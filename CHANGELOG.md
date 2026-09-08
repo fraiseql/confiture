@@ -139,6 +139,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skipped rule could not have reached anyway is unaffected, and `--fail-on never` still never fails.
   One required CI leg (`plpgsql-check`) runs the rule on a PostgreSQL built from a digest-pinned
   `postgres:15` plus the PGDG package; every other leg exercises the skip path.
+- **The `doc` family reports a distribution, not just a count (#250).** `doc_001`–`doc_004` are
+  satisfied by any `COMMENT`, so a schema whose every object carries a one-line restatement of its
+  own name reports **no findings at all** and reads as 100 % documented — indistinguishable from one
+  where somebody read every consumer of every object and wrote a paragraph. Every run that includes
+  the family now says which of the two it has, on one summary line printed above the findings and
+  before the "no violations" line, because the case this exists for has none:
+  `doc: 412 documented, 0 undocumented, median comment 9 chars (p10 7, p90 14)`. `--format json`
+  carries the same figures per rule in a new `documentation` block (`lint.schema.json`), always all
+  four rows, absent rather than zeroed when the family did not run. Percentiles are nearest-rank, so
+  every number is a length some comment actually has. This is a measurement, not a rule: no finding,
+  no exit code, nothing to select or baseline.
+  The inventory now keeps the comment *text* rather than a flag, which fixes two comments that
+  counted as documentation and are not: **`COMMENT ON … IS NULL` removes a comment** and an empty
+  one says nothing. Both now report.
+- **`doc_005`: a `COMMENT` that says only what the object's own name says (#250).** `info`,
+  **opt-in** (`--select default,doc_005`). One finding per comment whose every meaningful word is
+  already a word of the name — the issue's own `COMMENT ON FUNCTION app.delete_widget(…) IS 'Deletes
+  a widget'`. String comparison only: the name splits on `_`, the comment lowercases and splits on
+  non-word characters, articles and prepositions are dropped so `'Deletes a widget'` and `'Deletes
+  widget'` are the same finding, and both sides reduce to a crude stem so an inflected verb still
+  meets the name's own word. Only the local name is compared — a schema qualifier and a signature
+  are not things a comment restates. It is silent on a comment carrying any word the name does not,
+  on a one-word name (nothing to restate), and on an object with no comment, which is
+  `doc_001`–`doc_004`'s finding.
+  **The length bound the issue also offers is deliberately not implemented**: "shorter than 40
+  characters on an object with more than one parameter" would be wrong more often than right,
+  because a short accurate comment is common and punishing it teaches padding.
+  The rule is a heuristic and it says so in the reference: a correct comment that happens to restate
+  the name is a false positive, which is why it is `info`, why it is opt-in, and why the answer to
+  one is `--baseline` rather than a reworded comment.
 - **A rule that could not run in full says so.** `LintReport` gains `skipped` and `degraded`, each
   entry `{code, state, reason}`, surfaced on the summary line and as two arrays in
   `lint --format json` (`lint.schema.json` requires both, empty when there is nothing to say). The
@@ -212,6 +242,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A property of an object is reported once, not once per definition (LINT-10).** A table defined in
+  two files produced two identical `doc_001` findings, two `pk_001` and two `naming_00x` per column —
+  one mistake amplified into N, so a project that deduplicated a file watched its documentation
+  backlog halve as a side-effect and a `--baseline` recorded identities that existed only because of
+  the duplication. The rules that judge the *object* now read the first definition of each; the
+  second definition is `build_001`'s finding and nobody else's, and both point at the same line. The
+  grouping is `inventory.object_key`, the same one `build_001` uses, so a duplicate can never silence
+  a finding it does not cover. Rules whose subject is the *statement* are deliberately unchanged:
+  `qual_001` asks which schema this `CREATE` lands in, and a second unqualified definition is a
+  second answer.
 - **`confiture lint-unified --check tree` reads the tree the environment builds.** `--schema-dir`'s
   help said "inferred from env config" while the command read a hardcoded `db/schema`, so a project
   whose DDL lives anywhere else got no tree findings at all and one with `exclude_dirs` got findings

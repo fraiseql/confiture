@@ -1012,7 +1012,8 @@ def lint(
       acl_001 (`acls.lint_enabled: true`), tenant_001, replica_001, sec_002
       (`security_lint.enabled: true`), func_001 (`function_coverage.enabled:
       true`), own_001 / own_002 (an `ownership:` block), qual_002 (relations and
-      types created without a schema), and tree_001–tree_004, the DDL file-tree
+      types created without a schema), doc_005 (a COMMENT that says only what
+      the object's own name says), and tree_001–tree_004, the DDL file-tree
       rules — `--select tree`; tree_004 also needs `--overrides-dir`.
       `--list-rules` prints all of it with the configuration each needs.
 
@@ -1031,6 +1032,9 @@ def lint(
 
       confiture lint --select default,qual_002
         ↳ Also report relations and types created without a schema
+
+      confiture lint --select default,doc_005
+        ↳ Also report a COMMENT that says only what the object's name says
 
       confiture lint --env production
         ↳ Lint production environment
@@ -1235,6 +1239,7 @@ def _linter_config(
         check_naming="naming_001" in selected or "naming_002" in selected,
         check_primary_keys="pk_001" in selected,
         check_documentation=any(code.startswith("doc_") for code in selected),
+        check_restatements="doc_005" in selected,
         check_duplicates=any(code in selected for code in ("build_001", "build_002")),
         check_references="build_003" in selected,
         check_security="sec_001" in selected,

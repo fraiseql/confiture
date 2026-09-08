@@ -297,6 +297,40 @@ question the application will ask.
 
 See [lint-rules.md](../reference/lint-rules.md#the-body-family-a-routines-body-resolves-checked-by-postgresql).
 
+### The `doc` family reports a distribution, not just a count
+
+A documentation counter changes behaviour once a project starts driving it to
+zero, and what it rewards is whatever satisfies it. `doc_001`–`doc_004` are
+satisfied by any `COMMENT`, so a schema whose every object carries a one-line
+restatement of its own name reports **no findings at all** and reads as 100 %
+documented — the same as one where somebody read every consumer of every object
+and wrote a paragraph (#250).
+
+Every run that includes the family prints one line saying which of the two it
+has, above the findings and before the "no violations" line:
+
+```
+doc: 412 documented, 0 undocumented, median comment 9 chars (p10 7, p90 14)
+```
+
+`--format json` carries the same figures per rule under `documentation`. Nothing
+here is a finding: it does not move the exit code and there is nothing to
+select, ignore or baseline. It is there so that "documentation: 100 %" is a
+statement a reader can check.
+
+One rule *does* judge a comment, and only in the narrowest mechanical band:
+
+```bash
+confiture lint --select default,doc_005
+```
+
+`doc_005` reports a comment whose every meaningful word is already a word of the
+object's own name — `'Deletes a widget'` on `delete_widget`. It is `info` and
+opt-in because it is a heuristic: a correct comment that happens to restate the
+name is a false positive, and the answer to one is a baseline, not a reworded
+comment. See
+[lint-rules.md](../reference/lint-rules.md#doc_005-a-comment-that-says-only-what-the-name-says).
+
 ### The three per-rule flags are now aliases
 
 `--replica-safe`, `--check-tenant-isolation` and `--check-security-definer` still

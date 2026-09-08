@@ -36,6 +36,7 @@ class TestRegistryContents:
             "doc_002",
             "doc_003",
             "doc_004",
+            "doc_005",
             "build_001",
             "build_002",
             "build_003",

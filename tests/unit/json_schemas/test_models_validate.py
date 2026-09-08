@@ -113,6 +113,20 @@ FIELD_SAMPLES: dict[tuple[str, str], Any] = {
     ("LintReport", "degraded"): [
         {"code": "build_003", "state": "degraded", "reason": "no database answered"}
     ],
+    ("LintReport", "documentation"): {
+        "documented": 3,
+        "undocumented": 1,
+        "comment_length": {"p10": 9, "p50": 22, "p90": 61},
+        "rules": [
+            {
+                "code": "doc_001",
+                "documented": 3,
+                "undocumented": 1,
+                "comment_length": {"p10": 9, "p50": 22, "p90": 61},
+            },
+            {"code": "doc_003", "documented": 0, "undocumented": 0, "comment_length": None},
+        ],
+    },
     ("BuildResult", "duplicates"): [
         {
             "rule_id": "build_001",

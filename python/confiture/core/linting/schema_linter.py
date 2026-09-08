@@ -27,6 +27,7 @@ from confiture.core.linting.inventory import (
     SchemaObject,
     attribute_files,
     build_inventory,
+    distinct,
     label_for,
 )
 from confiture.core.parser_info import parse_error_line
@@ -104,6 +105,10 @@ class LintReport:
     #: Rules that did not run, and rules that ran without one of their tiers.
     skipped: list[RuleStatus] = field(default_factory=list)
     degraded: list[RuleStatus] = field(default_factory=list)
+    #: What the ``doc`` family measured, when it ran: how much of the schema
+    #: carries a comment and how long those comments are (#250). ``None`` when
+    #: the family was not selected — absent, not zero.
+    documentation: dict[str, Any] | None = None
 
     @property
     def has_errors(self) -> bool:
@@ -146,6 +151,7 @@ class LintConfig:
         check_naming: bool = True,
         check_primary_keys: bool = True,
         check_documentation: bool = True,
+        check_restatements: bool = False,
         check_indexes: bool = True,
         check_constraints: bool = True,
         check_security: bool = True,
@@ -168,6 +174,10 @@ class LintConfig:
             check_naming: Check naming conventions (snake_case)
             check_primary_keys: Ensure all tables have primary keys
             check_documentation: Check for COMMENT documentation
+            check_restatements: Report a COMMENT that says only what the object's
+                name already says (``doc_005``). Off by default, like the rule:
+                it is a heuristic and a correct comment that happens to restate
+                the name is a false positive.
             check_indexes: Check indexes on foreign keys
             check_constraints: Check constraint definitions
             check_security: Check for security issues (passwords, tokens)
@@ -205,6 +215,7 @@ class LintConfig:
         self.check_naming = check_naming
         self.check_primary_keys = check_primary_keys
         self.check_documentation = check_documentation
+        self.check_restatements = check_restatements
         self.check_indexes = check_indexes
         self.check_constraints = check_constraints
         self.check_security = check_security
@@ -329,6 +340,7 @@ class SchemaLinter:
             (self.config.check_naming, self._check_naming_conventions),
             (self.config.check_primary_keys, self._check_primary_keys),
             (self.config.check_documentation, self._check_documentation),
+            (self.config.check_restatements, self._check_restatements),
             (self.config.check_indexes, self._check_indexes),
             (self.config.check_security, self._check_security),
             (self.config.check_duplicates, self._check_duplicates),
@@ -395,7 +407,7 @@ class SchemaLinter:
 
     def _check_naming_conventions(self, report: LintReport) -> None:
         """Check naming conventions (snake_case for identifiers) on the inventory."""
-        for table in self._inventory.tables:
+        for table in distinct(self._inventory.tables):
             if not self._is_snake_case(table.name):
                 report.add_violation(
                     LintViolation(
@@ -435,7 +447,7 @@ class SchemaLinter:
 
     def _check_primary_keys(self, report: LintReport) -> None:
         """Every table has a primary key — a partition inherits its parent's."""
-        for table in self._inventory.tables:
+        for table in distinct(self._inventory.tables):
             if table.has_primary_key or table.is_partition:
                 continue
             if self._is_likely_junction_table(table.name):
@@ -456,9 +468,21 @@ class SchemaLinter:
     def _check_documentation(self, report: LintReport) -> None:
         """The ``doc`` family: every commentable object carries a COMMENT (#217)."""
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core.linting.documentation import documentation_findings
+        from confiture.core.linting.documentation import (
+            documentation_findings,
+            documentation_summary,
+        )
 
         for violation in documentation_findings(self._inventory):
+            report.add_violation(violation)
+        report.documentation = documentation_summary(self._inventory)
+
+    def _check_restatements(self, report: LintReport) -> None:
+        """``doc_005``: a COMMENT that says only what the object's name says (#250)."""
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
+        from confiture.core.linting.documentation import restatement_findings
+
+        for violation in restatement_findings(self._inventory):
             report.add_violation(violation)
 
     def _check_duplicates(self, report: LintReport) -> None:

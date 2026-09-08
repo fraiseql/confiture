@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import copy
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -77,6 +77,10 @@ KIND_KEYWORD: dict[str, str] = {
 #: and the default mode); OUT and TABLE parameters do not.
 _INPUT_MODES = frozenset({"d", "i", "b", "v"})
 
+#: Where an unqualified ``CREATE`` lands, for the purpose of deciding whether
+#: two statements define the same object: ``f()`` and ``public.f()`` are one.
+DEFAULT_SCHEMA = "public"
+
 
 @dataclass(frozen=True)
 class SchemaColumn:
@@ -110,7 +114,9 @@ class SchemaObject:
     decide what a second definition of the same object does at build time.
     ``line`` is where the object's *name* is written and ``statement_line``
     where its ``CREATE`` begins — the same line for most statements, and not
-    for one whose name is on a continuation line.
+    for one whose name is on a continuation line. ``comment`` is the text a
+    ``COMMENT ON`` left on the object, kept rather than reduced to a flag so a
+    rule can ask what the comment *says* and not only that one exists (#250).
     """
 
     kind: str
@@ -123,7 +129,7 @@ class SchemaObject:
     has_primary_key: bool = False
     is_partition: bool = False
     is_temporary: bool = False
-    documented: bool = False
+    comment: str | None = None
     signature: str | None = None
     offset: int = 0
     file: str | None = None
@@ -131,6 +137,16 @@ class SchemaObject:
     if_not_exists: bool = False
     parent: str | None = None
     statement_line: int = 1
+
+    @property
+    def documented(self) -> bool:
+        """Whether a ``COMMENT`` on this object left anything behind.
+
+        ``COMMENT ON TABLE t IS NULL`` *removes* a comment and ``IS ''`` stores
+        an empty one; both satisfied the ``doc`` family while it counted the
+        statement rather than what the statement left (#250).
+        """
+        return bool(self.comment and self.comment.strip())
 
     @property
     def qualified(self) -> str:
@@ -537,6 +553,11 @@ def _comment_target(stmt: Any) -> tuple[str | None, str, str | None] | None:
 
 
 def _apply_comment(stmt: Any, inventory: Inventory) -> None:
+    """Record what a ``COMMENT ON`` leaves on the objects it names.
+
+    The last statement wins, as it does in PostgreSQL, so a later
+    ``IS NULL`` really does undocument the object.
+    """
     kinds = _COMMENT_TARGETS.get(_enum_value(stmt.objtype))
     if kinds is None:
         return
@@ -545,7 +566,7 @@ def _apply_comment(stmt: Any, inventory: Inventory) -> None:
         return
     schema, name, signature = target
     for obj in inventory.find_all(kinds, schema, name, signature):
-        obj.documented = True
+        obj.comment = getattr(stmt, "comment", None)
 
 
 def build_inventory(sql: str) -> Inventory:
@@ -580,6 +601,43 @@ def label_for(path: Path, root: Path | None) -> str:
         except ValueError:
             pass
     return path.as_posix()
+
+
+def object_key(obj: SchemaObject) -> tuple[str, str, str, str | None]:
+    """What makes two ``CREATE`` statements definitions of the same object.
+
+    The folded spelling, so ``app."TbWidget"`` and ``app.tbwidget`` are one
+    object; the name *and* the input parameter types for a routine, so two
+    overloads are two; and :data:`DEFAULT_SCHEMA` for a statement that names
+    none, so ``f()`` and ``public.f()`` are one and ``tenant.f()`` is another.
+    """
+    return (obj.kind, (obj.folded_schema or DEFAULT_SCHEMA).lower(), obj.folded_name, obj.signature)
+
+
+def distinct(objects: Iterable[SchemaObject]) -> list[SchemaObject]:
+    """The first definition of each object, in source order.
+
+    A rule that reports a property of the *object* — it has no primary key, it
+    carries no ``COMMENT``, its name is not snake_case — reports it once
+    however many times the object is defined. The second definition is
+    ``build_001``'s finding and nobody else's: repeating every other rule
+    against it turned one mistake into N identical ones, halved a project's
+    documentation backlog the day it deduplicated a file, and put identities in
+    baselines that existed only because of the duplication (LINT-10).
+
+    A rule whose subject is the *statement* rather than the object — which
+    schema does this ``CREATE`` land in — reads the objects directly, because
+    for it a second definition really is a second thing to answer for.
+    """
+    seen: set[tuple[str, str, str, str | None]] = set()
+    first: list[SchemaObject] = []
+    for obj in objects:
+        key = object_key(obj)
+        if key in seen:
+            continue
+        seen.add(key)
+        first.append(obj)
+    return first
 
 
 def _statement_key(obj: SchemaObject) -> tuple[str, str | None, str, str | None]:
