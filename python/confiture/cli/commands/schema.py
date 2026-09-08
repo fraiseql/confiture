@@ -44,6 +44,7 @@ from confiture.core.linting.gate import (
     parse_threshold,
     should_fail,
     threshold_from_aliases,
+    unrun_reaches,
 )
 from confiture.core.linting.inventory import label_for
 from confiture.core.linting.libraries.generate import TREE_RULE_CODES, tree_violations
@@ -934,6 +935,16 @@ OverridesDirOpt = Annotated[
         "there is no conventional location to guess.",
     ),
 ]
+ServerUrlOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--server-url",
+        help="Writable PostgreSQL server the body family builds its scratch "
+        "database on. Only the server is used: a throwaway database is created "
+        "beside the configured one and dropped again. Defaults to the "
+        "environment's own database_url.",
+    ),
+]
 CheckTenantIsolationOpt = Annotated[
     bool,
     typer.Option(
@@ -974,6 +985,7 @@ def lint(
     replica_safe: ReplicaSafeOpt = False,
     migrations_dir: MigrationsDirOpt = Path("db/migrations"),
     overrides_dir: OverridesDirOpt = None,
+    server_url: ServerUrlOpt = None,
     check_tenant_isolation: CheckTenantIsolationOpt = False,
     check_security_definer: CheckSecurityDefinerOpt = False,
 ) -> None:
@@ -1067,7 +1079,7 @@ def lint(
             check_tenant_isolation=check_tenant_isolation,
             check_security_definer=check_security_definer,
         )
-        config = _linter_config(selected, threshold)
+        config = _linter_config(selected, threshold, server_url)
         if format_type == "table":
             # The banner is for humans; in json/csv mode stdout is the payload alone.
             console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
@@ -1114,7 +1126,10 @@ def lint(
             _print_baseline_note(baseline_diff, format_type, wrote=write_baseline)
         found = [v.severity.value for v in report.violations]
         new_since_baseline = baseline_diff is not None and bool(baseline_diff.new)
-        if should_fail(found, threshold) or new_since_baseline:
+        # A rule that did not run has established nothing, so it is not a pass:
+        # the gate reads the severity its registry entry declares (#245).
+        unrun = unrun_reaches([s.code for s in linter_report.skipped], threshold)
+        if should_fail(found, threshold) or new_since_baseline or unrun:
             raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found violations
     except typer.Exit:
         raise
@@ -1205,7 +1220,9 @@ def _severity_escalations(env: str, project_dir: Path, selected: frozenset[str])
     return escalations
 
 
-def _linter_config(selected: frozenset[str], threshold: Threshold) -> LinterConfig:
+def _linter_config(
+    selected: frozenset[str], threshold: Threshold, server_url: str | None = None
+) -> LinterConfig:
     """``LintConfig``'s coarse switches, from the exact set of selected codes.
 
     Its two ``fail_on_*`` booleans decide nothing — the gate does — so they are
@@ -1225,6 +1242,9 @@ def _linter_config(selected: frozenset[str], threshold: Threshold) -> LinterConf
         check_acl_coverage="acl_001" in selected,
         check_qualification="qual_001" in selected,
         check_qualification_relations="qual_002" in selected,
+        check_bodies="body_001" in selected,
+        check_body_warnings="body_002" in selected,
+        server_url=server_url,
     )
 
 

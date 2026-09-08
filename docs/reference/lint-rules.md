@@ -38,6 +38,8 @@ Adopt a rule on a schema that already trips it with a
 | `tree_006` | tree | warning | off | An entry's prefix extends its parent's |
 | `tree_007` | tree | warning | off | An entry numbered like its siblings, or none of them numbered |
 | `tree_008` | tree | info | off | No status word in a file or directory name the build reads |
+| `body_001` | body | warning | off | A plpgsql body resolves against the schema it is built into |
+| `body_002` | body | info | off | A plpgsql body carries no unused variable or shadowed declaration |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
 
 <!-- END GENERATED -->
@@ -372,3 +374,81 @@ confiture lint --select tree --baseline .confiture-lint-baseline.json --write-ba
 A tree finding's object *is* a path, so its identity carries the file and a
 baseline written today stays valid: fixing one collision does not retire the
 other thirty-five, and a collision added tomorrow is new.
+
+## The `body` family — a routine's body resolves, checked by PostgreSQL
+
+Every other rule on this page answers from the text. `body_001` cannot: that
+`v_pk` is `UUID` and `pk_widget` is `BIGINT` is a fact about *resolved types*,
+and a parser that has not built the schema does not hold it. PostgreSQL stores
+a PL/pgSQL body without resolving anything in it, so this compiles, deploys and
+lints clean, and raises the first time anyone calls it:
+
+```sql
+CREATE FUNCTION app.fn_widget_pk(p_name TEXT) RETURNS uuid
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_pk UUID;
+BEGIN
+    SELECT pk_widget INTO v_pk FROM app.tb_widget WHERE name = p_name;
+    RETURN v_pk;
+END;
+$$;
+```
+
+The family builds the DDL into a **throwaway database** on a writable
+maintenance server and runs
+[`plpgsql_check`](https://github.com/okbob/plpgsql_check) over every PL/pgSQL
+routine in it. PostgreSQL's own diagnosis is reported verbatim — message,
+SQLSTATE and all — because confiture has nothing to add to it.
+
+This is not a second parser. confiture still reads DDL with pglast; PostgreSQL
+is consulted only for what a parser cannot know.
+
+| Code | What it reports | Severity |
+|------|-----------------|----------|
+| `body_001` | a diagnosis carrying a real SQLSTATE: the body raises on its first call | `warning` |
+| `body_002` | the analyser's own opinion about a body that works — an unused variable, a shadowed declaration | `info` |
+
+Both are opt-in and separately selectable, so a project can adopt the failures
+without the style opinions:
+
+```bash
+confiture lint --select body_001 --server-url postgresql://localhost/postgres
+```
+
+### The extension is not in a stock PostgreSQL
+
+`plpgsql_check` ships with no PostgreSQL distribution. On Debian and Ubuntu it
+is `postgresql-<major>-plpgsql-check` from the PGDG repository; elsewhere it is
+built from [source](https://github.com/okbob/plpgsql_check). It only has to be
+*available* on the maintenance server — confiture runs `CREATE EXTENSION` in
+the scratch database it makes and drops.
+
+Because absence is the common case, a run that cannot do the analysis says so
+instead of reporting an empty list:
+
+```
+body_001 did not run: plpgsql_check is not available on the maintenance server, and no
+stock PostgreSQL carries it: install it (Debian/Ubuntu `postgresql-<major>-plpgsql-check`,
+or build https://github.com/okbob/plpgsql_check) and re-run
+```
+
+The same entry appears in the `skipped` array of `--format json`, and
+**`--fail-on` does not read a skip as a pass**: a run that asked for `body_001`
+at `--fail-on warning` and could not run it exits 1, because it has not
+established that there are no warnings. A threshold the skipped rule could not
+have reached anyway — `--fail-on error` against a `warning` rule — is
+unaffected, and `--fail-on never` still never fails.
+
+### Where it builds
+
+`--server-url` names the maintenance server. Only its *server* is used: a
+throwaway database is created beside the configured one and dropped again, and
+the environment's own database is never opened. Without the flag the
+environment's `database_url` supplies the server — so pass `--server-url` when
+`--env` names something you would rather not create a database on.
+
+If the environment declares `lint.search_path`, the scratch connection is set to
+it before the analysis, because an unqualified name in a body resolves through
+`search_path` and the analyser must be asked the same question the application
+will ask.

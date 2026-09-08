@@ -57,6 +57,8 @@ class TestRegistryContents:
             "tree_006",
             "tree_007",
             "tree_008",
+            "body_001",
+            "body_002",
         }
 
     def test_the_default_set_is_the_pre_0420_default_behaviour(self) -> None:
@@ -104,6 +106,7 @@ class TestRegistryContents:
             "func",
             "own",
             "tree",
+            "body",
             "security-definer",
         )
 

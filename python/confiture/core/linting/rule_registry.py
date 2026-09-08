@@ -61,6 +61,12 @@ class LintRule:
         legacy_flag: The pre-0.42.0 per-rule flag, kept as an alias, or None.
         requires_config: Configuration the rule additionally needs before it can
             report anything — selecting it is necessary, not sufficient.
+        requires_db: Whether the rule answers from a database rather than from
+            the files. Such a rule can be *selected* and still not run — no
+            server, an unreachable one, a missing extension — so it reports a
+            :class:`~confiture.core.linting.schema_linter.RuleStatus` instead of
+            an empty finding list, and ``--list-rules`` says so before the run
+            rather than after it.
         escalates_to: The severity the rule emits when ``escalated_by`` holds,
             or None when :attr:`severity` is the only severity it ever emits.
             The gate reads this to answer whether a threshold is reachable for
@@ -78,6 +84,7 @@ class LintRule:
     requires_config: str | None = None
     escalates_to: str | None = None
     escalated_by: str | None = None
+    requires_db: bool = False
 
     def to_dict(self) -> dict[str, object]:
         """JSON shape for ``lint --list-rules --format json``."""
@@ -91,6 +98,7 @@ class LintRule:
             "requires_config": self.requires_config,
             "escalates_to": self.escalates_to,
             "escalated_by": self.escalated_by,
+            "requires_db": self.requires_db,
         }
 
 
@@ -301,6 +309,24 @@ LINT_RULES: tuple[LintRule, ...] = (
         severity="info",
         default_on=False,
         requires_config="lint.status_words (optional; four words are the default)",
+    ),
+    LintRule(
+        code="body_001",
+        family="body",
+        title="A plpgsql body resolves against the schema it is built into",
+        severity="warning",
+        default_on=False,
+        requires_config="a writable maintenance server carrying plpgsql_check (--server-url)",
+        requires_db=True,
+    ),
+    LintRule(
+        code="body_002",
+        family="body",
+        title="A plpgsql body carries no unused variable or shadowed declaration",
+        severity="info",
+        default_on=False,
+        requires_config="a writable maintenance server carrying plpgsql_check (--server-url)",
+        requires_db=True,
     ),
     LintRule(
         code="sec_002",
