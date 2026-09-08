@@ -3850,11 +3850,11 @@ confiture lint-unified [OPTIONS] [FILES]...
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--check` | `-c` | text | - | Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (GEN001–GEN004 file-numbering). Default: all. |
+| `--check` | `-c` | text | - | Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (tree_001–tree_004 file-numbering). Default: all. |
 | `--git-diff` | - | Flag | off | Only lint files changed in the current git diff (default: off) |
 | `--env` | `-e` | text | `local` | Environment for schema lint (default: local) |
-| `--schema-dir` | - | path | - | Root of the DDL file tree for --check tree (default: inferred from env config). |
-| `--overrides-dir` | - | path | - | Overrides mirror directory for GEN004 orphan check (optional). |
+| `--schema-dir` | - | path | - | Root of the DDL file tree for --check tree (default: the directories --env's include_dirs builds from, minus what it excludes). |
+| `--overrides-dir` | - | path | - | Overrides mirror directory for the tree_004 orphan check (optional). |
 | `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
 | `--fail-on-error` | - | Flag | on | Exit with code 1 if errors found (default: on) |
 

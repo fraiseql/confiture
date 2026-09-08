@@ -46,7 +46,7 @@ from confiture.core.linting.gate import (
     threshold_from_aliases,
 )
 from confiture.core.linting.inventory import label_for
-from confiture.core.linting.libraries.generate import TREE_RULE_CODES
+from confiture.core.linting.libraries.generate import TREE_RULE_CODES, tree_violations
 from confiture.core.linting.libraries.security_definer import Sec002SecurityDefinerSearchPath
 from confiture.core.linting.rule_registry import (
     DEFAULT_SELECTOR,
@@ -1267,9 +1267,6 @@ def _ddl_tree_findings(
     selected: frozenset[str], env: str, project_dir: Path, overrides_dir: Path | None
 ) -> list[LintViolation]:
     """#111: tree_001–tree_004 over the DDL file tree the environment builds."""
-    # Reason: CLI start-up: the tree rules are opt-in, so their import is deferred until one is selected
-    from confiture.core.linting.libraries.generate import tree_violations
-
     files, roots = _env_ddl_files(env, project_dir)
     resolved = None
     if overrides_dir is not None:
@@ -1525,6 +1522,27 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
     console.print(f"[dim]Deprecated selectors, accepted for one minor: {aliases}.[/dim]")
 
 
+def _unified_tree_findings(
+    env: str, schema_dir: Path | None, overrides_dir: Path | None
+) -> list[LintViolation]:
+    """``lint-unified --check tree``'s findings, resolved the way ``lint`` resolves them.
+
+    ``--schema-dir`` names a tree explicitly; without it the environment's own
+    include configuration decides, which is what the flag's help has always
+    claimed and what ``confiture lint --select tree`` does. Two commands, one
+    answer to "which files is this rule about".
+    """
+    if schema_dir is not None:
+        files = sorted(f for f in schema_dir.rglob("*.sql") if f.is_file())
+        roots = [schema_dir]
+    else:
+        files, roots = _env_ddl_files(env, Path())
+    return [
+        _relative(v, Path())
+        for v in tree_violations(files, schema_dirs=roots, overrides_dir=overrides_dir)
+    ]
+
+
 @cli_boundary
 def lint_unified(
     files: list[Path] = typer.Argument(
@@ -1535,7 +1553,7 @@ def lint_unified(
         None,
         "--check",
         "-c",
-        help="Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (GEN001–GEN004 file-numbering). "
+        help="Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (tree_001–tree_004 file-numbering). "
         "Default: all.",
     ),
     git_diff: bool = typer.Option(
@@ -1552,12 +1570,13 @@ def lint_unified(
     schema_dir: Path | None = typer.Option(
         None,
         "--schema-dir",
-        help="Root of the DDL file tree for --check tree (default: inferred from env config).",
+        help="Root of the DDL file tree for --check tree (default: the directories --env's "
+        "include_dirs builds from, minus what it excludes).",
     ),
     overrides_dir: Path | None = typer.Option(
         None,
         "--overrides-dir",
-        help="Overrides mirror directory for GEN004 orphan check (optional).",
+        help="Overrides mirror directory for the tree_004 orphan check (optional).",
     ),
     format_type: str = format_option("table", "json"),
     fail_on_error: bool = typer.Option(
@@ -1579,8 +1598,9 @@ def lint_unified(
         Run only SchemaLinter checks on the local environment.
 
       confiture lint-unified --check tree --schema-dir db/schema/
-        Check DDL file-tree numbering rules (GEN001–GEN004): duplicate prefixes,
-        verb suffixes, sequence gaps, and orphaned overrides.
+        Check DDL file-tree numbering rules (tree_001–tree_004): duplicate prefixes,
+        verb suffixes, sequence gaps, and orphaned overrides. Without --schema-dir
+        the tree is the one --env builds from.
 
       confiture lint-unified --git-diff
         Lint only SQL files changed in the current git diff.
@@ -1614,19 +1634,10 @@ def lint_unified(
             console.print(f"[yellow]Schema lint skipped: {e}[/yellow]")
 
     if run_tree:
-        # Resolve schema_dir: CLI flag > default "db/schema"
-        resolved_schema_dir: Path = schema_dir if schema_dir is not None else Path("db/schema")
-
-        tree_config = LinterConfig(enabled=True, fail_on_error=fail_on_error)
-        tree_linter = _core_linting.SchemaLinter(env=env, config=tree_config)
         try:
-            tree_report = tree_linter.lint_tree(
-                schema_dir=resolved_schema_dir,
-                overrides_dir=overrides_dir,
-            )
             all_issues.extend(
                 _violation_to_unified_issue(v, "tree")
-                for v in tree_report.errors + tree_report.warnings + tree_report.info
+                for v in _unified_tree_findings(env, schema_dir, overrides_dir)
             )
         # Reason: lint-unified skips a linter that fails for any reason and says so
         except Exception as e:
@@ -1645,7 +1656,10 @@ def lint_unified(
                 sev = issue.severity.value.upper()
                 loc = f"{issue.file}:{issue.line}" if issue.line else issue.file
                 rule = f" [{issue.rule}]" if issue.rule else ""
-                console.print(f"  [{sev}]{rule} {loc}: {issue.message}")
+                # markup=False: every field is data. Rich reads `[tree_001]` as a
+                # style tag and prints nothing where the rule id should be — the
+                # uppercase codes only survived because they are not style names.
+                console.print(f"  [{sev}]{rule} {loc}: {issue.message}", markup=False)
 
     if fail_on_error and unified_result.has_errors:
         raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found errors

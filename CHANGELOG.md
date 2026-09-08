@@ -77,6 +77,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`confiture lint-unified --check tree` reads the tree the environment builds.** `--schema-dir`'s
+  help said "inferred from env config" while the command read a hardcoded `db/schema`, so a project
+  whose DDL lives anywhere else got no tree findings at all and one with `exclude_dirs` got findings
+  about files it does not build. Both commands now resolve through the same builder;
+  `--schema-dir` still names a tree explicitly.
+- **`lint-unified`'s table output printed no rule id.** The line was rendered as Rich markup, so a
+  lower-case code in brackets (`[tree_001]`) was read as a style tag and dropped. Every field on that
+  line is data and is printed as data.
 - `docs/guides/schema-linting.md` recommended `confiture lint --strict` and
   `confiture lint --fail-level critical` in its CI examples. Neither flag has ever existed.
 

@@ -1,267 +1,154 @@
-"""Tests for lint-unified tree check functionality.
+"""`confiture lint-unified --check tree` over a real tree.
 
-Tests for the --check tree option in lint-unified command that calls lint_tree().
+These used to mock `SchemaLinter` and assert that `lint_tree` was called with
+the right arguments, which held the wiring in place and said nothing about what
+the rules report. Both commands now resolve their tree the same way — through
+the environment's own include configuration, or the `--schema-dir` an operator
+names — so the tests run the rules against files on disk and read the findings.
 """
 
 import json
-from unittest.mock import MagicMock, patch
+import os
+from collections.abc import Iterator
+from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from confiture.core.linting.schema_linter import (
-    LintReport,
-    LintViolation,
-    RuleSeverity,
-)
 
-# Create test runner
 runner = CliRunner()
+
+_ENV = "database_url: postgresql://localhost/test\ninclude_dirs:\n  - path: db/schema\n"
+
+
+@pytest.fixture
+def project(tmp_path: Path) -> Iterator[Path]:
+    """A project whose `db/schema` is clean, cwd'd into for the duration."""
+    schema = tmp_path / "db" / "schema"
+    schema.mkdir(parents=True)
+    (tmp_path / "db" / "environments").mkdir(parents=True)
+    (tmp_path / "db" / "environments" / "local.yaml").write_text(_ENV)
+    (schema / "00001_create.sql").write_text("CREATE TABLE tb_a (id INT PRIMARY KEY);\n")
+    old_cwd = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        yield tmp_path
+    finally:
+        os.chdir(old_cwd)
+
+
+def _tree(directory: Path, **files: str) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    for stem, sql in files.items():
+        (directory / f"{stem}.sql").write_text(sql)
+    return directory
 
 
 class TestLintUnifiedTree:
-    """Tests for the lint-unified --check tree functionality."""
+    def test_a_clean_tree_reports_nothing(self, project: Path) -> None:
+        result = runner.invoke(app, ["lint-unified", "--check", "tree"])
 
-    def test_lint_unified_accepts_check_tree_flag(self, tmp_path):
-        """Should accept --check tree flag without crashing."""
-        # Create a temp schema directory with clean files
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
-        (schema_dir / "01_tables.sql").write_text("CREATE TABLE test (id INT);")
+        assert result.exit_code == 0
+        assert "No issues found" in result.stdout
 
-        with patch("confiture.core.linting.SchemaLinter") as mock_linter_class:
-            mock_linter = MagicMock()
-            mock_linter_class.return_value = mock_linter
+    def test_it_reports_a_duplicate_prefix(self, project: Path) -> None:
+        _tree(
+            project / "db" / "schema",
+            **{
+                "00002_foo": "CREATE TABLE tb_foo (id INT PRIMARY KEY);",
+                "00002_bar": "CREATE TABLE tb_bar (id INT PRIMARY KEY);",
+            },
+        )
 
-            # Mock tree report with no violations
-            mock_tree_report = LintReport(errors=[], warnings=[], info=[])
-            mock_linter.lint_tree.return_value = mock_tree_report
+        result = runner.invoke(app, ["lint-unified", "--check", "tree"])
 
-            # Run command
-            result = runner.invoke(app, ["lint-unified", "--check", "tree", str(schema_dir)])
+        assert result.exit_code == 1
+        assert "tree_001" in result.stdout
 
-            # Should succeed (exit code 0, no crash)
-            assert result.exit_code == 0
+    def test_it_reports_a_gap_in_the_sequence(self, project: Path) -> None:
+        _tree(
+            project / "db" / "schema",
+            **{"00009_late": "CREATE TABLE tb_late (id INT PRIMARY KEY);"},
+        )
 
-    def test_lint_unified_tree_reports_gen001_duplicate_prefix(self, tmp_path):
-        """Should report GEN001 duplicate prefix violations."""
-        # Create temp dir with duplicate prefixes
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
-        (schema_dir / "01_foo.sql").write_text("CREATE TABLE foo (id INT);")
-        (schema_dir / "01_bar.sql").write_text("CREATE TABLE bar (id INT);")
+        result = runner.invoke(app, ["lint-unified", "--check", "tree"])
 
-        with patch("confiture.core.linting.SchemaLinter") as mock_linter_class:
-            mock_linter = MagicMock()
-            mock_linter_class.return_value = mock_linter
+        assert "tree_003" in result.stdout
 
-            # Mock violation for GEN001
-            violation = LintViolation(
-                rule_id="GEN001",
-                rule_name="DuplicatePrefix",
-                severity=RuleSeverity.ERROR,
-                object_type="file",
-                object_name="01_foo.sql",
-                message="Multiple files with prefix '01'",
-                file_path=str(schema_dir / "01_foo.sql"),
-                line_number=1,
-            )
-            mock_tree_report = LintReport(errors=[violation], warnings=[], info=[])
-            mock_linter.lint_tree.return_value = mock_tree_report
+    def test_json_output_carries_the_tree_tool_and_the_new_code(self, project: Path) -> None:
+        _tree(
+            project / "db" / "schema",
+            **{
+                "00002_foo": "CREATE TABLE tb_foo (id INT PRIMARY KEY);",
+                "00002_bar": "CREATE TABLE tb_bar (id INT PRIMARY KEY);",
+            },
+        )
 
-            # Run command
-            result = runner.invoke(
-                app, ["lint-unified", "--check", "tree", "--schema-dir", str(schema_dir)]
-            )
+        result = runner.invoke(app, ["lint-unified", "--check", "tree", "--format", "json"])
 
-            # Should fail due to ERROR severity
-            assert result.exit_code == 1
-            assert "GEN001" in result.stdout
+        issues = json.loads(result.stdout)["issues"]
+        assert [(i["tool"], i["rule"]) for i in issues] == [("tree", "tree_001")]
 
-    def test_lint_unified_tree_reports_gen003_gap(self, tmp_path):
-        """Should report GEN003 gap violations."""
-        # Create temp dir with gap (01, 03 but no 02)
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
-        (schema_dir / "01_foo.sql").write_text("CREATE TABLE foo (id INT);")
-        (schema_dir / "03_bar.sql").write_text("CREATE TABLE bar (id INT);")
+    def test_check_schema_does_not_run_the_tree_rules(self, project: Path) -> None:
+        _tree(
+            project / "db" / "schema",
+            **{
+                "00002_foo": "CREATE TABLE tb_foo (id INT PRIMARY KEY);",
+                "00002_bar": "CREATE TABLE tb_bar (id INT PRIMARY KEY);",
+            },
+        )
 
-        with patch("confiture.core.linting.SchemaLinter") as mock_linter_class:
-            mock_linter = MagicMock()
-            mock_linter_class.return_value = mock_linter
+        result = runner.invoke(app, ["lint-unified", "--check", "schema", "--format", "json"])
 
-            # Mock violation for GEN003
-            violation = LintViolation(
-                rule_id="GEN003",
-                rule_name="GapInSequence",
-                severity=RuleSeverity.WARNING,
-                object_type="directory",
-                object_name=str(schema_dir),
-                message="Gap in numbering sequence at position 02",
-                file_path=None,
-                line_number=None,
-            )
-            mock_tree_report = LintReport(errors=[], warnings=[violation], info=[])
-            mock_linter.lint_tree.return_value = mock_tree_report
+        tools = {i["tool"] for i in json.loads(result.stdout)["issues"]}
+        assert "tree" not in tools
 
-            # Run command
-            result = runner.invoke(
-                app, ["lint-unified", "--check", "tree", "--schema-dir", str(schema_dir)]
-            )
+    def test_an_explicit_schema_dir_wins_over_the_environment(self, project: Path) -> None:
+        elsewhere = _tree(
+            project / "elsewhere",
+            **{
+                "00002_foo": "CREATE TABLE tb_foo (id INT PRIMARY KEY);",
+                "00002_bar": "CREATE TABLE tb_bar (id INT PRIMARY KEY);",
+            },
+        )
 
-            # Should succeed (exit code 0, WARNING not ERROR)
-            assert result.exit_code == 0
-            assert "GEN003" in result.stdout
+        result = runner.invoke(
+            app,
+            ["lint-unified", "--check", "tree", "--schema-dir", str(elsewhere), "--format", "json"],
+        )
 
-    def test_lint_unified_tree_json_output_includes_tree_tool(self, tmp_path):
-        """Should include tree tool in JSON output."""
-        # Create temp schema dir
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
-        (schema_dir / "01_tables.sql").write_text("CREATE TABLE test (id INT);")
+        issues = json.loads(result.stdout)["issues"]
+        assert [i["rule"] for i in issues] == ["tree_001"]
 
-        with patch("confiture.core.linting.SchemaLinter") as mock_linter_class:
-            mock_linter = MagicMock()
-            mock_linter_class.return_value = mock_linter
+    def test_an_overrides_dir_brings_tree_004_with_it(self, project: Path) -> None:
+        _tree(
+            project / "db" / "overrides",
+            **{"00099_gone": "-- override of a file that is not there"},
+        )
 
-            # Mock violation
-            violation = LintViolation(
-                rule_id="GEN001",
-                rule_name="DuplicatePrefix",
-                severity=RuleSeverity.ERROR,
-                object_type="file",
-                object_name="01_tables.sql",
-                message="Test violation",
-                file_path=str(schema_dir / "01_tables.sql"),
-                line_number=1,
-            )
-            mock_tree_report = LintReport(errors=[violation], warnings=[], info=[])
-            mock_linter.lint_tree.return_value = mock_tree_report
+        result = runner.invoke(
+            app,
+            [
+                "lint-unified",
+                "--check",
+                "tree",
+                "--overrides-dir",
+                "db/overrides",
+                "--format",
+                "json",
+            ],
+        )
 
-            # Run command with JSON format
-            result = runner.invoke(
-                app,
-                [
-                    "lint-unified",
-                    "--check",
-                    "tree",
-                    "--format",
-                    "json",
-                    "--schema-dir",
-                    str(schema_dir),
-                ],
-            )
+        issues = json.loads(result.stdout)["issues"]
+        assert [i["rule"] for i in issues] == ["tree_004"]
 
-            assert result.exit_code == 1  # Has errors
+    def test_without_an_overrides_dir_tree_004_is_not_run(self, project: Path) -> None:
+        _tree(
+            project / "db" / "overrides",
+            **{"00099_gone": "-- override of a file that is not there"},
+        )
 
-            # Parse JSON and check for tree tool
-            output = json.loads(result.stdout)
-            issues = output.get("issues", [])
-            assert len(issues) > 0
+        result = runner.invoke(app, ["lint-unified", "--check", "tree", "--format", "json"])
 
-            # Find the tree issue
-            tree_issues = [issue for issue in issues if issue.get("tool") == "tree"]
-            assert len(tree_issues) > 0
-
-    def test_lint_unified_no_check_includes_tree(self, tmp_path):
-        """Should include tree checks when no --check filter is given."""
-        # Create temp dir with GEN001 violation
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
-        (schema_dir / "01_foo.sql").write_text("CREATE TABLE foo (id INT);")
-        (schema_dir / "01_bar.sql").write_text("CREATE TABLE bar (id INT);")
-
-        with patch("confiture.core.linting.SchemaLinter") as mock_linter_class:
-            mock_linter = MagicMock()
-            mock_linter_class.return_value = mock_linter
-
-            # Mock violation for GEN001
-            violation = LintViolation(
-                rule_id="GEN001",
-                rule_name="DuplicatePrefix",
-                severity=RuleSeverity.ERROR,
-                object_type="file",
-                object_name="01_foo.sql",
-                message="Multiple files with prefix '01'",
-                file_path=str(schema_dir / "01_foo.sql"),
-                line_number=1,
-            )
-            mock_tree_report = LintReport(errors=[violation], warnings=[], info=[])
-            mock_linter.lint_tree.return_value = mock_tree_report
-
-            # Mock schema lint to return clean
-            mock_schema_report = LintReport(errors=[], warnings=[], info=[])
-            mock_linter.lint.return_value = mock_schema_report
-
-            # Run command without --check (should include all, including tree)
-            result = runner.invoke(app, ["lint-unified", "--schema-dir", str(schema_dir)])
-
-            # Should fail due to tree violation
-            assert result.exit_code == 1
-            assert "GEN001" in result.stdout
-
-    def test_lint_unified_check_schema_does_not_run_tree(self, tmp_path):
-        """Should NOT run tree checks when --check schema is specified."""
-        # Create temp dir with GEN001 violation
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
-        (schema_dir / "01_foo.sql").write_text("CREATE TABLE foo (id INT);")
-        (schema_dir / "01_bar.sql").write_text("CREATE TABLE bar (id INT);")
-
-        with patch("confiture.core.linting.SchemaLinter") as mock_linter_class:
-            mock_linter = MagicMock()
-            mock_linter_class.return_value = mock_linter
-
-            # Mock schema lint to return clean
-            mock_schema_report = LintReport(errors=[], warnings=[], info=[])
-            mock_linter.lint.return_value = mock_schema_report
-
-            # Run command with --check schema only
-            result = runner.invoke(
-                app, ["lint-unified", "--check", "schema", "--schema-dir", str(schema_dir)]
-            )
-
-            # Should succeed (no tree checks run)
-            assert result.exit_code == 0
-            # Verify lint_tree was NOT called
-            mock_linter.lint_tree.assert_not_called()
-
-    def test_lint_unified_tree_with_overrides_dir(self, tmp_path):
-        """Should pass --overrides-dir to lint_tree."""
-        # Create temp directories
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
-        (schema_dir / "01_tables.sql").write_text("CREATE TABLE test (id INT);")
-
-        overrides_dir = tmp_path / "overrides"
-        overrides_dir.mkdir()
-
-        with patch("confiture.core.linting.SchemaLinter") as mock_linter_class:
-            mock_linter = MagicMock()
-            mock_linter_class.return_value = mock_linter
-
-            # Mock clean report
-            mock_tree_report = LintReport(errors=[], warnings=[], info=[])
-            mock_linter.lint_tree.return_value = mock_tree_report
-
-            # Run command with --overrides-dir
-            result = runner.invoke(
-                app,
-                [
-                    "lint-unified",
-                    "--check",
-                    "tree",
-                    "--overrides-dir",
-                    str(overrides_dir),
-                    "--schema-dir",
-                    str(schema_dir),
-                ],
-            )
-
-            # Should succeed (exit code 0, no crash)
-            assert result.exit_code == 0
-            # Verify lint_tree was called with overrides_dir
-            mock_linter.lint_tree.assert_called_once_with(
-                schema_dir=schema_dir,
-                overrides_dir=overrides_dir,
-            )
+        assert json.loads(result.stdout)["issues"] == []
