@@ -139,6 +139,10 @@ class LintReport:
         warnings_count: Number of WARNING level violations
         info_count: Number of INFO level violations
         execution_time_ms: Time taken to lint in milliseconds
+        gate: What decided the exit code and whether anything could have
+            reached it — see ``core.linting.gate.Gate.to_dict``. Every
+            ``confiture lint`` run sets it; a report a library caller builds
+            itself has none.
     """
 
     violations: list[Violation]
@@ -150,6 +154,7 @@ class LintReport:
     info_count: int
     execution_time_ms: int
     baseline: dict[str, Any] | None = None
+    gate: dict[str, Any] | None = None
 
     @property
     def has_errors(self) -> bool:
@@ -208,7 +213,9 @@ class LintReport:
     def to_dict(self) -> dict[str, Any]:
         """The ``lint --format json`` payload (before the envelope adds ``parser``).
 
-        ``baseline`` is present only when the run compared against one (#219).
+        ``baseline`` is present only when the run compared against one (#219);
+        ``gate`` only when a gate decided the outcome, which is every run of
+        the command.
         """
         payload: dict[str, Any] = {
             "schema_name": self.schema_name,
@@ -237,4 +244,6 @@ class LintReport:
         }
         if self.baseline is not None:
             payload["baseline"] = self.baseline
+        if self.gate is not None:
+            payload["gate"] = self.gate
         return payload

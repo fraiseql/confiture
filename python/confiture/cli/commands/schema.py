@@ -38,7 +38,9 @@ from confiture.core.linting import SchemaLinter
 from confiture.core.linting.baseline import Baseline, BaselineDiff, identity
 from confiture.core.linting.duplicates import duplicate_violations, find_duplicates, inventory_files
 from confiture.core.linting.gate import (
+    Gate,
     Threshold,
+    compute_gate,
     parse_threshold,
     should_fail,
     threshold_from_aliases,
@@ -1058,10 +1060,17 @@ def lint(
         baseline_diff = _apply_baseline(
             linter_report, baseline=baseline, write=write_baseline, project_dir=project_dir
         )
+        gate = compute_gate(
+            threshold=threshold,
+            selected=selected,
+            escalations=_severity_escalations(env, project_dir, selected),
+            baseline_active=baseline_diff is not None,
+        )
         report = _convert_linter_report(
             linter_report,
             schema_name=env,
             baseline=None if baseline_diff is None else baseline_diff.summary(),
+            gate=gate.to_dict(),
         )
         if format_type == "table":
             format_lint_report(report, format_type="table", console=console)
@@ -1076,6 +1085,7 @@ def lint(
                 # terminal width, which breaks the JSON stream (see _output_json).
                 print(formatted)
 
+        _print_gate_notice(gate, format_type)
         if baseline_diff is not None:
             _print_baseline_note(baseline_diff, format_type, wrote=write_baseline)
         found = [v.severity.value for v in report.violations]
@@ -1138,6 +1148,39 @@ def _resolve_threshold(
     return parse_threshold(fail_on)
 
 
+def _print_gate_notice(gate: Gate, format_type: str) -> None:
+    """Say, on the summary, when nothing this run selected could have failed it.
+
+    The whole of #247: a pipeline set ``--fail-on-error``, no selected rule
+    emitted at ``error``, and four real findings sat behind a green tick for
+    months. ``--fail-on never`` is the same fact deliberately chosen, so it is
+    stated rather than warned about.
+    """
+    if format_type != "table" or gate.reachable or gate.reason is None:
+        return
+    style = "dim" if gate.threshold is Threshold.NEVER else "yellow"
+    console.print(f"\n[{style}]{gate.reason}[/{style}]")
+
+
+def _severity_escalations(env: str, project_dir: Path, selected: frozenset[str]) -> dict[str, str]:
+    """Selected rules whose configured severity is above the registry's declaration.
+
+    Reachability that ignored these would tell a project that has escalated
+    ``sec_002`` to ``error`` that its ``--fail-on error`` gate cannot fire, one
+    sentence before it fires.
+    """
+    escalations: dict[str, str] = {}
+    if "sec_002" in selected:
+        cfg = _security_lint_config(env, project_dir)
+        if cfg is not None and cfg.severity == "error":
+            escalations["sec_002"] = "error"
+    if "replica_001" in selected:
+        has_replicas, bypass = _replica_policy(env, project_dir)
+        if has_replicas and not bypass:
+            escalations["replica_001"] = "error"
+    return escalations
+
+
 def _linter_config(selected: frozenset[str], threshold: Threshold) -> LinterConfig:
     """``LintConfig``'s coarse switches, from the exact set of selected codes.
 
@@ -1191,16 +1234,18 @@ def _replica_findings(env: str, project_dir: Path, migrations_dir: Path) -> list
     # Reason: CLI start-up: importing confiture.core.linting.libraries.replica costs ~28 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.linting.libraries.replica import Replica001ForwardCompat
 
-    has_replicas = False
-    bypass = False
+    has_replicas, bypass = _replica_policy(env, project_dir)
+    return Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(migrations_dir)
+
+
+def _replica_policy(env: str, project_dir: Path) -> tuple[bool, bool]:
+    """``(replicas declared, unsafe DDL allowed anyway)`` — what decides replica_001's severity."""
     try:
         _env = Environment.load(env, project_dir=project_dir)
-        has_replicas = bool(_env.infrastructure.replicas)
-        bypass = _env.migration.allow_unsafe_under_replication
     # Reason: replica config is optional; any failure reading it means 'no replicas'
     except Exception:
-        pass
-    return Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(migrations_dir)
+        return False, False
+    return bool(_env.infrastructure.replicas), _env.migration.allow_unsafe_under_replication
 
 
 def _security_definer_findings(env: str, project_dir: Path) -> list[LintViolation]:

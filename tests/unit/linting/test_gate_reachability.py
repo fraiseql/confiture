@@ -24,10 +24,12 @@ from confiture.core.linting.gate import Threshold, compute_gate
 runner = CliRunner()
 
 _ENV = "database_url: postgresql://localhost/test\ninclude_dirs:\n  - path: db/schema\n"
-_UNPINNED_DEFINER = """CREATE SCHEMA IF NOT EXISTS app;
+#: Deliberately clean: reachability is a property of the *selection*, not of
+#: whether this particular schema happens to trip the rule.
+_PINNED_DEFINER = """CREATE SCHEMA IF NOT EXISTS app;
 
 CREATE FUNCTION app.fn_widget() RETURNS int
-LANGUAGE sql SECURITY DEFINER AS $$ SELECT 1 $$;
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog AS $$ SELECT 1 $$;
 """
 
 
@@ -36,7 +38,7 @@ def project(tmp_path: Path) -> Iterator[Path]:
     (tmp_path / "db" / "schema").mkdir(parents=True)
     (tmp_path / "db" / "environments").mkdir(parents=True)
     (tmp_path / "db" / "environments" / "local.yaml").write_text(_ENV)
-    (tmp_path / "db" / "schema" / "010_widget.sql").write_text(_UNPINNED_DEFINER)
+    (tmp_path / "db" / "schema" / "010_widget.sql").write_text(_PINNED_DEFINER)
 
     old_cwd = Path.cwd()
     os.chdir(tmp_path)

@@ -183,6 +183,57 @@ that turns it off.
 
 ---
 
+## Making lint block — `--fail-on`
+
+A lint whose findings never fail a pipeline is a lint nobody fixes. One flag
+decides:
+
+```bash
+confiture lint --fail-on error     # the default: only errors fail
+confiture lint --fail-on warning   # warnings too (`--fail-on-warning` is an alias)
+confiture lint --fail-on info      # every finding fails
+confiture lint --fail-on never     # report everything, never fail
+```
+
+`--fail-on-error` and `--fail-on-warning` are aliases for the first two, kept
+because pipelines already pass them. Passing an alias *and* `--fail-on` states
+the gate twice and exits 2; an unrecognised severity is `CONFIG_010` (exit 5).
+
+**A threshold nothing can reach is reported, not obeyed quietly.** This is the
+trap [#247](https://github.com/fraiseql/confiture/issues/247) was filed for: a
+pipeline set `--fail-on-error`, no selected rule emitted at `error`, and four
+real `build_001` findings sat behind a green tick for months. A run whose gate
+cannot fire now says so on the summary:
+
+```
+no selected rule emits at 'error'; this gate cannot fail — see --fail-on and --baseline
+```
+
+and `--format json` carries the same answer:
+
+```json
+"gate": {
+  "threshold": "error",
+  "reachable": false,
+  "reason": "no selected rule emits at 'error'; this gate cannot fail — see --fail-on and --baseline",
+  "max_selectable_severity": "warning"
+}
+```
+
+Reachability is computed from the registry's declared severities *plus* the
+escalations your config makes — `security_lint.severity: error` for `sec_002`,
+declared replicas for `replica_001` — so a project that has escalated is told
+its gate is armed rather than warned about a problem it does not have. See
+[lint-rules.md](../reference/lint-rules.md) for the two escalable rules.
+
+The three ways to make a gate meaningful, in the order to reach for them:
+
+1. **Raise the threshold** to the severity your rules actually emit
+   (`--fail-on warning` is the usual answer today).
+2. **Select a rule that reaches your threshold**, or escalate one by config.
+3. **Adopt with a baseline** — with `--baseline`, *any* new finding fails the
+   run whatever its severity, which is the next section.
+
 ## Adopting a rule with a baseline — `--baseline` / `--write-baseline`
 
 Turning on a rule against a schema that already trips it a hundred times is a
@@ -522,7 +573,7 @@ jobs:
         run: pip install fraiseql-confiture
 
       - name: Lint schema
-        run: confiture lint --strict
+        run: confiture lint --fail-on warning
 
       - name: Comment on PR
         if: failure()
@@ -546,17 +597,18 @@ jobs:
 
 **Good**:
 ```bash
-# Fail on any lint violations
-confiture lint --strict
+# Block on everything the rules can emit
+confiture lint --fail-on warning
 
-# Fail on critical issues only
-confiture lint --fail-level critical
+# Adopt against an existing backlog: fail only on what is new
+confiture lint --baseline .confiture-lint-baseline.json
 ```
 
 **Bad**:
 ```bash
-# Ignore lint issues
-confiture lint # (warnings don't fail)
+# The default threshold no rule reaches: a green tick that means nothing.
+# The run tells you so — read the notice rather than the exit code.
+confiture lint --fail-on error
 ```
 
 ### 2. Document Custom Rules

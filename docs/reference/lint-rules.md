@@ -26,6 +26,19 @@ Adopt a rule on a schema that already trips it with a
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
 <!-- END GENERATED -->
 
+The **Severity** column is the severity a rule emits by default. Two rules are
+escalated by configuration, and `--list-rules --format json` names both the
+severity they reach and what raises it (`escalates_to`, `escalated_by`):
+
+| Rule | Reaches | When |
+|------|---------|------|
+| `sec_002` | `error` | `security_lint.severity: error` |
+| `replica_001` | `error` | `infrastructure.replicas` declared, without `migration.allow_unsafe_under_replication` |
+
+`confiture lint --fail-on <severity>` reads both, so it can tell a project whose
+gate cannot fire from one whose gate is armed — see
+[making lint block](cli.md#making-lint-block-fail-on).
+
 > The table above is generated from `LINT_RULES`. Regenerate with
 > `python -c "from confiture.core.linting.rule_registry import render_rule_table;
 > print(render_rule_table())"`; `tests/unit/test_lint_rules_doc.py` fails if it drifts.

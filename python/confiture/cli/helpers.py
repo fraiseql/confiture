@@ -151,6 +151,7 @@ def _convert_linter_report(
     linter_report: LinterReport,
     schema_name: str = "schema",
     baseline: dict[str, Any] | None = None,
+    gate: dict[str, Any] | None = None,
 ) -> LintReport:
     """Convert a schema_linter.LintReport to models.lint.LintReport.
 
@@ -158,6 +159,7 @@ def _convert_linter_report(
         linter_report: Report from SchemaLinter
         schema_name: Name of schema being linted
         baseline: The ``--baseline`` comparison summary, when one ran.
+        gate: What decides this run's exit code, and whether it can be reached.
 
     Returns:
         LintReport compatible with format_lint_report
@@ -176,6 +178,7 @@ def _convert_linter_report(
         info_count=len(linter_report.info),
         execution_time_ms=0,  # Not tracked in linter
         baseline=baseline,
+        gate=gate,
     )
 
 

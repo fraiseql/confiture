@@ -160,6 +160,53 @@
           "minimum": 0
         }
       }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "threshold",
+        "reachable",
+        "reason",
+        "max_selectable_severity"
+      ],
+      "description": "What decided the exit code, and whether anything the run selected could have reached it (#247). Present on every `confiture lint` payload.",
+      "properties": {
+        "threshold": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warning",
+            "info",
+            "never"
+          ],
+          "description": "The severity at or above which a finding fails the run \u2014 `--fail-on`."
+        },
+        "reachable": {
+          "type": "boolean",
+          "description": "Whether any selected rule can emit at or above `threshold`, escalations applied."
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Why the threshold cannot be reached, in the words the summary line uses; null when it can."
+        },
+        "max_selectable_severity": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "error",
+            "warning",
+            "info",
+            null
+          ],
+          "description": "The most severe finding this selection can produce; null when no rule is selected."
+        }
+      }
     }
   }
 }
