@@ -148,6 +148,10 @@ class LintReport:
         degraded: Rules that ran without one of the things they resolve
             against, so they can over-report — ``build_003`` with no live
             database is the first of them.
+        documentation: How much of the schema carries a comment and how long
+            those comments are, per ``doc`` rule and for the family (#250).
+            ``None`` when the family did not run: absent means unmeasured,
+            which is not the same as zero.
     """
 
     violations: list[Violation]
@@ -162,6 +166,7 @@ class LintReport:
     gate: dict[str, Any] | None = None
     skipped: list[dict[str, str]] = field(default_factory=list)
     degraded: list[dict[str, str]] = field(default_factory=list)
+    documentation: dict[str, Any] | None = None
 
     @property
     def has_errors(self) -> bool:
@@ -222,7 +227,7 @@ class LintReport:
 
         ``baseline`` is present only when the run compared against one (#219);
         ``gate`` only when a gate decided the outcome, which is every run of
-        the command. ``skipped`` and ``degraded`` are always present, empty
+        the command; ``documentation`` only when the ``doc`` family ran. ``skipped`` and ``degraded`` are always present, empty
         when nothing was skipped or degraded: a consumer that has to tell
         "nothing was skipped" from "this payload predates the field" is a
         consumer that will assume the first.
@@ -254,6 +259,8 @@ class LintReport:
         }
         payload["skipped"] = list(self.skipped)
         payload["degraded"] = list(self.degraded)
+        if self.documentation is not None:
+            payload["documentation"] = self.documentation
         if self.baseline is not None:
             payload["baseline"] = self.baseline
         if self.gate is not None:

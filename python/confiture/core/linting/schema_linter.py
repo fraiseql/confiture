@@ -105,6 +105,10 @@ class LintReport:
     #: Rules that did not run, and rules that ran without one of their tiers.
     skipped: list[RuleStatus] = field(default_factory=list)
     degraded: list[RuleStatus] = field(default_factory=list)
+    #: What the ``doc`` family measured, when it ran: how much of the schema
+    #: carries a comment and how long those comments are (#250). ``None`` when
+    #: the family was not selected — absent, not zero.
+    documentation: dict[str, Any] | None = None
 
     @property
     def has_errors(self) -> bool:
@@ -457,10 +461,14 @@ class SchemaLinter:
     def _check_documentation(self, report: LintReport) -> None:
         """The ``doc`` family: every commentable object carries a COMMENT (#217)."""
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core.linting.documentation import documentation_findings
+        from confiture.core.linting.documentation import (
+            documentation_findings,
+            documentation_summary,
+        )
 
         for violation in documentation_findings(self._inventory):
             report.add_violation(violation)
+        report.documentation = documentation_summary(self._inventory)
 
     def _check_duplicates(self, report: LintReport) -> None:
         """``build_001`` / ``build_002``: an object defined more than once in one build (#218).

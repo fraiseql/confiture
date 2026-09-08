@@ -139,6 +139,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skipped rule could not have reached anyway is unaffected, and `--fail-on never` still never fails.
   One required CI leg (`plpgsql-check`) runs the rule on a PostgreSQL built from a digest-pinned
   `postgres:15` plus the PGDG package; every other leg exercises the skip path.
+- **The `doc` family reports a distribution, not just a count (#250).** `doc_001`–`doc_004` are
+  satisfied by any `COMMENT`, so a schema whose every object carries a one-line restatement of its
+  own name reports **no findings at all** and reads as 100 % documented — indistinguishable from one
+  where somebody read every consumer of every object and wrote a paragraph. Every run that includes
+  the family now says which of the two it has, on one summary line printed above the findings and
+  before the "no violations" line, because the case this exists for has none:
+  `doc: 412 documented, 0 undocumented, median comment 9 chars (p10 7, p90 14)`. `--format json`
+  carries the same figures per rule in a new `documentation` block (`lint.schema.json`), always all
+  four rows, absent rather than zeroed when the family did not run. Percentiles are nearest-rank, so
+  every number is a length some comment actually has. This is a measurement, not a rule: no finding,
+  no exit code, nothing to select or baseline.
+  The inventory now keeps the comment *text* rather than a flag, which fixes two comments that
+  counted as documentation and are not: **`COMMENT ON … IS NULL` removes a comment** and an empty
+  one says nothing. Both now report.
 - **A rule that could not run in full says so.** `LintReport` gains `skipped` and `degraded`, each
   entry `{code, state, reason}`, surfaced on the summary line and as two arrays in
   `lint --format json` (`lint.schema.json` requires both, empty when there is nothing to say). The

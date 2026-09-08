@@ -269,6 +269,110 @@
         }
       },
       "description": "Rules that ran without one of the things they resolve against, so they can over-report. `build_003` with no reachable database is the first of them: an object created by a migration or owned by an extension is then reported as missing."
+    },
+    "documentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "documented",
+        "undocumented",
+        "comment_length",
+        "rules"
+      ],
+      "description": "What the `doc` family measured, present only when it ran (#250). The rules report that a COMMENT exists; a project driving that counter to zero is rewarded by whatever satisfies it, so 100% documented reads the same for a hundred paragraphs and a hundred one-line restatements. The top-level figures are the family's; `rules` carries one row per doc code, always all four, so a code with no objects in the schema is a row of zeros rather than an absence.",
+      "properties": {
+        "documented": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Objects in scope of a doc rule that carry a non-blank COMMENT."
+        },
+        "undocumented": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Objects in scope of a doc rule that carry none. A COMMENT ... IS NULL removes a comment and counts here, as does an empty one."
+        },
+        "comment_length": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "p10",
+            "p50",
+            "p90"
+          ],
+          "description": "Comment-length percentiles over the documented objects, nearest-rank, so each value is a length some comment actually has. Lengths are the comment text with surrounding whitespace stripped. Null when nothing in scope carries a comment.",
+          "properties": {
+            "p10": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "p50": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "p90": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "rules": {
+          "type": "array",
+          "description": "One row per doc rule, in catalogue order.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "documented",
+              "undocumented",
+              "comment_length"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "documented": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "undocumented": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "comment_length": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "p10",
+                  "p50",
+                  "p90"
+                ],
+                "description": "Comment-length percentiles over the documented objects, nearest-rank, so each value is a length some comment actually has. Lengths are the comment text with surrounding whitespace stripped. Null when nothing in scope carries a comment.",
+                "properties": {
+                  "p10": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "p50": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "p90": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

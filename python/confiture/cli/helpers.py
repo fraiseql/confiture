@@ -181,6 +181,7 @@ def _convert_linter_report(
         gate=gate,
         skipped=[status.to_dict() for status in linter_report.skipped],
         degraded=[status.to_dict() for status in linter_report.degraded],
+        documentation=linter_report.documentation,
     )
 
 

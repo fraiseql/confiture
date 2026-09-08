@@ -99,6 +99,52 @@ COMMENT ON FUNCTION app.f(integer) IS 'the integer one';
 are dropped, so `COMMENT ON PROCEDURE app.p(numeric)` documents
 `app.p(x numeric(10,2))`.
 
+A `COMMENT ON … IS NULL` *removes* a comment, and an empty one says nothing;
+neither documents the object, and both report.
+
+### The distribution — what the counter cannot say
+
+The four rules count comments. A project that drives that count to zero is
+rewarded by whatever satisfies it, and a hundred one-line restatements of the
+signature read as "documentation: 100 %" exactly as a hundred paragraphs do — a
+schema where one documentation pass wrote about 1 100 characters per object
+looks identical, afterwards, to one that wrote nine (#250).
+
+So every run that includes the family reports the distribution beside the count.
+On the summary line, above the findings and before the "no violations" line,
+because the case this exists for has no findings:
+
+```
+doc: 412 documented, 0 undocumented, median comment 9 chars (p10 7, p90 14)
+```
+
+and in `--format json`, as a `documentation` block with a row per rule:
+
+```json
+{
+  "documentation": {
+    "documented": 412,
+    "undocumented": 0,
+    "comment_length": {"p10": 7, "p50": 9, "p90": 14},
+    "rules": [
+      {"code": "doc_001", "documented": 96, "undocumented": 0,
+       "comment_length": {"p10": 8, "p50": 11, "p90": 19}},
+      {"code": "doc_003", "documented": 0, "undocumented": 0, "comment_length": null}
+    ]
+  }
+}
+```
+
+Percentiles are **nearest rank**, so every number reported is a length some
+comment actually has rather than an average of two neighbours, and a length is
+the comment text with surrounding whitespace stripped. Every `doc` code gets a
+row whether or not the schema holds any of its objects, so a consumer reads a
+fixed shape. The block is **absent**, not zeroed, when the family did not run
+(`--ignore doc`): unmeasured and none are different answers.
+
+This is a measurement, not a rule — it emits no finding, moves no exit code, and
+there is nothing to select or baseline.
+
 ## The `qual` family — a `CREATE` says which schema it lands in
 
 `CREATE FUNCTION fn_slugify(value text) ...` does not say where the function

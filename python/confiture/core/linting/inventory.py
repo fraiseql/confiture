@@ -114,7 +114,9 @@ class SchemaObject:
     decide what a second definition of the same object does at build time.
     ``line`` is where the object's *name* is written and ``statement_line``
     where its ``CREATE`` begins — the same line for most statements, and not
-    for one whose name is on a continuation line.
+    for one whose name is on a continuation line. ``comment`` is the text a
+    ``COMMENT ON`` left on the object, kept rather than reduced to a flag so a
+    rule can ask what the comment *says* and not only that one exists (#250).
     """
 
     kind: str
@@ -127,7 +129,7 @@ class SchemaObject:
     has_primary_key: bool = False
     is_partition: bool = False
     is_temporary: bool = False
-    documented: bool = False
+    comment: str | None = None
     signature: str | None = None
     offset: int = 0
     file: str | None = None
@@ -135,6 +137,16 @@ class SchemaObject:
     if_not_exists: bool = False
     parent: str | None = None
     statement_line: int = 1
+
+    @property
+    def documented(self) -> bool:
+        """Whether a ``COMMENT`` on this object left anything behind.
+
+        ``COMMENT ON TABLE t IS NULL`` *removes* a comment and ``IS ''`` stores
+        an empty one; both satisfied the ``doc`` family while it counted the
+        statement rather than what the statement left (#250).
+        """
+        return bool(self.comment and self.comment.strip())
 
     @property
     def qualified(self) -> str:
@@ -541,6 +553,11 @@ def _comment_target(stmt: Any) -> tuple[str | None, str, str | None] | None:
 
 
 def _apply_comment(stmt: Any, inventory: Inventory) -> None:
+    """Record what a ``COMMENT ON`` leaves on the objects it names.
+
+    The last statement wins, as it does in PostgreSQL, so a later
+    ``IS NULL`` really does undocument the object.
+    """
     kinds = _COMMENT_TARGETS.get(_enum_value(stmt.objtype))
     if kinds is None:
         return
@@ -549,7 +566,7 @@ def _apply_comment(stmt: Any, inventory: Inventory) -> None:
         return
     schema, name, signature = target
     for obj in inventory.find_all(kinds, schema, name, signature):
-        obj.documented = True
+        obj.comment = getattr(stmt, "comment", None)
 
 
 def build_inventory(sql: str) -> Inventory:

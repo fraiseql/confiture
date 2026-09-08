@@ -85,6 +85,7 @@ def format_table(report: LintReport, console: Console) -> None:
     console.print(f"Time: {report.execution_time_ms}ms\n")
 
     _print_statuses(report, console)
+    _print_documentation(report, console)
 
     if not report.violations:
         console.print("[green]✅ No violations found![/green]\n")
@@ -150,6 +151,28 @@ def _print_statuses(report: LintReport, console: Console) -> None:
     for status in (*report.skipped, *report.degraded):
         verb = _STATE_VERB.get(status["state"], status["state"])
         console.print(f"{status['code']} {verb}: {status['reason']}\n", markup=False)
+
+
+def _print_documentation(report: LintReport, console: Console) -> None:
+    """The `doc` family's distribution, in one line, above the findings.
+
+    Printed before the early return for a clean report, because the failure
+    mode #250 describes has no findings at all: a schema whose every object
+    carries a one-line restatement of its own name reports zero `doc`
+    violations and a documentation figure of 100 %. The median is what tells
+    that apart from a documented schema, and p10/p90 tell it apart from a
+    schema where half the objects got the real treatment.
+    """
+    block = report.documentation
+    if block is None:
+        return
+    line = f"doc: {block['documented']} documented, {block['undocumented']} undocumented"
+    lengths = block.get("comment_length")
+    if lengths:
+        line += (
+            f", median comment {lengths['p50']} chars (p10 {lengths['p10']}, p90 {lengths['p90']})"
+        )
+    console.print(f"[dim]{line}[/dim]\n")
 
 
 def format_json(report: LintReport) -> str:

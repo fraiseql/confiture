@@ -490,7 +490,7 @@ Shape is identical to plain `drift` — items of type `missing_grant` / `extra_g
 
 ### `confiture lint --format json`
 
-**Schema**: [`lint.schema.json`](json-schemas/lint.schema.json) — `LintReport.to_dict()`: the counts and the violation items (`rule_id`, `severity`, `location`, `file`, `line`, `message`, `suggested_fix`). `file` and `line` are `null` together when the rule read a string rather than a file tree. `gate` reports the `--fail-on` threshold and whether any selected rule could have reached it (#247).
+**Schema**: [`lint.schema.json`](json-schemas/lint.schema.json) — `LintReport.to_dict()`: the counts and the violation items (`rule_id`, `severity`, `location`, `file`, `line`, `message`, `suggested_fix`). `file` and `line` are `null` together when the rule read a string rather than a file tree. `gate` reports the `--fail-on` threshold and whether any selected rule could have reached it (#247). `documentation` — present when the `doc` family ran — reports how much of the schema carries a `COMMENT` and the length percentiles of those comments, per rule and for the family, so "100 % documented" can be told apart from "100 restatements" (#250).
 
 ### `confiture introspect --format json`
 
