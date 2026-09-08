@@ -95,6 +95,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`lint-unified`'s table output printed no rule id.** The line was rendered as Rich markup, so a
   lower-case code in brackets (`[tree_001]`) was read as a style tag and dropped. Every field on that
   line is data and is printed as data.
+- **`confiture lint --project-dir` now points the whole command at that project.** It reached
+  `--baseline` and the migration-tree rules but not `SchemaLinter`, which loaded its environment
+  config from the current directory instead — so linting a project from outside it read one
+  project's config and another project's schema. The directories an operator names
+  (`--migrations-dir`, `--overrides-dir`) resolve under it too, through one resolver: before this,
+  `replica_001` read `--migrations-dir` as typed and reported a clean tree it had never opened.
 - `docs/guides/schema-linting.md` recommended `confiture lint --strict` and
   `confiture lint --fail-level critical` in its CI examples. Neither flag has ever existed.
 

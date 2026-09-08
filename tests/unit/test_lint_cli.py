@@ -3,6 +3,7 @@
 These tests verify the lint command integrates properly with the CLI framework.
 """
 
+from pathlib import Path
 from unittest.mock import ANY, MagicMock, patch
 
 from typer.testing import CliRunner
@@ -52,7 +53,7 @@ class TestLintCommand:
         result = runner.invoke(app, ["lint", "--env", "production"])
 
         assert result.exit_code == 0
-        mock_linter_class.assert_called_with(env="production", config=ANY)
+        mock_linter_class.assert_called_with(env="production", project_dir=Path(), config=ANY)
 
     @patch("confiture.cli.commands.schema.SchemaLinter")
     def test_lint_command_with_errors_fail_on_error(self, mock_linter_class):

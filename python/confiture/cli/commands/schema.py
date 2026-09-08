@@ -1067,7 +1067,7 @@ def lint(
         if format_type == "table":
             # The banner is for humans; in json/csv mode stdout is the payload alone.
             console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
-        linter = SchemaLinter(env=env, config=config)
+        linter = SchemaLinter(env=env, project_dir=project_dir, config=config)
         linter_report = linter.lint()
         # LintConfig's switches are coarser than the rule codes — `check_naming`
         # covers naming_001 *and* naming_002 — so `--select naming_001` needs a
@@ -1249,6 +1249,18 @@ def _tree_rule_findings(
     return [_relative(v, project_dir) for v in findings]
 
 
+def _under(path: Path | None, project_dir: Path) -> Path | None:
+    """A directory an operator named, read relative to ``--project-dir``.
+
+    ``--migrations-dir`` and ``--overrides-dir`` are project-relative like
+    ``--baseline`` is; three rules read the first of them and they must all read
+    the same directory.
+    """
+    if path is None or path.is_absolute():
+        return path
+    return project_dir / path
+
+
 def _env_ddl_files(env: str, project_dir: Path) -> tuple[list[Path], list[Path]]:
     """``(the files the build reads, the roots it reads them from)``.
 
@@ -1269,10 +1281,12 @@ def _ddl_tree_findings(
 ) -> list[LintViolation]:
     """#111: tree_001–tree_004 over the DDL file tree the environment builds."""
     files, roots = _env_ddl_files(env, project_dir)
-    resolved = None
-    if overrides_dir is not None:
-        resolved = overrides_dir if overrides_dir.is_absolute() else project_dir / overrides_dir
-    return tree_violations(files, selected=selected, schema_dirs=roots, overrides_dir=resolved)
+    return tree_violations(
+        files,
+        selected=selected,
+        schema_dirs=roots,
+        overrides_dir=_under(overrides_dir, project_dir),
+    )
 
 
 def _function_uniqueness_findings(env: str, project_dir: Path) -> list[LintViolation]:
@@ -1300,7 +1314,7 @@ def _ownership_findings(
     expectation = _env_block(env, project_dir, "ownership")
     if expectation is None:
         return []
-    resolved = migrations_dir if migrations_dir.is_absolute() else project_dir / migrations_dir
+    resolved = _under(migrations_dir, project_dir)
     findings: list[LintViolation] = []
     if "own_001" in selected:
         findings += Own001OwnershipCoverage(expectation=expectation).check(resolved)
@@ -1340,7 +1354,9 @@ def _replica_findings(env: str, project_dir: Path, migrations_dir: Path) -> list
     from confiture.core.linting.libraries.replica import Replica001ForwardCompat
 
     has_replicas, bypass = _replica_policy(env, project_dir)
-    return Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(migrations_dir)
+    return Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(
+        _under(migrations_dir, project_dir)
+    )
 
 
 def _replica_policy(env: str, project_dir: Path) -> tuple[bool, bool]:

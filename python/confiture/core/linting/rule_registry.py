@@ -221,7 +221,7 @@ LINT_RULES: tuple[LintRule, ...] = (
         title="No bare ALTER … OWNER TO on an object the migration did not create (guarded: warning)",
         severity="error",
         default_on=False,
-        requires_config="ownership:",
+        requires_config="an ownership: block",
     ),
     LintRule(
         code="tree_001",
