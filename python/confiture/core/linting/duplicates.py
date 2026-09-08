@@ -72,21 +72,32 @@ class Duplicate:
 def inventory_files(
     files: Iterable[Path], root: Path | None = None
 ) -> tuple[list[SchemaObject], list[SchemaObject], list[str]]:
-    """Inventory each file on its own, so every object knows its file.
+    """Inventory each file on its own, so every object knows its file."""
+    return inventory_texts((_label(path, root), path.read_text(encoding="utf-8")) for path in files)
+
+
+def inventory_texts(
+    sources: Iterable[tuple[str | None, str]],
+) -> tuple[list[SchemaObject], list[SchemaObject], list[str]]:
+    """The same, for text already read — one ``(label, text)`` pair per file.
 
     Returns the objects, the ``CREATE SCHEMA`` declarations and the files
     pglast rejected, each in file order — a file that cannot be parsed is
     reported, never silently skipped.
+
+    Callers that need the file text for something else too pass it in rather
+    than making this open the file again: a lint that wants a location for
+    every finding wants the same text several rules over.
     """
     objects: list[SchemaObject] = []
     schemas: list[SchemaObject] = []
     unparseable: list[str] = []
-    for path in files:
-        label = _label(path, root)
+    for label, text in sources:
         try:
-            inventory = build_inventory(path.read_text(encoding="utf-8"))
+            inventory = build_inventory(text)
         except pglast.parser.ParseError:
-            unparseable.append(label)
+            if label is not None:
+                unparseable.append(label)
             continue
         for obj in (*inventory.objects, *inventory.schemas):
             obj.file = label

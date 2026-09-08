@@ -277,6 +277,7 @@ class SchemaLinter:
         self._schema_files: list[Path] = []
         self._file_objects: list[SchemaObject] = []
         self._file_schemas: list[SchemaObject] = []
+        self._source_cache: list[tuple[str | None, str]] | None = None
 
     def lint(self, schema: str | None = None) -> LintReport:
         """Run linting and return report.
@@ -292,6 +293,7 @@ class SchemaLinter:
         if not self.config.enabled:
             return report
 
+        self._source_cache = None
         # Use provided schema or load from files
         if schema is not None:
             self._schema_sql = schema
@@ -396,11 +398,11 @@ class SchemaLinter:
         files and therefore no locations to report.
         """
         # Reason: import cycle (duplicates imports this module's inventory at module level)
-        from confiture.core.linting.duplicates import inventory_files
+        from confiture.core.linting.duplicates import inventory_texts
 
         if not self._schema_files:
             return [], []
-        objects, schemas, _unparseable = inventory_files(self._schema_files, root=self.project_dir)
+        objects, schemas, _unparseable = inventory_texts(self._sources())
         return objects, schemas
 
     def _load_schema(self) -> None:
@@ -696,13 +698,21 @@ class SchemaLinter:
         Every rule that reads the files *as files* — rather than the build they
         concatenate into — needs the same pair, and a whole-string lint
         (``lint(schema=...)``) has no file to name, so its label is ``None``.
+
+        Read once per lint and held: six rules want it, and a schema tree is
+        thousands of files. ``lint()`` clears it, so a reused linter still sees
+        what is on disk now.
         """
-        if not self._schema_files:
-            return [(None, self._schema_sql or "")]
-        return [
-            (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
-            for path in self._schema_files
-        ]
+        if self._source_cache is None:
+            self._source_cache = (
+                [(None, self._schema_sql or "")]
+                if not self._schema_files
+                else [
+                    (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
+                    for path in self._schema_files
+                ]
+            )
+        return self._source_cache
 
     def _directive_lines(self, name: str) -> frozenset[tuple[str | None, int]]:
         """``(file, statement line)`` of every statement carrying ``-- confiture:<name>``.
