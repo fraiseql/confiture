@@ -91,6 +91,13 @@ FIXTURES: dict[str, Fixture] = {
     ),
     "doc_003": Fixture({"010.sql": "CREATE VIEW v_t AS SELECT 1 AS x;\n"}),
     "doc_004": Fixture({"010.sql": "CREATE TYPE ty_t AS (a int);\n"}),
+    "doc_005": Fixture(
+        {
+            "010.sql": "CREATE FUNCTION delete_widget(id int) RETURNS void "
+            "LANGUAGE sql AS $$ SELECT 1 $$;\n"
+            "COMMENT ON FUNCTION delete_widget(int) IS 'Deletes a widget';\n"
+        }
+    ),
     "build_001": Fixture(
         {
             "010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY);\n",

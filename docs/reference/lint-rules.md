@@ -18,6 +18,7 @@ Adopt a rule on a schema that already trips it with a
 | `doc_002` | doc | info | on | Every function and procedure should carry a COMMENT (per overload) |
 | `doc_003` | doc | info | on | Every view and materialized view should carry a COMMENT |
 | `doc_004` | doc | info | on | Every composite type, enum and domain should carry a COMMENT |
+| `doc_005` | doc | info | off | A COMMENT says something the object's own name does not |
 | `build_001` | build | warning | on | An object is defined more than once in one build |
 | `build_002` | build | info | on | A routine's overloads are split across files |
 | `build_003` | build | warning | on | A body references an object the build does not create |
@@ -144,6 +145,47 @@ fixed shape. The block is **absent**, not zeroed, when the family did not run
 
 This is a measurement, not a rule — it emits no finding, moves no exit code, and
 there is nothing to select or baseline.
+
+### `doc_005` — a comment that says only what the name says
+
+`info`, **opt-in** (`--select default,doc_005`). One finding per comment where
+every meaningful word is already a word of the object's own name:
+
+```sql
+COMMENT ON FUNCTION app.delete_widget(uuid, uuid, boolean, uuid) IS
+'Deletes a widget';
+-- doc_005: Function 'app.delete_widget(...)' has a COMMENT that says only what
+-- its name already says: 'Deletes a widget'
+```
+
+The comparison is string-only and deliberately narrow. The name is split on `_`;
+the comment is lowercased, split on non-word characters, and stripped of
+articles and prepositions (`a`, `the`, `of`, `to`, …), which is what makes
+`'Deletes a widget'` and `'Deletes widget'` the same finding. Both sides are
+reduced to a crude stem, so an inflected verb still matches the name's own word
+— `'Creating widgets'` against `create_widget`. Only the *local* name is
+compared: a schema qualifier and a signature are not things a comment restates.
+
+It stays quiet when:
+
+- the comment carries any word the name does not — `'Soft-deletes a widget and
+  cascades to its variants, returning the affected count'` against
+  `delete_widget` reports nothing, because of `soft`;
+- the name is one word, so there is nothing to restate and nothing to be right
+  about;
+- there is no comment at all, which is `doc_001`–`doc_004`'s finding.
+
+**The length bound the issue also proposes is not implemented.** "Shorter than
+40 characters on an object with more than one parameter" would be wrong more
+often than right: a short accurate comment is common, and punishing it teaches
+padding.
+
+**This rule is a heuristic and it is wrong sometimes.** A comment that is
+*correct* and happens to restate the name is a false positive — some objects
+really do only do what their name says. That is why it is `info`, why it is
+opt-in, and why the answer to one is
+[a baseline](../guides/schema-linting.md#adopting-a-rule-with-a-baseline-baseline-write-baseline)
+rather than rewording a comment that was fine.
 
 ## The `qual` family — a `CREATE` says which schema it lands in
 

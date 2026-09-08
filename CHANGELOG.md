@@ -153,6 +153,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The inventory now keeps the comment *text* rather than a flag, which fixes two comments that
   counted as documentation and are not: **`COMMENT ON … IS NULL` removes a comment** and an empty
   one says nothing. Both now report.
+- **`doc_005`: a `COMMENT` that says only what the object's own name says (#250).** `info`,
+  **opt-in** (`--select default,doc_005`). One finding per comment whose every meaningful word is
+  already a word of the name — the issue's own `COMMENT ON FUNCTION app.delete_widget(…) IS 'Deletes
+  a widget'`. String comparison only: the name splits on `_`, the comment lowercases and splits on
+  non-word characters, articles and prepositions are dropped so `'Deletes a widget'` and `'Deletes
+  widget'` are the same finding, and both sides reduce to a crude stem so an inflected verb still
+  meets the name's own word. Only the local name is compared — a schema qualifier and a signature
+  are not things a comment restates. It is silent on a comment carrying any word the name does not,
+  on a one-word name (nothing to restate), and on an object with no comment, which is
+  `doc_001`–`doc_004`'s finding.
+  **The length bound the issue also offers is deliberately not implemented**: "shorter than 40
+  characters on an object with more than one parameter" would be wrong more often than right,
+  because a short accurate comment is common and punishing it teaches padding.
+  The rule is a heuristic and it says so in the reference: a correct comment that happens to restate
+  the name is a false positive, which is why it is `info`, why it is opt-in, and why the answer to
+  one is `--baseline` rather than a reworded comment.
 - **A rule that could not run in full says so.** `LintReport` gains `skipped` and `degraded`, each
   entry `{code, state, reason}`, surfaced on the summary line and as two arrays in
   `lint --format json` (`lint.schema.json` requires both, empty when there is nothing to say). The

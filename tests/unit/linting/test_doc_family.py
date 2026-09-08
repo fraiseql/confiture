@@ -24,7 +24,10 @@ from confiture.core.linting.rule_registry import LINT_RULES, default_codes, reso
 from confiture.core.linting.schema_linter import LintConfig, SchemaLinter
 
 BODY = "RETURNS int LANGUAGE sql AS $$ select 1 $$;"
-DOC_CODES = frozenset({"doc_001", "doc_002", "doc_003", "doc_004"})
+#: Every code the family covers. The four presence rules are on by default;
+#: ``doc_005`` judges what a comment *says* and is opt-in (#250).
+DOC_CODES = frozenset({"doc_001", "doc_002", "doc_003", "doc_004", "doc_005"})
+PRESENCE_CODES = DOC_CODES - {"doc_005"}
 
 
 def _report(sql: str):  # type: ignore[no-untyped-def]
@@ -109,14 +112,16 @@ class TestDocRules:
 
 
 class TestRegistry:
-    def test_the_doc_family_is_four_rules_at_info_on_by_default(self) -> None:
+    def test_the_doc_family_is_five_rules_at_info(self) -> None:
         doc = [rule for rule in LINT_RULES if rule.family == "doc"]
-        assert [rule.code for rule in doc] == ["doc_001", "doc_002", "doc_003", "doc_004"]
+        assert [rule.code for rule in doc] == sorted(DOC_CODES)
         assert {rule.severity for rule in doc} == {"info"}
-        assert all(rule.default_on for rule in doc)
-        assert default_codes() >= DOC_CODES
 
-    def test_select_doc_takes_all_four_and_ignore_drops_one(self) -> None:
+    def test_the_four_presence_rules_are_on_and_the_content_one_is_not(self) -> None:
+        assert default_codes() >= PRESENCE_CODES
+        assert "doc_005" not in default_codes()
+
+    def test_select_doc_takes_the_family_and_ignore_drops_one(self) -> None:
         assert resolve_selection(["doc"], []) == DOC_CODES
         assert resolve_selection(["doc"], ["doc_002"]) == DOC_CODES - {"doc_002"}
         assert resolve_selection(None, ["doc"]) == default_codes() - DOC_CODES

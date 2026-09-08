@@ -12,6 +12,7 @@ from typing import Literal
 
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 
 from confiture.core.parser_info import parser_stamp
 from confiture.models.lint import LintReport, LintSeverity, Violation
@@ -113,7 +114,11 @@ def format_table(report: LintReport, console: Console) -> None:
             violation.rule_id,
             violation.rule_name,
             _location_cell(violation),
-            violation.message,
+            # Text, not str: a message can quote what an author wrote — doc_005
+            # quotes the COMMENT it is about — and Rich reads `[a]` in a cell as
+            # a style tag, rendering a different sentence from the one reported.
+            # The location cell keeps markup, which it composes itself.
+            Text(violation.message),
         )
 
     console.print(table)

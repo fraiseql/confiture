@@ -11,7 +11,9 @@ They count comments, and a project that drives the count to zero is rewarded for
 whatever satisfies them — a hundred one-line restatements of the signature read
 as "documentation: 100 %" exactly as a hundred paragraphs do (#250).
 :func:`documentation_summary` reports the distribution beside the count, so the
-two are distinguishable without confiture having to judge prose.
+two are distinguishable without confiture having to judge prose. ``doc_005`` is
+the one narrow band where a comment is judged — it says only what the name says
+— and is ``info`` and opt-in for exactly that reason.
 """
 
 from __future__ import annotations
@@ -21,7 +23,10 @@ from collections.abc import Sequence
 from typing import Any
 
 from confiture.core.linting.inventory import KIND_KEYWORD, Inventory, SchemaObject, distinct
+from confiture.core.linting.restatement import adds_nothing
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+
+RESTATEMENT_RULE_ID = "doc_005"
 
 #: ``(rule code, rule name)`` per inventory kind. The noun each finding uses is
 #: ``KIND_KEYWORD``'s entry, capitalised — one table for both.
@@ -56,6 +61,42 @@ def _finding(obj: SchemaObject) -> LintViolation:
         line_number=obj.line,
         suggested_fix=f"COMMENT ON {keyword} {obj.identity} IS '...';",
     )
+
+
+def _restatement(obj: SchemaObject) -> LintViolation:
+    keyword = KIND_KEYWORD[obj.kind]
+    return LintViolation(
+        rule_id=RESTATEMENT_RULE_ID,
+        rule_name="Comment Restates the Name",
+        severity=RuleSeverity.INFO,
+        object_type=obj.kind,
+        object_name=obj.identity,
+        message=(
+            f"{keyword.capitalize()} '{obj.identity}' has a COMMENT that says only what its "
+            f"name already says: {obj.comment!r}"
+        ),
+        file_path=obj.file,
+        line_number=obj.line,
+        suggested_fix=(
+            "Say what a caller needs to know and the name cannot carry — what it is for, what it "
+            "does not do, what it costs — or baseline this finding: a correct comment that happens "
+            "to restate the name is a false positive of a heuristic."
+        ),
+    )
+
+
+def restatement_findings(inventory: Inventory) -> list[LintViolation]:
+    """``doc_005``: one finding per comment that says only what the name says.
+
+    Opt-in and ``info``, because :func:`~confiture.core.linting.restatement.adds_nothing`
+    is a heuristic. The comparison is against the object's local name: a schema
+    qualifier and a signature are not things a comment restates.
+    """
+    return [
+        _restatement(obj)
+        for obj in distinct(inventory.objects)
+        if obj.kind in _RULES and obj.comment and adds_nothing(obj.comment, obj.name)
+    ]
 
 
 def documentation_findings(inventory: Inventory) -> list[LintViolation]:

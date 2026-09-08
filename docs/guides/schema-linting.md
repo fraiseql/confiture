@@ -318,6 +318,19 @@ here is a finding: it does not move the exit code and there is nothing to
 select, ignore or baseline. It is there so that "documentation: 100 %" is a
 statement a reader can check.
 
+One rule *does* judge a comment, and only in the narrowest mechanical band:
+
+```bash
+confiture lint --select default,doc_005
+```
+
+`doc_005` reports a comment whose every meaningful word is already a word of the
+object's own name — `'Deletes a widget'` on `delete_widget`. It is `info` and
+opt-in because it is a heuristic: a correct comment that happens to restate the
+name is a false positive, and the answer to one is a baseline, not a reworded
+comment. See
+[lint-rules.md](../reference/lint-rules.md#doc_005-a-comment-that-says-only-what-the-name-says).
+
 ### The three per-rule flags are now aliases
 
 `--replica-safe`, `--check-tenant-isolation` and `--check-security-definer` still

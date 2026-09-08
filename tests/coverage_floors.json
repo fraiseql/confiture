@@ -27,6 +27,8 @@
     "core/linting/references.py": 90,
     "core/linting/unresolved.py": 95,
     "core/tree_prefix.py": 95,
-    "core/linting/bodies.py": 85
+    "core/linting/bodies.py": 85,
+    "core/linting/documentation.py": 95,
+    "core/linting/restatement.py": 95
   }
 }

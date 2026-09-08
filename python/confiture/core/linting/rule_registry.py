@@ -153,6 +153,13 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="doc_005",
+        family="doc",
+        title="A COMMENT says something the object's own name does not",
+        severity="info",
+        default_on=False,
+    ),
+    LintRule(
         code="build_001",
         family="build",
         title="An object is defined more than once in one build",
