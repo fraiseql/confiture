@@ -396,9 +396,7 @@ class TestCanConvertToCopy:
         validator = InsertValidator()
 
         # NOW()
-        can_convert, _ = validator.can_convert_to_copy(
-            "INSERT INTO t (created_at) VALUES (NOW());"
-        )
+        can_convert, _ = validator.can_convert_to_copy("INSERT INTO t (created_at) VALUES (NOW());")
         assert can_convert is False
 
         # uuid_generate_v4()
@@ -437,9 +435,7 @@ class TestRowExtraction:
     def test_extracts_null_values(self) -> None:
         """Extract NULL values correctly."""
         validator = InsertValidator()
-        rows = validator.extract_rows(
-            "INSERT INTO users (id, bio) VALUES (1, NULL);"
-        )
+        rows = validator.extract_rows("INSERT INTO users (id, bio) VALUES (1, NULL);")
         assert rows is not None
         assert rows[0][0] == "1"
         assert rows[0][1] is None
@@ -451,17 +447,13 @@ class TestTableExtraction:
     def test_extracts_simple_table(self) -> None:
         """Extract simple table name."""
         validator = InsertValidator()
-        table = validator.extract_table_name(
-            "INSERT INTO users (id) VALUES (1);"
-        )
+        table = validator.extract_table_name("INSERT INTO users (id) VALUES (1);")
         assert table == "users"
 
     def test_extracts_schema_qualified_table(self) -> None:
         """Extract schema-qualified table name."""
         validator = InsertValidator()
-        table = validator.extract_table_name(
-            "INSERT INTO prep_seed.tb_machine (id) VALUES (1);"
-        )
+        table = validator.extract_table_name("INSERT INTO prep_seed.tb_machine (id) VALUES (1);")
         assert table == "prep_seed.tb_machine"
 
 
@@ -624,6 +616,7 @@ def format_table(
 
     return copy_data
 
+
 def _escape_value(self, value: str) -> str:
     """Escape special characters for COPY format."""
     # Escape backslashes
@@ -723,6 +716,7 @@ The current regex-based approach for extracting INSERTs from function bodies wor
 ```python
 from sqlglot import parse_one, exp
 
+
 class ImprovedFunctionParser:
     """Extract INSERTs from PL/pgsql functions using sqlglot."""
 
@@ -738,11 +732,9 @@ class ImprovedFunctionParser:
         for i, line in enumerate(body.split("\n"), 1):
             if "INSERT" in line.upper():
                 # Try to extract full INSERT from this point
-                remaining = "\n".join(body.split("\n")[i-1:])
+                remaining = "\n".join(body.split("\n")[i - 1 :])
                 insert_match = re.search(
-                    r"(INSERT\s+INTO\s+[^;]+;)",
-                    remaining,
-                    re.IGNORECASE | re.DOTALL
+                    r"(INSERT\s+INTO\s+[^;]+;)", remaining, re.IGNORECASE | re.DOTALL
                 )
 
                 if insert_match:
@@ -751,10 +743,11 @@ class ImprovedFunctionParser:
                         ast = parse_one(insert_sql, dialect="postgres")
                         if isinstance(ast, exp.Insert):
                             table = ast.this.name if hasattr(ast, "this") else None
-                            columns = [
-                                c.name for c in ast.expressions
-                                if hasattr(c, "name")
-                            ] if ast.expressions else None
+                            columns = (
+                                [c.name for c in ast.expressions if hasattr(c, "name")]
+                                if ast.expressions
+                                else None
+                            )
 
                             statements.append(
                                 InsertStatement(

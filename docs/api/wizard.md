@@ -164,9 +164,9 @@ confiture migrate --wizard --schedule "2026-01-15 02:00 AM"
 
 ```python
 class RiskLevel(Enum):
-    LOW = "low"        # Safe changes
+    LOW = "low"  # Safe changes
     MEDIUM = "medium"  # Requires attention
-    HIGH = "high"      # Significant impact
+    HIGH = "high"  # Significant impact
     CRITICAL = "critical"  # Requires approval
 ```
 
@@ -181,12 +181,13 @@ class RiskAssessment:
     estimated_impact: str
     mitigation_steps: list[str]
 
+
 @dataclass
 class RiskFactor:
-    category: str       # 'data_loss', 'performance', 'blocking', etc.
-    severity: str       # 'low', 'medium', 'high'
+    category: str  # 'data_loss', 'performance', 'blocking', etc.
+    severity: str  # 'low', 'medium', 'high'
     description: str
-    mitigation: str     # How to mitigate
+    mitigation: str  # How to mitigate
 ```
 
 ### Risk Examples
@@ -223,10 +224,10 @@ class RiskFactor:
 
 ```python
 class ApprovalMode(Enum):
-    NONE = "none"           # No approval needed
-    SINGLE = "single"       # One person must approve
-    MULTIPLE = "multiple"   # Multiple people must approve
-    CONSENSUS = "consensus" # Everyone must agree
+    NONE = "none"  # No approval needed
+    SINGLE = "single"  # One person must approve
+    MULTIPLE = "multiple"  # Multiple people must approve
+    CONSENSUS = "consensus"  # Everyone must agree
 ```
 
 ### Approval Configuration
@@ -283,11 +284,12 @@ async def run_interactive(self) -> WizardResult:
     """
     pass
 
+
 # Result
 @dataclass
 class WizardResult:
     migration_id: str
-    status: str           # 'success', 'pending_approval', 'cancelled'
+    status: str  # 'success', 'pending_approval', 'cancelled'
     risk_level: RiskLevel
     execution_time: timedelta | None
     error: Exception | None
@@ -296,11 +298,7 @@ class WizardResult:
 ### run_scheduled()
 
 ```python
-async def run_scheduled(
-    self,
-    migration_id: str,
-    scheduled_time: datetime
-) -> ScheduledMigration:
+async def run_scheduled(self, migration_id: str, scheduled_time: datetime) -> ScheduledMigration:
     """
     Schedule migration for future execution.
 
@@ -313,6 +311,7 @@ async def run_scheduled(
     """
     pass
 
+
 @dataclass
 class ScheduledMigration:
     id: str
@@ -324,10 +323,7 @@ class ScheduledMigration:
 ### assess_risk()
 
 ```python
-async def assess_risk(
-    self,
-    migration_id: str
-) -> RiskAssessment:
+async def assess_risk(self, migration_id: str) -> RiskAssessment:
     """
     Assess migration risk without executing.
 
@@ -343,10 +339,7 @@ async def assess_risk(
 ### dry_run()
 
 ```python
-async def dry_run(
-    self,
-    migration_id: str
-) -> DryRunResult:
+async def dry_run(self, migration_id: str) -> DryRunResult:
     """
     Execute migration in dry-run mode (no actual changes).
 
@@ -357,6 +350,7 @@ async def dry_run(
         DryRunResult showing what would happen
     """
     pass
+
 
 @dataclass
 class DryRunResult:
@@ -377,16 +371,15 @@ class DryRunResult:
 ```python
 from confiture.wizard import MigrationWizard
 
+
 async def migrate_with_wizard():
-    wizard = MigrationWizard(
-        database_url="postgresql://localhost/mydb"
-    )
+    wizard = MigrationWizard(database_url="postgresql://localhost/mydb")
 
     result = await wizard.run_interactive()
 
-    if result.status == 'success':
+    if result.status == "success":
         print(f"✅ Migration completed in {result.execution_time}")
-    elif result.status == 'pending_approval':
+    elif result.status == "pending_approval":
         print("⏳ Migration pending approval")
     else:
         print(f"❌ Migration failed: {result.error}")
@@ -430,7 +423,7 @@ async def dry_run_then_execute():
 
         # Step 2: Request approval with dry-run results
         result = await wizard.run_interactive()
-        if result.status == 'success':
+        if result.status == "success":
             print("✅ Production migration completed successfully")
     else:
         print("❌ Dry-run failed - would not proceed")
@@ -460,12 +453,12 @@ async def schedule_and_monitor():
     while True:
         status = await wizard.check_migration_status(scheduled.id)
 
-        if status.status == 'completed':
+        if status.status == "completed":
             print(f"✅ Migration completed!")
             break
-        elif status.status == 'running':
+        elif status.status == "running":
             print(f"⏳ Running... {status.progress}%")
-        elif status.status == 'failed':
+        elif status.status == "failed":
             print(f"❌ Migration failed: {status.error}")
             break
 
@@ -504,7 +497,7 @@ async def schedule_and_monitor():
 4. **Monitor scheduled migrations**
    ```python
    # Check status periodically
-   while status.status == 'running':
+   while status.status == "running":
        print(f"Progress: {status.progress}%")
        await asyncio.sleep(10)
    ```

@@ -305,6 +305,7 @@ For complex logic, use a migration file instead:
 # db/migrations/001_seed_initial_data.py
 from confiture.models import Migration
 
+
 class SeedInitialData(Migration):
     def up(self, connection):
         cursor = connection.cursor()

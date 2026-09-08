@@ -25,7 +25,7 @@ import psycopg
 from confiture import detect_version, PGFeature, VersionAwareSQL
 
 conn = psycopg.connect("postgresql://localhost/myapp")
-version = detect_version(conn)          # → PGVersionInfo
+version = detect_version(conn)  # → PGVersionInfo
 
 if version.supports(PGFeature.REINDEX_CONCURRENTLY):
     sql = VersionAwareSQL(version)

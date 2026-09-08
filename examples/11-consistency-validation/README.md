@@ -77,15 +77,15 @@ example_1_basic_validation()
 ```python
 schema_context = {
     "table_name": {
-        "required": True,              # Table must be present
-        "min_rows": 1,                 # Minimum row count
+        "required": True,  # Table must be present
+        "min_rows": 1,  # Minimum row count
         "columns": {
             "column_name": {
-                "required": True,      # Column must have value
-                "unique": True,        # No duplicates
+                "required": True,  # Column must have value
+                "unique": True,  # No duplicates
                 "foreign_key": ("ref_table", "ref_column"),
             }
-        }
+        },
     }
 }
 ```
@@ -131,6 +131,7 @@ confiture seed validate --consistency-check
 ### Build Scripts
 ```python
 from confiture.core.seed.validation.consistency_validator import ConsistencyValidator
+
 validator = ConsistencyValidator()
 report = validator.validate(seed_data, schema_context)
 if report.has_violations:

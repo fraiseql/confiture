@@ -720,11 +720,12 @@ def create_user(email: str, first_name: str, last_name: str, bio: str):
         "INSERT INTO users (email, full_name, bio) VALUES ($1, $2, $3)",
         email,
         f"{first_name} {last_name}",
-        bio
+        bio,
     )
 
     # Write to new schema (via trigger or explicit)
     # Triggers handle this automatically in our case
+
 
 # Read from old schema during transition
 def get_user(user_id: int):

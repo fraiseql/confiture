@@ -51,29 +51,32 @@ anonymization:
 ### Name Masking
 
 ```python
-strategy = StrategyRegistry.get("name", {
-    "seed": 42,
-    "format_type": "firstname_lastname"  # or "initials", "random"
-})
+strategy = StrategyRegistry.get(
+    "name",
+    {
+        "seed": 42,
+        "format_type": "firstname_lastname",  # or "initials", "random"
+    },
+)
 ```
 
 ### Date Masking
 
 ```python
-strategy = StrategyRegistry.get("date", {
-    "seed": 42,
-    "mode": "year_month",  # or "year", "none"
-    "format": "iso"        # or "us", "uk"
-})
+strategy = StrategyRegistry.get(
+    "date",
+    {
+        "seed": 42,
+        "mode": "year_month",  # or "year", "none"
+        "format": "iso",  # or "us", "uk"
+    },
+)
 ```
 
 ### Credit Card (PCI-DSS Compliant)
 
 ```python
-strategy = StrategyRegistry.get("credit_card", {
-    "preserve_last4": True,
-    "preserve_bin": True
-})
+strategy = StrategyRegistry.get("credit_card", {"preserve_last4": True, "preserve_bin": True})
 ```
 
 ### Text Redaction Patterns
@@ -105,7 +108,7 @@ profile = StrategyProfile(
         "birthdate": "date:year_month",
         "ip_address": "ip_address",
     },
-    defaults="preserve"
+    defaults="preserve",
 )
 
 factory = StrategyFactory(profile)
@@ -121,12 +124,13 @@ anonymized = factory.anonymize(record)
 ```python
 from confiture.anonymization import register_strategy
 
-@register_strategy('email')
+
+@register_strategy("email")
 def anonymize_email(value: str, field_name: str, row_context: dict = None) -> str:
-    if not value or '@' not in value:
+    if not value or "@" not in value:
         return "invalid@example.com"
 
-    local, domain = value.rsplit('@', 1)
+    local, domain = value.rsplit("@", 1)
     hash_val = hashlib.sha256(local.encode()).hexdigest()[:6]
     return f"user_{hash_val}@{domain}"
 ```
@@ -135,6 +139,7 @@ def anonymize_email(value: str, field_name: str, row_context: dict = None) -> st
 
 ```python
 from confiture.core.anonymization.strategy import AnonymizationStrategy
+
 
 class MyStrategy(AnonymizationStrategy):
     config_type = MyStrategyConfig
@@ -146,6 +151,7 @@ class MyStrategy(AnonymizationStrategy):
     def validate(self, value):
         return isinstance(value, str)
 
+
 # Register
 StrategyRegistry.register("my_strategy", MyStrategy)
 ```
@@ -155,10 +161,10 @@ StrategyRegistry.register("my_strategy", MyStrategy)
 Access other columns for conditional logic:
 
 ```python
-@register_strategy('credit_card')
+@register_strategy("credit_card")
 def anonymize_card(value, field_name, row_context=None):
     # Keep test accounts unchanged
-    if row_context and row_context.get('is_test_account'):
+    if row_context and row_context.get("is_test_account"):
         return value
 
     return f"****-****-****-{value[-4:]}"
@@ -169,10 +175,10 @@ def anonymize_card(value, field_name, row_context=None):
 Same input always produces same output (preserves relationships):
 
 ```python
-@register_strategy('user_id')
+@register_strategy("user_id")
 def anonymize_id(value, field_name, row_context=None):
     hash_digest = sha256(str(value).encode()).digest()
-    return struct.unpack('>Q', hash_digest[:8])[0]
+    return struct.unpack(">Q", hash_digest[:8])[0]
 ```
 
 ---
@@ -204,20 +210,20 @@ profile = StrategyProfile(seed=42, ...)
 ### 2. Preserve Identifiers
 
 ```python
-columns={
+columns = {
     "customer_id": "preserve",  # Keep for joins
-    "order_id": "preserve",     # Keep for tracking
-    "name": "name",             # Anonymize PII
+    "order_id": "preserve",  # Keep for tracking
+    "name": "name",  # Anonymize PII
 }
 ```
 
 ### 3. Match Strategy to Data Type
 
 ```python
-columns={
-    "birth_date": "date",        # Not text_redaction
-    "email": "text_redaction",   # Not name
-    "full_name": "name",         # Not text_redaction
+columns = {
+    "birth_date": "date",  # Not text_redaction
+    "email": "text_redaction",  # Not name
+    "full_name": "name",  # Not text_redaction
 }
 ```
 
@@ -272,6 +278,7 @@ results = [StrategyFactory(profile).anonymize(r) for r in records]
 Check registration:
 ```python
 from confiture.core.anonymization.registry import StrategyRegistry
+
 print(StrategyRegistry.list_available())
 ```
 

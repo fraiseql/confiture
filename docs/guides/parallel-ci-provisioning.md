@@ -143,16 +143,20 @@ your project and override the defaults as needed:
 import pytest
 from pathlib import Path
 
+
 @pytest.fixture(scope="session")
 def confiture_project_dir():
     return Path(__file__).parent
+
 
 @pytest.fixture(scope="session")
 def confiture_template_name():
     return "app_tmpl"
 
-def test_widgets(confiture_worker_db):          # yields this worker's DB URL
+
+def test_widgets(confiture_worker_db):  # yields this worker's DB URL
     import psycopg
+
     with psycopg.connect(confiture_worker_db) as conn:
         ...
 ```
@@ -346,17 +350,36 @@ The fastest fix remains server tuning: an ephemeral test cluster with
 SERVER = "postgresql://postgres@db:5432/postgres"
 
 # 1) Build the cached artifact — a no-op when db/ is unchanged.
-build = base.with_exec([
-    "confiture", "build", "--env", "test", "--database-url", SERVER,
-    "--seed-profile", "slim", "--dump", "db/generated/",
-])
+build = base.with_exec(
+    [
+        "confiture",
+        "build",
+        "--env",
+        "test",
+        "--database-url",
+        SERVER,
+        "--seed-profile",
+        "slim",
+        "--dump",
+        "db/generated/",
+    ]
+)
 
 # 2) Parallel lane: provision a template from the artifact, then `pytest -n auto`
 #    (the fixtures clone one DB per worker).
-parallel = build.with_exec([
-    "confiture", "test-db", "provision-template", "--env", "test",
-    "--template", "app_tmpl", "--from-artifact", ARTIFACT,
-]).with_exec(["pytest", "-n", "auto"])
+parallel = build.with_exec(
+    [
+        "confiture",
+        "test-db",
+        "provision-template",
+        "--env",
+        "test",
+        "--template",
+        "app_tmpl",
+        "--from-artifact",
+        ARTIFACT,
+    ]
+).with_exec(["pytest", "-n", "auto"])
 ```
 
 ### Server tuning (your responsibility, not confiture's)

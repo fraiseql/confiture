@@ -91,6 +91,7 @@ Confiture has strict naming conventions for migration files. All migration filen
 
 from confiture.models.migration import Migration
 
+
 class AddUserBio(Migration):
     version = "20260403120115"
     name = "add_user_bio"
@@ -270,6 +271,7 @@ def up(self):
 def up(self):
     # No locks with CONCURRENTLY
     self.execute("CREATE INDEX CONCURRENTLY idx_users_email ON users(email)")
+
 
 def down(self):
     self.execute("DROP INDEX CONCURRENTLY idx_users_email")
