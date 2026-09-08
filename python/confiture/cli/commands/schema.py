@@ -36,6 +36,12 @@ from confiture.core.introspection.tables import SchemaIntrospector
 from confiture.core.linting import SchemaLinter
 from confiture.core.linting.baseline import Baseline, BaselineDiff, identity
 from confiture.core.linting.duplicates import duplicate_violations, find_duplicates, inventory_files
+from confiture.core.linting.gate import (
+    Threshold,
+    parse_threshold,
+    should_fail,
+    threshold_from_aliases,
+)
 from confiture.core.linting.libraries.security_definer import Sec002SecurityDefinerSearchPath
 from confiture.core.linting.rule_registry import DEFAULT_SELECTOR, LINT_RULES, resolve_selection
 from confiture.core.linting.schema_linter import (
@@ -43,6 +49,7 @@ from confiture.core.linting.schema_linter import (
 )
 from confiture.core.linting.schema_linter import LintReport as LinterReport
 from confiture.core.linting.schema_linter import (
+    LintViolation,
     RuleSeverity,
 )
 from confiture.core.linting.schema_linter import (
@@ -834,13 +841,25 @@ OutputOpt = Annotated[
     Path | None,
     typer.Option("--output", "-o", help="Output file path (default: stdout, only with json/csv)"),
 ]
+FailOnOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--fail-on",
+        help="Severity at which the run fails: error (default), warning, info "
+        "or never. `--fail-on-error` and `--fail-on-warning` are aliases for "
+        "the first two; passing both an alias and this exits 2. When no "
+        "selected rule can emit at the threshold, the run says so instead of "
+        "passing quietly (#247).",
+    ),
+]
 FailOnErrorOpt = Annotated[
-    bool, typer.Option("--fail-on-error", help="Exit with code 1 if errors found (default: on)")
+    bool,
+    typer.Option("--fail-on-error", help="Alias for `--fail-on error` (default: on)"),
 ]
 FailOnWarningOpt = Annotated[
     bool,
     typer.Option(
-        "--fail-on-warning", help="Exit with code 1 if warnings found (default: off, stricter)"
+        "--fail-on-warning", help="Alias for `--fail-on warning` (default: off, stricter)"
     ),
 ]
 SelectOpt = Annotated[
@@ -923,10 +942,12 @@ CheckSecurityDefinerOpt = Annotated[
 
 @cli_boundary
 def lint(
+    ctx: typer.Context,
     env: EnvOpt = "local",
     project_dir: ProjectDirOpt = Path(),
     format_type: str = format_option("table", "json", "csv"),
     output: OutputOpt = None,
+    fail_on: FailOnOpt = None,
     fail_on_error: FailOnErrorOpt = True,
     fail_on_warning: FailOnWarningOpt = False,
     select: SelectOpt = None,
@@ -983,8 +1004,11 @@ def lint(
       confiture lint --format json --output report.json
         ↳ Save linting report to JSON file
 
-      confiture lint --fail-on-warning
-        ↳ Exit with error code if any warnings found (strict mode)
+      confiture lint --fail-on warning
+        ↳ Fail the run on warnings as well as errors (--fail-on-warning is an alias)
+
+      confiture lint --fail-on never
+        ↳ Report every finding and never fail — the setting the two booleans could not express
 
     RELATED:
       confiture build       - Build schema from DDL files
@@ -995,8 +1019,11 @@ def lint(
       CORE: --env, --format, --output
         What to lint and how to report results
 
-      SEVERITY: --fail-on-error, --fail-on-warning
-        Control exit behavior based on issue severity
+      SEVERITY: --fail-on (error | warning | info | never)
+        The one threshold that decides the exit code. --fail-on-error and
+        --fail-on-warning are aliases; passing both an alias and --fail-on
+        exits 2. A threshold no selected rule can reach is reported, not
+        obeyed quietly.
     """
     try:
         if list_rules:
@@ -1005,6 +1032,9 @@ def lint(
         if write_baseline and baseline is None:
             error_console.print("[red]❌ Error: --write-baseline requires --baseline <file>[/red]")
             raise typer.Exit(USAGE_EXIT_CODE)
+        threshold = _resolve_threshold(
+            ctx, fail_on=fail_on, fail_on_error=fail_on_error, fail_on_warning=fail_on_warning
+        )
         # One selection, resolved once (#150). The three per-rule flags are
         # aliases over it rather than branches further down: each adds its
         # family to the defaults, which is exactly what it always did.
@@ -1017,8 +1047,8 @@ def lint(
         )
         config = LinterConfig(
             enabled=True,
-            fail_on_error=fail_on_error,
-            fail_on_warning=fail_on_warning,
+            fail_on_error=threshold.rank <= Threshold.ERROR.rank,
+            fail_on_warning=threshold.rank <= Threshold.WARNING.rank,
             check_naming="naming_001" in selected or "naming_002" in selected,
             check_primary_keys="pk_001" in selected,
             check_documentation=any(code.startswith("doc_") for code in selected),
@@ -1057,31 +1087,15 @@ def lint(
                 # terminal width, which breaks the JSON stream (see _output_json).
                 print(formatted)
 
-        should_fail = (report.has_errors and fail_on_error) or (
-            report.has_warnings and fail_on_warning
-        )
+        found = [v.severity.value for v in report.violations]
         if baseline_diff is not None:
             _print_baseline_note(baseline_diff, format_type, wrote=write_baseline)
-            should_fail = should_fail or bool(baseline_diff.new)
         if "replica_001" in selected:
-            should_fail = (
-                _replica_lint(
-                    env,
-                    project_dir,
-                    migrations_dir,
-                    fail_on_error=fail_on_error,
-                    fail_on_warning=fail_on_warning,
-                )
-                or should_fail
-            )
+            found += [v.severity.value for v in _replica_lint(env, project_dir, migrations_dir)]
         if "sec_002" in selected:
-            should_fail = (
-                _security_definer_lint(
-                    env, project_dir, fail_on_error=fail_on_error, fail_on_warning=fail_on_warning
-                )
-                or should_fail
-            )
-        if should_fail:
+            found += [v.severity.value for v in _security_definer_lint(env, project_dir)]
+        new_since_baseline = baseline_diff is not None and bool(baseline_diff.new)
+        if should_fail(found, threshold) or new_since_baseline:
             raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found violations
     except typer.Exit:
         raise
@@ -1095,13 +1109,56 @@ def lint(
         fail(e, json_mode=is_json(format_type), output_file=output)
 
 
-def _replica_lint(
-    env: str, project_dir: Path, migrations_dir: Path, *, fail_on_error: bool, fail_on_warning: bool
-) -> bool:
+def _passed_explicitly(ctx: typer.Context, name: str) -> bool:
+    """Whether the operator typed this option, rather than inheriting its default.
+
+    Compared by member name: Typer vendors its own click, so the
+    ``ParameterSource`` a Typer context returns is not the ``click.core`` one
+    and an identity test silently answers "no" for every option.
+    """
+    source = ctx.get_parameter_source(name)
+    return source is not None and source.name == "COMMANDLINE"
+
+
+def _resolve_threshold(
+    ctx: typer.Context,
+    *,
+    fail_on: str | None,
+    fail_on_error: bool,
+    fail_on_warning: bool,
+) -> Threshold:
+    """The one severity that decides this run's exit code.
+
+    ``--fail-on-error`` / ``--fail-on-warning`` are aliases for two of
+    ``--fail-on``'s four values, so passing both a threshold and an alias states
+    the gate twice — possibly two different ways. That is a usage error, not a
+    precedence puzzle to resolve silently.
+    """
+    given_aliases = [
+        flag
+        for flag, name in (
+            ("--fail-on-error", "fail_on_error"),
+            ("--fail-on-warning", "fail_on_warning"),
+        )
+        if _passed_explicitly(ctx, name)
+    ]
+    if fail_on is None:
+        return threshold_from_aliases(fail_on_error=fail_on_error, fail_on_warning=fail_on_warning)
+    if given_aliases:
+        error_console.print(
+            f"[red]❌ Error: --fail-on and {', '.join(given_aliases)} both set the gate; "
+            "pass one[/red]"
+        )
+        raise typer.Exit(USAGE_EXIT_CODE)
+    return parse_threshold(fail_on)
+
+
+def _replica_lint(env: str, project_dir: Path, migrations_dir: Path) -> list[LintViolation]:
     """#139: replica-aware forward-compatibility lint over the migrations tree.
 
-    A migration-tree check, distinct from the schema lint. Returns whether it
-    fails the run under the given fail modes.
+    A migration-tree check, distinct from the schema lint. Prints its own
+    findings and returns them; what they do to the exit code is the gate's
+    decision, made once for every rule.
     """
     # Reason: CLI start-up: importing confiture.core.linting.libraries.replica costs ~28 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.linting.libraries.replica import Replica001ForwardCompat
@@ -1120,7 +1177,7 @@ def _replica_lint(
     )
     if not violations:
         console.print("\n[green]🔁 Replica forward-compatibility: no issues[/green]")
-        return False
+        return []
     console.print("\n[cyan]🔁 Replica forward-compatibility:[/cyan]")
     for v in violations:
         color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
@@ -1128,19 +1185,15 @@ def _replica_lint(
             f"  [{color}]{v.severity.value.upper()}[/{color}] {v.rule_id} "
             f"({v.object_name}): {v.message}"
         )
-    errors = any(v.severity == RuleSeverity.ERROR for v in violations)
-    warnings = any(v.severity == RuleSeverity.WARNING for v in violations)
-    return (errors and fail_on_error) or (warnings and fail_on_warning)
+    return violations
 
 
-def _security_definer_lint(
-    env: str, project_dir: Path, *, fail_on_error: bool, fail_on_warning: bool
-) -> bool:
+def _security_definer_lint(env: str, project_dir: Path) -> list[LintViolation]:
     """#161: sec_002 — SECURITY DEFINER / search_path bolt-on over the env's schema DDL.
 
     Findings print to the console; they are NOT folded into the JSON report. For
     machine-readable output use `migrate validate --check-security-definer --format json`.
-    Returns whether it fails the run under the given fail modes.
+    Returns them; what they do to the exit code is the gate's decision.
     """
 
     sec_cfg = None
@@ -1154,7 +1207,7 @@ def _security_definer_lint(
     except Exception:
         sec_cfg = None
     if sec_cfg is None:
-        return False
+        return []
     severity = _RS.ERROR if sec_cfg.severity == "error" else _RS.WARNING
     try:
         ddl_paths = _core_builder.SchemaBuilder(env=env, project_dir=project_dir).find_sql_files()
@@ -1165,7 +1218,7 @@ def _security_definer_lint(
     ).check(ddl_paths or [Path("db/schema")])
     if not violations:
         console.print("\n[green]🔒 Security-definer search_path lint: no issues[/green]")
-        return False
+        return []
     console.print("\n[cyan]🔒 Security-definer search_path lint:[/cyan]")
     for v in violations:
         color = "red" if v.severity == _RS.ERROR else "yellow"
@@ -1174,9 +1227,7 @@ def _security_definer_lint(
             f"  [{color}]{v.severity.value.upper()}[/{color}] "
             f"{v.rule_id} ({v.object_name}){loc}: {v.message}"
         )
-    errors = any(v.severity == _RS.ERROR for v in violations)
-    warnings = any(v.severity == _RS.WARNING for v in violations)
-    return (errors and fail_on_error) or (warnings and fail_on_warning)
+    return violations
 
 
 def _apply_baseline(

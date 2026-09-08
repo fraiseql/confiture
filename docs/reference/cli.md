@@ -2887,16 +2887,32 @@ or family; see [lint-rules.md](lint-rules.md) for the catalogue and the
 
 | Code | Meaning |
 |------|---------|
-| 0 | No failing finding (info never fails; warnings only with `--fail-on-warning`); with `--baseline`, nothing new |
-| 1 | Findings at a failing severity — or, with `--baseline`, any finding the file does not know |
-| 2 | Usage error (`--write-baseline` without `--baseline`) |
-| 5 | Configuration error: unknown rule or family, missing or malformed baseline file (`CONFIG_012`) |
+| 0 | Nothing reached `--fail-on` (default `error`); with `--baseline`, nothing new |
+| 1 | A finding at or above `--fail-on` — or, with `--baseline`, any finding the file does not know |
+| 2 | Usage error (`--write-baseline` without `--baseline`; `--fail-on` together with one of its aliases) |
+| 5 | Configuration error: unknown rule or family, unknown `--fail-on` severity (`CONFIG_010`), missing or malformed baseline file (`CONFIG_012`) |
+
+### Making lint block — `--fail-on`
+
+`--fail-on <severity>` is the whole gate: `error` (the default), `warning`,
+`info`, or `never` for "report every finding and never fail". `--fail-on-error`
+and `--fail-on-warning` are aliases for the first two, kept because pipelines
+use them; passing an alias *and* `--fail-on` states the gate twice and exits 2.
+
+A threshold no selected rule can reach is reported rather than obeyed quietly:
+the summary says so in one line and `--format json` carries the same answer as
+`gate: {threshold, reachable, reason, max_selectable_severity}`. Reachability is
+computed from the registry's declared severities plus the escalations the
+environment config makes (`security_lint.severity`, declared replicas), so a
+project that has escalated is told the truth and not a generic warning.
 
 ### Examples
 
 ```bash
 confiture lint --env production --format json
 confiture lint --select doc,build --ignore doc_002
+confiture lint --fail-on warning                                           # block on warnings too
+confiture lint --fail-on never --format json                               # report, never fail
 confiture lint --baseline .confiture-lint-baseline.json --write-baseline   # once
 confiture lint --baseline .confiture-lint-baseline.json                    # every run
 ```
@@ -2918,8 +2934,9 @@ confiture lint [OPTIONS]
 | `--project-dir` | - | path | `.` | Project directory (default: current directory) |
 | `--format` | `-f` | text | `table` | Output format: table or json or csv (default: table) |
 | `--output` | `-o` | path | - | Output file path (default: stdout, only with json/csv) |
-| `--fail-on-error` | - | Flag | on | Exit with code 1 if errors found (default: on) |
-| `--fail-on-warning` | - | Flag | off | Exit with code 1 if warnings found (default: off, stricter) |
+| `--fail-on` | - | text | - | Severity at which the run fails: error (default), warning, info or never. `--fail-on-error` and `--fail-on-warning` are aliases for the first two; passing both an alias and this exits 2. When no selected rule can emit at the threshold, the run says so instead of passing quietly (#247). |
+| `--fail-on-error` | - | Flag | on | Alias for `--fail-on error` (default: on) |
+| `--fail-on-warning` | - | Flag | off | Alias for `--fail-on warning` (default: off, stricter) |
 | `--select` | - | text | - | Rules or families to run, comma-separated (#150). `default` means the rules a plain lint runs, so `--select default,replica` is the defaults plus one family. Omit to run the defaults. See `--list-rules`. |
 | `--ignore` | - | text | - | Rules or families to skip, comma-separated. Applied after --select, so --ignore always wins. |
 | `--baseline` | - | path | - | Baseline file (#219): fail only on findings it does not know, print only those, rewrite it when findings disappear |
