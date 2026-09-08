@@ -19,7 +19,7 @@ Adopt a rule on a schema that already trips it with a
 | `doc_003` | doc | info | on | Every view and materialized view should carry a COMMENT |
 | `doc_004` | doc | info | on | Every composite type, enum and domain should carry a COMMENT |
 | `doc_005` | doc | info | off | A COMMENT says something the object's own name does not |
-| `build_001` | build | warning | on | An object is defined more than once in one build |
+| `build_001` | build | error | on | An object is defined more than once in one build |
 | `build_002` | build | info | on | A routine's overloads are split across files |
 | `build_003` | build | warning | on | A body references an object the build does not create |
 | `sec_001` | security | warning | on | Columns that look like secrets should not be plain text |
@@ -260,7 +260,7 @@ unqualified), name and — for routines — input parameter types.
 
 | Rule | Severity | Reports |
 |------|----------|---------|
-| `build_001` | warning | an object defined more than once across the build's files, with every definition's file, offset and line, and which one wins (`last`, `first` or `conflict`) |
+| `build_001` | error | an object defined more than once across the build's files, with every definition's file, offset and line, and which one wins (`last`, `first` or `conflict`) |
 | `build_002` | info | a routine whose overloads are split across files — legal, but how the first mistake starts |
 | `build_003` | warning | a routine or view body that names an object **no file in the build creates** |
 
@@ -269,13 +269,35 @@ unqualified), name and — for routines — input parameter types.
 itself: `confiture build --warn-duplicates` reports and builds,
 `confiture build --fail-on-duplicates` reports and exits 1 without writing
 anything. `build --format json` carries the findings under `duplicates`
-(see [`build.schema.json`](json-schemas/build.schema.json)).
+(see [`build.schema.json`](json-schemas/build.schema.json)); the build's own
+flags decide its exit code, so promoting the lint rule left them alone.
 
 ```text
 ⚠️ build_001: Function 'app.f(integer)' is defined 2 times in one build:
    db/schema/010_first.sql (line 1, offset 0); db/schema/020_second.sql (line 1, offset 0)
    — the last definition wins (CREATE OR REPLACE)
 ```
+
+### Why `build_001` is an error
+
+It is the one rule a default `confiture lint` can fail on, and the reason is
+that its finding is not a matter of taste: two definitions of one object mean
+the build's outcome depends on the order the files are concatenated in, and no
+reader of either file can see that order. Which definition survives is decided
+somewhere else entirely — a `CREATE OR REPLACE` takes the last, an `IF NOT
+EXISTS` takes the first, and a plain `CREATE` fails the build outright.
+
+Three ways to decline it on a schema that already trips it, in the order you
+should reach for them:
+
+| | What it does |
+|---|---|
+| `--baseline lint-baseline.json --write-baseline` | records today's duplicates and fails only on the next one — the ratchet |
+| `--ignore build_001` (or `--ignore build`) | turns the rule off for this run |
+| `--fail-on never` | reports every finding and never sets the exit code |
+
+`--fail-on warning` is **not** among them: `warning` is a *lower* threshold than
+`error`, so an error still trips it.
 
 ### `build_003` — the inventory, read backwards
 

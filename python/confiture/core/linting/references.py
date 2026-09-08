@@ -35,12 +35,20 @@ diagnoses from the body's first line too (#245). So the two halves of it are
 public — :func:`body_locations` says where each routine's body starts in its
 file, and :func:`file_line` places a body-relative line on that file — and
 there is one answer to "which line is this, really", not two.
+
+A body has a third possible outcome beside "read" and "dynamic": *not
+returned*. ``libpg_query`` serialises a trigger function's implicit ``TG_``
+datums as malformed JSON, so ``parse_plpgsql`` raises on every ``RETURNS
+TRIGGER`` body regardless of what that body contains. :func:`read_references`
+names those routines instead of raising or staying quiet, because a rule that
+skipped a body has not established that the body is clean.
 """
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import pglast
@@ -148,27 +156,58 @@ def file_line(body_line: int, first: int | None) -> int:
     return body_line if first is None else body_line + first - 1
 
 
-def referenced_objects(sql: str) -> list[Reference]:
-    """Every object the routine and view bodies in ``sql`` name, in source order.
+class _UnreadableBody(Exception):
+    """No parser would return this body, so nothing can be read out of it."""
+
+
+@dataclass(frozen=True)
+class ReferenceScan:
+    """What one text's bodies name, and which of them could not be read.
+
+    Attributes:
+        references: Every object named, in source order.
+        unread: The identity of each routine whose body no parser returned.
+            Empty for almost every schema and never empty for one with a
+            trigger function, which is why it is a list and not a flag.
+    """
+
+    references: list[Reference] = field(default_factory=list)
+    unread: list[str] = field(default_factory=list)
+
+
+def read_references(sql: str) -> ReferenceScan:
+    """Every object the routine and view bodies in ``sql`` name, and what went unread.
 
     A text pglast rejects yields nothing: the linter already reports a parse
     failure once, as its ``UNPARSEABLE`` notice, and a second report of the
-    same fact from every rule would be noise.
+    same fact from every rule would be noise. A single *body* it will not
+    return is different — the rest of the text read fine — so that routine is
+    named rather than dropped.
     """
     try:
         raws = list(pglast.parse_sql(sql) or [])
     except pglast.parser.ParseError:
-        return []
+        return ReferenceScan()
     # Scanned once for the whole text: a body's first line is a lexical
     # question, and asking it per routine would make the cost quadratic.
     constants = _string_constants(sql)
     found: list[Reference] = []
+    unread: list[str] = []
     for raw in raws:
         obj = object_from_statement(sql, raw)
         reader = None if obj is None else _READERS.get(obj.kind)
-        if obj is not None and reader is not None:
+        if obj is None or reader is None:
+            continue
+        try:
             found.extend(reader(sql, raw, obj, constants))
-    return found
+        except _UnreadableBody:
+            unread.append(obj.identity)
+    return ReferenceScan(found, unread)
+
+
+def referenced_objects(sql: str) -> list[Reference]:
+    """Every object the routine and view bodies in ``sql`` name, in source order."""
+    return read_references(sql).references
 
 
 def _string_constants(sql: str) -> list[tuple[int, int]]:
@@ -254,6 +293,12 @@ def _plpgsql_references(statement: str, obj: SchemaObject, *, first: int | None)
         tree = pglast.parse_plpgsql(statement)
     except pglast.parser.ParseError:
         return []
+    except json.JSONDecodeError as exc:
+        # `libpg_query` emits `{}}` for a trigger function's implicit `TG_`
+        # datums, so its JSON does not decode — every `RETURNS TRIGGER` body,
+        # whatever it contains. Not this rule's to fix and not this rule's to
+        # die of: the caller names the routine as unread.
+        raise _UnreadableBody(obj.identity) from exc
     found: list[Reference] = []
     exact = first is not None
     for query, line, dynamic in _fragments(tree, line=1, dynamic=False):

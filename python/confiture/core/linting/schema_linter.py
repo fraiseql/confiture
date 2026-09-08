@@ -533,16 +533,14 @@ class SchemaLinter:
         certainty.
         """
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core.linting.references import referenced_objects
+        from confiture.core.linting.references import read_references
 
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
         from confiture.core.linting.unresolved import reference_findings, unresolved_references
 
-        located = [
-            (label, reference)
-            for label, text in self._sources()
-            for reference in referenced_objects(text)
-        ]
+        scans = [(label, read_references(text)) for label, text in self._sources()]
+        located = [(label, reference) for label, scan in scans for reference in scan.references]
+        self._report_unread_bodies(scans, report)
         candidates = unresolved_references(
             located,
             self._file_objects or self._inventory.objects,
@@ -553,6 +551,33 @@ class SchemaLinter:
             candidates = self._after_live_tier(candidates, report)
         for violation in reference_findings(candidates):
             report.add_violation(violation)
+
+    @staticmethod
+    def _report_unread_bodies(scans: list[tuple[str | None, Any]], report: LintReport) -> None:
+        """Name the routines whose bodies no parser would return.
+
+        `build_003` subtracts what a body names from what the build creates, so
+        a body it never read contributes no names and the rule says nothing
+        about it. Saying nothing and finding nothing are the same output and a
+        different fact, which is what `degraded` exists to separate.
+        """
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import RULE_ID
+
+        unread = sorted({name for _label, scan in scans for name in scan.unread})
+        if not unread:
+            return
+        body = "body" if len(unread) == 1 else "bodies"
+        report.degraded.append(
+            RuleStatus(
+                code=RULE_ID,
+                state="degraded",
+                reason=(
+                    f"could not read {len(unread)} routine {body}, so the objects "
+                    f"they name are not checked: {', '.join(unread)}"
+                ),
+            )
+        )
 
     def _check_bodies(self, report: LintReport) -> None:
         """``body_001`` / ``body_002``: what ``plpgsql_check`` says about each body (#245).

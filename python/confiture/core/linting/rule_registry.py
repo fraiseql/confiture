@@ -163,7 +163,7 @@ LINT_RULES: tuple[LintRule, ...] = (
         code="build_001",
         family="build",
         title="An object is defined more than once in one build",
-        severity="warning",
+        severity="error",
         default_on=True,
     ),
     LintRule(

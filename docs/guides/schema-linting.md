@@ -369,11 +369,15 @@ the gate twice and exits 2; an unrecognised severity is `CONFIG_010` (exit 5).
 
 **A threshold nothing can reach is reported, not obeyed quietly.** This is the
 trap [#247](https://github.com/fraiseql/confiture/issues/247) was filed for: a
-pipeline set `--fail-on-error`, no selected rule emitted at `error`, and four
-real `build_001` findings sat behind a green tick for months. A run whose gate
-cannot fire now says so on the summary:
+pipeline set `--fail-on-error`, no rule that ran by default emitted at `error`,
+and four real `build_001` findings sat behind a green tick for months. Two
+things answer it. `build_001` is now an **error**, so the default selection
+reaches the default threshold and that particular pipeline goes red; and a run
+whose gate genuinely cannot fire — a narrower `--select`, say — says so on the
+summary instead of passing quietly:
 
 ```
+$ confiture lint --select doc,naming --fail-on error
 no selected rule emits at 'error'; this gate cannot fail — see --fail-on and --baseline
 ```
 
@@ -388,6 +392,9 @@ and `--format json` carries the same answer:
 }
 ```
 
+A default run answers `"reachable": true` and `"max_selectable_severity":
+"error"`, because `build_001` is in the default set.
+
 Reachability is computed from the registry's declared severities *plus* the
 escalations your config makes — `security_lint.severity: error` for `sec_002`,
 declared replicas for `replica_001` — so a project that has escalated is told
@@ -396,11 +403,17 @@ its gate is armed rather than warned about a problem it does not have. See
 
 The three ways to make a gate meaningful, in the order to reach for them:
 
-1. **Raise the threshold** to the severity your rules actually emit
-   (`--fail-on warning` is the usual answer today).
+1. **Lower the threshold** to the severity your rules actually emit
+   (`--fail-on warning` catches everything above `info`).
 2. **Select a rule that reaches your threshold**, or escalate one by config.
 3. **Adopt with a baseline** — with `--baseline`, *any* new finding fails the
    run whatever its severity, which is the next section.
+
+Going the other way, a default run that has just gone red on a `build_001`
+backlog declines it with `--baseline` (the ratchet), `--ignore build_001` (off
+for this run) or `--fail-on never` (report, never fail). Not with `--fail-on
+warning`: `warning` is a *lower* threshold than `error`, so an error still
+trips it.
 
 ## Adopting a rule with a baseline — `--baseline` / `--write-baseline`
 

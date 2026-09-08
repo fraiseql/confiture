@@ -179,7 +179,7 @@ def duplicate_violations(duplicates: Iterable[Duplicate]) -> list[LintViolation]
                 f"{dup.kind.capitalize()} '{dup.identity}' is defined {len(dup.definitions)} "
                 f"times in one build: {places} — {_WINS_TEXT[dup.wins]}"
             )
-            severity, name = RuleSeverity.WARNING, "Duplicate Definition"
+            severity, name = RuleSeverity.ERROR, "Duplicate Definition"
             fix = "Keep one definition, or make the later file an explicit ALTER."
         else:
             message = (
