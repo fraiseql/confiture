@@ -12,6 +12,33 @@ This approach works for projects of any size:
 - **Simple projects**: A few flat files (`tables.sql`, `views.sql`)
 - **Complex domains**: Hundreds of files in a deep hierarchy
 
+### The order is reproducible, and it is checkable
+
+Two properties this page depends on:
+
+**The order never comes from the filesystem.** Both sort modes key on the whole
+path — every directory's number, then the file's — and end with the path
+itself, so the order is total. Two files that a numbering cannot separate
+(`0001_x.sql` and `001_x.sql` are both 1) still land in the same place on every
+machine. Before 1.4.0 the hex key read the filename's prefix alone, so the
+`00001_create.sql` that `confiture generate alloc` writes into every directory
+tied with every other one and the tie fell to `Path.rglob` — the filesystem's
+order.
+
+**A numeric prefix means one thing.** The run of hex digits before the first
+`_`, in either case, carrying at least one decimal digit — so `0a_users.sql` is
+10 and `add_column.sql` is a word. Whether it is read in base 16 or base 10 is a
+property of the *directory*: one hex-lettered prefix among the siblings makes
+the whole group hex, which is what `confiture generate alloc` already assumes
+when it picks the next number.
+
+**Check the arrangement, not just the SQL.** `confiture lint --select tree`
+reports colliding prefixes, a prefix that does not extend its parent's, an
+unnumbered entry beside numbered siblings, and a status word in a name the
+build reads — see [the `tree` family](reference/lint-rules.md#the-tree-family-the-arrangement-that-decides-the-build-order).
+The family is opt-in and `--baseline` is the way to adopt it on a tree that has
+never been checked.
+
 ---
 
 ## The Number Prefix Pattern
@@ -45,14 +72,17 @@ For large schemas requiring more than 9 main categories, or when you need cleare
 ### Hex Prefix Format
 
 ```
-0x{HH}_{description}.sql
+{HH}_{description}.sql
 
 Where:
-- 0x: Literal hex prefix
-- HH: Two hexadecimal digits (00-FF, allowing 255 categories)
+- HH: Hexadecimal digits, either case (00-FF, allowing 255 categories)
 - _: Underscore separator
 - description: Human-readable name
 ```
+
+There is no `0x` marker: `x` is not a hexadecimal digit, so `0x0A_users.sql`
+carries no prefix confiture can read and sorts as an unnumbered file. Write the
+digits alone.
 
 ### Example with Hex Sorting
 
@@ -64,15 +94,19 @@ build:
 
 ```bash
 db/schema/
-├── 0x00_extensions.sql       # 0   - Extensions
-├── 0x01_security.sql         # 1   - Security
-├── 0x0A_users.sql            # 10  - User domain
-├── 0x0B_posts.sql            # 11  - Content domain
-├── 0x14_views.sql            # 20  - Views
-├── 0x1E_functions.sql        # 30  - Functions
-├── 0x28_triggers.sql         # 40  - Triggers
-└── 0xFF_finalize.sql         # 255 - Final steps
+├── 00_extensions.sql         # 0   - Extensions
+├── 01_security.sql           # 1   - Security
+├── 0a_users.sql              # 10  - User domain
+├── 0b_posts.sql              # 11  - Content domain
+├── 14_views.sql              # 20  - Views
+├── 1e_functions.sql          # 30  - Functions
+├── 28_triggers.sql           # 40  - Triggers
+└── ff_finalize.sql           # 255 - Final steps
 ```
+
+One hex-lettered prefix among the siblings makes the whole directory hex, so
+`00_extensions.sql` above is 0 and not "the decimal zero in a decimal
+directory". Either case works, and `confiture generate alloc` writes lower.
 
 **Benefits**:
 - **255 possible categories** (vs 9 with decimal)

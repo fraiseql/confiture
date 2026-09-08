@@ -82,6 +82,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and an unqualified name is not judged at all unless the new `lint.search_path` says where to look —
   an unqualified *routine* call not even then, because `pg_catalog` is on every search path.
   `--baseline` is the documented adoption path for an existing schema.
+- **Four rules for the DDL tree itself (#249).** The arrangement of `db/schema/` decides which
+  definition of an object wins and which objects exist when a later file references one, and nothing
+  checked it: an audit of one large tree found 36 colliding prefixes, 9 entries whose prefix did not
+  extend their parent's, 2 unnumbered entries and 7 filenames carrying a status word — every one of
+  them by hand, because `lint-unified --check tree` reported "No issues found". The `tree` family is
+  **opt-in** (`--select tree`), each finding carries its path and, for a file, line 1, and every one
+  can be baselined.
+  `tree_005` (`warning`) reports two sibling *entries* sharing a numeric prefix where at least one is
+  a directory — `tree_001` compares the files inside one directory and never saw a colliding pair of
+  directories. Its message names the resulting build order, because confiture is the only component
+  that computes it. `tree_006` (`warning`) reports an entry whose prefix does not extend its
+  parent's, and reads the convention out of the tree rather than assuming one: it fires only where a
+  directory's own prefix extends *its* parent's, so `034_dim/0341_geo/03452_odd` is a finding and
+  `10_tables/01_users.sql` is not. `tree_007` (`warning`) reports an entry with no prefix beside
+  numbered siblings, which `tree_002` could not see because it only looks at files that already
+  carry one; a directory whose entries are all unnumbered says nothing. `tree_008` (`info`) reports a
+  status word in a name the build reads, with the vocabulary in the new `lint.status_words`
+  (default `TODO`, `FIXME`, `WIP`, `DRAFT`).
+  None of the four opens a file — they are findings about names — and all of them read the
+  environment's own file list, so a directory `exclude_dirs` or an `exclude` glob keeps out of the
+  build is judged by nothing.
 - **A rule that could not run in full says so.** `LintReport` gains `skipped` and `degraded`, each
   entry `{code, state, reason}`, surfaced on the summary line and as two arrays in
   `lint --format json` (`lint.schema.json` requires both, empty when there is nothing to say). The

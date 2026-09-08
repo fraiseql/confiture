@@ -169,3 +169,92 @@ def test_the_status_words_are_configurable(in_tmp: Path) -> None:
     found = _codes(_findings(), "tree_008")
 
     assert [i["file"] for i in found] == ["db/schema/00001_create_ADRAFT.sql"]
+
+
+_EXCLUDED_ENV = (
+    "database_url: postgresql://localhost/test\n"
+    "include_dirs:\n"
+    "  - path: db/schema\n"
+    "    exclude:\n"
+    "      - 'vendor/*.sql'\n"
+    "exclude_dirs:\n"
+    "  - db/schema/legacy\n"
+)
+
+
+def test_a_directory_the_build_never_reads_is_judged_by_nothing(in_tmp: Path) -> None:
+    """LINT-08 holds for the four new rules: they read the build's file list.
+
+    Both exclusion mechanisms are exercised — the legacy ``exclude_dirs`` and a
+    per-directory ``exclude`` glob — because a rule that walked the tree itself
+    would report the numbering of files nothing applies.
+    """
+    _project(
+        in_tmp,
+        {
+            "0100_kept/00001_create.sql": "CREATE TABLE tb_a (id INT);\n",
+            "legacy/0248_a/00001_create.sql": "CREATE TABLE tb_b (id INT);\n",
+            "legacy/0248_b/00001_create.sql": "CREATE TABLE tb_c (id INT);\n",
+            "vendor/00001_create.sql": "CREATE TABLE tb_d (id INT);\n",
+            "vendor/unnumbered.sql": "CREATE TABLE tb_e (id INT);\n",
+            f"vendor/00002_{DEFAULT_STATUS_WORDS[0]}.sql": "CREATE TABLE tb_f (id INT);\n",
+        },
+    )
+    (in_tmp / "db" / "environments" / "local.yaml").write_text(_EXCLUDED_ENV)
+
+    assert {i["rule_id"] for i in _findings()} == set()
+
+
+def test_the_same_tree_without_the_exclusions_is_full_of_findings(in_tmp: Path) -> None:
+    """The other half of the previous test: the tree really does trip the rules."""
+    _project(
+        in_tmp,
+        {
+            "0100_kept/00001_create.sql": "CREATE TABLE tb_a (id INT);\n",
+            "legacy/0248_a/00001_create.sql": "CREATE TABLE tb_b (id INT);\n",
+            "legacy/0248_b/00001_create.sql": "CREATE TABLE tb_c (id INT);\n",
+            "vendor/00001_create.sql": "CREATE TABLE tb_d (id INT);\n",
+            "vendor/unnumbered.sql": "CREATE TABLE tb_e (id INT);\n",
+            f"vendor/00002_{DEFAULT_STATUS_WORDS[0]}.sql": "CREATE TABLE tb_f (id INT);\n",
+        },
+    )
+
+    assert {i["rule_id"] for i in _findings()} >= {"tree_005", "tree_007", "tree_008"}
+
+
+def test_a_baseline_absorbs_a_tree_that_has_never_been_checked(in_tmp: Path) -> None:
+    """The adoption path for #249's reporter: 36 collisions, then a ratchet.
+
+    A tree rule's object is a path, so the identity is stable across runs; a
+    baseline written today must leave the run clean tomorrow and still fail on
+    a collision added after it.
+    """
+    schema = {
+        f"{n:04d}_a/00001_create.sql": f"CREATE TABLE tb_a{n} (id INT);\n" for n in range(100, 136)
+    }
+    schema.update(
+        {
+            f"{n:04d}_b/00001_create.sql": f"CREATE TABLE tb_b{n} (id INT);\n"
+            for n in range(100, 136)
+        }
+    )
+    _project(in_tmp, schema)
+    baseline = in_tmp / ".confiture-lint-baseline.json"
+
+    first = runner.invoke(
+        app, ["lint", "--select", "tree_005", "--baseline", str(baseline), "--write-baseline"]
+    )
+    assert first.exit_code == 0, first.output
+    assert len(json.loads(baseline.read_text())["rules"]["tree_005"]) == 36
+
+    second = runner.invoke(app, ["lint", "--select", "tree_005", "--baseline", str(baseline)])
+    assert second.exit_code == 0, second.output
+
+    for suffix in ("c", "d"):
+        directory = in_tmp / "db" / "schema" / f"0200_{suffix}"
+        directory.mkdir()
+        (directory / "00001_create.sql").write_text(f"CREATE TABLE tb_{suffix} (id INT);\n")
+    third = runner.invoke(app, ["lint", "--select", "tree_005", "--baseline", str(baseline)])
+
+    assert third.exit_code == 1, third.output
+    assert "0200_d" in third.output

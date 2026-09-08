@@ -289,9 +289,13 @@ build:
 - Clear visual hierarchy required
 
 **Hex sorting details**:
-- Files with `0x{HH}_` prefixes sort by hex value
-- Non-hex files sort alphabetically after hex files
-- Supports 255 possible categories (0x00-0xFF)
+- Files with a `{HH}_` prefix sort by its value; there is no `0x` marker,
+  because `x` is not a hex digit
+- The base belongs to the directory: one hex-lettered sibling makes the whole
+  group hexadecimal
+- Unnumbered files sort after every numbered one, by name
+- The key reads every path component, so the order does not depend on the
+  filesystem
 
 **See [Hexadecimal Sorting](../features/hexadecimal-sorting.md)** for complete documentation.
 
