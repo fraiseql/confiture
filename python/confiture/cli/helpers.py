@@ -19,6 +19,7 @@ from confiture.core.linting.schema_linter import (
     LintReport as LinterReport,
 )
 from confiture.core.linting.schema_linter import (
+    LintViolation,
     RuleSeverity,
 )
 from confiture.core.parser_info import parser_stamp
@@ -119,6 +120,33 @@ def _get_suggestion(unknown_command: str) -> str | None:
     return matches[0] if matches else None
 
 
+#: The linter's severities, in the order ``models.lint`` names them.
+_SEVERITIES: dict[RuleSeverity, LintSeverity] = {
+    RuleSeverity.ERROR: LintSeverity.ERROR,
+    RuleSeverity.WARNING: LintSeverity.WARNING,
+    RuleSeverity.INFO: LintSeverity.INFO,
+}
+
+
+def _to_violation(violation: LintViolation) -> Violation:
+    """The one place a linter violation becomes a reportable one.
+
+    Copying the fields at each of the three call sites is how ``file_path`` and
+    ``line_number`` came to be dropped from every ``lint --format json``
+    payload; there is one conversion now, and one test over it.
+    """
+    return Violation(
+        rule_id=violation.rule_id,
+        rule_name=violation.rule_name,
+        severity=_SEVERITIES[violation.severity],
+        message=violation.message,
+        location=violation.object_name,
+        suggested_fix=violation.suggested_fix,
+        file=violation.file_path,
+        line=violation.line_number,
+    )
+
+
 def _convert_linter_report(
     linter_report: LinterReport,
     schema_name: str = "schema",
@@ -129,55 +157,17 @@ def _convert_linter_report(
     Args:
         linter_report: Report from SchemaLinter
         schema_name: Name of schema being linted
+        baseline: The ``--baseline`` comparison summary, when one ran.
 
     Returns:
         LintReport compatible with format_lint_report
     """
-    violations = []
-
-    # Map RuleSeverity to LintSeverity
-    severity_map = {
-        RuleSeverity.ERROR: LintSeverity.ERROR,
-        RuleSeverity.WARNING: LintSeverity.WARNING,
-        RuleSeverity.INFO: LintSeverity.INFO,
-    }
-
-    # Convert all violations
-    violations.extend(
-        Violation(
-            rule_id=violation.rule_id,
-            rule_name=violation.rule_name,
-            severity=severity_map[violation.severity],
-            message=violation.message,
-            location=violation.object_name,
-        )
-        for violation in linter_report.errors
-    )
-
-    violations.extend(
-        Violation(
-            rule_id=violation.rule_id,
-            rule_name=violation.rule_name,
-            severity=severity_map[violation.severity],
-            message=violation.message,
-            location=violation.object_name,
-        )
-        for violation in linter_report.warnings
-    )
-
-    violations.extend(
-        Violation(
-            rule_id=violation.rule_id,
-            rule_name=violation.rule_name,
-            severity=severity_map[violation.severity],
-            message=violation.message,
-            location=violation.object_name,
-        )
-        for violation in linter_report.info
-    )
-
     return LintReport(
-        violations=violations,
+        violations=[
+            _to_violation(violation)
+            for bucket in (linter_report.errors, linter_report.warnings, linter_report.info)
+            for violation in bucket
+        ],
         schema_name=schema_name,
         tables_checked=linter_report.tables_checked,
         columns_checked=linter_report.columns_checked,

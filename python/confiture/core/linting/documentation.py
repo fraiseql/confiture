@@ -48,6 +48,7 @@ def _finding(obj: SchemaObject) -> LintViolation:
         object_type=obj.kind,
         object_name=obj.identity,
         message=f"{noun} '{obj.identity}' should have a COMMENT describing its purpose",
+        file_path=obj.file,
         line_number=obj.line,
         suggested_fix=f"COMMENT ON {_COMMENT_KEYWORD[obj.kind]} {obj.identity} IS '...';",
     )

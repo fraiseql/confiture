@@ -490,7 +490,7 @@ Shape is identical to plain `drift` — items of type `missing_grant` / `extra_g
 
 ### `confiture lint --format json`
 
-**Schema**: [`lint.schema.json`](json-schemas/lint.schema.json) — `LintReport.to_dict()`: the counts and the violation items (`rule_id`, `severity`, `location`, `message`, `suggested_fix`).
+**Schema**: [`lint.schema.json`](json-schemas/lint.schema.json) — `LintReport.to_dict()`: the counts and the violation items (`rule_id`, `severity`, `location`, `file`, `line`, `message`, `suggested_fix`). `file` and `line` are `null` together when the rule read a string rather than a file tree.
 
 ### `confiture introspect --format json`
 

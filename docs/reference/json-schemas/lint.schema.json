@@ -64,6 +64,8 @@
               "rule_id",
               "severity",
               "location",
+              "file",
+              "line",
               "message",
               "suggested_fix"
             ],
@@ -84,6 +86,21 @@
               },
               "location": {
                 "type": "string"
+              },
+              "file": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Source file the finding is in, relative to the project root; null when the rule read a string rather than a file tree."
+              },
+              "line": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "description": "1-based line within `file`; null whenever `file` is null."
               },
               "message": {
                 "type": "string"

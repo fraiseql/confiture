@@ -163,7 +163,7 @@ class TestLintCommand:
         result = runner.invoke(app, ["lint", "--format", "csv"])
 
         assert result.exit_code == 1  # Has errors
-        assert "rule_name,severity,location,message" in result.stdout
+        assert "rule_name,severity,location,file,line,message" in result.stdout
         assert "TestRule" in result.stdout
 
     @patch("confiture.cli.commands.schema.SchemaLinter")

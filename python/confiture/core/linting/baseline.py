@@ -24,10 +24,25 @@ CONVENTIONAL_NAME = ".confiture-lint-baseline.json"
 MALFORMED_CODE = "CONFIG_012"
 
 
+#: The rules that read a *tree of files* rather than the one built schema, so the
+#: same object name can legitimately be reported from several of them: a
+#: duplicate definition is about the pair of files it is in, an ACL or replica
+#: finding is about one migration. Their identity carries ``@file``.
+#:
+#: Every other rule reads the build, where an object is defined once, and
+#: identifies its finding by the object alone — moving a table from one schema
+#: file to another must not retire a baseline entry and add a new one. That is
+#: why this is an explicit set and not "whatever violations happen to carry a
+#: ``file_path``": since 1.4.0 nearly all of them do.
+FILE_SCOPED_RULES = frozenset({"build_001", "build_002", "acl_001", "tenant_001", "replica_001"})
+
+
 def identity(violation: LintViolation) -> str:
     """``rule:kind:name`` — with ``@file`` when the rule is file-scoped. No line numbers."""
     base = f"{violation.rule_id}:{violation.object_type}:{violation.object_name}"
-    return f"{base}@{violation.file_path}" if violation.file_path else base
+    if violation.rule_id in FILE_SCOPED_RULES and violation.file_path:
+        return f"{base}@{violation.file_path}"
+    return base
 
 
 @dataclass

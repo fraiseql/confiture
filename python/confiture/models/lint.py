@@ -39,6 +39,12 @@ class Violation:
         message: Human-readable description of the issue
         location: Where the violation occurred (table name, column, etc.)
         suggested_fix: Optional suggestion on how to fix it
+        file: Path of the source file the finding is in, relative to the
+            project root, or ``None`` when the rule read a string rather than
+            a tree (``SchemaLinter.lint(schema=...)``).
+        line: 1-based line within ``file``, or ``None`` for the same reason.
+            Never a line in the concatenated build: a line without a file is
+            not a location.
     """
 
     rule_name: str
@@ -47,6 +53,8 @@ class Violation:
     location: str
     suggested_fix: str | None = None
     rule_id: str = ""
+    file: str | None = None
+    line: int | None = None
 
     def __str__(self) -> str:
         """Format violation for human consumption."""
@@ -218,6 +226,8 @@ class LintReport:
                         "rule_id": v.rule_id,
                         "severity": v.severity.value,
                         "location": v.location,
+                        "file": v.file,
+                        "line": v.line,
                         "message": v.message,
                         "suggested_fix": v.suggested_fix,
                     }
