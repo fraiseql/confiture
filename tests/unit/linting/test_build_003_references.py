@@ -332,3 +332,83 @@ class TestTheHonestFallback:
 
         assert finding.line_number == 5
         assert "the line given is the routine's" not in finding.message
+
+
+TRIGGER_ROUTINE = """CREATE OR REPLACE FUNCTION app.fn_touch()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$;
+"""
+
+
+class TestABodyNoParserWillReturn:
+    """A trigger function must not take the whole lint down with it.
+
+    `libpg_query` serialises a PL/pgSQL *trigger* function's implicit `TG_`
+    datums as `{}}` — malformed JSON — so `pglast.parse_plpgsql` raises
+    `json.JSONDecodeError` rather than `ParseError` on every `RETURNS TRIGGER`
+    and `RETURNS event_trigger` body. Trigger functions are ordinary, this rule
+    is on by default, and the exception reached the CLI's error boundary: a
+    plain `confiture lint` died with `INTERNAL_ERROR` on most real schemas.
+
+    A body no parser will return is a body this rule did not read, which is a
+    degradation to report, not an exception to raise and not a silence to pass
+    off as a clean result.
+    """
+
+    def _payload(self, *args: str) -> dict:
+        result = runner.invoke(
+            app, ["lint", "--select", "build_003", "--format", "json", "--fail-on", "never", *args]
+        )
+        assert result.exit_code == 0, result.output
+        return json.loads(result.stdout)
+
+    @staticmethod
+    def _unread(payload: dict) -> list[dict]:
+        """Only the "body went unread" degradations.
+
+        The fixture's DSN points at a closed port on purpose, so the live tier
+        degrades on every run here; that entry is a different fact.
+        """
+        return [d for d in payload["degraded"] if d["reason"].startswith("could not read")]
+
+    def test_a_trigger_function_does_not_crash_the_lint(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_trg.sql": TRIGGER_ROUTINE})
+
+        assert self._payload()["violations"]["total"] == 0
+
+    def test_and_the_report_says_the_body_went_unread(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_trg.sql": TRIGGER_ROUTINE})
+
+        (degraded,) = self._unread(self._payload())
+
+        assert degraded["code"] == "build_003"
+        assert degraded["state"] == "degraded"
+        assert "app.fn_touch()" in degraded["reason"]
+
+    def test_a_readable_body_beside_it_is_still_read(self, in_tmp: Path) -> None:
+        """The degradation is per body: one unreadable routine hides no other."""
+        _project(
+            in_tmp,
+            {
+                "001_schema.sql": ISSUE_246_SCHEMA,
+                "010_trg.sql": TRIGGER_ROUTINE,
+                "020_fn.sql": ISSUE_246_ROUTINE,
+            },
+        )
+
+        payload = self._payload()
+
+        assert sorted(i["location"] for i in payload["violations"]["items"]) == [
+            "app.fn_report() -> app.fn_refresh_summary",
+            "app.fn_report() -> app.tv_summary",
+        ]
+        assert "app.fn_touch()" in self._unread(payload)[0]["reason"]
+
+    def test_a_schema_with_no_unreadable_body_reports_no_degradation(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": ISSUE_246_ROUTINE})
+
+        assert self._unread(self._payload()) == []

@@ -65,7 +65,11 @@ class TestListRules:
         assert "security-definer" in result.output
 
     def test_does_not_advertise_rules_with_no_implementation(self, lint_project: Path) -> None:
-        """`check_indexes` computes nothing and `check_constraints` has no code."""
+        """The catalogue offers no check the linter cannot run.
+
+        `check_indexes` and `check_constraints` were `LintConfig` switches with
+        nothing behind them; they were removed rather than listed.
+        """
         result = _lint("--list-rules")
 
         assert "fk_001" not in result.output

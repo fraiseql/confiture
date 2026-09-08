@@ -2906,6 +2906,12 @@ computed from the registry's declared severities plus the escalations the
 environment config makes (`security_lint.severity`, declared replicas), so a
 project that has escalated is told the truth and not a generic warning.
 
+The default selection reaches the default threshold: `build_001` — an object
+defined more than once in one build — runs by default and emits `error`, so a
+plain `confiture lint` exits 1 on a duplicate definition. Decline it with
+`--baseline`, `--ignore build_001` or `--fail-on never`; not with `--fail-on
+warning`, which is a *lower* threshold and still fails on an error.
+
 ### Examples
 
 ```bash
@@ -2913,6 +2919,7 @@ confiture lint --env production --format json
 confiture lint --select doc,build --ignore doc_002
 confiture lint --fail-on warning                                           # block on warnings too
 confiture lint --fail-on never --format json                               # report, never fail
+confiture lint --ignore build_001                                          # decline the duplicate gate
 confiture lint --baseline .confiture-lint-baseline.json --write-baseline   # once
 confiture lint --baseline .confiture-lint-baseline.json                    # every run
 ```

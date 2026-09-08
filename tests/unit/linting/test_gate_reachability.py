@@ -1,11 +1,16 @@
 """A threshold no selected rule can reach is reported, not obeyed quietly.
 
-`--fail-on-error` was the default and no registered rule emitted at `error`, so
-a pipeline that set it got exit 0 forever and read that as "clean" (#247). The
-gate now answers a second question beside "did anything fail": *could* anything
-have failed. Reachability is computed from the registry's declared severities
-plus the escalations the environment config makes, so a project that has
-escalated `sec_002` is told the truth rather than a generic warning.
+`--fail-on-error` was the default and no rule that ran by default emitted at
+`error`, so a pipeline that set it got exit 0 forever and read that as "clean"
+(#247). The gate now answers a second question beside "did anything fail":
+*could* anything have failed. Reachability is computed from the registry's
+declared severities plus the escalations the environment config makes, so a
+project that has escalated `sec_002` is told the truth rather than a generic
+warning.
+
+Promoting `build_001` to `error` is what disarmed the trap for the default
+selection; the notice still has work to do for a narrower one, which is what
+these fixtures select.
 """
 
 from __future__ import annotations
@@ -59,20 +64,27 @@ def _gate(*args: str) -> dict:
 
 
 class TestTheNotice:
-    def test_the_default_selection_cannot_reach_error(self, project: Path) -> None:
-        result = _lint("--fail-on", "error")
+    def test_a_selection_with_no_error_rule_cannot_reach_error(self, project: Path) -> None:
+        result = _lint("--fail-on", "error", "--select", "doc,naming,pk")
 
         assert result.exit_code == 0
         assert "no selected rule emits at 'error'" in result.output
         assert "this gate cannot fail" in result.output
 
     def test_json_says_the_same_thing(self, project: Path) -> None:
-        gate = _gate("--fail-on", "error")
+        gate = _gate("--fail-on", "error", "--select", "doc,naming,pk")
 
         assert gate["threshold"] == "error"
         assert gate["reachable"] is False
         assert "no selected rule emits at 'error'" in gate["reason"]
         assert gate["max_selectable_severity"] == "warning"
+
+    def test_the_default_selection_reaches_error(self, project: Path) -> None:
+        """`build_001` runs by default and declares `error`, so the trap is disarmed."""
+        gate = _gate("--fail-on", "error")
+
+        assert gate["reachable"] is True
+        assert gate["max_selectable_severity"] == "error"
 
     def test_a_reachable_threshold_says_nothing(self, project: Path) -> None:
         result = _lint("--fail-on", "warning")
@@ -94,14 +106,14 @@ class TestEscalations:
             _ENV + "security_lint:\n  enabled: true\n  severity: error\n"
         )
 
-        gate = _gate("--fail-on", "error", "--select", "default,security-definer")
+        gate = _gate("--fail-on", "error", "--select", "doc,security-definer")
 
         assert gate["reachable"] is True
         assert gate["max_selectable_severity"] == "error"
 
-    def test_the_first_registered_error_rule_makes_error_reachable(self, project: Path) -> None:
+    def test_an_opt_in_error_rule_makes_error_reachable(self, project: Path) -> None:
         """`acl_001` declares `error` (D2), so selecting it arms `--fail-on error`."""
-        gate = _gate("--fail-on", "error", "--select", "default,acl")
+        gate = _gate("--fail-on", "error", "--select", "doc,acl")
 
         assert gate["reachable"] is True
         assert gate["max_selectable_severity"] == "error"
@@ -113,7 +125,7 @@ class TestEscalations:
             _ENV + "security_lint:\n  enabled: true\n"
         )
 
-        gate = _gate("--fail-on", "error", "--select", "default,security-definer")
+        gate = _gate("--fail-on", "error", "--select", "doc,security-definer")
 
         assert gate["reachable"] is False
         assert gate["max_selectable_severity"] == "warning"

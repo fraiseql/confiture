@@ -163,7 +163,7 @@ class TestLintRule:
     def test_registry_has_the_build_family(self) -> None:
         build = [rule for rule in LINT_RULES if rule.family == "build"]
         assert [(r.code, r.severity, r.default_on) for r in build] == [
-            ("build_001", "warning", True),
+            ("build_001", "error", True),
             ("build_002", "info", True),
             ("build_003", "warning", True),
         ]
@@ -171,10 +171,10 @@ class TestLintRule:
             {"build_001", "build_002", "build_003"}
         )
 
-    def test_lint_reports_build_001_as_a_warning_with_the_locations(self) -> None:
+    def test_lint_reports_build_001_as_an_error_with_the_locations(self) -> None:
         sql = f"CREATE OR REPLACE FUNCTION app.f() {BODY}\n\nCREATE OR REPLACE FUNCTION app.f() {BODY}\n"
         report = SchemaLinter(config=LintConfig(enabled=True)).lint(schema=sql)
-        (finding,) = [v for v in report.warnings if v.rule_id == "build_001"]
+        (finding,) = [v for v in report.errors if v.rule_id == "build_001"]
         assert finding.object_name == "app.f()"
         assert finding.object_type == "function"
         assert "line 1" in finding.message and "line 3" in finding.message
@@ -248,7 +248,9 @@ class TestBuildCli:
         assert json.loads(result.stdout)["duplicates"] == []
 
     def test_lint_reports_the_same_duplicate_with_file_paths(self, dup_project: Path) -> None:
-        result = CliRunner().invoke(app, ["lint", "--select", "build", "--format", "json"])
+        result = CliRunner().invoke(
+            app, ["lint", "--select", "build", "--format", "json", "--fail-on", "never"]
+        )
         assert result.exit_code == 0, result.output
         items = json.loads(result.stdout)["violations"]["items"]
         assert [(i["rule_id"], i["location"]) for i in items] == [("build_001", "app.f(integer)")]

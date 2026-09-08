@@ -152,8 +152,6 @@ class LintConfig:
         check_primary_keys: bool = True,
         check_documentation: bool = True,
         check_restatements: bool = False,
-        check_indexes: bool = True,
-        check_constraints: bool = True,
         check_security: bool = True,
         check_tenant_isolation: bool = False,
         check_acl_coverage: bool = True,
@@ -178,8 +176,6 @@ class LintConfig:
                 name already says (``doc_005``). Off by default, like the rule:
                 it is a heuristic and a correct comment that happens to restate
                 the name is a false positive.
-            check_indexes: Check indexes on foreign keys
-            check_constraints: Check constraint definitions
             check_security: Check for security issues (passwords, tokens)
             check_tenant_isolation: Detect INSERTs missing tenant FK columns
                 (multi-tenant rule, ``tenant_001``). Opt-in (default off).
@@ -216,8 +212,6 @@ class LintConfig:
         self.check_primary_keys = check_primary_keys
         self.check_documentation = check_documentation
         self.check_restatements = check_restatements
-        self.check_indexes = check_indexes
-        self.check_constraints = check_constraints
         self.check_security = check_security
         self.check_tenant_isolation = check_tenant_isolation
         self.check_acl_coverage = check_acl_coverage
@@ -283,6 +277,7 @@ class SchemaLinter:
         self._schema_files: list[Path] = []
         self._file_objects: list[SchemaObject] = []
         self._file_schemas: list[SchemaObject] = []
+        self._source_cache: list[tuple[str | None, str]] | None = None
 
     def lint(self, schema: str | None = None) -> LintReport:
         """Run linting and return report.
@@ -298,6 +293,7 @@ class SchemaLinter:
         if not self.config.enabled:
             return report
 
+        self._source_cache = None
         # Use provided schema or load from files
         if schema is not None:
             self._schema_sql = schema
@@ -336,12 +332,26 @@ class SchemaLinter:
 
         # One table rather than a chain of ifs: a rule is its switch and its
         # method, and adding one is a row.
+        #
+        # Deliberately keyed on switches and not on rule codes, which is the
+        # question a reader arrives with now that the registry is the single
+        # source of truth for what a rule is. One method serves several codes
+        # (`_check_documentation` emits doc_001 through doc_004), two switches
+        # share one method (qual_001 and qual_002), and `LintConfig` is the
+        # library API — a caller sets `check_documentation=True`, not a set of
+        # codes. Keying this on the registry would mean either running a method
+        # once per code it emits, or putting a method name in the catalogue
+        # `--list-rules` publishes. Per-code selection happens where it belongs,
+        # on the findings, in `_keep_selected_rules`.
+        #
+        # What the two tables owe each other is agreement, and two guards hold
+        # it: `test_every_rule_is_registered` (no rule emits without an entry)
+        # and `test_every_switch_has_a_rule` (no switch runs without a rule).
         for enabled, check in (
             (self.config.check_naming, self._check_naming_conventions),
             (self.config.check_primary_keys, self._check_primary_keys),
             (self.config.check_documentation, self._check_documentation),
             (self.config.check_restatements, self._check_restatements),
-            (self.config.check_indexes, self._check_indexes),
             (self.config.check_security, self._check_security),
             (self.config.check_duplicates, self._check_duplicates),
             (
@@ -388,11 +398,11 @@ class SchemaLinter:
         files and therefore no locations to report.
         """
         # Reason: import cycle (duplicates imports this module's inventory at module level)
-        from confiture.core.linting.duplicates import inventory_files
+        from confiture.core.linting.duplicates import inventory_texts
 
         if not self._schema_files:
             return [], []
-        objects, schemas, _unparseable = inventory_files(self._schema_files, root=self.project_dir)
+        objects, schemas, _unparseable = inventory_texts(self._sources())
         return objects, schemas
 
     def _load_schema(self) -> None:
@@ -533,16 +543,14 @@ class SchemaLinter:
         certainty.
         """
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core.linting.references import referenced_objects
+        from confiture.core.linting.references import read_references
 
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
         from confiture.core.linting.unresolved import reference_findings, unresolved_references
 
-        located = [
-            (label, reference)
-            for label, text in self._sources()
-            for reference in referenced_objects(text)
-        ]
+        scans = [(label, read_references(text)) for label, text in self._sources()]
+        located = [(label, reference) for label, scan in scans for reference in scan.references]
+        self._report_unread_bodies(scans, report)
         candidates = unresolved_references(
             located,
             self._file_objects or self._inventory.objects,
@@ -553,6 +561,33 @@ class SchemaLinter:
             candidates = self._after_live_tier(candidates, report)
         for violation in reference_findings(candidates):
             report.add_violation(violation)
+
+    @staticmethod
+    def _report_unread_bodies(scans: list[tuple[str | None, Any]], report: LintReport) -> None:
+        """Name the routines whose bodies no parser would return.
+
+        `build_003` subtracts what a body names from what the build creates, so
+        a body it never read contributes no names and the rule says nothing
+        about it. Saying nothing and finding nothing are the same output and a
+        different fact, which is what `degraded` exists to separate.
+        """
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import RULE_ID
+
+        unread = sorted({name for _label, scan in scans for name in scan.unread})
+        if not unread:
+            return
+        body = "body" if len(unread) == 1 else "bodies"
+        report.degraded.append(
+            RuleStatus(
+                code=RULE_ID,
+                state="degraded",
+                reason=(
+                    f"could not read {len(unread)} routine {body}, so the objects "
+                    f"they name are not checked: {', '.join(unread)}"
+                ),
+            )
+        )
 
     def _check_bodies(self, report: LintReport) -> None:
         """``body_001`` / ``body_002``: what ``plpgsql_check`` says about each body (#245).
@@ -663,13 +698,21 @@ class SchemaLinter:
         Every rule that reads the files *as files* — rather than the build they
         concatenate into — needs the same pair, and a whole-string lint
         (``lint(schema=...)``) has no file to name, so its label is ``None``.
+
+        Read once per lint and held: six rules want it, and a schema tree is
+        thousands of files. ``lint()`` clears it, so a reused linter still sees
+        what is on disk now.
         """
-        if not self._schema_files:
-            return [(None, self._schema_sql or "")]
-        return [
-            (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
-            for path in self._schema_files
-        ]
+        if self._source_cache is None:
+            self._source_cache = (
+                [(None, self._schema_sql or "")]
+                if not self._schema_files
+                else [
+                    (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
+                    for path in self._schema_files
+                ]
+            )
+        return self._source_cache
 
     def _directive_lines(self, name: str) -> frozenset[tuple[str | None, int]]:
         """``(file, statement line)`` of every statement carrying ``-- confiture:<name>``.
@@ -686,39 +729,6 @@ class SchemaLinter:
             for directive in sql_lexer.directives(text)
             if directive.name == name and directive.statement_line is not None
         )
-
-    def _check_indexes(self, _report: LintReport) -> None:
-        """Check for indexes on foreign keys.
-
-        Args:
-            _report: Report to add violations to
-        """
-        if not self._schema_sql:
-            return
-
-        # Find foreign key definitions
-        fk_pattern = r"REFERENCES\s+(\w+)\s*\((\w+)\)"
-        fk_matches = list(re.finditer(fk_pattern, self._schema_sql, re.IGNORECASE))
-
-        if not fk_matches:
-            return
-
-        # Check for CREATE INDEX statements
-        index_pattern = r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+\w+\s+ON\s+(\w+)\s*\(([^)]+)\)"
-        indexes = {}
-
-        for match in re.finditer(index_pattern, self._schema_sql, re.IGNORECASE):
-            table = match.group(1)
-            columns = match.group(2)
-            if table not in indexes:
-                indexes[table] = []
-            indexes[table].append(columns)
-
-        # Warn if foreign keys lack indexes
-        # This is simplified - a full implementation would parse more thoroughly
-        # For now, just note that checking for indexes on FK columns is important
-        for _fk_match in fk_matches:
-            pass
 
     def _check_security(self, report: LintReport) -> None:
         """Columns whose names suggest sensitive data, read from the inventory."""

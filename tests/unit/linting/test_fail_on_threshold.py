@@ -1,9 +1,14 @@
 """`confiture lint --fail-on <severity>`: the gate a CI pipeline can actually set.
 
-`--fail-on-error` is on by default and no rule in the registry emits at `error`,
-so the flag a pipeline reaches for to make lint block is a flag that cannot
-block (#247). The threshold is one value now, not two booleans that between them
-express three of the four useful settings and none of the fifth.
+`--fail-on-error` is on by default and, before this release, no rule that ran by
+default emitted at `error` — so the flag a pipeline reaches for to make lint
+block was a flag that could not block (#247). The threshold is one value now,
+not two booleans that between them express three of the four useful settings and
+none of the fifth; `build_001` is the default-on rule that reaches it.
+
+Two fixtures, because a threshold only means something when findings sit on both
+sides of it: one schema whose worst finding is an `error`, one whose worst is a
+`warning`.
 """
 
 from __future__ import annotations
@@ -24,20 +29,18 @@ runner = CliRunner()
 
 _DEFINED_ONCE = "CREATE TABLE app.tb_widget (id BIGINT PRIMARY KEY);\n"
 _DEFINED_AGAIN = "CREATE TABLE app.tb_widget (id BIGINT PRIMARY KEY, label TEXT);\n"
+#: `pk_001`, a warning, and nothing above it.
+_NO_PRIMARY_KEY = "CREATE TABLE app.tb_gadget (id BIGINT, label TEXT);\n"
 
 
-@pytest.fixture
-def duplicate_project(tmp_path: Path) -> Iterator[Path]:
-    """The #247 reproduction: one `build_001` warning and some `doc_001` info."""
+def _project(tmp_path: Path, files: dict[str, str]) -> Iterator[Path]:
     (tmp_path / "db" / "schema").mkdir(parents=True)
     (tmp_path / "db" / "environments").mkdir(parents=True)
     (tmp_path / "db" / "environments" / "local.yaml").write_text(
         "database_url: postgresql://localhost/test\ninclude_dirs:\n  - path: db/schema\n"
     )
-    (tmp_path / "db" / "schema" / "010_widget.sql").write_text(
-        "CREATE SCHEMA IF NOT EXISTS app;\n" + _DEFINED_ONCE
-    )
-    (tmp_path / "db" / "schema" / "020_widget.sql").write_text(_DEFINED_AGAIN)
+    for name, sql in files.items():
+        (tmp_path / "db" / "schema" / name).write_text(sql)
 
     old_cwd = Path.cwd()
     os.chdir(tmp_path)
@@ -45,6 +48,27 @@ def duplicate_project(tmp_path: Path) -> Iterator[Path]:
         yield tmp_path
     finally:
         os.chdir(old_cwd)
+
+
+@pytest.fixture
+def duplicate_project(tmp_path: Path) -> Iterator[Path]:
+    """The #247 reproduction: one `build_001` error and some `doc_001` info."""
+    yield from _project(
+        tmp_path,
+        {
+            "010_widget.sql": "CREATE SCHEMA IF NOT EXISTS app;\n" + _DEFINED_ONCE,
+            "020_widget.sql": _DEFINED_AGAIN,
+        },
+    )
+
+
+@pytest.fixture
+def warning_project(tmp_path: Path) -> Iterator[Path]:
+    """The other side of the threshold: `pk_001` and `doc_001`, nothing worse."""
+    yield from _project(
+        tmp_path,
+        {"010_gadget.sql": "CREATE SCHEMA IF NOT EXISTS app;\n" + _NO_PRIMARY_KEY},
+    )
 
 
 def _lint(*args: str):  # type: ignore[no-untyped-def]
@@ -55,18 +79,27 @@ class TestThreshold:
     def test_fail_on_warning_fails_on_the_duplicate(self, duplicate_project: Path) -> None:
         assert _lint("--fail-on", "warning").exit_code == 1
 
-    def test_fail_on_error_passes_the_duplicate(self, duplicate_project: Path) -> None:
-        """The trap #247 was filed for, now something an operator can choose."""
+    def test_fail_on_error_fails_on_the_duplicate(self, duplicate_project: Path) -> None:
+        """`build_001` is an error, so the threshold every pipeline sets reaches it."""
+        assert _lint("--fail-on", "error").exit_code == 1
+
+    def test_fail_on_error_passes_a_schema_whose_worst_finding_is_a_warning(
+        self, warning_project: Path
+    ) -> None:
+        """The threshold still discriminates; it is the rule that moved, not it."""
         assert _lint("--fail-on", "error").exit_code == 0
+
+    def test_fail_on_warning_fails_on_that_same_schema(self, warning_project: Path) -> None:
+        assert _lint("--fail-on", "warning").exit_code == 1
 
     def test_fail_on_info_fails_on_an_info_finding(self, duplicate_project: Path) -> None:
         assert _lint("--fail-on", "info", "--select", "doc").exit_code == 1
 
-    def test_the_default_threshold_is_still_error(self, duplicate_project: Path) -> None:
-        """Unchanged behaviour: no flag means `--fail-on error`."""
+    def test_the_default_threshold_is_still_error(self, warning_project: Path) -> None:
+        """Unchanged: no flag means `--fail-on error`, and a warning is not one."""
         assert _lint().exit_code == 0
 
-    def test_the_boolean_aliases_still_mean_what_they_meant(self, duplicate_project: Path) -> None:
+    def test_the_boolean_aliases_still_mean_what_they_meant(self, warning_project: Path) -> None:
         assert _lint("--fail-on-warning").exit_code == 1
         assert _lint("--fail-on-error").exit_code == 0
 

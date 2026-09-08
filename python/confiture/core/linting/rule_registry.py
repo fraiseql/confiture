@@ -11,10 +11,13 @@ This module is the single backing store: :func:`resolve_selection` turns
 are re-expressed as ``--select default,<family>`` rather than as branches in the
 command body.
 
-**Only rules that can actually emit a violation are listed.** ``LintConfig``
-also carries ``check_indexes`` and ``check_constraints``; the first computes and
-discards, the second has no implementation at all. Listing them would move the
-existing over-claim into a new, more authoritative place.
+**Only rules that can actually emit a violation are listed**, and every switch
+``LintConfig`` carries belongs to one of them. Two did not — ``check_indexes``
+computed and discarded, ``check_constraints`` had no implementation at all —
+and both were on by default, so a lint dispatched work no rule was behind.
+``tests/unit/linting/test_every_switch_has_a_rule.py`` is what keeps the
+catalogue and the dispatch agreeing in that direction, as
+``test_every_rule_is_registered.py`` does in the other.
 """
 
 from __future__ import annotations
@@ -163,7 +166,7 @@ LINT_RULES: tuple[LintRule, ...] = (
         code="build_001",
         family="build",
         title="An object is defined more than once in one build",
-        severity="warning",
+        severity="error",
         default_on=True,
     ),
     LintRule(

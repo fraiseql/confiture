@@ -131,9 +131,7 @@ class TestNamingConventionChecks:
             check_naming=True,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -156,9 +154,7 @@ class TestNamingConventionChecks:
             check_naming=True,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -185,9 +181,7 @@ class TestNamingConventionChecks:
             check_naming=True,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -216,9 +210,7 @@ class TestPrimaryKeyChecks:
             check_primary_keys=True,
             check_naming=False,
             check_documentation=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -241,9 +233,7 @@ class TestPrimaryKeyChecks:
             check_primary_keys=True,
             check_naming=False,
             check_documentation=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -266,9 +256,7 @@ class TestPrimaryKeyChecks:
             check_primary_keys=True,
             check_naming=False,
             check_documentation=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -295,9 +283,7 @@ class TestDocumentationChecks:
             check_documentation=True,
             check_naming=False,
             check_primary_keys=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -323,9 +309,7 @@ class TestDocumentationChecks:
             check_documentation=True,
             check_naming=False,
             check_primary_keys=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -350,9 +334,7 @@ class TestDocumentationChecks:
             check_documentation=True,
             check_naming=False,
             check_primary_keys=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -376,8 +358,6 @@ class TestSecurityChecks:
             check_naming=False,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -397,8 +377,6 @@ class TestSecurityChecks:
             check_naming=False,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -418,8 +396,6 @@ class TestSecurityChecks:
             check_naming=False,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -439,8 +415,6 @@ class TestSecurityChecks:
             check_naming=False,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -464,8 +438,6 @@ class TestSecurityChecks:
             check_naming=False,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -489,9 +461,7 @@ class TestLintConfigOptions:
             check_naming=False,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -511,9 +481,7 @@ class TestLintConfigOptions:
             check_naming=True,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
@@ -755,9 +723,7 @@ CREATE TABLE post_tags (
             check_naming=True,
             check_primary_keys=False,
             check_documentation=False,
-            check_indexes=False,
             check_security=False,
-            check_constraints=False,
         )
         linter = SchemaLinter(config=config)
         result = linter.lint(schema=schema)
