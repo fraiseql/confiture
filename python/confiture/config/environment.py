@@ -610,14 +610,21 @@ class FunctionCoverage(BaseModel):
     ignore: list[str] = Field(default_factory=list)
 
 
+#: ``tree_008``'s vocabulary when a project has not named its own: the words a
+#: filename uses to say the work is not finished. The one place they are
+#: written down — everything else, the rule included, reads them from here.
+DEFAULT_STATUS_WORDS: tuple[str, ...] = ("TODO", "FIXME", "WIP", "DRAFT")
+
+
 class LintSettings(BaseModel):
     """The ``lint:`` block in environment YAML: what the lint rules resolve against.
 
-    Only ``build_003`` reads it today. That rule subtracts the objects a body
-    references from the objects the build creates, and the build is not the
-    only thing that creates objects: a migration does, and so does an
-    extension. A live database answers for both when one is reachable; this is
-    what a project uses when none is.
+    ``build_003`` subtracts the objects a body references from the objects the
+    build creates, and the build is not the only thing that creates objects: a
+    migration does, and so does an extension. A live database answers for both
+    when one is reachable; ``ignore_objects`` and ``search_path`` are what a
+    project uses when none is. ``status_words`` belongs to ``tree_008``, which
+    reads names rather than SQL.
 
     Attributes:
         ignore_objects: ``fnmatch`` globs over ``schema.name``. A reference
@@ -630,12 +637,18 @@ class LintSettings(BaseModel):
             ``now()`` becomes a finding. Unqualified *routine* calls are never
             judged even with this set — ``pg_catalog`` is on every search path
             and confiture cannot enumerate it.
+        status_words: The words in a file or directory name that say the work
+            is unfinished, matched case-insensitively against the
+            underscore-separated parts of the name. The default is the
+            vocabulary ``tree_008`` was filed for; a project that writes
+            ``_SPIKE`` says so here.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     ignore_objects: list[str] = Field(default_factory=list)
     search_path: list[str] = Field(default_factory=list)
+    status_words: list[str] = Field(default_factory=lambda: list(DEFAULT_STATUS_WORDS))
 
 
 class SecurityLinting(BaseModel):

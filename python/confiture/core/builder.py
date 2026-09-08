@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from confiture.config.environment import Environment
+from confiture.core import tree_prefix
 from confiture.core.fk_extractor import extract_and_strip_fks, generate_alter_statements
 from confiture.core.progress import ProgressManager
 
@@ -210,48 +211,20 @@ class SchemaBuilder:
         return Path(*common_parts)
 
     def _is_hex_prefix(self, filename: str) -> bool:
-        """Check if filename starts with hexadecimal prefix.
+        """Whether *filename* carries a numeric prefix.
 
-        Hex prefixes must consist of valid hexadecimal characters where
-        all letters are uppercase, followed by an underscore.
-
-        Args:
-            filename: Filename to check
-
-        Returns:
-            True if filename starts with valid hex prefix
-        """
-        parts = filename.split("_", 1)
-        if len(parts) != 2:
-            return False
-        prefix = parts[0]
-
-        # Check that all letters are uppercase
-        if not all(c.isupper() or c.isdigit() for c in prefix):
-            return False
-
-        try:
-            int(prefix, 16)
-            return True
-        except ValueError:
-            return False
-
-    def _hex_sort_key(self, path: Path) -> tuple[float | int, str]:
-        """Generate sort key for hexadecimal-prefixed files.
+        Delegates to :mod:`confiture.core.tree_prefix`, the one answer the
+        builder, the tree rules and ``generate alloc`` share: the run of hex
+        digits before the first underscore, in either case, carrying at least
+        one decimal digit so that ``add_column.sql`` stays a word (LINT-07).
 
         Args:
-            path: File path to generate sort key for
+            filename: Filename or stem to check
 
         Returns:
-            Tuple for sorting: (hex_value, rest_of_filename) or (inf, filename)
+            True if the name starts with a numeric prefix
         """
-        filename = path.stem
-        if self._is_hex_prefix(filename):
-            parts = filename.split("_", 1)
-            hex_value = int(parts[0], 16)
-            rest = parts[1] if len(parts) > 1 else ""
-            return (hex_value, rest)
-        return (float("inf"), filename)
+        return tree_prefix.is_numbered(filename)
 
     def find_sql_files(self) -> list[Path]:
         """Discover SQL files with pattern matching
@@ -325,19 +298,14 @@ class SchemaBuilder:
             )
 
         # Sort files based on configuration
-        if self.env_config.build.sort_mode == "hex":
-            # Check if any file has hex prefix
-            has_hex = any(self._is_hex_prefix(f.stem) for f in filtered_files)
-
-            if has_hex:
-                # Sort by hex value
-                return sorted(filtered_files, key=self._hex_sort_key)
-            else:
-                # Default alphabetical sort
-                return sorted(filtered_files)
-        else:
-            # Default alphabetical sort
-            return sorted(filtered_files)
+        if self.env_config.build.sort_mode == "hex" and any(
+            self._is_hex_prefix(f.stem) for f in filtered_files
+        ):
+            # Numeric order, reading the prefix on every path component — see
+            # core.tree_prefix for why the filename's own prefix is not enough.
+            return tree_prefix.order(filtered_files)
+        # Default alphabetical sort
+        return sorted(filtered_files)
 
     def _validate_comments(self, files: list[Path]) -> None:
         """Validate SQL files for unclosed block comments

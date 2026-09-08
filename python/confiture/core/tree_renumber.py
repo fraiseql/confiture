@@ -47,9 +47,7 @@ from pathlib import Path
 
 from confiture.core import sql_lexer
 from confiture.core.tree_allocator import PrefixConfig, TreeAllocator
-
-# Matches a leading numeric (decimal or hex) prefix followed by "_".
-_PREFIX_RE = re.compile(r"^[0-9a-fA-F]+_")
+from confiture.core.tree_prefix import prefix_text
 
 
 def _stem_from_path(path: Path) -> str:
@@ -68,7 +66,8 @@ def _stem_from_path(path: Path) -> str:
         _stem_from_path(Path("0001a_create.sql"))        # → "create"
         _stem_from_path(Path("create_item.sql"))         # → "create_item"
     """
-    return _PREFIX_RE.sub("", path.stem)
+    raw = prefix_text(path.stem)
+    return path.stem if raw is None else path.stem[len(raw) + 1 :]
 
 
 @dataclasses.dataclass

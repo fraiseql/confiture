@@ -289,9 +289,13 @@ build:
 - Clear visual hierarchy required
 
 **Hex sorting details**:
-- Files with `0x{HH}_` prefixes sort by hex value
-- Non-hex files sort alphabetically after hex files
-- Supports 255 possible categories (0x00-0xFF)
+- Files with a `{HH}_` prefix sort by its value; there is no `0x` marker,
+  because `x` is not a hex digit
+- The base belongs to the directory: one hex-lettered sibling makes the whole
+  group hexadecimal
+- Unnumbered files sort after every numbered one, by name
+- The key reads every path component, so the order does not depend on the
+  filesystem
 
 **See [Hexadecimal Sorting](../features/hexadecimal-sorting.md)** for complete documentation.
 
@@ -707,6 +711,7 @@ Generated from `confiture.config.environment`; the description is the model's ow
 |---|---|---|---|
 | `ignore_objects` | list[str] | `[]` | ``fnmatch`` globs over ``schema.name``. A reference matching one is never reported as unresolved — the escape hatch for an object created outside the DDL tree (``public.gen_random_uuid``, ``pg_stat_statements*``). |
 | `search_path` | list[str] | `[]` | The schemas an unqualified *relation* in a body is looked for in, in order. Empty (the default) means an unqualified name is not judged at all: without knowing what resolves it, every ``now()`` becomes a finding. Unqualified *routine* calls are never judged even with this set — ``pg_catalog`` is on every search path and confiture cannot enumerate it. |
+| `status_words` | list[str] | `['TODO', 'FIXME', 'WIP', 'DRAFT']` | The words in a file or directory name that say the work is unfinished, matched case-insensitively against the underscore-separated parts of the name. The default is the vocabulary ``tree_008`` was filed for; a project that writes ``_SPIKE`` says so here. |
 
 ### Complete skeleton (every field at its default)
 
@@ -836,6 +841,11 @@ security_lint:
 lint:
   ignore_objects: []
   search_path: []
+  status_words:
+    - TODO
+    - FIXME
+    - WIP
+    - DRAFT
 ```
 
 <!-- END GENERATED: config-fields -->

@@ -27,7 +27,7 @@ from confiture.cli.helpers import (
 )
 from confiture.cli.lint_formatter import format_lint_report, save_report
 from confiture.cli.options import format_option
-from confiture.config.environment import Environment
+from confiture.config.environment import DEFAULT_STATUS_WORDS, Environment
 from confiture.core import builder as _core_builder
 from confiture.core import linting as _core_linting
 from confiture.core.builder import SchemaBuilder
@@ -1288,11 +1288,17 @@ def _ddl_tree_findings(
 ) -> list[LintViolation]:
     """#111: tree_001–tree_004 over the DDL file tree the environment builds."""
     files, roots = _env_ddl_files(env, project_dir)
+    # A config that will not load has already left `files` empty, so the
+    # fallback here is a spelling of "nothing to report", not a second default.
+    lint_settings = _env_block(env, project_dir, "lint")
     return tree_violations(
         files,
         selected=selected,
         schema_dirs=roots,
         overrides_dir=_under(overrides_dir, project_dir),
+        status_words=(
+            DEFAULT_STATUS_WORDS if lint_settings is None else lint_settings.status_words
+        ),
     )
 
 

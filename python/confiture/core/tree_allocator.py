@@ -30,6 +30,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from confiture.core.tree_prefix import has_hex_letter, prefix_text
+
 
 class PrefixScheme(Enum):
     """Numeric base used for file prefix allocation."""
@@ -57,14 +59,6 @@ class PrefixConfig:
     start: int = 1
 
 
-# Matches a run of hex chars followed by '_' at the start of a filename.
-# This is intentionally broad so the caller can decide whether the chars
-# are hex-only or decimal-only.
-_HEX_PREFIX_RE = re.compile(r"^([0-9a-fA-F]+)_")
-# Matches a run of *decimal* digits followed by '_'.
-_DECIMAL_PREFIX_RE = re.compile(r"^(\d+)_")
-# Detects at least one letter (a-f/A-F) that makes a prefix truly hex.
-_HEX_LETTER_RE = re.compile(r"[a-fA-F]")
 # Allowed characters in a verb: ASCII letters, digits, underscore, hyphen, dot.
 # Rejects path separators (``/``, ``\``) and ``..`` sequences that would let a
 # verb escape the target directory via ``Path.mkdir(parents=True)``.
@@ -82,12 +76,11 @@ def _parse_prefix(filename: str, base: int = 10) -> int | None:
         Integer value of the prefix, or *None* if the filename does not
         start with a recognisable prefix in the requested base.
     """
-    pattern = _HEX_PREFIX_RE if base == 16 else _DECIMAL_PREFIX_RE
-    m = pattern.match(filename)
-    if not m:
+    raw = prefix_text(filename)
+    if raw is None or (base != 16 and not raw.isdigit()):
         return None
     try:
-        return int(m.group(1), base)
+        return int(raw, base)
     except ValueError:
         return None
 
@@ -214,23 +207,22 @@ class TreeAllocator:
         is empty or contains no recognisable prefixed files.
         """
         widths: list[int] = []
-        has_hex_letter = False
+        hex_scheme = False
 
         for child in directory.iterdir():
             if child.suffix != ".sql":
                 continue
-            m = _HEX_PREFIX_RE.match(child.name)
-            if not m:
+            raw = prefix_text(child.name)
+            if raw is None:
                 continue
-            raw = m.group(1)
             widths.append(len(raw))
-            if _HEX_LETTER_RE.search(raw):
-                has_hex_letter = True
+            if has_hex_letter(raw):
+                hex_scheme = True
 
         if not widths:
             return PrefixConfig()
 
-        scheme = PrefixScheme.HEX if has_hex_letter else PrefixScheme.DECIMAL
+        scheme = PrefixScheme.HEX if hex_scheme else PrefixScheme.DECIMAL
         # Modal width — most common length among existing prefixes.
         width = max(set(widths), key=widths.count)
         return PrefixConfig(scheme=scheme, width=width)

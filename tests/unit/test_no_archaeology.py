@@ -7,6 +7,11 @@ marker — a real follow-up lives in the issue tracker or in a shrink-only budge
 ``docs/`` may use "Phase 1" for its own concepts (blue-green phases, the TDD cycle),
 so there only two-digit remediation phases and review ids are forbidden; release
 notes are history and exempt.
+
+One line is exempt, by exact path and name: ``DEFAULT_STATUS_WORDS`` is the
+vocabulary ``tree_008`` *reports* in a filename, which the rule cannot look for
+without writing down. It is declared once and read from there everywhere else,
+so the exemption is one line rather than a family of files.
 """
 
 from __future__ import annotations
@@ -43,6 +48,10 @@ def _tracked(*pathspecs: str) -> list[Path]:
     return [REPO_ROOT / p for p in out.split("\0") if p]
 
 
+#: (path, name) of the one declaration whose markers are data, not archaeology.
+VOCABULARY_DECLARATION = ("python/confiture/config/environment.py", "DEFAULT_STATUS_WORDS")
+
+
 def _hits(files: list[Path], pattern: re.Pattern[str]) -> list[str]:
     found: list[str] = []
     for path in files:
@@ -53,7 +62,10 @@ def _hits(files: list[Path], pattern: re.Pattern[str]) -> list[str]:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
+        exempt_path, exempt_name = VOCABULARY_DECLARATION
         for lineno, line in enumerate(text.splitlines(), 1):
+            if rel == exempt_path and line.startswith(exempt_name):
+                continue
             if pattern.search(line):
                 found.append(f"{rel}:{lineno}: {line.strip()[:100]}")
     return found

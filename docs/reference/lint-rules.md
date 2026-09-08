@@ -3,9 +3,9 @@
 Every rule `confiture lint` can emit, generated from the rule registry
 (`confiture lint --list-rules` prints the same catalogue). Select and ignore
 rules by code or by family with `--select` / `--ignore` — see the
-[schema linting guide](../guides/schema-linting.md#selecting-rules--list-rules--select--ignore).
+[schema linting guide](../guides/schema-linting.md#selecting-rules-list-rules-select-ignore).
 Adopt a rule on a schema that already trips it with a
-[baseline](../guides/schema-linting.md#adopting-a-rule-with-a-baseline--baseline--write-baseline).
+[baseline](../guides/schema-linting.md#adopting-a-rule-with-a-baseline-baseline-write-baseline).
 
 <!-- BEGIN GENERATED: lint-rules -->
 
@@ -34,6 +34,10 @@ Adopt a rule on a schema that already trips it with a
 | `tree_002` | tree | warning | off | A numbered file carries a verb after its prefix |
 | `tree_003` | tree | warning | off | Prefixes within one directory are contiguous |
 | `tree_004` | tree | warning | off | Every file in the overrides mirror has a counterpart in the tree |
+| `tree_005` | tree | warning | off | No two sibling entries share a numeric prefix |
+| `tree_006` | tree | warning | off | An entry's prefix extends its parent's |
+| `tree_007` | tree | warning | off | An entry numbered like its siblings, or none of them numbered |
+| `tree_008` | tree | info | off | No status word in a file or directory name the build reads |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
 
 <!-- END GENERATED -->
@@ -57,7 +61,7 @@ for a bare one. The catalogue declares the `error`, because that is what the gat
 needs in order to answer whether `--fail-on error` can fire.
 
 Rules whose subject is a file rather than a database object — `tree_001` through
-`tree_004`, `own_001`, `own_002`, and the four that read a tree of migrations —
+`tree_008`, `own_001`, `own_002`, and the four that read a tree of migrations —
 carry the file in their `--baseline` identity, so baselining one directory does
 not silence the rest of the tree.
 
@@ -114,7 +118,7 @@ Two codes rather than one because the volume differs by an order of magnitude:
 a schema has a handful of routines and hundreds of tables. A project adopts
 `qual_001` on the day it upgrades and takes `qual_002` on with
 `--select default,qual_002` plus a
-[baseline](../guides/schema-linting.md#adopting-a-rule-with-a-baseline--baseline--write-baseline)
+[baseline](../guides/schema-linting.md#adopting-a-rule-with-a-baseline-baseline-write-baseline)
 when it is ready.
 
 ```sql
@@ -279,3 +283,92 @@ records what is there today; later runs fail only on names the file does not
 know. The identity of a finding is `<referrer> -> <name>`, so fixing one of six
 unresolved names in a routine does not retire the other five, and moving the
 routine to another file does not churn the baseline.
+
+## The `tree` family — the arrangement that decides the build order
+
+confiture builds a schema by concatenating a directory tree in path order, and
+that order decides which definition of an object wins and which objects exist
+when a later file references one. The whole family is **opt-in**
+(`--select tree`, or one code at a time), because a tree that has never been
+checked will light up; `--baseline` is the designed way to adopt it.
+
+None of these rules opens a file. They are findings about names, and each one
+carries the path — and line 1 when the entry is a file, since a name has no
+line of its own.
+
+| Code | Reports |
+|------|---------|
+| `tree_001` | two **files** in one directory share a numeric prefix |
+| `tree_002` | a numbered file carries no verb after its prefix (`00001.sql`) |
+| `tree_003` | prefixes within one directory are not contiguous |
+| `tree_004` | a file in the overrides mirror has no counterpart in the tree |
+| `tree_005` | two sibling **entries** share a prefix, at least one a directory |
+| `tree_006` | an entry's prefix does not extend its parent's |
+| `tree_007` | an entry carries no prefix while its siblings do |
+| `tree_008` | a name carries a status word |
+
+### What they read
+
+The files the environment builds, resolved through the same `SchemaBuilder`
+`confiture build` uses. A directory kept out by `exclude_dirs` or by a
+per-directory `exclude` glob contributes no entry, so a numbering that decides
+nothing is judged by nothing. `tree_004` is the exception: its subject is the
+overrides mirror, which the build never reads, and it needs `--overrides-dir`.
+
+### `tree_005` — a collision, and the order it produces
+
+```
+db/schema/03_functions/034_dim/0248_configurator/
+db/schema/03_functions/034_dim/0248_flag/
+```
+
+Two entries sharing a prefix are ordered by what follows it, which nobody reads
+as significant — and adding a file to one of them silently reorders the other.
+`tree_001` compares the *files* inside one directory and is an `error`;
+`tree_005` is about the entries it does not compare, so a colliding pair of
+directories is reported once, by one rule. The message names the resulting
+build order, because confiture is the only component that computes it.
+
+### `tree_006` — the convention is read from the tree, not assumed
+
+Two numbering conventions are both idiomatic, and confiture cannot pick one for
+a project:
+
+```
+01_core/010_users/0101_user.sql     # a child's prefix continues its parent's
+10_tables/01_users.sql              # each directory numbers its own contents
+```
+
+`tree_006` fires only where the tree itself demonstrates the first — where a
+directory's own prefix extends *its* parent's. `034_dim` continuing `03_f…` is
+the tree saying which convention it keeps, so `034_dim/0341_geo/03452_odd` is a
+finding and `10_tables/01_users.sql` is not.
+
+Under the default alphabetical sort this is not cosmetic: `0341_geo` sorts
+before `034_dim` (`1` < `_`), so a prefix of the wrong length moves its whole
+subtree.
+
+### `tree_008` — a name that says the work is not finished
+
+`..._update_TODO.sql` is in the build and applied on every deploy. Whether that
+is confiture's business is arguable, so the rule is `info`, opt-in, and its
+vocabulary is configurable:
+
+```yaml
+# db/environments/local.yaml
+lint:
+  status_words: [TODO, FIXME, WIP, DRAFT, SPIKE]
+```
+
+The words are matched case-insensitively against the underscore-separated parts
+of a file or directory name. The default is the four above.
+
+### Adopting the family on an existing tree
+
+```bash
+confiture lint --select tree --baseline .confiture-lint-baseline.json --write-baseline
+```
+
+A tree finding's object *is* a path, so its identity carries the file and a
+baseline written today stays valid: fixing one collision does not retire the
+other thirty-five, and a collision added tomorrow is new.

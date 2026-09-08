@@ -82,6 +82,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and an unqualified name is not judged at all unless the new `lint.search_path` says where to look —
   an unqualified *routine* call not even then, because `pg_catalog` is on every search path.
   `--baseline` is the documented adoption path for an existing schema.
+- **Four rules for the DDL tree itself (#249).** The arrangement of `db/schema/` decides which
+  definition of an object wins and which objects exist when a later file references one, and nothing
+  checked it: an audit of one large tree found 36 colliding prefixes, 9 entries whose prefix did not
+  extend their parent's, 2 unnumbered entries and 7 filenames carrying a status word — every one of
+  them by hand, because `lint-unified --check tree` reported "No issues found". The `tree` family is
+  **opt-in** (`--select tree`), each finding carries its path and, for a file, line 1, and every one
+  can be baselined.
+  `tree_005` (`warning`) reports two sibling *entries* sharing a numeric prefix where at least one is
+  a directory — `tree_001` compares the files inside one directory and never saw a colliding pair of
+  directories. Its message names the resulting build order, because confiture is the only component
+  that computes it. `tree_006` (`warning`) reports an entry whose prefix does not extend its
+  parent's, and reads the convention out of the tree rather than assuming one: it fires only where a
+  directory's own prefix extends *its* parent's, so `034_dim/0341_geo/03452_odd` is a finding and
+  `10_tables/01_users.sql` is not. `tree_007` (`warning`) reports an entry with no prefix beside
+  numbered siblings, which `tree_002` could not see because it only looks at files that already
+  carry one; a directory whose entries are all unnumbered says nothing. `tree_008` (`info`) reports a
+  status word in a name the build reads, with the vocabulary in the new `lint.status_words`
+  (default `TODO`, `FIXME`, `WIP`, `DRAFT`).
+  None of the four opens a file — they are findings about names — and all of them read the
+  environment's own file list, so a directory `exclude_dirs` or an `exclude` glob keeps out of the
+  build is judged by nothing.
 - **A rule that could not run in full says so.** `LintReport` gains `skipped` and `degraded`, each
   entry `{code, state, reason}`, surfaced on the summary line and as two arrays in
   `lint --format json` (`lint.schema.json` requires both, empty when there is nothing to say). The
@@ -91,6 +112,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The build order no longer depends on the filesystem (LINT-06, LINT-07).** Under
+  `build.sort_mode: hex` the sort key was the *filename's* prefix and nothing else, so the
+  `00001_create.sql` that `confiture generate alloc` writes into every directory tied exactly with
+  every other one — and a tie under a stable sort keeps whatever order `Path.rglob` returned, which
+  is the filesystem's, not the project's. Measured on a three-directory tree: **nine different build
+  orders from nine shuffles of the same files.** The key now reads the number on every path
+  component and ends with the path itself, so it is total; a guard shuffles discovery ten times and
+  asserts one order, under both sort modes.
+  The same commit gives confiture **one definition of a numeric prefix**
+  (`core/tree_prefix.py`), imported by the builder, the tree rules, `TreeAllocator` and
+  `generate renumber`. It had four: the builder required **upper case** while the tree rules and the
+  allocator accepted either — and the allocator *writes* lower case (`format(value, "0Nx")`), so a
+  tree confiture generated itself was not hex to the builder that orders it, and the linter could
+  approve a numbering the builder ordered differently. A prefix now needs at least one decimal digit,
+  so `add_column.sql` and `abc_alpha.sql` stay words rather than sorting as 2781 and 2748, and its
+  base belongs to the **directory** — one hex-lettered sibling makes the group hex, as
+  `TreeAllocator` already decided — rather than to the individual name, which read `0100` beside
+  `009a` as 100 beside 154 when the author wrote 256 after 154.
+  **This can change the build order of a `sort_mode: hex` project, once.** It changes it to the one
+  the numbering asks for, and to the same one on every machine; the schema hash is order-dependent,
+  so `confiture build` will report a new digest on the first run after upgrading. Projects on the
+  default `alphabetical` mode are unaffected.
 - **`acl_001` is declared `error` in the catalogue.** The rule has always *emitted* `error`; the
   registry entry said `warning` (LINT-01), so `--list-rules` and the published rule reference were
   wrong about the one rule that could reach `error`. **No project's exit code moves** — the emission

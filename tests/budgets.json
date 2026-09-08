@@ -34,8 +34,7 @@
   "too_many_branches": {
     "python/confiture/cli/commands/debug.py": 1,
     "python/confiture/cli/commands/migrate/baseline.py": 1,
-    "python/confiture/cli/commands/migrate/introspect.py": 1,
-    "python/confiture/core/builder.py": 1
+    "python/confiture/cli/commands/migrate/introspect.py": 1
   },
   "too_many_statements": {
     "python/confiture/cli/seed.py": 1
@@ -64,7 +63,6 @@
     "python/confiture/core/anonymization/strategies/address.py": 3,
     "python/confiture/core/anonymization/strategies/credit_card.py": 4,
     "python/confiture/core/anonymization/strategies/differential_privacy.py": 3,
-    "python/confiture/core/builder.py": 1,
     "python/confiture/core/change_set/naming.py": 3,
     "python/confiture/core/differ.py": 3,
     "python/confiture/core/dry_run.py": 1,
@@ -78,7 +76,6 @@
     "python/confiture/core/linting/libraries/functions.py": 2,
     "python/confiture/core/linting/libraries/gdpr.py": 1,
     "python/confiture/core/linting/libraries/general.py": 1,
-    "python/confiture/core/linting/libraries/generate.py": 1,
     "python/confiture/core/linting/libraries/hipaa.py": 1,
     "python/confiture/core/linting/libraries/pci_dss.py": 1,
     "python/confiture/core/linting/libraries/security_definer.py": 1,

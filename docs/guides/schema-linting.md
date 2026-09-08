@@ -143,7 +143,7 @@ confiture lint --list-rules --format json
 | `replica_001` | `replica` | opt-in | Replica forward-compatibility |
 | `func_001` | `func` | opt-in | Needs `function_coverage.enabled: true` |
 | `own_001`, `own_002` | `own` | opt-in | Need an `ownership:` block |
-| `tree_001`–`tree_004` | `tree` | opt-in | DDL file-tree numbering |
+| `tree_001`–`tree_008` | `tree` | opt-in | DDL file-tree numbering and naming |
 | `sec_002` | `security-definer` | opt-in | Needs `security_lint.enabled: true` |
 
 The table above is a summary; [lint-rules.md](../reference/lint-rules.md) is
@@ -187,22 +187,43 @@ to look in, and an unqualified routine call is not judged even then: `now()` is
 `pg_catalog`'s and no configuration makes that enumerable.
 
 `--baseline` is the adoption path for an existing schema; see
-[lint-rules.md](../reference/lint-rules.md#build_003--the-inventory-read-backwards).
+[lint-rules.md](../reference/lint-rules.md#build_003-the-inventory-read-backwards).
 
 ### The file-tree family
 
-`--select tree` runs the four rules that read the *shape* of `db/schema/` rather
-than the SQL in it: a prefix shared by two files in one directory (`tree_001`,
-an **error** — the build reads both and the prefix decides nothing), a numbered
-file with no verb after its prefix (`tree_002`), a gap in a directory's sequence
-(`tree_003`), and a file in the overrides mirror whose counterpart is gone
-(`tree_004`, which needs `--overrides-dir`).
+`--select tree` runs the eight rules that read the *shape* of `db/schema/`
+rather than the SQL in it. The arrangement decides which definition of an object
+wins and which objects exist when a later file references one, so it is worth
+checking:
+
+| Code | Reports |
+|------|---------|
+| `tree_001` | two **files** in one directory share a prefix (**error**) |
+| `tree_002` | a numbered file carries no verb after its prefix |
+| `tree_003` | a gap in a directory's prefix sequence |
+| `tree_004` | an override with no counterpart (needs `--overrides-dir`) |
+| `tree_005` | two sibling **entries** share a prefix, one of them a directory |
+| `tree_006` | an entry's prefix does not extend its parent's |
+| `tree_007` | an entry carries no prefix while its siblings do |
+| `tree_008` | a name carries a status word (`lint.status_words`) |
 
 They read the files **the environment builds** — `exclude_dirs` and the
 per-directory `exclude` globs apply — so a file the build never reads never
-produces a finding about its numbering.
+produces a finding about its numbering. None of them opens a file: these are
+findings about names.
 
-Before 1.4.0 these rules emitted `GEN001`–`GEN004` and were reachable only from
+A tree that has never been checked will light up, which is why the family is
+opt-in and why `--baseline` exists:
+
+```bash
+confiture lint --select tree --baseline .confiture-lint-baseline.json --write-baseline
+```
+
+`tree_006` reads the convention out of the tree rather than assuming one — see
+[lint-rules.md](../reference/lint-rules.md#the-tree-family-the-arrangement-that-decides-the-build-order)
+for what fires and what does not.
+
+Before 1.4.0 the first four emitted `GEN001`–`GEN004` and were reachable only from
 `confiture lint-unified --check tree`, outside the registry and therefore outside
 `--select`, `--ignore` and `--baseline`. The old codes remain accepted
 *selectors* for one minor; the codes the rules emit are the new ones.

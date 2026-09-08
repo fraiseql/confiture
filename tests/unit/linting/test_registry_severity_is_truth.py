@@ -166,6 +166,26 @@ FIXTURES: dict[str, Fixture] = {
         extra_files={"db/overrides/00002_gone.sql": "-- override of a file that is not there\n"},
         extra_args=("--overrides-dir", "db/overrides"),
     ),
+    "tree_005": Fixture(
+        {
+            "0248_a/00001_create.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n",
+            "0248_b/00001_create.sql": "CREATE TABLE tb_b (id INT PRIMARY KEY);\n",
+        }
+    ),
+    "tree_006": Fixture(
+        {
+            "03_f/034_dim/0341_geo/03452_odd/00001_create.sql": (
+                "CREATE TABLE tb_a (id INT PRIMARY KEY);\n"
+            ),
+        }
+    ),
+    "tree_007": Fixture(
+        {
+            "00001_create.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n",
+            "helpers.sql": "CREATE TABLE tb_b (id INT PRIMARY KEY);\n",
+        }
+    ),
+    "tree_008": Fixture({"00001_create_TODO.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n"}),
 }
 
 
@@ -181,7 +201,9 @@ def _build(tmp_path: Path, fixture: Fixture, env_extra: str) -> None:
     (tmp_path / "db" / "environments").mkdir(parents=True, exist_ok=True)
     (tmp_path / "db" / "environments" / "local.yaml").write_text(_BASE_ENV + env_extra)
     for name, sql in fixture.schema.items():
-        (tmp_path / "db" / "schema" / name).write_text(sql)
+        path = tmp_path / "db" / "schema" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(sql)
     if fixture.migrations:
         (tmp_path / "db" / "migrations").mkdir(parents=True, exist_ok=True)
         for name, sql in fixture.migrations.items():
