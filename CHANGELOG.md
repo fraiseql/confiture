@@ -14,6 +14,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-08
+
+Eight phases against the linter, released once. Six issues were filed by a project that ran
+`confiture lint` over a large schema, drove the counters to zero, and then found nine broken routines
+by hand — the theme is that the linter reported the *shape* of a statement and never whether the
+statement meant anything, and that the flag a pipeline sets to make any of it block could not block.
+
+### Upgrade note — read before bumping
+
+1. **`build_001` is now an `error`, so a default `confiture lint` fails on a duplicate definition
+   where it used to pass.** This is the headline and the one thing that can turn a green pipeline
+   red on the day you upgrade. An object defined twice means the build's outcome depends on the
+   order the files are concatenated in, which no reader of either file can see. Three ways to
+   decline it: `--baseline <file> --write-baseline` (the ratchet — records today's findings and
+   fails only on the next one), `--ignore build_001`, or `--fail-on never`. **Not** `--fail-on
+   warning`: `warning` is a *lower* threshold than `error`, so an error still trips it. Measured
+   before shipping, on the schemas this organisation deploys: 114 duplicates in one, 0 in the other
+   two.
+2. **Two rules are new and on by default** — `qual_001` (routines created without a schema) and
+   `build_003` (a body naming an object no file in the build creates) — so a pipeline on
+   `--fail-on warning` can go red. `--baseline` is the same one-command answer.
+3. **The tree rules emit `tree_00x` where `lint-unified` emitted `GEN00x`.** `GEN001`–`GEN004`
+   remain accepted `--select` aliases for one minor. No published JSON schema covered the old ids,
+   so nothing contractual breaks.
+4. **Under `build.sort_mode: hex` the build order is now deterministic**, so a tree whose order was
+   previously decided by filesystem traversal may see it change once — **and the schema hash with
+   it**, which invalidates cached build artifacts. It changes to the order the numbering asks for,
+   and to the same order on every machine.
+
 ### Added
 
 - **`confiture lint --fail-on <severity>`: a gate a pipeline can actually set (#247, part 1).**
@@ -178,6 +207,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`build_001` — an object defined more than once in one build — is an `error` (#247, part 3).**
+  The catalogue goes from 5 error / 18 warning / 8 info to **6 / 17 / 8**, and `build_001` is the
+  first rule that both runs by default and reaches `error`, which is what makes the default
+  `--fail-on error` a gate rather than a formality: the "this gate cannot fail" notice added earlier
+  in this release no longer appears on a default run. `build_002` stays `info` — a routine's
+  overloads split across files is legal — and `tree_001` stays opt-in despite also emitting `error`,
+  because the `tree` family carries verb-suffix and gap-policy opinions tied to the
+  `confiture generate alloc` workflow that a tree not managed that way should not inherit.
+  See the upgrade note above for the three ways to decline it.
+- **`LintConfig.check_indexes` and `check_constraints` are gone.** Both were on by default and
+  neither had a rule behind it — the first dispatched on every lint, ran two schema-wide regexes and
+  discarded the result; the second had no implementation at all. No `--ignore` could reach either,
+  because no rule code controlled them. `tests/unit/linting/test_every_switch_has_a_rule.py` is the
+  new guard in that direction, the mirror of `test_every_rule_is_registered.py`: selecting no rule
+  turns on no check, and every switch belongs to some registered rule.
+- **A lint reads each schema file once, not once per rule that wants a location.** Each of this
+  release's new rules needs the files *as files* rather than the string the build concatenates them
+  into, and each went to disk for them; a default lint opened every file five times. Three reads
+  remain and each asks something different of the same bytes — the builder validates comments across
+  the files, the builder joins them, and the linter reads them once for every rule. A guard holds
+  the third at one however many rules run.
+
 - **The build order no longer depends on the filesystem (LINT-06, LINT-07).** Under
   `build.sort_mode: hex` the sort key was the *filename's* prefix and nothing else, so the
   `00001_create.sql` that `confiture generate alloc` writes into every directory tied exactly with
@@ -241,6 +292,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one enum.
 
 ### Fixed
+
+- **A PL/pgSQL trigger function crashed `confiture lint` outright.** `libpg_query` serialises a
+  trigger function's implicit `TG_` datums as `{}}`, so `pglast.parse_plpgsql` raises
+  `json.JSONDecodeError` — not the `ParseError` the code caught — on every `RETURNS TRIGGER` and
+  `RETURNS event_trigger` body regardless of what that body contains. `build_003` is on by default,
+  so the exception reached the CLI's error boundary and a plain lint died with `INTERNAL_ERROR` on
+  most real schemas. A body no parser will return is now named in the report's `degraded` array —
+  `could not read N routine bodies, so the objects they name are not checked: …` — because a rule
+  that skipped a body has not established that the body is clean. Found by running the release
+  against the schemas this organisation deploys, which is what that step is for.
 
 - **A property of an object is reported once, not once per definition (LINT-10).** A table defined in
   two files produced two identical `doc_001` findings, two `pk_001` and two `naming_00x` per column —
@@ -5516,6 +5577,8 @@ confiture seed apply --sequential --database-url postgresql://localhost/db
 ## [0.3.14] - 2026-01-31
 
 ## [0.3.13] - 2026-01-31
+
+## [1.4.0] - 2026-09-08
 
 ## [Unreleased]
 
