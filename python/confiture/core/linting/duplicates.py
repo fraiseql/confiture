@@ -8,9 +8,11 @@ same object with its file, offset and line and says which one the database
 ends up with; ``build_002`` reports a routine whose overloads live in
 different files, which is legal but is how the first kind of mistake starts.
 
-The identity of an object is ``(kind, schema, name, signature)``; an
-unqualified name is the ``public`` schema, so ``f()`` and ``public.f()`` are one
-object and ``tenant.f()`` is another.
+The identity of an object is :func:`~confiture.core.linting.inventory.object_key`
+— ``(kind, schema, name, signature)``, an unqualified name being the ``public``
+schema, so ``f()`` and ``public.f()`` are one object and ``tenant.f()`` another.
+The rules that report a property of an object once group by that same key, so a
+duplicate can never silence a finding it does not cover.
 """
 
 from __future__ import annotations
@@ -23,10 +25,13 @@ from typing import Any
 
 import pglast
 
-from confiture.core.linting.inventory import SchemaObject, build_inventory, label_for
+from confiture.core.linting.inventory import (
+    SchemaObject,
+    build_inventory,
+    label_for,
+    object_key,
+)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
-
-DEFAULT_SCHEMA = "public"
 
 
 @dataclass(frozen=True)
@@ -93,8 +98,11 @@ def inventory_files(
 _label = label_for
 
 
-def _key(obj: SchemaObject) -> tuple[str, str, str, str | None]:
-    return (obj.kind, (obj.folded_schema or DEFAULT_SCHEMA).lower(), obj.folded_name, obj.signature)
+#: What makes two ``CREATE`` statements definitions of the same object. The
+#: inventory's answer, not one of this module's own: the rules that report a
+#: property of an object once (LINT-10) must group exactly as ``build_001`` does,
+#: or a duplicate would silence a documentation finding it did not cover.
+_key = object_key
 
 
 def _definition(obj: SchemaObject) -> Definition:

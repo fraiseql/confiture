@@ -212,6 +212,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A property of an object is reported once, not once per definition (LINT-10).** A table defined in
+  two files produced two identical `doc_001` findings, two `pk_001` and two `naming_00x` per column —
+  one mistake amplified into N, so a project that deduplicated a file watched its documentation
+  backlog halve as a side-effect and a `--baseline` recorded identities that existed only because of
+  the duplication. The rules that judge the *object* now read the first definition of each; the
+  second definition is `build_001`'s finding and nobody else's, and both point at the same line. The
+  grouping is `inventory.object_key`, the same one `build_001` uses, so a duplicate can never silence
+  a finding it does not cover. Rules whose subject is the *statement* are deliberately unchanged:
+  `qual_001` asks which schema this `CREATE` lands in, and a second unqualified definition is a
+  second answer.
 - **`confiture lint-unified --check tree` reads the tree the environment builds.** `--schema-dir`'s
   help said "inferred from env config" while the command read a hardcoded `db/schema`, so a project
   whose DDL lives anywhere else got no tree findings at all and one with `exclude_dirs` got findings

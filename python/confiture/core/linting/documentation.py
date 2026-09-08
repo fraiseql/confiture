@@ -10,7 +10,7 @@ inventory, so a schema qualifier changes nothing.
 
 from __future__ import annotations
 
-from confiture.core.linting.inventory import KIND_KEYWORD, Inventory, SchemaObject
+from confiture.core.linting.inventory import KIND_KEYWORD, Inventory, SchemaObject, distinct
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 
 #: ``(rule code, rule name)`` per inventory kind. The noun each finding uses is
@@ -49,5 +49,9 @@ def _finding(obj: SchemaObject) -> LintViolation:
 
 
 def documentation_findings(inventory: Inventory) -> list[LintViolation]:
-    """One ``doc_*`` finding per undocumented object, in source order."""
-    return [_finding(obj) for obj in inventory.objects if _needs_comment(obj)]
+    """One ``doc_*`` finding per undocumented object, in source order.
+
+    Per *object*, not per ``CREATE``: an object defined twice is one thing to
+    document and ``build_001``'s finding besides (LINT-10).
+    """
+    return [_finding(obj) for obj in distinct(inventory.objects) if _needs_comment(obj)]

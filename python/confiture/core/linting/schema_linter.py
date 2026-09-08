@@ -27,6 +27,7 @@ from confiture.core.linting.inventory import (
     SchemaObject,
     attribute_files,
     build_inventory,
+    distinct,
     label_for,
 )
 from confiture.core.parser_info import parse_error_line
@@ -395,7 +396,7 @@ class SchemaLinter:
 
     def _check_naming_conventions(self, report: LintReport) -> None:
         """Check naming conventions (snake_case for identifiers) on the inventory."""
-        for table in self._inventory.tables:
+        for table in distinct(self._inventory.tables):
             if not self._is_snake_case(table.name):
                 report.add_violation(
                     LintViolation(
@@ -435,7 +436,7 @@ class SchemaLinter:
 
     def _check_primary_keys(self, report: LintReport) -> None:
         """Every table has a primary key — a partition inherits its parent's."""
-        for table in self._inventory.tables:
+        for table in distinct(self._inventory.tables):
             if table.has_primary_key or table.is_partition:
                 continue
             if self._is_likely_junction_table(table.name):

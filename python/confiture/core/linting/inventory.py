@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import copy
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -76,6 +76,10 @@ KIND_KEYWORD: dict[str, str] = {
 #: Parameter modes that take part in a function's identity (IN, INOUT, VARIADIC
 #: and the default mode); OUT and TABLE parameters do not.
 _INPUT_MODES = frozenset({"d", "i", "b", "v"})
+
+#: Where an unqualified ``CREATE`` lands, for the purpose of deciding whether
+#: two statements define the same object: ``f()`` and ``public.f()`` are one.
+DEFAULT_SCHEMA = "public"
 
 
 @dataclass(frozen=True)
@@ -580,6 +584,43 @@ def label_for(path: Path, root: Path | None) -> str:
         except ValueError:
             pass
     return path.as_posix()
+
+
+def object_key(obj: SchemaObject) -> tuple[str, str, str, str | None]:
+    """What makes two ``CREATE`` statements definitions of the same object.
+
+    The folded spelling, so ``app."TbWidget"`` and ``app.tbwidget`` are one
+    object; the name *and* the input parameter types for a routine, so two
+    overloads are two; and :data:`DEFAULT_SCHEMA` for a statement that names
+    none, so ``f()`` and ``public.f()`` are one and ``tenant.f()`` is another.
+    """
+    return (obj.kind, (obj.folded_schema or DEFAULT_SCHEMA).lower(), obj.folded_name, obj.signature)
+
+
+def distinct(objects: Iterable[SchemaObject]) -> list[SchemaObject]:
+    """The first definition of each object, in source order.
+
+    A rule that reports a property of the *object* — it has no primary key, it
+    carries no ``COMMENT``, its name is not snake_case — reports it once
+    however many times the object is defined. The second definition is
+    ``build_001``'s finding and nobody else's: repeating every other rule
+    against it turned one mistake into N identical ones, halved a project's
+    documentation backlog the day it deduplicated a file, and put identities in
+    baselines that existed only because of the duplication (LINT-10).
+
+    A rule whose subject is the *statement* rather than the object — which
+    schema does this ``CREATE`` land in — reads the objects directly, because
+    for it a second definition really is a second thing to answer for.
+    """
+    seen: set[tuple[str, str, str, str | None]] = set()
+    first: list[SchemaObject] = []
+    for obj in objects:
+        key = object_key(obj)
+        if key in seen:
+            continue
+        seen.add(key)
+        first.append(obj)
+    return first
 
 
 def _statement_key(obj: SchemaObject) -> tuple[str, str | None, str, str | None]:
