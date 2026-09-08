@@ -103,6 +103,10 @@ FIXTURES: dict[str, Fixture] = {
         }
     ),
     "sec_001": Fixture({"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, password TEXT);\n"}),
+    "qual_001": Fixture(
+        {"010.sql": "CREATE FUNCTION fn_f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\n"}
+    ),
+    "qual_002": Fixture({"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY);\n"}),
     "acl_001": Fixture(
         {"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY);\n"},
         env_extra=_ACLS,

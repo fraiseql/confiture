@@ -1218,6 +1218,8 @@ def _linter_config(selected: frozenset[str], threshold: Threshold) -> LinterConf
         check_security="sec_001" in selected,
         check_tenant_isolation="tenant_001" in selected,
         check_acl_coverage="acl_001" in selected,
+        check_qualification="qual_001" in selected,
+        check_qualification_relations="qual_002" in selected,
     )
 
 

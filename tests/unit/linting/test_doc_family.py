@@ -104,7 +104,8 @@ class TestDocRules:
         assert finding.severity.value == "info"
         assert finding.object_type == "function"
         assert finding.line_number == 2
-        assert report.errors == [] and report.warnings == []
+        louder = [v for v in report.errors + report.warnings if v.rule_id.startswith("doc_")]
+        assert louder == []
 
 
 class TestRegistry:
@@ -121,11 +122,13 @@ class TestRegistry:
         assert resolve_selection(None, ["doc"]) == default_codes() - DOC_CODES
 
 
+# Schema-qualified so the fixture trips the doc family and nothing else: an
+# unqualified routine is a qual_001 finding of its own.
 _SCHEMA = """
 CREATE TABLE tb_ok (id INT PRIMARY KEY);
 COMMENT ON TABLE tb_ok IS 'documented';
-CREATE FUNCTION fn_undocumented(a integer) RETURNS int LANGUAGE sql AS $$ select 1 $$;
-CREATE VIEW v_undocumented AS SELECT 1 AS a;
+CREATE FUNCTION app.fn_undocumented(a integer) RETURNS int LANGUAGE sql AS $$ select 1 $$;
+CREATE VIEW app.v_undocumented AS SELECT 1 AS a;
 """
 
 

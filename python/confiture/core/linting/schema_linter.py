@@ -117,6 +117,8 @@ class LintConfig:
         check_tenant_isolation: bool = False,
         check_acl_coverage: bool = True,
         check_duplicates: bool = True,
+        check_qualification: bool = True,
+        check_qualification_relations: bool = False,
     ):
         """Initialize linting configuration.
 
@@ -138,6 +140,12 @@ class LintConfig:
                 Default True, i.e. unchanged: the rule additionally requires
                 ``acls.lint_enabled: true`` in the environment YAML. Set False to
                 suppress it (``confiture lint --ignore acl``).
+            check_qualification: Report routines created without a schema
+                (``qual_001``). On by default, like the rule.
+            check_qualification_relations: Report relations and types created
+                without a schema (``qual_002``). Off by default, like the rule —
+                the volume in an existing project is much higher, so it is
+                adopted on its own with ``--select qual_002``.
         """
         self.enabled = enabled
         self.fail_on_error = fail_on_error
@@ -151,6 +159,8 @@ class LintConfig:
         self.check_tenant_isolation = check_tenant_isolation
         self.check_acl_coverage = check_acl_coverage
         self.check_duplicates = check_duplicates
+        self.check_qualification = check_qualification
+        self.check_qualification_relations = check_qualification_relations
 
 
 class SchemaLinter:
@@ -256,30 +266,23 @@ class SchemaLinter:
         report.tables_checked = len(self._inventory.tables)
         report.columns_checked = sum(len(t.columns) for t in self._inventory.tables)
 
-        # Run configured checks
-        if self.config.check_naming:
-            self._check_naming_conventions(report)
-
-        if self.config.check_primary_keys:
-            self._check_primary_keys(report)
-
-        if self.config.check_documentation:
-            self._check_documentation(report)
-
-        if self.config.check_indexes:
-            self._check_indexes(report)
-
-        if self.config.check_security:
-            self._check_security(report)
-
-        if self.config.check_duplicates:
-            self._check_duplicates(report)
-
-        # Tenant isolation (tenant_001) — opt-in multi-tenant rule. Detects
-        # INSERTs in functions that omit the FK column a tenant-scoped view
-        # requires. Off by default so existing lint output is unchanged.
-        if self.config.check_tenant_isolation:
-            self._check_tenant_isolation(report)
+        # One table rather than a chain of ifs: a rule is its switch and its
+        # method, and adding one is a row.
+        for enabled, check in (
+            (self.config.check_naming, self._check_naming_conventions),
+            (self.config.check_primary_keys, self._check_primary_keys),
+            (self.config.check_documentation, self._check_documentation),
+            (self.config.check_indexes, self._check_indexes),
+            (self.config.check_security, self._check_security),
+            (self.config.check_duplicates, self._check_duplicates),
+            (
+                self.config.check_qualification or self.config.check_qualification_relations,
+                self._check_qualification,
+            ),
+            (self.config.check_tenant_isolation, self._check_tenant_isolation),
+        ):
+            if enabled:
+                check(report)
 
         # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
         # the environment YAML.  The mere presence of an ``acls:`` block
@@ -407,6 +410,24 @@ class SchemaLinter:
 
         objects = self._file_objects or self._inventory.objects
         for violation in duplicate_violations(find_duplicates(objects)):
+            report.add_violation(violation)
+
+    def _check_qualification(self, report: LintReport) -> None:
+        """``qual_001`` / ``qual_002``: a ``CREATE`` that names no schema (#248)."""
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
+        from confiture.core.linting.qualification import (
+            RELATION_KINDS,
+            ROUTINE_KINDS,
+            qualification_findings,
+        )
+
+        kinds: set[str] = set()
+        if self.config.check_qualification:
+            kinds |= ROUTINE_KINDS
+        if self.config.check_qualification_relations:
+            kinds |= RELATION_KINDS
+        objects = self._file_objects or self._inventory.objects
+        for violation in qualification_findings(objects, kinds):
             report.add_violation(violation)
 
     def _check_indexes(self, _report: LintReport) -> None:

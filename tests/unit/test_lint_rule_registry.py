@@ -39,6 +39,8 @@ class TestRegistryContents:
             "build_001",
             "build_002",
             "sec_001",
+            "qual_001",
+            "qual_002",
             "acl_001",
             "tenant_001",
             "replica_001",
@@ -65,6 +67,7 @@ class TestRegistryContents:
             "build_001",
             "build_002",
             "sec_001",
+            "qual_001",
         }
 
     def test_each_legacy_flag_maps_to_exactly_one_family(self) -> None:
@@ -88,6 +91,7 @@ class TestRegistryContents:
             "doc",
             "build",
             "security",
+            "qual",
             "acl",
             "tenant",
             "replica",
@@ -112,6 +116,7 @@ class TestSelection:
                 "build_001",
                 "build_002",
                 "sec_001",
+                "qual_001",
             }
         )
 
@@ -135,6 +140,7 @@ class TestSelection:
                 "build_001",
                 "build_002",
                 "sec_001",
+                "qual_001",
                 "replica_001",
             }
         )
@@ -158,6 +164,7 @@ class TestSelection:
                 "build_001",
                 "build_002",
                 "sec_001",
+                "qual_001",
             }
         )
 

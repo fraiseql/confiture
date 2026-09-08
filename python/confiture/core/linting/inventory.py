@@ -56,6 +56,20 @@ _COMMENT_TARGETS: dict[int | None, tuple[str, ...]] = {
     _OBJECT_DOMAIN: ("domain",),
 }
 
+#: The SQL keyword that names each inventory kind: what ``COMMENT ON <kind>``
+#: and ``CREATE <kind>`` are spelled with, and — capitalised — the noun a
+#: finding calls the object. One table, because a rule that invented its own
+#: would be free to disagree with the inventory about what a ``matview`` is.
+KIND_KEYWORD: dict[str, str] = {
+    "table": "TABLE",
+    "function": "FUNCTION",
+    "procedure": "PROCEDURE",
+    "view": "VIEW",
+    "matview": "MATERIALIZED VIEW",
+    "type": "TYPE",
+    "domain": "DOMAIN",
+}
+
 #: Parameter modes that take part in a function's identity (IN, INOUT, VARIADIC
 #: and the default mode); OUT and TABLE parameters do not.
 _INPUT_MODES = frozenset({"d", "i", "b", "v"})
