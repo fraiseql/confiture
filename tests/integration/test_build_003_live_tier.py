@@ -93,11 +93,25 @@ def _findings(payload: dict) -> list[str]:
     return [i["location"] for i in payload["violations"]["items"] if i["rule_id"] == "build_003"]
 
 
+def _resolved(payload: dict) -> list[str]:
+    """The findings of a run whose live tier actually answered.
+
+    A tier that could not answer hands every outstanding name back, so the run
+    reports exactly what it would report with no database at all — which looks
+    identical to the rule failing to resolve. `lint` says which it was, in
+    `degraded`; asserting it here means a three-second connect timeout on a
+    loaded runner fails with "no database answered" instead of sending a reader
+    after a resolution bug that is not there.
+    """
+    assert payload["degraded"] == [], "the live tier did not answer; this run proves nothing"
+    return _findings(payload)
+
+
 def test_a_relation_the_database_has_is_not_a_finding(in_tmp: Path, live_objects: str) -> None:
     """The migration-created case: absent from the tree, present in the database."""
     _project(in_tmp, {"010_fn.sql": CALLER}, live_objects)
 
-    assert _findings(_payload()) == []
+    assert _resolved(_payload()) == []
 
 
 def test_a_routine_the_database_has_is_not_a_finding(in_tmp: Path, live_objects: str) -> None:
@@ -114,7 +128,7 @@ def test_a_routine_the_database_has_is_not_a_finding(in_tmp: Path, live_objects:
         live_objects,
     )
 
-    assert _findings(_payload()) == []
+    assert _resolved(_payload()) == []
 
 
 def test_a_reachable_database_makes_the_run_undegraded(in_tmp: Path, live_objects: str) -> None:
@@ -159,4 +173,4 @@ def test_an_extension_owned_function_resolves_through_the_database(
 
     _project(in_tmp, {"010_fn.sql": EXTENSION_CALLER}, test_db_url)
 
-    assert _findings(_payload()) == []
+    assert _resolved(_payload()) == []
