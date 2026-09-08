@@ -14,6 +14,8 @@ from typing import Any
 import pglast
 from pglast.enums.parsenodes import FunctionParameterMode
 
+from confiture.core.ddl_walk import routine_body
+
 _FUNC_RE = re.compile(
     r"""
     CREATE \s+ (?:OR \s+ REPLACE \s+)?
@@ -229,15 +231,5 @@ class FunctionSignatureParser:
 
 def _function_body(node: Any) -> str | None:
     """The dollar-quoted body of a ``CreateFunctionStmt``, or ``None`` for C/internal."""
-    language = None
-    body = None
-    for opt in node.options or []:
-        args = opt.arg if isinstance(opt.arg, tuple | list) else [opt.arg]
-        values = [getattr(a, "sval", None) for a in args]
-        if opt.defname == "language":
-            language = values[0].lower() if values and values[0] else None
-        elif opt.defname == "as":
-            body = values[0] if values else None
-    if language in ("c", "internal"):
-        return None
-    return body
+    language, body = routine_body(node)
+    return None if language in ("c", "internal") else body

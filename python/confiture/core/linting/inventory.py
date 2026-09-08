@@ -316,7 +316,7 @@ def _signature(parameters: Any) -> str:
     )
 
 
-def _split_names(names: Any) -> tuple[str | None, str]:
+def split_names(names: Any) -> tuple[str | None, str]:
     """``(schema, name)`` from a pglast name list; the schema is ``None`` when absent."""
     parts = [getattr(n, "sval", None) for n in names or []]
     parts = [p for p in parts if p is not None]
@@ -380,7 +380,7 @@ def _parent_name(stmt: Any) -> str | None:
 
 
 def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
-    schema, name = _split_names(stmt.funcname)
+    schema, name = split_names(stmt.funcname)
     return _object(
         "procedure" if stmt.is_procedure else "function",
         schema,
@@ -403,7 +403,7 @@ def _aggregate_from_define(sql: str, stmt: Any, offset: int) -> SchemaObject | N
     """
     if _enum_value(stmt.kind) != _OBJECT_AGGREGATE:
         return None
-    schema, name = _split_names(stmt.defnames)
+    schema, name = split_names(stmt.defnames)
     args = getattr(stmt, "args", None)
     return _object(
         "aggregate",
@@ -439,12 +439,12 @@ def _composite_type_from_create(sql: str, stmt: Any, offset: int) -> SchemaObjec
 
 
 def _enum_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
-    schema, name = _split_names(stmt.typeName)
+    schema, name = split_names(stmt.typeName)
     return _object("type", schema, name, _line_of(sql, offset), offset)
 
 
 def _domain_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
-    schema, name = _split_names(stmt.domainname)
+    schema, name = split_names(stmt.domainname)
     return _object("domain", schema, name, _line_of(sql, offset), offset)
 
 
@@ -468,7 +468,7 @@ _BUILDERS: dict[str, Callable[[str, Any, int], SchemaObject | None]] = {
 }
 
 
-def _object_from_statement(sql: str, raw: Any) -> SchemaObject | None:
+def object_from_statement(sql: str, raw: Any) -> SchemaObject | None:
     """The one entry this statement creates, or ``None`` when it creates none."""
     stmt = raw.stmt
     builder = _BUILDERS.get(type(stmt).__name__)
@@ -522,12 +522,12 @@ def _comment_target(stmt: Any) -> tuple[str | None, str, str | None] | None:
     obj = stmt.object
     node_kind = type(obj).__name__
     if node_kind == "ObjectWithArgs":
-        schema, name = _split_names(obj.objname)
+        schema, name = split_names(obj.objname)
         if getattr(obj, "args_unspecified", False) or obj.objargs is None:
             return schema, name, None
         return schema, name, ", ".join(_type_text(t) for t in obj.objargs)
     if node_kind == "TypeName":
-        schema, name = _split_names(obj.names)
+        schema, name = split_names(obj.names)
         return schema, name, None
     names = [getattr(o, "sval", None) for o in (obj or [])]
     names = [n for n in names if n is not None]
@@ -553,7 +553,7 @@ def build_inventory(sql: str) -> Inventory:
     inventory = Inventory()
     raws = list(pglast.parse_sql(sql) or [])
     for raw in raws:
-        obj = _object_from_statement(sql, raw) or _schema_declaration(sql, raw)
+        obj = object_from_statement(sql, raw) or _schema_declaration(sql, raw)
         if obj is not None:
             (inventory.schemas if obj.kind == "schema" else inventory.objects).append(obj)
     for raw in raws:

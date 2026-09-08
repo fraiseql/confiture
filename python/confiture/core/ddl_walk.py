@@ -8,12 +8,55 @@ and risk tier — from the same pglast nodes. What "nullable", "has a default" a
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
+
+from pglast import ast as _pg_ast
 
 from confiture.core._pglast_enums import member as _pg_member
 
 _CONSTR_NOTNULL = _pg_member("ConstrType", "CONSTR_NOTNULL")
 _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
+
+
+def walk_nodes(node: Any) -> Iterator[Any]:
+    """Every parse node under ``node``, itself included, in source order.
+
+    pglast nodes carry their children in ``__slots__``, singly or in a tuple,
+    so "walk the tree" is the same three lines wherever it is needed. It lives
+    here because it is the only piece the DDL walkers were still each writing
+    for themselves.
+    """
+    if isinstance(node, list | tuple):
+        for item in node:
+            yield from walk_nodes(item)
+        return
+    if not isinstance(node, _pg_ast.Node):
+        return
+    yield node
+    for slot in node.__slots__:
+        child = getattr(node, slot, None)
+        if child is not None and not isinstance(child, str | int | float | bool | bytes):
+            yield from walk_nodes(child)
+
+
+def routine_body(stmt: Any) -> tuple[str | None, str | None]:
+    """``(language, body text)`` of a ``CreateFunctionStmt``, both as written.
+
+    The body of a ``LANGUAGE c`` routine is a shared-object symbol rather than
+    SQL, which is why the language comes back with it: every caller has to
+    decide what the text it is holding actually is.
+    """
+    language: str | None = None
+    body: str | None = None
+    for opt in getattr(stmt, "options", None) or ():
+        args = opt.arg if isinstance(opt.arg, tuple | list) else [opt.arg]
+        values = [getattr(a, "sval", None) for a in args]
+        if opt.defname == "language":
+            language = values[0].lower() if values and values[0] else None
+        elif opt.defname == "as":
+            body = values[0] if values else None
+    return language, body
 
 
 def enum_int(value: object) -> int | None:
