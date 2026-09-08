@@ -102,6 +102,11 @@ FIXTURES: dict[str, Fixture] = {
             "020.sql": "CREATE FUNCTION fn_f(a text) RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\n",
         }
     ),
+    "build_003": Fixture(
+        {
+            "010.sql": "CREATE VIEW v_t AS SELECT id FROM app.tb_nobody_creates_this;\n",
+        }
+    ),
     "sec_001": Fixture({"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, password TEXT);\n"}),
     "qual_001": Fixture(
         {"010.sql": "CREATE FUNCTION fn_f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\n"}

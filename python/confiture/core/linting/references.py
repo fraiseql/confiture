@@ -71,9 +71,9 @@ class Reference:
     of what a body contains (``now()``, a record variable, a local), and why
     resolving an unqualified name needs a declared ``search_path`` rather than
     a guess. ``line`` is 1-based in the frame described in the module
-    docstring; ``line_is_exact`` is false when a body's offset in its file
-    could not be established, so the line is the routine's rather than the
-    statement's and the finding says so.
+    docstring; ``line_is_exact`` is false when the line is counted in a body's
+    own frame rather than the file's, and ``referrer_line`` — where the
+    referring ``CREATE`` begins — is then the only line a reader can open.
     """
 
     schema: str | None
@@ -82,6 +82,7 @@ class Reference:
     line: int
     referrer: str
     referrer_kind: str
+    referrer_line: int = 1
     dynamic: bool = False
     line_is_exact: bool = True
 
@@ -128,7 +129,7 @@ def _routine_references(sql: str, raw: Any, obj: SchemaObject) -> list[Reference
     if getattr(stmt, "sql_body", None) is not None:
         # `BEGIN ATOMIC … END`: parsed with the statement, so its locations are
         # already offsets into `sql`.
-        return _from_nodes(sql, stmt.sql_body, obj, offset=0)
+        return _from_nodes(sql, stmt.sql_body, obj)
     if language not in _SQL_LANGUAGES or body is None:
         return []
     if language == "sql":
@@ -138,7 +139,7 @@ def _routine_references(sql: str, raw: Any, obj: SchemaObject) -> list[Reference
 
 def _query_references(sql: str, raw: Any, obj: SchemaObject) -> list[Reference]:
     """A view or materialized view: its query was parsed with the statement."""
-    return _from_nodes(sql, raw.stmt.query, obj, offset=0)
+    return _from_nodes(sql, raw.stmt.query, obj)
 
 
 #: Which reader each inventory kind needs. A kind that is absent has no body.
@@ -164,7 +165,7 @@ def _plpgsql_references(statement: str, obj: SchemaObject) -> list[Reference]:
     found: list[Reference] = []
     for query, line, dynamic in _fragments(tree, line=1, dynamic=False):
         if dynamic:
-            found.append(_reference(None, query, DYNAMIC, line, obj, dynamic=True))
+            found.append(_reference(None, query, DYNAMIC, line, obj, dynamic=True, exact=False))
             continue
         found.extend(_from_text(query, obj, line=line))
     return found
@@ -202,7 +203,8 @@ def _from_text(text: str, obj: SchemaObject, line: int | None = None) -> list[Re
 
     A PL/pgSQL fragment can be a bare expression (``v := app.f(1)``, a ``WHEN``
     condition), which is not a statement; prefixing ``SELECT`` makes it one
-    without changing what it names.
+    without changing what it names. Lines are counted in the *body's* frame, so
+    they are marked inexact until a caller converts them.
     """
     for candidate in (text, f"SELECT {text}"):
         try:
@@ -212,7 +214,7 @@ def _from_text(text: str, obj: SchemaObject, line: int | None = None) -> list[Re
         return [
             ref
             for raw in raws
-            for ref in _from_nodes(candidate, raw.stmt, obj, offset=0, line=line, created=raw)
+            for ref in _from_nodes(candidate, raw.stmt, obj, line=line, created=raw, exact=False)
         ]
     return []
 
@@ -222,9 +224,9 @@ def _from_nodes(
     root: Any,
     obj: SchemaObject,
     *,
-    offset: int,
     line: int | None = None,
     created: Any = None,
+    exact: bool = True,
 ) -> list[Reference]:
     """Walk one parse tree for the relations and routines it names.
 
@@ -242,8 +244,8 @@ def _from_nodes(
         schema, name, kind, location = named
         if schema is None and name in skip:
             continue
-        at = line if line is not None else _line_of(text, location, offset)
-        found.append(_reference(schema, name, kind, at, obj))
+        at = line if line is not None else _line_of(text, location)
+        found.append(_reference(schema, name, kind, at, obj, exact=exact))
     return found
 
 
@@ -273,10 +275,10 @@ def _created_name(text: str, raw: Any) -> frozenset[str]:
     return frozenset() if created is None else frozenset({created.folded_name})
 
 
-def _line_of(text: str, location: int | None, offset: int) -> int:
+def _line_of(text: str, location: int | None) -> int:
     if location is None or location < 0:
         return 1
-    return text.count("\n", 0, min(location, len(text))) + 1 + offset
+    return text.count("\n", 0, min(location, len(text))) + 1
 
 
 def _reference(
@@ -287,6 +289,7 @@ def _reference(
     obj: SchemaObject,
     *,
     dynamic: bool = False,
+    exact: bool = True,
 ) -> Reference:
     return Reference(
         schema=schema,
@@ -295,5 +298,7 @@ def _reference(
         line=line,
         referrer=obj.identity,
         referrer_kind=obj.kind,
+        referrer_line=obj.statement_line,
         dynamic=dynamic,
+        line_is_exact=exact,
     )

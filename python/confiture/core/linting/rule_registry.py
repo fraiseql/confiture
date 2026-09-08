@@ -159,6 +159,13 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="build_003",
+        family="build",
+        title="A body references an object the build does not create",
+        severity="warning",
+        default_on=True,
+    ),
+    LintRule(
         code="sec_001",
         family="security",
         title="Columns that look like secrets should not be plain text",

@@ -165,8 +165,11 @@ class TestLintRule:
         assert [(r.code, r.severity, r.default_on) for r in build] == [
             ("build_001", "warning", True),
             ("build_002", "info", True),
+            ("build_003", "warning", True),
         ]
-        assert resolve_selection(["build"], []) == frozenset({"build_001", "build_002"})
+        assert resolve_selection(["build"], []) == frozenset(
+            {"build_001", "build_002", "build_003"}
+        )
 
     def test_lint_reports_build_001_as_a_warning_with_the_locations(self) -> None:
         sql = f"CREATE OR REPLACE FUNCTION app.f() {BODY}\n\nCREATE OR REPLACE FUNCTION app.f() {BODY}\n"

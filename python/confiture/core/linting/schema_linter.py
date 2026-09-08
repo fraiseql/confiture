@@ -121,6 +121,7 @@ class LintConfig:
         check_duplicates: bool = True,
         check_qualification: bool = True,
         check_qualification_relations: bool = False,
+        check_references: bool = True,
     ):
         """Initialize linting configuration.
 
@@ -148,6 +149,8 @@ class LintConfig:
                 without a schema (``qual_002``). Off by default, like the rule —
                 the volume in an existing project is much higher, so it is
                 adopted on its own with ``--select qual_002``.
+            check_references: Report objects a body names that no file in the
+                build creates (``build_003``). On by default, like the rule.
         """
         self.enabled = enabled
         self.fail_on_error = fail_on_error
@@ -163,6 +166,7 @@ class LintConfig:
         self.check_duplicates = check_duplicates
         self.check_qualification = check_qualification
         self.check_qualification_relations = check_qualification_relations
+        self.check_references = check_references
 
 
 class SchemaLinter:
@@ -282,6 +286,7 @@ class SchemaLinter:
                 self.config.check_qualification or self.config.check_qualification_relations,
                 self._check_qualification,
             ),
+            (self.config.check_references, self._check_references),
             (self.config.check_tenant_isolation, self._check_tenant_isolation),
         ):
             if enabled:
@@ -439,6 +444,38 @@ class SchemaLinter:
         for violation in findings:
             report.add_violation(violation)
 
+    def _check_references(self, report: LintReport) -> None:
+        """``build_003``: a body names an object no file in the build creates (#246)."""
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
+        from confiture.core.linting.references import referenced_objects
+
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import unresolved_findings
+
+        located = [
+            (label, reference)
+            for label, text in self._sources()
+            for reference in referenced_objects(text)
+        ]
+        for violation in unresolved_findings(
+            located, self._file_objects or self._inventory.objects
+        ):
+            report.add_violation(violation)
+
+    def _sources(self) -> list[tuple[str | None, str]]:
+        """``(project-relative label, text)`` per schema file, or the one string linted.
+
+        Every rule that reads the files *as files* — rather than the build they
+        concatenate into — needs the same pair, and a whole-string lint
+        (``lint(schema=...)``) has no file to name, so its label is ``None``.
+        """
+        if not self._schema_files:
+            return [(None, self._schema_sql or "")]
+        return [
+            (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
+            for path in self._schema_files
+        ]
+
     def _directive_lines(self, name: str) -> frozenset[tuple[str | None, int]]:
         """``(file, statement line)`` of every statement carrying ``-- confiture:<name>``.
 
@@ -448,17 +485,9 @@ class SchemaLinter:
         comments in between included — :func:`sql_lexer.directives` decides
         that, not a walk of its own.
         """
-        sources: list[tuple[str | None, str]] = (
-            [
-                (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
-                for path in self._schema_files
-            ]
-            if self._schema_files
-            else [(None, self._schema_sql or "")]
-        )
         return frozenset(
             (label, directive.statement_line)
-            for label, text in sources
+            for label, text in self._sources()
             for directive in sql_lexer.directives(text)
             if directive.name == name and directive.statement_line is not None
         )
