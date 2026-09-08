@@ -25,6 +25,7 @@
     "core/step_runner.py": 85,
     "testing/pytest_plugin.py": 70,
     "core/linting/references.py": 90,
-    "core/linting/unresolved.py": 95
+    "core/linting/unresolved.py": 95,
+    "core/tree_prefix.py": 95
   }
 }

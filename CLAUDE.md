@@ -366,6 +366,7 @@ confiture/
 │   │   ├── temp_database.py      # Temporary database lifecycle and pg_dump wrapper
 │   │   ├── test_db.py            # Test-database provisioning primitive (CI-path)
 │   │   ├── tree_allocator.py     # SQL function tree file allocation
+│   │   ├── tree_prefix.py        # What a numbered filename's prefix is, and where the file it names sorts
 │   │   ├── tree_renumber.py      # SQL function tree renumber — safe file-move with cross-reference rewrit…
 │   │   ├── type_lattice.py       # Is an `ALTER COLUMN … TYPE` widening or narrowing (issue #199)?
 │   │   ├── unified_linter.py     # Unified SQL linter orchestrating Squawk, SQLFluff, and other tools

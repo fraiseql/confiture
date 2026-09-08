@@ -91,6 +91,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The build order no longer depends on the filesystem (LINT-06, LINT-07).** Under
+  `build.sort_mode: hex` the sort key was the *filename's* prefix and nothing else, so the
+  `00001_create.sql` that `confiture generate alloc` writes into every directory tied exactly with
+  every other one — and a tie under a stable sort keeps whatever order `Path.rglob` returned, which
+  is the filesystem's, not the project's. Measured on a three-directory tree: **nine different build
+  orders from nine shuffles of the same files.** The key now reads the number on every path
+  component and ends with the path itself, so it is total; a guard shuffles discovery ten times and
+  asserts one order, under both sort modes.
+  The same commit gives confiture **one definition of a numeric prefix**
+  (`core/tree_prefix.py`), imported by the builder, the tree rules, `TreeAllocator` and
+  `generate renumber`. It had four: the builder required **upper case** while the tree rules and the
+  allocator accepted either — and the allocator *writes* lower case (`format(value, "0Nx")`), so a
+  tree confiture generated itself was not hex to the builder that orders it, and the linter could
+  approve a numbering the builder ordered differently. A prefix now needs at least one decimal digit,
+  so `add_column.sql` and `abc_alpha.sql` stay words rather than sorting as 2781 and 2748, and its
+  base belongs to the **directory** — one hex-lettered sibling makes the group hex, as
+  `TreeAllocator` already decided — rather than to the individual name, which read `0100` beside
+  `009a` as 100 beside 154 when the author wrote 256 after 154.
+  **This can change the build order of a `sort_mode: hex` project, once.** It changes it to the one
+  the numbering asks for, and to the same one on every machine; the schema hash is order-dependent,
+  so `confiture build` will report a new digest on the first run after upgrading. Projects on the
+  default `alphabetical` mode are unaffected.
 - **`acl_001` is declared `error` in the catalogue.** The rule has always *emitted* `error`; the
   registry entry said `warning` (LINT-01), so `--list-rules` and the published rule reference were
   wrong about the one rule that could reach `error`. **No project's exit code moves** — the emission

@@ -43,35 +43,16 @@ Usage (one rule directly)::
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from collections.abc import Collection, Sequence
 from pathlib import Path
 
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.tree_prefix import is_hex_group, prefix_value
+from confiture.core.tree_prefix import prefix_text as _raw_prefix
 
 #: Every code this module emits, in registry order.
 TREE_RULE_CODES: tuple[str, ...] = ("tree_001", "tree_002", "tree_003", "tree_004")
-
-# Matches a leading hex/decimal prefix followed by exactly one underscore.
-_PREFIX_CAPTURE_RE = re.compile(r"^([0-9a-fA-F]+)_")
-# Distinguishes hex letters from pure-decimal digits.
-_HEX_LETTER_RE = re.compile(r"[a-fA-F]")
-
-
-def _raw_prefix(filename: str) -> str | None:
-    """Return the raw prefix string (digits before first ``_``), or *None*."""
-    m = _PREFIX_CAPTURE_RE.match(filename)
-    return m.group(1) if m else None
-
-
-def _parse_prefix_value(filename: str) -> int | None:
-    """Return the integer value of the prefix, or *None* if absent."""
-    raw = _raw_prefix(filename)
-    if raw is None:
-        return None
-    base = 16 if _HEX_LETTER_RE.search(raw) else 10
-    return int(raw, base)
 
 
 def _by_directory(files: Sequence[Path]) -> dict[Path, list[Path]]:
@@ -196,8 +177,13 @@ class Tree003GapPolicy:
         violations: list[LintViolation] = []
 
         for directory, group in _by_directory(files).items():
+            # One numbering per directory, as TreeAllocator allocates it: a
+            # decimal tree read in base 16 turns 0009 → 0010 into a gap of six.
+            hex_group = is_hex_group(f.name for f in group)
             values = sorted(
-                value for value in (_parse_prefix_value(f.name) for f in group) if value is not None
+                value
+                for value in (prefix_value(f.name, hex_group=hex_group) for f in group)
+                if value is not None
             )
             if len(values) < 2:
                 continue
