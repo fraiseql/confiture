@@ -84,6 +84,8 @@ def format_table(report: LintReport, console: Console) -> None:
     console.print(f"Columns: {report.columns_checked} checked")
     console.print(f"Time: {report.execution_time_ms}ms\n")
 
+    _print_statuses(report, console)
+
     if not report.violations:
         console.print("[green]✅ No violations found![/green]\n")
         return
@@ -127,6 +129,27 @@ def format_table(report: LintReport, console: Console) -> None:
         console.print("\n[bold]Suggested Fixes:[/bold]")
         for violation in fixes:
             console.print(f"  {violation.location}: {violation.suggested_fix}")
+
+
+#: How each status reads on the summary: "<code> <verb> <reason>".
+_STATE_VERB = {
+    "skipped": "did not run",
+    "degraded": "ran without the live tier",
+}
+
+
+def _print_statuses(report: LintReport, console: Console) -> None:
+    """Say which rules did not run, and which ran short of a tier.
+
+    Printed above the findings, because it changes how the findings should be
+    read — a degraded rule over-reports, and a skipped one reports nothing at
+    all. ``markup=False``: a reason carries a rule code and a driver's error
+    text, and Rich would read ``[build_003]`` as a style tag and render it as
+    nothing.
+    """
+    for status in (*report.skipped, *report.degraded):
+        verb = _STATE_VERB.get(status["state"], status["state"])
+        console.print(f"{status['code']} {verb}: {status['reason']}\n", markup=False)
 
 
 def format_json(report: LintReport) -> str:

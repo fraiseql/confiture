@@ -143,6 +143,11 @@ class LintReport:
             reached it — see ``core.linting.gate.Gate.to_dict``. Every
             ``confiture lint`` run sets it; a report a library caller builds
             itself has none.
+        skipped: Rules that did not run, each with a reason. A skip is not a
+            pass, and a payload that omitted it would read as one.
+        degraded: Rules that ran without one of the things they resolve
+            against, so they can over-report — ``build_003`` with no live
+            database is the first of them.
     """
 
     violations: list[Violation]
@@ -155,6 +160,8 @@ class LintReport:
     execution_time_ms: int
     baseline: dict[str, Any] | None = None
     gate: dict[str, Any] | None = None
+    skipped: list[dict[str, str]] = field(default_factory=list)
+    degraded: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def has_errors(self) -> bool:
@@ -215,7 +222,10 @@ class LintReport:
 
         ``baseline`` is present only when the run compared against one (#219);
         ``gate`` only when a gate decided the outcome, which is every run of
-        the command.
+        the command. ``skipped`` and ``degraded`` are always present, empty
+        when nothing was skipped or degraded: a consumer that has to tell
+        "nothing was skipped" from "this payload predates the field" is a
+        consumer that will assume the first.
         """
         payload: dict[str, Any] = {
             "schema_name": self.schema_name,
@@ -242,6 +252,8 @@ class LintReport:
                 ],
             },
         }
+        payload["skipped"] = list(self.skipped)
+        payload["degraded"] = list(self.degraded)
         if self.baseline is not None:
             payload["baseline"] = self.baseline
         if self.gate is not None:

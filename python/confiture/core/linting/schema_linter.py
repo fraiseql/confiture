@@ -16,6 +16,7 @@ from typing import Any
 
 import pglast
 import pglast.parser
+import psycopg
 
 from confiture.config.environment import Environment
 from confiture.core import builder as _core_builder
@@ -31,6 +32,15 @@ from confiture.core.parser_info import parse_error_line
 from confiture.exceptions import ConfiturError
 
 logger = logging.getLogger(__name__)
+
+#: How long ``build_003``'s live tier waits for a connection. A lint runs in a
+#: pre-commit hook; a server that is not there must cost a moment, not a minute.
+_LIVE_TIER_TIMEOUT_S = 3
+
+
+def _first_line(exc: Exception) -> str:
+    """A driver's error, trimmed to the sentence a summary line can carry."""
+    return str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
 
 
 class RuleSeverity(Enum):
@@ -61,6 +71,25 @@ class LintViolation:
         return f"{prefix} {self.rule_name}: {self.message} ({self.object_type}: {self.object_name})"
 
 
+@dataclass(frozen=True)
+class RuleStatus:
+    """A rule that could not run, or could not run in full, and why.
+
+    ``state`` is ``skipped`` — the rule did not run at all — or ``degraded``:
+    it ran, but one of the things it resolves against was unavailable, so it
+    can over-report. Both are the same three fields because both answer the
+    same question for a reader, and a report that quietly omits either is a
+    report whose counts mean something other than what they say.
+    """
+
+    code: str
+    state: str
+    reason: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"code": self.code, "state": self.state, "reason": self.reason}
+
+
 @dataclass
 class LintReport:
     """Result of schema linting."""
@@ -71,6 +100,9 @@ class LintReport:
     #: What the inventory read — the counts the JSON payload reports.
     tables_checked: int = 0
     columns_checked: int = 0
+    #: Rules that did not run, and rules that ran without one of their tiers.
+    skipped: list[RuleStatus] = field(default_factory=list)
+    degraded: list[RuleStatus] = field(default_factory=list)
 
     @property
     def has_errors(self) -> bool:
@@ -445,22 +477,74 @@ class SchemaLinter:
             report.add_violation(violation)
 
     def _check_references(self, report: LintReport) -> None:
-        """``build_003``: a body names an object no file in the build creates (#246)."""
+        """``build_003``: a body names an object no file in the build creates (#246).
+
+        Three tiers, in order (D4): the build inventory, then
+        ``lint.ignore_objects``, then — only for what is still outstanding — a
+        live database, which is the one thing that can answer for an object
+        created by a migration or owned by an extension. A tier that could not
+        answer is reported as a degradation rather than left to be read as
+        certainty.
+        """
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core.linting.references import referenced_objects
 
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
-        from confiture.core.linting.unresolved import unresolved_findings
+        from confiture.core.linting.unresolved import reference_findings, unresolved_references
 
         located = [
             (label, reference)
             for label, text in self._sources()
             for reference in referenced_objects(text)
         ]
-        for violation in unresolved_findings(
-            located, self._file_objects or self._inventory.objects
-        ):
+        candidates = unresolved_references(
+            located,
+            self._file_objects or self._inventory.objects,
+            ignore=self.environment.lint.ignore_objects,
+        )
+        if candidates:
+            candidates = self._after_live_tier(candidates, report)
+        for violation in reference_findings(candidates):
             report.add_violation(violation)
+
+    def _after_live_tier(
+        self,
+        candidates: list[tuple[str | None, Any]],
+        report: LintReport,
+    ) -> list[tuple[str | None, Any]]:
+        """*candidates* minus what a live database has, or all of them and a notice.
+
+        The connection is opened only because something was outstanding, and
+        with a short timeout: a lint is not the place to wait on a server, and
+        a database reachable only through the configured SSH tunnel counts as
+        unreachable — deliberately, since starting a tunnel is not what an
+        operator asked for by typing ``confiture lint``.
+        """
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import RULE_ID, probe_live
+
+        try:
+            live = self._probe(candidates, probe_live)
+        except (psycopg.Error, OSError, ConfiturError) as exc:
+            report.degraded.append(
+                RuleStatus(
+                    code=RULE_ID,
+                    state="degraded",
+                    reason=(
+                        "no database answered, so an object created by a migration or owned "
+                        f"by an extension is reported as missing: {_first_line(exc)}"
+                    ),
+                )
+            )
+            return candidates
+        return [pair for pair in candidates if not live.holds(pair[1])]
+
+    def _probe(self, candidates: list[tuple[str | None, Any]], probe: Any) -> Any:
+        """One connection, one round trip, closed before anything else runs."""
+        with psycopg.connect(
+            str(self.environment.database_url), connect_timeout=_LIVE_TIER_TIMEOUT_S
+        ) as connection:
+            return probe(connection, candidates)
 
     def _sources(self) -> list[tuple[str | None, str]]:
         """``(project-relative label, text)`` per schema file, or the one string linted.

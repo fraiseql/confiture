@@ -19,9 +19,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from fnmatch import fnmatch
+from typing import Any
 
 from confiture.core.linting.inventory import KIND_KEYWORD, SchemaObject
-from confiture.core.linting.references import RELATION, Reference
+from confiture.core.linting.references import RELATION, ROUTINE, Reference
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 
 RULE_ID = "build_003"
@@ -101,18 +103,89 @@ def _finding(file: str | None, reference: Reference) -> LintViolation:
     )
 
 
-def unresolved_findings(
+def unresolved_references(
     located: Iterable[tuple[str | None, Reference]],
     objects: Sequence[SchemaObject],
-) -> list[LintViolation]:
-    """One ``build_003`` per unresolved name per referring object, in source order.
+    *,
+    ignore: Sequence[str] = (),
+) -> list[tuple[str | None, Reference]]:
+    """The references tiers (a) and (c) could not answer, with their files.
 
     *located* is every reference with the file it was written in; *objects* is
-    the whole build's inventory, which is what the names are resolved against.
+    the whole build's inventory. *ignore* is ``lint.ignore_objects``, matched
+    with :func:`fnmatch.fnmatch` against ``schema.name`` as written.
+
+    What comes back is what the live tier is for. Handing it back rather than
+    turning it straight into findings is what lets the caller consult a
+    database *only when there is something to ask* — a clean tree opens no
+    connection and reports no degradation, because none of its answers was
+    missing.
     """
     catalogue = BuildCatalogue.of(objects)
     return [
-        _finding(file, reference)
+        (file, reference)
         for file, reference in located
-        if _reportable(reference) and not catalogue.creates(reference)
+        if _reportable(reference)
+        and not catalogue.creates(reference)
+        and not _ignored(reference, ignore)
     ]
+
+
+def _ignored(reference: Reference, patterns: Sequence[str]) -> bool:
+    return any(fnmatch(reference.qualified, pattern) for pattern in patterns)
+
+
+@dataclass(frozen=True)
+class LiveCatalogue:
+    """What a database says exists, for the names the build could not answer.
+
+    Tier (b): an object created by a migration, or owned by an extension, is
+    real and absent from the DDL tree. One round trip asks about every
+    outstanding name at once — ``to_regclass`` for relations, ``pg_proc`` for
+    routines — because a query per name would make the rule's cost a function
+    of how wrong the schema is.
+    """
+
+    relations: frozenset[str]
+    routines: frozenset[str]
+
+    def holds(self, reference: Reference) -> bool:
+        names = self.relations if reference.kind == RELATION else self.routines
+        return reference.qualified in names
+
+
+#: One statement, both kinds, each row tagged with which catalogue answered.
+_LIVE_QUERY = """
+SELECT 'relation' AS kind, name
+  FROM unnest(%(relations)s::text[]) AS name
+ WHERE to_regclass(name) IS NOT NULL
+UNION ALL
+SELECT 'routine' AS kind, n.nspname || '.' || p.proname
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+ WHERE n.nspname || '.' || p.proname = ANY(%(routines)s::text[])
+"""
+
+
+def probe_live(
+    connection: Any, candidates: Iterable[tuple[str | None, Reference]]
+) -> LiveCatalogue:
+    """Ask an open connection which of *candidates* it actually has."""
+    wanted: dict[str, set[str]] = {RELATION: set(), ROUTINE: set()}
+    for _file, reference in candidates:
+        wanted[RELATION if reference.kind == RELATION else ROUTINE].add(reference.qualified)
+    rows = connection.execute(
+        _LIVE_QUERY,
+        {"relations": sorted(wanted[RELATION]), "routines": sorted(wanted[ROUTINE])},
+    ).fetchall()
+    return LiveCatalogue(
+        relations=frozenset(name for kind, name in rows if kind == "relation"),
+        routines=frozenset(name for kind, name in rows if kind == "routine"),
+    )
+
+
+def reference_findings(
+    candidates: Iterable[tuple[str | None, Reference]],
+) -> list[LintViolation]:
+    """One ``build_003`` per unresolved name per referring object, in source order."""
+    return [_finding(file, reference) for file, reference in candidates]

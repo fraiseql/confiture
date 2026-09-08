@@ -522,6 +522,7 @@ Generated from `confiture.config.environment`; the description is the model's ow
 | `ownership` | [OwnershipExpectation](#ownershipexpectation) \| NoneType | - | Expected relation ownership per schema for ``drift --check-ownership`` and the ``own_001`` lint; ``null`` disables both. |
 | `function_coverage` | [FunctionCoverage](#functioncoverage) \| NoneType | - | Which schemas' functions the function-uniqueness check covers (``migrate validate --check-function-uniqueness``). |
 | `security_lint` | [SecurityLinting](#securitylinting) \| NoneType | - | The ``sec_002`` SECURITY DEFINER lint: enabled flag, schema scope, ignore globs and severity. |
+| `lint` | [LintSettings](#lintsettings) | (nested) | What the lint rules resolve against — ``lint.ignore_objects`` excuses a name ``build_003`` cannot find in the build. |
 
 #### `DirectoryConfig`
 
@@ -700,6 +701,12 @@ Generated from `confiture.config.environment`; the description is the model's ow
 | `ignore` | list[str] | `[]` | Object-path globs (``schema.name``) that opt specific callables out of detection for deliberate exceptions. |
 | `severity` | str | `warning` | Violation severity — ``"warning"`` (advisory, exit 0) or ``"error"`` (hard gate, exit 1). |
 
+#### `LintSettings`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `ignore_objects` | list[str] | `[]` | ``fnmatch`` globs over ``schema.name``. A reference matching one is never reported as unresolved — the escape hatch for an object created outside the DDL tree (``public.gen_random_uuid``, ``pg_stat_statements*``). |
+
 ### Complete skeleton (every field at its default)
 
 ```yaml
@@ -825,6 +832,8 @@ security_lint:
     - '*'
   ignore: []
   severity: warning
+lint:
+  ignore_objects: []
 ```
 
 <!-- END GENERATED: config-fields -->

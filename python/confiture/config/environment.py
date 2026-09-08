@@ -610,6 +610,27 @@ class FunctionCoverage(BaseModel):
     ignore: list[str] = Field(default_factory=list)
 
 
+class LintSettings(BaseModel):
+    """The ``lint:`` block in environment YAML: what the lint rules resolve against.
+
+    Only ``build_003`` reads it today. That rule subtracts the objects a body
+    references from the objects the build creates, and the build is not the
+    only thing that creates objects: a migration does, and so does an
+    extension. A live database answers for both when one is reachable; this is
+    what a project uses when none is.
+
+    Attributes:
+        ignore_objects: ``fnmatch`` globs over ``schema.name``. A reference
+            matching one is never reported as unresolved — the escape hatch
+            for an object created outside the DDL tree
+            (``public.gen_random_uuid``, ``pg_stat_statements*``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ignore_objects: list[str] = Field(default_factory=list)
+
+
 class SecurityLinting(BaseModel):
     """The ``security_lint:`` block in environment YAML (issue #161).
 
@@ -837,6 +858,7 @@ class Environment(BaseModel):
         ownership: Expected relation ownership per schema for ``drift --check-ownership`` and the ``own_001`` lint; ``null`` disables both.
         function_coverage: Which schemas' functions the function-uniqueness check covers (``migrate validate --check-function-uniqueness``).
         security_lint: The ``sec_002`` SECURITY DEFINER lint: enabled flag, schema scope, ignore globs and severity.
+        lint: What the lint rules resolve against — ``lint.ignore_objects`` excuses a name ``build_003`` cannot find in the build.
         name: Environment name (e.g., "local", "production")
         database_url: PostgreSQL connection URL
         include_dirs: Directories to include when building schema (supports both string and dict formats)
@@ -890,6 +912,9 @@ class Environment(BaseModel):
     # leaves the rule disabled; set ``security_lint.enabled: true`` in the env
     # YAML to opt in.
     security_lint: SecurityLinting | None = None
+    # Issue #246 — what ``build_003`` resolves references against when the
+    # build inventory and a live database cannot answer.
+    lint: LintSettings = Field(default_factory=LintSettings)
 
     @property
     def database(self) -> DatabaseConfig:
