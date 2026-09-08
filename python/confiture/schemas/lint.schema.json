@@ -10,7 +10,9 @@
     "tables_checked",
     "columns_checked",
     "execution_time_ms",
-    "violations"
+    "violations",
+    "skipped",
+    "degraded"
   ],
   "properties": {
     "schema_name": {
@@ -207,6 +209,66 @@
           "description": "The most severe finding this selection can produce; null when no rule is selected."
         }
       }
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "state",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The rule code this is about."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "skipped",
+              "degraded"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why, in the words the summary line uses."
+          }
+        }
+      },
+      "description": "Rules that did not run at all, each with a reason. Always present, empty when none. A skip is never a pass: `--fail-on` cannot be satisfied by a rule that did not run."
+    },
+    "degraded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "state",
+          "reason"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The rule code this is about."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "skipped",
+              "degraded"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why, in the words the summary line uses."
+          }
+        }
+      },
+      "description": "Rules that ran without one of the things they resolve against, so they can over-report. `build_003` with no reachable database is the first of them: an object created by a migration or owned by an extension is then reported as missing."
     }
   }
 }

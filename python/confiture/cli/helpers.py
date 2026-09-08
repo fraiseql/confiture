@@ -179,6 +179,8 @@ def _convert_linter_report(
         execution_time_ms=0,  # Not tracked in linter
         baseline=baseline,
         gate=gate,
+        skipped=[status.to_dict() for status in linter_report.skipped],
+        degraded=[status.to_dict() for status in linter_report.degraded],
     )
 
 

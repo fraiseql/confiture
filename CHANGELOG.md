@@ -60,6 +60,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SET search_path` in the file deliberately does **not**, because that is the mechanism which makes
   the outcome role-dependent in the first place. Both rules read the object inventory, so there is no
   second parse and no new regex.
+- **`build_003`: references resolve against the build (#246).** The inventory `build_001` reads to
+  know an object is defined *twice* now also answers the reverse question — a routine or view body
+  that names an object **no file in the build creates**. #246's reproduction, a routine reading
+  `app.tv_summary` and calling `app.fn_refresh_summary` with neither created anywhere, built and
+  linted in silence; a hand-rolled version of this check found six such objects in one routine of a
+  large schema, reachable from the application's public API and never once completing a call.
+  `warning`, **on by default**, one finding per unresolved name per referring object, each with the
+  referring file and the line **inside the body**.
+  Extraction is PostgreSQL's own parser end to end and adds no regex: a PL/pgSQL body through
+  `pglast.parse_plpgsql`, whose embedded SQL fragments carry their line, each re-parsed with
+  `parse_sql` and walked for `RangeVar` and `FuncCall`; a `LANGUAGE sql` body, a `BEGIN ATOMIC` body
+  and a view definition parse directly. A statement built at run time (`EXECUTE '…' || quote_ident(t)`)
+  is *declared* unresolvable and never reported — guessing at the string is the regex behaviour the
+  issue explicitly did not ask for.
+  Three tiers keep it quiet about legitimate references: the build inventory, then a live database
+  when `--env`'s connection is reachable (one round trip, `to_regclass` plus a `pg_proc` lookup, only
+  for the names the build could not answer — this is what covers an object created by a migration or
+  owned by an extension), then the new `lint.ignore_objects` config key (fnmatch over `schema.name`).
+  Forward references inside one build resolve, `pg_catalog` and `information_schema` never report,
+  and an unqualified name is not judged at all unless the new `lint.search_path` says where to look —
+  an unqualified *routine* call not even then, because `pg_catalog` is on every search path.
+  `--baseline` is the documented adoption path for an existing schema.
+- **A rule that could not run in full says so.** `LintReport` gains `skipped` and `degraded`, each
+  entry `{code, state, reason}`, surfaced on the summary line and as two arrays in
+  `lint --format json` (`lint.schema.json` requires both, empty when there is nothing to say). The
+  first user is `build_003`: a run whose live tier did not answer prints `build_003 ran without the
+  live tier: …`, so `12 unresolved references` from a degraded run reads as an upper bound rather
+  than as twelve bugs.
 
 ### Changed
 

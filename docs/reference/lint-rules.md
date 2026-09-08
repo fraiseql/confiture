@@ -8,6 +8,7 @@ Adopt a rule on a schema that already trips it with a
 [baseline](../guides/schema-linting.md#adopting-a-rule-with-a-baseline--baseline--write-baseline).
 
 <!-- BEGIN GENERATED: lint-rules -->
+
 | Code | Family | Severity | Default | Rule |
 |------|--------|----------|:-------:|------|
 | `naming_001` | naming | warning | on | Table names should be snake_case |
@@ -19,6 +20,7 @@ Adopt a rule on a schema that already trips it with a
 | `doc_004` | doc | info | on | Every composite type, enum and domain should carry a COMMENT |
 | `build_001` | build | warning | on | An object is defined more than once in one build |
 | `build_002` | build | info | on | A routine's overloads are split across files |
+| `build_003` | build | warning | on | A body references an object the build does not create |
 | `sec_001` | security | warning | on | Columns that look like secrets should not be plain text |
 | `qual_001` | qual | warning | on | Routines are created schema-qualified |
 | `qual_002` | qual | warning | off | Relations and types are created schema-qualified |
@@ -33,6 +35,7 @@ Adopt a rule on a schema that already trips it with a
 | `tree_003` | tree | warning | off | Prefixes within one directory are contiguous |
 | `tree_004` | tree | warning | off | Every file in the overrides mirror has a counterpart in the tree |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
+
 <!-- END GENERATED -->
 
 The **Severity** column is the severity a rule emits by default. Two rules are
@@ -165,8 +168,10 @@ unqualified), name and — for routines — input parameter types.
 |------|----------|---------|
 | `build_001` | warning | an object defined more than once across the build's files, with every definition's file, offset and line, and which one wins (`last`, `first` or `conflict`) |
 | `build_002` | info | a routine whose overloads are split across files — legal, but how the first mistake starts |
+| `build_003` | warning | a routine or view body that names an object **no file in the build creates** |
 
-Both run as lint rules (`confiture lint`, `--select build`) and from the build
+`build_001` and `build_002` run as lint rules (`confiture lint`,
+`--select build`) and from the build
 itself: `confiture build --warn-duplicates` reports and builds,
 `confiture build --fail-on-duplicates` reports and exits 1 without writing
 anything. `build --format json` carries the findings under `duplicates`
@@ -177,3 +182,100 @@ anything. `build --format json` carries the findings under `duplicates`
    db/schema/010_first.sql (line 1, offset 0); db/schema/020_second.sql (line 1, offset 0)
    — the last definition wins (CREATE OR REPLACE)
 ```
+
+### `build_003` — the inventory, read backwards
+
+The same inventory that knows an object is created *twice* knows when one is
+created *never*. `build_003` takes the objects a body names — relations from a
+`FROM` or an `INSERT`, routines from a call — and subtracts the objects the
+build creates. What is left is a body referring to something nobody built:
+
+```sql
+CREATE OR REPLACE FUNCTION app.fn_report()
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN
+    FOR r IN SELECT id FROM app.tv_summary LOOP   -- no file creates this
+        PERFORM app.fn_refresh_summary(r.id);     -- nor this
+    END LOOP;
+END;
+$$;
+```
+
+```text
+⚠️ build_003: Function 'app.fn_report()' references relation 'app.tv_summary',
+   and no file in the build creates it
+   db/schema/010_fn.sql:6
+```
+
+Extraction is PostgreSQL's own parser end to end. A PL/pgSQL body goes through
+`parse_plpgsql`, which hands back every embedded SQL fragment with the line it
+is written on; each fragment is re-parsed and walked for `RangeVar` and
+`FuncCall`. A `LANGUAGE sql` body, a `BEGIN ATOMIC` body and a view definition
+are SQL already and parse directly.
+
+What the rule deliberately does **not** report:
+
+- **A forward reference inside one build.** The inventory is the whole build,
+  so a routine reading a table created three files later resolves. Only a name
+  absent from the entire build is a finding.
+- **A statement built at run time.** `EXECUTE 'SELECT … ' || quote_ident(t)`
+  names nothing a parser can resolve, and guessing at the string is exactly the
+  regex behaviour this rule exists to replace.
+- **`pg_catalog` and `information_schema`.** PostgreSQL ships them.
+- **An unqualified name**, unless `lint.search_path` says where to look — and
+  an unqualified *routine* call not even then, because `pg_catalog` is on every
+  search path and confiture cannot enumerate it. Without that rule, every
+  `now()` and `count()` would be a finding.
+
+#### Three tiers answer a reference
+
+| Tier | What answers | When |
+|------|--------------|------|
+| a | the build inventory | always |
+| b | a live database — `to_regclass` for relations, `pg_proc` for routines | when `--env`'s `database_url` accepts a connection, and only for names tier (a) could not answer |
+| c | `lint.ignore_objects` in the environment YAML | always |
+
+Tier (b) is what makes the rule usable on a real project: an object created by
+a migration, or owned by an extension, is real and is absent from the DDL tree.
+One connection, one round trip, every outstanding name at once — and only when
+something is outstanding, so a clean tree connects to nothing.
+
+**A run that could not reach a database says so**, on the summary line and in
+the JSON payload's `degraded` array:
+
+```text
+build_003 ran without the live tier: no database answered, so an object created
+by a migration or owned by an extension is reported as missing: connection failed …
+```
+
+Read `n unresolved references` from a degraded run as an upper bound, not a
+count of bugs.
+
+Tier (c) is for a project with no reachable database. It is `fnmatch` over
+`schema.name`:
+
+```yaml
+# db/environments/local.yaml
+lint:
+  ignore_objects:
+    - public.gen_random_uuid    # pgcrypto, installed by the platform
+    - audit.*                   # a whole schema a sibling service owns
+  search_path:                  # optional: where an unqualified relation lives
+    - app
+    - public
+```
+
+#### Adopting it on a schema that already trips it
+
+`build_003` is on by default, and #246's own report is six unresolved objects
+in one routine of an existing schema. `--baseline` is the designed path:
+
+```bash
+confiture lint --select build_003 --baseline .confiture-lint-baseline.json --write-baseline
+```
+
+records what is there today; later runs fail only on names the file does not
+know. The identity of a finding is `<referrer> -> <name>`, so fixing one of six
+unresolved names in a routine does not retire the other five, and moving the
+routine to another file does not churn the baseline.

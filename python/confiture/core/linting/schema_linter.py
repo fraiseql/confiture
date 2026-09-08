@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Any
 
 import pglast
 import pglast.parser
+import psycopg
 
 from confiture.config.environment import Environment
 from confiture.core import builder as _core_builder
@@ -31,6 +33,15 @@ from confiture.core.parser_info import parse_error_line
 from confiture.exceptions import ConfiturError
 
 logger = logging.getLogger(__name__)
+
+#: How long ``build_003``'s live tier waits for a connection. A lint runs in a
+#: pre-commit hook; a server that is not there must cost a moment, not a minute.
+_LIVE_TIER_TIMEOUT_S = 3
+
+
+def _first_line(exc: Exception) -> str:
+    """A driver's error, trimmed to the sentence a summary line can carry."""
+    return str(exc).strip().splitlines()[0] if str(exc).strip() else type(exc).__name__
 
 
 class RuleSeverity(Enum):
@@ -61,6 +72,25 @@ class LintViolation:
         return f"{prefix} {self.rule_name}: {self.message} ({self.object_type}: {self.object_name})"
 
 
+@dataclass(frozen=True)
+class RuleStatus:
+    """A rule that could not run, or could not run in full, and why.
+
+    ``state`` is ``skipped`` — the rule did not run at all — or ``degraded``:
+    it ran, but one of the things it resolves against was unavailable, so it
+    can over-report. Both are the same three fields because both answer the
+    same question for a reader, and a report that quietly omits either is a
+    report whose counts mean something other than what they say.
+    """
+
+    code: str
+    state: str
+    reason: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"code": self.code, "state": self.state, "reason": self.reason}
+
+
 @dataclass
 class LintReport:
     """Result of schema linting."""
@@ -71,6 +101,9 @@ class LintReport:
     #: What the inventory read — the counts the JSON payload reports.
     tables_checked: int = 0
     columns_checked: int = 0
+    #: Rules that did not run, and rules that ran without one of their tiers.
+    skipped: list[RuleStatus] = field(default_factory=list)
+    degraded: list[RuleStatus] = field(default_factory=list)
 
     @property
     def has_errors(self) -> bool:
@@ -121,6 +154,7 @@ class LintConfig:
         check_duplicates: bool = True,
         check_qualification: bool = True,
         check_qualification_relations: bool = False,
+        check_references: bool = True,
     ):
         """Initialize linting configuration.
 
@@ -148,6 +182,8 @@ class LintConfig:
                 without a schema (``qual_002``). Off by default, like the rule —
                 the volume in an existing project is much higher, so it is
                 adopted on its own with ``--select qual_002``.
+            check_references: Report objects a body names that no file in the
+                build creates (``build_003``). On by default, like the rule.
         """
         self.enabled = enabled
         self.fail_on_error = fail_on_error
@@ -163,6 +199,7 @@ class LintConfig:
         self.check_duplicates = check_duplicates
         self.check_qualification = check_qualification
         self.check_qualification_relations = check_qualification_relations
+        self.check_references = check_references
 
 
 class SchemaLinter:
@@ -282,6 +319,7 @@ class SchemaLinter:
                 self.config.check_qualification or self.config.check_qualification_relations,
                 self._check_qualification,
             ),
+            (self.config.check_references, self._check_references),
             (self.config.check_tenant_isolation, self._check_tenant_isolation),
         ):
             if enabled:
@@ -439,6 +477,94 @@ class SchemaLinter:
         for violation in findings:
             report.add_violation(violation)
 
+    def _check_references(self, report: LintReport) -> None:
+        """``build_003``: a body names an object no file in the build creates (#246).
+
+        Three tiers, in order (D4): the build inventory, then
+        ``lint.ignore_objects``, then — only for what is still outstanding — a
+        live database, which is the one thing that can answer for an object
+        created by a migration or owned by an extension. A tier that could not
+        answer is reported as a degradation rather than left to be read as
+        certainty.
+        """
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
+        from confiture.core.linting.references import referenced_objects
+
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import reference_findings, unresolved_references
+
+        located = [
+            (label, reference)
+            for label, text in self._sources()
+            for reference in referenced_objects(text)
+        ]
+        candidates = unresolved_references(
+            located,
+            self._file_objects or self._inventory.objects,
+            ignore=self.environment.lint.ignore_objects,
+            search_path=self.environment.lint.search_path,
+        )
+        if candidates:
+            candidates = self._after_live_tier(candidates, report)
+        for violation in reference_findings(candidates):
+            report.add_violation(violation)
+
+    def _after_live_tier(
+        self,
+        candidates: list[tuple[str | None, Any]],
+        report: LintReport,
+    ) -> list[tuple[str | None, Any]]:
+        """*candidates* minus what a live database has, or all of them and a notice.
+
+        The connection is opened only because something was outstanding, and
+        with a short timeout: a lint is not the place to wait on a server, and
+        a database reachable only through the configured SSH tunnel counts as
+        unreachable — deliberately, since starting a tunnel is not what an
+        operator asked for by typing ``confiture lint``.
+        """
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import RULE_ID, probe_live
+
+        search_path = self.environment.lint.search_path
+        try:
+            live = self._probe(candidates, probe_live, search_path)
+        except (psycopg.Error, OSError, ConfiturError) as exc:
+            report.degraded.append(
+                RuleStatus(
+                    code=RULE_ID,
+                    state="degraded",
+                    reason=(
+                        "no database answered, so an object created by a migration or owned "
+                        f"by an extension is reported as missing: {_first_line(exc)}"
+                    ),
+                )
+            )
+            return candidates
+        return [pair for pair in candidates if not live.holds(pair[1], search_path)]
+
+    def _probe(
+        self, candidates: list[tuple[str | None, Any]], probe: Any, search_path: Sequence[str]
+    ) -> Any:
+        """One connection, one round trip, closed before anything else runs."""
+        with psycopg.connect(
+            str(self.environment.database_url), connect_timeout=_LIVE_TIER_TIMEOUT_S
+        ) as connection:
+            return probe(connection, candidates, search_path)
+
+    def _sources(self) -> list[tuple[str | None, str]]:
+        """``(project-relative label, text)`` per schema file, or the one string linted.
+
+        Every rule that reads the files *as files* — rather than the build they
+        concatenate into — needs the same pair, and a whole-string lint
+        (``lint(schema=...)``) has no file to name, so its label is ``None``.
+        """
+        if not self._schema_files:
+            return [(None, self._schema_sql or "")]
+        return [
+            (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
+            for path in self._schema_files
+        ]
+
     def _directive_lines(self, name: str) -> frozenset[tuple[str | None, int]]:
         """``(file, statement line)`` of every statement carrying ``-- confiture:<name>``.
 
@@ -448,17 +574,9 @@ class SchemaLinter:
         comments in between included — :func:`sql_lexer.directives` decides
         that, not a walk of its own.
         """
-        sources: list[tuple[str | None, str]] = (
-            [
-                (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
-                for path in self._schema_files
-            ]
-            if self._schema_files
-            else [(None, self._schema_sql or "")]
-        )
         return frozenset(
             (label, directive.statement_line)
-            for label, text in sources
+            for label, text in self._sources()
             for directive in sql_lexer.directives(text)
             if directive.name == name and directive.statement_line is not None
         )

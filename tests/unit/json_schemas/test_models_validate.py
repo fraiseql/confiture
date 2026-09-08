@@ -107,6 +107,12 @@ FIELD_SAMPLES: dict[tuple[str, str], Any] = {
         "reason": "no selected rule emits at 'error'",
         "max_selectable_severity": "warning",
     },
+    ("LintReport", "skipped"): [
+        {"code": "body_001", "state": "skipped", "reason": "plpgsql_check is not installed"}
+    ],
+    ("LintReport", "degraded"): [
+        {"code": "build_003", "state": "degraded", "reason": "no database answered"}
+    ],
     ("BuildResult", "duplicates"): [
         {
             "rule_id": "build_001",
