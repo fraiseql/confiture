@@ -1,4 +1,4 @@
-"""Lint rules for the SQL function file tree (``tree_001``–``tree_006``).
+"""Lint rules for the SQL function file tree (``tree_001``–``tree_008``).
 
 These rules enforce structural consistency in the ``db/schema/`` directory
 tree managed by ``confiture generate alloc / scaffold / renumber``.
@@ -20,16 +20,27 @@ tree_005  Sibling collision — two entries in one directory share a numeric
 tree_006  Parent extension — an entry's prefix does not extend its parent's,
           in a directory whose own prefix extends *its* parent's.  Severity:
           WARNING.
+tree_007  Unnumbered sibling — an entry carries no numeric prefix while its
+          siblings do.  Severity: WARNING.
+tree_008  Status word — a file or directory name says the work is not
+          finished.  Severity: INFO.
+
 ``tree_001`` compares files within one directory, so a pair of colliding
 *directories* was invisible to it; ``tree_005`` is about the entries it does
-not compare. Both are shapes #249 found by hand in one tree.
+not compare, and ``tree_002`` looks only at files that already carry a prefix,
+which is why ``tree_007`` exists. The last four are the shapes #249 found by
+hand in one tree, 54 times between them.
 
-The first three read *the files the build reads*, handed to them as a list —
-they do not walk the filesystem themselves. A rule that rglobbed its own tree
+Every rule but ``tree_004`` reads *the files the build reads*, handed to it as
+a list — none of them walks the filesystem. A rule that rglobbed its own tree
 reported files the environment's ``exclude_dirs`` and per-directory ``exclude``
 globs keep out of the build, i.e. files whose numbering decides nothing.
 ``tree_004``'s subject is the overrides mirror, which the build never reads, so
 it walks that tree and asks the schema roots whether a counterpart exists.
+
+None of them opens a file. These are findings about names, and the filename
+patterns here are filename patterns: no rule in this module reads SQL text, so
+none of it goes near ``core.sql_lexer``.
 
 Usage (via SchemaLinter)::
 
@@ -57,6 +68,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from confiture.config.environment import DEFAULT_STATUS_WORDS
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.tree_prefix import is_hex_group, prefix_value
 from confiture.core.tree_prefix import prefix_text as _raw_prefix
@@ -69,6 +81,8 @@ TREE_RULE_CODES: tuple[str, ...] = (
     "tree_004",
     "tree_005",
     "tree_006",
+    "tree_007",
+    "tree_008",
 )
 
 
@@ -470,12 +484,119 @@ class Tree006ParentPrefix:
         return violations
 
 
+class Tree007Unnumbered:
+    """``tree_007`` — an entry carries no numeric prefix while its siblings do.
+
+    An unnumbered entry sorts by its name against numbered ones, so where it
+    lands in the build is decided by its first character rather than by
+    anybody. Distinct from ``tree_002``, which asks whether a *prefixed* file
+    also carries a verb and never looks at a file with no prefix at all.
+
+    A directory whose entries are all unnumbered reports nothing —
+    ``00_common/extensions.sql`` is idiomatic, and it is the mixture that makes
+    a position undecided.
+    """
+
+    def check(self, files: Sequence[Path], roots: Sequence[Path]) -> list[LintViolation]:
+        """Run the check and return all violations found.
+
+        Args:
+            files: The SQL files the build reads, in the order it reads them.
+            roots: The include directories they were found under.
+
+        Returns:
+            List of :class:`~confiture.core.linting.schema_linter.LintViolation`.
+        """
+        violations: list[LintViolation] = []
+
+        for parent, entries in _entries_by_parent(files, roots).items():
+            unnumbered = [e for e in entries if _raw_prefix(e.path.name) is None]
+            if not unnumbered or len(unnumbered) == len(entries):
+                continue
+            violations.extend(
+                LintViolation(
+                    rule_id="tree_007",
+                    rule_name="Unnumbered Entry",
+                    severity=RuleSeverity.WARNING,
+                    object_type="directory" if entry.is_dir else "file",
+                    object_name=entry.path.name,
+                    message=(
+                        f"'{entry.label}' carries no numeric prefix while its siblings in "
+                        f"{parent.name}/ do. It sorts by its name against them, so its "
+                        f"position in the build is decided by its first character."
+                    ),
+                    file_path=str(entry.path),
+                    line_number=None if entry.is_dir else 1,
+                )
+                for entry in unnumbered
+            )
+
+        return violations
+
+
+class Tree008StatusWord:
+    """``tree_008`` — a name says the work is not finished.
+
+    ``..._update_TODO.sql`` is in the build and applied on every deploy, and
+    its own name says it is not done. Whether that is confiture's business is
+    arguable — which is why the rule is ``info`` and opt-in, and why the
+    vocabulary is :attr:`LintSettings.status_words` rather than a constant.
+    """
+
+    def __init__(self, status_words: Collection[str] = DEFAULT_STATUS_WORDS) -> None:
+        """Args:
+        status_words: The words to report, matched case-insensitively
+            against the underscore-separated parts of a name.
+        """
+        self._words = {word.casefold() for word in status_words if word}
+
+    def check(self, files: Sequence[Path], roots: Sequence[Path]) -> list[LintViolation]:
+        """Run the check and return all violations found.
+
+        Args:
+            files: The SQL files the build reads, in the order it reads them.
+            roots: The include directories they were found under.
+
+        Returns:
+            List of :class:`~confiture.core.linting.schema_linter.LintViolation`.
+        """
+        violations: list[LintViolation] = []
+        if not self._words:
+            return violations
+
+        for entries in _entries_by_parent(files, roots).values():
+            for entry in entries:
+                stem = entry.path.name if entry.is_dir else entry.path.stem
+                found = [part for part in stem.split("_") if part.casefold() in self._words]
+                if not found:
+                    continue
+                violations.append(
+                    LintViolation(
+                        rule_id="tree_008",
+                        rule_name="Status Word In Name",
+                        severity=RuleSeverity.INFO,
+                        object_type="directory" if entry.is_dir else "file",
+                        object_name=entry.path.name,
+                        message=(
+                            f"'{entry.label}' carries the status word '{found[0]}'. "
+                            f"The build reads it and every deploy applies it. Finish it, "
+                            f"take it out of the build, or set lint.status_words."
+                        ),
+                        file_path=str(entry.path),
+                        line_number=None if entry.is_dir else 1,
+                    )
+                )
+
+        return violations
+
+
 def tree_violations(
     files: Sequence[Path],
     *,
     selected: Collection[str] = TREE_RULE_CODES,
     schema_dirs: Sequence[Path] = (),
     overrides_dir: Path | None = None,
+    status_words: Collection[str] = DEFAULT_STATUS_WORDS,
 ) -> list[LintViolation]:
     """Run the selected file-tree rules over *files*.
 
@@ -493,6 +614,7 @@ def tree_violations(
         overrides_dir: The overrides mirror. ``tree_004`` is skipped without it —
             there is no conventional location to guess, and guessing wrong would
             report every generated file as an orphan.
+        status_words: ``tree_008``'s vocabulary, from ``lint.status_words``.
 
     Returns:
         Every violation the selected rules found, rule order preserved.
@@ -510,4 +632,8 @@ def tree_violations(
         violations += Tree005SiblingPrefix().check(files, schema_dirs)
     if "tree_006" in selected:
         violations += Tree006ParentPrefix().check(files, schema_dirs)
+    if "tree_007" in selected:
+        violations += Tree007Unnumbered().check(files, schema_dirs)
+    if "tree_008" in selected:
+        violations += Tree008StatusWord(status_words).check(files, schema_dirs)
     return violations

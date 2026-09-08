@@ -36,6 +36,8 @@ Adopt a rule on a schema that already trips it with a
 | `tree_004` | tree | warning | off | Every file in the overrides mirror has a counterpart in the tree |
 | `tree_005` | tree | warning | off | No two sibling entries share a numeric prefix |
 | `tree_006` | tree | warning | off | An entry's prefix extends its parent's |
+| `tree_007` | tree | warning | off | An entry numbered like its siblings, or none of them numbered |
+| `tree_008` | tree | info | off | No status word in a file or directory name the build reads |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
 
 <!-- END GENERATED -->

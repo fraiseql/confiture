@@ -55,6 +55,8 @@ class TestRegistryContents:
             "tree_004",
             "tree_005",
             "tree_006",
+            "tree_007",
+            "tree_008",
         }
 
     def test_the_default_set_is_the_pre_0420_default_behaviour(self) -> None:

@@ -54,6 +54,8 @@ FILE_SCOPED_RULES = frozenset(
         "tree_004",
         "tree_005",
         "tree_006",
+        "tree_007",
+        "tree_008",
     }
 )
 

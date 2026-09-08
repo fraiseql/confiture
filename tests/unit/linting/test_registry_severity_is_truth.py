@@ -179,6 +179,13 @@ FIXTURES: dict[str, Fixture] = {
             ),
         }
     ),
+    "tree_007": Fixture(
+        {
+            "00001_create.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n",
+            "helpers.sql": "CREATE TABLE tb_b (id INT PRIMARY KEY);\n",
+        }
+    ),
+    "tree_008": Fixture({"00001_create_TODO.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n"}),
 }
 
 

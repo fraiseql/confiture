@@ -288,6 +288,21 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=False,
     ),
     LintRule(
+        code="tree_007",
+        family="tree",
+        title="An entry numbered like its siblings, or none of them numbered",
+        severity="warning",
+        default_on=False,
+    ),
+    LintRule(
+        code="tree_008",
+        family="tree",
+        title="No status word in a file or directory name the build reads",
+        severity="info",
+        default_on=False,
+        requires_config="lint.status_words (optional; four words are the default)",
+    ),
+    LintRule(
         code="sec_002",
         family="security-definer",
         title="SECURITY DEFINER routines pin search_path (CVE-2018-1058)",

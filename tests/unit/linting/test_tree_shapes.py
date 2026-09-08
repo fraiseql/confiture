@@ -23,6 +23,7 @@ import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.config.environment import DEFAULT_STATUS_WORDS
 
 runner = CliRunner()
 
@@ -35,7 +36,9 @@ _ISSUE_TREE = {
     "03_functions/034_dim/0248_flag/00001_create.sql": "CREATE TABLE tb_flag (id INT);\n",
     "03_functions/034_dim/0341_geo/03452_odd/00001_create.sql": "CREATE TABLE tb_geo (id INT);\n",
     "03_functions/034_dim/unnumbered_thing.sql": "CREATE TABLE tb_thing (id INT);\n",
-    "03_functions/034_dim/00002_update_TODO.sql": "CREATE TABLE tb_upd (id INT);\n",
+    f"03_functions/034_dim/00002_update_{DEFAULT_STATUS_WORDS[0]}.sql": (
+        "CREATE TABLE tb_upd (id INT);\n"
+    ),
 }
 
 
@@ -116,3 +119,53 @@ def test_the_convention_is_read_from_the_tree_not_assumed(in_tmp: Path) -> None:
     )
 
     assert _codes(_findings(), "tree_006") == []
+
+
+def test_an_unnumbered_entry_beside_numbered_siblings(in_tmp: Path) -> None:
+    """The third shape: a file with no prefix sorts by name against numbered siblings."""
+    _project(in_tmp, _ISSUE_TREE)
+
+    found = _codes(_findings(), "tree_007")
+
+    assert [i["file"] for i in found] == ["db/schema/03_functions/034_dim/unnumbered_thing.sql"]
+    assert found[0]["line"] == 1
+
+
+def test_a_directory_of_unnumbered_files_is_not_a_finding(in_tmp: Path) -> None:
+    """``00_common/extensions.sql`` is idiomatic: nothing in it is numbered."""
+    _project(
+        in_tmp,
+        {
+            "00_common/extensions.sql": "CREATE EXTENSION IF NOT EXISTS pgcrypto;\n",
+            "00_common/roles.sql": "CREATE TABLE tb_r (id INT);\n",
+            "10_tables/users.sql": "CREATE TABLE tb_u (id INT);\n",
+        },
+    )
+
+    assert _codes(_findings(), "tree_007") == []
+
+
+def test_a_status_word_in_a_name(in_tmp: Path) -> None:
+    """The fourth shape: the file is in the build and its name says it is not finished."""
+    _project(in_tmp, _ISSUE_TREE)
+
+    found = _codes(_findings(), "tree_008")
+
+    assert [i["file"] for i in found] == [
+        f"db/schema/03_functions/034_dim/00002_update_{DEFAULT_STATUS_WORDS[0]}.sql"
+    ]
+    assert found[0]["severity"] == "info"
+    assert DEFAULT_STATUS_WORDS[0] in found[0]["message"]
+
+
+def test_the_status_words_are_configurable(in_tmp: Path) -> None:
+    """A project names its own vocabulary; the default is documented, not hardcoded."""
+    _project(
+        in_tmp,
+        {"00001_create_ADRAFT.sql": "CREATE TABLE tb_a (id INT);\n"},
+        env_extra="lint:\n  status_words: [ADRAFT]\n",
+    )
+
+    found = _codes(_findings(), "tree_008")
+
+    assert [i["file"] for i in found] == ["db/schema/00001_create_ADRAFT.sql"]
