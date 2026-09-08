@@ -34,7 +34,8 @@
           "legacy_flag",
           "requires_config",
           "escalates_to",
-          "escalated_by"
+          "escalated_by",
+          "requires_db"
         ],
         "properties": {
           "code": {
@@ -94,6 +95,10 @@
               "null"
             ],
             "description": "The configuration that raises the severity, named the way an operator would set it."
+          },
+          "requires_db": {
+            "type": "boolean",
+            "description": "Whether the rule answers from a database rather than from the files. Such a rule can be selected and still not run; it then reports a `skipped` entry rather than an empty finding list."
           }
         }
       }

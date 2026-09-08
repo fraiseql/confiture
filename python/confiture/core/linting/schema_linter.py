@@ -155,6 +155,9 @@ class LintConfig:
         check_qualification: bool = True,
         check_qualification_relations: bool = False,
         check_references: bool = True,
+        check_bodies: bool = False,
+        check_body_warnings: bool = False,
+        server_url: str | None = None,
     ):
         """Initialize linting configuration.
 
@@ -184,6 +187,17 @@ class LintConfig:
                 adopted on its own with ``--select qual_002``.
             check_references: Report objects a body names that no file in the
                 build creates (``build_003``). On by default, like the rule.
+            check_bodies: Report plpgsql bodies that do not resolve
+                (``body_001``). Off by default, like the rule: it needs a
+                writable maintenance server carrying ``plpgsql_check``.
+            check_body_warnings: Report the same analyser's opinions about a
+                body that works — an unused variable, a shadowed declaration
+                (``body_002``). Off by default and separately selectable.
+            server_url: The writable maintenance server the ``body`` family
+                builds its scratch database on (``--server-url``). ``None``
+                falls back to the environment's own URL, whose *database* is
+                never touched — only the server, and only to create and drop a
+                throwaway database beside it.
         """
         self.enabled = enabled
         self.fail_on_error = fail_on_error
@@ -200,6 +214,9 @@ class LintConfig:
         self.check_qualification = check_qualification
         self.check_qualification_relations = check_qualification_relations
         self.check_references = check_references
+        self.check_bodies = check_bodies
+        self.check_body_warnings = check_body_warnings
+        self.server_url = server_url
 
 
 class SchemaLinter:
@@ -320,6 +337,10 @@ class SchemaLinter:
                 self._check_qualification,
             ),
             (self.config.check_references, self._check_references),
+            (
+                self.config.check_bodies or self.config.check_body_warnings,
+                self._check_bodies,
+            ),
             (self.config.check_tenant_isolation, self._check_tenant_isolation),
         ):
             if enabled:
@@ -508,6 +529,67 @@ class SchemaLinter:
             candidates = self._after_live_tier(candidates, report)
         for violation in reference_findings(candidates):
             report.add_violation(violation)
+
+    def _check_bodies(self, report: LintReport) -> None:
+        """``body_001`` / ``body_002``: what ``plpgsql_check`` says about each body (#245).
+
+        The analysis needs a database, and the extension that does it is in no
+        stock PostgreSQL — so the first thing this establishes is whether it can
+        run at all, and the answer to "no" is a stated skip rather than an empty
+        finding list that reads like a clean bill of health.
+        """
+        # Reason: CLI start-up: the rules are opt-in, so their import is deferred until one is selected
+        from confiture.core.linting import bodies
+
+        server = self._maintenance_server()
+        reason = bodies.unavailable(server)
+        if reason is not None:
+            self._skip_body_rules(report, reason)
+            return
+        try:
+            diagnoses = bodies.diagnose(
+                server,
+                self._schema_sql or "",
+                search_path=self.environment.lint.search_path,
+            )
+        except (psycopg.Error, OSError, ConfiturError) as exc:
+            self._skip_body_rules(report, bodies.BUILD_FAILED + _first_line(exc))
+            return
+        wanted = set(self._selected_body_rules())
+        where = bodies.locations(self._sources())
+        for violation in bodies.findings(diagnoses, where):
+            if violation.rule_id in wanted:
+                report.add_violation(violation)
+
+    def _skip_body_rules(self, report: LintReport, reason: str) -> None:
+        """One ``skipped`` entry per selected ``body`` code, all with the same reason."""
+        report.skipped.extend(
+            RuleStatus(code=code, state="skipped", reason=reason)
+            for code in self._selected_body_rules()
+        )
+
+    def _maintenance_server(self) -> str:
+        """Where the scratch database is built: ``--server-url``, else the env's own.
+
+        The environment's URL names a *server*, and only its server is used —
+        :class:`~confiture.core.temp_database.TempDatabase` creates and drops a
+        database beside the configured one and never opens it.
+        """
+        return self.config.server_url or str(self.environment.database_url)
+
+    def _selected_body_rules(self) -> list[str]:
+        """The ``body`` codes this run asked for, in catalogue order."""
+        # Reason: CLI start-up: the rules are opt-in, so their import is deferred until one is selected
+        from confiture.core.linting import bodies
+
+        return [
+            code
+            for code, wanted in (
+                (bodies.RULE_ID, self.config.check_bodies),
+                (bodies.WARNING_RULE_ID, self.config.check_body_warnings),
+            )
+            if wanted
+        ]
 
     def _after_live_tier(
         self,

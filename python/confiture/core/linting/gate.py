@@ -114,6 +114,20 @@ def _ceiling(selected: Iterable[str], escalations: Mapping[str, str]) -> str | N
     return max(severities, key=lambda s: _RANK[s], default=None)
 
 
+def unrun_reaches(codes: Iterable[str], threshold: Threshold) -> bool:
+    """Whether a rule that did not run could have reached the threshold.
+
+    A gate told to fail on warnings, whose one selected rule is a warning rule
+    that never executed, has not established that there are no warnings — so a
+    skip is not a pass. The registry's declared severity is what a rule that did
+    not run *would* have emitted, and it is the only honest thing to compare;
+    ``never`` outranks it as it outranks every finding, because that threshold
+    is a deliberate choice not to fail.
+    """
+    ceiling = _ceiling(codes, {})
+    return ceiling is not None and _RANK[ceiling] >= threshold.rank
+
+
 def compute_gate(
     *,
     threshold: Threshold,

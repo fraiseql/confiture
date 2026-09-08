@@ -103,6 +103,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   None of the four opens a file — they are findings about names — and all of them read the
   environment's own file list, so a directory `exclude_dirs` or an `exclude` glob keeps out of the
   build is judged by nothing.
+- **The `body` family: a routine's body resolves, checked by PostgreSQL (#245).** PostgreSQL stores a
+  PL/pgSQL body without resolving anything in it, so a routine whose `SELECT … INTO` feeds a `BIGINT`
+  column into a `UUID` variable compiles, deploys, and lints clean — and raises the first time
+  anybody calls it. That is a fact about *resolved types*, which no parser holds, so `body_001`
+  materialises the DDL tree into a **throwaway database** on a writable maintenance server
+  (`ExpectedSchemaDB.from_source()`, the drift-guard epic's scratch-DB seam) and runs
+  [`plpgsql_check`](https://github.com/okbob/plpgsql_check) over every PL/pgSQL routine in it. Only
+  the server is used: the database is created beside the configured one and dropped again, and
+  `--server-url` names a different server when the environment's own is not one to create databases
+  on. `--check-body` does not cover any of this — it compares `prosrc` between source and live, so a
+  body wrong in both places matches perfectly.
+  Two codes, both **opt-in**, so a project can adopt the failures without the style notes:
+  `body_001` (`warning`) is a diagnosis carrying a real SQLSTATE — the body raises on its first call;
+  `body_002` (`info`) is the analyser's own opinion about a body that works, an unused variable or a
+  shadowed declaration. The split is on the SQLSTATE, not on `plpgsql_check`'s own `level`, which
+  does not separate them: the issue's headline case comes back at `warning` with SQLSTATE `42804`
+  and "unused variable" comes back at `warning` with `00000`. Each finding names the routine as the
+  catalog spells it, the DDL file it is written in, the line inside that file — `plpgsql_check`
+  numbers a body from its own first line exactly as `parse_plpgsql` does, and there is now one
+  conversion between the two frames — and PostgreSQL's message and SQLSTATE verbatim, with the
+  analyser's own hint as the suggested fix. confiture does not paraphrase a diagnosis it did not make.
+  This is **not a second parser**: confiture still reads every statement with pglast and consults
+  PostgreSQL only for what a parser cannot know (recorded in `CLAUDE.md`'s SQL-parsing section).
+  If the environment declares `lint.search_path`, the scratch connection is set to it, because an
+  unqualified name in a body resolves through `search_path` and the analyser must be asked the
+  question the application will ask.
+  `plpgsql_check` ships with no PostgreSQL distribution, so **not running is the common case** and is
+  never silent: three distinct reasons — the maintenance server did not answer, it carries no
+  `plpgsql_check`, the scratch database would not build from the DDL — each land in
+  `LintReport.skipped` with a sentence saying what to do, in the table and in the JSON. `--list-rules`
+  marks a rule that needs a database (`requires_db`, new in `lint-list-rules.schema.json`) *before*
+  the run. **A skip is not a pass:** a run that selected `body_001` at `--fail-on warning` and could
+  not execute it exits 1, because it has not established that there are no warnings; a threshold the
+  skipped rule could not have reached anyway is unaffected, and `--fail-on never` still never fails.
+  One required CI leg (`plpgsql-check`) runs the rule on a PostgreSQL built from a digest-pinned
+  `postgres:15` plus the PGDG package; every other leg exercises the skip path.
 - **A rule that could not run in full says so.** `LintReport` gains `skipped` and `degraded`, each
   entry `{code, state, reason}`, surfaced on the summary line and as two arrays in
   `lint --format json` (`lint.schema.json` requires both, empty when there is nothing to say). The

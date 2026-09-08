@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
+from tests._helpers import plpgsql_check_url
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -186,6 +187,28 @@ FIXTURES: dict[str, Fixture] = {
         }
     ),
     "tree_008": Fixture({"00001_create_TODO.sql": "CREATE TABLE tb_a (id INT PRIMARY KEY);\n"}),
+    "body_001": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_widget (pk_widget BIGINT PRIMARY KEY);\n"
+            "CREATE FUNCTION fn_widget_pk() RETURNS uuid LANGUAGE plpgsql AS $$\n"
+            "DECLARE v_pk UUID;\n"
+            "BEGIN\n"
+            "    SELECT pk_widget INTO v_pk FROM tb_widget;\n"
+            "    RETURN v_pk;\n"
+            "END;\n"
+            "$$;\n"
+        }
+    ),
+    "body_002": Fixture(
+        {
+            "010.sql": "CREATE FUNCTION fn_unused() RETURNS void LANGUAGE plpgsql AS $$\n"
+            "DECLARE v_never INT;\n"
+            "BEGIN\n"
+            "    PERFORM 1;\n"
+            "END;\n"
+            "$$;\n"
+        }
+    ),
 }
 
 
@@ -224,11 +247,36 @@ def in_tmp(tmp_path: Path) -> Iterator[Path]:
         os.chdir(old_cwd)
 
 
-def _emitted(code: str, tmp_path: Path, fixture: Fixture, env_extra: str) -> list[str]:
+def _server_args(rule) -> tuple[str, ...]:
+    """``--server-url`` for a rule that answers from a database, or a skip.
+
+    A ``requires_db`` rule cannot be driven against a fixture on a machine with
+    no server carrying its extension — and a guard that silently passed there
+    would be exactly the lie it exists to prevent, so it skips out loud instead.
+    """
+    if not rule.requires_db:
+        return ()
+    url = plpgsql_check_url()
+    if url is None:
+        pytest.skip(f"{rule.code} needs a server carrying plpgsql_check (CONFITURE_TEST_DB_URL)")
+    return ("--server-url", url)
+
+
+def _emitted(code: str, tmp_path: Path, fixture: Fixture, env_extra: str, *extra: str) -> list[str]:
     _build(tmp_path, fixture, env_extra)
     result = runner.invoke(
         app,
-        ["lint", "--select", code, "--format", "json", "--fail-on", "never", *fixture.extra_args],
+        [
+            "lint",
+            "--select",
+            code,
+            "--format",
+            "json",
+            "--fail-on",
+            "never",
+            *fixture.extra_args,
+            *extra,
+        ],
     )
     assert result.exit_code == 0, result.output
     items = json.loads(result.stdout)["violations"]["items"]
@@ -239,7 +287,7 @@ def _emitted(code: str, tmp_path: Path, fixture: Fixture, env_extra: str) -> lis
 def test_the_rule_emits_the_severity_the_registry_declares(rule, in_tmp: Path) -> None:
     fixture = FIXTURES[rule.code]
 
-    emitted = _emitted(rule.code, in_tmp, fixture, fixture.env_extra)
+    emitted = _emitted(rule.code, in_tmp, fixture, fixture.env_extra, *_server_args(rule))
 
     assert emitted, f"{rule.code} reported nothing on a fixture that violates it"
     assert set(emitted) == {rule.severity}

@@ -145,6 +145,17 @@ The consumers, all on `pglast.parser.parse_sql`:
 `confiture --version` names the parser on its second line and every JSON payload
 carries `parser: {"pglast": "8.4", "pg_major": 18}` (`core/parser_info.py`).
 
+**`plpgsql_check` is not a second parser** (`core/linting/bodies.py`, the `body`
+family, #245). A parser cannot know that `pk_widget` is `BIGINT` and `v_pk` is
+`UUID`; only a built schema knows that, so the DDL is materialised into a
+throwaway database (`ExpectedSchemaDB.from_source()`) and PostgreSQL is asked.
+It is an *analysis engine consulted about resolved types*, never a fallback for
+reading DDL: confiture still parses every statement with pglast, and the
+extension's diagnosis is reported verbatim — message and SQLSTATE — because
+confiture has nothing to add to it. The extension is in no stock PostgreSQL, so
+the rule reports a `skipped` status rather than an empty result when it cannot
+run, and one required CI leg (`plpgsql-check`) is the only place it does.
+
 **One lexer too.** `core/sql_lexer.py` is the only module that tokenises SQL text
 (`split_statements`, `strip_comments`, `tokens`, `code_text`, `comments`,
 `directives`, `strip_copy_blocks`). A regex outside it whose pattern carries a
@@ -378,7 +389,7 @@ confiture/
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
 │   │   ├── idempotency/          # Idempotency validation for SQL migrations (17 modules)
 │   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (6 modules)
-│   │   ├── linting/              # Rule Library System (34 modules)
+│   │   ├── linting/              # Rule Library System (35 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (3 modules)
 │   │   ├── seed/                 # Seed data management and optimization (24 modules)
