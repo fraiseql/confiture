@@ -34,6 +34,8 @@ Adopt a rule on a schema that already trips it with a
 | `tree_002` | tree | warning | off | A numbered file carries a verb after its prefix |
 | `tree_003` | tree | warning | off | Prefixes within one directory are contiguous |
 | `tree_004` | tree | warning | off | Every file in the overrides mirror has a counterpart in the tree |
+| `tree_005` | tree | warning | off | No two sibling entries share a numeric prefix |
+| `tree_006` | tree | warning | off | An entry's prefix extends its parent's |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
 
 <!-- END GENERATED -->

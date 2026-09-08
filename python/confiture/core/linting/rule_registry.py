@@ -274,6 +274,20 @@ LINT_RULES: tuple[LintRule, ...] = (
         requires_config="--overrides-dir <path>",
     ),
     LintRule(
+        code="tree_005",
+        family="tree",
+        title="No two sibling entries share a numeric prefix",
+        severity="warning",
+        default_on=False,
+    ),
+    LintRule(
+        code="tree_006",
+        family="tree",
+        title="An entry's prefix extends its parent's",
+        severity="warning",
+        default_on=False,
+    ),
+    LintRule(
         code="sec_002",
         family="security-definer",
         title="SECURITY DEFINER routines pin search_path (CVE-2018-1058)",

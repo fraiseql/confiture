@@ -76,7 +76,6 @@
     "python/confiture/core/linting/libraries/functions.py": 2,
     "python/confiture/core/linting/libraries/gdpr.py": 1,
     "python/confiture/core/linting/libraries/general.py": 1,
-    "python/confiture/core/linting/libraries/generate.py": 1,
     "python/confiture/core/linting/libraries/hipaa.py": 1,
     "python/confiture/core/linting/libraries/pci_dss.py": 1,
     "python/confiture/core/linting/libraries/security_definer.py": 1,

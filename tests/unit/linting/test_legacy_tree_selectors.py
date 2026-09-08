@@ -59,9 +59,9 @@ def test_the_old_code_selects_the_new_rule(legacy: str, code: str) -> None:
 
 def test_the_old_code_is_accepted_by_ignore_too() -> None:
     """A pipeline that silenced a rule by its old id keeps silencing it."""
-    assert resolve_selection(["tree"], ["GEN001"]) == frozenset(
-        {"tree_002", "tree_003", "tree_004"}
-    )
+    family = resolve_selection(["tree"], ())
+
+    assert resolve_selection(["tree"], ["GEN001"]) == family - {"tree_001"}
 
 
 def test_a_legacy_selector_reports_under_the_new_code(colliding_tree: Path) -> None:

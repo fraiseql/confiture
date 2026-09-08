@@ -1,4 +1,4 @@
-"""Lint rules for the SQL function file tree (``tree_001``–``tree_004``).
+"""Lint rules for the SQL function file tree (``tree_001``–``tree_006``).
 
 These rules enforce structural consistency in the ``db/schema/`` directory
 tree managed by ``confiture generate alloc / scaffold / renumber``.
@@ -14,6 +14,15 @@ tree_003  Gap policy — consecutive prefix values within a directory must be
           contiguous (step 1).  Severity: WARNING.
 tree_004  Orphaned overrides — every file in the ``overrides/`` mirror must
           have a matching file in the schema tree.  Severity: WARNING.
+tree_005  Sibling collision — two entries in one directory share a numeric
+          prefix, where at least one of them is a directory.  Severity:
+          WARNING.
+tree_006  Parent extension — an entry's prefix does not extend its parent's,
+          in a directory whose own prefix extends *its* parent's.  Severity:
+          WARNING.
+``tree_001`` compares files within one directory, so a pair of colliding
+*directories* was invisible to it; ``tree_005`` is about the entries it does
+not compare. Both are shapes #249 found by hand in one tree.
 
 The first three read *the files the build reads*, handed to them as a list —
 they do not walk the filesystem themselves. A rule that rglobbed its own tree
@@ -45,6 +54,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Collection, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
@@ -52,7 +62,95 @@ from confiture.core.tree_prefix import is_hex_group, prefix_value
 from confiture.core.tree_prefix import prefix_text as _raw_prefix
 
 #: Every code this module emits, in registry order.
-TREE_RULE_CODES: tuple[str, ...] = ("tree_001", "tree_002", "tree_003", "tree_004")
+TREE_RULE_CODES: tuple[str, ...] = (
+    "tree_001",
+    "tree_002",
+    "tree_003",
+    "tree_004",
+    "tree_005",
+    "tree_006",
+)
+
+
+@dataclass(frozen=True)
+class _Entry:
+    """One thing the build reads, or a directory on the way to one.
+
+    Attributes:
+        path: Where the entry is.
+        is_dir: Whether it is a directory. A finding about a file points at its
+            first line; a directory has none.
+        order: The position of the first file the build reads at or under this
+            entry, so a collision can report the order it produces — which is
+            the thing only confiture knows, because it computes it.
+    """
+
+    path: Path
+    is_dir: bool
+    order: int
+
+    @property
+    def label(self) -> str:
+        """The entry's name, with a trailing slash when it is a directory."""
+        return f"{self.path.name}/" if self.is_dir else self.path.name
+
+
+def _entries_by_parent(files: Sequence[Path], roots: Sequence[Path]) -> dict[Path, list[_Entry]]:
+    """Every entry the build reads, grouped by the directory it sits in.
+
+    Derived from the file list rather than walked, so a directory the
+    environment's ``exclude_dirs`` or per-directory ``exclude`` globs keep out
+    of the build contributes no entry and is judged by nothing (LINT-08).
+    Groups are in build order, and so is *files*.
+
+    Args:
+        files: The SQL files the build reads, in the order it reads them.
+        roots: The include directories they were found under. An entry above a
+            root is not part of the tree and is never judged.
+    """
+    deepest_first = sorted(roots, key=lambda root: len(root.parts), reverse=True)
+    entries: dict[Path, _Entry] = {}
+    children: dict[Path, list[Path]] = defaultdict(list)
+    for index, sql_file in enumerate(files):
+        root = next((r for r in deepest_first if sql_file.is_relative_to(r)), None)
+        if root is None:
+            continue
+        relative = sql_file.relative_to(root).parts
+        for depth in range(1, len(relative) + 1):
+            path = root.joinpath(*relative[:depth])
+            if path not in entries:
+                entries[path] = _Entry(path=path, is_dir=depth < len(relative), order=index)
+                children[path.parent].append(path)
+    return {parent: [entries[child] for child in kids] for parent, kids in children.items()}
+
+
+#: A collision needs two entries, and a gap needs two numbers, to exist at all.
+_A_PAIR = 2
+
+
+def _extends(child: str, parent: str) -> bool:
+    """Whether *child* continues *parent*'s numbering rather than restarting it."""
+    return len(child) > len(parent) and child.casefold().startswith(parent.casefold())
+
+
+def _enforced_prefix(directory: Path) -> str | None:
+    """The prefix *directory*'s children must extend, or ``None``.
+
+    The convention is read out of the tree, never assumed: a directory requires
+    its children to extend its prefix only when its own prefix extends *its*
+    parent's. ``10_tables/01_users.sql`` — the layout
+    ``docs/organizing-sql-files.md`` calls Pattern 2, where each directory
+    numbers its contents from 1 — therefore reports nothing, while
+    ``034_dim/0341_geo/03452_odd`` reports, because ``0341`` continuing ``034``
+    is the tree saying which convention it keeps.
+    """
+    own = _raw_prefix(directory.name)
+    if own is None:
+        return None
+    above = _raw_prefix(directory.parent.name)
+    if above is None or not _extends(own, above):
+        return None
+    return own
 
 
 def _by_directory(files: Sequence[Path]) -> dict[Path, list[Path]]:
@@ -185,7 +283,7 @@ class Tree003GapPolicy:
                 for value in (prefix_value(f.name, hex_group=hex_group) for f in group)
                 if value is not None
             )
-            if len(values) < 2:
+            if len(values) < _A_PAIR:
                 continue
 
             violations.extend(
@@ -259,6 +357,119 @@ class Tree004OrphanedOverride:
         return violations
 
 
+class Tree005SiblingPrefix:
+    """``tree_005`` — two sibling entries share a numeric prefix.
+
+    ``tree_001`` compares the *files* in one directory; this compares every
+    entry the build reads, so the shape #249 found 36 times — two sibling
+    *directories* numbered ``0248`` — is reported at last. A group of files
+    alone stays ``tree_001``'s, which is an ``error`` and already names them.
+
+    The message carries the resulting build order, because confiture is the
+    only component that computes it: inserting a file into one of the colliding
+    directories silently reorders the other.
+    """
+
+    def check(self, files: Sequence[Path], roots: Sequence[Path]) -> list[LintViolation]:
+        """Run the check and return all violations found.
+
+        Args:
+            files: The SQL files the build reads, in the order it reads them.
+            roots: The include directories they were found under.
+
+        Returns:
+            List of :class:`~confiture.core.linting.schema_linter.LintViolation`.
+        """
+        violations: list[LintViolation] = []
+
+        for parent, entries in _entries_by_parent(files, roots).items():
+            groups: dict[str, list[_Entry]] = defaultdict(list)
+            for entry in entries:
+                raw = _raw_prefix(entry.path.name)
+                if raw is not None:
+                    groups[raw.casefold()].append(entry)
+
+            for sharing in groups.values():
+                if len(sharing) < _A_PAIR or not any(entry.is_dir for entry in sharing):
+                    continue
+                ordered = sorted(sharing, key=lambda entry: entry.order)
+                raw = _raw_prefix(ordered[0].path.name)
+                violations.extend(
+                    LintViolation(
+                        rule_id="tree_005",
+                        rule_name="Sibling Prefix Collision",
+                        severity=RuleSeverity.WARNING,
+                        object_type="directory" if dup.is_dir else "file",
+                        object_name=dup.path.name,
+                        message=(
+                            f"Prefix '{raw}' is shared by sibling entries in "
+                            f"{parent.name}/: {', '.join(e.label for e in ordered)}. "
+                            f"The build reads {ordered[0].label} first; adding a file to "
+                            f"either one silently reorders the other."
+                        ),
+                        file_path=str(dup.path),
+                        line_number=None if dup.is_dir else 1,
+                    )
+                    for dup in ordered[1:]
+                )
+
+        return violations
+
+
+class Tree006ParentPrefix:
+    """``tree_006`` — an entry's prefix does not extend its parent's.
+
+    ``0341_geo/03452_odd`` reads as a typo and applies where nobody put it:
+    under the default alphabetical sort a prefix of the wrong length reorders
+    the whole subtree, because ``0341_geo`` sorts before ``034_dim`` (``1`` <
+    ``_``).
+
+    The convention is read out of the tree rather than assumed — see
+    :func:`_enforced_prefix` — so a project that numbers each directory from 1
+    reports nothing.
+    """
+
+    def check(self, files: Sequence[Path], roots: Sequence[Path]) -> list[LintViolation]:
+        """Run the check and return all violations found.
+
+        Args:
+            files: The SQL files the build reads, in the order it reads them.
+            roots: The include directories they were found under.
+
+        Returns:
+            List of :class:`~confiture.core.linting.schema_linter.LintViolation`.
+        """
+        violations: list[LintViolation] = []
+
+        for parent, entries in _entries_by_parent(files, roots).items():
+            expected = _enforced_prefix(parent)
+            if expected is None:
+                continue
+            for entry in entries:
+                raw = _raw_prefix(entry.path.name)
+                if raw is None or _extends(raw, expected):
+                    continue
+                violations.append(
+                    LintViolation(
+                        rule_id="tree_006",
+                        rule_name="Parent Prefix Extension",
+                        severity=RuleSeverity.WARNING,
+                        object_type="directory" if entry.is_dir else "file",
+                        object_name=entry.path.name,
+                        message=(
+                            f"Prefix '{raw}' does not extend its parent's '{expected}'. "
+                            f"Entries in {parent.name}/ are numbered '{expected}…'; "
+                            f"'{raw}' sorts by its own digits, and takes everything "
+                            f"under it along."
+                        ),
+                        file_path=str(entry.path),
+                        line_number=None if entry.is_dir else 1,
+                    )
+                )
+
+        return violations
+
+
 def tree_violations(
     files: Sequence[Path],
     *,
@@ -295,4 +506,8 @@ def tree_violations(
         violations += Tree003GapPolicy().check(files)
     if "tree_004" in selected and overrides_dir is not None:
         violations += Tree004OrphanedOverride().check(schema_dirs, overrides_dir)
+    if "tree_005" in selected:
+        violations += Tree005SiblingPrefix().check(files, schema_dirs)
+    if "tree_006" in selected:
+        violations += Tree006ParentPrefix().check(files, schema_dirs)
     return violations
