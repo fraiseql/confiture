@@ -7,9 +7,9 @@ command carries three inconsistent per-rule flags today.
 
 The registry is the backing store for all of it: `--list-rules` enumerates it,
 selection resolves against it, and the legacy flags become aliases over it. It
-lists only rules that can actually produce a violation — `check_indexes` and
-`check_constraints` are LintConfig fields with no implementation behind them, so
-advertising them here would be the same dishonesty in a new place.
+lists only rules that can actually produce a violation, and — since 1.4.0 —
+every `LintConfig` switch belongs to one of them; see
+`linting/test_every_switch_has_a_rule.py` for the other direction.
 """
 
 from __future__ import annotations

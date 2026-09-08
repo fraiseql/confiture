@@ -152,8 +152,6 @@ class LintConfig:
         check_primary_keys: bool = True,
         check_documentation: bool = True,
         check_restatements: bool = False,
-        check_indexes: bool = True,
-        check_constraints: bool = True,
         check_security: bool = True,
         check_tenant_isolation: bool = False,
         check_acl_coverage: bool = True,
@@ -178,8 +176,6 @@ class LintConfig:
                 name already says (``doc_005``). Off by default, like the rule:
                 it is a heuristic and a correct comment that happens to restate
                 the name is a false positive.
-            check_indexes: Check indexes on foreign keys
-            check_constraints: Check constraint definitions
             check_security: Check for security issues (passwords, tokens)
             check_tenant_isolation: Detect INSERTs missing tenant FK columns
                 (multi-tenant rule, ``tenant_001``). Opt-in (default off).
@@ -216,8 +212,6 @@ class LintConfig:
         self.check_primary_keys = check_primary_keys
         self.check_documentation = check_documentation
         self.check_restatements = check_restatements
-        self.check_indexes = check_indexes
-        self.check_constraints = check_constraints
         self.check_security = check_security
         self.check_tenant_isolation = check_tenant_isolation
         self.check_acl_coverage = check_acl_coverage
@@ -336,12 +330,26 @@ class SchemaLinter:
 
         # One table rather than a chain of ifs: a rule is its switch and its
         # method, and adding one is a row.
+        #
+        # Deliberately keyed on switches and not on rule codes, which is the
+        # question a reader arrives with now that the registry is the single
+        # source of truth for what a rule is. One method serves several codes
+        # (`_check_documentation` emits doc_001 through doc_004), two switches
+        # share one method (qual_001 and qual_002), and `LintConfig` is the
+        # library API — a caller sets `check_documentation=True`, not a set of
+        # codes. Keying this on the registry would mean either running a method
+        # once per code it emits, or putting a method name in the catalogue
+        # `--list-rules` publishes. Per-code selection happens where it belongs,
+        # on the findings, in `_keep_selected_rules`.
+        #
+        # What the two tables owe each other is agreement, and two guards hold
+        # it: `test_every_rule_is_registered` (no rule emits without an entry)
+        # and `test_every_switch_has_a_rule` (no switch runs without a rule).
         for enabled, check in (
             (self.config.check_naming, self._check_naming_conventions),
             (self.config.check_primary_keys, self._check_primary_keys),
             (self.config.check_documentation, self._check_documentation),
             (self.config.check_restatements, self._check_restatements),
-            (self.config.check_indexes, self._check_indexes),
             (self.config.check_security, self._check_security),
             (self.config.check_duplicates, self._check_duplicates),
             (
@@ -711,39 +719,6 @@ class SchemaLinter:
             for directive in sql_lexer.directives(text)
             if directive.name == name and directive.statement_line is not None
         )
-
-    def _check_indexes(self, _report: LintReport) -> None:
-        """Check for indexes on foreign keys.
-
-        Args:
-            _report: Report to add violations to
-        """
-        if not self._schema_sql:
-            return
-
-        # Find foreign key definitions
-        fk_pattern = r"REFERENCES\s+(\w+)\s*\((\w+)\)"
-        fk_matches = list(re.finditer(fk_pattern, self._schema_sql, re.IGNORECASE))
-
-        if not fk_matches:
-            return
-
-        # Check for CREATE INDEX statements
-        index_pattern = r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+\w+\s+ON\s+(\w+)\s*\(([^)]+)\)"
-        indexes = {}
-
-        for match in re.finditer(index_pattern, self._schema_sql, re.IGNORECASE):
-            table = match.group(1)
-            columns = match.group(2)
-            if table not in indexes:
-                indexes[table] = []
-            indexes[table].append(columns)
-
-        # Warn if foreign keys lack indexes
-        # This is simplified - a full implementation would parse more thoroughly
-        # For now, just note that checking for indexes on FK columns is important
-        for _fk_match in fk_matches:
-            pass
 
     def _check_security(self, report: LintReport) -> None:
         """Columns whose names suggest sensitive data, read from the inventory."""

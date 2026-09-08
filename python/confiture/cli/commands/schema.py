@@ -1004,9 +1004,8 @@ def lint(
       `--ignore` wins over `--select`; an unknown selector exits 5.
 
       naming_001, naming_002, pk_001, doc_001–doc_004, build_001, build_002,
-      sec_001, qual_001 — on by default. (LintConfig also carries check_indexes /
-      check_constraints; neither has a rule behind it, so neither is listed or
-      selectable.)
+      build_003, sec_001, qual_001 — on by default. build_001 is the one that
+      emits `error`, so a plain lint fails on a duplicate definition.
 
       Opt-in, each needing its configuration as well as its selector:
       acl_001 (`acls.lint_enabled: true`), tenant_001, replica_001, sec_002
