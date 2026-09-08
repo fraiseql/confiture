@@ -541,9 +541,25 @@ class SchemaLinter:
         # Reason: CLI start-up: the rules are opt-in, so their import is deferred until one is selected
         from confiture.core.linting import bodies
 
-        reason = bodies.unavailable(self._maintenance_server())
+        server = self._maintenance_server()
+        reason = bodies.unavailable(server)
         if reason is not None:
             self._skip_body_rules(report, reason)
+            return
+        try:
+            diagnoses = bodies.diagnose(
+                server,
+                self._schema_sql or "",
+                search_path=self.environment.lint.search_path,
+            )
+        except (psycopg.Error, OSError, ConfiturError) as exc:
+            self._skip_body_rules(report, bodies.BUILD_FAILED + _first_line(exc))
+            return
+        wanted = set(self._selected_body_rules())
+        where = bodies.locations(self._sources())
+        for violation in bodies.findings(diagnoses, where):
+            if violation.rule_id in wanted:
+                report.add_violation(violation)
 
     def _skip_body_rules(self, report: LintReport, reason: str) -> None:
         """One ``skipped`` entry per selected ``body`` code, all with the same reason."""

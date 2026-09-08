@@ -29,6 +29,12 @@ delimiter is located through ``sql_lexer.string_constants`` and its line added
 back. Where that fails, the reference is marked inexact rather than pointed at
 the wrong line — the routine's own line is a worse answer than the statement's
 and a much better one than a line three short of it.
+
+That conversion is not only this rule's problem: ``plpgsql_check`` numbers its
+diagnoses from the body's first line too (#245). So the two halves of it are
+public — :func:`body_locations` says where each routine's body starts in its
+file, and :func:`file_line` places a body-relative line on that file — and
+there is one answer to "which line is this, really", not two.
 """
 
 from __future__ import annotations
@@ -65,6 +71,9 @@ _DYNAMIC_STATEMENTS = frozenset({"PLpgSQL_stmt_dynexecute", "PLpgSQL_stmt_dynfor
 #: The key libpg_query's PL/pgSQL parser gives every embedded SQL fragment.
 _EXPR = "PLpgSQL_expr"
 
+#: Inventory kinds whose ``CREATE`` carries a body written in a string constant.
+_ROUTINE_KINDS = frozenset({"function", "procedure"})
+
 
 @dataclass(frozen=True)
 class Reference:
@@ -93,6 +102,50 @@ class Reference:
     def qualified(self) -> str:
         """``schema.name`` as written, or the bare name when none was."""
         return f"{self.schema}.{self.name}" if self.schema else self.name
+
+
+@dataclass(frozen=True)
+class BodyLocation:
+    """A routine, and the file line its body starts on.
+
+    ``first_line`` is ``None`` when the opening delimiter could not be found,
+    which is what makes a line derived from it inexact rather than wrong.
+    """
+
+    obj: SchemaObject
+    first_line: int | None
+
+
+def body_locations(sql: str) -> list[BodyLocation]:
+    """Every routine ``sql`` creates, with the file line its body starts on.
+
+    The same walk :func:`referenced_objects` makes, stopping at the question
+    "where is this body written" — which is what a diagnosis counted from the
+    body's first line needs in order to name a file line.
+    """
+    try:
+        raws = list(pglast.parse_sql(sql) or [])
+    except pglast.parser.ParseError:
+        return []
+    constants = _string_constants(sql)
+    found: list[BodyLocation] = []
+    for raw in raws:
+        obj = object_from_statement(sql, raw)
+        if obj is not None and obj.kind in _ROUTINE_KINDS:
+            found.append(BodyLocation(obj, _body_line(sql, raw.stmt, constants)))
+    return found
+
+
+def file_line(body_line: int, first: int | None) -> int:
+    """A line counted from a body's first line, placed on the file it is written in.
+
+    ``parse_plpgsql`` and ``plpgsql_check`` both number a body from its own
+    first line — the one after the opening delimiter — so both need the same
+    single addition, and neither should carry its own copy of it. Without a
+    known first line the body's own number is the best available answer, and the
+    caller says so rather than implying the file.
+    """
+    return body_line if first is None else body_line + first - 1
 
 
 def referenced_objects(sql: str) -> list[Reference]:
@@ -204,7 +257,7 @@ def _plpgsql_references(statement: str, obj: SchemaObject, *, first: int | None)
     found: list[Reference] = []
     exact = first is not None
     for query, line, dynamic in _fragments(tree, line=1, dynamic=False):
-        at = line + first - 1 if first is not None else line
+        at = file_line(line, first)
         if dynamic:
             found.append(_reference(None, query, DYNAMIC, at, obj, dynamic=True, exact=False))
             continue

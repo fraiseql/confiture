@@ -22,12 +22,15 @@ threshold the skipped rule could have reached does not exit 0.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import psycopg
 import psycopg.sql
+
+from confiture.core.linting import references
+from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 
 #: A body that will raise on its first call.
 RULE_ID = "body_001"
@@ -40,6 +43,10 @@ WARNING_RULE_ID = "body_002"
 #: The extension that does the analysis. Not in a stock PostgreSQL.
 EXTENSION = "plpgsql_check"
 
+#: The schema key a routine created without a qualifier is filed under: the
+#: file cannot say which schema it lands in, and the catalog can.
+_ANY_SCHEMA = "*"
+
 #: How long the reachability probe waits. A lint runs in a pre-commit hook; a
 #: server that is not there must cost a moment, not a minute. The same number
 #: ``build_003``'s live tier uses, for the same reason.
@@ -48,6 +55,13 @@ CONNECT_TIMEOUT_S = 3
 _UNREACHABLE = (
     "the maintenance server did not answer, so the scratch database could not be built "
     "(pass --server-url to name a writable server other than the environment's own): "
+)
+
+#: The third way the rule does not run, and the only one that can only be found
+#: by trying: the server is there, the extension is there, and the DDL does not
+#: apply — a build that fails here is a build that would fail anywhere.
+BUILD_FAILED = (
+    "the scratch database could not be built from the DDL, so the bodies were never analysed: "
 )
 
 _NO_EXTENSION = (
@@ -101,6 +115,27 @@ def _extension_available(connection: Any) -> bool:
 
 
 @dataclass(frozen=True)
+class Location:
+    """Where a routine is written: its file, its ``CREATE``, and its body's first line."""
+
+    file: str | None
+    line: int
+    body_line: int | None
+
+    def at(self, body_line: int | None) -> int:
+        """The file line a body-relative diagnosis belongs on.
+
+        A diagnosis about the routine as a whole carries no line, and one whose
+        body could not be located in the file falls back to the ``CREATE`` —
+        the statement's own line is a coarser answer than the body's and a much
+        better one than a line several short of it.
+        """
+        if body_line is None or self.body_line is None:
+            return self.line
+        return references.file_line(body_line, self.body_line)
+
+
+@dataclass(frozen=True)
 class Diagnosis:
     """One thing ``plpgsql_check`` said about one routine.
 
@@ -118,11 +153,18 @@ class Diagnosis:
     schema: str
     name: str
     arity: int
+    kind: str
     identity: str
     body_line: int | None
     level: str
     sqlstate: str
     message: str
+    hint: str | None
+
+    @property
+    def key(self) -> tuple[str, str, int]:
+        """What joins a catalog routine to the ``CREATE`` that made it."""
+        return (self.schema, self.name, self.arity)
 
     @property
     def raises(self) -> bool:
@@ -161,6 +203,7 @@ WITH routines AS (
            n.nspname AS schema,
            p.proname AS name,
            p.pronargs AS arity,
+           CASE p.prokind WHEN 'p' THEN 'procedure' ELSE 'function' END AS kind,
            n.nspname || '.' || p.proname || '(' || COALESCE(
                (SELECT string_agg(format_type(t, NULL), ',' ORDER BY o)
                   FROM unnest(p.proargtypes::oid[]) WITH ORDINALITY AS a(t, o)),
@@ -178,8 +221,8 @@ WITH routines AS (
        AND NOT EXISTS (
            SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e')
 )
-SELECT r.schema, r.name, r.arity, r.identity,
-       c.lineno, c.level, c.sqlstate, c.message
+SELECT r.schema, r.name, r.arity, r.kind, r.identity,
+       c.lineno, c.level, c.sqlstate, c.message, c.hint
   FROM routines r
   CROSS JOIN LATERAL {check}(
            funcoid := r.oid,
@@ -225,13 +268,15 @@ def diagnose(
                 schema=schema,
                 name=name,
                 arity=arity,
+                kind=kind,
                 identity=identity,
                 body_line=lineno,
                 level=level,
                 sqlstate=sqlstate,
                 message=message,
+                hint=hint,
             )
-            for schema, name, arity, identity, lineno, level, sqlstate, message in (
+            for schema, name, arity, kind, identity, lineno, level, sqlstate, message, hint in (
                 connection.execute(psycopg.sql.SQL(_ANALYSIS).format(check=analyser)).fetchall()
             )
         ]
@@ -257,3 +302,106 @@ def _install(connection: Any) -> psycopg.sql.Identifier:
         (EXTENSION,),
     ).fetchone()[0]
     return psycopg.sql.Identifier(schema, "plpgsql_check_function_tb")
+
+
+def locations(sources: Iterable[tuple[str | None, str]]) -> dict[tuple[str, str, int], Location]:
+    """Where each routine is written, keyed the way a diagnosis is keyed.
+
+    ``sources`` is ``(project-relative file label, text)`` per DDL file. The key
+    is ``(schema, name, input-argument count)``: PostgreSQL spells an argument's
+    type its own way (``character varying`` for a ``varchar`` in the DDL), so
+    the count is what the two sides can agree on without normalising type names.
+    A schema-less ``CREATE`` lands in whatever the build's search path put first,
+    which the catalog knows and the file does not, so it is keyed under every
+    schema no other definition of that name claims.
+
+    Two overloads of one name with the same arity cannot be told apart this way,
+    and neither gets a location rather than one of them getting the wrong file.
+    """
+    found: dict[tuple[str, str, int], Location] = {}
+    ambiguous: set[tuple[str, str, int]] = set()
+    unqualified: list[tuple[tuple[str, str, int], Location]] = []
+    for label, text in sources:
+        for placed in references.body_locations(text):
+            obj = placed.obj
+            here = Location(file=label, line=obj.statement_line, body_line=placed.first_line)
+            key = (obj.folded_schema or "", obj.folded_name, _arity(obj.signature))
+            if obj.folded_schema is None:
+                unqualified.append((key, here))
+            elif key in found:
+                ambiguous.add(key)
+            else:
+                found[key] = here
+    for (_schema, name, arity), here in unqualified:
+        _add_unqualified(found, ambiguous, name, arity, here)
+    for key in ambiguous:
+        found.pop(key, None)
+    return found
+
+
+def _add_unqualified(
+    found: dict[tuple[str, str, int], Location],
+    ambiguous: set[tuple[str, str, int]],
+    name: str,
+    arity: int,
+    here: Location,
+) -> None:
+    """A routine created without a schema qualifier answers for every schema.
+
+    Which one it lands in is a property of the build's search path, not of the
+    file — so the location is offered under any schema, and withdrawn where a
+    qualified definition of the same name already claims one.
+    """
+    key = (_ANY_SCHEMA, name, arity)
+    if key in found:
+        ambiguous.add(key)
+    else:
+        found[key] = here
+
+
+def locate(where: Mapping[tuple[str, str, int], Location], diagnosis: Diagnosis) -> Location | None:
+    """The DDL location of the routine a diagnosis is about, if it can be told."""
+    return where.get(diagnosis.key) or where.get((_ANY_SCHEMA, diagnosis.name, diagnosis.arity))
+
+
+def _arity(signature: str | None) -> int:
+    """How many input arguments a ``CREATE``'s parameter list declares.
+
+    The inventory's signature is the input types as written with their typmods
+    dropped (``numeric``, never ``numeric(10,2)``), so no entry can contain a
+    comma and counting them is exact.
+    """
+    return 0 if not signature else signature.count(",") + 1
+
+
+def findings(
+    diagnoses: Iterable[Diagnosis], where: Mapping[tuple[str, str, int], Location]
+) -> list[LintViolation]:
+    """One finding per diagnosis, at the file line the routine's body puts it on."""
+    return [_finding(diagnosis, locate(where, diagnosis)) for diagnosis in diagnoses]
+
+
+def _finding(diagnosis: Diagnosis, at: Location | None) -> LintViolation:
+    raising = diagnosis.raises
+    return LintViolation(
+        rule_id=RULE_ID if raising else WARNING_RULE_ID,
+        rule_name="Unresolved Body" if raising else "Body Warning",
+        severity=RuleSeverity.WARNING if raising else RuleSeverity.INFO,
+        object_type=diagnosis.kind,
+        object_name=diagnosis.identity,
+        message=_message(diagnosis),
+        file_path=None if at is None else at.file,
+        line_number=None if at is None else at.at(diagnosis.body_line),
+        suggested_fix=diagnosis.hint,
+    )
+
+
+def _message(diagnosis: Diagnosis) -> str:
+    """PostgreSQL's diagnosis, attributed and quoted — never paraphrased.
+
+    The SQLSTATE rides along for the findings that have a real one: it is what
+    a reader looks up, and what tells a type mismatch from a missing relation
+    without reading the prose.
+    """
+    state = f" (SQLSTATE {diagnosis.sqlstate})" if diagnosis.raises else ""
+    return f"{EXTENSION} on '{diagnosis.identity}': {diagnosis.message}{state}"
