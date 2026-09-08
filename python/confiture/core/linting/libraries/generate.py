@@ -1,19 +1,26 @@
-"""Lint rules for the SQL function file tree (GEN001–GEN004).
+"""Lint rules for the SQL function file tree (``tree_001``–``tree_004``).
 
 These rules enforce structural consistency in the ``db/schema/`` directory
 tree managed by ``confiture generate alloc / scaffold / renumber``.
 
 Rules
 -----
-GEN001  Prefix uniqueness — no two files in the same directory share a
-        numeric prefix.  Severity: ERROR.
-GEN002  Verb suffix — every prefixed file must include a verb after the
-        underscore (e.g. ``00001_create.sql`` not ``00001.sql``).
-        Severity: WARNING.
-GEN003  Gap policy — consecutive prefix values within a directory must be
-        contiguous (step 1).  Severity: WARNING.
-GEN004  Orphaned overrides — every file in the ``overrides/`` mirror must
-        have a matching file in the schema tree.  Severity: WARNING.
+tree_001  Prefix uniqueness — no two files in the same directory share a
+          numeric prefix.  Severity: ERROR.
+tree_002  Verb suffix — every prefixed file must include a verb after the
+          underscore (e.g. ``00001_create.sql`` not ``00001.sql``).
+          Severity: WARNING.
+tree_003  Gap policy — consecutive prefix values within a directory must be
+          contiguous (step 1).  Severity: WARNING.
+tree_004  Orphaned overrides — every file in the ``overrides/`` mirror must
+          have a matching file in the schema tree.  Severity: WARNING.
+
+The first three read *the files the build reads*, handed to them as a list —
+they do not walk the filesystem themselves. A rule that rglobbed its own tree
+reported files the environment's ``exclude_dirs`` and per-directory ``exclude``
+globs keep out of the build, i.e. files whose numbering decides nothing.
+``tree_004``'s subject is the overrides mirror, which the build never reads, so
+it walks that tree and asks the schema roots whether a counterpart exists.
 
 Usage (via SchemaLinter)::
 
@@ -27,26 +34,39 @@ Usage (via SchemaLinter)::
     for v in report.errors + report.warnings:
         print(v)
 
-Usage (rules directly)::
+Usage (one rule directly)::
 
-    from confiture.core.linting.libraries.generate import Gen001PrefixUnique
+    from confiture.core.linting.libraries.generate import Tree001PrefixUnique
 
-    violations = Gen001PrefixUnique().check(Path("db/schema"))
+    violations = Tree001PrefixUnique().check(sorted(Path("db/schema").rglob("*.sql")))
 """
 
 from __future__ import annotations
 
 import re
+from collections import defaultdict
+from collections.abc import Collection, Sequence
 from pathlib import Path
 
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+
+#: Every code this module emits, in registry order.
+TREE_RULE_CODES: tuple[str, ...] = ("tree_001", "tree_002", "tree_003", "tree_004")
+
+#: The pre-1.4.0 uppercase spelling of each code, accepted as a ``--select`` /
+#: ``--ignore`` selector for one minor. The emitted ``rule_id`` is the lowercase
+#: code from 1.4.0 on: there is one lint catalogue, so there is one namespace.
+LEGACY_TREE_SELECTORS: dict[str, str] = {
+    "gen001": "tree_001",
+    "gen002": "tree_002",
+    "gen003": "tree_003",
+    "gen004": "tree_004",
+}
 
 # Matches a leading hex/decimal prefix followed by exactly one underscore.
 _PREFIX_CAPTURE_RE = re.compile(r"^([0-9a-fA-F]+)_")
 # Distinguishes hex letters from pure-decimal digits.
 _HEX_LETTER_RE = re.compile(r"[a-fA-F]")
-# Matches a stem that is entirely decimal or hex digits (no underscore).
-_PREFIX_ONLY_STEM_RE = re.compile(r"^[0-9][0-9a-fA-F]*$")
 
 
 def _raw_prefix(filename: str) -> str | None:
@@ -64,48 +84,48 @@ def _parse_prefix_value(filename: str) -> int | None:
     return int(raw, base)
 
 
-def _sql_files_in(directory: Path) -> list[Path]:
-    return [f for f in directory.iterdir() if f.is_file() and f.suffix == ".sql"]
+def _by_directory(files: Sequence[Path]) -> dict[Path, list[Path]]:
+    """Group SQL files by the directory they sit in, each group name-sorted."""
+    grouped: dict[Path, list[Path]] = defaultdict(list)
+    for sql_file in files:
+        if sql_file.suffix == ".sql":
+            grouped[sql_file.parent].append(sql_file)
+    return {directory: sorted(group, key=lambda f: f.name) for directory, group in grouped.items()}
 
 
-def _all_dirs(schema_dir: Path) -> list[Path]:
-    """Return *schema_dir* plus every descendant directory."""
-    return [schema_dir, *[d for d in schema_dir.rglob("*") if d.is_dir()]]
+class Tree001PrefixUnique:
+    """``tree_001`` — no two files in the same directory share a numeric prefix.
 
-
-class Gen001PrefixUnique:
-    """GEN001 — No two files in the same directory share a numeric prefix.
-
-    Scans every directory under ``schema_dir`` and emits one ERROR for
-    each extra file beyond the first that shares a prefix value.
+    Emits one ERROR for each file beyond the first that shares a prefix value
+    with a sibling: the build reads all of them, in an order the prefix no
+    longer decides.
     """
 
-    def check(self, schema_dir: Path) -> list[LintViolation]:
+    def check(self, files: Sequence[Path]) -> list[LintViolation]:
         """Run the check and return all violations found.
 
         Args:
-            schema_dir: Root of the schema tree to scan.
+            files: The SQL files the build reads.
 
         Returns:
             List of :class:`~confiture.core.linting.schema_linter.LintViolation`.
         """
         violations: list[LintViolation] = []
 
-        for directory in _all_dirs(schema_dir):
-            prefix_to_files: dict[str, list[Path]] = {}
-            for sql_file in _sql_files_in(directory):
+        for directory, group in _by_directory(files).items():
+            prefix_to_files: dict[str, list[Path]] = defaultdict(list)
+            for sql_file in group:
                 raw = _raw_prefix(sql_file.name)
-                if raw is None:
-                    continue
-                prefix_to_files.setdefault(raw, []).append(sql_file)
+                if raw is not None:
+                    prefix_to_files[raw].append(sql_file)
 
-            for raw_prefix, files in prefix_to_files.items():
-                if len(files) <= 1:
+            for raw_prefix, sharing in prefix_to_files.items():
+                if len(sharing) <= 1:
                     continue
                 # First file is the "winner"; every subsequent file is a duplicate.
                 violations.extend(
                     LintViolation(
-                        rule_id="GEN001",
+                        rule_id="tree_001",
                         rule_name="Prefix Uniqueness",
                         severity=RuleSeverity.ERROR,
                         object_type="file",
@@ -113,18 +133,18 @@ class Gen001PrefixUnique:
                         message=(
                             f"Prefix '{raw_prefix}' is shared by multiple files "
                             f"in {directory.name}/: "
-                            f"{', '.join(sorted(f.name for f in files))}"
+                            f"{', '.join(f.name for f in sharing)}"
                         ),
                         file_path=str(dup),
                     )
-                    for dup in sorted(files, key=lambda f: f.name)[1:]
+                    for dup in sharing[1:]
                 )
 
         return violations
 
 
-class Gen002VerbSuffix:
-    """GEN002 — Every prefixed file must carry a verb after the underscore.
+class Tree002VerbSuffix:
+    """``tree_002`` — every prefixed file must carry a verb after the underscore.
 
     A file whose stem is entirely digits (or hex digits) with no underscore
     is a prefixed file with no verb — ``00001.sql`` rather than the expected
@@ -133,43 +153,38 @@ class Gen002VerbSuffix:
     Files with no numeric prefix (e.g. ``helpers.sql``) are ignored.
     """
 
-    def check(self, schema_dir: Path) -> list[LintViolation]:
+    def check(self, files: Sequence[Path]) -> list[LintViolation]:
         """Run the check and return all violations found.
 
         Args:
-            schema_dir: Root of the schema tree to scan.
+            files: The SQL files the build reads.
 
         Returns:
             List of :class:`~confiture.core.linting.schema_linter.LintViolation`.
         """
-        violations: list[LintViolation] = []
-
-        for sql_file in schema_dir.rglob("*.sql"):
-            if not sql_file.is_file():
-                continue
-            stem = sql_file.stem
+        return [
+            LintViolation(
+                rule_id="tree_002",
+                rule_name="Verb Suffix",
+                severity=RuleSeverity.WARNING,
+                object_type="file",
+                object_name=sql_file.name,
+                message=(
+                    f"'{sql_file.name}' has a numeric prefix but no verb suffix. "
+                    f"Expected format: <prefix>_<verb>.sql"
+                ),
+                file_path=str(sql_file),
+            )
             # Stem starts with a digit AND has no underscore → prefixed, no verb.
-            if stem and stem[0].isdigit() and "_" not in stem:
-                violations.append(
-                    LintViolation(
-                        rule_id="GEN002",
-                        rule_name="Verb Suffix",
-                        severity=RuleSeverity.WARNING,
-                        object_type="file",
-                        object_name=sql_file.name,
-                        message=(
-                            f"'{sql_file.name}' has a numeric prefix but no verb suffix. "
-                            f"Expected format: <prefix>_<verb>.sql"
-                        ),
-                        file_path=str(sql_file),
-                    )
-                )
-
-        return violations
+            for sql_file in files
+            if sql_file.suffix == ".sql"
+            and sql_file.stem[:1].isdigit()
+            and "_" not in sql_file.stem
+        ]
 
 
-class Gen003GapPolicy:
-    """GEN003 — Consecutive prefix values within a directory must be contiguous.
+class Tree003GapPolicy:
+    """``tree_003`` — consecutive prefix values within a directory are contiguous.
 
     Detects gaps in prefix sequences (step > 1 between adjacent values) and
     emits one WARNING per gap found.  A single-file or empty directory is
@@ -179,31 +194,27 @@ class Gen003GapPolicy:
     the default for :class:`~confiture.core.tree_allocator.TreeAllocator`.
     """
 
-    def check(self, schema_dir: Path) -> list[LintViolation]:
+    def check(self, files: Sequence[Path]) -> list[LintViolation]:
         """Run the check and return all violations found.
 
         Args:
-            schema_dir: Root of the schema tree to scan.
+            files: The SQL files the build reads.
 
         Returns:
             List of :class:`~confiture.core.linting.schema_linter.LintViolation`.
         """
         violations: list[LintViolation] = []
 
-        for directory in _all_dirs(schema_dir):
-            values: list[int] = []
-            for sql_file in _sql_files_in(directory):
-                val = _parse_prefix_value(sql_file.name)
-                if val is not None:
-                    values.append(val)
-
+        for directory, group in _by_directory(files).items():
+            values = sorted(
+                value for value in (_parse_prefix_value(f.name) for f in group) if value is not None
+            )
             if len(values) < 2:
                 continue
 
-            values.sort()
             violations.extend(
                 LintViolation(
-                    rule_id="GEN003",
+                    rule_id="tree_003",
                     rule_name="Prefix Gap",
                     severity=RuleSeverity.WARNING,
                     object_type="directory",
@@ -222,19 +233,19 @@ class Gen003GapPolicy:
         return violations
 
 
-class Gen004OrphanedOverride:
-    """GEN004 — Every file in the overrides mirror must match a schema file.
+class Tree004OrphanedOverride:
+    """``tree_004`` — every file in the overrides mirror matches a schema file.
 
     When a file exists in ``overrides_dir`` but its counterpart is absent
-    from ``schema_dir``, it is an orphaned override — the generated file
+    from every schema root, it is an orphaned override — the generated file
     was deleted or moved without cleaning up the override.
     """
 
-    def check(self, schema_dir: Path, overrides_dir: Path) -> list[LintViolation]:
+    def check(self, schema_dirs: Sequence[Path], overrides_dir: Path) -> list[LintViolation]:
         """Run the check and return all violations found.
 
         Args:
-            schema_dir: Root of the schema tree.
+            schema_dirs: The roots of the schema tree the overrides mirror.
             overrides_dir: Root of the overrides mirror directory.
 
         Returns:
@@ -245,28 +256,67 @@ class Gen004OrphanedOverride:
         if not overrides_dir.exists():
             return violations
 
-        for override_file in overrides_dir.rglob("*.sql"):
+        for override_file in sorted(overrides_dir.rglob("*.sql")):
             if not override_file.is_file():
                 continue
             try:
                 rel = override_file.relative_to(overrides_dir)
             except ValueError:
                 continue
-            schema_counterpart = schema_dir / rel
-            if not schema_counterpart.exists():
-                violations.append(
-                    LintViolation(
-                        rule_id="GEN004",
-                        rule_name="Orphaned Override",
-                        severity=RuleSeverity.WARNING,
-                        object_type="file",
-                        object_name=override_file.name,
-                        message=(
-                            f"Override '{rel}' has no matching file in schema tree. "
-                            f"Delete the override or restore the schema file."
-                        ),
-                        file_path=str(override_file),
-                    )
+            if any((root / rel).exists() for root in schema_dirs):
+                continue
+            violations.append(
+                LintViolation(
+                    rule_id="tree_004",
+                    rule_name="Orphaned Override",
+                    severity=RuleSeverity.WARNING,
+                    object_type="file",
+                    object_name=override_file.name,
+                    message=(
+                        f"Override '{rel}' has no matching file in schema tree. "
+                        f"Delete the override or restore the schema file."
+                    ),
+                    file_path=str(override_file),
                 )
+            )
 
         return violations
+
+
+def tree_violations(
+    files: Sequence[Path],
+    *,
+    selected: Collection[str] = TREE_RULE_CODES,
+    schema_dirs: Sequence[Path] = (),
+    overrides_dir: Path | None = None,
+) -> list[LintViolation]:
+    """Run the selected file-tree rules over *files*.
+
+    The one place the four rules are sequenced: ``confiture lint``,
+    ``confiture lint-unified --check tree`` and
+    :meth:`~confiture.core.linting.schema_linter.SchemaLinter.lint_tree` all
+    arrive here, so selecting, ignoring and baselining a tree rule mean the same
+    thing whichever command was typed.
+
+    Args:
+        files: The SQL files the build reads, for ``tree_001``–``tree_003``.
+        selected: Which codes to run. Anything outside :data:`TREE_RULE_CODES`
+            is ignored, so a caller can pass a whole ``--select`` resolution.
+        schema_dirs: Schema roots, for ``tree_004``'s counterpart lookup.
+        overrides_dir: The overrides mirror. ``tree_004`` is skipped without it —
+            there is no conventional location to guess, and guessing wrong would
+            report every generated file as an orphan.
+
+    Returns:
+        Every violation the selected rules found, rule order preserved.
+    """
+    violations: list[LintViolation] = []
+    if "tree_001" in selected:
+        violations += Tree001PrefixUnique().check(files)
+    if "tree_002" in selected:
+        violations += Tree002VerbSuffix().check(files)
+    if "tree_003" in selected:
+        violations += Tree003GapPolicy().check(files)
+    if "tree_004" in selected and overrides_dir is not None:
+        violations += Tree004OrphanedOverride().check(schema_dirs, overrides_dir)
+    return violations

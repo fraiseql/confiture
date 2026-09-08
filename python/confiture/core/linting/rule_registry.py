@@ -182,6 +182,63 @@ LINT_RULES: tuple[LintRule, ...] = (
         escalated_by="infrastructure.replicas declared, without migration.allow_unsafe_under_replication",
     ),
     LintRule(
+        code="func_001",
+        family="func",
+        title="Every function and procedure signature is defined exactly once",
+        severity="error",
+        default_on=False,
+        requires_config="function_coverage.enabled: true",
+    ),
+    LintRule(
+        code="own_001",
+        family="own",
+        title="Every created relation is paired with an ALTER … OWNER TO",
+        severity="error",
+        default_on=False,
+        requires_config="ownership.lint_enabled: true",
+    ),
+    LintRule(
+        code="own_002",
+        family="own",
+        # Graded by the finding, not by configuration: an `ALTER … OWNER TO`
+        # wrapped in an `IF EXISTS` guard is a `warning`, a bare one an `error`.
+        # The declaration is the ceiling, because that is what the gate needs to
+        # answer "can `--fail-on error` fire here"; the title states the floor.
+        title="No bare ALTER … OWNER TO on an object the migration did not create (guarded: warning)",
+        severity="error",
+        default_on=False,
+        requires_config="ownership:",
+    ),
+    LintRule(
+        code="tree_001",
+        family="tree",
+        title="No two files in one directory share a numeric prefix",
+        severity="error",
+        default_on=False,
+    ),
+    LintRule(
+        code="tree_002",
+        family="tree",
+        title="A numbered file carries a verb after its prefix",
+        severity="warning",
+        default_on=False,
+    ),
+    LintRule(
+        code="tree_003",
+        family="tree",
+        title="Prefixes within one directory are contiguous",
+        severity="warning",
+        default_on=False,
+    ),
+    LintRule(
+        code="tree_004",
+        family="tree",
+        title="Every file in the overrides mirror has a counterpart in the tree",
+        severity="warning",
+        default_on=False,
+        requires_config="--overrides-dir <path>",
+    ),
+    LintRule(
         code="sec_002",
         family="security-definer",
         title="SECURITY DEFINER routines pin search_path (CVE-2018-1058)",

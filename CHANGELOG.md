@@ -34,6 +34,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `file` and `line` for every violation (`null` together when the rule read a string rather than a
   file tree), the violations table shows `file:line` under the object, and `lint.schema.json` is
   updated. `--list-rules --format json` gains `escalates_to` / `escalated_by`.
+- **Seven rules confiture already implemented join the catalogue (LINT-04, LINT-05).** `func_001`,
+  `own_001`, `own_002` and the four file-tree rules emitted violations while sitting outside the
+  registry, so none of them could be listed by `--list-rules`, named by `--select` / `--ignore`,
+  absorbed by `--baseline`, or counted when the gate answered "can this run fail" — and one of them
+  is an `error`, which is part of why `--fail-on-error` could report an unreachable threshold with an
+  `error` rule in the tree. All seven are registered and reachable from `confiture lint`:
+  `--select func` (needs `function_coverage.enabled: true`), `--select own` (needs `ownership:`),
+  `--select tree`. `confiture lint` gains `--overrides-dir`, which `tree_004` needs.
+  A new guard — `tests/unit/linting/test_every_rule_is_registered.py` — walks the AST of every module
+  under `core/linting/` for the rule codes it declares and fails on one the registry does not know,
+  with a stated reason for each of the two allow-listed groups (the five dormant compliance
+  catalogues, and the `UNPARSEABLE` notice). LINT-04 cannot recur.
 
 ### Changed
 
@@ -50,6 +62,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JSON stream, so the payload would not parse (LINT-03). They now go through the same report, the same
   `--baseline` and the same gate as every other rule. The `--check-security-definer` help no longer
   sends users to `migrate validate` for machine-readable output.
+- **The file-tree rules emit `tree_001`–`tree_004`, not `GEN001`–`GEN004`.** One lint catalogue, one
+  code namespace: the uppercase codes were a second namespace that `--select`, `--ignore` and
+  `--baseline` could not reach. The classes are renamed to match
+  (`Gen001PrefixUnique` → `Tree001PrefixUnique`, and so on). No published JSON schema covered the old
+  ids.
+- **The file-tree rules read the files the build reads.** `tree_001`–`tree_003` are handed the
+  environment's own file list instead of walking the tree with `rglob`, so a file kept out of the
+  build by `exclude_dirs` or a per-directory `exclude` glob no longer produces a finding about a
+  numbering that decides nothing (LINT-08). `Tree001PrefixUnique.check()` and its two siblings take a
+  sequence of files; `Tree004OrphanedOverride.check()` takes the schema roots.
 
 ### Fixed
 
