@@ -167,6 +167,28 @@ the backlog drains.
 that makes the outcome role-dependent. See
 [lint-rules.md](../reference/lint-rules.md#the-qual-family-a-create-says-which-schema-it-lands-in).
 
+### `build_003` — references resolve against the build
+
+The inventory that tells `build_001` an object is defined *twice* can tell you
+when one is created *never*. `build_003` subtracts what the build creates from
+what a routine or view body names; what is left is a body referring to
+something nobody built — the failure that had one routine in a large schema
+never completing a call.
+
+It resolves in three tiers: the build inventory, then a live database when
+`--env`'s connection is reachable (an object created by a migration or owned by
+an extension is real and absent from the tree), then `lint.ignore_objects` for
+a project with neither. A run where no database answered prints
+`build_003 ran without the live tier: …` and carries the same sentence in the
+JSON `degraded` array — read its count as an upper bound.
+
+An unqualified name is not judged unless `lint.search_path` names the schemas
+to look in, and an unqualified routine call is not judged even then: `now()` is
+`pg_catalog`'s and no configuration makes that enumerable.
+
+`--baseline` is the adoption path for an existing schema; see
+[lint-rules.md](../reference/lint-rules.md#build_003--the-inventory-read-backwards).
+
 ### The file-tree family
 
 `--select tree` runs the four rules that read the *shape* of `db/schema/` rather

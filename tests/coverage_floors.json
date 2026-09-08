@@ -23,6 +23,8 @@
     "core/replica/classifier.py": 85,
     "core/schema_to_schema.py": 70,
     "core/step_runner.py": 85,
-    "testing/pytest_plugin.py": 70
+    "testing/pytest_plugin.py": 70,
+    "core/linting/references.py": 90,
+    "core/linting/unresolved.py": 95
   }
 }

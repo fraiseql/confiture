@@ -624,11 +624,18 @@ class LintSettings(BaseModel):
             matching one is never reported as unresolved — the escape hatch
             for an object created outside the DDL tree
             (``public.gen_random_uuid``, ``pg_stat_statements*``).
+        search_path: The schemas an unqualified *relation* in a body is looked
+            for in, in order. Empty (the default) means an unqualified name is
+            not judged at all: without knowing what resolves it, every
+            ``now()`` becomes a finding. Unqualified *routine* calls are never
+            judged even with this set — ``pg_catalog`` is on every search path
+            and confiture cannot enumerate it.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     ignore_objects: list[str] = Field(default_factory=list)
+    search_path: list[str] = Field(default_factory=list)
 
 
 class SecurityLinting(BaseModel):

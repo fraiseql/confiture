@@ -706,6 +706,7 @@ Generated from `confiture.config.environment`; the description is the model's ow
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `ignore_objects` | list[str] | `[]` | ``fnmatch`` globs over ``schema.name``. A reference matching one is never reported as unresolved — the escape hatch for an object created outside the DDL tree (``public.gen_random_uuid``, ``pg_stat_statements*``). |
+| `search_path` | list[str] | `[]` | The schemas an unqualified *relation* in a body is looked for in, in order. Empty (the default) means an unqualified name is not judged at all: without knowing what resolves it, every ``now()`` becomes a finding. Unqualified *routine* calls are never judged even with this set — ``pg_catalog`` is on every search path and confiture cannot enumerate it. |
 
 ### Complete skeleton (every field at its default)
 
@@ -834,6 +835,7 @@ security_lint:
   severity: warning
 lint:
   ignore_objects: []
+  search_path: []
 ```
 
 <!-- END GENERATED: config-fields -->

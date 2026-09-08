@@ -13,6 +13,11 @@ name absent from the entire build reports.
 A finding is one unresolved name in one referring object — its identity carries
 both, because six unresolved names in one routine are six things to fix and one
 of them being fixed must not retire the other five from a ``--baseline``.
+
+An unqualified name is not judged unless ``lint.search_path`` says where to
+look, and an unqualified *routine* call is not judged even then: ``pg_catalog``
+is on every search path, so ``now()`` and ``count()`` would be findings and the
+rule would be unusable — the failure #246 names in its own scope notes.
 """
 
 from __future__ import annotations
@@ -42,6 +47,14 @@ BUILTIN_SCHEMAS: frozenset[str] = frozenset({"pg_catalog", "information_schema"}
 #: name it refers to. ASCII, because the baseline file is JSON a human edits.
 JOIN = " -> "
 
+#: What the message adds when the line is the routine's rather than the
+#: statement's. Said, not implied: a reader who opens that line and finds a
+#: ``CREATE`` there would otherwise conclude the rule is simply wrong.
+INEXACT_LINE = (
+    " — the line given is the routine's, not the statement's: "
+    "the body's position in the file could not be established"
+)
+
 
 @dataclass(frozen=True)
 class BuildCatalogue:
@@ -66,19 +79,38 @@ class BuildCatalogue:
             routines=frozenset((s, n) for k, s, n in entries if k in ROUTINE_KINDS),
         )
 
-    def creates(self, reference: Reference) -> bool:
-        """Whether the build creates the object this reference names."""
+    def creates(self, reference: Reference, search_path: Sequence[str]) -> bool:
+        """Whether the build creates any of the objects this reference could mean."""
         names = self.relations if reference.kind == RELATION else self.routines
-        if reference.schema is None:
-            return any(name == reference.name for _, name in names)
-        return (reference.schema, reference.name) in names or (None, reference.name) in names
+        return any(
+            pair in names or (None, pair[1]) in names
+            for pair in candidates_for(reference, search_path)
+        )
 
 
-def _reportable(reference: Reference) -> bool:
+def candidates_for(reference: Reference, search_path: Sequence[str]) -> tuple[tuple[str, str], ...]:
+    """``(schema, name)`` for every object this reference could mean.
+
+    Empty means "do not judge it": an unqualified name with no declared search
+    path could be anything, and an unqualified routine could always be a
+    ``pg_catalog`` built-in, which no configuration makes enumerable.
+    """
+    if reference.schema is not None:
+        return ((reference.schema, reference.name),)
+    if reference.kind != RELATION or not search_path:
+        return ()
+    return tuple((schema, reference.name) for schema in search_path)
+
+
+def _qualified(pair: tuple[str, str]) -> str:
+    return f"{pair[0]}.{pair[1]}"
+
+
+def _reportable(reference: Reference, search_path: Sequence[str]) -> bool:
     """Whether this reference is one the build could ever have created."""
-    if reference.dynamic:
+    if reference.dynamic or reference.schema in BUILTIN_SCHEMAS:
         return False
-    return reference.schema not in BUILTIN_SCHEMAS
+    return bool(candidates_for(reference, search_path))
 
 
 def _noun(reference: Reference) -> str:
@@ -96,6 +128,7 @@ def _finding(file: str | None, reference: Reference) -> LintViolation:
         message=(
             f"{referrer_noun} '{reference.referrer}' references "
             f"{_noun(reference)} '{reference.qualified}', and no file in the build creates it"
+            + ("" if reference.line_is_exact else INEXACT_LINE)
         ),
         file_path=file,
         line_number=reference.line if reference.line_is_exact else reference.referrer_line,
@@ -108,6 +141,7 @@ def unresolved_references(
     objects: Sequence[SchemaObject],
     *,
     ignore: Sequence[str] = (),
+    search_path: Sequence[str] = (),
 ) -> list[tuple[str | None, Reference]]:
     """The references tiers (a) and (c) could not answer, with their files.
 
@@ -125,14 +159,15 @@ def unresolved_references(
     return [
         (file, reference)
         for file, reference in located
-        if _reportable(reference)
-        and not catalogue.creates(reference)
-        and not _ignored(reference, ignore)
+        if _reportable(reference, search_path)
+        and not catalogue.creates(reference, search_path)
+        and not _ignored(reference, patterns=ignore, search_path=search_path)
     ]
 
 
-def _ignored(reference: Reference, patterns: Sequence[str]) -> bool:
-    return any(fnmatch(reference.qualified, pattern) for pattern in patterns)
+def _ignored(reference: Reference, *, patterns: Sequence[str], search_path: Sequence[str]) -> bool:
+    names = [reference.qualified, *(_qualified(p) for p in candidates_for(reference, search_path))]
+    return any(fnmatch(name, pattern) for name in names for pattern in patterns)
 
 
 @dataclass(frozen=True)
@@ -149,9 +184,9 @@ class LiveCatalogue:
     relations: frozenset[str]
     routines: frozenset[str]
 
-    def holds(self, reference: Reference) -> bool:
+    def holds(self, reference: Reference, search_path: Sequence[str] = ()) -> bool:
         names = self.relations if reference.kind == RELATION else self.routines
-        return reference.qualified in names
+        return any(_qualified(p) in names for p in candidates_for(reference, search_path))
 
 
 #: One statement, both kinds, each row tagged with which catalogue answered.
@@ -168,12 +203,15 @@ SELECT 'routine' AS kind, n.nspname || '.' || p.proname
 
 
 def probe_live(
-    connection: Any, candidates: Iterable[tuple[str | None, Reference]]
+    connection: Any,
+    candidates: Iterable[tuple[str | None, Reference]],
+    search_path: Sequence[str] = (),
 ) -> LiveCatalogue:
     """Ask an open connection which of *candidates* it actually has."""
     wanted: dict[str, set[str]] = {RELATION: set(), ROUTINE: set()}
     for _file, reference in candidates:
-        wanted[RELATION if reference.kind == RELATION else ROUTINE].add(reference.qualified)
+        bucket = wanted[RELATION if reference.kind == RELATION else ROUTINE]
+        bucket.update(_qualified(p) for p in candidates_for(reference, search_path))
     rows = connection.execute(
         _LIVE_QUERY,
         {"relations": sorted(wanted[RELATION]), "routines": sorted(wanted[ROUTINE])},

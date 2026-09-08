@@ -22,10 +22,12 @@ import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.core.linting.references import RELATION, Reference
+from confiture.core.linting.unresolved import reference_findings
 
 runner = CliRunner()
 
-_ENV = "database_url: postgresql://localhost/lintdemo\ninclude_dirs:\n  - path: db/schema\n"
+_ENV = "database_url: postgresql://127.0.0.1:1/lintdemo\ninclude_dirs:\n  - path: db/schema\n"
 
 ISSUE_246_SCHEMA = """CREATE SCHEMA IF NOT EXISTS app;
 """
@@ -186,13 +188,147 @@ def test_a_pg_catalog_reference_never_reports(in_tmp: Path) -> None:
     assert _findings() == []
 
 
-def test_the_line_is_the_routine_s_until_the_body_offset_is_known(in_tmp: Path) -> None:
-    """Where the finding points today: at the ``CREATE``, not at the statement.
+def test_the_line_is_the_statement_inside_the_body(in_tmp: Path) -> None:
+    """The line the reader opens is the ``FOR`` and the ``PERFORM``, not the ``CREATE``.
 
-    ``parse_plpgsql`` counts lines from the body's first line, and nothing yet
-    converts that to a line in the file — so the honest thing to report is the
-    routine's own line rather than a line three short of the truth.
+    ``parse_plpgsql`` counts from the body's first line — the remainder of the
+    ``$$`` line — so the two statements are body lines 5 and 6 and file lines 6
+    and 7.
     """
     _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": ISSUE_246_ROUTINE})
 
-    assert {f["line"] for f in _findings()} == {1}
+    lines = {f["location"].rsplit(" -> ", 1)[1]: f["line"] for f in _findings()}
+
+    assert lines == {"app.tv_summary": 6, "app.fn_refresh_summary": 7}
+
+
+def test_a_language_sql_body_line_is_the_statement_s_too(in_tmp: Path) -> None:
+    _project(
+        in_tmp,
+        {
+            "001_schema.sql": ISSUE_246_SCHEMA,
+            "010_fn.sql": (
+                "-- a leading comment\n"
+                "CREATE FUNCTION app.fn_ids() RETURNS SETOF bigint LANGUAGE sql AS $$\n"
+                "    SELECT id\n"
+                "      FROM app.tb_absent\n"
+                "$$;\n"
+            ),
+        },
+    )
+
+    assert [f["line"] for f in _findings()] == [4]
+
+
+def test_an_unqualified_name_is_not_judged_without_a_search_path(in_tmp: Path) -> None:
+    """``widgets`` could be any schema's; ``now()`` is nobody's to create.
+
+    Judging an unqualified name without knowing what resolves it is how every
+    built-in becomes a finding — the failure #246 names in its own scope notes.
+    """
+    _project(
+        in_tmp,
+        {
+            "001_schema.sql": ISSUE_246_SCHEMA,
+            "010_fn.sql": (
+                "CREATE FUNCTION app.fn_x() RETURNS SETOF record LANGUAGE sql AS $$\n"
+                "    SELECT now() FROM widgets\n"
+                "$$;\n"
+            ),
+        },
+    )
+
+    assert _findings() == []
+
+
+def test_an_unqualified_relation_is_judged_under_a_declared_search_path(in_tmp: Path) -> None:
+    """With the schemas named, an unqualified relation has somewhere to be looked for."""
+    _project(
+        in_tmp,
+        {
+            "001_schema.sql": ISSUE_246_SCHEMA,
+            "010_fn.sql": (
+                "CREATE FUNCTION app.fn_x() RETURNS SETOF bigint LANGUAGE sql AS $$\n"
+                "    SELECT id FROM widgets\n"
+                "$$;\n"
+            ),
+        },
+        env=_ENV + "lint:\n  search_path:\n    - app\n",
+    )
+
+    assert [f["location"] for f in _findings()] == ["app.fn_x() -> widgets"]
+
+
+def test_a_search_path_resolves_an_unqualified_relation_the_build_creates(in_tmp: Path) -> None:
+    _project(
+        in_tmp,
+        {
+            "001_schema.sql": ISSUE_246_SCHEMA,
+            "005_table.sql": "CREATE TABLE app.widgets (id bigint PRIMARY KEY);\n",
+            "010_fn.sql": (
+                "CREATE FUNCTION app.fn_x() RETURNS SETOF bigint LANGUAGE sql AS $$\n"
+                "    SELECT id FROM widgets\n"
+                "$$;\n"
+            ),
+        },
+        env=_ENV + "lint:\n  search_path:\n    - app\n",
+    )
+
+    assert _findings() == []
+
+
+def test_an_unqualified_routine_is_never_judged(in_tmp: Path) -> None:
+    """``pg_catalog`` is on every search path and confiture cannot enumerate it.
+
+    A declared search path says where a project's own objects live; it does not
+    make ``now()``, ``count()`` or an operator's implementation knowable.
+    """
+    _project(
+        in_tmp,
+        {
+            "001_schema.sql": ISSUE_246_SCHEMA,
+            "010_fn.sql": (
+                "CREATE FUNCTION app.fn_x() RETURNS timestamptz LANGUAGE sql AS $$\n"
+                "    SELECT now()\n"
+                "$$;\n"
+            ),
+        },
+        env=_ENV + "lint:\n  search_path:\n    - app\n",
+    )
+
+    assert _findings() == []
+
+
+class TestTheHonestFallback:
+    """When the body's position is unknown, the message says which line this is.
+
+    The conversion from a body-relative line to a file line needs the body's
+    opening delimiter, and a text whose scan failed does not have one. Pointing
+    at the routine is then the best available answer — and saying so is what
+    stops a reader concluding the rule is simply wrong when they open the line
+    and find a ``CREATE`` on it.
+    """
+
+    def _reference(self, exact: bool) -> Reference:
+        return Reference(
+            schema="app",
+            name="tv_summary",
+            kind=RELATION,
+            line=5,
+            referrer="app.fn_report()",
+            referrer_kind="function",
+            referrer_line=1,
+            line_is_exact=exact,
+        )
+
+    def test_an_inexact_reference_reports_the_routine_s_line(self) -> None:
+        (finding,) = reference_findings([("db/schema/010_fn.sql", self._reference(exact=False))])
+
+        assert finding.line_number == 1
+        assert "the line given is the routine's" in finding.message
+
+    def test_an_exact_reference_says_nothing_extra(self) -> None:
+        (finding,) = reference_findings([("db/schema/010_fn.sql", self._reference(exact=True))])
+
+        assert finding.line_number == 5
+        assert "the line given is the routine's" not in finding.message

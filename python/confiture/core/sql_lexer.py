@@ -236,6 +236,29 @@ def tokens(sql: str) -> list[Any]:
     return _lex(sql)[0]
 
 
+def string_constants(sql: str) -> list[tuple[int, int]]:
+    """``(token start, content start)`` of every string constant, in source order.
+
+    The content start is the offset past the opening delimiter — ``'``, ``E'``,
+    ``U&'``, ``$$``, ``$tag$`` — which is where PostgreSQL starts counting a
+    function body's lines, and therefore what turns ``parse_plpgsql``'s
+    body-relative ``lineno`` into a line in the file. Where that delimiter ends
+    is the scanner's question, so it is answered here and nowhere else.
+    """
+    return [
+        (token.start, token.start + _opening_length(sql[token.start : token.end + 1]))
+        for token in tokens(sql)
+        if token.name in _STRING_TOKENS
+    ]
+
+
+def _opening_length(text: str) -> int:
+    """How many characters of a string constant's text are its opening delimiter."""
+    if text.startswith("$"):
+        return text.index("$", 1) + 1
+    return text.index("'") + 1
+
+
 def code_text(sql: str) -> CodeText:
     r"""``sql`` with everything that is not SQL code blanked to spaces.
 

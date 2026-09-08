@@ -23,10 +23,12 @@ cannot resolve is *declared* unresolvable rather than guessed at: an
 :attr:`Reference.dynamic`, which the rule drops explicitly.
 
 Lines are counted in the frame of the text handed to
-:func:`referenced_objects`, except inside a PL/pgSQL body, where
-``parse_plpgsql`` counts from the body's own first line — converting that to a
-line in the file is :func:`file_line`'s job, and it needs the body's offset,
-which only a caller holding the file has.
+:func:`referenced_objects`. A body is the one place that needs work:
+``parse_plpgsql`` counts from the body's own first line, so the body's opening
+delimiter is located through ``sql_lexer.string_constants`` and its line added
+back. Where that fails, the reference is marked inexact rather than pointed at
+the wrong line — the routine's own line is a worse answer than the statement's
+and a much better one than a line three short of it.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ from typing import Any
 import pglast
 import pglast.parser
 
+from confiture.core import sql_lexer
 from confiture.core.ddl_walk import routine_body, walk_nodes
 from confiture.core.linting.inventory import SchemaObject, object_from_statement, split_names
 
@@ -103,13 +106,40 @@ def referenced_objects(sql: str) -> list[Reference]:
         raws = list(pglast.parse_sql(sql) or [])
     except pglast.parser.ParseError:
         return []
+    # Scanned once for the whole text: a body's first line is a lexical
+    # question, and asking it per routine would make the cost quadratic.
+    constants = _string_constants(sql)
     found: list[Reference] = []
     for raw in raws:
         obj = object_from_statement(sql, raw)
         reader = None if obj is None else _READERS.get(obj.kind)
         if obj is not None and reader is not None:
-            found.extend(reader(sql, raw, obj))
+            found.extend(reader(sql, raw, obj, constants))
     return found
+
+
+def _string_constants(sql: str) -> list[tuple[int, int]]:
+    try:
+        return sql_lexer.string_constants(sql)
+    except (ValueError, IndexError):
+        return []
+
+
+def _body_line(sql: str, stmt: Any, constants: list[tuple[int, int]]) -> int | None:
+    """The file line the routine's body starts on, or ``None`` when it cannot be found.
+
+    ``parse_plpgsql`` numbers a body from its first line, which is whatever
+    follows the opening ``$$`` — so the line to add back is the line of the
+    first string constant at or after the ``AS`` clause.
+    """
+    at = next(
+        (opt.location for opt in getattr(stmt, "options", None) or () if opt.defname == "as"),
+        None,
+    )
+    if at is None or at < 0:
+        return None
+    content = next((start for token, start in constants if token >= at), None)
+    return None if content is None else _line_of(sql, content)
 
 
 def _statement_text(sql: str, raw: Any) -> str:
@@ -122,7 +152,9 @@ def _statement_text(sql: str, raw: Any) -> str:
     return sql[start : start + length] if length else sql[start:]
 
 
-def _routine_references(sql: str, raw: Any, obj: SchemaObject) -> list[Reference]:
+def _routine_references(
+    sql: str, raw: Any, obj: SchemaObject, constants: list[tuple[int, int]]
+) -> list[Reference]:
     """A function or procedure body, read by whichever parser its language needs."""
     stmt = raw.stmt
     language, body = routine_body(stmt)
@@ -132,18 +164,23 @@ def _routine_references(sql: str, raw: Any, obj: SchemaObject) -> list[Reference
         return _from_nodes(sql, stmt.sql_body, obj)
     if language not in _SQL_LANGUAGES or body is None:
         return []
+    first = _body_line(sql, stmt, constants)
     if language == "sql":
-        return _from_text(body, obj)
-    return _plpgsql_references(_statement_text(sql, raw), obj)
+        # The body is one SQL text: each reference keeps its own line in it,
+        # shifted onto the file by where the body starts.
+        return _from_text(body, obj, shift=(first - 1) if first else 0, exact=first is not None)
+    return _plpgsql_references(_statement_text(sql, raw), obj, first=first)
 
 
-def _query_references(sql: str, raw: Any, obj: SchemaObject) -> list[Reference]:
+def _query_references(
+    sql: str, raw: Any, obj: SchemaObject, _constants: list[tuple[int, int]]
+) -> list[Reference]:
     """A view or materialized view: its query was parsed with the statement."""
     return _from_nodes(sql, raw.stmt.query, obj)
 
 
 #: Which reader each inventory kind needs. A kind that is absent has no body.
-_READERS: dict[str, Callable[[str, Any, SchemaObject], list[Reference]]] = {
+_READERS: dict[str, Callable[[str, Any, SchemaObject, list[tuple[int, int]]], list[Reference]]] = {
     "function": _routine_references,
     "procedure": _routine_references,
     "view": _query_references,
@@ -151,23 +188,27 @@ _READERS: dict[str, Callable[[str, Any, SchemaObject], list[Reference]]] = {
 }
 
 
-def _plpgsql_references(statement: str, obj: SchemaObject) -> list[Reference]:
+def _plpgsql_references(statement: str, obj: SchemaObject, *, first: int | None) -> list[Reference]:
     """Every fragment libpg_query's PL/pgSQL parser found, re-parsed as SQL.
 
-    Lines are the ones ``parse_plpgsql`` reports, i.e. counted from the body's
-    first line; a fragment it marks dynamic yields one dynamic reference and
-    nothing is read out of the string it would have built.
+    ``parse_plpgsql`` counts from the body's first line, so *first* — that
+    line's number in the file — turns each ``lineno`` into a file line. Without
+    it the reference is inexact and reports the routine's line instead. A
+    fragment marked dynamic yields one dynamic reference and nothing is read
+    out of the string it would have built.
     """
     try:
         tree = pglast.parse_plpgsql(statement)
     except pglast.parser.ParseError:
         return []
     found: list[Reference] = []
+    exact = first is not None
     for query, line, dynamic in _fragments(tree, line=1, dynamic=False):
+        at = line + first - 1 if first is not None else line
         if dynamic:
-            found.append(_reference(None, query, DYNAMIC, line, obj, dynamic=True, exact=False))
+            found.append(_reference(None, query, DYNAMIC, at, obj, dynamic=True, exact=False))
             continue
-        found.extend(_from_text(query, obj, line=line))
+        found.extend(_from_text(query, obj, line=at, exact=exact))
     return found
 
 
@@ -198,13 +239,19 @@ def _fragments(node: Any, *, line: int, dynamic: bool) -> Iterator[tuple[str, in
             yield from _fragments(value, line=line, dynamic=dynamic)
 
 
-def _from_text(text: str, obj: SchemaObject, line: int | None = None) -> list[Reference]:
-    """References in a SQL fragment, at ``line`` or at their own line within it.
+def _from_text(
+    text: str,
+    obj: SchemaObject,
+    *,
+    line: int | None = None,
+    shift: int = 0,
+    exact: bool = True,
+) -> list[Reference]:
+    """References in a SQL fragment: all at *line*, or each at its own plus *shift*.
 
     A PL/pgSQL fragment can be a bare expression (``v := app.f(1)``, a ``WHEN``
     condition), which is not a statement; prefixing ``SELECT`` makes it one
-    without changing what it names. Lines are counted in the *body's* frame, so
-    they are marked inexact until a caller converts them.
+    without changing what it names.
     """
     for candidate in (text, f"SELECT {text}"):
         try:
@@ -214,7 +261,9 @@ def _from_text(text: str, obj: SchemaObject, line: int | None = None) -> list[Re
         return [
             ref
             for raw in raws
-            for ref in _from_nodes(candidate, raw.stmt, obj, line=line, created=raw, exact=False)
+            for ref in _from_nodes(
+                candidate, raw.stmt, obj, line=line, created=raw, exact=exact, offset=shift
+            )
         ]
     return []
 
@@ -227,6 +276,7 @@ def _from_nodes(
     line: int | None = None,
     created: Any = None,
     exact: bool = True,
+    offset: int = 0,
 ) -> list[Reference]:
     """Walk one parse tree for the relations and routines it names.
 
@@ -244,7 +294,7 @@ def _from_nodes(
         schema, name, kind, location = named
         if schema is None and name in skip:
             continue
-        at = line if line is not None else _line_of(text, location)
+        at = line if line is not None else _line_of(text, location) + offset
         found.append(_reference(schema, name, kind, at, obj, exact=exact))
     return found
 

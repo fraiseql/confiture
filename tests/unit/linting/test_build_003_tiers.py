@@ -11,7 +11,7 @@ The part that matters as much as the tiers is the honesty. A run where the live
 tier did not answer is a *degraded* run, and saying "12 unresolved references"
 without saying "and six of them may be created by migrations I could not see"
 is how a rule loses its reader. The degradation is stated in the table and in
-the JSON, in the shape a check that could not run at all will reuse.
+the JSON, in the shape a check that could not run at all uses too.
 """
 
 from __future__ import annotations
@@ -152,7 +152,8 @@ def test_an_ignored_name_does_not_make_the_run_degraded(in_tmp: Path) -> None:
 
 
 class TestTheStatusShape:
-    """``skipped`` and ``degraded`` are one shape, built here for Phase 06 to reuse."""
+    """``skipped`` and ``degraded`` are one shape: a check that could not run at all
+    needs the same three fields as one that ran short of a tier."""
 
     def test_a_report_starts_with_neither(self) -> None:
         report = LintReport()

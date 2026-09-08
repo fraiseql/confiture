@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -501,6 +502,7 @@ class SchemaLinter:
             located,
             self._file_objects or self._inventory.objects,
             ignore=self.environment.lint.ignore_objects,
+            search_path=self.environment.lint.search_path,
         )
         if candidates:
             candidates = self._after_live_tier(candidates, report)
@@ -523,8 +525,9 @@ class SchemaLinter:
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
         from confiture.core.linting.unresolved import RULE_ID, probe_live
 
+        search_path = self.environment.lint.search_path
         try:
-            live = self._probe(candidates, probe_live)
+            live = self._probe(candidates, probe_live, search_path)
         except (psycopg.Error, OSError, ConfiturError) as exc:
             report.degraded.append(
                 RuleStatus(
@@ -537,14 +540,16 @@ class SchemaLinter:
                 )
             )
             return candidates
-        return [pair for pair in candidates if not live.holds(pair[1])]
+        return [pair for pair in candidates if not live.holds(pair[1], search_path)]
 
-    def _probe(self, candidates: list[tuple[str | None, Any]], probe: Any) -> Any:
+    def _probe(
+        self, candidates: list[tuple[str | None, Any]], probe: Any, search_path: Sequence[str]
+    ) -> Any:
         """One connection, one round trip, closed before anything else runs."""
         with psycopg.connect(
             str(self.environment.database_url), connect_timeout=_LIVE_TIER_TIMEOUT_S
         ) as connection:
-            return probe(connection, candidates)
+            return probe(connection, candidates, search_path)
 
     def _sources(self) -> list[tuple[str | None, str]]:
         """``(project-relative label, text)`` per schema file, or the one string linted.

@@ -223,3 +223,59 @@ What the rule deliberately does **not** report:
   names nothing a parser can resolve, and guessing at the string is exactly the
   regex behaviour this rule exists to replace.
 - **`pg_catalog` and `information_schema`.** PostgreSQL ships them.
+- **An unqualified name**, unless `lint.search_path` says where to look — and
+  an unqualified *routine* call not even then, because `pg_catalog` is on every
+  search path and confiture cannot enumerate it. Without that rule, every
+  `now()` and `count()` would be a finding.
+
+#### Three tiers answer a reference
+
+| Tier | What answers | When |
+|------|--------------|------|
+| a | the build inventory | always |
+| b | a live database — `to_regclass` for relations, `pg_proc` for routines | when `--env`'s `database_url` accepts a connection, and only for names tier (a) could not answer |
+| c | `lint.ignore_objects` in the environment YAML | always |
+
+Tier (b) is what makes the rule usable on a real project: an object created by
+a migration, or owned by an extension, is real and is absent from the DDL tree.
+One connection, one round trip, every outstanding name at once — and only when
+something is outstanding, so a clean tree connects to nothing.
+
+**A run that could not reach a database says so**, on the summary line and in
+the JSON payload's `degraded` array:
+
+```text
+build_003 ran without the live tier: no database answered, so an object created
+by a migration or owned by an extension is reported as missing: connection failed …
+```
+
+Read `n unresolved references` from a degraded run as an upper bound, not a
+count of bugs.
+
+Tier (c) is for a project with no reachable database. It is `fnmatch` over
+`schema.name`:
+
+```yaml
+# db/environments/local.yaml
+lint:
+  ignore_objects:
+    - public.gen_random_uuid    # pgcrypto, installed by the platform
+    - audit.*                   # a whole schema a sibling service owns
+  search_path:                  # optional: where an unqualified relation lives
+    - app
+    - public
+```
+
+#### Adopting it on a schema that already trips it
+
+`build_003` is on by default, and #246's own report is six unresolved objects
+in one routine of an existing schema. `--baseline` is the designed path:
+
+```bash
+confiture lint --select build_003 --baseline .confiture-lint-baseline.json --write-baseline
+```
+
+records what is there today; later runs fail only on names the file does not
+know. The identity of a finding is `<referrer> -> <name>`, so fixing one of six
+unresolved names in a routine does not retire the other five, and moving the
+routine to another file does not churn the baseline.

@@ -50,16 +50,39 @@ def test_a_relation_and_a_routine_are_told_apart() -> None:
     assert refs == {("app", "tv_summary"): "relation", ("app", "fn_refresh_summary"): "routine"}
 
 
-def test_lines_are_body_relative() -> None:
-    """``parse_plpgsql`` counts from the body's first line; that is what is reported.
+def test_lines_are_lines_in_the_text_handed_in() -> None:
+    """``parse_plpgsql`` counts from the body's first line; the body's line is added back.
 
     Body line 1 is the remainder of the ``$$`` line, so ``FOR`` is body line 5
-    and ``PERFORM`` body line 6 — three and two lines short of the file, which
-    is the conversion the rule owns.
+    and file line 6, and ``PERFORM`` body line 6 and file line 7.
     """
     lines = {r.name: r.line for r in referenced_objects(ISSUE_246)}
 
-    assert lines == {"tv_summary": 5, "fn_refresh_summary": 6}
+    assert lines == {"tv_summary": 6, "fn_refresh_summary": 7}
+
+
+def test_a_located_body_gives_exact_lines() -> None:
+    """The conversion succeeded, so the finding may point at the statement."""
+    assert all(r.line_is_exact for r in referenced_objects(ISSUE_246))
+
+
+def test_a_body_whose_start_cannot_be_found_says_its_lines_are_not_exact() -> None:
+    """No ``AS`` clause to locate: the ``BEGIN ATOMIC`` form parses with the statement.
+
+    That one is exact for a different reason — its nodes carry offsets into the
+    file — which is why exactness is a property of the reference and not an
+    assumption about how it was read.
+    """
+    sql = (
+        "CREATE FUNCTION app.fn_a() RETURNS SETOF bigint LANGUAGE sql\n"
+        "BEGIN ATOMIC\n"
+        "    SELECT id FROM app.tb_missing;\n"
+        "END;\n"
+    )
+
+    refs = referenced_objects(sql)
+
+    assert [(r.name, r.line, r.line_is_exact) for r in refs] == [("tb_missing", 3, True)]
 
 
 def test_every_reference_names_the_object_that_makes_it() -> None:
