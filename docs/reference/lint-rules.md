@@ -46,6 +46,16 @@ severity they reach and what raises it (`escalates_to`, `escalated_by`):
 gate cannot fire from one whose gate is armed — see
 [making lint block](cli.md#making-lint-block-fail-on).
 
+One rule grades its findings rather than its configuration: `own_002` emits
+`warning` for an `ALTER … OWNER TO` wrapped in an `IF EXISTS` guard and `error`
+for a bare one. The catalogue declares the `error`, because that is what the gate
+needs in order to answer whether `--fail-on error` can fire.
+
+Rules whose subject is a file rather than a database object — `tree_001` through
+`tree_004`, `own_001`, `own_002`, and the four that read a tree of migrations —
+carry the file in their `--baseline` identity, so baselining one directory does
+not silence the rest of the tree.
+
 > The table above is generated from `LINT_RULES`. Regenerate with
 > `python -c "from confiture.core.linting.rule_registry import render_rule_table;
 > print(render_rule_table())"`; `tests/unit/test_lint_rules_doc.py` fails if it drifts.
