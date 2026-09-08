@@ -138,11 +138,35 @@ confiture lint --list-rules --format json
 | `acl_001` | `acl` | opt-in | Needs `acls.lint_enabled: true` |
 | `tenant_001` | `tenant` | opt-in | Multi-tenant FK isolation |
 | `replica_001` | `replica` | opt-in | Replica forward-compatibility |
+| `func_001` | `func` | opt-in | Needs `function_coverage.enabled: true` |
+| `own_001`, `own_002` | `own` | opt-in | Need an `ownership:` block |
+| `tree_001`–`tree_004` | `tree` | opt-in | DDL file-tree numbering |
 | `sec_002` | `security-definer` | opt-in | Needs `security_lint.enabled: true` |
+
+The table above is a summary; [lint-rules.md](../reference/lint-rules.md) is
+generated from the registry and lists every rule.
 
 `sec_001` and `sec_002` share a code prefix but are different rules in different
 families — the flag that shipped `sec_002` named `security-definer`, and that is
 the selector.
+
+### The file-tree family
+
+`--select tree` runs the four rules that read the *shape* of `db/schema/` rather
+than the SQL in it: a prefix shared by two files in one directory (`tree_001`,
+an **error** — the build reads both and the prefix decides nothing), a numbered
+file with no verb after its prefix (`tree_002`), a gap in a directory's sequence
+(`tree_003`), and a file in the overrides mirror whose counterpart is gone
+(`tree_004`, which needs `--overrides-dir`).
+
+They read the files **the environment builds** — `exclude_dirs` and the
+per-directory `exclude` globs apply — so a file the build never reads never
+produces a finding about its numbering.
+
+Before 1.4.0 these rules emitted `GEN001`–`GEN004` and were reachable only from
+`confiture lint-unified --check tree`, outside the registry and therefore outside
+`--select`, `--ignore` and `--baseline`. The old codes remain accepted
+*selectors* for one minor; the codes the rules emit are the new ones.
 
 Select and skip by code or family:
 

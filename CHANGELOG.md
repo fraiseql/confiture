@@ -74,6 +74,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build by `exclude_dirs` or a per-directory `exclude` glob no longer produces a finding about a
   numbering that decides nothing (LINT-08). `Tree001PrefixUnique.check()` and its two siblings take a
   sequence of files; `Tree004OrphanedOverride.check()` takes the schema roots.
+- **A tree, ownership or function-uniqueness finding can be baselined.** `own_001`, `own_002` and
+  `tree_001`–`tree_004` join `baseline.FILE_SCOPED_RULES`, so their identity carries the file:
+  a tree rule's object *is* a path, and `tree_001:file:00001_create.sql` would collapse every
+  directory in the tree onto one baseline entry. `func_001` deliberately stays out — it reports one
+  finding per duplicated signature and names whichever copy sorted first, so `@file` would churn.
+- **`core/linting/versioning.LintSeverity` is renamed `ComplianceSeverity` (LINT-11).** Two enums
+  shared the name — a three-value one in `models/lint.py` and a four-value one (it adds `CRITICAL`)
+  behind the compliance catalogues — so which one an import meant depended on where it was written.
+  Behaviour is unchanged; the catalogues are the only importers. A guard holds one severity name to
+  one enum.
 
 ### Fixed
 

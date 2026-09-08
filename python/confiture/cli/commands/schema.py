@@ -990,17 +990,18 @@ def lint(
       `--select default,replica` is the usual lint plus one opt-in family.
       `--ignore` wins over `--select`; an unknown selector exits 5.
 
-      naming_001, naming_002, pk_001, doc_001–doc_004, sec_001 — on by default.
-      (LintConfig also carries check_indexes / check_constraints; neither has a
-      rule behind it, so neither is listed or selectable.)
+      naming_001, naming_002, pk_001, doc_001–doc_004, build_001, build_002,
+      sec_001 — on by default. (LintConfig also carries check_indexes /
+      check_constraints; neither has a rule behind it, so neither is listed or
+      selectable.)
 
-      ACL coverage (acl_001) — opt-in. Set ``acls.lint_enabled: true`` in
-      the environment YAML to enable.  Merely defining ``acls:`` no longer
-      auto-fires the rule (changed in 0.12.0).  See ``docs/guides/acl-coverage.md``.
-
-      Multi-tenant isolation (tenant_001) — opt-in via ``--select default,tenant``
-      (or the ``--check-tenant-isolation`` alias). Detects function INSERTs that
-      omit the FK column a tenant-scoped view needs.
+      Opt-in, each needing its configuration as well as its selector:
+      acl_001 (`acls.lint_enabled: true`), tenant_001, replica_001, sec_002
+      (`security_lint.enabled: true`), func_001 (`function_coverage.enabled:
+      true`), own_001 / own_002 (an `ownership:` block), and tree_001–tree_004,
+      the DDL file-tree rules — `--select tree`; tree_004 also needs
+      `--overrides-dir`. `--list-rules` prints all of it with the configuration
+      each needs.
 
     EXAMPLES:
       confiture lint

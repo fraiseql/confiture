@@ -21,7 +21,12 @@ from confiture.core.linting.libraries import (
     PCI_DSSLibrary,
     SOXLibrary,
 )
-from confiture.core.linting.versioning import LintSeverity, Rule, RuleVersion, RuleVersionManager
+from confiture.core.linting.versioning import (
+    ComplianceSeverity,
+    Rule,
+    RuleVersion,
+    RuleVersionManager,
+)
 
 
 class TestRuleVersion:
@@ -62,13 +67,13 @@ class TestRule:
             name="test_rule",
             description="Test rule description",
             version=RuleVersion(1, 0, 0),
-            severity=LintSeverity.ERROR,
+            severity=ComplianceSeverity.ERROR,
             enabled_by_default=True,
         )
 
         assert rule.rule_id == "test_001"
         assert rule.name == "test_rule"
-        assert rule.severity == LintSeverity.ERROR
+        assert rule.severity == ComplianceSeverity.ERROR
         assert rule.enabled_by_default is True
 
     def test_rule_with_deprecation(self):
@@ -78,7 +83,7 @@ class TestRule:
             name="old_rule",
             description="Old rule",
             version=RuleVersion(1, 0, 0),
-            severity=LintSeverity.WARNING,
+            severity=ComplianceSeverity.WARNING,
             enabled_by_default=False,
             deprecated_in=RuleVersion(2, 0, 0),
         )
@@ -116,8 +121,8 @@ class TestGeneralLibrary:
         library = GeneralLibrary()
 
         severities = {r.severity for r in library.rules.values()}
-        assert LintSeverity.WARNING in severities
-        assert LintSeverity.ERROR in severities
+        assert ComplianceSeverity.WARNING in severities
+        assert ComplianceSeverity.ERROR in severities
 
 
 class TestHIPAALibrary:
@@ -140,7 +145,9 @@ class TestHIPAALibrary:
         """Test HIPAA library has critical rules."""
         library = HIPAALibrary()
 
-        critical_rules = [r for r in library.rules.values() if r.severity == LintSeverity.CRITICAL]
+        critical_rules = [
+            r for r in library.rules.values() if r.severity == ComplianceSeverity.CRITICAL
+        ]
         assert len(critical_rules) > 0
 
     def test_hipaa_library_phi_encryption(self):
@@ -308,7 +315,7 @@ class TestRuleVersionManager:
             name="test",
             description="test",
             version=v1,
-            severity=LintSeverity.WARNING,
+            severity=ComplianceSeverity.WARNING,
         )
         manager = RuleVersionManager(rules=[rule_v1])
 
@@ -324,7 +331,7 @@ class TestRuleVersionManager:
             name="test",
             description="test",
             version=v1,
-            severity=LintSeverity.WARNING,
+            severity=ComplianceSeverity.WARNING,
         )
 
         rule_v2 = Rule(
@@ -332,7 +339,7 @@ class TestRuleVersionManager:
             name="test",
             description="test",
             version=v2,
-            severity=LintSeverity.WARNING,
+            severity=ComplianceSeverity.WARNING,
         )
 
         manager = RuleVersionManager(rules=[rule_v1, rule_v2])
@@ -383,7 +390,7 @@ class TestRuleDisabling:
         [
             r
             for r in library.rules.values()
-            if r.severity == LintSeverity.CRITICAL and not r.enabled_by_default
+            if r.severity == ComplianceSeverity.CRITICAL and not r.enabled_by_default
         ]
 
         # Library should have rules

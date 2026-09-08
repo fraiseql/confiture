@@ -9,7 +9,7 @@ import logging
 import pytest
 
 from confiture.core.linting.versioning import (
-    LintSeverity,
+    ComplianceSeverity,
     Rule,
     RuleRemovedError,
     RuleVersion,
@@ -17,34 +17,34 @@ from confiture.core.linting.versioning import (
 )
 
 
-class TestLintSeverity:
-    """Test LintSeverity enum."""
+class TestComplianceSeverity:
+    """Test ComplianceSeverity enum."""
 
     def test_severity_info(self):
         """Test INFO severity level."""
-        assert LintSeverity.INFO.value == "info"
+        assert ComplianceSeverity.INFO.value == "info"
 
     def test_severity_warning(self):
         """Test WARNING severity level."""
-        assert LintSeverity.WARNING.value == "warning"
+        assert ComplianceSeverity.WARNING.value == "warning"
 
     def test_severity_error(self):
         """Test ERROR severity level."""
-        assert LintSeverity.ERROR.value == "error"
+        assert ComplianceSeverity.ERROR.value == "error"
 
     def test_severity_critical(self):
         """Test CRITICAL severity level."""
-        assert LintSeverity.CRITICAL.value == "critical"
+        assert ComplianceSeverity.CRITICAL.value == "critical"
 
     def test_all_severities_defined(self):
         """Test all severity levels are defined."""
-        severities = list(LintSeverity)
+        severities = list(ComplianceSeverity)
         assert len(severities) == 4
 
     def test_severity_comparison(self):
         """Test severity enum members."""
-        assert LintSeverity.INFO != LintSeverity.WARNING
-        assert LintSeverity.ERROR != LintSeverity.CRITICAL
+        assert ComplianceSeverity.INFO != ComplianceSeverity.WARNING
+        assert ComplianceSeverity.ERROR != ComplianceSeverity.CRITICAL
 
 
 class TestRuleVersion:
@@ -236,7 +236,7 @@ class TestRule:
         assert rule.deprecated_in is None
         assert rule.removed_in is None
         assert rule.migration_path is None
-        assert rule.severity == LintSeverity.WARNING
+        assert rule.severity == ComplianceSeverity.WARNING
         assert rule.enabled_by_default is True
 
     def test_create_rule_with_deprecation(self):
@@ -273,9 +273,9 @@ class TestRule:
             name="critical_rule",
             description="Critical rule",
             version=version,
-            severity=LintSeverity.CRITICAL,
+            severity=ComplianceSeverity.CRITICAL,
         )
-        assert rule.severity == LintSeverity.CRITICAL
+        assert rule.severity == ComplianceSeverity.CRITICAL
 
     def test_create_rule_disabled_by_default(self):
         """Test creating rule disabled by default."""
@@ -626,7 +626,7 @@ class TestRuleVersioningIntegration:
             deprecated_in=v2,
             removed_in=v3,
             migration_path="https://docs.example.com",
-            severity=LintSeverity.ERROR,
+            severity=ComplianceSeverity.ERROR,
         )
 
         manager = RuleVersionManager([rule])

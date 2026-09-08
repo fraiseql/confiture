@@ -33,7 +33,7 @@ from .schema_linter import (
     SchemaLinter,
 )
 from .versioning import (
-    LintSeverity,
+    ComplianceSeverity,
     Rule,
     RuleRemovedError,
     RuleVersion,
@@ -41,6 +41,7 @@ from .versioning import (
 )
 
 __all__ = [
+    "ComplianceSeverity",
     "ComposedRuleSet",
     "ConflictResolution",
     "ConflictType",
@@ -50,7 +51,6 @@ __all__ = [
     "HIPAALibrary",
     "LintConfig",
     "LintReport",
-    "LintSeverity",
     "LintViolation",
     "PCI_DSSLibrary",
     "Rule",

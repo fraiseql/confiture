@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .versioning import LintSeverity, Rule, RuleVersion
+from .versioning import ComplianceSeverity, Rule, RuleVersion
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class RuleConflict:
     library_a: str
     library_b: str
     conflict_type: ConflictType
-    severity: LintSeverity
+    severity: ComplianceSeverity
     description: str
     suggested_resolution: str
 
@@ -145,7 +145,7 @@ class RuleLibraryComposer:
                     library_a=existing_library.name,
                     library_b=new_library.name,
                     conflict_type=ConflictType.DUPLICATE,
-                    severity=LintSeverity.WARNING,
+                    severity=ComplianceSeverity.WARNING,
                     description=f"Rule {existing_rule_id} exists in both libraries",
                     suggested_resolution=("Use override_rule() to select preferred version"),
                 )
@@ -177,7 +177,7 @@ class ComposedRuleSet:
         ]
         return "\n".join(lines)
 
-    def get_rules_by_severity(self, severity: LintSeverity) -> list[Rule]:
+    def get_rules_by_severity(self, severity: ComplianceSeverity) -> list[Rule]:
         """Get all rules of a specific severity."""
         return [r for r in self.rules if r.severity == severity]
 

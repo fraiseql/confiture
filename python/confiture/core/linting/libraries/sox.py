@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ..composer import RuleLibrary
-from ..versioning import LintSeverity, Rule, RuleVersion
+from ..versioning import ComplianceSeverity, Rule, RuleVersion
 
 
 class SOXLibrary(RuleLibrary):
@@ -16,7 +16,7 @@ class SOXLibrary(RuleLibrary):
                 name="financial_data_integrity",
                 description="Financial data integrity must be maintained",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -24,7 +24,7 @@ class SOXLibrary(RuleLibrary):
                 name="audit_trail_required",
                 description="Complete audit trail of all changes required",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -32,7 +32,7 @@ class SOXLibrary(RuleLibrary):
                 name="change_authorization",
                 description="All database changes must be authorized",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -40,7 +40,7 @@ class SOXLibrary(RuleLibrary):
                 name="segregation_of_duties",
                 description="Segregation of duties must be enforced",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -48,7 +48,7 @@ class SOXLibrary(RuleLibrary):
                 name="access_logging",
                 description="All database access must be logged",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.CRITICAL,
+                severity=ComplianceSeverity.CRITICAL,
                 enabled_by_default=True,
             ),
             Rule(
@@ -56,7 +56,7 @@ class SOXLibrary(RuleLibrary):
                 name="retention_policy",
                 description="Data retention policy must be documented",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -64,7 +64,7 @@ class SOXLibrary(RuleLibrary):
                 name="backup_integrity",
                 description="Backups must maintain data integrity",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -72,7 +72,7 @@ class SOXLibrary(RuleLibrary):
                 name="disaster_recovery_testing",
                 description="Disaster recovery must be tested regularly",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.WARNING,
+                severity=ComplianceSeverity.WARNING,
                 enabled_by_default=True,
             ),
             Rule(
@@ -80,7 +80,7 @@ class SOXLibrary(RuleLibrary):
                 name="change_tracking",
                 description="Track who made what changes and when",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
             Rule(
@@ -88,7 +88,7 @@ class SOXLibrary(RuleLibrary):
                 name="reconciliation",
                 description="Regular reconciliation of accounts required",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.WARNING,
+                severity=ComplianceSeverity.WARNING,
                 enabled_by_default=True,
             ),
             Rule(
@@ -96,7 +96,7 @@ class SOXLibrary(RuleLibrary):
                 name="control_testing",
                 description="Controls must be tested regularly",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.WARNING,
+                severity=ComplianceSeverity.WARNING,
                 enabled_by_default=True,
             ),
             Rule(
@@ -104,7 +104,7 @@ class SOXLibrary(RuleLibrary):
                 name="documentation_requirement",
                 description="All migrations must be thoroughly documented",
                 version=RuleVersion(1, 0, 0),
-                severity=LintSeverity.ERROR,
+                severity=ComplianceSeverity.ERROR,
                 enabled_by_default=True,
             ),
         ]

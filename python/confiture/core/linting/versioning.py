@@ -9,7 +9,7 @@ from enum import Enum
 logger = logging.getLogger(__name__)
 
 
-class LintSeverity(Enum):
+class ComplianceSeverity(Enum):
     """Severity levels for linting rules."""
 
     INFO = "info"
@@ -84,7 +84,7 @@ class Rule:
     deprecated_in: RuleVersion | None = None
     removed_in: RuleVersion | None = None
     migration_path: str | None = None  # Docs URL or replacement rule ID
-    severity: LintSeverity = LintSeverity.WARNING
+    severity: ComplianceSeverity = ComplianceSeverity.WARNING
     enabled_by_default: bool = True
 
     def is_deprecated(self, target_version: RuleVersion | None = None) -> bool:
