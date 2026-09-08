@@ -383,6 +383,7 @@ jobs:
         uv run pytest \
           tests/integration/test_body_analysis.py \
           tests/integration/test_body_findings.py \
+          tests/integration/test_body_skip_reasons.py \
           tests/unit/linting/test_body_skip_contract.py \
           tests/unit/linting/test_body_locations.py \
           tests/unit/linting/test_registry_severity_is_truth.py \
