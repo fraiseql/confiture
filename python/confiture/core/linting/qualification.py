@@ -29,11 +29,13 @@ from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 _RULES: dict[str, tuple[str, str]] = {
     "function": ("qual_001", "Unqualified Routine"),
     "procedure": ("qual_001", "Unqualified Routine"),
+    "aggregate": ("qual_001", "Unqualified Routine"),
     "table": ("qual_002", "Unqualified Object"),
     "view": ("qual_002", "Unqualified Object"),
     "matview": ("qual_002", "Unqualified Object"),
     "type": ("qual_002", "Unqualified Object"),
     "domain": ("qual_002", "Unqualified Object"),
+    "sequence": ("qual_002", "Unqualified Object"),
 }
 
 #: The schema named when nothing in the file says which one was meant.

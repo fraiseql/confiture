@@ -69,6 +69,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_FUNCTION",
         "OBJECT_PROCEDURE",
         "OBJECT_ROUTINE",
+        "OBJECT_AGGREGATE",
         "OBJECT_TYPE",
         "OBJECT_SCHEMA",
         "OBJECT_SEQUENCE",
