@@ -143,3 +143,68 @@ def test_find_sql_files_projects_the_selection(tmp_path: Path) -> None:
     builder = SchemaBuilder(env="local", project_dir=project)
 
     assert builder.find_sql_files() == [record.path for record in builder._select()]
+
+
+def golden_project(tmp_path: Path) -> Path:
+    """A project shaped like the ones this repository ships.
+
+    Three numbered directories under two ``include_dirs`` entries that are
+    listed in an order alphabetical sorting does not agree with, no ``order``
+    key and no path-shaped glob — the shape every configuration in this
+    repository, in ``examples/`` and in ``db/`` happens to use.
+    """
+    files = {
+        "db/schema/00_common/00_extensions.sql": "CREATE EXTENSION IF NOT EXISTS pgcrypto;\n",
+        "db/schema/10_tables/10_users.sql": "CREATE TABLE users (id bigint PRIMARY KEY);\n",
+        "db/schema/10_tables/20_orders.sql": "CREATE TABLE orders (id bigint PRIMARY KEY);\n",
+        "db/functions/30_functions/10_fn_user.sql": "CREATE FUNCTION fn_user() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n",
+    }
+    for relative, sql in files.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(sql)
+
+    env_dir = tmp_path / "db" / "environments"
+    env_dir.mkdir(parents=True)
+    (env_dir / "local.yaml").write_text(f"""
+name: local
+database_url: "postgresql://localhost/test"
+include_dirs:
+  - {tmp_path / "db" / "schema"}
+  - {tmp_path / "db" / "functions"}
+build:
+  validate_comments:
+    enabled: false
+""")
+    return tmp_path
+
+
+GOLDEN_ORDER = [
+    "db/functions/30_functions/10_fn_user.sql",
+    "db/schema/00_common/00_extensions.sql",
+    "db/schema/10_tables/10_users.sql",
+    "db/schema/10_tables/20_orders.sql",
+]
+
+GOLDEN_HASH = "a4565bdb1d67710c15945bfb9a5748f3a46228df25afe07802ad2f0e044fc17d"
+
+
+def test_a_default_project_builds_what_it_built_before(tmp_path: Path) -> None:
+    """The compatibility claim of this release, as two literals.
+
+    A project that sets no ``order`` and writes no path-shaped glob selects the
+    same files, in the same sequence, with the same schema hash. Nothing that
+    changes the meaning of ``order``, of ``**`` or of ``recursive`` may move
+    either literal.
+
+    It covers exactly one configuration shape — defaults everywhere. What the
+    release measures beyond that shape is a sweep over ``db/`` and
+    ``examples/``, not this test.
+    """
+    project = golden_project(tmp_path)
+    builder = SchemaBuilder(env="local", project_dir=project)
+
+    selected = [str(path.relative_to(project)) for path in builder.find_sql_files()]
+
+    assert selected == GOLDEN_ORDER
+    assert builder.compute_hash() == GOLDEN_HASH
