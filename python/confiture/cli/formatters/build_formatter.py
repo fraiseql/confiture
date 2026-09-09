@@ -72,7 +72,10 @@ def format_text(result: BuildResult, console: Console) -> None:
         if result.warnings:
             console.print("\n[yellow]Warnings:[/yellow]")
             for warning in result.warnings:
-                console.print(f"  ⚠️ {warning}")
+                style = "yellow" if warning.severity == "warning" else "dim"
+                console.print(
+                    f"  [{style}]{warning.code} {warning.message}[/{style}]", soft_wrap=True
+                )
         if result.duplicates:
             console.print(
                 f"\n[yellow]Duplicate definitions: {len(result.duplicates)} (see above)[/yellow]"

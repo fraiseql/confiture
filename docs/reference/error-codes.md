@@ -85,7 +85,10 @@ resolution hint surfaced in the envelope.
 | `SCHEMA_201` | 4 | error | Schema directory not found: {directory} | Create the schema directory or check the path |
 | `SCHEMA_202` | 4 | error | Circular dependency detected | Break the circular dependency between schema files |
 | `SCHEMA_205` | 4 | error | psql meta-command in {file} at line {line} | Remove the backslash commands; only SQL statements and inline COPY … FROM stdin data blocks are applied |
+| `SCHEMA_206` | 0 | warning | {file}: pglast could not parse it — not checked for duplicates | Fix the file's syntax or exclude it from the build; the duplicate scan skipped it, so an object it defines twice is not reported |
 | `SEED_001` | 5 | error | Seed execution error | Check seed file syntax and database state |
+| `SEED_002` | 0 | warning | {count} seed file(s) failed | The build continued because --continue-on-error (or seed.continue_on_error) is set; re-run without it to stop at the first failure |
+| `SEED_003` | 0 | info | No seed files found for environment '{env}' | Add seed files under the environment's seed directory, or drop --sequential |
 | `SQL_001` | 1 | error | SQL execution error | Check the SQL statement for errors |
 | `SYNC_001` | 5 | error | Sync error | Check source and target database connections |
 | `VALID_001` | 5 | error | Validation error | Check validation rules and data integrity |

@@ -178,6 +178,16 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "FROM stdin data blocks are applied"
         ),
     },
+    {
+        "code": "SCHEMA_206",
+        "message_template": "{file}: pglast could not parse it — not checked for duplicates",
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Fix the file's syntax or exclude it from the build; the duplicate scan "
+            "skipped it, so an object it defines twice is not reported"
+        ),
+    },
     # ========== DIFFER (400-499): Schema diff detection errors → exit code 5 ==========
     {
         "code": "DIFFER_400",
@@ -426,5 +436,24 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": "Check seed file syntax and database state",
+    },
+    {
+        "code": "SEED_002",
+        "message_template": "{count} seed file(s) failed",
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "The build continued because --continue-on-error (or seed.continue_on_error) "
+            "is set; re-run without it to stop at the first failure"
+        ),
+    },
+    {
+        "code": "SEED_003",
+        "message_template": "No seed files found for environment '{env}'",
+        "severity": "info",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Add seed files under the environment's seed directory, or drop --sequential"
+        ),
     },
 )

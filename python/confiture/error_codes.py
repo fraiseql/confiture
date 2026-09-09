@@ -220,6 +220,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "SCHEMA_201": 4,
     "SCHEMA_202": 4,
     "SCHEMA_205": 4,  # psql meta-command refused before psql runs
+    "SCHEMA_206": 0,  # carve-out: a build warning in the envelope, never fatal (#268)
     # SYNC family → 5.
     "SYNC_001": 5,
     # DIFFER family → 5.
@@ -255,6 +256,8 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     # RESTORE / SEED → 5.
     "RESTORE_001": 5,
     "SEED_001": 5,
+    "SEED_002": 0,  # carve-out: a build warning in the envelope, never fatal (#268)
+    "SEED_003": 0,  # carve-out: a build note in the envelope, never fatal (#268)
 }
 
 

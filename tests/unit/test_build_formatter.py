@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 from rich.console import Console
 
 from confiture.cli.formatters.build_formatter import format_build_result
-from confiture.models.results import BuildResult
+from confiture.models.results import BuildResult, BuildWarning
 
 
 class TestBuildFormatter:
@@ -134,12 +134,15 @@ class TestBuildFormatter:
                 files_processed=10,
                 schema_size_bytes=5000,
                 output_path="/tmp/schema.sql",
-                warnings=["Warning 1", "Warning 2"],
+                warnings=[
+                    BuildWarning.of("SEED_002", "2 seed file(s) failed"),
+                    BuildWarning.of("SCHEMA_206", "db/schema/x.sql: pglast could not parse it"),
+                ],
             )
 
             console = Console()
             format_build_result(result, "json", output_file, console)
 
             data = json.loads(output_file.read_text())
-            assert len(data["warnings"]) == 2
-            assert "Warning 1" in data["warnings"]
+            assert [w["code"] for w in data["warnings"]] == ["SEED_002", "SCHEMA_206"]
+            assert data["warnings"][0]["severity"] == "warning"
