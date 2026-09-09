@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`confiture build --list-files`** prints what the build would read — one line per file with the
+  `include_dirs` entry that selected it, that entry's `order` and the include pattern that matched —
+  and builds nothing. `--format json` emits the same selection against the new
+  `build-list-files.schema.json`. This is the surface to diff across an upgrade.
+
 ### Fixed
 
 - **A file selected by two include patterns is built once.** `include: ["**/*.sql", "*.sql"]` over a

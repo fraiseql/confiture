@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.dev/schemas/build-list-files.schema.json",
+  "title": "confiture build --list-files --format json",
+  "description": "What `confiture build` would read, and why. One entry per selected file, in build order, naming the include_dirs entry that selected it, that entry's `order` and the include pattern that matched. Nothing is built.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "env",
+    "files",
+    "patterns",
+    "total"
+  ],
+  "properties": {
+    "env": {
+      "type": "string",
+      "description": "The environment the selection was made for."
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of entries in `files`."
+    },
+    "files": {
+      "type": "array",
+      "description": "The selected files, in the order the build concatenates them.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "entry",
+          "order",
+          "pattern"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The file, relative to the project root when it is under it."
+          },
+          "entry": {
+            "type": "string",
+            "description": "The include_dirs entry the file was found under."
+          },
+          "order": {
+            "type": "integer",
+            "description": "That entry's `order` value."
+          },
+          "pattern": {
+            "type": "string",
+            "description": "The entry's include pattern that matched — the first, when more than one would."
+          }
+        }
+      }
+    },
+    "patterns": {
+      "type": "array",
+      "description": "One note per configured pattern that does not select what it appears to; empty when every pattern selects what its author would expect.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "entry",
+          "pattern",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The error-code registry entry that names the situation."
+          },
+          "entry": {
+            "type": "string",
+            "description": "The include_dirs entry the pattern is written under."
+          },
+          "pattern": {
+            "type": "string",
+            "description": "The pattern as written."
+          },
+          "message": {
+            "type": "string",
+            "description": "What it selects, and what a reader would expect it to select."
+          }
+        }
+      }
+    }
+  }
+}

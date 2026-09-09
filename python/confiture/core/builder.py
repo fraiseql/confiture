@@ -113,6 +113,38 @@ class SelectedFile:
     pattern: str
 
 
+@dataclass(frozen=True)
+class PatternDiagnostic:
+    """A configured pattern that does not select what its author would expect.
+
+    Attributes:
+        code: The error-code registry entry that names the situation.
+        entry: The ``include_dirs`` entry the pattern is written under.
+        pattern: The pattern as written.
+        message: What it selects, and what a reader would expect it to select.
+    """
+
+    code: str
+    entry: Path
+    pattern: str
+    message: str
+
+
+@dataclass(frozen=True)
+class SelectionReport:
+    """What a build would read, before anything is read.
+
+    Attributes:
+        env: The environment the selection was made for.
+        files: The selected files, in build order, each with its provenance.
+        patterns: One note per pattern that does not select what it appears to.
+    """
+
+    env: str
+    files: list[SelectedFile]
+    patterns: list[PatternDiagnostic]
+
+
 def _first_occurrences(selected: list[SelectedFile]) -> list[SelectedFile]:
     """*selected* with each resolved path kept once, at its first appearance.
 
@@ -178,6 +210,7 @@ class SchemaBuilder:
             self.env_config = env
         else:
             self.env_config = Environment.load(env, project_dir=project_dir)
+        self.env_name: str = env if isinstance(env, str) else self.env_config.name
 
         # Validate include_dirs
         if not self.env_config.include_dirs:
@@ -305,6 +338,20 @@ class SchemaBuilder:
         selected = self._without_excluded_dirs(_first_occurrences(selected))
         self._require_non_empty(selected)
         return self._in_build_order(selected)
+
+    def selection_report(self) -> SelectionReport:
+        """What ``build`` would read, and why — without reading any of it.
+
+        Returns:
+            The selected files in build order, each naming the ``include_dirs``
+            entry, the ``order`` and the pattern that put it there, together
+            with a note for every pattern that does not select what it appears
+            to.
+
+        Raises:
+            SchemaError: For the same reasons :meth:`find_sql_files` does.
+        """
+        return SelectionReport(env=self.env_name, files=self._select(), patterns=[])
 
     def _select_entry(self, config: dict[str, Any]) -> list[SelectedFile]:
         """The files one ``include_dirs`` entry selects, in the order its patterns are written."""

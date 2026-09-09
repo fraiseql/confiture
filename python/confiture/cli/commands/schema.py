@@ -13,7 +13,10 @@ from rich.console import Console as _Console
 from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.formatters.build_formatter import format_build_result
+from confiture.cli.formatters.build_formatter import (
+    format_build_result,
+    format_selection_report,
+)
 from confiture.cli.helpers import (
     FINDINGS_EXIT_CODE,
     USAGE_EXIT_CODE,
@@ -356,6 +359,14 @@ DumpFormatOpt = Annotated[
         "Default: custom.",
     ),
 ]
+ListFilesOpt = Annotated[
+    bool,
+    typer.Option(
+        "--list-files",
+        help="Print the files this build would read — with the include_dirs entry, "
+        "its order and the pattern that matched each — and build nothing",
+    ),
+]
 SeedProfileOpt = Annotated[
     str | None,
     typer.Option(
@@ -389,6 +400,7 @@ def build(
     dump: DumpOpt = None,
     dump_format: DumpFormatOpt = "custom",
     seed_profile: SeedProfileOpt = None,
+    list_files: ListFilesOpt = False,
 ) -> None:
     """Build complete schema from DDL files in one fast operation.
 
@@ -410,6 +422,9 @@ def build(
       confiture build --validate-comments --fail-on-unclosed
         ↳ Enable comment validation to catch concatenation errors
 
+      confiture build --list-files
+        ↳ Print what the build would read — file, entry, order, pattern — and build nothing
+
     RELATED:
       confiture migrate up      - Apply incremental migrations instead
       confiture seed validate   - Validate seed data separately
@@ -421,6 +436,9 @@ def build(
 
       ADVANCED: --show-hash, --schema-only, --two-pass, --separator-style, --separator-template
         Optional parameters for customizing output format
+
+      DIAGNOSTIC: --list-files
+        Print the selection instead of building it
 
       STRUCTURED OUTPUT: --format, --report
         Export results in JSON/CSV format for automation and integration
@@ -435,6 +453,9 @@ def build(
     json_mode = is_json(format_type)
     try:
         builder = SchemaBuilder(env=env, project_dir=project_dir)
+        if list_files:
+            format_selection_report(builder.selection_report(), format_type, project_dir, console)
+            return
         _apply_build_overrides(
             builder,
             out,

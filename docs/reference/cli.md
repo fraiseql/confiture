@@ -298,6 +298,7 @@ confiture build [OPTIONS]
 | `--dump` | - | path | - | Also emit a content-addressed pg_dump -Fc artifact restorable by 'confiture restore'. Pass a file path, or an existing directory to auto-name 'schema_{env}.{profile}.{hash}.pgdump' inside it (cache by db/ hash). |
 | `--dump-format` | - | text | `custom` | Artifact format for --dump: custom (-Fc) or directory (-Fd, parallel). Default: custom. |
 | `--seed-profile` | - | text | - | Apply only the named seed profile (seed.profiles.<name>) during --sequential seed application and --dump. Unknown name → exit 5. |
+| `--list-files` | - | Flag | off | Print the files this build would read — with the include_dirs entry, its order and the pattern that matched each — and build nothing |
 
 <!-- END GENERATED: cli confiture build -->
 
