@@ -270,6 +270,31 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "Create or regenerate it with `confiture lint --baseline <file> --write-baseline`"
         ),
     },
+    {
+        "code": "CONFIG_013",
+        "message_template": (
+            "{kind} pattern '{pattern}' matches nothing since the glob dialect changed"
+        ),
+        "severity": "warning",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Patterns follow gitignore's rules since 1.5.0: one carrying a '/' is matched "
+            "left-anchored against the path relative to the include directory. Prefix it "
+            "with '**/' to match at any depth again."
+        ),
+    },
+    {
+        "code": "CONFIG_014",
+        "message_template": (
+            "{kind} pattern '{pattern}' matches a different set of files since 1.5.0"
+        ),
+        "severity": "info",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Run `confiture build --list-files` to see the selection this configuration "
+            "produces now; '**' spans zero or more directories since 1.5.0."
+        ),
+    },
     # ========== Default error codes for exception types ==========
     # These are the base codes used as defaults in exception __init__ methods.
     # More specific codes (e.g., MIGR_100, SCHEMA_201) are used at raise sites.

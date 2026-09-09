@@ -15,6 +15,7 @@ from rich.table import Table
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.build_formatter import (
     format_build_result,
+    format_pattern_notes,
     format_selection_report,
 )
 from confiture.cli.helpers import (
@@ -456,6 +457,7 @@ def build(
         if list_files:
             format_selection_report(builder.selection_report(), format_type, project_dir, console)
             return
+        format_pattern_notes(builder.pattern_diagnostics(), project_dir, out)
         _apply_build_overrides(
             builder,
             out,

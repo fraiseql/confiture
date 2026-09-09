@@ -9,13 +9,14 @@ Performance: Uses Rust extension (_core) when available for 10-50x speedup.
 import hashlib
 import logging
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from confiture.config.environment import Environment
-from confiture.core import tree_prefix
+from confiture.core import path_globs, tree_prefix
 from confiture.core.fk_extractor import extract_and_strip_fks, generate_alter_statements
 from confiture.core.progress import ProgressManager
 
@@ -162,9 +163,28 @@ def _first_occurrences(selected: list[SelectedFile]) -> list[SelectedFile]:
     return unique
 
 
-def _is_excluded(rel_path: Path, exclude_patterns: list[str]) -> bool:
-    """Whether a path relative to its include directory matches any exclusion."""
-    return any(rel_path.match(pattern) for pattern in exclude_patterns)
+def _walk_files(directory: Path, *, recursive: bool) -> Iterator[Path]:
+    """Every file under *directory*, once, in a deterministic order.
+
+    Directory symlinks are not descended into, matching what ``rglob`` does on
+    the Python versions confiture supports. ``recursive`` bounds the walk; the
+    patterns then filter what it found, so neither decides half of the other's
+    job.
+    """
+    for entry in sorted(directory.iterdir()):
+        if entry.is_dir():
+            if recursive and not entry.is_symlink():
+                yield from _walk_files(entry, recursive=recursive)
+            continue
+        yield entry
+
+
+def _first_matching(rel_path: Path, include_patterns: list[str]) -> str | None:
+    """The first include pattern that selects *rel_path*, or None if none does."""
+    for pattern in include_patterns:
+        if path_globs.matches(rel_path, pattern):
+            return pattern
+    return None
 
 
 def _sorted_block(block: list[SelectedFile], *, numbered: bool) -> list[SelectedFile]:
@@ -366,6 +386,22 @@ class SchemaBuilder:
         self._require_non_empty(selected)
         return self._in_build_order(selected)
 
+    def _empty_selection_hint(self) -> str:
+        """Why nothing was selected, when a pattern's change explains it.
+
+        A pattern that stopped matching under 1.5.0's semantics is the failure
+        this release most plausibly creates, so it is named in the error that
+        reports the empty build rather than somewhere the reader has to go
+        looking for it.
+        """
+        silenced = [note for note in self.pattern_diagnostics() if note.code == "CONFIG_013"]
+        if not silenced:
+            return (
+                "Add .sql files to subdirectories like 00_common/, 10_tables/ "
+                "or check your include/exclude patterns"
+            )
+        return "; ".join(note.message for note in silenced)
+
     def selection_report(self) -> SelectionReport:
         """What ``build`` would read, and why — without reading any of it.
 
@@ -378,7 +414,34 @@ class SchemaBuilder:
         Raises:
             SchemaError: For the same reasons :meth:`find_sql_files` does.
         """
-        return SelectionReport(env=self.env_name, files=self._select(), patterns=[])
+        return SelectionReport(
+            env=self.env_name, files=self._select(), patterns=self.pattern_diagnostics()
+        )
+
+    def pattern_diagnostics(self) -> list[PatternDiagnostic]:
+        """One note per configured pattern that selects a different set than it did.
+
+        Computing them replays 1.4.0's whole selection — one extra directory
+        walk per entry — so an entry whose patterns cannot have changed meaning
+        does not pay for it.
+        """
+        notes: list[PatternDiagnostic] = []
+        for config in self.include_configs:
+            include_dir: Path = config["path"]
+            if not include_dir.exists():
+                continue
+            walked = list(_walk_files(include_dir, recursive=config["recursive"]))
+            notes.extend(
+                PatternDiagnostic(code=code, entry=include_dir, pattern=pattern, message=message)
+                for code, pattern, message in path_globs.migration_notes(
+                    include_dir,
+                    walked,
+                    recursive=config["recursive"],
+                    include=config["include"],
+                    exclude=config["exclude"],
+                )
+            )
+        return notes
 
     def _select_entry(self, config: dict[str, Any]) -> list[SelectedFile]:
         """The files one ``include_dirs`` entry selects, in the order its patterns are written."""
@@ -392,17 +455,18 @@ class SchemaBuilder:
             )
 
         order = int(config["order"])
+        include_patterns = config["include"]
+        exclude_patterns = config["exclude"]
         found: list[SelectedFile] = []
-        for pattern in config["include"]:
-            if config["recursive"]:
-                matches = include_dir.rglob(pattern)
-            else:
-                matches = include_dir.glob(pattern)
-            found.extend(
-                SelectedFile(path=path, entry=include_dir, order=order, pattern=pattern)
-                for path in matches
-                if not _is_excluded(path.relative_to(include_dir), config["exclude"])
-            )
+        for path in _walk_files(include_dir, recursive=config["recursive"]):
+            rel_path = path.relative_to(include_dir)
+            if path_globs.matches_any(rel_path, exclude_patterns):
+                continue
+            pattern = _first_matching(rel_path, include_patterns)
+            if pattern is not None:
+                found.append(
+                    SelectedFile(path=path, entry=include_dir, order=order, pattern=pattern)
+                )
         return found
 
     def _without_excluded_dirs(self, selected: list[SelectedFile]) -> list[SelectedFile]:
@@ -425,7 +489,7 @@ class SchemaBuilder:
         include_dirs_str = ", ".join(str(d) for d in self.include_dirs)
         raise SchemaError(
             f"No SQL files found in include directories: {include_dirs_str}",
-            resolution_hint="Add .sql files to subdirectories like 00_common/, 10_tables/ or check your include/exclude patterns",
+            resolution_hint=self._empty_selection_hint(),
         )
 
     def _in_build_order(self, selected: list[SelectedFile]) -> list[SelectedFile]:

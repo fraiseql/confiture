@@ -35,7 +35,6 @@ _MISSING_DIR_SIGNALS = (
     "does not exist",
     "doesn't exist",
     "no such",
-    "no sql files",
 )
 
 
@@ -80,6 +79,14 @@ def _detect_error_context(error: Exception) -> str | None:
     # apply/syntax failure carrying the bare word "schema"/"seed" is not
     # mislabeled as a missing directory (#159); those fall through to the
     # SQL_SYNTAX_ERROR check below.
+    #
+    # "No SQL files found" is deliberately NOT a signal here (#256): a
+    # selection that came out empty is not a missing directory — the directory
+    # exists and is full of files the patterns stopped matching — and its own
+    # resolution_hint names the pattern that emptied it. Routing it here
+    # printed "The schema directory doesn't exist" and told the reader to
+    # `mkdir` it. A genuinely absent include directory raises SCHEMA_201,
+    # whose message carries "does not exist" and still lands here.
     if isinstance(error, (SchemaError, FileNotFoundError)) and any(
         signal in error_msg for signal in _MISSING_DIR_SIGNALS
     ):

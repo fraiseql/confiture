@@ -16,6 +16,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`include` and `exclude` globs now mean what gitignore means by them.** They went through different
+  machinery — `include` through `rglob`/`glob`, `exclude` through `PurePath.match`, where `**` is one
+  component and matching is anchored at the *right* end — so the reference manual's own examples
+  excluded a different set of files from the one they name: `**/*.bak` did not exclude a `.bak` at the
+  root of the include directory, `**/temp/**` did not exclude a root-level `temp/`, and `vendor/**` did
+  not exclude anything below `vendor/`'s first level. One matcher (`core/path_globs.py`) now answers for
+  both lists, in **gitignore's dialect**: a pattern with no `/` matches the file's *name* at any depth
+  (so `*.sql` and `*.bak` are unaffected), a pattern with a `/` is matched **left-anchored** against the
+  whole relative path, and `**` spans **zero or more** components. Discovery walks each entry's tree
+  once and the patterns filter what it found, so `recursive` no longer half-decides the reach.
+  **Both directions can change**: left-anchoring *un-excludes* files a right-anchored `temp/*.sql` used
+  to remove at any depth, so a build can grow as well as shrink.
+
+  For one release, confiture replays 1.4.0's whole selection and **names every pattern whose match set
+  moved**: `CONFIG_013` (`warning`) for a pattern that matched files and now matches none — carrying the
+  count and, when it would restore them exactly, the `**/`-prefixed rewrite — and `CONFIG_014` (`info`)
+  for one whose match set merely grew or shrank, naming the files. `confiture build` prints them,
+  `confiture validate-config` folds them into its `issues[]`, and `confiture build --list-files` carries
+  them in `patterns[]`. **`validate-config --strict` exits 5 on a warning**, so a `CONFIG_013` reddens a
+  currently-green `--strict` leg on upgrade day; that is deliberate, and `CONFIG_014` stays `info` so the
+  merely-shifted case does not. When a selection ends up empty *because* a pattern stopped matching, the
+  `SchemaError` that reports it carries that diagnostic as its resolution hint instead of the generic
+  one — and it is no longer routed to the missing-schema-directory template, which printed "The schema
+  directory doesn't exist" and told the reader to `mkdir` a directory that exists and is full of files
+  the patterns stopped matching. A genuinely absent include directory still raises `SCHEMA_201` and
+  still gets that template. The replay costs one extra directory walk per entry and is skipped entirely for a configuration
+  whose patterns contain no `/` — such a pattern cannot have changed meaning. It is deleted in 1.6.0
+  (#263).
+
+  One config file now carries **two glob dialects under the same two key names**:
+  `seed.profiles.<name>.include`/`.exclude` stay `fnmatch` globs over a bare *filename*, because seed
+  discovery is a flat listing where a path never appears. `configuration.md` says so next to each block,
+  and `tests/unit/test_one_path_matcher.py` keeps `PurePath.match`, `PurePath.full_match` and `fnmatch`
+  out of every module but `core/path_globs.py`, with an allow-list that states, per module, which
+  *object* name it is matching instead of a path.
+
 - **The `order` key on an `include_dirs` entry now decides the sequence files are concatenated in.**
   It was read once — the entries were sorted by it — and then discarded: every entry's matches were
   flattened into one list and sorted globally, so `db/b` at `order: 10` and `db/a` at `order: 20` built
