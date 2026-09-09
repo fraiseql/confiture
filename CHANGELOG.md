@@ -25,7 +25,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   both lists, in **gitignore's dialect**: a pattern with no `/` matches the file's *name* at any depth
   (so `*.sql` and `*.bak` are unaffected), a pattern with a `/` is matched **left-anchored** against the
   whole relative path, and `**` spans **zero or more** components. Discovery walks each entry's tree
-  once and the patterns filter what it found, so `recursive` no longer half-decides the reach.
+  once and the patterns filter what it found, so `recursive` is now **the only thing that bounds the
+  walk**: `true` walks the tree, `false` reads the entry's own directory, and no pattern is rewritten
+  between what the YAML says and what the matcher sees. The rewrite that turned a non-recursive entry's
+  `["**/*.sql"]` into `["*.sql"]` behind the user's back is gone — `**` spans zero components, so
+  `**/*.sql` still selects the depth-1 files without it. Only a pattern that *requires* depth, like
+  `**/sub/*.sql`, can now match nothing under `recursive: false` — that shape used to build files three
+  levels below a directory the flag said not to descend into, and it is reported (never a hard error)
+  with the contradiction named.
+
+  The manual's `include_dirs` examples are now **executed**: its `local.yaml` and `production.yaml`
+  blocks are lifted from the page, built, and asserted against. The production one is the reason this
+  matters — `exclude: ["**/development/**"]` needed three path components under `PurePath.match`, and
+  `db/seeds/common/development/` is two below the entry that excludes it, so **a production build
+  shipped the development seeds that block exists to keep out**. `docs/organizing-sql-files.md` now
+  states the whole selection model in one place: walk (bounded by `recursive`) → include → exclude →
+  dedupe → order blocks → sort within a block.
   **Both directions can change**: left-anchoring *un-excludes* files a right-anchored `temp/*.sql` used
   to remove at any depth, so a build can grow as well as shrink.
 
@@ -62,6 +77,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identical hash** — pinned as literals by `tests/unit/test_build_selection_is_stable.py`. Only a
   project that sets distinct `order` values changes, and what changes is that its stated intent is now
   honoured. The order entries are *listed* in still sequences nothing.
+
+### Fixed
+
+- **`auto_discover` is documented as what it does.** Its `DirectoryConfig` docstring claimed it
+  "discover[s] files by the include/exclude globs" and that `false` "builds only what `order` and
+  explicit names select" — no such behaviour has ever existed. It guards exactly one branch: whether a
+  **missing include directory** is skipped or fails the build. The hand-written options table in
+  `configuration.md` also gave its default as `false`; the model says `true`. A new
+  `test_include_dirs_table_matches_the_model` compares every default in that hand-written table against
+  `DirectoryConfig`, so the two tables in that file cannot disagree again.
 
 ### Added
 

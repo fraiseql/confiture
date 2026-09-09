@@ -1,6 +1,9 @@
 """Tests for recursive directory support in SchemaBuilder."""
 
+import pytest
+
 from confiture.core.builder import SchemaBuilder
+from confiture.exceptions import SchemaError
 
 """Tests for recursive directory support feature.
 
@@ -210,3 +213,70 @@ include_dirs:
     assert config["path"] == schema_dir
     assert config["recursive"] is True
     assert config["order"] == 5
+
+
+def _entry_project(tmp_path, *, recursive: bool, include: list[str], files: list[str]):
+    """A project with one ``include_dirs`` entry, spelled exactly as given."""
+    schema_dir = tmp_path / "db" / "schema"
+    for relative in files:
+        path = schema_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("SELECT 1;\n")
+
+    config_path = tmp_path / "db" / "environments" / "test.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(
+        "database_url: postgresql://localhost/test\n"
+        "include_dirs:\n"
+        f"  - path: {schema_dir}\n"
+        f"    recursive: {str(recursive).lower()}\n"
+        "    include:\n" + "".join(f'      - "{pattern}"\n' for pattern in include)
+    )
+    return tmp_path, schema_dir
+
+
+def test_a_slash_free_pattern_reaches_depth_when_recursive(tmp_path):
+    """``recursive: true`` + ``*.sql`` reaches every depth, as it always has.
+
+    Pinned rather than fixed: ``rglob`` gave this reach before, rule 1 of the
+    glob dialect gives it now, and nothing about the release may change it.
+    """
+    project, schema_dir = _entry_project(
+        tmp_path, recursive=True, include=["*.sql"], files=["top.sql", "a/b/deep.sql"]
+    )
+
+    selected = sorted(
+        str(p.relative_to(schema_dir))
+        for p in SchemaBuilder(env="test", project_dir=project).find_sql_files()
+    )
+
+    assert selected == ["a/b/deep.sql", "top.sql"]
+
+
+def test_the_default_include_is_not_rewritten_under_non_recursive(tmp_path):
+    """``recursive: false`` + ``**/*.sql`` reads depth 1 — and the pattern is left alone.
+
+    The selection was already right, but for the wrong reason: the entry's
+    include list was silently rewritten to ``["*.sql"]`` to stop ``glob`` from
+    recursing. ``**`` spans zero components, so the rewrite buys nothing and
+    the matcher now sees what the YAML says.
+    """
+    project, schema_dir = _entry_project(
+        tmp_path, recursive=False, include=["**/*.sql"], files=["top.sql", "a/b/deep.sql"]
+    )
+    builder = SchemaBuilder(env="test", project_dir=project)
+
+    selected = [str(p.relative_to(schema_dir)) for p in builder.find_sql_files()]
+
+    assert selected == ["top.sql"]
+    assert builder.include_configs[0]["include"] == ["**/*.sql"]
+
+
+def test_a_pattern_that_requires_depth_selects_nothing_when_not_recursive(tmp_path):
+    """``recursive: false`` + ``**/sub/*.sql`` builds nothing, three levels down included."""
+    project, _ = _entry_project(
+        tmp_path, recursive=False, include=["**/sub/*.sql"], files=["a/sub/deep.sql"]
+    )
+
+    with pytest.raises(SchemaError):
+        SchemaBuilder(env="test", project_dir=project).find_sql_files()

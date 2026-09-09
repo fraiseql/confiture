@@ -204,6 +204,17 @@ def _names(paths: set[Path], directory: Path, limit: int = 3) -> str:
     return ", ".join(relative)
 
 
+def requires_a_subdirectory(pattern: str) -> bool:
+    """Whether *pattern* can only match below the include directory's own level.
+
+    ``**`` spans zero components, so ``**/*.sql`` matches a file sitting
+    directly in the directory. A literal component before a ``/`` — as in
+    ``**/sub/*.sql`` or ``10_tables/*.sql`` — does not: there is a directory to
+    descend into, and under ``recursive: false`` nothing descends.
+    """
+    return len([c for c in _components(pattern) if c != "**"]) > 1
+
+
 def _restoring_rewrite(pattern: str, before: set[Path], directory: Path, walked: list[Path]) -> str:
     """``**/`` + *pattern* when that selects exactly what *pattern* used to, else ``""``."""
     candidate = f"**/{pattern.lstrip('/')}"
@@ -214,6 +225,19 @@ def _restoring_rewrite(pattern: str, before: set[Path], directory: Path, walked:
 _VERBS = {"include": ("selects", "excludes"), "exclude": ("excludes", "selects")}
 
 
+def _silenced_hint(
+    pattern: str, before: set[Path], directory: Path, walked: list[Path], *, recursive: bool
+) -> str:
+    """Why a pattern stopped matching, when there is a nameable why."""
+    if not recursive and requires_a_subdirectory(pattern):
+        return (
+            f"; '{pattern}' needs a subdirectory and this entry sets recursive: false, "
+            "so the walk never leaves the include directory"
+        )
+    rewrite = _restoring_rewrite(pattern, before, directory, walked)
+    return f"; write '{rewrite}' to keep the old meaning" if rewrite else ""
+
+
 def _note(
     kind: str,
     pattern: str,
@@ -221,14 +245,15 @@ def _note(
     after: set[Path],
     directory: Path,
     walked: list[Path],
+    *,
+    recursive: bool,
 ) -> tuple[str, str, str] | None:
     """One ``(code, pattern, message)`` for a pattern whose match set moved."""
     if before == after:
         return None
     verb = _VERBS[kind][0]
     if before and not after:
-        rewrite = _restoring_rewrite(pattern, before, directory, walked)
-        hint = f"; write '{rewrite}' to keep the old meaning" if rewrite else ""
+        hint = _silenced_hint(pattern, before, directory, walked, recursive=recursive)
         return (
             "CONFIG_013",
             pattern,
@@ -278,7 +303,9 @@ def migration_notes(
         for pattern in exclude
     }
     notes = [
-        _note(kind, pattern, before[pattern], after[pattern], directory, walked)
+        _note(
+            kind, pattern, before[pattern], after[pattern], directory, walked, recursive=recursive
+        )
         for kind, before, after in (
             ("include", before_include, after_include),
             ("exclude", before_exclude, after_exclude),

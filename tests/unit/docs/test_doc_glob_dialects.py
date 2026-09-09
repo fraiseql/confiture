@@ -65,3 +65,69 @@ def test_the_manual_says_which_dialect_applies_to_which_block() -> None:
     assert re.search(r"gitignore", text, re.IGNORECASE), "the include_dirs dialect is not named"
     assert "fnmatch" in text, "the seed-profile dialect is not named"
     assert "seed.profiles" in text, "nothing tells a reader which block reads which dialect"
+
+
+def _materialise(project: Path, block: str, env: str, files: list[str]) -> Path:
+    """A project laid out as a doc block describes, with *files* under its tree."""
+    for relative in files:
+        path = project / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("SELECT 1;\n")
+    env_dir = project / "db" / "environments"
+    env_dir.mkdir(parents=True, exist_ok=True)
+    (env_dir / f"{env}.yaml").write_text(f"database_url: postgresql://localhost/test\n{block}")
+    return project
+
+
+def _doc_block(name: str) -> str:
+    from doc_snippets import fenced_after_anchor
+
+    return fenced_after_anchor(_doc_text(), name)
+
+
+PRODUCTION_TREE = [
+    "db/schema/10_tables/10_users.sql",
+    "db/seeds/common/10_lookup.sql",
+    "db/seeds/common/development/90_dev_only.sql",
+    "db/seeds/development/99_fixtures.sql",
+]
+
+
+def test_the_production_example_does_not_ship_development_seeds(tmp_path: Path) -> None:
+    """The manual's own production config, executed.
+
+    ``**/development/**`` needed three path components under ``PurePath.match``,
+    and ``db/seeds/common/development/`` is two below the entry that excludes
+    it — so a production build shipped the development seeds the block exists
+    to keep out.
+    """
+    project = _materialise(
+        tmp_path, _doc_block("include-dirs-production"), "production", PRODUCTION_TREE
+    )
+
+    selected = [
+        str(p.relative_to(project))
+        for p in SchemaBuilder(env="production", project_dir=project).find_sql_files()
+    ]
+
+    assert selected == [
+        "db/schema/10_tables/10_users.sql",
+        "db/seeds/common/10_lookup.sql",
+    ]
+
+
+def test_the_local_example_builds_the_schema_then_both_seed_blocks(tmp_path: Path) -> None:
+    """The `order` values in the same example decide the sequence, as its prose says."""
+    project = _materialise(tmp_path, _doc_block("include-dirs-local"), "local", PRODUCTION_TREE)
+
+    selected = [
+        str(p.relative_to(project))
+        for p in SchemaBuilder(env="local", project_dir=project).find_sql_files()
+    ]
+
+    assert selected == [
+        "db/schema/10_tables/10_users.sql",
+        "db/seeds/common/10_lookup.sql",
+        "db/seeds/common/development/90_dev_only.sql",
+        "db/seeds/development/99_fixtures.sql",
+    ]

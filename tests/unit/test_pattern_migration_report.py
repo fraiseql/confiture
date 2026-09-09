@@ -21,7 +21,14 @@ from confiture.exceptions import SchemaError
 runner = CliRunner()
 
 
-def _project(tmp_path: Path, *, include: list[str], exclude: list[str], files: list[str]) -> Path:
+def _project(
+    tmp_path: Path,
+    *,
+    include: list[str],
+    exclude: list[str],
+    files: list[str],
+    recursive: bool = True,
+) -> Path:
     schema_dir = tmp_path / "db" / "schema"
     for relative in files:
         path = schema_dir / relative
@@ -38,15 +45,19 @@ def _project(tmp_path: Path, *, include: list[str], exclude: list[str], files: l
     (env_dir / "local.yaml").write_text(
         "name: local\ndatabase_url: postgresql://localhost/test\n"
         "include_dirs:\n"
-        f"  - path: {schema_dir}\n" + block("include", include) + block("exclude", exclude) + ""
-        "build:\n  validate_comments:\n    enabled: false\n"
+        f"  - path: {schema_dir}\n"
+        f"    recursive: {str(recursive).lower()}\n"
+        + block("include", include)
+        + block("exclude", exclude)
+        + "build:\n  validate_comments:\n    enabled: false\n"
     )
     return tmp_path
 
 
 def _notes(project: Path) -> list[tuple[str, str, str]]:
-    report = SchemaBuilder(env="local", project_dir=project).selection_report()
-    return [(note.code, note.pattern, note.message) for note in report.patterns]
+    """The diagnostics themselves — computed without selecting, so an empty build still reports."""
+    builder = SchemaBuilder(env="local", project_dir=project)
+    return [(note.code, note.pattern, note.message) for note in builder.pattern_diagnostics()]
 
 
 def test_a_pattern_that_now_matches_nothing_is_a_warning(tmp_path: Path) -> None:
@@ -64,6 +75,10 @@ def test_a_pattern_that_now_matches_nothing_is_a_warning(tmp_path: Path) -> None
     message = notes[0][2]
     assert "3" in message
     assert "**/temp/*.sql" in message
+
+    # …and the same notes are what `selection_report()` — and so `--list-files` — carries.
+    report = SchemaBuilder(env="local", project_dir=project).selection_report()
+    assert [(n.code, n.pattern, n.message) for n in report.patterns] == notes
 
 
 def test_a_pattern_that_now_matches_more_is_an_info(tmp_path: Path) -> None:
@@ -230,3 +245,37 @@ def test_the_empty_build_is_not_reported_as_a_missing_directory(tmp_path: Path) 
     assert "mkdir" not in result.stderr
     assert "10_tables/*.sql" in result.stderr
     assert "10_tables/*.sql" in result.stdout
+
+
+def test_a_pattern_that_needs_a_subdirectory_says_so(tmp_path: Path) -> None:
+    """``recursive: false`` and a pattern that requires depth is a contradiction, not a mystery."""
+    project = _project(
+        tmp_path,
+        include=["**/sub/*.sql"],
+        exclude=[],
+        files=["a/sub/deep.sql"],
+        recursive=False,
+    )
+
+    notes = _notes(project)
+
+    assert [(code, pattern) for code, pattern, _ in notes] == [("CONFIG_013", "**/sub/*.sql")]
+    assert "recursive: false" in notes[0][2]
+
+
+def test_the_default_include_under_non_recursive_says_nothing(tmp_path: Path) -> None:
+    """``recursive: false`` + ``**/*.sql`` is normal and must stay silent.
+
+    It is the model's default include, so a diagnostic here would fire for
+    every non-recursive entry in every project and redden a currently-green
+    ``validate-config --strict``.
+    """
+    project = _project(
+        tmp_path,
+        include=["**/*.sql"],
+        exclude=[],
+        files=["top.sql", "a/b/deep.sql"],
+        recursive=False,
+    )
+
+    assert _notes(project) == []
