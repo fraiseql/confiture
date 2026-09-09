@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `**/sub/*.sql`, can now match nothing under `recursive: false` — that shape used to build files three
   levels below a directory the flag said not to descend into, and it is reported (never a hard error)
   with the contradiction named.
+
+  The manual's `include_dirs` examples are now **executed**: its `local.yaml` and `production.yaml`
+  blocks are lifted from the page, built, and asserted against. The production one is the reason this
+  matters — `exclude: ["**/development/**"]` needed three path components under `PurePath.match`, and
+  `db/seeds/common/development/` is two below the entry that excludes it, so **a production build
+  shipped the development seeds that block exists to keep out**. `docs/organizing-sql-files.md` now
+  states the whole selection model in one place: walk (bounded by `recursive`) → include → exclude →
+  dedupe → order blocks → sort within a block.
   **Both directions can change**: left-anchoring *un-excludes* files a right-anchored `temp/*.sql` used
   to remove at any depth, so a build can grow as well as shrink.
 

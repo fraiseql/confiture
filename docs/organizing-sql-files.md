@@ -48,6 +48,39 @@ build reads — see [the `tree` family](reference/lint-rules.md#the-tree-family-
 The family is opt-in and `--baseline` is the way to adopt it on a tree that has
 never been checked.
 
+### How a file gets into the build
+
+Six steps, in this order:
+
+1. **Walk** — each `include_dirs` entry's tree, bounded by `recursive` and nothing else.
+2. **Include** — keep what an `include` pattern matches (default `**/*.sql`).
+3. **Exclude** — drop what an `exclude` pattern matches.
+4. **Dedupe** — a file two entries both select is kept once, under the lower `order`.
+5. **Block** — group by `order`, concatenate the groups low to high.
+6. **Sort** — inside a block, alphabetical or `hex`.
+
+Worked example. Two entries, `db/schema` (no `order`, so `0`) and `db/seeds/common` at `order: 20` with
+`exclude: ["**/development/**"]`, over this tree:
+
+```
+db/schema/10_tables/10_users.sql
+db/seeds/common/10_lookup.sql
+db/seeds/common/development/90_dev_only.sql
+```
+
+The walk finds all three. `**/*.sql` includes all three. `**/development/**` drops
+`common/development/90_dev_only.sql` — `**` spans zero or more directories, so it catches a
+`development/` sitting directly under the entry. Nothing is selected twice. Block `0` is the schema
+file, block `20` the remaining seed file, and the build is:
+
+```
+db/schema/10_tables/10_users.sql
+db/seeds/common/10_lookup.sql
+```
+
+Patterns are [gitignore's globs](reference/configuration.md#include_dirs), matched against the path
+relative to the entry's directory.
+
 ---
 
 ## The Number Prefix Pattern

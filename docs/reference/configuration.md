@@ -259,8 +259,10 @@ db/schema/
 
 **Environment-specific includes**:
 
+`local.yaml` — the schema, then both seed blocks:
+
+<!-- doctest:include-dirs-local -->
 ```yaml
-# local.yaml (includes seeds)
 include_dirs:
   - path: db/schema
     recursive: true
@@ -268,8 +270,12 @@ include_dirs:
     order: 20
   - path: db/seeds/development
     order: 30
+```
 
-# production.yaml (excludes development seeds)
+`production.yaml` — the same, minus anything under a `development/` directory:
+
+<!-- doctest:include-dirs-production -->
+```yaml
 include_dirs:
   - path: db/schema
     recursive: true
@@ -278,6 +284,11 @@ include_dirs:
     exclude:
       - "**/development/**"
 ```
+
+Both blocks are executed by a test, which builds the tree described here and asserts that
+`db/seeds/common/development/` is absent from the production build. Before 1.5.0 it was **present**:
+`**/development/**` needed three path components and that directory is two below its entry, so a
+production build shipped development seeds.
 
 `db/schema` sets no `order`, so it is block `0` and is built before both seed blocks — not because it
 is listed first, but because `0 < 20 < 30`.
