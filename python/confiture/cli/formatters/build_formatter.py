@@ -69,19 +69,32 @@ def format_text(result: BuildResult, console: Console) -> None:
             console.print(f"📦 Artifact: {result.artifact_path}")
         if result.execution_time_ms > 0:
             console.print(f"⏱️ Time: {result.execution_time_ms}ms")
-        if result.warnings:
-            console.print("\n[yellow]Warnings:[/yellow]")
-            for warning in result.warnings:
-                style = "yellow" if warning.severity == "warning" else "dim"
-                console.print(
-                    f"  [{style}]{warning.code} {warning.message}[/{style}]", soft_wrap=True
-                )
+        format_warnings(result, console)
         if result.duplicates:
             console.print(
                 f"\n[yellow]Duplicate definitions: {len(result.duplicates)} (see above)[/yellow]"
             )
     else:
         console.print(f"[red]❌ Build failed: {result.error}[/red]")
+        format_warnings(result, console)
+
+
+def format_warnings(result: BuildResult, console: Console) -> None:
+    """Print the build's own diagnostics — the only place a `BuildWarning` is rendered.
+
+    A build that stopped is exactly when its warnings are worth reading, so a
+    failed result prints them too.
+
+    Args:
+        result: The build result whose ``warnings`` to print.
+        console: Rich console for output.
+    """
+    if not result.warnings:
+        return
+    console.print("\n[yellow]Warnings:[/yellow]")
+    for warning in result.warnings:
+        style = "yellow" if warning.severity == "warning" else "dim"
+        console.print(f"  [{style}]{warning.code} {warning.message}[/{style}]", soft_wrap=True)
 
 
 def selection_payload(report: SelectionReport, project_dir: Path | None) -> dict:

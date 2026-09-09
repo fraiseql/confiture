@@ -28,13 +28,18 @@ runner = CliRunner()
 _URL = "postgresql://localhost/confiture_test"
 
 
+_ONE_TABLE = {"01_tables.sql": "CREATE TABLE tb_widget (id int);\n"}
+_ONE_TABLE_AND_A_BROKEN_FILE = {**_ONE_TABLE, "02_broken.sql": "CREATE TABEL broken (;\n"}
+
+
 def _project(
-    tmp_path: Path, *, seeds: dict[str, str] | None = None, schema: str | None = None
+    tmp_path: Path, *, seeds: dict[str, str] | None = None, schema: dict[str, str] | None = None
 ) -> Path:
-    """A minimal project; ``seeds`` names the files under ``db/seeds/``."""
+    """A minimal project; ``schema`` and ``seeds`` name the files under each directory."""
     schema_dir = tmp_path / "db" / "schema"
     schema_dir.mkdir(parents=True)
-    (schema_dir / "01_tables.sql").write_text(schema or "CREATE TABLE tb_widget (id int);\n")
+    for name, body in (schema or _ONE_TABLE).items():
+        (schema_dir / name).write_text(body)
 
     seed_block = ""
     if seeds is not None:
@@ -131,6 +136,64 @@ class TestSeedWarnings:
         assert "SEED_002" in result.stdout
 
 
+class TestDuplicateScanWarnings:
+    """The scan skips a file it cannot parse; the envelope says which one."""
+
+    def test_a_file_the_scan_could_not_parse_is_in_the_envelope(self, tmp_path: Path) -> None:
+        """An object defined twice in *that* file was not looked for; a consumer learns so."""
+        project = _project(tmp_path, schema=_ONE_TABLE_AND_A_BROKEN_FILE)
+
+        payload = _payload(project, "--warn-duplicates")
+
+        assert [w["code"] for w in payload["warnings"]] == ["SCHEMA_206"]
+        warning = payload["warnings"][0]
+        assert warning["file"] == "db/schema/02_broken.sql"
+        assert warning["file"] in warning["message"]
+        assert warning["severity"] == "warning"
+
+    def test_a_plain_build_does_not_scan_and_says_nothing(self, tmp_path: Path) -> None:
+        """The scan is opt-in; so is what it has to say."""
+        project = _project(tmp_path, schema=_ONE_TABLE_AND_A_BROKEN_FILE)
+
+        assert _payload(project)["warnings"] == []
+
+    def test_a_failed_build_still_shows_them_on_the_console(self, tmp_path: Path) -> None:
+        """A build that stopped is exactly when its warnings are worth reading."""
+        project = _project(
+            tmp_path,
+            schema={
+                "01_tables.sql": "CREATE TABLE tb_widget (id int);\n",
+                "02_again.sql": "CREATE TABLE tb_widget (id int);\n",
+                "03_broken.sql": "CREATE TABEL broken (;\n",
+            },
+        )
+
+        result = _build(project, "--fail-on-duplicates")
+
+        assert result.exit_code == 1
+        assert "SCHEMA_206" in result.stdout
+        assert result.stdout.count("could not parse it") == 1
+
+    def test_the_failing_gate_carries_them_too(self, tmp_path: Path) -> None:
+        """`--fail-on-duplicates` builds nothing — and still publishes what it saw."""
+        project = _project(
+            tmp_path,
+            schema={
+                "01_tables.sql": "CREATE TABLE tb_widget (id int);\n",
+                "02_again.sql": "CREATE TABLE tb_widget (id int);\n",
+                "03_broken.sql": "CREATE TABEL broken (;\n",
+            },
+        )
+
+        result = _build(project, "--warn-duplicates", "--fail-on-duplicates", "--format", "json")
+
+        assert result.exit_code == 1
+        payload = json.loads(result.stdout)
+        assert payload["success"] is False
+        assert [w["code"] for w in payload["warnings"]] == ["SCHEMA_206"]
+        assert payload["duplicates"]
+
+
 @pytest.mark.parametrize("array", ["warnings", "duplicates"])
 def test_every_published_array_has_something_that_fills_it(array: str, tmp_path: Path) -> None:
     """No published field of this envelope is one nothing can ever write to.
@@ -166,6 +229,9 @@ def _seed_failure_payload(tmp_path: Path) -> dict:
 def _duplicate_payload(tmp_path: Path) -> dict:
     project = _project(
         tmp_path / "duplicates",
-        schema="CREATE TABLE tb_widget (id int);\nCREATE TABLE tb_widget (id int);\n",
+        schema={
+            "01_tables.sql": "CREATE TABLE tb_widget (id int);\n",
+            "02_again.sql": "CREATE TABLE tb_widget (id int);\n",
+        },
     )
     return _payload(project, "--warn-duplicates")

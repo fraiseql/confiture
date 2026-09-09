@@ -479,7 +479,7 @@ def build(
             seed_profile=seed_profile,
             sequential=sequential,
         )
-        schema, schema_file_count, duplicates = _run_build(
+        schema, schema_file_count, duplicates, warnings = _run_build(
             builder,
             out,
             env=env,
@@ -498,7 +498,6 @@ def build(
         )
 
         seed_files_applied = 0
-        warnings: list[BuildWarning] = []
         if apply_sequential:
             seed_files_applied, seed_warnings = _apply_seeds_sequentially(
                 builder,
@@ -580,23 +579,24 @@ def _duplicate_gate(
     out: Console,
     json_mode: bool,
     report_output: Path | None,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[BuildWarning]]:
     """Scan the build's files for duplicate definitions when asked (#218).
 
     ``--warn-duplicates`` reports and builds; ``--fail-on-duplicates`` reports
     and exits 1 before anything is written. A plain build does not scan.
+
+    Returns:
+        ``(duplicates, warnings)`` — a file the scan could not parse was not
+        checked, which the envelope says rather than only the console (#268).
     """
     if not (warn or fail):
-        return []
+        return [], []
 
     objects, _schemas, unparseable = inventory_files(sql_files, root=project_dir)
-    for label in unparseable:
-        out.print(
-            f"[yellow]⚠️ {label}: pglast could not parse it — not checked for duplicates[/yellow]"
-        )
+    warnings = [BuildWarning.of("SCHEMA_206", file=label) for label in unparseable]
     duplicates = find_duplicates(objects)
     if not duplicates:
-        return []
+        return [], warnings
     if not json_mode:
         out.print("[yellow]Duplicate definitions:[/yellow]")
         for violation in duplicate_violations(duplicates):
@@ -609,12 +609,13 @@ def _duplicate_gate(
             schema_size_bytes=0,
             output_path=str(output.absolute()),
             hash=None,
+            warnings=warnings,
             duplicates=payload,
             error=f"{len(duplicates)} duplicate definition(s); nothing was built",
         )
         format_build_result(result, "json" if json_mode else "text", report_output, console)
         raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: the duplicate gate tripped
-    return payload
+    return payload, warnings
 
 
 _SEPARATOR_STYLES = ("block_comment", "line_comment", "mysql", "custom")
@@ -665,18 +666,18 @@ def _run_build(
     output: Path,
     apply_sequential: bool,
     duplicate_gate: Callable[[list[Path]], Any],
-) -> tuple[str, int, Any]:
+) -> tuple[str, int, Any, list[BuildWarning]]:
     """Concatenate the schema under a progress bar, after ``duplicate_gate`` saw the files.
 
     Returns:
-        ``(schema, schema_file_count, duplicates)``; the seed files are left
-        to the sequential applier when ``apply_sequential``.
+        ``(schema, schema_file_count, duplicates, warnings)``; the seed files
+        are left to the sequential applier when ``apply_sequential``.
     """
     out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
 
     with ProgressManager() as progress:
         sql_files = builder.find_sql_files()
-        duplicates = duplicate_gate(sql_files)
+        duplicates, warnings = duplicate_gate(sql_files)
         if apply_sequential:
             schema = builder.build(output_path=output, schema_only=True, progress=progress)
             schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
@@ -684,7 +685,7 @@ def _run_build(
             schema = builder.build(output_path=output, progress=progress)
             schema_file_count = len(sql_files)
     out.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
-    return schema, schema_file_count, duplicates
+    return schema, schema_file_count, duplicates, warnings
 
 
 def _apply_build_overrides(
