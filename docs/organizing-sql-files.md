@@ -32,6 +32,15 @@ property of the *directory*: one hex-lettered prefix among the siblings makes
 the whole group hex, which is what `confiture generate alloc` already assumes
 when it picks the next number.
 
+**`order` chooses the block, the sort chooses within it.** Each `include_dirs`
+entry carries an `order` (default `0`); entries are grouped by that value and
+the groups are concatenated low to high, with the sort above deciding inside
+each group. A project that never sets `order` has exactly one group, so
+everything on this page describes its whole build. The order entries are
+*listed* in sequences nothing — `order` is the only sequencing key — and it
+breaks one tie: a file two entries both select is built once, under the entry
+with the lower `order`, and among equals under the one listed first.
+
 **Check the arrangement, not just the SQL.** `confiture lint --select tree`
 reports colliding prefixes, a prefix that does not extend its parent's, an
 unnumbered entry beside numbered siblings, and a status word in a name the

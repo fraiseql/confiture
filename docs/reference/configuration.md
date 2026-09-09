@@ -187,7 +187,7 @@ include_dirs:
     exclude:                 # Exclude patterns (optional)
       - "**/*.bak"
       - "**/temp/**"
-    order: 10                # Processing order (optional)
+    order: 10                # Build block: groups run low to high (optional, default 0)
     auto_discover: false     # Default: false
 ```
 
@@ -199,7 +199,7 @@ include_dirs:
 | `recursive` | boolean | `true` | Recursively discover files in subdirectories |
 | `include` | array[string] | `["**/*.sql"]` | Glob patterns for files to include |
 | `exclude` | array[string] | `[]` | Glob patterns for files to exclude |
-| `order` | integer | auto | Processing order (lower numbers first) |
+| `order` | integer | `0` | Build block: entries are grouped by this value and the groups concatenated low to high |
 | `auto_discover` | boolean | `false` | Skip missing directories silently |
 
 **Path resolution**:
@@ -214,6 +214,18 @@ include_dirs:
 - `[abc]` - Match any character in set
 
 **Ordering strategy**:
+
+`order` **partitions the build.** Entries are grouped by their `order` value, the groups are
+concatenated low to high, and *within* a group the build's sort mode decides — alphabetical by default,
+numeric-prefix order under `build.sort_mode: hex`. Every entry defaults to `order: 0`, so a
+configuration that never sets the key has exactly one group and its files are sorted as one list.
+
+**The order entries are listed in sequences nothing.** `order` is the only sequencing key: writing
+`- db/seeds` above `- db/schema` still builds `db/schema` first when its `order` is lower. Re-listing
+two entries that share an `order` does not change the build either. The list order breaks exactly one
+tie: when two entries both select the same file — an entry for `db/schema` and one for
+`db/schema/10_tables`, say — the file is built once, under the entry with the lower `order`, and among
+entries sharing an `order` under the one listed first.
 
 Use numbered prefixes or explicit `order` values to control execution order:
 
@@ -248,6 +260,9 @@ include_dirs:
     exclude:
       - "**/development/**"
 ```
+
+`db/schema` sets no `order`, so it is block `0` and is built before both seed blocks — not because it
+is listed first, but because `0 < 20 < 30`.
 
 ---
 
@@ -537,7 +552,7 @@ Generated from `confiture.config.environment`; the description is the model's ow
 | `include` | list[str] | `['**/*.sql']` | Glob patterns a file must match to be built (default: ``**/*.sql``). |
 | `exclude` | list[str] | `[]` | Glob patterns that remove files from the build. |
 | `auto_discover` | bool | `true` | Discover files by the include/exclude globs; ``false`` builds only what ``order`` and explicit names select. |
-| `order` | int | `0` | Sort key among directories in the build; lower runs first (default: 0). |
+| `order` | int | `0` | Which block of the build this entry's files land in. Entries are grouped by ``order``, the groups concatenated low to high, and inside a group the build's sort mode decides. Every entry defaults to 0, so a config that never sets it has one group. The order entries are *listed* in sequences nothing; it breaks one tie, deciding which entry owns a file two entries both select. |
 
 #### `BuildConfig`
 
