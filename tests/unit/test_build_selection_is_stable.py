@@ -90,3 +90,56 @@ def test_overlapping_include_patterns_pass_the_duplicate_gate(tmp_path: Path) ->
     assert result.exit_code == 0
     assert output.exists()
     assert output.read_text().count("CREATE TABLE t (id int);") == 1
+
+
+def _provenance_project(tmp_path: Path) -> Path:
+    """Two entries, three files, and no two files selected the same way."""
+    (tmp_path / "db" / "a").mkdir(parents=True)
+    (tmp_path / "db" / "b").mkdir(parents=True)
+    (tmp_path / "db" / "a" / "00_first.sql").write_text("SELECT 1;\n")
+    (tmp_path / "db" / "b" / "00_zero.sql").write_text("SELECT 2;\n")
+    (tmp_path / "db" / "b" / "99_last.sql").write_text("SELECT 3;\n")
+
+    env_dir = tmp_path / "db" / "environments"
+    env_dir.mkdir(parents=True)
+    (env_dir / "local.yaml").write_text(f"""
+name: local
+database_url: "postgresql://localhost/test"
+include_dirs:
+  - path: {tmp_path / "db" / "a"}
+    order: 20
+  - path: {tmp_path / "db" / "b"}
+    order: 10
+    recursive: false
+    include:
+      - "9*.sql"
+      - "0*.sql"
+build:
+  validate_comments:
+    enabled: false
+""")
+    return tmp_path
+
+
+def test_selection_carries_provenance(tmp_path: Path) -> None:
+    """Each selected file names the entry, the order and the pattern that found it."""
+    project = _provenance_project(tmp_path)
+    builder = SchemaBuilder(env="local", project_dir=project)
+
+    selected = builder._select()
+
+    assert [
+        (record.path.name, record.entry.name, record.order, record.pattern) for record in selected
+    ] == [
+        ("00_first.sql", "a", 20, "**/*.sql"),
+        ("00_zero.sql", "b", 10, "0*.sql"),
+        ("99_last.sql", "b", 10, "9*.sql"),
+    ]
+
+
+def test_find_sql_files_projects_the_selection(tmp_path: Path) -> None:
+    """``find_sql_files`` is the paths of ``_select``, in the same order."""
+    project = _provenance_project(tmp_path)
+    builder = SchemaBuilder(env="local", project_dir=project)
+
+    assert builder.find_sql_files() == [record.path for record in builder._select()]
