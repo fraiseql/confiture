@@ -14,6 +14,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-09
+
+Five phases against `include_dirs`, released once. The block has three knobs — `order`, the
+include/exclude globs, and `recursive` — and before this release none of them did what its name and its
+documentation say. `order` sorted a list nothing later read. `**` was a single path component, so the
+reference manual's own exclusion examples excluded a different set of files from the one they name —
+including a production config that shipped development seeds. `recursive` and the pattern beside it each
+half-decided the walk, and which half won was settled by a silent rewrite of the user's pattern. Closes
+#255 and #256.
+
+### Upgrade note — read before bumping
+
+Everything in this block feeds more than `confiture build`: `SchemaLinter._load_schema` selects its
+files through the same `find_sql_files()`, so since 1.4.0 the `tree_00x`, `sec_002`, `func_001` and
+`build_003` rules see exactly what the build sees.
+
+**The one command to run first:** `confiture build --list-files` — new in this release — prints every
+file the build would read with the entry, the `order` block and the pattern that selected it, and builds
+nothing. Diff it across the upgrade and you have the whole answer for your project.
+
+1. **`order` now orders.** Entries are grouped by their `order` value and the groups are concatenated
+   low to high; within a group the sort you already had decides. **Only a project that sets distinct
+   `order` values changes** — every entry defaults to `0`, so a project that never set the key has one
+   group and builds a byte-identical schema with an identical hash. When it does change, the schema hash
+   changes with it. The order the entries are *listed* in still sequences nothing; it breaks one tie,
+   deciding which entry owns a file two entries both select.
+2. **`**` is recursive, and patterns anchor at the left** — gitignore's rules, named as such. A pattern
+   with no `/` still matches the filename at any depth, which is why `*.sql` and `*.bak` are untouched.
+   Some files **leave** the build (the ones a `**/temp/**` was always meant to exclude) and some may
+   **enter** it (a relative `temp/*.sql` used to match at any depth, and now names one place).
+   `CONFIG_013` and `CONFIG_014` name every pattern of yours that changed, with its rewrite;
+   `confiture validate-config` reports them without building anything. **`validate-config --strict`
+   exits 5 on a `CONFIG_013`**, so a strict CI leg can go red on upgrade day with nothing else wrong —
+   that is the diagnostic doing its job, not a regression.
+3. **`confiture lint` sees what the build sees.** A changed selection changes the lint result: files
+   entering the build bring their violations with them, files leaving take theirs away. Since 1.4.0
+   `build_001` is an `error`, so this is the second way a green pipeline turns red without a line of SQL
+   changing.
+4. **A file selected by two patterns is built once.** `include: ["**/*.sql", "*.sql"]` used to
+   concatenate every file twice. A project that depended on that was already failing `build_001` in
+   1.4.0 — with a message naming the file as its own duplicate — and already failing
+   `build --fail-on-duplicates`, which shares the detector.
+5. **`recursive: false` now means it** — but `**` under it is *not* an error. `**/*.sql`, the default
+   include, still selects the directory's own files, because `**` spans *zero* or more components. Only
+   a pattern that requires a subdirectory (`**/sub/*.sql`) matches nothing, and it says so by name. That
+   shape used to build files three levels below a directory the flag said not to descend into.
+6. **No pattern is rewritten any more.** An explicitly written `include: ["**/*.sql"]` became
+   `["*.sql"]` under `recursive: false`. It is used as written now; the result is the same set of files,
+   and `--list-files` reports the pattern you actually wrote.
+7. **Cache churn, not breakage.** A changed hash rebuilds `test-db` templates and re-keys
+   `schema_artifact` filenames once. Nothing needs deleting by hand.
+8. **Deprecation.** The pre-1.5.0 selection lives only to compute the `CONFIG_013`/`CONFIG_014`
+   diagnostic and is **deleted in 1.6.0**, along with those codes — #263.
+
+### What was measured before shipping
+
+`find_sql_files()` and `compute_hash()` were run on **every** environment config in this repository and
+in every example project — **17 config files, 22 `include_dirs` entries** — on `v1.4.0` and on the
+release candidate. The two outputs are **byte-identical**, selection and digest, for all 15 that build
+(the two that do not are `examples/04`'s sync-only configs, which carry no `include_dirs` and fail
+identically on both).
+
+**What that does not prove:** all 22 of those entries are plain strings. Not one sets `order`,
+`include`, `exclude`, `recursive` or `auto_discover`, so the sweep exercises exactly one configuration
+shape — every knob at its default — which is precisely the shape this release promises not to change. It
+is a real regression net for the unchanged path and no evidence at all about a configuration at risk.
+
+The at-risk shapes have their own corpus, `tests/fixtures/build_selection_corpus/`: one minimal project
+per shape that changes, plus one control, each with its 1.4.0 and 1.5.0 selection recorded and a test
+that fails if a shape stops differing. Four of the seven changed shapes report **no** diagnostic at all —
+`order` blocks, deduplication and overlap resolution are not glob semantics, so nothing names them, and
+`--list-files` is the tool for those. The worked example, from `#255`'s own reproduction:
+
+```
+# db/b at order 10, db/a at order 20
+1.4.0:  db/a/00_first.sql, db/b/99_last.sql     # alphabetical; order ignored
+1.5.0:  db/b/99_last.sql, db/a/00_first.sql     # order 10 before order 20
+```
+
+and from `#256`'s, where the build *grows*:
+
+```
+# exclude: ["temp/*.sql"]
+1.4.0:  db/schema/keep.sql                      # a/temp/t2.sql excluded at any depth
+1.5.0:  db/schema/a/temp/t2.sql, keep.sql       # the pattern now names one place
+```
+
 ### Changed
 
 - **`include` and `exclude` globs now mean what gitignore means by them.** They went through different
@@ -5670,6 +5757,8 @@ confiture seed apply --sequential --database-url postgresql://localhost/db
 ## [0.3.13] - 2026-01-31
 
 ## [1.4.0] - 2026-09-08
+
+## [1.5.0] - 2026-09-09
 
 ## [Unreleased]
 

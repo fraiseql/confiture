@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.4.0
-**Last Updated**: 2026-09-08
+**Version**: 1.5.0
+**Last Updated**: September 09, 2026
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -165,6 +165,23 @@ SQL); a regex that matches a statement's shape (`^CREATE\s+TABLE`) counts agains
 the shrink-only `sql_keyword_regex` dimension of `tests/budgets.json`. Read a
 `-- confiture:<name>` directive through `sql_lexer.directives()`, never with a
 line walker of your own.
+
+**One path matcher too** (since 1.5.0, #256). `core/path_globs.py` answers "does
+this path, relative to its include directory, match this configured glob" and
+nothing else does. The dialect is **gitignore's**, named as such so a reader has
+a reference implementation to compare against: a pattern with no `/` matches the
+*filename* at any depth, a pattern with a `/` is matched **left-anchored**
+against the whole relative path, `**` spans **zero or more** components, and `*`
+/ `?` never cross a separator. `PurePath.match`, `PurePath.full_match` or
+`fnmatch` called on a *path* anywhere else fails
+`tests/unit/test_one_path_matcher.py`; its allow-list entries state, per module,
+which *object* name (`schema.relname`, a bare filename from a flat listing) that
+module matches instead. That is the point of the allow-list: `SeedProfile`
+spells its keys `include` / `exclude` exactly as `DirectoryConfig` does, but they
+are `fnmatch` globs over a bare filename, on purpose — seed discovery is a flat
+listing where a path never appears and `**` has nothing to span. `recursive`
+bounds the walk and the patterns filter what it found; nothing rewrites a
+pattern between what the YAML says and what the matcher sees.
 
 #### Python migrations: the static evaluator (since 0.46.0, #213)
 
@@ -1158,8 +1175,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: 2026-09-08
-**Version**: 1.4.0
+**Last Updated**: September 09, 2026
+**Version**: 1.5.0
 
 ---
 
