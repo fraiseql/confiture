@@ -165,25 +165,32 @@ class BuildWarning:
     file: str | None = None
 
     @classmethod
-    def of(cls, code: str, message: str, file: str | None = None) -> BuildWarning:
-        """A warning whose severity is the one the registry publishes for *code*.
+    def of(cls, code: str, *, file: str | None = None, **fields: object) -> BuildWarning:
+        """The registry's entry for *code*, filled in.
+
+        Severity *and* wording come from the registry, so the sentence a build
+        prints is the one the published codebook documents — neither can drift
+        from the other by being written twice.
 
         Args:
             code: A registered error code.
-            message: What happened, in one line.
-            file: The file it is about, when it is about one.
+            file: The file the warning is about, when it is about one. Also
+                available to the message template as ``{file}``.
+            **fields: The remaining placeholders of the code's message template.
 
         Returns:
-            The warning, with ``severity`` taken from the registry.
+            The warning, ready for the envelope.
 
         Raises:
             ValueError: *code* is not registered — a warning no consumer could
                 look up is a bug, not a payload.
+            KeyError: The template has a placeholder *fields* does not fill.
         """
+        definition = ERROR_CODE_REGISTRY.get(code)
         return cls(
             code=code,
-            severity=ERROR_CODE_REGISTRY.get(code).severity.value,
-            message=message,
+            severity=definition.severity.value,
+            message=definition.message_template.format(file=file, **fields),
             file=file,
         )
 

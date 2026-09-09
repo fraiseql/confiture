@@ -78,7 +78,7 @@ from confiture.core.unified_linter import UnifiedLinter
 from confiture.core.validation.config_loaders import load_security_lint as _lsl
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError
 from confiture.models.lint import LintSeverity
-from confiture.models.results import BuildResult
+from confiture.models.results import BuildResult, BuildWarning
 from confiture.models.unified_lint import UnifiedLintIssue, UnifiedLintResult
 
 # Valid output formats for linting (re-exported so main.py can keep LINT_FORMATS there)
@@ -498,8 +498,9 @@ def build(
         )
 
         seed_files_applied = 0
+        warnings: list[BuildWarning] = []
         if apply_sequential:
-            seed_files_applied = _apply_seeds_sequentially(
+            seed_files_applied, seed_warnings = _apply_seeds_sequentially(
                 builder,
                 out,
                 env=env,
@@ -509,6 +510,7 @@ def build(
                 json_mode=json_mode,
                 report_output=report_output,
             )
+            warnings.extend(seed_warnings)
 
         schema_hash = builder.compute_hash() if show_hash else None
         artifact_path_str: str | None = None
@@ -542,6 +544,7 @@ def build(
             artifact_path=artifact_path_str,
             artifact_hash=artifact_hash_str,
             seed_profile=seed_profile,
+            warnings=warnings,
             duplicates=duplicates,
         )
         format_build_result(build_result, format_type, report_output, console)
@@ -766,8 +769,14 @@ def _apply_seeds_sequentially(
     profile: Any,
     json_mode: bool,
     report_output: Path | None,
-) -> int:
-    """``--sequential``: apply the seed files through the core sequencer; return the count."""
+) -> tuple[int, list[BuildWarning]]:
+    """``--sequential``: apply the seed files through the core sequencer.
+
+    Returns:
+        ``(applied, warnings)``. What the run has to say about the seeds is
+        returned rather than printed, so the envelope carries it and the
+        result renders it once (issue #268).
+    """
 
     # The environment's `seed:` block is the default; the flag can only widen it.
     seed_settings = getattr(builder.env_config, "seed", None)
@@ -776,8 +785,7 @@ def _apply_seeds_sequentially(
     out.print("\n[cyan]🌱 Applying seed files sequentially...[/cyan]")
     _schema_files, seed_files = builder.categorize_sql_files()
     if not seed_files:
-        out.print("[yellow]⚠️  No seed files found[/yellow]")
-        return 0
+        return 0, [BuildWarning.of("SEED_003", env=env)]
     try:
         result = apply_seed_files(
             database_url or builder.env_config.database_url,
@@ -791,9 +799,9 @@ def _apply_seeds_sequentially(
     except ConfiturError as e:
         fail(e, json_mode=json_mode, output_file=report_output)
     out.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
-    if result.failed > 0:
-        out.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
-    return result.succeeded
+    if result.failed == 0:
+        return result.succeeded, []
+    return result.succeeded, [BuildWarning.of("SEED_002", count=result.failed)]
 
 
 def _write_dump_artifact(

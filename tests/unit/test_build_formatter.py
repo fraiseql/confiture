@@ -135,8 +135,8 @@ class TestBuildFormatter:
                 schema_size_bytes=5000,
                 output_path="/tmp/schema.sql",
                 warnings=[
-                    BuildWarning.of("SEED_002", "2 seed file(s) failed"),
-                    BuildWarning.of("SCHEMA_206", "db/schema/x.sql: pglast could not parse it"),
+                    BuildWarning.of("SEED_002", count=2),
+                    BuildWarning.of("SCHEMA_206", file="db/schema/x.sql"),
                 ],
             )
 
