@@ -25,7 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   both lists, in **gitignore's dialect**: a pattern with no `/` matches the file's *name* at any depth
   (so `*.sql` and `*.bak` are unaffected), a pattern with a `/` is matched **left-anchored** against the
   whole relative path, and `**` spans **zero or more** components. Discovery walks each entry's tree
-  once and the patterns filter what it found, so `recursive` no longer half-decides the reach.
+  once and the patterns filter what it found, so `recursive` is now **the only thing that bounds the
+  walk**: `true` walks the tree, `false` reads the entry's own directory, and no pattern is rewritten
+  between what the YAML says and what the matcher sees. The rewrite that turned a non-recursive entry's
+  `["**/*.sql"]` into `["*.sql"]` behind the user's back is gone — `**` spans zero components, so
+  `**/*.sql` still selects the depth-1 files without it. Only a pattern that *requires* depth, like
+  `**/sub/*.sql`, can now match nothing under `recursive: false` — that shape used to build files three
+  levels below a directory the flag said not to descend into, and it is reported (never a hard error)
+  with the contradiction named.
   **Both directions can change**: left-anchoring *un-excludes* files a right-anchored `temp/*.sql` used
   to remove at any depth, so a build can grow as well as shrink.
 

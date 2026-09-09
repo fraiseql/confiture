@@ -56,10 +56,14 @@ if not TYPE_CHECKING:
 
 
 def _include_config(include: Any) -> dict[str, Any] | None:
-    """One ``include_dirs`` entry — a string, a dict or a ``DirectoryConfig`` — as a config dict.
+    """One ``include_dirs`` entry — a string or a ``DirectoryConfig`` — as a config dict.
 
-    A string means recursive ``**/*.sql``; a non-recursive entry with the
-    default pattern reads ``*.sql``. An entry of another type is ignored.
+    A bare string is the whole tree: recursive, with the default ``**/*.sql``.
+    Nothing here edits the patterns the user wrote; ``recursive`` bounds the
+    walk and the patterns filter what it found, so a ``**`` under
+    ``recursive: false`` still selects the depth-1 files (it spans *zero* or
+    more components) and needs no rewriting to do it. An entry of another type
+    is ignored.
     """
     if isinstance(include, str):
         return {
@@ -70,25 +74,11 @@ def _include_config(include: Any) -> dict[str, Any] | None:
             "auto_discover": True,
             "order": 0,
         }
-    if isinstance(include, dict):
-        recursive = include.get("recursive", True)
-        default_include = ["**/*.sql"] if recursive else ["*.sql"]
-        return {
-            "path": Path(include["path"]),
-            "recursive": recursive,
-            "include": include.get("include", default_include),
-            "exclude": include.get("exclude", []),
-            "auto_discover": include.get("auto_discover", True),
-            "order": include.get("order", 0),
-        }
     if hasattr(include, "path"):  # DirectoryConfig object
-        include_patterns = include.include
-        if include_patterns == ["**/*.sql"] and not include.recursive:
-            include_patterns = ["*.sql"]
         return {
             "path": Path(include.path),
             "recursive": include.recursive,
-            "include": include_patterns,
+            "include": include.include,
             "exclude": include.exclude,
             "auto_discover": include.auto_discover,
             "order": include.order,
