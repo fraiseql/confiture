@@ -14,13 +14,16 @@ scenario here that fills it.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from jsonschema import Draft202012Validator
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.core.schema_exporter import load_schema
 from confiture.core.seed.applier import ApplyResult
 
 runner = CliRunner()
@@ -194,29 +197,46 @@ class TestDuplicateScanWarnings:
         assert payload["duplicates"]
 
 
-@pytest.mark.parametrize("array", ["warnings", "duplicates"])
-def test_every_published_array_has_something_that_fills_it(array: str, tmp_path: Path) -> None:
-    """No published field of this envelope is one nothing can ever write to.
+def _published_arrays() -> list[str]:
+    """Every array `build --format json` publishes, read from the schema itself."""
+    schema = load_schema("build.schema.json")
+    return sorted(
+        name for name, spec in schema["properties"].items() if spec.get("type") == "array"
+    )
 
-    `warnings` shipped in 1.5.0 as an array that was serialised on every run and
-    written to by nothing (#268). This test is the reason that cannot happen
-    again quietly: a new array in `build.schema.json` either has a scenario here
-    that fills it, or it fails.
-    """
-    fillers = {
+
+def _fillers(tmp_path: Path) -> dict[str, Callable[[], dict]]:
+    """One scenario per published array, each producing a payload that fills it."""
+    return {
         "warnings": lambda: _seed_failure_payload(tmp_path),
         "duplicates": lambda: _duplicate_payload(tmp_path),
     }
-    published = set(json.loads(_read_build_schema())["properties"])
-    assert array in published, f"{array} is no longer published; drop it from this guard"
+
+
+@pytest.mark.parametrize("array", _published_arrays())
+def test_every_published_array_has_something_that_fills_it(array: str, tmp_path: Path) -> None:
+    """No published field of this envelope is one nothing can ever write to.
+
+    `warnings` shipped in 1.5.0 as an array that was serialised on every run
+    and written to by nothing (#268). This test is why that cannot happen again
+    quietly: it enumerates the arrays from `build.schema.json`, so a new one
+    either has a scenario here that fills it, or it fails.
+    """
+    fillers = _fillers(tmp_path)
+    assert array in fillers, (
+        f"build.schema.json publishes {array}[] but nothing here fills it — "
+        "add the scenario that writes it, or stop publishing it"
+    )
 
     assert fillers[array]()[array], f"nothing in the build path ever writes {array}[]"
 
 
-def _read_build_schema() -> str:
-    from confiture.core.schema_exporter import load_schema
+def test_a_real_build_payload_validates_against_the_published_schema(tmp_path: Path) -> None:
+    """The typed entries are the ones the schema documents, not a lookalike."""
+    payload = _seed_failure_payload(tmp_path)
 
-    return json.dumps(load_schema("build.schema.json"))
+    Draft202012Validator(load_schema("build.schema.json")).validate(payload)
+    assert payload["warnings"][0]["code"] == "SEED_002"
 
 
 def _seed_failure_payload(tmp_path: Path) -> dict:

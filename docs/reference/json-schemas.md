@@ -488,6 +488,16 @@ Shape is identical to plain `drift` — items of type `missing_grant` / `extra_g
 
 **Schema**: [`build.schema.json`](json-schemas/build.schema.json) — `BuildResult.to_dict()`: files processed, schema size and hash, output and artifact paths, seed files applied, warnings, error.
 
+`warnings[]` carries the build's own diagnostics — what the run has to say that is not a failure — as typed entries `{code, severity, message, file}`, so a consumer matches a code rather than a sentence. Since 1.6.0 (#268); before, the array was published on every run and written to by nothing, and its entries were typed as plain strings. What can appear there today:
+
+| code | severity | when |
+|---|---|---|
+| `SEED_002` | `warning` | `--sequential` applied seeds and some failed (`--continue-on-error`, or `seed.continue_on_error`). `seed_files_applied` counts the ones that worked; this counts the ones that did not. |
+| `SEED_003` | `info` | `--sequential` found no seed files at all. |
+| `SCHEMA_206` | `warning` | `--warn-duplicates` / `--fail-on-duplicates` could not parse a file, so it was not checked; `file` names it. |
+
+`severity` is the one the [error-code registry](./error-codes.md) publishes for `code` and is never `error` — a build that failed says so in `error`, not here. A build with nothing to report publishes `[]`.
+
 ### `confiture build --list-files --format json`
 
 **Schema**: [`build-list-files.schema.json`](json-schemas/build-list-files.schema.json) — what the build *would* read, and why: `files[]` in build order, each naming the `include_dirs` entry that selected it, that entry's `order` and the include pattern that matched, plus `patterns[]` — one note per configured pattern that does not select what it appears to. Nothing is built.
