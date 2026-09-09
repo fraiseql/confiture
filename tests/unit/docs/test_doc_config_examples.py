@@ -40,3 +40,52 @@ def test_complete_example_uses_nested_tracking_table_not_legacy_key() -> None:
         "loader rejects. Use nested 'migration: { tracking_table: ... }'."
     )
     assert "tracking_table" in data.get("migration", {})
+
+
+def _hand_written_include_dirs_table() -> dict[str, str]:
+    """The `include_dirs` options table a reader sees, as ``{field: default}``.
+
+    ``configuration.md`` carries this table by hand *and* a generated one for
+    the same model further down. Two tables in one file is how the
+    ``auto_discover`` default came to be documented as ``false`` when the model
+    says ``true``, and the `order` default as ``auto`` when it is ``0``.
+    """
+    text = read_doc(CONFIG_DOC)
+    body = text.split("**Configuration Options**:", 1)[1].split("**Path resolution**", 1)[0]
+    defaults: dict[str, str] = {}
+    for line in body.splitlines():
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) != 4 or not cells[0].startswith("`"):
+            continue
+        defaults[cells[0].strip("`")] = cells[2]
+    return defaults
+
+
+def test_include_dirs_table_matches_the_model() -> None:
+    """Every default in the hand-written table is the one ``DirectoryConfig`` has."""
+    from confiture.config.environment import DirectoryConfig
+
+    documented = _hand_written_include_dirs_table()
+    assert documented, "the include_dirs options table is no longer where this test looks"
+
+    fields = DirectoryConfig.model_fields
+    assert set(documented) == set(fields), (
+        f"table and model disagree about the fields: {set(documented) ^ set(fields)}"
+    )
+
+    wrong: list[str] = []
+    for name, cell in documented.items():
+        field = fields[name]
+        if field.is_required():
+            if cell != "required":
+                wrong.append(f"{name}: table says {cell!r}, the field is required")
+            continue
+        actual = field.get_default(call_default_factory=True)
+        expected = {True: "`true`", False: "`false`"}.get(
+            actual if isinstance(actual, bool) else object(), f"`{actual!r}`".replace("'", '"')
+        )
+        if cell != expected:
+            wrong.append(f"{name}: table says {cell!r}, the model says {expected!r}")
+    assert wrong == [], "the hand-written table has drifted from the model:\n  " + "\n  ".join(
+        wrong
+    )

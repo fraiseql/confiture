@@ -70,6 +70,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   project that sets distinct `order` values changes, and what changes is that its stated intent is now
   honoured. The order entries are *listed* in still sequences nothing.
 
+### Fixed
+
+- **`auto_discover` is documented as what it does.** Its `DirectoryConfig` docstring claimed it
+  "discover[s] files by the include/exclude globs" and that `false` "builds only what `order` and
+  explicit names select" — no such behaviour has ever existed. It guards exactly one branch: whether a
+  **missing include directory** is skipped or fails the build. The hand-written options table in
+  `configuration.md` also gave its default as `false`; the model says `true`. A new
+  `test_include_dirs_table_matches_the_model` compares every default in that hand-written table against
+  `DirectoryConfig`, so the two tables in that file cannot disagree again.
+
 ### Added
 
 - **`confiture build --list-files`** prints what the build would read — one line per file with the

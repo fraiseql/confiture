@@ -188,7 +188,7 @@ include_dirs:
       - "**/*.bak"
       - "**/temp/**"
     order: 10                # Build block: groups run low to high (optional, default 0)
-    auto_discover: false     # Default: false
+    auto_discover: true      # Default: true — a missing directory is skipped, not an error
 ```
 
 **Configuration Options**:
@@ -200,12 +200,13 @@ include_dirs:
 | `include` | array[string] | `["**/*.sql"]` | Glob patterns for files to include |
 | `exclude` | array[string] | `[]` | Glob patterns for files to exclude |
 | `order` | integer | `0` | Build block: entries are grouped by this value and the groups concatenated low to high |
-| `auto_discover` | boolean | `false` | Skip missing directories silently |
+| `auto_discover` | boolean | `true` | Skip this entry when its directory does not exist, instead of failing the build |
 
 **Path resolution**:
 - **Relative paths**: Resolved from project root (where `db/` directory is located)
 - **Absolute paths**: Used as-is
-- **Validation**: Confiture checks directory existence unless `auto_discover: true`
+- **Validation**: a missing include directory fails the build unless `auto_discover: true` (the
+  default), which skips the entry. `auto_discover` decides nothing about *which* files are selected.
 
 **Pattern syntax**: since 1.5.0 these are **gitignore's** globs, matched against the path relative to
 the include directory:
@@ -568,7 +569,7 @@ Generated from `confiture.config.environment`; the description is the model's ow
 | `recursive` | bool | `true` | Descend into subdirectories (default: true). |
 | `include` | list[str] | `['**/*.sql']` | Glob patterns a file must match to be built (default: ``**/*.sql``). |
 | `exclude` | list[str] | `[]` | Glob patterns that remove files from the build. |
-| `auto_discover` | bool | `true` | Discover files by the include/exclude globs; ``false`` builds only what ``order`` and explicit names select. |
+| `auto_discover` | bool | `true` | What happens when this directory does not exist: ``true`` (the default) skips the entry, ``false`` fails the build. It decides nothing about which files are selected — ``include`` and ``exclude`` decide that on their own. |
 | `order` | int | `0` | Which block of the build this entry's files land in. Entries are grouped by ``order``, the groups concatenated low to high, and inside a group the build's sort mode decides. Every entry defaults to 0, so a config that never sets it has one group. The order entries are *listed* in sequences nothing; it breaks one tie, deciding which entry owns a file two entries both select. |
 
 #### `BuildConfig`
