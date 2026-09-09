@@ -94,6 +94,23 @@ def _include_config(include: Any) -> dict[str, Any] | None:
     return None
 
 
+def _first_occurrences(files: list[Path]) -> list[Path]:
+    """*files* with each resolved path kept once, at its first appearance.
+
+    Two include patterns can select the same file — ``["**/*.sql", "*.sql"]``
+    over a flat directory selects every file twice. The build reads it once.
+    """
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for file in files:
+        resolved = file.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(file)
+    return unique
+
+
 def _resolved_dir_paths(items: Any) -> list[Path]:
     """Absolute paths of a directory list (strings, ``{path: …}`` dicts or ``DirectoryConfig``)."""
     paths: list[Path] = []
@@ -279,6 +296,8 @@ class SchemaBuilder:
 
                     if not is_excluded:
                         all_sql_files.append(file)
+
+        all_sql_files = _first_occurrences(all_sql_files)
 
         # Filter out excluded directories (legacy support)
         filtered_files = []
