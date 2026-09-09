@@ -29,6 +29,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Both directions can change**: left-anchoring *un-excludes* files a right-anchored `temp/*.sql` used
   to remove at any depth, so a build can grow as well as shrink.
 
+  For one release, confiture replays 1.4.0's whole selection and **names every pattern whose match set
+  moved**: `CONFIG_013` (`warning`) for a pattern that matched files and now matches none — carrying the
+  count and, when it would restore them exactly, the `**/`-prefixed rewrite — and `CONFIG_014` (`info`)
+  for one whose match set merely grew or shrank, naming the files. `confiture build` prints them,
+  `confiture validate-config` folds them into its `issues[]`, and `confiture build --list-files` carries
+  them in `patterns[]`. **`validate-config --strict` exits 5 on a warning**, so a `CONFIG_013` reddens a
+  currently-green `--strict` leg on upgrade day; that is deliberate, and `CONFIG_014` stays `info` so the
+  merely-shifted case does not. When a selection ends up empty *because* a pattern stopped matching, the
+  `SchemaError` that reports it carries that diagnostic as its resolution hint instead of the generic
+  one. The replay costs one extra directory walk per entry and is skipped entirely for a configuration
+  whose patterns contain no `/` — such a pattern cannot have changed meaning. It is deleted in 1.6.0
+  (#263).
+
 - **The `order` key on an `include_dirs` entry now decides the sequence files are concatenated in.**
   It was read once — the entries were sorted by it — and then discarded: every entry's matches were
   flattened into one list and sorted globally, so `db/b` at `order: 10` and `db/a` at `order: 20` built
