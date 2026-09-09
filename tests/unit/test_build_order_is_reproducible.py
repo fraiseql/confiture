@@ -99,6 +99,71 @@ def test_hex_order_reads_the_directory_prefix_not_only_the_filename(tmp_path, sh
     ]
 
 
+def _two_block_tree(tmp_path: Path) -> Path:
+    """Two ``order`` blocks; only the second's *filenames* carry numeric prefixes.
+
+    The first block's numbers are on its directories, so the predicate that
+    decides whether numbers are read at all — which looks at file stems — is
+    false for that block on its own and true over the selection as a whole.
+    """
+    first = tmp_path / "db" / "first"
+    (first / "9_beta").mkdir(parents=True)
+    (first / "10_alpha").mkdir(parents=True)
+    (first / "9_beta" / "x.sql").write_text("SELECT 1;\n")
+    (first / "10_alpha" / "y.sql").write_text("SELECT 2;\n")
+    second = tmp_path / "db" / "second"
+    second.mkdir(parents=True)
+    (second / "00001_create.sql").write_text("SELECT 3;\n")
+
+    env = tmp_path / "db" / "environments" / "test.yaml"
+    env.parent.mkdir(parents=True)
+    env.write_text(
+        "database_url: postgresql://localhost/test\n"
+        "include_dirs:\n"
+        f"  - path: {first}\n    order: 10\n"
+        f"  - path: {second}\n    order: 20\n"
+        "build:\n  sort_mode: hex\n"
+    )
+    return tmp_path
+
+
+_TWO_BLOCK_ORDER = [
+    "db/first/9_beta/x.sql",
+    "db/first/10_alpha/y.sql",
+    "db/second/00001_create.sql",
+]
+
+
+def test_hex_predicate_is_global_not_per_block(tmp_path):
+    """Both blocks read their numbers, because one selected file carries one.
+
+    Deciding it per block would sort the first block alphabetically —
+    ``10_alpha`` before ``9_beta`` — which is neither what the tree says nor
+    what the same files sorted as one flat list gave before blocks existed.
+    """
+    project = _two_block_tree(tmp_path)
+
+    order = [
+        f.relative_to(project).as_posix()
+        for f in SchemaBuilder(env="test", project_dir=project).find_sql_files()
+    ]
+
+    assert order == _TWO_BLOCK_ORDER
+
+
+def test_discovery_order_does_not_reach_a_blocked_build(tmp_path, shuffle_discovery):
+    """Ten shuffles of a two-block tree produce one build order."""
+    project = _two_block_tree(tmp_path)
+
+    orders = []
+    for seed in range(10):
+        shuffle_discovery(seed)
+        builder = SchemaBuilder(env="test", project_dir=project)
+        orders.append([f.relative_to(project).as_posix() for f in builder.find_sql_files()])
+
+    assert orders == [_TWO_BLOCK_ORDER] * 10
+
+
 def _hex_tree(tmp_path: Path) -> Path:
     """A tree numbered the way ``TreeAllocator`` writes hex prefixes: lower case."""
     schema = tmp_path / "db" / "schema"

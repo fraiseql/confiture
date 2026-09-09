@@ -122,7 +122,12 @@ build:
 
 
 def test_selection_carries_provenance(tmp_path: Path) -> None:
-    """Each selected file names the entry, the order and the pattern that found it."""
+    """Each selected file names the entry, the order and the pattern that found it.
+
+    The ``order`` it names is also the block it is built in, so the entry at
+    ``order: 10`` is concatenated before the one at ``order: 20`` whatever the
+    filenames sort like.
+    """
     project = _provenance_project(tmp_path)
     builder = SchemaBuilder(env="local", project_dir=project)
 
@@ -131,9 +136,9 @@ def test_selection_carries_provenance(tmp_path: Path) -> None:
     assert [
         (record.path.name, record.entry.name, record.order, record.pattern) for record in selected
     ] == [
-        ("00_first.sql", "a", 20, "**/*.sql"),
         ("00_zero.sql", "b", 10, "0*.sql"),
         ("99_last.sql", "b", 10, "9*.sql"),
+        ("00_first.sql", "a", 20, "**/*.sql"),
     ]
 
 

@@ -167,7 +167,16 @@ def test_an_extension_owned_function_resolves_through_the_database(
         if not available:
             pytest.skip("pgcrypto is not available on this server: no extension to resolve through")
         try:
-            conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+            # WITH SCHEMA public, and relocated if an earlier run put it
+            # elsewhere: a bare CREATE EXTENSION installs into the first schema
+            # of search_path, which under a role named `confiture` is a leftover
+            # schema of that name — and then `public.gen_random_uuid`, the name
+            # this test is about, does not exist.
+            conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public")
+            if conn.execute("SELECT to_regprocedure('public.gen_random_uuid()')").fetchone() == (
+                None,
+            ):
+                conn.execute("ALTER EXTENSION pgcrypto SET SCHEMA public")
         except psycopg.errors.InsufficientPrivilege:
             pytest.skip("this role may not CREATE EXTENSION: no extension to resolve through")
 

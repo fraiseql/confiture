@@ -123,7 +123,12 @@ include_dirs:
 
 
 def test_directory_ordering(tmp_path):
-    """Test that directories are processed in order."""
+    """The entry at ``order: 10`` is built before the one at ``order: 20``.
+
+    The two directories also sort that way alphabetically, so this passed
+    while ``order`` decided nothing. What it pins now is the ``order`` key —
+    :mod:`tests.unit.test_include_dirs_order` is where the two disagree.
+    """
     schema_dir = tmp_path / "schema"
     dir1 = schema_dir / "01_first"
     dir2 = schema_dir / "02_second"

@@ -408,7 +408,7 @@ class DirectoryConfig(BaseModel):
         include: Glob patterns a file must match to be built (default: ``**/*.sql``).
         exclude: Glob patterns that remove files from the build.
         auto_discover: Discover files by the include/exclude globs; ``false`` builds only what ``order`` and explicit names select.
-        order: Sort key among directories in the build; lower runs first (default: 0).
+        order: Which block of the build this entry's files land in. Entries are grouped by ``order``, the groups concatenated low to high, and inside a group the build's sort mode decides. Every entry defaults to 0, so a config that never sets it has one group. The order entries are *listed* in sequences nothing; it breaks one tie, deciding which entry owns a file two entries both select.
     """
 
     path: str

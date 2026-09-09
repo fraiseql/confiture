@@ -167,6 +167,22 @@ def _is_excluded(rel_path: Path, exclude_patterns: list[str]) -> bool:
     return any(rel_path.match(pattern) for pattern in exclude_patterns)
 
 
+def _sorted_block(block: list[SelectedFile], *, numbered: bool) -> list[SelectedFile]:
+    """One ``order`` block, in the sequence the configured sort mode gives it."""
+    if numbered:
+        by_path = {record.path: record for record in block}
+        return [by_path[path] for path in tree_prefix.order(list(by_path))]
+    return sorted(block, key=lambda record: record.path)
+
+
+def _order_blocks(selected: list[SelectedFile]) -> list[list[SelectedFile]]:
+    """*selected* grouped by ``order`` value, the groups low to high."""
+    blocks: dict[int, list[SelectedFile]] = {}
+    for record in selected:
+        blocks.setdefault(record.order, []).append(record)
+    return [blocks[order] for order in sorted(blocks)]
+
+
 def _resolved_dir_paths(items: Any) -> list[Path]:
     """Absolute paths of a directory list (strings, ``{path: …}`` dicts or ``DirectoryConfig``)."""
     paths: list[Path] = []
@@ -226,7 +242,10 @@ class SchemaBuilder:
             if config is not None
         ]
 
-        # Sort by order
+        # Entries in build sequence: by ``order``, and — because the sort is
+        # stable — in config order among equals. Two things read this: the
+        # blocks the files are concatenated in, and, when two entries select
+        # the same file, which of them owns it (the first one reached).
         self.include_configs.sort(key=lambda x: int(x["order"]))
 
         # Extract paths for backward compatibility
@@ -323,6 +342,14 @@ class SchemaBuilder:
     def _select(self) -> list[SelectedFile]:
         """The files the build reads, in build order, each carrying its provenance.
 
+        Overlapping entries — one for ``db/schema`` and one for
+        ``db/schema/10_tables`` — are legal and select the same files twice. A
+        file is built once, and it belongs to the entry with the lower
+        ``order``; among entries sharing an ``order``, to the one listed first.
+        That is what ``self.include_configs`` is sorted for: this loop reaches
+        the owning entry before any other that would select the same file, so
+        keeping the first occurrence keeps the right one.
+
         Returns:
             One record per file, deduplicated on the resolved path and sorted
             the way the build concatenates them.
@@ -402,16 +429,35 @@ class SchemaBuilder:
         )
 
     def _in_build_order(self, selected: list[SelectedFile]) -> list[SelectedFile]:
-        """*selected* in the order the build concatenates it."""
-        if self.env_config.build.sort_mode == "hex" and any(
+        """*selected* in the order the build concatenates it.
+
+        ``order`` partitions the build: entries are grouped by their ``order``
+        value and the groups are concatenated low to high. Within a group the
+        configured sort decides — alphabetical, or numeric-prefix order under
+        ``sort_mode: hex``. Every entry defaults to ``order: 0``, so a project
+        that never sets the key has exactly one group, and that group's sort is
+        the whole sort.
+
+        The order entries are *listed* in sequences nothing: ``order`` is the
+        only sequencing key, so ``- db/seeds`` written above ``- db/schema``
+        still builds ``db/schema`` first when its ``order`` is lower. It breaks
+        exactly one tie — entries sharing an ``order`` value keep their config
+        order, which is what decides which entry owns a file two entries both
+        select.
+
+        Whether numeric prefixes are read at all is decided once, over every
+        selected file: a two-block tree where only one block carries them sorts
+        both blocks the same way, as it did before blocks existed.
+        """
+        # Numeric order, reading the prefix on every path component — see
+        # core.tree_prefix for why the filename's own prefix is not enough.
+        numbered = self.env_config.build.sort_mode == "hex" and any(
             self._is_hex_prefix(record.path.stem) for record in selected
-        ):
-            # Numeric order, reading the prefix on every path component — see
-            # core.tree_prefix for why the filename's own prefix is not enough.
-            by_path = {record.path: record for record in selected}
-            return [by_path[path] for path in tree_prefix.order(list(by_path))]
-        # Default alphabetical sort
-        return sorted(selected, key=lambda record: record.path)
+        )
+        ordered: list[SelectedFile] = []
+        for block in _order_blocks(selected):
+            ordered.extend(_sorted_block(block, numbered=numbered))
+        return ordered
 
     def _validate_comments(self, files: list[Path]) -> None:
         """Validate SQL files for unclosed block comments
