@@ -90,3 +90,55 @@ def test_config_list_order_is_not_a_sequencing_key(tmp_path: Path) -> None:
     assert _two_zero_order_entries(tmp_path, swapped=True) == _two_zero_order_entries(
         tmp_path, swapped=False
     )
+
+
+def _overlapping_entries(tmp_path: Path, *, orders: tuple[int, int], swapped: bool = False) -> Path:
+    """An entry for ``db/schema`` and one for ``db/schema/10_tables`` inside it."""
+    root = tmp_path / f"{orders[0]}-{orders[1]}-{swapped}"
+    tables = root / "db" / "schema" / "10_tables"
+    tables.mkdir(parents=True)
+    (root / "db" / "schema" / "00_common.sql").write_text("SELECT 1;\n")
+    (tables / "10_users.sql").write_text("SELECT 2;\n")
+
+    entries = [
+        (root / "db" / "schema", orders[0]),
+        (tables, orders[1]),
+    ]
+    if swapped:
+        entries.reverse()
+    env_dir = root / "db" / "environments"
+    env_dir.mkdir(parents=True)
+    env_dir.joinpath("test.yaml").write_text(
+        "database_url: postgresql://localhost/test\ninclude_dirs:\n"
+        + "".join(f"  - path: {path}\n    order: {order}\n" for path, order in entries)
+    )
+    return root
+
+
+def test_overlapping_entries_take_the_lower_order(tmp_path: Path) -> None:
+    """A file two entries both select is built once, in the earlier block."""
+    project = _overlapping_entries(tmp_path, orders=(20, 10))
+    builder = SchemaBuilder(env="test", project_dir=project)
+
+    selected = builder._select()
+
+    assert [(str(r.path.relative_to(project)), r.order) for r in selected] == [
+        ("db/schema/10_tables/10_users.sql", 10),
+        ("db/schema/00_common.sql", 20),
+    ]
+
+
+def test_overlapping_entries_at_equal_order_take_the_first_listed(tmp_path: Path) -> None:
+    """At equal ``order``, the entry listed first owns the file — the one tie config order breaks."""
+    listed = SchemaBuilder(
+        env="test", project_dir=_overlapping_entries(tmp_path, orders=(0, 0))
+    )._select()
+    swapped = SchemaBuilder(
+        env="test", project_dir=_overlapping_entries(tmp_path, orders=(0, 0), swapped=True)
+    )._select()
+
+    owner = {record.path.name: record.entry.name for record in listed}
+    swapped_owner = {record.path.name: record.entry.name for record in swapped}
+
+    assert owner["10_users.sql"] == "schema"
+    assert swapped_owner["10_users.sql"] == "10_tables"

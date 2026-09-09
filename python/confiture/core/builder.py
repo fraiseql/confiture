@@ -242,7 +242,10 @@ class SchemaBuilder:
             if config is not None
         ]
 
-        # Sort by order
+        # Entries in build sequence: by ``order``, and — because the sort is
+        # stable — in config order among equals. Two things read this: the
+        # blocks the files are concatenated in, and, when two entries select
+        # the same file, which of them owns it (the first one reached).
         self.include_configs.sort(key=lambda x: int(x["order"]))
 
         # Extract paths for backward compatibility
@@ -338,6 +341,14 @@ class SchemaBuilder:
 
     def _select(self) -> list[SelectedFile]:
         """The files the build reads, in build order, each carrying its provenance.
+
+        Overlapping entries — one for ``db/schema`` and one for
+        ``db/schema/10_tables`` — are legal and select the same files twice. A
+        file is built once, and it belongs to the entry with the lower
+        ``order``; among entries sharing an ``order``, to the one listed first.
+        That is what ``self.include_configs`` is sorted for: this loop reaches
+        the owning entry before any other that would select the same file, so
+        keeping the first occurrence keeps the right one.
 
         Returns:
             One record per file, deduplicated on the resolved path and sorted
