@@ -488,6 +488,10 @@ Shape is identical to plain `drift` — items of type `missing_grant` / `extra_g
 
 **Schema**: [`build.schema.json`](json-schemas/build.schema.json) — `BuildResult.to_dict()`: files processed, schema size and hash, output and artifact paths, seed files applied, warnings, error.
 
+### `confiture build --list-files --format json`
+
+**Schema**: [`build-list-files.schema.json`](json-schemas/build-list-files.schema.json) — what the build *would* read, and why: `files[]` in build order, each naming the `include_dirs` entry that selected it, that entry's `order` and the include pattern that matched, plus `patterns[]` — one note per configured pattern that does not select what it appears to. Nothing is built.
+
 ### `confiture lint --format json`
 
 **Schema**: [`lint.schema.json`](json-schemas/lint.schema.json) — `LintReport.to_dict()`: the counts and the violation items (`rule_id`, `severity`, `location`, `file`, `line`, `message`, `suggested_fix`). `file` and `line` are `null` together when the rule read a string rather than a file tree. `gate` reports the `--fail-on` threshold and whether any selected rule could have reached it (#247). `documentation` — present when the `doc` family ran — reports how much of the schema carries a `COMMENT` and the length percentiles of those comments, per rule and for the family, so "100 % documented" can be told apart from "100 restatements" (#250).

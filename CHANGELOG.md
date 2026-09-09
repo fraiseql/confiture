@@ -14,6 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`confiture build --list-files`** prints what the build would read — one line per file with the
+  `include_dirs` entry that selected it, that entry's `order` and the include pattern that matched —
+  and builds nothing. `--format json` emits the same selection against the new
+  `build-list-files.schema.json`. This is the surface to diff across an upgrade.
+
+### Fixed
+
+- **A file selected by two include patterns is built once.** `include: ["**/*.sql", "*.sql"]` over a
+  flat directory selected every file twice: the generated schema carried each file's text twice,
+  `confiture lint` reported one `build_001` **error** naming the file as its own duplicate
+  (`Table 't' is defined 2 times in one build: db/schema/10_t.sql (line 1, offset 0);
+  db/schema/10_t.sql (line 1, offset 0)`), and `build --fail-on-duplicates` exited 1 without
+  building. Selection now keeps the first occurrence of each resolved path, so a configuration
+  whose patterns do not overlap selects exactly what it selected before.
+
 ## [1.4.0] - 2026-09-08
 
 Eight phases against the linter, released once. Six issues were filed by a project that ran

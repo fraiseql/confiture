@@ -9,6 +9,7 @@ Performance: Uses Rust extension (_core) when available for 10-50x speedup.
 import hashlib
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -94,6 +95,78 @@ def _include_config(include: Any) -> dict[str, Any] | None:
     return None
 
 
+@dataclass(frozen=True)
+class SelectedFile:
+    """A file the build reads, and how it came to be in the build.
+
+    Attributes:
+        path: The file itself.
+        entry: The ``include_dirs`` entry whose directory it was found under.
+        order: That entry's ``order`` value.
+        pattern: The entry's include pattern that matched it — the first, when
+            more than one would.
+    """
+
+    path: Path
+    entry: Path
+    order: int
+    pattern: str
+
+
+@dataclass(frozen=True)
+class PatternDiagnostic:
+    """A configured pattern that does not select what its author would expect.
+
+    Attributes:
+        code: The error-code registry entry that names the situation.
+        entry: The ``include_dirs`` entry the pattern is written under.
+        pattern: The pattern as written.
+        message: What it selects, and what a reader would expect it to select.
+    """
+
+    code: str
+    entry: Path
+    pattern: str
+    message: str
+
+
+@dataclass(frozen=True)
+class SelectionReport:
+    """What a build would read, before anything is read.
+
+    Attributes:
+        env: The environment the selection was made for.
+        files: The selected files, in build order, each with its provenance.
+        patterns: One note per pattern that does not select what it appears to.
+    """
+
+    env: str
+    files: list[SelectedFile]
+    patterns: list[PatternDiagnostic]
+
+
+def _first_occurrences(selected: list[SelectedFile]) -> list[SelectedFile]:
+    """*selected* with each resolved path kept once, at its first appearance.
+
+    Two include patterns can select the same file — ``["**/*.sql", "*.sql"]``
+    over a flat directory selects every file twice. The build reads it once.
+    """
+    seen: set[Path] = set()
+    unique: list[SelectedFile] = []
+    for file in selected:
+        resolved = file.path.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(file)
+    return unique
+
+
+def _is_excluded(rel_path: Path, exclude_patterns: list[str]) -> bool:
+    """Whether a path relative to its include directory matches any exclusion."""
+    return any(rel_path.match(pattern) for pattern in exclude_patterns)
+
+
 def _resolved_dir_paths(items: Any) -> list[Path]:
     """Absolute paths of a directory list (strings, ``{path: …}`` dicts or ``DirectoryConfig``)."""
     paths: list[Path] = []
@@ -137,6 +210,7 @@ class SchemaBuilder:
             self.env_config = env
         else:
             self.env_config = Environment.load(env, project_dir=project_dir)
+        self.env_name: str = env if isinstance(env, str) else self.env_config.name
 
         # Validate include_dirs
         if not self.env_config.include_dirs:
@@ -244,68 +318,100 @@ class SchemaBuilder:
             >>> print(files[0])
             /path/to/db/schema/00_common/extensions.sql
         """
-        all_sql_files = []
+        return [record.path for record in self._select()]
 
+    def _select(self) -> list[SelectedFile]:
+        """The files the build reads, in build order, each carrying its provenance.
+
+        Returns:
+            One record per file, deduplicated on the resolved path and sorted
+            the way the build concatenates them.
+
+        Raises:
+            SchemaError: If an include directory is missing and not auto-discovered,
+                or if nothing was selected.
+        """
+        selected: list[SelectedFile] = []
         for config in self.include_configs:
-            include_dir: Path = config["path"]
-            recursive = config["recursive"]
-            include_patterns = config["include"]
-            exclude_patterns = config["exclude"]
-            auto_discover = config["auto_discover"]
+            selected.extend(self._select_entry(config))
 
-            if not include_dir.exists():
-                if auto_discover:
-                    # Skip non-existent directories in auto-discover mode
-                    continue
-                else:
-                    raise SchemaError(
-                        f"Include directory does not exist: {include_dir}",
-                        resolution_hint=f"Create the directory at {include_dir} or update include_dirs in your config",
-                    )
+        selected = self._without_excluded_dirs(_first_occurrences(selected))
+        self._require_non_empty(selected)
+        return self._in_build_order(selected)
 
-            # Find files matching include patterns
-            for pattern in include_patterns:
-                if recursive:
-                    sql_files = list(include_dir.rglob(pattern))
-                else:
-                    sql_files = list(include_dir.glob(pattern))
+    def selection_report(self) -> SelectionReport:
+        """What ``build`` would read, and why — without reading any of it.
 
-                # Filter out excluded patterns
-                for file in sql_files:
-                    rel_path = file.relative_to(include_dir)
-                    is_excluded = any(
-                        rel_path.match(exclude_pattern) for exclude_pattern in exclude_patterns
-                    )
+        Returns:
+            The selected files in build order, each naming the ``include_dirs``
+            entry, the ``order`` and the pattern that put it there, together
+            with a note for every pattern that does not select what it appears
+            to.
 
-                    if not is_excluded:
-                        all_sql_files.append(file)
+        Raises:
+            SchemaError: For the same reasons :meth:`find_sql_files` does.
+        """
+        return SelectionReport(env=self.env_name, files=self._select(), patterns=[])
 
-        # Filter out excluded directories (legacy support)
-        filtered_files = []
-        exclude_paths = [Path(d) for d in self.env_config.exclude_dirs]
-
-        for file in all_sql_files:
-            # Check if file is in any excluded directory
-            is_excluded = any(file.is_relative_to(exclude_dir) for exclude_dir in exclude_paths)
-            if not is_excluded:
-                filtered_files.append(file)
-
-        if not filtered_files:
-            include_dirs_str = ", ".join(str(d) for d in self.include_dirs)
+    def _select_entry(self, config: dict[str, Any]) -> list[SelectedFile]:
+        """The files one ``include_dirs`` entry selects, in the order its patterns are written."""
+        include_dir: Path = config["path"]
+        if not include_dir.exists():
+            if config["auto_discover"]:
+                return []
             raise SchemaError(
-                f"No SQL files found in include directories: {include_dirs_str}",
-                resolution_hint="Add .sql files to subdirectories like 00_common/, 10_tables/ or check your include/exclude patterns",
+                f"Include directory does not exist: {include_dir}",
+                resolution_hint=f"Create the directory at {include_dir} or update include_dirs in your config",
             )
 
-        # Sort files based on configuration
+        order = int(config["order"])
+        found: list[SelectedFile] = []
+        for pattern in config["include"]:
+            if config["recursive"]:
+                matches = include_dir.rglob(pattern)
+            else:
+                matches = include_dir.glob(pattern)
+            found.extend(
+                SelectedFile(path=path, entry=include_dir, order=order, pattern=pattern)
+                for path in matches
+                if not _is_excluded(path.relative_to(include_dir), config["exclude"])
+            )
+        return found
+
+    def _without_excluded_dirs(self, selected: list[SelectedFile]) -> list[SelectedFile]:
+        """*selected* minus everything under ``exclude_dirs`` (the pattern-less legacy key)."""
+        exclude_paths = [Path(directory) for directory in self.env_config.exclude_dirs]
+        return [
+            record
+            for record in selected
+            if not any(record.path.is_relative_to(excluded) for excluded in exclude_paths)
+        ]
+
+    def _require_non_empty(self, selected: list[SelectedFile]) -> None:
+        """Refuse a build with nothing in it.
+
+        Raises:
+            SchemaError: If *selected* is empty.
+        """
+        if selected:
+            return
+        include_dirs_str = ", ".join(str(d) for d in self.include_dirs)
+        raise SchemaError(
+            f"No SQL files found in include directories: {include_dirs_str}",
+            resolution_hint="Add .sql files to subdirectories like 00_common/, 10_tables/ or check your include/exclude patterns",
+        )
+
+    def _in_build_order(self, selected: list[SelectedFile]) -> list[SelectedFile]:
+        """*selected* in the order the build concatenates it."""
         if self.env_config.build.sort_mode == "hex" and any(
-            self._is_hex_prefix(f.stem) for f in filtered_files
+            self._is_hex_prefix(record.path.stem) for record in selected
         ):
             # Numeric order, reading the prefix on every path component — see
             # core.tree_prefix for why the filename's own prefix is not enough.
-            return tree_prefix.order(filtered_files)
+            by_path = {record.path: record for record in selected}
+            return [by_path[path] for path in tree_prefix.order(list(by_path))]
         # Default alphabetical sort
-        return sorted(filtered_files)
+        return sorted(selected, key=lambda record: record.path)
 
     def _validate_comments(self, files: list[Path]) -> None:
         """Validate SQL files for unclosed block comments

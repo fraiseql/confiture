@@ -8,6 +8,8 @@ from pathlib import Path
 from rich.console import Console
 
 from confiture.cli.formatters.common import handle_output
+from confiture.core.builder import SelectionReport
+from confiture.core.linting.inventory import label_for
 from confiture.models.results import BuildResult
 
 
@@ -77,3 +79,77 @@ def format_text(result: BuildResult, console: Console) -> None:
             )
     else:
         console.print(f"[red]❌ Build failed: {result.error}[/red]")
+
+
+def selection_payload(report: SelectionReport, project_dir: Path | None) -> dict:
+    """The ``--list-files`` payload: the selection, named the way a finding names a file.
+
+    Args:
+        report: What the build would read.
+        project_dir: Project root; paths under it are named relative to it.
+
+    Returns:
+        ``{env, files: [{path, entry, order, pattern}], patterns, total}``.
+    """
+    return {
+        "env": report.env,
+        "files": [
+            {
+                "path": label_for(selected.path, project_dir),
+                "entry": label_for(selected.entry, project_dir),
+                "order": selected.order,
+                "pattern": selected.pattern,
+            }
+            for selected in report.files
+        ],
+        "patterns": [
+            {
+                "code": note.code,
+                "entry": label_for(note.entry, project_dir),
+                "pattern": note.pattern,
+                "message": note.message,
+            }
+            for note in report.patterns
+        ],
+        "total": len(report.files),
+    }
+
+
+def format_selection_report(
+    report: SelectionReport,
+    format_type: str,
+    project_dir: Path | None,
+    console: Console,
+) -> None:
+    """Print what the build would read; nothing is built.
+
+    Args:
+        report: What the build would read.
+        format_type: Output format ('text', 'json', or 'csv').
+        project_dir: Project root, for naming files relative to it.
+        console: Rich console for output.
+    """
+    payload = selection_payload(report, project_dir)
+    if format_type == "text":
+        console.print(
+            f"{payload['total']} file(s) selected for env '{payload['env']}' — nothing was built",
+            soft_wrap=True,
+        )
+        for entry in payload["files"]:
+            console.print(
+                f"  {entry['path']}  ← {entry['entry']} · "
+                f"order {entry['order']} · {entry['pattern']}",
+                soft_wrap=True,
+            )
+        for note in payload["patterns"]:
+            console.print(f"  {note['code']} {note['pattern']}: {note['message']}", soft_wrap=True)
+        return
+
+    csv_data = (
+        ["path", "entry", "order", "pattern"],
+        [
+            [entry["path"], entry["entry"], str(entry["order"]), entry["pattern"]]
+            for entry in payload["files"]
+        ],
+    )
+    handle_output(format_type, payload, csv_data, None, console)
