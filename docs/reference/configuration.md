@@ -207,11 +207,28 @@ include_dirs:
 - **Absolute paths**: Used as-is
 - **Validation**: Confiture checks directory existence unless `auto_discover: true`
 
-**Pattern syntax**: Uses glob patterns with `**` for recursive matching:
-- `*` - Match any characters (non-recursive)
-- `**` - Match any characters (recursive)
-- `?` - Match single character
-- `[abc]` - Match any character in set
+**Pattern syntax**: since 1.5.0 these are **gitignore's** globs, matched against the path relative to
+the include directory:
+
+- A pattern containing **no `/`** matches the file's *name*, at any depth — `*.sql` and `*.bak` reach
+  everywhere under the entry.
+- A pattern containing a `/` is matched against the whole relative path, **left-anchored**:
+  `10_tables/*.sql` names the `10_tables/` directly under the entry, not an `a/10_tables/` deeper down.
+  A trailing `/` names a directory and takes everything beneath it.
+- `**` spans **zero or more** directories, so `**/*.sql` selects a top-level `x.sql` as well as a
+  nested one, and `**/temp/**` excludes `temp/x.sql` and `a/b/temp/x.sql` alike.
+- `*` and `?` never cross a `/`; `[abc]` is a character class and `[!abc]` its negation; matching is
+  case-sensitive.
+
+Before 1.5.0 they were matched with `PurePath.match`, where `**` is a single component and matching is
+anchored at the *right* end — so the three examples above excluded a different set of files from the
+one they name. `confiture build` reports every pattern of yours whose match set moved (`CONFIG_013`,
+`CONFIG_014`), in both directions, for one release.
+
+> **Two dialects, two key names that look alike.** `seed.profiles.<name>.include` / `.exclude` are
+> spelled exactly like an `include_dirs` entry's, but they are `fnmatch` globs over a bare *filename*:
+> seed discovery is a flat, non-recursive listing where a path never appears and `**` has nothing to
+> span. Only `include_dirs` patterns read the gitignore dialect above.
 
 **Ordering strategy**:
 
@@ -646,8 +663,8 @@ Generated from `confiture.config.environment`; the description is the model's ow
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `include` | list[str] | `[]` | Globs a file must match to be included (empty = all files). |
-| `exclude` | list[str] | `[]` | Globs that remove an otherwise-included file. |
+| `include` | list[str] | `[]` | Globs a *filename* must match to be included (empty = all files). |
+| `exclude` | list[str] | `[]` | Globs over a *filename* that remove an otherwise-included file. |
 
 #### `DriftConfig`
 

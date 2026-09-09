@@ -42,6 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whose patterns contain no `/` — such a pattern cannot have changed meaning. It is deleted in 1.6.0
   (#263).
 
+  One config file now carries **two glob dialects under the same two key names**:
+  `seed.profiles.<name>.include`/`.exclude` stay `fnmatch` globs over a bare *filename*, because seed
+  discovery is a flat listing where a path never appears. `configuration.md` says so next to each block,
+  and `tests/unit/test_one_path_matcher.py` keeps `PurePath.match`, `PurePath.full_match` and `fnmatch`
+  out of every module but `core/path_globs.py`, with an allow-list that states, per module, which
+  *object* name it is matching instead of a path.
+
 - **The `order` key on an `include_dirs` entry now decides the sequence files are concatenated in.**
   It was read once — the entries were sorted by it — and then discarded: every entry's matches were
   flattened into one list and sorted globally, so `db/b` at `order: 10` and `db/a` at `order: 20` built

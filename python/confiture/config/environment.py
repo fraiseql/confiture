@@ -165,9 +165,14 @@ class SeedProfile(BaseModel):
     (e.g. excluding large ETL-statistics partitions) for faster, higher-parallel
     test databases.
 
+    These are ``fnmatch`` globs over a bare filename, **not** the gitignore path
+    globs ``include_dirs`` entries take under the same two key names: seed
+    discovery is a flat listing, so a path never appears and ``**`` would have
+    nothing to span.
+
     Attributes:
-        include: Globs a file must match to be included (empty = all files).
-        exclude: Globs that remove an otherwise-included file.
+        include: Globs a *filename* must match to be included (empty = all files).
+        exclude: Globs over a *filename* that remove an otherwise-included file.
     """
 
     include: list[str] = Field(default_factory=list)
