@@ -1,0 +1,9 @@
+name: local
+database_url: postgresql://localhost/test
+include_dirs:
+  - path: db/schema
+    include:
+      - "**/*.sql"
+      - "**/*.bak"
+    exclude:
+      - "*.bak"

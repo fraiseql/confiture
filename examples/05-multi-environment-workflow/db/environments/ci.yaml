@@ -2,13 +2,25 @@ name: ci
 
 database_url: postgresql://postgres:postgres@localhost:5432/confiture_ci
 
-# Which directories to include when building schema
+# Which directories to include when building schema.
+#
+# Two blocks. `order` decides the sequence — not the order the entries are
+# listed in — so the extensions block below is concatenated first even though
+# it is written second. Both entries select the files under 00_common/; the
+# lower `order` owns them, and each file is built once.
+#
+# `exclude` is a gitignore-style glob matched against the path relative to the
+# entry's own directory, which is why the same file is spelled two ways here.
 include_dirs:
-  - db/schema
+  - path: db/schema
+    order: 10
+    exclude:
+      - "00_common/roles.sql"   # production-only in CI
 
-# Exclude production-only files in CI
-exclude_dirs:
-  - db/schema/00_common/roles.sql
+  - path: db/schema/00_common
+    order: 5
+    exclude:
+      - "roles.sql"             # the same file, relative to this entry
 
 # CI-specific options
 options:

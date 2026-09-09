@@ -1,0 +1,7 @@
+name: local
+database_url: postgresql://localhost/test
+include_dirs:
+  - path: db/schema
+    recursive: false
+    include:
+      - "**/sub/*.sql"

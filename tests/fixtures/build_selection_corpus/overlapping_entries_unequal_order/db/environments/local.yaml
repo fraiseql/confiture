@@ -1,0 +1,7 @@
+name: local
+database_url: postgresql://localhost/test
+include_dirs:
+  - path: db/schema
+    order: 20
+  - path: db/schema/10_tables
+    order: 10
