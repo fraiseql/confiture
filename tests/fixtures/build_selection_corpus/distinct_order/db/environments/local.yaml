@@ -1,0 +1,7 @@
+name: local
+database_url: postgresql://localhost/test
+include_dirs:
+  - path: db/b
+    order: 10
+  - path: db/a
+    order: 20

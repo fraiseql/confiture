@@ -31,6 +31,8 @@ from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path, PurePath
 
+from confiture.exceptions import ConfigurationError
+
 # A regex that cannot match: an empty pattern is ignored, as gitignore ignores
 # a blank line, rather than raising from inside a build.
 _MATCHES_NOTHING = re.compile("(?!)")
@@ -111,8 +113,21 @@ def compile_pattern(pattern: str) -> re.Pattern[str]:
 
     Returns:
         The compiled regex, cached, so the same pattern is translated once.
+
+    Raises:
+        ConfigurationError: If the pattern contains a ``..`` component.
     """
     components = _components(pattern)
+    if ".." in components:
+        raise ConfigurationError(
+            f"Include/exclude pattern {pattern!r} contains '..'",
+            resolution_hint=(
+                "Patterns are matched against the path relative to the entry's own "
+                "directory, which never begins with '..', so this one can only ever "
+                "match nothing. Point an include_dirs entry at the other directory "
+                "instead."
+            ),
+        )
     if not components:
         return _MATCHES_NOTHING
     fragments: list[str] = []

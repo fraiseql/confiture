@@ -1,0 +1,153 @@
+{
+  "distinct_order": {
+    "before_1_5_0": {
+      "files": [
+        "db/a/00_first.sql",
+        "db/b/99_last.sql"
+      ],
+      "hash": "394a592da3b6c1691c945a3ae124ee5ab8adb4a60e9bb135bd49b800170cd2e7"
+    },
+    "changed": true,
+    "diagnostics": [],
+    "since_1_5_0": {
+      "files": [
+        "db/b/99_last.sql",
+        "db/a/00_first.sql"
+      ],
+      "hash": "b32dbd48f585b31e8eab47f688b2ea467985535106e2680d05cc552ba98454c3"
+    }
+  },
+  "duplicate_selecting_include": {
+    "before_1_5_0": {
+      "files": [
+        "db/schema/10_t.sql",
+        "db/schema/10_t.sql"
+      ],
+      "hash": "4f5352acecee6941c3da26b41201842c4d267e051061c6c2dc09c4dd08b618b4"
+    },
+    "changed": true,
+    "diagnostics": [],
+    "since_1_5_0": {
+      "files": [
+        "db/schema/10_t.sql"
+      ],
+      "hash": "bd92037c29038e7e3c775934f65d25b6ae4bb739aecb883df574336f127627b5"
+    }
+  },
+  "non_recursive_depth_pattern": {
+    "before_1_5_0": {
+      "files": [
+        "db/schema/a/sub/deep.sql"
+      ],
+      "hash": "7438d711f297ce712adced0930e74c81d530a9fa2a2f8d54baecd69cec152e60"
+    },
+    "changed": true,
+    "diagnostics": [
+      {
+        "code": "CONFIG_013",
+        "pattern": "**/sub/*.sql"
+      }
+    ],
+    "since_1_5_0": {
+      "error": "SchemaError"
+    }
+  },
+  "overlapping_entries_equal_order": {
+    "before_1_5_0": {
+      "files": [
+        "db/schema/00_common.sql",
+        "db/schema/10_tables/10_users.sql",
+        "db/schema/10_tables/10_users.sql"
+      ],
+      "hash": "79382688d5d28132bbd2a78e71b0f94e9c46a4d021aa5530e3c895b384f3d7ce"
+    },
+    "changed": true,
+    "diagnostics": [],
+    "since_1_5_0": {
+      "files": [
+        "db/schema/00_common.sql",
+        "db/schema/10_tables/10_users.sql"
+      ],
+      "hash": "fee22bb00e84f033c113f952dce7c0a36235d709905a89dce4410191774f8ee5"
+    }
+  },
+  "overlapping_entries_unequal_order": {
+    "before_1_5_0": {
+      "files": [
+        "db/schema/00_common.sql",
+        "db/schema/10_tables/10_users.sql",
+        "db/schema/10_tables/10_users.sql"
+      ],
+      "hash": "79382688d5d28132bbd2a78e71b0f94e9c46a4d021aa5530e3c895b384f3d7ce"
+    },
+    "changed": true,
+    "diagnostics": [],
+    "since_1_5_0": {
+      "files": [
+        "db/schema/10_tables/10_users.sql",
+        "db/schema/00_common.sql"
+      ],
+      "hash": "7d2ebd75368dc98e3c866ce6d2dd72af6429c169dcddb20e0d38b86427ab5780"
+    }
+  },
+  "path_shaped_exclude": {
+    "before_1_5_0": {
+      "files": [
+        "db/schema/keep.sql"
+      ],
+      "hash": "7e5abb428c359d7903bd1b080b8773cb8e51917adf7e1be99402492ff4d6ed88"
+    },
+    "changed": true,
+    "diagnostics": [
+      {
+        "code": "CONFIG_014",
+        "pattern": "temp/*.sql"
+      }
+    ],
+    "since_1_5_0": {
+      "files": [
+        "db/schema/a/temp/t2.sql",
+        "db/schema/keep.sql"
+      ],
+      "hash": "3628341bcc9f91880344ff671bf5badb909d5840a2165e602621a4f0ea7fbaf0"
+    }
+  },
+  "recursive_exclude": {
+    "before_1_5_0": {
+      "files": [
+        "db/schema/keep.sql",
+        "db/schema/temp/t1.sql"
+      ],
+      "hash": "81047e145de01dad0d2ff4990fa09d4730ddd9f0be0eb1bc86bc75784b4e9e74"
+    },
+    "changed": true,
+    "diagnostics": [
+      {
+        "code": "CONFIG_014",
+        "pattern": "**/temp/**"
+      }
+    ],
+    "since_1_5_0": {
+      "files": [
+        "db/schema/keep.sql"
+      ],
+      "hash": "7e5abb428c359d7903bd1b080b8773cb8e51917adf7e1be99402492ff4d6ed88"
+    }
+  },
+  "slash_free_exclude": {
+    "before_1_5_0": {
+      "files": [
+        "db/schema/keep.sql"
+      ],
+      "hash": "7e5abb428c359d7903bd1b080b8773cb8e51917adf7e1be99402492ff4d6ed88"
+    },
+    "changed": false,
+    "diagnostics": [],
+    "since_1_5_0": {
+      "files": [
+        "db/schema/keep.sql"
+      ],
+      "hash": "7e5abb428c359d7903bd1b080b8773cb8e51917adf7e1be99402492ff4d6ed88"
+    }
+  }
+}
