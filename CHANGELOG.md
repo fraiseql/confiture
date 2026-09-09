@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The `order` key on an `include_dirs` entry now decides the sequence files are concatenated in.**
+  It was read once — the entries were sorted by it — and then discarded: every entry's matches were
+  flattened into one list and sorted globally, so `db/b` at `order: 10` and `db/a` at `order: 20` built
+  `db/a/00_first.sql` first. `order` now *partitions* the build: entries are grouped by their `order`
+  value, the groups are concatenated low to high, and within a group the configured sort
+  (`alphabetical`, or `hex`) decides exactly as before. Every entry defaults to `order: 0`, so **a
+  project that has never set the key has exactly one group and builds a byte-identical schema with an
+  identical hash** — pinned as literals by `tests/unit/test_build_selection_is_stable.py`. Only a
+  project that sets distinct `order` values changes, and what changes is that its stated intent is now
+  honoured. The order entries are *listed* in still sequences nothing.
+
 ### Added
 
 - **`confiture build --list-files`** prints what the build would read — one line per file with the

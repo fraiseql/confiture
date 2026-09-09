@@ -53,3 +53,40 @@ def test_order_decides_concatenation_the_other_way_round(tmp_path: Path) -> None
     project = _two_entry_project(tmp_path, first_order=20, second_order=10)
 
     assert _built_order(project) == ["db/a/00_first.sql", "db/b/99_last.sql"]
+
+
+def _two_zero_order_entries(tmp_path: Path, *, swapped: bool) -> list[str]:
+    """Build a two-entry project whose entries share ``order: 0``, listed either way."""
+    root = tmp_path / ("swapped" if swapped else "listed")
+    (root / "db" / "a").mkdir(parents=True, exist_ok=True)
+    (root / "db" / "b").mkdir(parents=True, exist_ok=True)
+    (root / "db" / "a" / "00_first.sql").write_text("SELECT 1;\n")
+    (root / "db" / "b" / "99_last.sql").write_text("SELECT 2;\n")
+
+    entries = [root / "db" / "a", root / "db" / "b"]
+    if swapped:
+        entries.reverse()
+    env_dir = root / "db" / "environments"
+    env_dir.mkdir(parents=True, exist_ok=True)
+    env_dir.joinpath("test.yaml").write_text(
+        "database_url: postgresql://localhost/test\ninclude_dirs:\n"
+        + "".join(f"  - path: {entry}\n    order: 0\n" for entry in entries)
+    )
+    builder = SchemaBuilder(env="test", project_dir=root)
+    return [str(path.relative_to(root)) for path in builder.find_sql_files()]
+
+
+def test_config_list_order_is_not_a_sequencing_key(tmp_path: Path) -> None:
+    """Re-listing two entries that share an ``order`` does not change the build.
+
+    ``order`` is the only sequencing key. The list order breaks exactly one
+    tie — which entry owns a file two entries both select — and that is the
+    only place it is observable.
+    """
+    assert _two_zero_order_entries(tmp_path, swapped=False) == [
+        "db/a/00_first.sql",
+        "db/b/99_last.sql",
+    ]
+    assert _two_zero_order_entries(tmp_path, swapped=True) == _two_zero_order_entries(
+        tmp_path, swapped=False
+    )
