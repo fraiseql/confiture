@@ -16,6 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`include` and `exclude` globs now mean what gitignore means by them.** They went through different
+  machinery — `include` through `rglob`/`glob`, `exclude` through `PurePath.match`, where `**` is one
+  component and matching is anchored at the *right* end — so the reference manual's own examples
+  excluded a different set of files from the one they name: `**/*.bak` did not exclude a `.bak` at the
+  root of the include directory, `**/temp/**` did not exclude a root-level `temp/`, and `vendor/**` did
+  not exclude anything below `vendor/`'s first level. One matcher (`core/path_globs.py`) now answers for
+  both lists, in **gitignore's dialect**: a pattern with no `/` matches the file's *name* at any depth
+  (so `*.sql` and `*.bak` are unaffected), a pattern with a `/` is matched **left-anchored** against the
+  whole relative path, and `**` spans **zero or more** components. Discovery walks each entry's tree
+  once and the patterns filter what it found, so `recursive` no longer half-decides the reach.
+  **Both directions can change**: left-anchoring *un-excludes* files a right-anchored `temp/*.sql` used
+  to remove at any depth, so a build can grow as well as shrink.
+
 - **The `order` key on an `include_dirs` entry now decides the sequence files are concatenated in.**
   It was read once — the entries were sorted by it — and then discarded: every entry's matches were
   flattened into one list and sorted globally, so `db/b` at `order: 10` and `db/a` at `order: 20` built

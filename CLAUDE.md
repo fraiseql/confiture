@@ -351,6 +351,7 @@ confiture/
 │   │   ├── migrator.py           # Migration executor — public re-exports
 │   │   ├── ownership_fixer.py    # Auto-fixer for ownership coverage gaps in migration files (issue #124)
 │   │   ├── parser_info.py        # What parses the SQL: pglast's version and the PostgreSQL grammar it emb…
+│   │   ├── path_globs.py         # The one path matcher: does this path, relative to its include directory…
 │   │   ├── pg_version.py         # PostgreSQL version detection and feature flags
 │   │   ├── pgtap_generator.py    # Generate pgTAP test scaffolds from PostgreSQL functions
 │   │   ├── preconditions.py      # Migration preconditions for fail-fast validation

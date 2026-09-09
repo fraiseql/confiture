@@ -46,7 +46,14 @@ include_dirs:
 
 
 def test_exclude_patterns(tmp_path):
-    """Test exclude patterns filter files correctly."""
+    """Exclude patterns filter files correctly — both halves, for their own reasons.
+
+    ``temp/**`` has always removed ``temp/temp.sql``. ``**/*.bak`` never removed
+    ``backup.sql.bak``: it was absent because the *include* default (``**/*.sql``)
+    never matched it, and ``**/*.bak`` did not match a file at the root of the
+    include directory either. Since 1.5.0 it does, so the assertion below holds
+    for the reason its name gives.
+    """
     schema_dir = tmp_path / "schema"
     (schema_dir / "temp").mkdir(parents=True)
 

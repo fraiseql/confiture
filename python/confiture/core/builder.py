@@ -9,13 +9,14 @@ Performance: Uses Rust extension (_core) when available for 10-50x speedup.
 import hashlib
 import logging
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from confiture.config.environment import Environment
-from confiture.core import tree_prefix
+from confiture.core import path_globs, tree_prefix
 from confiture.core.fk_extractor import extract_and_strip_fks, generate_alter_statements
 from confiture.core.progress import ProgressManager
 
@@ -162,9 +163,28 @@ def _first_occurrences(selected: list[SelectedFile]) -> list[SelectedFile]:
     return unique
 
 
-def _is_excluded(rel_path: Path, exclude_patterns: list[str]) -> bool:
-    """Whether a path relative to its include directory matches any exclusion."""
-    return any(rel_path.match(pattern) for pattern in exclude_patterns)
+def _walk_files(directory: Path, *, recursive: bool) -> Iterator[Path]:
+    """Every file under *directory*, once, in a deterministic order.
+
+    Directory symlinks are not descended into, matching what ``rglob`` does on
+    the Python versions confiture supports. ``recursive`` bounds the walk; the
+    patterns then filter what it found, so neither decides half of the other's
+    job.
+    """
+    for entry in sorted(directory.iterdir()):
+        if entry.is_dir():
+            if recursive and not entry.is_symlink():
+                yield from _walk_files(entry, recursive=recursive)
+            continue
+        yield entry
+
+
+def _first_matching(rel_path: Path, include_patterns: list[str]) -> str | None:
+    """The first include pattern that selects *rel_path*, or None if none does."""
+    for pattern in include_patterns:
+        if path_globs.matches(rel_path, pattern):
+            return pattern
+    return None
 
 
 def _sorted_block(block: list[SelectedFile], *, numbered: bool) -> list[SelectedFile]:
@@ -392,17 +412,18 @@ class SchemaBuilder:
             )
 
         order = int(config["order"])
+        include_patterns = config["include"]
+        exclude_patterns = config["exclude"]
         found: list[SelectedFile] = []
-        for pattern in config["include"]:
-            if config["recursive"]:
-                matches = include_dir.rglob(pattern)
-            else:
-                matches = include_dir.glob(pattern)
-            found.extend(
-                SelectedFile(path=path, entry=include_dir, order=order, pattern=pattern)
-                for path in matches
-                if not _is_excluded(path.relative_to(include_dir), config["exclude"])
-            )
+        for path in _walk_files(include_dir, recursive=config["recursive"]):
+            rel_path = path.relative_to(include_dir)
+            if path_globs.matches_any(rel_path, exclude_patterns):
+                continue
+            pattern = _first_matching(rel_path, include_patterns)
+            if pattern is not None:
+                found.append(
+                    SelectedFile(path=path, entry=include_dir, order=order, pattern=pattern)
+                )
         return found
 
     def _without_excluded_dirs(self, selected: list[SelectedFile]) -> list[SelectedFile]:
