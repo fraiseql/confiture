@@ -195,3 +195,38 @@ def test_validate_config_reports_them_as_issues(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     codes = [issue["code"] for issue in payload["issues"]]
     assert "CONFIG_013" in codes
+
+
+def test_the_empty_build_is_not_reported_as_a_missing_directory(tmp_path: Path) -> None:
+    """The terminal shows the pattern that emptied the build, not a canned wrong cause.
+
+    ``No SQL files found`` used to route to the missing-schema-directory
+    template, which prints "The schema directory doesn't exist" and tells the
+    reader to ``mkdir`` it — over a directory that exists and is full of files
+    the patterns stopped matching.
+    """
+    project = _project(
+        tmp_path,
+        include=["10_tables/*.sql"],
+        exclude=[],
+        files=["a/10_tables/y.sql"],
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "build",
+            "--env",
+            "local",
+            "--project-dir",
+            str(project),
+            "--output",
+            str(tmp_path / "schema.sql"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "schema directory doesn't exist" not in result.stderr.lower()
+    assert "mkdir" not in result.stderr
+    assert "10_tables/*.sql" in result.stderr
+    assert "10_tables/*.sql" in result.stdout

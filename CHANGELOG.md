@@ -38,7 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   currently-green `--strict` leg on upgrade day; that is deliberate, and `CONFIG_014` stays `info` so the
   merely-shifted case does not. When a selection ends up empty *because* a pattern stopped matching, the
   `SchemaError` that reports it carries that diagnostic as its resolution hint instead of the generic
-  one. The replay costs one extra directory walk per entry and is skipped entirely for a configuration
+  one — and it is no longer routed to the missing-schema-directory template, which printed "The schema
+  directory doesn't exist" and told the reader to `mkdir` a directory that exists and is full of files
+  the patterns stopped matching. A genuinely absent include directory still raises `SCHEMA_201` and
+  still gets that template. The replay costs one extra directory walk per entry and is skipped entirely for a configuration
   whose patterns contain no `/` — such a pattern cannot have changed meaning. It is deleted in 1.6.0
   (#263).
 
