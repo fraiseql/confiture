@@ -186,6 +186,12 @@ An unqualified name is not judged unless `lint.search_path` names the schemas
 to look in, and an unqualified routine call is not judged even then: `now()` is
 `pg_catalog`'s and no configuration makes that enumerable.
 
+A routine whose signature or declarations name a schema-qualified type — the
+shape of every mutation in a FraiseQL schema — is read like any other since
+1.7.0. A body confiture still could not read is **named** in `degraded`, not
+counted as clean; the two shapes that reach it are listed in
+[lint-rules.md](../reference/lint-rules.md#build_003-the-inventory-read-backwards).
+
 `--baseline` is the adoption path for an existing schema; see
 [lint-rules.md](../reference/lint-rules.md#build_003-the-inventory-read-backwards).
 
