@@ -8,7 +8,7 @@ from pathlib import Path
 from rich.console import Console
 
 from confiture.cli.formatters.common import handle_output
-from confiture.core.builder import PatternDiagnostic, SelectionReport
+from confiture.core.builder import SelectionReport
 from confiture.core.linting.inventory import label_for
 from confiture.models.results import BuildResult
 
@@ -158,21 +158,3 @@ def format_selection_report(
         ],
     )
     handle_output(format_type, payload, csv_data, None, console)
-
-
-def format_pattern_notes(
-    notes: list[PatternDiagnostic], project_dir: Path | None, console: Console
-) -> None:
-    """Say which configured patterns select a different set of files than they did.
-
-    Args:
-        notes: The diagnostics `SchemaBuilder.pattern_diagnostics()` returned.
-        project_dir: Project root, for naming the entry relative to it.
-        console: Rich console for output.
-    """
-    for note in notes:
-        style = "yellow" if note.code == "CONFIG_013" else "dim"
-        console.print(
-            f"[{style}]{note.code} {label_for(note.entry, project_dir)}: {note.message}[/{style}]",
-            soft_wrap=True,
-        )

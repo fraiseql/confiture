@@ -203,8 +203,6 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_010": 5,
     "CONFIG_011": 5,  # installed pglast lacks enum members confiture walks (D13)
     "CONFIG_012": 5,  # lint baseline file missing or malformed (#219)
-    "CONFIG_013": 5,  # a glob that matched files matches none since 1.5.0 (#256)
-    "CONFIG_014": 0,  # carve-out: a glob's match set moved — reported, never fatal (#256)
     # MIGR family → 3, with one success-with-signal carve-out at 0.
     "MIGR_001": 3,
     "MIGR_004": 3,

@@ -116,6 +116,38 @@ database_url: postgresql://localhost/test
         with pytest.raises(SchemaError, match="No SQL files found"):
             builder.find_sql_files()
 
+    def test_empty_selection_hint_points_at_the_configuration(self, tmp_path):
+        """A build that selects nothing is told where to look, not what changed.
+
+        The hint is static: it names the two places an empty selection comes
+        from — no files under the include directories, or patterns that match
+        none of them.
+        """
+        schema_dir = tmp_path / "db" / "schema"
+        (schema_dir / "a" / "10_tables").mkdir(parents=True)
+        (schema_dir / "a" / "10_tables" / "y.sql").write_text("SELECT 1;")
+
+        config_dir = tmp_path / "db" / "environments"
+        config_dir.mkdir(parents=True)
+        (config_dir / "test.yaml").write_text(f"""
+name: test
+database_url: postgresql://localhost/test
+include_dirs:
+  - path: {schema_dir}
+    include:
+      - "10_tables/*.sql"
+""")
+
+        builder = SchemaBuilder(env="test", project_dir=tmp_path)
+
+        with pytest.raises(SchemaError) as raised:
+            builder.find_sql_files()
+
+        assert raised.value.resolution_hint == (
+            "Add .sql files to subdirectories like 00_common/, 10_tables/ "
+            "or check your include/exclude patterns"
+        )
+
 
 class TestSchemaBuilderBuild:
     """Test schema building."""

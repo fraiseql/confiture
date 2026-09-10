@@ -56,24 +56,6 @@ def test_every_at_risk_shape_still_differs_from_1_4_0(name: str) -> None:
     )
 
 
-@pytest.mark.parametrize("name", sorted(EXPECTED))
-def test_the_corpus_reports_the_diagnostics_it_recorded(name: str, monkeypatch) -> None:
-    """Which shapes are explained by a `CONFIG_013`/`CONFIG_014`, and which are not.
-
-    Four of them change with **no** diagnostic at all — `order` blocks,
-    deduplication and overlap resolution are not glob semantics, so nothing
-    names them. `confiture build --list-files` is the tool for those, and the
-    upgrade note says so.
-    """
-    project = CORPUS / name
-    monkeypatch.chdir(project)
-    builder = SchemaBuilder(env="local", project_dir=project)
-
-    reported = [{"code": n.code, "pattern": n.pattern} for n in builder.pattern_diagnostics()]
-
-    assert reported == EXPECTED[name]["diagnostics"]
-
-
 def test_the_corpus_covers_both_directions() -> None:
     """A build can grow as well as shrink, and the corpus holds one of each."""
     grew = [

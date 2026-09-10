@@ -105,23 +105,6 @@ class SelectedFile:
 
 
 @dataclass(frozen=True)
-class PatternDiagnostic:
-    """A configured pattern that does not select what its author would expect.
-
-    Attributes:
-        code: The error-code registry entry that names the situation.
-        entry: The ``include_dirs`` entry the pattern is written under.
-        pattern: The pattern as written.
-        message: What it selects, and what a reader would expect it to select.
-    """
-
-    code: str
-    entry: Path
-    pattern: str
-    message: str
-
-
-@dataclass(frozen=True)
 class SelectionReport:
     """What a build would read, before anything is read.
 
@@ -375,20 +358,16 @@ class SchemaBuilder:
         return self._in_build_order(selected)
 
     def _empty_selection_hint(self) -> str:
-        """Why nothing was selected, when a pattern's change explains it.
+        """Where to look when a build selected nothing.
 
-        A pattern that stopped matching under 1.5.0's semantics is the failure
-        this release most plausibly creates, so it is named in the error that
-        reports the empty build rather than somewhere the reader has to go
-        looking for it.
+        Static: the two things it can be are an include directory with no
+        ``.sql`` under it, and patterns that match none of what is there.
+        ``confiture build --list-files`` answers which.
         """
-        silenced = [note for note in self.pattern_diagnostics() if note.code == "CONFIG_013"]
-        if not silenced:
-            return (
-                "Add .sql files to subdirectories like 00_common/, 10_tables/ "
-                "or check your include/exclude patterns"
-            )
-        return "; ".join(note.message for note in silenced)
+        return (
+            "Add .sql files to subdirectories like 00_common/, 10_tables/ "
+            "or check your include/exclude patterns"
+        )
 
     def selection_report(self) -> SelectionReport:
         """What ``build`` would read, and why — without reading any of it.
@@ -401,31 +380,6 @@ class SchemaBuilder:
             SchemaError: For the same reasons :meth:`find_sql_files` does.
         """
         return SelectionReport(env=self.env_name, files=self._select())
-
-    def pattern_diagnostics(self) -> list[PatternDiagnostic]:
-        """One note per configured pattern that selects a different set than it did.
-
-        Computing them replays 1.4.0's whole selection — one extra directory
-        walk per entry — so an entry whose patterns cannot have changed meaning
-        does not pay for it.
-        """
-        notes: list[PatternDiagnostic] = []
-        for config in self.include_configs:
-            include_dir: Path = config["path"]
-            if not include_dir.exists():
-                continue
-            walked = list(_walk_files(include_dir, recursive=config["recursive"]))
-            notes.extend(
-                PatternDiagnostic(code=code, entry=include_dir, pattern=pattern, message=message)
-                for code, pattern, message in path_globs.migration_notes(
-                    include_dir,
-                    walked,
-                    recursive=config["recursive"],
-                    include=config["include"],
-                    exclude=config["exclude"],
-                )
-            )
-        return notes
 
     def _select_entry(self, config: dict[str, Any]) -> list[SelectedFile]:
         """The files one ``include_dirs`` entry selects, in the order its patterns are written."""
