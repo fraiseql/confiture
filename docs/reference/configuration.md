@@ -223,8 +223,8 @@ the include directory:
 
 Before 1.5.0 they were matched with `PurePath.match`, where `**` is a single component and matching is
 anchored at the *right* end — so the three examples above excluded a different set of files from the
-one they name. `confiture build` reports every pattern of yours whose match set moved (`CONFIG_013`,
-`CONFIG_014`), in both directions, for one release.
+one they name. `confiture build --list-files` prints the selection a configuration produces, naming
+the entry and the pattern that put each file there; diff it across an upgrade to see what moved.
 
 > **Two dialects, two key names that look alike.** `seed.profiles.<name>.include` / `.exclude` are
 > spelled exactly like an `include_dirs` entry's, but they are `fnmatch` globs over a bare *filename*:

@@ -15,7 +15,6 @@ from rich.table import Table
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.build_formatter import (
     format_build_result,
-    format_pattern_notes,
     format_selection_report,
 )
 from confiture.cli.helpers import (
@@ -78,7 +77,7 @@ from confiture.core.unified_linter import UnifiedLinter
 from confiture.core.validation.config_loaders import load_security_lint as _lsl
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError
 from confiture.models.lint import LintSeverity
-from confiture.models.results import BuildResult
+from confiture.models.results import BuildResult, BuildWarning
 from confiture.models.unified_lint import UnifiedLintIssue, UnifiedLintResult
 
 # Valid output formats for linting (re-exported so main.py can keep LINT_FORMATS there)
@@ -457,7 +456,6 @@ def build(
         if list_files:
             format_selection_report(builder.selection_report(), format_type, project_dir, console)
             return
-        format_pattern_notes(builder.pattern_diagnostics(), project_dir, out)
         _apply_build_overrides(
             builder,
             out,
@@ -479,7 +477,7 @@ def build(
             seed_profile=seed_profile,
             sequential=sequential,
         )
-        schema, schema_file_count, duplicates = _run_build(
+        schema, schema_file_count, duplicates, warnings = _run_build(
             builder,
             out,
             env=env,
@@ -499,7 +497,7 @@ def build(
 
         seed_files_applied = 0
         if apply_sequential:
-            seed_files_applied = _apply_seeds_sequentially(
+            seed_files_applied, seed_warnings = _apply_seeds_sequentially(
                 builder,
                 out,
                 env=env,
@@ -509,6 +507,7 @@ def build(
                 json_mode=json_mode,
                 report_output=report_output,
             )
+            warnings.extend(seed_warnings)
 
         schema_hash = builder.compute_hash() if show_hash else None
         artifact_path_str: str | None = None
@@ -542,6 +541,7 @@ def build(
             artifact_path=artifact_path_str,
             artifact_hash=artifact_hash_str,
             seed_profile=seed_profile,
+            warnings=warnings,
             duplicates=duplicates,
         )
         format_build_result(build_result, format_type, report_output, console)
@@ -577,23 +577,24 @@ def _duplicate_gate(
     out: Console,
     json_mode: bool,
     report_output: Path | None,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[BuildWarning]]:
     """Scan the build's files for duplicate definitions when asked (#218).
 
     ``--warn-duplicates`` reports and builds; ``--fail-on-duplicates`` reports
     and exits 1 before anything is written. A plain build does not scan.
+
+    Returns:
+        ``(duplicates, warnings)`` — a file the scan could not parse was not
+        checked, which the envelope says rather than only the console (#268).
     """
     if not (warn or fail):
-        return []
+        return [], []
 
     objects, _schemas, unparseable = inventory_files(sql_files, root=project_dir)
-    for label in unparseable:
-        out.print(
-            f"[yellow]⚠️ {label}: pglast could not parse it — not checked for duplicates[/yellow]"
-        )
+    warnings = [BuildWarning.of("SCHEMA_206", file=label) for label in unparseable]
     duplicates = find_duplicates(objects)
     if not duplicates:
-        return []
+        return [], warnings
     if not json_mode:
         out.print("[yellow]Duplicate definitions:[/yellow]")
         for violation in duplicate_violations(duplicates):
@@ -606,12 +607,13 @@ def _duplicate_gate(
             schema_size_bytes=0,
             output_path=str(output.absolute()),
             hash=None,
+            warnings=warnings,
             duplicates=payload,
             error=f"{len(duplicates)} duplicate definition(s); nothing was built",
         )
         format_build_result(result, "json" if json_mode else "text", report_output, console)
         raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: the duplicate gate tripped
-    return payload
+    return payload, warnings
 
 
 _SEPARATOR_STYLES = ("block_comment", "line_comment", "mysql", "custom")
@@ -662,18 +664,18 @@ def _run_build(
     output: Path,
     apply_sequential: bool,
     duplicate_gate: Callable[[list[Path]], Any],
-) -> tuple[str, int, Any]:
+) -> tuple[str, int, Any, list[BuildWarning]]:
     """Concatenate the schema under a progress bar, after ``duplicate_gate`` saw the files.
 
     Returns:
-        ``(schema, schema_file_count, duplicates)``; the seed files are left
-        to the sequential applier when ``apply_sequential``.
+        ``(schema, schema_file_count, duplicates, warnings)``; the seed files
+        are left to the sequential applier when ``apply_sequential``.
     """
     out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
 
     with ProgressManager() as progress:
         sql_files = builder.find_sql_files()
-        duplicates = duplicate_gate(sql_files)
+        duplicates, warnings = duplicate_gate(sql_files)
         if apply_sequential:
             schema = builder.build(output_path=output, schema_only=True, progress=progress)
             schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
@@ -681,7 +683,7 @@ def _run_build(
             schema = builder.build(output_path=output, progress=progress)
             schema_file_count = len(sql_files)
     out.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
-    return schema, schema_file_count, duplicates
+    return schema, schema_file_count, duplicates, warnings
 
 
 def _apply_build_overrides(
@@ -766,8 +768,14 @@ def _apply_seeds_sequentially(
     profile: Any,
     json_mode: bool,
     report_output: Path | None,
-) -> int:
-    """``--sequential``: apply the seed files through the core sequencer; return the count."""
+) -> tuple[int, list[BuildWarning]]:
+    """``--sequential``: apply the seed files through the core sequencer.
+
+    Returns:
+        ``(applied, warnings)``. What the run has to say about the seeds is
+        returned rather than printed, so the envelope carries it and the
+        result renders it once (issue #268).
+    """
 
     # The environment's `seed:` block is the default; the flag can only widen it.
     seed_settings = getattr(builder.env_config, "seed", None)
@@ -776,8 +784,7 @@ def _apply_seeds_sequentially(
     out.print("\n[cyan]🌱 Applying seed files sequentially...[/cyan]")
     _schema_files, seed_files = builder.categorize_sql_files()
     if not seed_files:
-        out.print("[yellow]⚠️  No seed files found[/yellow]")
-        return 0
+        return 0, [BuildWarning.of("SEED_003", env=env)]
     try:
         result = apply_seed_files(
             database_url or builder.env_config.database_url,
@@ -791,9 +798,9 @@ def _apply_seeds_sequentially(
     except ConfiturError as e:
         fail(e, json_mode=json_mode, output_file=report_output)
     out.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
-    if result.failed > 0:
-        out.print(f"[yellow]⚠️  {result.failed} seed files failed[/yellow]")
-    return result.succeeded
+    if result.failed == 0:
+        return result.succeeded, []
+    return result.succeeded, [BuildWarning.of("SEED_002", count=result.failed)]
 
 
 def _write_dump_artifact(

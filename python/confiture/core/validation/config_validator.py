@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 import yaml
 from pydantic import ValidationError
@@ -24,7 +24,7 @@ from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
 )
-from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.exceptions import ConfigurationError
 from confiture.url_redaction import redact_url
 
 
@@ -209,7 +209,6 @@ class ConfigValidator:
 
         migration_count, tree_issues = self._validate_migrations_tree()
         issues.extend(tree_issues)
-        issues.extend(self._validate_selection_patterns())
 
         valid = not any(i.severity in ("error", "critical") for i in issues)
         return ConfigValidationReport(
@@ -219,48 +218,6 @@ class ConfigValidator:
             migration_count=migration_count,
             issues=issues,
         )
-
-    _PATTERN_SEVERITY: ClassVar[dict[str, str]] = {"CONFIG_013": "warning", "CONFIG_014": "info"}
-
-    def _validate_selection_patterns(self) -> list[ConfigIssue]:
-        """Include/exclude patterns whose meaning changed when the glob dialect did.
-
-        The same computation ``confiture build`` prints, folded into the issues
-        this command already reports, so a pipeline that validates its
-        configuration learns about the change before a build does.
-        """
-        env_name = self._env_name()
-        if env_name is None or self._project_dir is None:
-            return []
-        # Reason: cycle — builder imports core.validation.comment_validator
-        from confiture.core.builder import SchemaBuilder
-
-        try:
-            builder = SchemaBuilder(env=env_name, project_dir=self._project_dir)
-            notes = builder.pattern_diagnostics()
-        except (ConfiturError, OSError):
-            return []  # a config this broken is already reported by the checks above
-        return [
-            ConfigIssue(
-                severity=self._PATTERN_SEVERITY.get(note.code, "info"),
-                code=note.code,
-                message=note.message,
-                file=str(self._config_path) if self._config_path else None,
-                actionable=(
-                    "Glob patterns follow gitignore's rules since 1.5.0: a pattern with a "
-                    "'/' is matched left-anchored against the path relative to the include "
-                    "directory, and '**' spans zero or more directories."
-                ),
-            )
-            for note in notes
-        ]
-
-    def _env_name(self) -> str | None:
-        """The environment this config file is, when it is laid out as one."""
-        path = self._config_path
-        if path is None or path.parent.name != "environments":
-            return None
-        return path.stem
 
     def _validate_schema(self, raw: dict[str, Any]) -> list[ConfigIssue]:
 

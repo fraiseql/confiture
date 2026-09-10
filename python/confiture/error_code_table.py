@@ -178,6 +178,16 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "FROM stdin data blocks are applied"
         ),
     },
+    {
+        "code": "SCHEMA_206",
+        "message_template": "{file}: pglast could not parse it — not checked for duplicates",
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Fix the file's syntax or exclude it from the build; the duplicate scan "
+            "skipped it, so an object it defines twice is not reported"
+        ),
+    },
     # ========== DIFFER (400-499): Schema diff detection errors → exit code 5 ==========
     {
         "code": "DIFFER_400",
@@ -268,31 +278,6 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "exit_code": 5,
         "resolution_hint": (
             "Create or regenerate it with `confiture lint --baseline <file> --write-baseline`"
-        ),
-    },
-    {
-        "code": "CONFIG_013",
-        "message_template": (
-            "{kind} pattern '{pattern}' matches nothing since the glob dialect changed"
-        ),
-        "severity": "warning",
-        "exit_code": 5,
-        "resolution_hint": (
-            "Patterns follow gitignore's rules since 1.5.0: one carrying a '/' is matched "
-            "left-anchored against the path relative to the include directory. Prefix it "
-            "with '**/' to match at any depth again."
-        ),
-    },
-    {
-        "code": "CONFIG_014",
-        "message_template": (
-            "{kind} pattern '{pattern}' matches a different set of files since 1.5.0"
-        ),
-        "severity": "info",
-        "exit_code": 0,
-        "resolution_hint": (
-            "Run `confiture build --list-files` to see the selection this configuration "
-            "produces now; '**' spans zero or more directories since 1.5.0."
         ),
     },
     # ========== Default error codes for exception types ==========
@@ -426,5 +411,24 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": "Check seed file syntax and database state",
+    },
+    {
+        "code": "SEED_002",
+        "message_template": "{count} seed file(s) failed",
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "The build continued because --continue-on-error (or seed.continue_on_error) "
+            "is set; re-run without it to stop at the first failure"
+        ),
+    },
+    {
+        "code": "SEED_003",
+        "message_template": "No seed files found for environment '{env}'",
+        "severity": "info",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Add seed files under the environment's seed directory, or drop --sequential"
+        ),
     },
 )

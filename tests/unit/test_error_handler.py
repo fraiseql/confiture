@@ -52,6 +52,16 @@ class TestApplyFailureClassification:
         err = SchemaError("schema build failed: [Errno 2] No such file or directory")
         assert _detect_error_context(err) == "SCHEMA_DIR_NOT_FOUND"
 
+    def test_empty_selection_is_not_a_missing_directory(self) -> None:
+        """#256: a selection that came out empty is not a missing directory.
+
+        The include directory exists and is full of files the patterns do not
+        match; routing this here printed "The schema directory doesn't exist"
+        and told the reader to ``mkdir`` it.
+        """
+        err = SchemaError("No SQL files found in include directories: /repo/db/schema")
+        assert _detect_error_context(err) != "SCHEMA_DIR_NOT_FOUND"
+
 
 class TestDsnPrecedenceErrorContext:
     """#152: precedence-routing config errors must not get the connection template.

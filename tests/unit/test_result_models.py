@@ -4,7 +4,47 @@ Validates BuildResult, MigrateUpResult, and related dataclasses
 used for structured output (JSON/CSV).
 """
 
-from confiture.models.results import BuildResult, MigrateUpResult, MigrationApplied
+import pytest
+
+from confiture.models.results import (
+    BuildResult,
+    BuildWarning,
+    MigrateUpResult,
+    MigrationApplied,
+)
+
+
+class TestBuildWarning:
+    """A build diagnostic that reaches the envelope, not only the console (#268)."""
+
+    def test_the_registry_states_both_the_severity_and_the_sentence(self):
+        """One place says what a code means, so the payload cannot disagree with the codebook."""
+        warning = BuildWarning.of("SEED_002", count=2)
+
+        assert warning.to_dict() == {
+            "code": "SEED_002",
+            "severity": "warning",
+            "message": "2 seed file(s) failed",
+            "file": None,
+        }
+
+    def test_a_warning_can_name_the_file_it_is_about(self):
+        """The duplicate scan skips one file at a time; the entry says which."""
+        warning = BuildWarning.of("SCHEMA_206", file="db/schema/10_tables/odd.sql")
+
+        assert warning.to_dict()["file"] == "db/schema/10_tables/odd.sql"
+        assert warning.to_dict()["severity"] == "warning"
+        assert warning.message.startswith("db/schema/10_tables/odd.sql: pglast could not parse")
+
+    def test_an_unregistered_code_is_refused(self):
+        """A warning whose code no consumer can look up is a bug, not a payload."""
+        with pytest.raises(ValueError, match="NOPE_999"):
+            BuildWarning.of("NOPE_999")
+
+    def test_a_template_placeholder_nobody_filled_is_refused(self):
+        """A half-written sentence never reaches a consumer."""
+        with pytest.raises(KeyError):
+            BuildWarning.of("SEED_002")
 
 
 class TestBuildResult:
@@ -53,7 +93,7 @@ class TestBuildResult:
             hash="abc123",
             execution_time_ms=150,
             seed_files_applied=3,
-            warnings=["Warning 1"],
+            warnings=[BuildWarning.of("SEED_002", count=1)],
         )
 
         data = result.to_dict()
@@ -65,7 +105,14 @@ class TestBuildResult:
         assert data["hash"] == "abc123"
         assert data["execution_time_ms"] == 150
         assert data["seed_files_applied"] == 3
-        assert data["warnings"] == ["Warning 1"]
+        assert data["warnings"] == [
+            {
+                "code": "SEED_002",
+                "severity": "warning",
+                "message": "1 seed file(s) failed",
+                "file": None,
+            }
+        ]
         assert "error" in data
 
     def test_build_result_to_dict_failure(self):

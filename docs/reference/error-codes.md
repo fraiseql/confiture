@@ -54,8 +54,6 @@ resolution hint surfaced in the envelope.
 | `CONFIG_010` | 5 | error | Database URL not set in environment '{env}' | Set database_url in db/environments/{env}.yaml or DATABASE_URL environment variable |
 | `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=6.0, current major) |
 | `CONFIG_012` | 5 | error | Lint baseline file is missing or malformed: {file} | Create or regenerate it with `confiture lint --baseline <file> --write-baseline` |
-| `CONFIG_013` | 5 | warning | {kind} pattern '{pattern}' matches nothing since the glob dialect changed | Patterns follow gitignore's rules since 1.5.0: one carrying a '/' is matched left-anchored against the path relative to the include directory. Prefix it with '**/' to match at any depth again. |
-| `CONFIG_014` | 0 | info | {kind} pattern '{pattern}' matches a different set of files since 1.5.0 | Run `confiture build --list-files` to see the selection this configuration produces now; '**' spans zero or more directories since 1.5.0. |
 | `DDL_001` | 4 | error | Destructive DDL operation refused without --force: {operation} | Re-run with --force if the destructive change is intended |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |
@@ -85,7 +83,10 @@ resolution hint surfaced in the envelope.
 | `SCHEMA_201` | 4 | error | Schema directory not found: {directory} | Create the schema directory or check the path |
 | `SCHEMA_202` | 4 | error | Circular dependency detected | Break the circular dependency between schema files |
 | `SCHEMA_205` | 4 | error | psql meta-command in {file} at line {line} | Remove the backslash commands; only SQL statements and inline COPY … FROM stdin data blocks are applied |
+| `SCHEMA_206` | 0 | warning | {file}: pglast could not parse it — not checked for duplicates | Fix the file's syntax or exclude it from the build; the duplicate scan skipped it, so an object it defines twice is not reported |
 | `SEED_001` | 5 | error | Seed execution error | Check seed file syntax and database state |
+| `SEED_002` | 0 | warning | {count} seed file(s) failed | The build continued because --continue-on-error (or seed.continue_on_error) is set; re-run without it to stop at the first failure |
+| `SEED_003` | 0 | info | No seed files found for environment '{env}' | Add seed files under the environment's seed directory, or drop --sequential |
 | `SQL_001` | 1 | error | SQL execution error | Check the SQL statement for errors |
 | `SYNC_001` | 5 | error | Sync error | Check source and target database connections |
 | `VALID_001` | 5 | error | Validation error | Check validation rules and data integrity |

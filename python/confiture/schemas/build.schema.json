@@ -66,8 +66,41 @@
     },
     "warnings": {
       "type": "array",
+      "description": "Build-time diagnostics: what the build has to say that is not a failure — a seed file that failed under --continue-on-error, a file the duplicate scan could not parse. Empty on a build with nothing to report. Before 1.6.0 this array was published and never written to, and its entries were typed as plain strings (#268). Defined inline rather than in _common.schema.json because this schema's $id is on a different host, which a relative $ref out of it cannot resolve.",
       "items": {
-        "type": "string"
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "severity",
+          "message",
+          "file"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The error-code registry entry that names the situation (e.g. `SEED_002`), so a consumer matches a code rather than a sentence."
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "warning",
+              "info"
+            ],
+            "description": "The severity the registry publishes for `code`; never `error` here — an error is not a warning, it is the envelope's `error` field."
+          },
+          "message": {
+            "type": "string",
+            "description": "What happened, in one line."
+          },
+          "file": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file it is about, relative to the project root; null when the warning is about the build rather than one file."
+          }
+        }
       }
     },
     "error": {
