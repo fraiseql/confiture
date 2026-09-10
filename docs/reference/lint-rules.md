@@ -357,17 +357,31 @@ is blanked, one it accepts is put back. A reference is never rewritten, because
 `app.tv_summary` reduced to `tv_summary` would be a name the rule declines to
 judge — the same silent miss, one step along.
 
-Two shapes are still refused, and both are **named** rather than passed off as
-clean (see `degraded`, below):
+One shape is still refused, and it is **named** rather than passed off as clean
+(see `degraded`, below): an array whose element type the stub cannot resolve —
+`app.type_input[]`, and equally `public.type_input[]` and a bare `type_input[]`,
+since naming the array type means resolving the element, and telling
+`type_input[]` from `text[]` needs the catalogue that is not there. It is
+pglast 8's alone: pglast 6.16 and 7.18 read it.
 
-- an array whose element type the stub cannot resolve — `app.type_input[]`, and
-  equally `public.type_input[]` and a bare `type_input[]`, since naming the
-  array type means resolving the element and telling `type_input[]` from
-  `text[]` needs the catalogue that is not there;
-- a `RETURNS TRIGGER` body, whose implicit `TG_` datums `libpg_query`
-  serialises as malformed JSON.
+#### A trigger function's body is read like any other
 
-Both are pglast 8's alone: pglast 6.16 and 7.18 read all of it.
+`RETURNS TRIGGER` and `RETURNS event_trigger` bodies were unread until 1.8.0 —
+all of them, whatever they contained ([#272]). `libpg_query` writes the implicit
+`TG_*` datums it synthesises for them as `{}}`, one closing brace too many each,
+so its output was not valid JSON and the tree never arrived. That was 5 of the 8
+plpgsql routines confiture's own examples ship, and triggers are where a schema
+keeps its audit writes, its denormalisation maintenance and its cross-table
+invariants: bodies that reference plenty, and rarely covered by a call path a
+test exercises.
+
+Confiture deletes those braces before decoding, at the position the JSON decoder
+stops at and only when the characters there are that defect. A serialisation
+that decodes is never edited — the same three characters spell the implicit
+`RETURN` at the end of very nearly every body, so a global replace would break
+the routines that were never broken. Also pglast 8's alone.
+
+[#272]: https://github.com/fraiseql/confiture/issues/272
 
 What the rule deliberately does **not** report:
 

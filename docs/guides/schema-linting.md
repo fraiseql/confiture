@@ -188,8 +188,9 @@ to look in, and an unqualified routine call is not judged even then: `now()` is
 
 A routine whose signature or declarations name a schema-qualified type — the
 shape of every mutation in a FraiseQL schema — is read like any other since
-1.7.0. A body confiture still could not read is **named** in `degraded`, not
-counted as clean; the two shapes that reach it are listed in
+1.7.0, and a trigger function's body since 1.8.0. A body confiture still could
+not read is **named** in `degraded`, not counted as clean; the one shape that
+reaches it is described in
 [lint-rules.md](../reference/lint-rules.md#build_003-the-inventory-read-backwards).
 
 `--baseline` is the adoption path for an existing schema; see

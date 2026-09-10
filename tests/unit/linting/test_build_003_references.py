@@ -339,102 +339,18 @@ class TestTheHonestFallback:
 def _body_is_unreadable(statement: str) -> bool:
     """Whether *this* libpg_query refuses the body — probed, not looked up.
 
-    Both blind spots this file pins are **pglast 8's alone**: 6.16 and 7.18
-    return a trigger function's body and resolve a schema-qualified type, and
-    the ``[ast]`` extra accepts all three majors. What `build_003` promises on
-    every one of them — that a body it did not read is named — is asserted
-    unconditionally; what it degrades *on* differs, and asking is the only
-    honest way to know which.
+    The shapes this file pins are **pglast 8's alone**: 6.16 and 7.18 resolve a
+    schema-qualified type and serialise a trigger function's datums as valid
+    JSON, and the ``[ast]`` extra accepts all three majors. What `build_003`
+    promises on every one of them — that a body it did not read is named — is
+    asserted unconditionally; what it degrades *on* differs, and asking is the
+    only honest way to know which.
     """
     try:
         pglast.parse_plpgsql(statement)
     except (pglast.parser.ParseError, json.JSONDecodeError):
         return True
     return False
-
-
-TRIGGER_ROUTINE = """CREATE OR REPLACE FUNCTION app.fn_touch()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
-    NEW.updated_at = now();
-    RETURN NEW;
-END;
-$$;
-"""
-
-
-@pytest.mark.skipif(
-    not _body_is_unreadable(TRIGGER_ROUTINE),
-    reason="this libpg_query returns a trigger function's body",
-)
-class TestABodyNoParserWillReturn:
-    """A trigger function must not take the whole lint down with it.
-
-    `libpg_query` serialises a PL/pgSQL *trigger* function's implicit `TG_`
-    datums as `{}}` — malformed JSON — so `pglast.parse_plpgsql` raises
-    `json.JSONDecodeError` rather than `ParseError` on every `RETURNS TRIGGER`
-    and `RETURNS event_trigger` body. Trigger functions are ordinary, this rule
-    is on by default, and the exception reached the CLI's error boundary: a
-    plain `confiture lint` died with `INTERNAL_ERROR` on most real schemas.
-
-    A body no parser will return is a body this rule did not read, which is a
-    degradation to report, not an exception to raise and not a silence to pass
-    off as a clean result.
-    """
-
-    def _payload(self, *args: str) -> dict:
-        result = runner.invoke(
-            app, ["lint", "--select", "build_003", "--format", "json", "--fail-on", "never", *args]
-        )
-        assert result.exit_code == 0, result.output
-        return json.loads(result.stdout)
-
-    @staticmethod
-    def _unread(payload: dict) -> list[dict]:
-        """Only the "body went unread" degradations.
-
-        The fixture's DSN points at a closed port on purpose, so the live tier
-        degrades on every run here; that entry is a different fact.
-        """
-        return [d for d in payload["degraded"] if d["reason"].startswith("could not read")]
-
-    def test_a_trigger_function_does_not_crash_the_lint(self, in_tmp: Path) -> None:
-        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_trg.sql": TRIGGER_ROUTINE})
-
-        assert self._payload()["violations"]["total"] == 0
-
-    def test_and_the_report_says_the_body_went_unread(self, in_tmp: Path) -> None:
-        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_trg.sql": TRIGGER_ROUTINE})
-
-        (degraded,) = self._unread(self._payload())
-
-        assert degraded["code"] == "build_003"
-        assert degraded["state"] == "degraded"
-        assert "app.fn_touch()" in degraded["reason"]
-
-    def test_a_readable_body_beside_it_is_still_read(self, in_tmp: Path) -> None:
-        """The degradation is per body: one unreadable routine hides no other."""
-        _project(
-            in_tmp,
-            {
-                "001_schema.sql": ISSUE_246_SCHEMA,
-                "010_trg.sql": TRIGGER_ROUTINE,
-                "020_fn.sql": ISSUE_246_ROUTINE,
-            },
-        )
-
-        payload = self._payload()
-
-        assert sorted(i["location"] for i in payload["violations"]["items"]) == [
-            "app.fn_report() -> app.fn_refresh_summary",
-            "app.fn_report() -> app.tv_summary",
-        ]
-        assert "app.fn_touch()" in self._unread(payload)[0]["reason"]
-
-    def test_a_schema_with_no_unreadable_body_reports_no_degradation(self, in_tmp: Path) -> None:
-        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": ISSUE_246_ROUTINE})
-
-        assert self._unread(self._payload()) == []
 
 
 ISSUE_270_TYPES = """CREATE SCHEMA IF NOT EXISTS app;
@@ -465,36 +381,44 @@ BEGIN FOR r IN SELECT id FROM public.tv_d LOOP NULL; END LOOP; RETURN NULL; END;
 """
 
 
-REFUSED_ROUTINES = """CREATE OR REPLACE FUNCTION app.m_z(input_data app.type_input[])
+REFUSED_ROUTINE_ALONE = """CREATE OR REPLACE FUNCTION app.m_z(input_data app.type_input[])
 RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE r RECORD;
 BEGIN FOR r IN SELECT id FROM public.tv_z LOOP NULL; END LOOP; END; $$;
+"""
 
+REFUSED_ROUTINES = (
+    REFUSED_ROUTINE_ALONE
+    + """
 CREATE OR REPLACE FUNCTION app.m_d(p TEXT)
 RETURNS TEXT LANGUAGE plpgsql AS $$
 DECLARE r RECORD;
 BEGIN FOR r IN SELECT id FROM public.tv_d LOOP NULL; END LOOP; RETURN NULL; END; $$;
 """
+)
 
 
 @pytest.mark.skipif(
-    not _body_is_unreadable(REFUSED_ROUTINES.split(";\n\n", maxsplit=1)[0] + ";"),
+    not _body_is_unreadable(REFUSED_ROUTINE_ALONE),
     reason="this libpg_query resolves an array of a type it does not know",
 )
 class TestARoutineTheCompilerRefuses:
-    """A body libpg_query will not compile is named, whatever raised (#270).
+    """A body libpg_query will not return is named, whatever stopped it (#270).
 
-    Its `ParseError` arm returned an empty reference list, so the routine
-    contributed no names, produced no finding, and reached no degradation
-    either: silence and a clean result were the same output.
+    The rule is on by default and trees are full of routines, so a body that
+    does not come back must be a degradation to report — not an exception to
+    raise, and not a silence to pass off as a clean result. `build_003`'s
+    `ParseError` arm did the third of those: the routine contributed no names,
+    produced no finding, and reached no degradation either.
 
-    Most of what raised there is now compiled — a schema-qualified type is
-    blanked before the compiler sees it. What is left is refused for a reason no
-    qualifier explains: naming an array type means resolving its element type,
-    and an element the stub cannot resolve comes back as `record`, which
-    PL/pgSQL declines as `_record`. That happens to `public.type_input[]` and to
-    a bare `type_input[]` exactly as it happens here, so it is a hole with no
-    catalogue-free bottom — and an audible one.
+    Almost nothing raises here any more. A schema-qualified type is blanked
+    before the compiler sees it (#270), and a trigger function's mis-serialised
+    datums are repaired before the tree is decoded (#272). What is left is
+    refused for a reason no rewrite explains: naming an array type means
+    resolving its element type, and an element the stub cannot resolve comes
+    back as `record`, which PL/pgSQL declines as `_record`. That happens to
+    `public.type_input[]` and to a bare `type_input[]` exactly as it happens
+    here, so it is a hole with no catalogue-free bottom — and an audible one.
     """
 
     def _payload(self, *args: str) -> dict:
@@ -505,9 +429,26 @@ class TestARoutineTheCompilerRefuses:
         return json.loads(result.stdout)
 
     @staticmethod
-    def _unread_reason(payload: dict) -> str:
-        (degraded,) = [d for d in payload["degraded"] if d["reason"].startswith("could not read")]
+    def _unread(payload: dict) -> list[dict]:
+        """Only the "body went unread" degradations.
+
+        The fixture's DSN points at a closed port on purpose, so the live tier
+        degrades on every run here; that entry is a different fact.
+        """
+        return [d for d in payload["degraded"] if d["reason"].startswith("could not read")]
+
+    def _unread_reason(self, payload: dict) -> str:
+        (degraded,) = self._unread(payload)
         return degraded["reason"]
+
+    def test_the_refused_routine_does_not_crash_the_lint(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": REFUSED_ROUTINE_ALONE})
+
+        payload = self._payload()
+
+        assert payload["violations"]["total"] == 0
+        assert self._unread(payload)[0]["state"] == "degraded"
+        assert self._unread(payload)[0]["code"] == "build_003"
 
     def test_the_refused_routine_is_named(self, in_tmp: Path) -> None:
         _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": REFUSED_ROUTINES})
@@ -524,6 +465,11 @@ class TestARoutineTheCompilerRefuses:
         assert [i["location"] for i in payload["violations"]["items"]] == [
             "app.m_d(text) -> public.tv_d"
         ]
+
+    def test_a_schema_with_no_unreadable_body_reports_no_degradation(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": ISSUE_246_ROUTINE})
+
+        assert self._unread(self._payload()) == []
 
 
 class TestTheRoutinesThatCarryTheWriteLogic:
@@ -614,3 +560,99 @@ $$;
         (finding,) = self._payload()["violations"]["items"]
 
         assert finding["line"] == 6
+
+
+ISSUE_272_ROUTINES = """CREATE OR REPLACE FUNCTION app.trg_audit()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE v_x int;
+BEGIN
+    SELECT id INTO v_x FROM app.tv_audit;
+    PERFORM app.fn_missing(NEW.id);
+    RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION app.fn_plain()
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE v_x int;
+BEGIN
+    SELECT id INTO v_x FROM app.tv_plain;
+END;
+$$;
+"""
+
+
+class TestATriggerBodyIsRead:
+    """#272's reproduction: a trigger body and a control of the same shape.
+
+    `libpg_query` wrote a trigger function's implicit `TG_*` datums as `{}}`,
+    so `parse_plpgsql`'s output did not decode and **every** `RETURNS TRIGGER`
+    body was unread — not some of them, all of them, whatever the body held.
+    The control beside it, identical but for its return type, reported fine,
+    which is what made the blind spot a property of the signature rather than
+    of anything a reader would look for in the body.
+
+    Trigger functions are where a schema keeps its audit writes, its
+    denormalisation maintenance and its cross-table invariants: bodies that
+    reference plenty and are rarely covered by a call path a test exercises.
+    They are exactly what this rule is for, so "unread but named" was an honest
+    report of a permanent hole, not an acceptable resting place.
+    """
+
+    def _payload(self, *args: str) -> dict:
+        result = runner.invoke(
+            app, ["lint", "--select", "build_003", "--format", "json", "--fail-on", "never", *args]
+        )
+        assert result.exit_code == 0, result.output
+        return json.loads(result.stdout)
+
+    def test_the_trigger_and_the_control_both_report(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": ISSUE_272_ROUTINES})
+
+        assert sorted(i["location"] for i in self._payload()["violations"]["items"]) == [
+            "app.fn_plain() -> app.tv_plain",
+            "app.trg_audit() -> app.fn_missing",
+            "app.trg_audit() -> app.tv_audit",
+        ]
+
+    def test_nothing_is_reported_as_unread(self, in_tmp: Path) -> None:
+        """The `degraded` line the trigger used to leave behind is gone."""
+        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": ISSUE_272_ROUTINES})
+
+        unread = [
+            d for d in self._payload()["degraded"] if d["reason"].startswith("could not read")
+        ]
+
+        assert unread == []
+
+    def test_the_line_is_the_statement_inside_the_body(self, in_tmp: Path) -> None:
+        """The repair edits the serialisation, so the body's own numbering stands."""
+        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": ISSUE_272_ROUTINES})
+
+        lines = {
+            f["location"].rsplit(" -> ", 1)[1]: f["line"]
+            for f in self._payload()["violations"]["items"]
+        }
+
+        assert lines == {"app.tv_audit": 5, "app.fn_missing": 6, "app.tv_plain": 15}
+
+    def test_an_event_trigger_body_is_read_too(self, in_tmp: Path) -> None:
+        """Two stray braces rather than ten, and the same answer."""
+        _project(
+            in_tmp,
+            {
+                "001_schema.sql": ISSUE_246_SCHEMA,
+                "010_fn.sql": (
+                    "CREATE FUNCTION app.evt_guard() RETURNS event_trigger\n"
+                    "LANGUAGE plpgsql AS $$\n"
+                    "BEGIN\n"
+                    "    PERFORM app.fn_audit_ddl();\n"
+                    "END;\n"
+                    "$$;\n"
+                ),
+            },
+        )
+
+        assert [i["location"] for i in self._payload()["violations"]["items"]] == [
+            "app.evt_guard() -> app.fn_audit_ddl"
+        ]
