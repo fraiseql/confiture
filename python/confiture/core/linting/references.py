@@ -54,7 +54,7 @@ from typing import Any
 import pglast
 import pglast.parser
 
-from confiture.core import sql_lexer
+from confiture.core import plpgsql_parse, sql_lexer
 from confiture.core.ddl_walk import routine_body, walk_nodes
 from confiture.core.linting.inventory import SchemaObject, object_from_statement, split_names
 
@@ -217,6 +217,19 @@ def _string_constants(sql: str) -> list[tuple[int, int]]:
         return []
 
 
+def _as_location(stmt: Any) -> int | None:
+    """Where the routine's ``AS`` clause begins, or ``None`` when it has none.
+
+    Both the line the body starts on and the text handed to the PL/pgSQL
+    compiler are counted from it, so the ``DefElem`` walk is written once.
+    """
+    at = next(
+        (opt.location for opt in getattr(stmt, "options", None) or () if opt.defname == "as"),
+        None,
+    )
+    return None if at is None or at < 0 else at
+
+
 def _body_line(sql: str, stmt: Any, constants: list[tuple[int, int]]) -> int | None:
     """The file line the routine's body starts on, or ``None`` when it cannot be found.
 
@@ -224,11 +237,8 @@ def _body_line(sql: str, stmt: Any, constants: list[tuple[int, int]]) -> int | N
     follows the opening ``$$`` — so the line to add back is the line of the
     first string constant at or after the ``AS`` clause.
     """
-    at = next(
-        (opt.location for opt in getattr(stmt, "options", None) or () if opt.defname == "as"),
-        None,
-    )
-    if at is None or at < 0:
+    at = _as_location(stmt)
+    if at is None:
         return None
     content = next((start for token, start in constants if token >= at), None)
     return None if content is None else _line_of(sql, content)
@@ -261,7 +271,14 @@ def _routine_references(
         # The body is one SQL text: each reference keeps its own line in it,
         # shifted onto the file by where the body starts.
         return _from_text(body, obj, shift=(first - 1) if first else 0, exact=first is not None)
-    return _plpgsql_references(_statement_text(sql, raw), obj, first=first)
+    at = _as_location(stmt)
+    offset = raw.stmt_location or 0
+    return _plpgsql_references(
+        _statement_text(sql, raw),
+        obj,
+        first=first,
+        body_at=None if at is None else at - offset,
+    )
 
 
 def _query_references(
@@ -280,7 +297,9 @@ _READERS: dict[str, Callable[[str, Any, SchemaObject, list[tuple[int, int]]], li
 }
 
 
-def _plpgsql_references(statement: str, obj: SchemaObject, *, first: int | None) -> list[Reference]:
+def _plpgsql_references(
+    statement: str, obj: SchemaObject, *, first: int | None, body_at: int | None = None
+) -> list[Reference]:
     """Every fragment libpg_query's PL/pgSQL parser found, re-parsed as SQL.
 
     ``parse_plpgsql`` counts from the body's first line, so *first* — that
@@ -288,13 +307,18 @@ def _plpgsql_references(statement: str, obj: SchemaObject, *, first: int | None)
     it the reference is inexact and reports the routine's line instead. A
     fragment marked dynamic yields one dynamic reference and nothing is read
     out of the string it would have built.
+
+    The compiler is reached through :func:`confiture.core.plpgsql_parse.parse_body`,
+    which blanks the schema qualifiers its stubbed catalogue will not resolve —
+    with spaces, so every ``lineno`` below still counts the lines this file has.
     """
     try:
-        tree = pglast.parse_plpgsql(statement)
+        tree = plpgsql_parse.parse_body(statement, body_at=body_at).tree
     except pglast.parser.ParseError as exc:
         # The statement parsed as SQL — it is in `raws` — so a refusal here is
-        # the PL/pgSQL compiler's, about this one body. Reporting nothing about
-        # a body that was never read is the failure #270 is filed on.
+        # the PL/pgSQL compiler's, about this one body, and not one blanking a
+        # qualifier addresses. Reporting nothing about a body that was never
+        # read is the failure #270 is filed on.
         raise _UnreadableBody(obj.identity) from exc
     except json.JSONDecodeError as exc:
         # `libpg_query` emits `{}}` for a trigger function's implicit `TG_`
