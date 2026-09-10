@@ -14,6 +14,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-09-10
+
+Two issues in one release, because the second deletes what the first would otherwise have wired.
+`confiture build --format json` has published a `warnings[]` array for as long as it has had a schema,
+and **no code path ever wrote to it** ([#268](https://github.com/fraiseql/confiture/issues/268)). 1.5.0's
+one-release upgrade aid — the replay of 1.4.0's globbing behind `CONFIG_013`/`CONFIG_014` — comes out on
+the schedule it shipped with ([#263](https://github.com/fraiseql/confiture/issues/263)).
+
+#268's own preference was a typed `patterns[]` array on the build envelope, mirroring `--list-files`.
+#263 deletes the pattern diagnostics entirely, so that array would have been born dead and removed in the
+same release. `warnings[]` is the build envelope's single typed diagnostic channel instead, filled by the
+three diagnostics that **survive** the retirement — which is also what makes the guard on it worth
+having: it is written against content that is permanent.
+
+**Selection behaviour is unchanged.** The golden hash and the eight-shape corpus in
+`tests/fixtures/build_selection_corpus/` still pin gitignore's semantics file for file. What leaves this
+release is the *commentary* on 1.5.0's change, not the change.
+
+### ⚠️ Upgrade note — read before bumping
+
+**From 1.5.0 there is nothing to do**, unless you parse `confiture build --format json`: `warnings[]`
+carries objects now rather than strings — it carried nothing at all before — and `build --list-files
+--format json` no longer carries `patterns[]`.
+
+**From 1.4.0, do not go straight to 1.6.0.** The diagnostic that names which of *your* `include_dirs`
+globs changed meaning when the dialect became gitignore's exists only in 1.5.x. 1.6.0 applies the new
+semantics and says nothing about the difference. Two ways to keep the answer:
+
+1. **Install 1.5.x once and run `confiture validate-config`.** It reports every changed pattern with its
+   rewrite and builds nothing; `--strict` exits 5 on a `CONFIG_013`, which is the diagnostic doing its
+   job rather than a regression. Then upgrade to 1.6.0, where both codes are gone.
+2. **Or diff `confiture build --list-files` across the upgrade.** It exists in both releases, it names
+   the entry, the `order` and the pattern behind every selected file, and it is the whole answer for
+   your project — including the four changed shapes that never had a diagnostic to begin with, since
+   `order` blocks, deduplication and overlap resolution are not glob semantics.
+
+The 1.5.0 entry below still states what changed and why; only the machinery that reported it is gone.
+
+### Added
+
+- **The build envelope carries the build's own diagnostics** ([#268](https://github.com/fraiseql/confiture/issues/268)).
+  Three things `confiture build` had to say were said on the console and nowhere else. A `--sequential
+  --continue-on-error` run that applied three seed files and failed two published `success: true`,
+  `seed_files_applied: 3` and not one word about the two — a consumer reading the JSON, which is the
+  right thing to read, could not tell a partial seed run from a clean one. A `--sequential` run that
+  found no seed files at all published the same silence. And `--warn-duplicates` skips a file pglast
+  cannot parse, so an object that file defines twice was never looked for: the scan was *incomplete*,
+  and the envelope reported it exactly as it reports a clean one.
+
+  `warnings[]` is where they go, as typed entries — `{"code": "SEED_002", "severity": "warning",
+  "message": "2 seed file(s) failed", "file": null}` — so a consumer matches a **code**, not a sentence:
+
+  | code | severity | when |
+  |---|---|---|
+  | `SEED_002` | `warning` | `--sequential` applied seeds and some failed. `seed_files_applied` counts the ones that worked; this counts the ones that did not. |
+  | `SEED_003` | `info` | `--sequential` found no seed files at all. |
+  | `SCHEMA_206` | `warning` | The duplicate scan could not parse a file, so it was not checked; `file` names it. |
+
+  All three are registry entries with exit code `0` — a warning here never fails a build, and a build
+  that *did* fail says so in `error`. `severity` is read from the registry rather than written at the
+  call site, and so is the message: `BuildWarning.of()` fills the registry's template, so the line a
+  build prints is the line the published codebook documents, and a code nothing registered is refused.
+  `--fail-on-duplicates` publishes them too — a build that stopped is precisely when its warnings are
+  worth reading. On the console they appear once, in the result's Warnings section, dim for an `info`.
+
+  The guard against a repeat enumerates the arrays `build.schema.json` publishes **from the schema**:
+  a new array either has a scenario that fills it or the test names it as a hole. A hardcoded pair of
+  names would not have caught this one.
+
+### ⚠️ BREAKING — `warnings[]` entries are objects, not strings ([#268](https://github.com/fraiseql/confiture/issues/268))
+
+`BuildResult.warnings` was typed `list[str]` and `build.schema.json` published it as an array of strings.
+It is a list of `{code, severity, message, file}` objects now, and the schema types it. Breaking on
+paper and inert in practice: the array has been `[]` on every run since it was published, so no consumer
+can have read an element of it.
+
+### ⚠️ BREAKING — `build --list-files --format json` drops `patterns[]` ([#263](https://github.com/fraiseql/confiture/issues/263))
+
+`build-list-files.schema.json` no longer declares the key and **rejects a payload that carries it**. It
+was the 1.4.0-selection replay's published half. What `--list-files` publishes is the selection:
+`files[]` in build order, each naming the `include_dirs` entry that selected it, that entry's `order`
+and the include pattern that matched. Nothing else about it.
+
+### Removed
+
+- **`CONFIG_013` and `CONFIG_014`, with the replay that computed them**
+  ([#263](https://github.com/fraiseql/confiture/issues/263)). To tell a project which of its globs
+  changed meaning, 1.5.0 re-ran 1.4.0's entire selection — one extra directory walk per `include_dirs`
+  entry, on every build — and diffed the two match sets. Both consumers of that population are on 1.5.0,
+  so the aid has done its work, and the CHANGELOG above carries the mitigation for anyone arriving from
+  1.4.0. Out with it: `path_globs.migration_notes` and everything under its banner,
+  `SchemaBuilder.pattern_diagnostics()`, `PatternDiagnostic`, `SelectionReport.patterns`,
+  `format_pattern_notes()` and the `confiture build` banner that printed them, and
+  `ConfigValidator._validate_selection_patterns` — `confiture validate-config` no longer folds pattern
+  notes into its `issues[]`, so a `--strict` leg that went red on upgrade day goes green again. The two
+  registry rows leave with their only emitter, because every registered code must have a raise site.
+
+  One behaviour the aid introduced **stays**: a build that selects nothing is still not routed to the
+  missing-schema-directory template, which used to print "The schema directory doesn't exist" and tell
+  the reader to `mkdir` a directory that exists and is full of files the patterns stopped matching. The
+  hint is static again — the two things an empty selection can mean, and `--list-files` to tell them
+  apart — and the assertion that pinned it moved to a unit test on the classifier rather than leaving
+  with the deleted module.
+
 ## [1.5.0] - 2026-09-09
 
 Five phases against `include_dirs`, released once. The block has three knobs — `order`, the
