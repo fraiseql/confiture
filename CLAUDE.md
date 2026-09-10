@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.6.0
+**Version**: 1.7.0
 **Last Updated**: September 10, 2026
 **Current Status**: Production-Ready
 
@@ -155,6 +155,24 @@ extension's diagnosis is reported verbatim — message and SQLSTATE — because
 confiture has nothing to add to it. The extension is in no stock PostgreSQL, so
 the rule reports a `skipped` status rather than an empty result when it cannot
 run, and one required CI leg (`plpgsql-check`) is the only place it does.
+
+**One place compiles a PL/pgSQL body** (`core/plpgsql_parse.py`, #270).
+`libpg_query`'s PL/pgSQL compiler is PostgreSQL's own with the catalogue stubbed
+out, and on **pglast 8 only** that stub's `LookupExplicitNamespace` resolves
+`pg_catalog` and `public` and refuses everything else — so `app.mutation_response`
+as a parameter, a return type, a `SETOF`, a `RETURNS TABLE` column or a `DECLARE`
+took the whole routine down before a line of its body was read. That was 233 of
+297 routines on a FraiseQL-shaped schema, silently.
+
+Nothing downstream reads a type — the caller wants linenos and `PLpgSQL_expr`
+query strings — so `parse_body()` **blanks the qualifier with spaces**, keeping
+every offset and line number, and returns `Compiled(tree, text, neutralised)`.
+Which qualifier to blank is the compiler's answer, never a model of PL/pgSQL's
+declaration grammar: a guess narrows the search and each blank in it is then
+tested by *putting it back*, because a qualifier the compiler accepts is a
+reference and `app.tv_summary` blanked to `tv_summary` is a name `build_003`
+declines to judge. Do not call `pglast.parse_plpgsql` directly; do not replace
+the oracle with a grammar.
 
 **One lexer too.** `core/sql_lexer.py` is the only module that tokenises SQL text
 (`split_statements`, `strip_comments`, `tokens`, `code_text`, `comments`,
@@ -371,6 +389,7 @@ confiture/
 │   │   ├── path_globs.py         # The one path matcher: does this path, relative to its include directory…
 │   │   ├── pg_version.py         # PostgreSQL version detection and feature flags
 │   │   ├── pgtap_generator.py    # Generate pgTAP test scaffolds from PostgreSQL functions
+│   │   ├── plpgsql_parse.py      # Compiling a PL/pgSQL body with a compiler that has no catalogue (issue…
 │   │   ├── preconditions.py      # Migration preconditions for fail-fast validation
 │   │   ├── preflight.py          # Pre-flight migration checks
 │   │   ├── progress.py           # Progress tracking for long-running operations
@@ -1176,7 +1195,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: September 10, 2026
-**Version**: 1.6.0
+**Version**: 1.7.0
 
 ---
 

@@ -18,6 +18,8 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
+import pglast
+import pglast.parser
 import pytest
 from typer.testing import CliRunner
 
@@ -334,6 +336,23 @@ class TestTheHonestFallback:
         assert "the line given is the routine's" not in finding.message
 
 
+def _body_is_unreadable(statement: str) -> bool:
+    """Whether *this* libpg_query refuses the body — probed, not looked up.
+
+    Both blind spots this file pins are **pglast 8's alone**: 6.16 and 7.18
+    return a trigger function's body and resolve a schema-qualified type, and
+    the ``[ast]`` extra accepts all three majors. What `build_003` promises on
+    every one of them — that a body it did not read is named — is asserted
+    unconditionally; what it degrades *on* differs, and asking is the only
+    honest way to know which.
+    """
+    try:
+        pglast.parse_plpgsql(statement)
+    except (pglast.parser.ParseError, json.JSONDecodeError):
+        return True
+    return False
+
+
 TRIGGER_ROUTINE = """CREATE OR REPLACE FUNCTION app.fn_touch()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
@@ -344,6 +363,10 @@ $$;
 """
 
 
+@pytest.mark.skipif(
+    not _body_is_unreadable(TRIGGER_ROUTINE),
+    reason="this libpg_query returns a trigger function's body",
+)
 class TestABodyNoParserWillReturn:
     """A trigger function must not take the whole lint down with it.
 
@@ -412,3 +435,182 @@ class TestABodyNoParserWillReturn:
         _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": ISSUE_246_ROUTINE})
 
         assert self._unread(self._payload()) == []
+
+
+ISSUE_270_TYPES = """CREATE SCHEMA IF NOT EXISTS app;
+
+CREATE TYPE app.type_input AS (nom TEXT);
+CREATE TYPE app.mutation_response AS (status TEXT, message TEXT);
+"""
+
+ISSUE_270_ROUTINES = """CREATE OR REPLACE FUNCTION app.m_a(input_data app.type_input)
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_a LOOP NULL; END LOOP; END; $$;
+
+CREATE OR REPLACE FUNCTION app.m_b()
+RETURNS app.mutation_response LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_b LOOP NULL; END LOOP; RETURN NULL; END; $$;
+
+CREATE OR REPLACE FUNCTION app.m_c(input_data app.type_input)
+RETURNS app.mutation_response LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_c LOOP NULL; END LOOP; RETURN NULL; END; $$;
+
+CREATE OR REPLACE FUNCTION app.m_d(p TEXT)
+RETURNS TEXT LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_d LOOP NULL; END LOOP; RETURN NULL; END; $$;
+"""
+
+
+REFUSED_ROUTINES = """CREATE OR REPLACE FUNCTION app.m_z(input_data app.type_input[])
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_z LOOP NULL; END LOOP; END; $$;
+
+CREATE OR REPLACE FUNCTION app.m_d(p TEXT)
+RETURNS TEXT LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_d LOOP NULL; END LOOP; RETURN NULL; END; $$;
+"""
+
+
+@pytest.mark.skipif(
+    not _body_is_unreadable(REFUSED_ROUTINES.split(";\n\n", maxsplit=1)[0] + ";"),
+    reason="this libpg_query resolves an array of a type it does not know",
+)
+class TestARoutineTheCompilerRefuses:
+    """A body libpg_query will not compile is named, whatever raised (#270).
+
+    Its `ParseError` arm returned an empty reference list, so the routine
+    contributed no names, produced no finding, and reached no degradation
+    either: silence and a clean result were the same output.
+
+    Most of what raised there is now compiled — a schema-qualified type is
+    blanked before the compiler sees it. What is left is refused for a reason no
+    qualifier explains: naming an array type means resolving its element type,
+    and an element the stub cannot resolve comes back as `record`, which
+    PL/pgSQL declines as `_record`. That happens to `public.type_input[]` and to
+    a bare `type_input[]` exactly as it happens here, so it is a hole with no
+    catalogue-free bottom — and an audible one.
+    """
+
+    def _payload(self, *args: str) -> dict:
+        result = runner.invoke(
+            app, ["lint", "--select", "build_003", "--format", "json", "--fail-on", "never", *args]
+        )
+        assert result.exit_code == 0, result.output
+        return json.loads(result.stdout)
+
+    @staticmethod
+    def _unread_reason(payload: dict) -> str:
+        (degraded,) = [d for d in payload["degraded"] if d["reason"].startswith("could not read")]
+        return degraded["reason"]
+
+    def test_the_refused_routine_is_named(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": REFUSED_ROUTINES})
+
+        assert "app.m_z(app.type_input[])" in self._unread_reason(self._payload())
+
+    def test_the_control_in_the_same_file_is_read(self, in_tmp: Path) -> None:
+        """The refusal is per routine: it hides nothing beside it."""
+        _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": REFUSED_ROUTINES})
+
+        payload = self._payload()
+
+        assert "app.m_d(text)" not in self._unread_reason(payload)
+        assert [i["location"] for i in payload["violations"]["items"]] == [
+            "app.m_d(text) -> public.tv_d"
+        ]
+
+
+class TestTheRoutinesThatCarryTheWriteLogic:
+    """#270's reproduction, four functions in one file, all four read.
+
+    `fn(uuid, app.type_x_input, jsonb) RETURNS app.mutation_response` is the
+    convention for every mutation in a FraiseQL schema — 233 of 297 plpgsql
+    routines on the one this was filed from, and the 64 that were analysable
+    were the ones without write logic in them. The type qualifier is blanked
+    before the compiler sees it, so the body is read like any other.
+    """
+
+    def _payload(self, *args: str) -> dict:
+        result = runner.invoke(
+            app, ["lint", "--select", "build_003", "--format", "json", "--fail-on", "never", *args]
+        )
+        assert result.exit_code == 0, result.output
+        return json.loads(result.stdout)
+
+    def test_all_four_report(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": ISSUE_270_ROUTINES})
+
+        payload = self._payload()
+
+        assert sorted(i["location"] for i in payload["violations"]["items"]) == [
+            "app.m_a(app.type_input) -> public.tv_a",
+            "app.m_b() -> public.tv_b",
+            "app.m_c(app.type_input) -> public.tv_c",
+            "app.m_d(text) -> public.tv_d",
+        ]
+
+    def test_nothing_is_reported_as_unread(self, in_tmp: Path) -> None:
+        """Nothing was skipped, so nothing claims to have been."""
+        _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": ISSUE_270_ROUTINES})
+
+        unread = [
+            d for d in self._payload()["degraded"] if d["reason"].startswith("could not read")
+        ]
+
+        assert unread == []
+
+    def test_a_reference_keeps_the_qualifier_its_author_wrote(self, in_tmp: Path) -> None:
+        """Blanking a type must not reach the names the rule reports."""
+        _project(
+            in_tmp,
+            {
+                "001_types.sql": ISSUE_270_TYPES,
+                "010_fn.sql": """CREATE OR REPLACE FUNCTION app.m_e(input_data app.type_input)
+RETURNS app.mutation_response LANGUAGE plpgsql AS $$
+DECLARE
+    v_res app.mutation_response;
+    v_seq int := app.fn_next();
+BEGIN
+    SELECT * INTO v_res FROM app.tv_summary;
+    PERFORM core.fn_log(v_seq);
+    RETURN v_res;
+END;
+$$;
+""",
+            },
+        )
+
+        assert sorted(i["location"] for i in self._payload()["violations"]["items"]) == [
+            "app.m_e(app.type_input) -> app.fn_next",
+            "app.m_e(app.type_input) -> app.tv_summary",
+            "app.m_e(app.type_input) -> core.fn_log",
+        ]
+
+    def test_the_line_is_the_statement_inside_the_body(self, in_tmp: Path) -> None:
+        """Blanking is spaces, so a neutralised body's lines are its own."""
+        _project(
+            in_tmp,
+            {
+                "001_types.sql": ISSUE_270_TYPES,
+                "010_fn.sql": """CREATE OR REPLACE FUNCTION app.m_f(input_data app.type_input)
+RETURNS app.mutation_response LANGUAGE plpgsql AS $$
+DECLARE
+    v_res app.mutation_response;
+BEGIN
+    SELECT * INTO v_res FROM app.tv_summary;
+    RETURN v_res;
+END;
+$$;
+""",
+            },
+        )
+
+        (finding,) = self._payload()["violations"]["items"]
+
+        assert finding["line"] == 6
