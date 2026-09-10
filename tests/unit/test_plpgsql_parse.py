@@ -25,6 +25,8 @@ retire these skips if libpg_query ever resolves the stub.
 
 from __future__ import annotations
 
+import json
+
 import pglast
 import pglast.parser
 import pytest
@@ -299,3 +301,110 @@ class TestTheLexerDecidesWhatIsAName:
         )
 
         assert "app.commented" in parse_body(statement, body_at=_as_at(statement)).text
+
+
+#: One row per body whose implicit datums `libpg_query` mis-serialises, with the
+#: number of stray closing braces each carries. The count is the shape's, not an
+#: implementation detail: it is one per datum PL/pgSQL synthesises, and a row
+#: whose number moves is libpg_query changing what it synthesises.
+MIS_SERIALISED: dict[str, tuple[str, int]] = {
+    "returns trigger": (
+        "CREATE FUNCTION app.f() RETURNS TRIGGER LANGUAGE plpgsql AS $$\n"
+        "BEGIN\n  PERFORM app.fn_log(NEW.id);\n  RETURN NEW;\nEND; $$",
+        10,
+    ),
+    "returns pg_catalog.trigger": (
+        "CREATE FUNCTION app.f() RETURNS pg_catalog.trigger LANGUAGE plpgsql AS $$\n"
+        "BEGIN\n  PERFORM app.fn_log(NEW.id);\n  RETURN NEW;\nEND; $$",
+        10,
+    ),
+    "returns event_trigger": (
+        "CREATE FUNCTION app.f() RETURNS event_trigger LANGUAGE plpgsql AS $$\n"
+        "BEGIN\n  PERFORM app.fn_log();\nEND; $$",
+        2,
+    ),
+}
+
+
+def _serialisation_is_malformed(statement: str) -> bool:
+    """Whether *this* libpg_query writes JSON that does not decode. Probed.
+
+    True on pglast 8, false on 6.16 and 7.18 — which do not serialise the
+    implicit datums at all, so their output has nothing to repair.
+    """
+    try:
+        pglast.parse_plpgsql(statement)
+    except json.JSONDecodeError:
+        return True
+    except pglast.parser.ParseError:  # pragma: no cover - a different failure
+        return False
+    return False
+
+
+#: Whether *this* libpg_query is the one that mis-serialises a trigger
+#: function's implicit `TG_` datums. Probed, not looked up.
+STRAY_BRACES = _serialisation_is_malformed(MIS_SERIALISED["returns trigger"][0])
+
+needs_the_strays = pytest.mark.skipif(
+    not STRAY_BRACES,
+    reason="this libpg_query serialises a trigger function's datums as valid JSON",
+)
+
+
+@needs_the_strays
+@pytest.mark.parametrize("shape", sorted(MIS_SERIALISED))
+def test_libpg_query_mis_serialises_the_shape_on_its_own(shape: str) -> None:
+    """The premise, where it holds. A row that stops raising was fixed upstream."""
+    with pytest.raises(json.JSONDecodeError):
+        pglast.parse_plpgsql(MIS_SERIALISED[shape][0])
+
+
+@pytest.mark.parametrize("shape", sorted(MIS_SERIALISED))
+def test_every_mis_serialised_shape_compiles(shape: str) -> None:
+    statement = MIS_SERIALISED[shape][0]
+
+    assert parse_body(statement, body_at=_as_at(statement)).tree
+
+
+@needs_the_strays
+@pytest.mark.parametrize("shape", sorted(MIS_SERIALISED))
+def test_the_repair_deletes_one_brace_per_synthesised_datum(shape: str) -> None:
+    statement, strays = MIS_SERIALISED[shape]
+
+    assert parse_body(statement, body_at=_as_at(statement)).repaired == strays
+
+
+def test_a_repaired_body_still_names_what_it_references() -> None:
+    """The point of reading it at all: the fragments come back, qualified."""
+    statement = (
+        "CREATE FUNCTION app.trg_audit() RETURNS TRIGGER LANGUAGE plpgsql AS $$\n"
+        "DECLARE v_x int;\nBEGIN\n"
+        "    SELECT id INTO v_x FROM app.tv_audit;\n"
+        "    PERFORM app.fn_missing(NEW.id);\n"
+        "    RETURN NEW;\nEND; $$"
+    )
+
+    found = _queries(parse_body(statement, body_at=_as_at(statement)).tree)
+
+    # `parse_plpgsql` blanks the `INTO` clause out of the fragment it hands
+    # back, so the run of spaces where it stood is not a fact worth pinning.
+    assert sorted(" ".join(query.split()) for query in found) == [
+        "SELECT app.fn_missing(NEW.id)",
+        "SELECT id FROM app.tv_audit",
+    ]
+
+
+def _queries(tree: object) -> list[str]:
+    """Every ``PLpgSQL_expr`` query string in *tree*, in no particular order."""
+    found: list[str] = []
+    stack = [tree]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            expr = node.get("PLpgSQL_expr")
+            if isinstance(expr, dict) and expr.get("query"):
+                found.append(expr["query"])
+            stack.extend(node.values())
+        elif isinstance(node, list):
+            stack.extend(node)
+    return found
