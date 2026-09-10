@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from pathlib import Path
+from typing import ClassVar
 
 import pglast
 import pglast.parser
@@ -402,24 +403,27 @@ def test_a_repaired_body_still_names_what_it_references() -> None:
 
     found = _queries(parse_body(statement, body_at=_as_at(statement)).tree)
 
-    # `parse_plpgsql` blanks the `INTO` clause out of the fragment it hands
-    # back, so the run of spaces where it stood is not a fact worth pinning.
-    assert sorted(" ".join(query.split()) for query in found) == [
-        "SELECT app.fn_missing(NEW.id)",
-        "SELECT id FROM app.tv_audit",
-    ]
+    assert {"SELECT app.fn_missing(NEW.id)", "SELECT id FROM app.tv_audit"} <= found
 
 
-def _queries(tree: object) -> list[str]:
-    """Every ``PLpgSQL_expr`` query string in *tree*, in no particular order."""
-    found: list[str] = []
+def _queries(tree: object) -> set[str]:
+    """Every ``PLpgSQL_expr`` query string in *tree*, whitespace collapsed.
+
+    Collapsed because ``parse_plpgsql`` blanks the ``INTO`` clause out of the
+    fragment it hands back, and the run of spaces where it stood is not a fact
+    worth pinning. A *subset* because the majors do not agree on what counts as
+    a fragment — ``RETURN NEW`` is a ``PLpgSQL_expr`` on pglast 6 and 7 and a
+    datum reference on 8 — and it names nothing either way. What every major
+    must agree on is the fragments that name something.
+    """
+    found: set[str] = set()
     stack = [tree]
     while stack:
         node = stack.pop()
         if isinstance(node, dict):
-            expr = node.get("PLpgSQL_expr")
+            expr = node.get(_EXPR)
             if isinstance(expr, dict) and expr.get("query"):
-                found.append(expr["query"])
+                found.add(" ".join(expr["query"].split()))
             stack.extend(node.values())
         elif isinstance(node, list):
             stack.extend(node)
@@ -571,13 +575,18 @@ class TestARepairedBodyNumbersItsOwnLines:
         "END; $$"
     )
 
-    def test_each_statement_reports_the_body_line_it_is_written_on(self) -> None:
-        compiled = parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT))
+    #: ``{fragment: the body line it is written on}``. Only the fragments that
+    #: name something: see :func:`_queries` for why an exact set is not a fact
+    #: every major agrees on.
+    EXPECTED: ClassVar[dict[str, int]] = {
+        "SELECT id FROM app.tv_audit": 4,
+        "SELECT app.fn_missing(NEW.id)": 5,
+    }
 
-        assert _lines_by_query(compiled.tree) == {
-            "SELECT id FROM app.tv_audit": 4,
-            "SELECT app.fn_missing(NEW.id)": 5,
-        }
+    def test_each_statement_reports_the_body_line_it_is_written_on(self) -> None:
+        found = _lines_by_query(parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT)).tree)
+
+        assert {query: found.get(query) for query in self.EXPECTED} == self.EXPECTED
 
     def test_the_statement_itself_is_handed_over_unchanged(self) -> None:
         compiled = parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT))
