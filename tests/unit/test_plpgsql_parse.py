@@ -37,6 +37,8 @@ that will quietly retire these skips if libpg_query ever fixes either.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from pathlib import Path
 
 import pglast
 import pglast.parser
@@ -606,3 +608,75 @@ def _lines_by_query(tree: object) -> dict[str, int]:
         elif isinstance(node, list):
             stack.extend((item, line) for item in node)
     return found
+
+
+#: The repository's own SQL: the shipped examples, the schema it builds itself
+#: from, and the fixtures the suites read. Real files rather than a table of
+#: shapes, which is where #272 was found — the shapes in this module all
+#: reduce to one routine, and "5 of the 8 routines we ship" is the measurement
+#: that made it worth fixing.
+CORPUS_ROOTS = ("db/schema", "examples", "tests/fixtures")
+
+
+def _repository() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _plpgsql_routines() -> list[tuple[str, str]]:
+    """``(identity, whole CREATE statement)`` for every plpgsql routine shipped.
+
+    A file this repository cannot parse as SQL is some suite's fixture for
+    exactly that and is skipped; a routine inside a file that parses is not.
+    """
+    found: list[tuple[str, str]] = []
+    for name in CORPUS_ROOTS:
+        for path in sorted((_repository() / name).rglob("*.sql")):
+            text = path.read_text()
+            try:
+                raws = pglast.parse_sql(text)
+            except pglast.parser.ParseError:
+                continue
+            found.extend(_routines_in(text, raws, path.relative_to(_repository())))
+    return found
+
+
+def _routines_in(text: str, raws: object, path: Path) -> Iterator[tuple[str, str]]:
+    for raw in raws or ():  # type: ignore[union-attr]
+        statement = raw.stmt
+        if type(statement).__name__ != "CreateFunctionStmt":
+            continue
+        options = {option.defname: option for option in (statement.options or ())}
+        language = options.get("language")
+        if getattr(getattr(language, "arg", None), "sval", None) != "plpgsql":
+            continue
+        start = raw.stmt_location or 0
+        end = start + raw.stmt_len if raw.stmt_len else len(text)
+        name = ".".join(part.sval for part in statement.funcname)
+        yield f"{path}:{name}", text[start:end]
+
+
+def _returns_a_trigger(statement: str) -> bool:
+    names = pglast.parse_sql(statement)[0].stmt.returnType.names or ()
+    return bool(names) and names[-1].sval in {"trigger", "event_trigger"}
+
+
+ROUTINES = _plpgsql_routines()
+
+
+def test_the_corpus_holds_the_shape_this_is_about() -> None:
+    """Without this the test below can pass by finding nothing at all."""
+    assert [identity for identity, sql in ROUTINES if _returns_a_trigger(sql)]
+
+
+@pytest.mark.parametrize("identity", [identity for identity, _sql in ROUTINES])
+def test_every_plpgsql_routine_in_the_repository_is_read(identity: str) -> None:
+    """One row per routine confiture ships, so the one that regressed is named.
+
+    5 of these 8 were unread on 1.7.0, all of them triggers. A row that starts
+    failing is a routine `build_003` has stopped checking — either a shape
+    worth repairing here, or one worth adding to `STILL_REFUSED` with the
+    reason it cannot be.
+    """
+    statement = dict(ROUTINES)[identity]
+
+    assert parse_body(statement).tree
