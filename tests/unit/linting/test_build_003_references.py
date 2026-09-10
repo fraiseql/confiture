@@ -18,6 +18,8 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
+import pglast
+import pglast.parser
 import pytest
 from typer.testing import CliRunner
 
@@ -334,6 +336,23 @@ class TestTheHonestFallback:
         assert "the line given is the routine's" not in finding.message
 
 
+def _body_is_unreadable(statement: str) -> bool:
+    """Whether *this* libpg_query refuses the body — probed, not looked up.
+
+    Both blind spots this file pins are **pglast 8's alone**: 6.16 and 7.18
+    return a trigger function's body and resolve a schema-qualified type, and
+    the ``[ast]`` extra accepts all three majors. What `build_003` promises on
+    every one of them — that a body it did not read is named — is asserted
+    unconditionally; what it degrades *on* differs, and asking is the only
+    honest way to know which.
+    """
+    try:
+        pglast.parse_plpgsql(statement)
+    except (pglast.parser.ParseError, json.JSONDecodeError):
+        return True
+    return False
+
+
 TRIGGER_ROUTINE = """CREATE OR REPLACE FUNCTION app.fn_touch()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
@@ -344,6 +363,10 @@ $$;
 """
 
 
+@pytest.mark.skipif(
+    not _body_is_unreadable(TRIGGER_ROUTINE),
+    reason="this libpg_query returns a trigger function's body",
+)
 class TestABodyNoParserWillReturn:
     """A trigger function must not take the whole lint down with it.
 
@@ -454,6 +477,10 @@ BEGIN FOR r IN SELECT id FROM public.tv_d LOOP NULL; END LOOP; RETURN NULL; END;
 """
 
 
+@pytest.mark.skipif(
+    not _body_is_unreadable(REFUSED_ROUTINES.split(";\n\n", maxsplit=1)[0] + ";"),
+    reason="this libpg_query resolves an array of a type it does not know",
+)
 class TestARoutineTheCompilerRefuses:
     """A body libpg_query will not compile is named, whatever raised (#270).
 

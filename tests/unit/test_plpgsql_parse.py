@@ -8,12 +8,19 @@ takes the whole routine down before a line of its body is read — which is how
 `build_003` came to skip 78.5 % of the routines on the schema #270 was filed
 from, silently.
 
-These tests pin two things. The table below is *reach*: one row per shape that
-refuses, so a shape that stops compiling fails the row that regressed. And the
-invariant, which is the reason this module is a parser question rather than a
-grammar question: **a qualifier libpg_query accepts is never blanked.** Blanking
+These tests pin two things. The table below is *reach*: one row per shape, so a
+shape that stops compiling fails the row that regressed. And the invariant,
+which is the reason this module is a parser question rather than a grammar
+question: **a qualifier libpg_query accepts is never blanked.** Blanking
 `app.tv_summary` in a body would leave an unqualified name, which `build_003`
 declines to judge — the same silent miss #270 reports, moved one step along.
+
+The refusal is **pglast 8's alone**, measured: pglast 6.16 and 7.18 compile
+every shape in `REFUSED` and in `STILL_REFUSED` without complaint, and the
+`[ast]` extra accepts all three majors. So which facts hold is discovered by
+probing this interpreter's libpg_query, never from a version number — the same
+"ask the parser" rule the module itself follows, and the one that will quietly
+retire these skips if libpg_query ever resolves the stub.
 """
 
 from __future__ import annotations
@@ -79,9 +86,28 @@ def _as_at(statement: str) -> int:
     return statement.index(" AS $$") + 1
 
 
+def _refuses(statement: str) -> bool:
+    try:
+        pglast.parse_plpgsql(statement)
+    except pglast.parser.ParseError:
+        return True
+    return False
+
+
+#: Whether *this* libpg_query is the one that cannot resolve a schema-qualified
+#: type. True on pglast 8, false on 6 and 7. Probed, not looked up.
+STUB_REFUSES_QUALIFIED_TYPES = _refuses(REFUSED["composite parameter"])
+
+needs_the_stub = pytest.mark.skipif(
+    not STUB_REFUSES_QUALIFIED_TYPES,
+    reason="this libpg_query resolves a schema-qualified type, so nothing needs neutralising",
+)
+
+
+@needs_the_stub
 @pytest.mark.parametrize("shape", sorted(REFUSED))
 def test_libpg_query_refuses_the_shape_on_its_own(shape: str) -> None:
-    """The premise. A row that stops refusing has been fixed upstream."""
+    """The premise, where it holds. A row that stops refusing was fixed upstream."""
     with pytest.raises(pglast.parser.ParseError):
         pglast.parse_plpgsql(REFUSED[shape])
 
@@ -104,6 +130,7 @@ def test_an_accepted_shape_is_left_alone(shape: str) -> None:
     assert compiled.text == statement
 
 
+@needs_the_stub
 @pytest.mark.parametrize("shape", sorted(STILL_REFUSED))
 def test_a_shape_no_qualifier_explains_still_raises(shape: str) -> None:
     """Refused for a reason blanking cannot address, and said so rather than shrugged.
@@ -152,6 +179,7 @@ class TestTheInvariant:
         compiled = parse_body(statement, body_at=statement.index(" AS $$") + 1)
         return [statement[start:end] for start, end in compiled.neutralised]
 
+    @needs_the_stub
     def test_only_the_type_qualifiers_are_blanked(self) -> None:
         assert self._blanked(MUTATION) == ["app.", "app.", "app."]
 
@@ -161,6 +189,7 @@ class TestTheInvariant:
         for reference in ("app.fn_default()", "app.tv_cursor", "app.tv_summary", "core.fn_log"):
             assert reference in compiled.text
 
+    @needs_the_stub
     def test_the_three_blanked_spans_are_the_declared_and_signature_types(self) -> None:
         """Named, so a future change that blanks a different three fails here."""
         compiled = parse_body(MUTATION, body_at=MUTATION.index(" AS $$") + 1)
@@ -186,10 +215,12 @@ class TestTheGuessIsOnlyAHint:
     def test_and_the_references_survive_that_route_too(self) -> None:
         compiled = parse_body(MUTATION)
 
-        assert [MUTATION[s:e] for s, e in compiled.neutralised] == ["app.", "app.", "app."]
+        for reference in ("app.fn_default()", "app.tv_cursor", "app.tv_summary", "core.fn_log"):
+            assert reference in compiled.text
 
 
 class TestWhatBlankingCannotFix:
+    @needs_the_stub
     def test_a_body_wrong_for_another_reason_raises(self) -> None:
         """An undeclared loop variable is the body's problem, not the catalogue's."""
         statement = (
@@ -200,6 +231,7 @@ class TestWhatBlankingCannotFix:
         with pytest.raises(pglast.parser.ParseError):
             parse_body(statement, body_at=_as_at(statement))
 
+    @needs_the_stub
     def test_a_statement_with_no_qualifier_at_all_raises_at_once(self) -> None:
         """Nothing to neutralise, so nothing is attempted."""
         statement = (
@@ -233,6 +265,7 @@ class TestLinesDoNotMove:
                 stack.extend(node)
         return sorted(found)
 
+    @needs_the_stub
     def test_a_neutralised_body_numbers_its_statements_exactly_as_a_plain_one(self) -> None:
         qualified = MUTATION
         plain = MUTATION.replace("app.type_input", "     type_input").replace(
