@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.7.0
+**Version**: 1.8.0
 **Last Updated**: September 10, 2026
 **Current Status**: Production-Ready
 
@@ -156,23 +156,40 @@ confiture has nothing to add to it. The extension is in no stock PostgreSQL, so
 the rule reports a `skipped` status rather than an empty result when it cannot
 run, and one required CI leg (`plpgsql-check`) is the only place it does.
 
-**One place compiles a PL/pgSQL body** (`core/plpgsql_parse.py`, #270).
-`libpg_query`'s PL/pgSQL compiler is PostgreSQL's own with the catalogue stubbed
-out, and on **pglast 8 only** that stub's `LookupExplicitNamespace` resolves
-`pg_catalog` and `public` and refuses everything else — so `app.mutation_response`
-as a parameter, a return type, a `SETOF`, a `RETURNS TABLE` column or a `DECLARE`
-took the whole routine down before a line of its body was read. That was 233 of
-297 routines on a FraiseQL-shaped schema, silently.
+**One place compiles a PL/pgSQL body** (`core/plpgsql_parse.py`, #270 and #272).
+`pglast.parse_plpgsql` is the wrong shape twice, on **pglast 8 only** both
+times — 6.16 and 7.18 have neither — and both ended in the same place, a routine
+`build_003` never looked at. `parse_body()` answers for both and returns
+`Compiled(tree, text, neutralised, repaired)`.
 
-Nothing downstream reads a type — the caller wants linenos and `PLpgSQL_expr`
-query strings — so `parse_body()` **blanks the qualifier with spaces**, keeping
-every offset and line number, and returns `Compiled(tree, text, neutralised)`.
-Which qualifier to blank is the compiler's answer, never a model of PL/pgSQL's
-declaration grammar: a guess narrows the search and each blank in it is then
-tested by *putting it back*, because a qualifier the compiler accepts is a
-reference and `app.tv_summary` blanked to `tv_summary` is a name `build_003`
-declines to judge. Do not call `pglast.parse_plpgsql` directly; do not replace
-the oracle with a grammar.
+*The compiler* is PostgreSQL's own with the catalogue stubbed out, and that
+stub's `LookupExplicitNamespace` resolves `pg_catalog` and `public` and refuses
+everything else — so `app.mutation_response` as a parameter, a return type, a
+`SETOF`, a `RETURNS TABLE` column or a `DECLARE` took the whole routine down
+before a line of its body was read. That was 233 of 297 routines on a
+FraiseQL-shaped schema, silently. Nothing downstream reads a type — the caller
+wants linenos and `PLpgSQL_expr` query strings — so the qualifier is **blanked
+with spaces**, keeping every offset and line number. Which one to blank is the
+compiler's answer, never a model of PL/pgSQL's declaration grammar: a guess
+narrows the search and each blank in it is then tested by *putting it back*,
+because a qualifier the compiler accepts is a reference and `app.tv_summary`
+blanked to `tv_summary` is a name `build_003` declines to judge.
+
+*The serialiser* writes a trigger function's implicit `TG_*` datums as `{}}`,
+one closing brace too many each, so `json.loads` never reached the tree and
+**every** `RETURNS TRIGGER` and `RETURNS event_trigger` body was unread whatever
+it held — 5 of the 8 plpgsql routines in this repo's own corpora. The stray
+brace is deleted at the position `json.JSONDecodeError.pos` names, and only when
+the characters there are that defect: `{"PLpgSQL_stmt_return":{}}` is a
+legitimate `{}}` in very nearly every body, so `raw.replace("{}}", "{}")`
+corrupts an ordinary `RETURNS void` function. A serialisation that decodes is
+returned byte-for-byte (`repaired == 0`); one broken some other way raises, so
+the routine stays named in `degraded`. Each repaired datum decodes to `{}` —
+**a datum index is not a fact that tree holds**, and the three majors do not
+agree on that array anyway.
+
+Do not call `pglast.parse_plpgsql` directly; do not replace the oracle with a
+grammar; do not repair the JSON with a global replace.
 
 **One lexer too.** `core/sql_lexer.py` is the only module that tokenises SQL text
 (`split_statements`, `strip_comments`, `tokens`, `code_text`, `comments`,
@@ -1195,7 +1212,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: September 10, 2026
-**Version**: 1.7.0
+**Version**: 1.8.0
 
 ---
 
