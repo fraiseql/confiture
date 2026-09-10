@@ -1,26 +1,37 @@
-"""Compiling a PL/pgSQL body with libpg_query, which has no catalogue (#270).
+"""Compiling a PL/pgSQL body with libpg_query, which is wrong twice (#270, #272).
 
-`pglast.parse_plpgsql` is the only thing that reads a PL/pgSQL body, and the
-`libpg_query` build behind it stubs out PostgreSQL's catalogue. The stub's
-`LookupExplicitNamespace` resolves `pg_catalog` and `public`; every other schema
-is `Not implemented`. A type name carrying one of those qualifiers therefore
-takes the whole routine down before a line of its body is read — which is how
-`build_003` came to skip 78.5 % of the routines on the schema #270 was filed
-from, silently.
+`pglast.parse_plpgsql` is the only thing that reads a PL/pgSQL body, and two
+different parts of it hand back nothing where a tree should be.
 
-These tests pin two things. The table below is *reach*: one row per shape, so a
-shape that stops compiling fails the row that regressed. And the invariant,
-which is the reason this module is a parser question rather than a grammar
-question: **a qualifier libpg_query accepts is never blanked.** Blanking
-`app.tv_summary` in a body would leave an unqualified name, which `build_003`
-declines to judge — the same silent miss #270 reports, moved one step along.
+The **compiler** stubs out PostgreSQL's catalogue. Its `LookupExplicitNamespace`
+resolves `pg_catalog` and `public`; every other schema is `Not implemented`, so
+a type name carrying one of those qualifiers takes the whole routine down before
+a line of its body is read — which is how `build_003` came to skip 78.5 % of the
+routines on the schema #270 was filed from, silently.
 
-The refusal is **pglast 8's alone**, measured: pglast 6.16 and 7.18 compile
-every shape in `REFUSED` and in `STILL_REFUSED` without complaint, and the
-`[ast]` extra accepts all three majors. So which facts hold is discovered by
-probing this interpreter's libpg_query, never from a version number — the same
-"ask the parser" rule the module itself follows, and the one that will quietly
-retire these skips if libpg_query ever resolves the stub.
+The **serialiser** writes a trigger function's implicit `TG_*` datums as `{}}`,
+one closing brace too many each, so `json.loads` never reaches the tree and
+every `RETURNS TRIGGER` and `RETURNS event_trigger` body was unread whatever it
+contained (#272).
+
+These tests pin three things. The `REFUSED` and `MIS_SERIALISED` tables are
+*reach*: one row per shape, so a shape that stops being read fails the row that
+regressed. And one invariant per defect, both of them the reason this module
+asks rather than models:
+
+- **a qualifier libpg_query accepts is never blanked** — `app.tv_summary`
+  reduced to `tv_summary` is a name `build_003` declines to judge, which is
+  #270's silent miss moved one step along;
+- **a serialisation that decodes is never edited** — the same three characters
+  spell a legitimate implicit `RETURN` in very nearly every body, so a global
+  replace breaks the routines that were never broken.
+
+Both defects are **pglast 8's alone**, measured: pglast 6.16 and 7.18 compile
+every shape in `REFUSED` and in `STILL_REFUSED` and return a trigger body as
+valid JSON, and the `[ast]` extra accepts all three majors. So which facts hold
+is discovered by probing this interpreter's libpg_query, never from a version
+number — the same "ask the parser" rule the module itself follows, and the one
+that will quietly retire these skips if libpg_query ever fixes either.
 """
 
 from __future__ import annotations
@@ -31,7 +42,10 @@ import pglast
 import pglast.parser
 import pytest
 
-from confiture.core.plpgsql_parse import parse_body
+from confiture.core.plpgsql_parse import _STRAY, parse_body
+
+#: The serialiser's name for a fragment of SQL, which is what a body is read for.
+_EXPR = "PLpgSQL_expr"
 
 #: Bodies are irrelevant to what the compiler refuses, so every row shares one.
 _BODY = "$$ DECLARE r RECORD; BEGIN FOR r IN SELECT id FROM public.t LOOP NULL; END LOOP; END; $$"
@@ -407,4 +421,188 @@ def _queries(tree: object) -> list[str]:
             stack.extend(node.values())
         elif isinstance(node, list):
             stack.extend(node)
+    return found
+
+
+class TestABlindReplaceIsWhatThisIsNot:
+    """The repair is positional because a global one corrupts ordinary bodies.
+
+    `{"PLpgSQL_stmt_return":{}}` — the implicit `RETURN` PL/pgSQL appends to a
+    body that falls off its end — is a legitimate `{}}` in the serialisation of
+    very nearly every routine. `raw.replace("{}}", "{}")` deletes that brace
+    too, and the result does not decode: the shortcut breaks the bodies that
+    were never broken.
+
+    So the deletion happens only at the position the JSON decoder stopped at,
+    and only when the three characters ending there are the defect. A
+    serialisation that decodes never enters the loop, whatever it contains.
+    """
+
+    #: An ordinary function with no explicit `RETURN`: one legitimate `{}}`,
+    #: no stray, and nothing for this module to do.
+    VOID = (
+        "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
+        "BEGIN PERFORM app.fn_log(); END; $$"
+    )
+
+    @staticmethod
+    def _raw(statement: str) -> str:
+        return pglast.parser.parse_plpgsql_json(statement)
+
+    def test_a_well_formed_serialisation_is_never_touched(self) -> None:
+        assert parse_body(self.VOID, body_at=_as_at(self.VOID)).repaired == 0
+
+    def test_even_though_it_contains_the_three_characters(self) -> None:
+        """The premise: without it the test above proves nothing."""
+        assert self._raw(self.VOID).count(_STRAY) == 1
+
+    def test_and_a_blind_replace_would_break_it(self) -> None:
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(self._raw(self.VOID).replace(_STRAY, "{}"))
+
+    @needs_the_strays
+    def test_a_body_carrying_both_keeps_the_legitimate_one(self) -> None:
+        """An ``event_trigger``: three occurrences, two of them stray."""
+        statement = MIS_SERIALISED["returns event_trigger"][0]
+
+        assert self._raw(statement).count(_STRAY) == 3
+        assert parse_body(statement, body_at=_as_at(statement)).repaired == 2
+
+    @needs_the_strays
+    def test_and_a_blind_replace_would_break_that_too(self) -> None:
+        statement = MIS_SERIALISED["returns event_trigger"][0]
+
+        with pytest.raises(json.JSONDecodeError):
+            json.loads(self._raw(statement).replace(_STRAY, "{}"))
+
+
+class TestADefectThisModuleDoesNotKnow:
+    """Anything but the known stray brace raises, so the routine stays named.
+
+    `libpg_query` does not emit these, so they are injected: a serialisation
+    broken elsewhere must not be quietly half-decoded into a tree the caller
+    then reports findings from. A body that went unread is `degraded`, and the
+    silent half-read is exactly the failure #270 was filed on.
+    """
+
+    @staticmethod
+    def _with_serialisation(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+        monkeypatch.setattr(pglast.parser, "parse_plpgsql_json", lambda _statement: raw)
+
+    def test_a_truncated_serialisation_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._with_serialisation(monkeypatch, '[{"PLpgSQL_function":{"datums":[')
+
+        with pytest.raises(json.JSONDecodeError):
+            parse_body(ACCEPTED["unqualified type"])
+
+    def test_a_stray_brace_that_is_not_the_defect_raises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One brace too many, but not after an empty object: not this defect."""
+        self._with_serialisation(monkeypatch, '[{"PLpgSQL_function":{"datums":[1}},{}]}]')
+
+        with pytest.raises(json.JSONDecodeError):
+            parse_body(ACCEPTED["unqualified type"])
+
+    def test_a_defect_at_the_very_start_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No room for three characters before the error: the slice must not wrap."""
+        self._with_serialisation(monkeypatch, "}")
+
+        with pytest.raises(json.JSONDecodeError):
+            parse_body(ACCEPTED["unqualified type"])
+
+
+class TestTheTwoRepairsCompose:
+    """A trigger body that also names a schema-qualified type is read.
+
+    The compiler refuses it before serialising anything, so the qualifier is
+    blanked first and *then* the serialisation needs repairing — which only
+    works because the oracle that tests a blank set asks for a tree rather than
+    for the absence of one particular exception.
+    """
+
+    STATEMENT = (
+        "CREATE FUNCTION app.trg_sync() RETURNS TRIGGER LANGUAGE plpgsql AS $$\n"
+        "DECLARE v_res app.mutation_response;\n"
+        "BEGIN\n"
+        "    SELECT * INTO v_res FROM app.tv_summary;\n"
+        "    RETURN NEW;\n"
+        "END; $$"
+    )
+
+    @needs_the_stub
+    def test_the_compiler_refuses_it_outright(self) -> None:
+        """The premise: this is a `ParseError`, before any JSON exists."""
+        with pytest.raises(pglast.parser.ParseError):
+            pglast.parse_plpgsql(self.STATEMENT)
+
+    def test_it_compiles(self) -> None:
+        assert parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT)).tree
+
+    @needs_the_stub
+    def test_only_the_declared_type_is_blanked(self) -> None:
+        compiled = parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT))
+
+        assert [self.STATEMENT[s:e] for s, e in compiled.neutralised] == ["app."]
+        assert "app.tv_summary" in compiled.text
+
+    @needs_the_strays
+    def test_and_the_serialisation_still_needed_repairing(self) -> None:
+        assert parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT)).repaired == 10
+
+
+class TestARepairedBodyNumbersItsOwnLines:
+    """The repair edits the serialisation, never the statement.
+
+    A trigger's `lineno`s are the lines its statements are written on, and the
+    caller turns those into file lines. This is the pin against a future
+    "reconstruct the datums" that renumbers the tree to match.
+    """
+
+    STATEMENT = (
+        "CREATE FUNCTION app.trg_audit() RETURNS TRIGGER LANGUAGE plpgsql AS $$\n"
+        "DECLARE v_x int;\n"
+        "BEGIN\n"
+        "    SELECT id INTO v_x FROM app.tv_audit;\n"
+        "    PERFORM app.fn_missing(NEW.id);\n"
+        "    RETURN NEW;\n"
+        "END; $$"
+    )
+
+    def test_each_statement_reports_the_body_line_it_is_written_on(self) -> None:
+        compiled = parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT))
+
+        assert _lines_by_query(compiled.tree) == {
+            "SELECT id FROM app.tv_audit": 4,
+            "SELECT app.fn_missing(NEW.id)": 5,
+        }
+
+    def test_the_statement_itself_is_handed_over_unchanged(self) -> None:
+        compiled = parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT))
+
+        assert compiled.text == self.STATEMENT
+        assert compiled.neutralised == ()
+
+
+def _lines_by_query(tree: object) -> dict[str, int]:
+    """``{normalised SQL fragment: body line}``, the way the caller reads a tree.
+
+    ``parse_plpgsql`` puts ``lineno`` on the statement and the SQL on a
+    ``PLpgSQL_expr`` below it, so the nearest enclosing line travels down —
+    the same walk :mod:`confiture.core.linting.references` does.
+    """
+    found: dict[str, int] = {}
+    stack: list[tuple[object, int]] = [(tree, 1)]
+    while stack:
+        node, line = stack.pop()
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == _EXPR and isinstance(value, dict) and value.get("query"):
+                    found[" ".join(value["query"].split())] = line
+                elif isinstance(value, dict):
+                    stack.append((value, value.get("lineno", line)))
+                elif isinstance(value, list):
+                    stack.append((value, line))
+        elif isinstance(node, list):
+            stack.extend((item, line) for item in node)
     return found
