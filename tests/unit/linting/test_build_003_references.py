@@ -412,3 +412,79 @@ class TestABodyNoParserWillReturn:
         _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": ISSUE_246_ROUTINE})
 
         assert self._unread(self._payload()) == []
+
+
+ISSUE_270_TYPES = """CREATE SCHEMA IF NOT EXISTS app;
+
+CREATE TYPE app.type_input AS (nom TEXT);
+CREATE TYPE app.mutation_response AS (status TEXT, message TEXT);
+"""
+
+ISSUE_270_ROUTINES = """CREATE OR REPLACE FUNCTION app.m_a(input_data app.type_input)
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_a LOOP NULL; END LOOP; END; $$;
+
+CREATE OR REPLACE FUNCTION app.m_b()
+RETURNS app.mutation_response LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_b LOOP NULL; END LOOP; RETURN NULL; END; $$;
+
+CREATE OR REPLACE FUNCTION app.m_c(input_data app.type_input)
+RETURNS app.mutation_response LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_c LOOP NULL; END LOOP; RETURN NULL; END; $$;
+
+CREATE OR REPLACE FUNCTION app.m_d(p TEXT)
+RETURNS TEXT LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_d LOOP NULL; END LOOP; RETURN NULL; END; $$;
+"""
+
+
+class TestARoutineTheCompilerRefuses:
+    """A body libpg_query will not compile is named, whatever raised (#270).
+
+    `libpg_query`'s PL/pgSQL compiler has no catalogue: its
+    `LookupExplicitNamespace` resolves `pg_catalog` and `public` and nothing
+    else, so a schema-qualified type anywhere in a routine's signature or
+    declarations makes it refuse the whole routine with a `ParseError` — before
+    reading a line of the body.
+
+    That arm returned an empty reference list, so the routine contributed no
+    names, produced no finding, and reached no degradation either. On the
+    schema #270 was filed from that was 233 routines of 297, and the summary was
+    indistinguishable from a clean one.
+    """
+
+    def _payload(self, *args: str) -> dict:
+        result = runner.invoke(
+            app, ["lint", "--select", "build_003", "--format", "json", "--fail-on", "never", *args]
+        )
+        assert result.exit_code == 0, result.output
+        return json.loads(result.stdout)
+
+    @staticmethod
+    def _unread_reason(payload: dict) -> str:
+        (degraded,) = [d for d in payload["degraded"] if d["reason"].startswith("could not read")]
+        return degraded["reason"]
+
+    def test_the_refused_routines_are_named(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": ISSUE_270_ROUTINES})
+
+        reason = self._unread_reason(self._payload())
+
+        assert "app.m_a(app.type_input)" in reason
+        assert "app.m_b()" in reason
+        assert "app.m_c(app.type_input)" in reason
+
+    def test_the_control_in_the_same_file_is_not_named(self, in_tmp: Path) -> None:
+        """The refusal is per routine: the scalar-signature control is read."""
+        _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": ISSUE_270_ROUTINES})
+
+        payload = self._payload()
+
+        assert "app.m_d(text)" not in self._unread_reason(payload)
+        assert [i["location"] for i in payload["violations"]["items"]] == [
+            "app.m_d(text) -> public.tv_d"
+        ]

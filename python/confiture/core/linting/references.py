@@ -291,8 +291,11 @@ def _plpgsql_references(statement: str, obj: SchemaObject, *, first: int | None)
     """
     try:
         tree = pglast.parse_plpgsql(statement)
-    except pglast.parser.ParseError:
-        return []
+    except pglast.parser.ParseError as exc:
+        # The statement parsed as SQL — it is in `raws` — so a refusal here is
+        # the PL/pgSQL compiler's, about this one body. Reporting nothing about
+        # a body that was never read is the failure #270 is filed on.
+        raise _UnreadableBody(obj.identity) from exc
     except json.JSONDecodeError as exc:
         # `libpg_query` emits `{}}` for a trigger function's implicit `TG_`
         # datums, so its JSON does not decode — every `RETURNS TRIGGER` body,
