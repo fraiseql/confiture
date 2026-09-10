@@ -66,6 +66,24 @@ What the two repairs share is the failure they refuse to become. A qualifier
 blanked too eagerly, or a brace deleted on a hunch, hands back a tree that is
 missing something without saying so — and a routine reported as clean because
 it was never read is the bug both of these issues are.
+
+Both are pglast 8's, both are reported upstream as
+https://github.com/pganalyze/libpg_query/issues/337, and neither is repaired
+here for want of a better place: the ``[ast]`` extra accepts ``pglast>=6.0``
+uncapped and confiture cannot ship libpg_query, so a fix that lands upstream
+lands in a future wheel and never in the one an installed environment already
+has. Both repairs are written to retire themselves rather than to be removed —
+a qualifier is blanked only after the compiler refuses the statement as
+written, and a brace is deleted only after the decode fails — so on a
+libpg_query that has neither defect this module compiles once and returns
+``Compiled(tree, statement, (), 0)``.
+
+That issue lists a **third** regression which is deliberately *not* repaired
+here: ``RETURN <bare variable>`` comes back with no ``expr`` and no
+``retvarno``. Nothing is lost by it — a bare variable is a local, and the
+consumers of this module read fragments to find the objects they name — so
+there is nothing to reconstruct and no guess worth making. It is written down
+because the next reader deserves to know it was looked at.
 """
 
 from __future__ import annotations

@@ -411,10 +411,18 @@ def _queries(tree: object) -> set[str]:
 
     Collapsed because ``parse_plpgsql`` blanks the ``INTO`` clause out of the
     fragment it hands back, and the run of spaces where it stood is not a fact
-    worth pinning. A *subset* because the majors do not agree on what counts as
-    a fragment — ``RETURN NEW`` is a ``PLpgSQL_expr`` on pglast 6 and 7 and a
-    datum reference on 8 — and it names nothing either way. What every major
-    must agree on is the fragments that name something.
+    worth pinning.
+
+    A *subset* because the majors do not agree on what counts as a fragment.
+    ``RETURN <bare variable>`` — ``RETURN NEW``, ``RETURN v_res`` — comes back
+    as a ``PLpgSQL_expr`` on pglast 6.16 and 7.18 and, on 8.4, with no ``expr``
+    and no ``retvarno`` at all: the third regression in
+    https://github.com/pganalyze/libpg_query/issues/337, alongside the two
+    confiture repairs in :mod:`confiture.core.plpgsql_parse`. It is **not**
+    repaired here and does not need to be — a bare variable name is a local,
+    which names no object this rule judges, and ``RETURN app.fn_x(1)`` or
+    ``RETURN r.id`` still comes through on every major. What every major must
+    agree on is the fragments that name something, so that is what is asserted.
     """
     found: set[str] = set()
     stack = [tree]
