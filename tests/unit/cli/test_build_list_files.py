@@ -62,4 +62,3 @@ def test_list_files_json_carries_the_selection_in_build_order(tmp_path: Path) ->
     assert payload["files"][0]["entry"] == "db/functions"
     assert payload["files"][0]["order"] == 0
     assert payload["files"][0]["pattern"] == "**/*.sql"
-    assert payload["patterns"] == []

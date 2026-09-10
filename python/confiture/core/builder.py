@@ -128,12 +128,10 @@ class SelectionReport:
     Attributes:
         env: The environment the selection was made for.
         files: The selected files, in build order, each with its provenance.
-        patterns: One note per pattern that does not select what it appears to.
     """
 
     env: str
     files: list[SelectedFile]
-    patterns: list[PatternDiagnostic]
 
 
 def _first_occurrences(selected: list[SelectedFile]) -> list[SelectedFile]:
@@ -397,16 +395,12 @@ class SchemaBuilder:
 
         Returns:
             The selected files in build order, each naming the ``include_dirs``
-            entry, the ``order`` and the pattern that put it there, together
-            with a note for every pattern that does not select what it appears
-            to.
+            entry, the ``order`` and the pattern that put it there.
 
         Raises:
             SchemaError: For the same reasons :meth:`find_sql_files` does.
         """
-        return SelectionReport(
-            env=self.env_name, files=self._select(), patterns=self.pattern_diagnostics()
-        )
+        return SelectionReport(env=self.env_name, files=self._select())
 
     def pattern_diagnostics(self) -> list[PatternDiagnostic]:
         """One note per configured pattern that selects a different set than it did.

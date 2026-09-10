@@ -76,10 +76,6 @@ def test_a_pattern_that_now_matches_nothing_is_a_warning(tmp_path: Path) -> None
     assert "3" in message
     assert "**/temp/*.sql" in message
 
-    # …and the same notes are what `selection_report()` — and so `--list-files` — carries.
-    report = SchemaBuilder(env="local", project_dir=project).selection_report()
-    assert [(n.code, n.pattern, n.message) for n in report.patterns] == notes
-
 
 def test_a_pattern_that_now_matches_more_is_an_info(tmp_path: Path) -> None:
     """``**/temp/**`` did not exclude a root-level ``temp/``; now it does."""

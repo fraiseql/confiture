@@ -105,7 +105,7 @@ def selection_payload(report: SelectionReport, project_dir: Path | None) -> dict
         project_dir: Project root; paths under it are named relative to it.
 
     Returns:
-        ``{env, files: [{path, entry, order, pattern}], patterns, total}``.
+        ``{env, files: [{path, entry, order, pattern}], total}``.
     """
     return {
         "env": report.env,
@@ -117,15 +117,6 @@ def selection_payload(report: SelectionReport, project_dir: Path | None) -> dict
                 "pattern": selected.pattern,
             }
             for selected in report.files
-        ],
-        "patterns": [
-            {
-                "code": note.code,
-                "entry": label_for(note.entry, project_dir),
-                "pattern": note.pattern,
-                "message": note.message,
-            }
-            for note in report.patterns
         ],
         "total": len(report.files),
     }
@@ -157,8 +148,6 @@ def format_selection_report(
                 f"order {entry['order']} · {entry['pattern']}",
                 soft_wrap=True,
             )
-        for note in payload["patterns"]:
-            console.print(f"  {note['code']} {note['pattern']}: {note['message']}", soft_wrap=True)
         return
 
     csv_data = (

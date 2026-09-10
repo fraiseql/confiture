@@ -500,7 +500,7 @@ Shape is identical to plain `drift` — items of type `missing_grant` / `extra_g
 
 ### `confiture build --list-files --format json`
 
-**Schema**: [`build-list-files.schema.json`](json-schemas/build-list-files.schema.json) — what the build *would* read, and why: `files[]` in build order, each naming the `include_dirs` entry that selected it, that entry's `order` and the include pattern that matched, plus `patterns[]` — one note per configured pattern that does not select what it appears to. Nothing is built.
+**Schema**: [`build-list-files.schema.json`](json-schemas/build-list-files.schema.json) — what the build *would* read, and why: `files[]` in build order, each naming the `include_dirs` entry that selected it, that entry's `order` and the include pattern that matched. Nothing is built.
 
 ### `confiture lint --format json`
 
