@@ -31,6 +31,7 @@ from confiture.core.linting.inventory import (
     label_for,
 )
 from confiture.core.parser_info import parse_error_line
+from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.exceptions import ConfiturError
 
 logger = logging.getLogger(__name__)
@@ -270,8 +271,17 @@ class SchemaLinter:
         # Load environment configuration
         self.environment = Environment.load(env, project_dir=project_dir)
 
-        # Schema cache
+        # Schema cache. Two strings, deliberately, and they are not
+        # interchangeable (#274):
+        #   `_schema_sql` is the build as `SchemaBuilder` produced it, COPY
+        #     rows and all. It is what gets materialised into a database
+        #     (`bodies.diagnose`) or scanned as text (`tenant_001`).
+        #   `_parse_sql` is what pglast is asked to read: the same files with
+        #     their COPY blocks blanked, assembled by `_assemble_parse_text`.
+        # Handing the first to pglast reads nothing; handing the second to a
+        # database drops the seed rows.
         self._schema_sql: str | None = None
+        self._parse_sql: str = ""
         self._inventory: Inventory = Inventory()
         self._tables: dict[str, dict[str, Any]] | None = None
         self._schema_files: list[Path] = []
@@ -309,9 +319,10 @@ class SchemaLinter:
         # rules below read what they can, and this notice says the rest was
         # not read (ANA-02).
         self._inventory = Inventory()
+        self._parse_sql = self._assemble_parse_text()
         self._file_objects, self._file_schemas = self._inventory_per_file()
         try:
-            self._inventory = build_inventory(self._schema_sql)
+            self._inventory = build_inventory(self._parse_sql)
             attribute_files(self._inventory, self._file_objects)
         except pglast.parser.ParseError as exc:
             report.add_violation(
@@ -322,7 +333,7 @@ class SchemaLinter:
                     object_type="schema",
                     object_name="schema",
                     message=f"pglast could not parse the schema: {exc}",
-                    line_number=parse_error_line(self._schema_sql, exc),
+                    line_number=parse_error_line(self._parse_sql, exc),
                     suggested_fix="Fix the SQL syntax; rules cannot see past a parse error.",
                 )
             )
@@ -699,20 +710,56 @@ class SchemaLinter:
         concatenate into — needs the same pair, and a whole-string lint
         (``lint(schema=...)``) has no file to name, so its label is ``None``.
 
+        The text is **blanked**: a ``COPY … FROM stdin`` block is psql client
+        protocol and pglast rejects the text it sits in, so one seed file used
+        to empty the inventory (#274). Blanking keeps every offset and every
+        line number, so a finding still points at the line its author wrote —
+        which deleting the block would not (:func:`sql_lexer.blank_copy_blocks`).
+
         Read once per lint and held: six rules want it, and a schema tree is
         thousands of files. ``lint()`` clears it, so a reused linter still sees
         what is on disk now.
         """
         if self._source_cache is None:
             self._source_cache = (
-                [(None, self._schema_sql or "")]
+                [(None, blank_copy_blocks(self._schema_sql or ""))]
                 if not self._schema_files
                 else [
-                    (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
+                    (
+                        label_for(path, self.project_dir),
+                        blank_copy_blocks(path.read_text(encoding="utf-8")),
+                    )
                     for path in self._schema_files
                 ]
             )
         return self._source_cache
+
+    def _assemble_parse_text(self) -> str:
+        """The text pglast is asked to read — the blanked files, concatenated.
+
+        Deliberately **not** ``self._schema_sql``. The three things
+        ``SchemaBuilder.build`` adds — a header, a per-file separator, and the
+        ``build.two_pass`` FK rewrite — reach no rule: the inventory reads
+        ``CREATE`` statements, their columns and their primary keys, and
+        two-pass moves only foreign keys. What assembling it here buys is worth
+        more than byte-equality with an artefact nobody edits:
+
+        * the whole-build inventory and the per-file inventory then walk the
+          same statements in the same order *by construction*, which is what
+          :func:`attribute_files` needs and cannot check — it zips positionally
+          and stops at the first disagreement;
+        * every file's span in this text is known, because this laid it out.
+
+        ``_schema_sql`` keeps the real build, COPY rows and all, for the two
+        consumers that want it: ``bodies.diagnose()`` materialises it into a
+        throwaway database, and ``tenant_001`` scans it as text.
+        """
+        parts: list[str] = []
+        for _label, text in self._sources():
+            parts.append(text)
+            if text and not text.endswith("\n"):
+                parts.append("\n")
+        return "".join(parts)
 
     def _directive_lines(self, name: str) -> frozenset[tuple[str | None, int]]:
         """``(file, statement line)`` of every statement carrying ``-- confiture:<name>``.
