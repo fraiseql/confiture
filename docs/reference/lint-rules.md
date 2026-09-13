@@ -8,9 +8,9 @@ Adopt a rule on a schema that already trips it with a
 [baseline](../guides/schema-linting.md#adopting-a-rule-with-a-baseline-baseline-write-baseline).
 
 <!-- BEGIN GENERATED: lint-rules -->
-
 | Code | Family | Severity | Default | Rule |
 |------|--------|----------|:-------:|------|
+| `UNPARSEABLE` | parse | error | on | Every file in the build parses |
 | `naming_001` | naming | warning | on | Table names should be snake_case |
 | `naming_002` | naming | warning | on | Column names should be snake_case |
 | `pk_001` | pk | warning | on | Every table should declare a primary key |
@@ -42,7 +42,6 @@ Adopt a rule on a schema that already trips it with a
 | `body_001` | body | warning | off | A plpgsql body resolves against the schema it is built into |
 | `body_002` | body | info | off | A plpgsql body carries no unused variable or shadowed declaration |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
-
 <!-- END GENERATED -->
 
 The **Severity** column is the severity a rule emits by default. Two rules are

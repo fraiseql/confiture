@@ -31,7 +31,12 @@ CREATE TABLE app.tb_widget (id uuid PRIMARY KEY, label text);
 
 _ALSO_GOOD = "CREATE TABLE app.tb_gadget (id uuid);\n"
 
-_BROKEN = "CREATE TABLE app.tb_broken (\n"
+# Valid on line 1, rejected on line 3: a notice that names line 1 would be
+# indistinguishable from one that names "the start of the file".
+_BROKEN = """CREATE TABLE app.tb_ok (id int);
+
+CREATE TABEL app.tb_broken (id int);
+"""
 
 _ENV = "database_url: postgresql://localhost/test\ninclude_dirs:\n  - db/schema\n"
 
@@ -98,3 +103,60 @@ class TestTheRestOfTheBuildIsInventoried:
         assert payload["tables_checked"] == 1
         assert payload["documentation"]["documented"] == 1
         assert [i["rule_id"] for i in payload["violations"]["items"]] == ["UNPARSEABLE"]
+
+
+class TestTheNoticeNamesTheFile:
+    def test_the_notice_names_the_file(self, one_broken_file: Path) -> None:
+        payload, _ = _lint("--fail-on", "never")
+        notices = [i for i in payload["violations"]["items"] if i["rule_id"] == "UNPARSEABLE"]
+
+        assert [(i["file"], i["line"]) for i in notices] == [("db/schema/030_broken.sql", 3)]
+
+    def test_the_notice_is_an_error(self, one_broken_file: Path) -> None:
+        """A file that was not read is not an `info` about the file that was."""
+        payload, _ = _lint("--fail-on", "never")
+        notices = [i for i in payload["violations"]["items"] if i["rule_id"] == "UNPARSEABLE"]
+
+        assert [i["severity"] for i in notices] == ["error"]
+
+    def test_the_default_gate_fires(self, one_broken_file: Path) -> None:
+        """#274's ask: the default gate cannot pass over a build it did not read."""
+        _, exit_code = _lint()
+
+        assert exit_code == 1
+
+    def test_one_notice_per_rejected_file(self, tmp_path: Path) -> None:
+        """Several rules read the same file; the reader learns about the file once.
+
+        `func_001` and `sec_002` open the schema files themselves, so before the
+        dedup one broken file produced a notice from each of them *and* one from
+        the build — three identical `error` findings about one fact.
+        """
+        (tmp_path / "db" / "schema").mkdir(parents=True)
+        (tmp_path / "db" / "environments").mkdir(parents=True)
+        (tmp_path / "db" / "schema" / "010_widget.sql").write_text(_GOOD)
+        (tmp_path / "db" / "schema" / "030_broken.sql").write_text(_BROKEN)
+        (tmp_path / "db" / "environments" / "local.yaml").write_text(
+            _ENV + "function_coverage:\n  enabled: true\nsecurity_lint:\n  enabled: true\n"
+        )
+
+        old_cwd = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            payload, _ = _lint("--fail-on", "never", "--select", "default,func_001,sec_002")
+        finally:
+            os.chdir(old_cwd)
+
+        notices = [i for i in payload["violations"]["items"] if i["rule_id"] == "UNPARSEABLE"]
+        assert [(i["file"], i["line"]) for i in notices] == [("db/schema/030_broken.sql", 3)]
+
+    def test_a_whole_string_lint_reports_one_notice_with_no_file(self) -> None:
+        """`lint(schema=...)` has no files, so the notice has no file to name."""
+        from confiture.core.linting.schema_linter import RuleSeverity, SchemaLinter
+
+        report = SchemaLinter(env="local").lint("CREATE TABEL broken (;")
+
+        notices = [v for v in report.errors if v.rule_id == "UNPARSEABLE"]
+        assert len(notices) == 1
+        assert notices[0].file_path is None
+        assert notices[0].severity is RuleSeverity.ERROR

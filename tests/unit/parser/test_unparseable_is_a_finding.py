@@ -4,7 +4,8 @@
 and report *ok*, make preflight crash, and leave lint's report clean. Each
 surface now says what happened: ``IDEM_UNPARSEABLE`` (counted as unanalyzed,
 so ``--fail-on-unanalyzable`` fails the run), ``PFLIGHT_UNPARSEABLE`` (which
-forces ``window_safe: false``), and lint's ``UNPARSEABLE`` notice.
+forces ``window_safe: false``), and lint's ``UNPARSEABLE``
+finding (``error`` since 1.9.0, so the default gate fires on it too).
 """
 
 from __future__ import annotations
@@ -93,7 +94,7 @@ def test_preflight_cli_envelope_says_so(migrations: Path) -> None:
 
 def test_lint_reports_an_unparseable_notice_not_a_clean_report() -> None:
     report = SchemaLinter(env="local").lint(BROKEN)
-    notices = [v for v in report.info if v.rule_id == "UNPARSEABLE"]
+    notices = [v for v in report.errors if v.rule_id == "UNPARSEABLE"]
     assert len(notices) == 1, [str(v) for v in report.errors + report.warnings + report.info]
-    assert notices[0].severity is RuleSeverity.INFO
+    assert notices[0].severity is RuleSeverity.ERROR
     assert notices[0].line_number == 1

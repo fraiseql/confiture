@@ -11,8 +11,8 @@ selected rule reaches `error` while an `error` rule sat in the tree.
 This walks the AST of every module under `core/linting/` for the rule codes it
 declares and fails on one the registry does not know. Two allow-lists, each
 entry stating why the code is not a registry rule: the dormant compliance
-catalogues, which are descriptions with no `check()` and no caller, and the
-`UNPARSEABLE` notice, which is what a rule reports when it could not run.
+catalogues, which are descriptions with no `check()` and no caller, and a second
+that is empty — `UNPARSEABLE` was in it until #274 made it a registered rule.
 """
 
 from __future__ import annotations
@@ -42,13 +42,13 @@ DORMANT_CATALOGUES: dict[str, str] = {
     "libraries/general.py": "general best-practice descriptions; no check(), no caller",
 }
 
-#: Codes that are not rules at all.
-NOT_A_RULE: dict[str, str] = {
-    "UNPARSEABLE": (
-        "the notice a rule emits when pglast rejected a file — it reports that a rule "
-        "could not run, so it has no severity to declare and nothing to select"
-    ),
-}
+#: Codes that are not rules at all. Empty since 1.9.0: `UNPARSEABLE` was the one
+#: entry, on the reasoning that it "reports that a rule could not run, so it has
+#: no severity to declare and nothing to select". That reading did not survive
+#: #274 — the notice names a *file* that was not read, which is a finding about
+#: the schema like any other, and having no severity to declare is exactly what
+#: let a build the lint never parsed pass `--fail-on error`.
+NOT_A_RULE: dict[str, str] = {}
 
 
 def _declared_codes(tree: ast.AST) -> set[str]:

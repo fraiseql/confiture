@@ -39,6 +39,11 @@ DEFAULT_SELECTOR = "default"
 #: costs one mapping — while the emitted ``rule_id`` is the new code from 1.4.0
 #: on. Nothing published ever carried the old ids: ``lint-unified``, the only
 #: command that emitted them, has no JSON schema.
+#: The notice a file pglast rejected produces. Named here rather than beside its
+#: constructor because two modules need it and one of them (``schema_linter``)
+#: cannot import the other without a cycle.
+UNPARSEABLE_RULE_ID = "UNPARSEABLE"
+
 LEGACY_CODE_ALIASES: dict[str, str] = {
     "gen001": "tree_001",
     "gen002": "tree_002",
@@ -106,6 +111,21 @@ class LintRule:
 
 
 LINT_RULES: tuple[LintRule, ...] = (
+    LintRule(
+        code=UNPARSEABLE_RULE_ID,
+        family="parse",
+        # A file PostgreSQL's own parser rejects is a finding everywhere else in
+        # confiture — `IDEM_UNPARSEABLE` fails `--fail-on-unanalyzable`,
+        # `PFLIGHT_UNPARSEABLE` forces `window_safe: false`, `migrate diff` exits
+        # on `DIFFER_400`. Lint graded it `info`, below every `--fail-on`
+        # threshold but `info`, so a build it had not read passed the gate
+        # (#274). Registering it is also what lets `compute_gate` see it, and
+        # what gives a project with a deliberately non-SQL file the
+        # `--ignore UNPARSEABLE` it needs.
+        title="Every file in the build parses",
+        severity="error",
+        default_on=True,
+    ),
     LintRule(
         code="naming_001",
         family="naming",
@@ -387,9 +407,13 @@ def _expand(token: str, *, option: str) -> frozenset[str]:
     key = LEGACY_CODE_ALIASES.get(key, key)
     if key == DEFAULT_SELECTOR:
         return default_codes()
-    by_code = {rule.code: rule for rule in LINT_RULES}
+    # Keyed on the folded code and answering with the registry's own spelling:
+    # selection has always been case-insensitive, and every code was lower-case
+    # until `UNPARSEABLE` — which would otherwise resolve to a set holding
+    # `unparseable`, matching no finding's `rule_id`.
+    by_code = {rule.code.lower(): rule.code for rule in LINT_RULES}
     if key in by_code:
-        return frozenset({key})
+        return frozenset({by_code[key]})
     matched = frozenset(rule.code for rule in LINT_RULES if rule.family == key)
     if matched:
         return matched

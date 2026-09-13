@@ -30,7 +30,7 @@ from confiture.core.linting.inventory import (
     distinct,
     label_for,
 )
-from confiture.core.parser_info import parse_error_line
+from confiture.core.linting.rule_registry import UNPARSEABLE_RULE_ID
 from confiture.core.sql_lexer import blank_copy_blocks, blank_preserving_lines
 from confiture.exceptions import ConfiturError
 
@@ -113,6 +113,11 @@ class LintReport:
     #: carries a comment and how long those comments are (#250). ``None`` when
     #: the family was not selected — absent, not zero.
     documentation: dict[str, Any] | None = None
+    #: ``(file, line)`` of every ``UNPARSEABLE`` already held. Six rules open
+    #: files of their own, so one broken file used to be reported by each of
+    #: them *and* by the build — several identical errors about one fact. The
+    #: notice is about the file, not about the rule that happened to find it.
+    _unparseable_seen: set[tuple[str | None, int | None]] = field(default_factory=set)
 
     @property
     def has_errors(self) -> bool:
@@ -135,7 +140,12 @@ class LintReport:
         return len(self.errors) + len(self.warnings) + len(self.info)
 
     def add_violation(self, violation: LintViolation) -> None:
-        """Add a violation to the report."""
+        """Add a violation to the report, keeping one ``UNPARSEABLE`` per file."""
+        if violation.rule_id == UNPARSEABLE_RULE_ID:
+            seen = (violation.file_path, violation.line_number)
+            if seen in self._unparseable_seen:
+                return
+            self._unparseable_seen.add(seen)
         if violation.severity == RuleSeverity.ERROR:
             self.errors.append(violation)
         elif violation.severity == RuleSeverity.WARNING:
@@ -329,18 +339,10 @@ class SchemaLinter:
             self._inventory = build_inventory(self._parse_sql)
             attribute_files(self._inventory, self._file_objects)
         except pglast.parser.ParseError as exc:
-            report.add_violation(
-                LintViolation(
-                    rule_id="UNPARSEABLE",
-                    rule_name="Unparseable SQL",
-                    severity=RuleSeverity.INFO,
-                    object_type="schema",
-                    object_name="schema",
-                    message=f"pglast could not parse the schema: {exc}",
-                    line_number=parse_error_line(self._parse_sql, exc),
-                    suggested_fix="Fix the SQL syntax; rules cannot see past a parse error.",
-                )
-            )
+            # A file-backed run has already reported each rejected file by name
+            # above; reaching here means the *concatenation* failed, or there
+            # were no files at all — `lint(schema=...)`, which has none to name.
+            self._add_unparseable(report, None, self._parse_sql, exc)
 
         report.tables_checked = len(self._inventory.tables)
         report.columns_checked = sum(len(t.columns) for t in self._inventory.tables)
@@ -752,13 +754,20 @@ class SchemaLinter:
         and a line into a generated artefact — which was all the whole-build
         parse could say, because it failed as a unit.
         """
+        for rejection in rejected:
+            SchemaLinter._add_unparseable(
+                report, Path(rejection.label), rejection.text, rejection.error
+            )
+
+    @staticmethod
+    def _add_unparseable(
+        report: LintReport, path: Path | None, text: str, exc: BaseException
+    ) -> None:
+        """One constructor for the notice, reached from both of this module's sites."""
         # Reason: import cycle (unparseable imports LintViolation from this module)
         from confiture.core.linting.unparseable import unparseable_notice
 
-        for rejection in rejected:
-            report.add_violation(
-                unparseable_notice(Path(rejection.label), rejection.text, rejection.error)
-            )
+        report.add_violation(unparseable_notice(path, text, exc))
 
     def _assemble_parse_text(self, rejected: set[str]) -> str:
         """The text pglast is asked to read — the blanked files, concatenated.

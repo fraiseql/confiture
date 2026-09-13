@@ -29,6 +29,7 @@ class TestRegistryContents:
     def test_every_rule_confiture_lint_can_emit_is_listed(self) -> None:
         codes = {rule.code for rule in LINT_RULES}
         assert codes == {
+            "UNPARSEABLE",
             "naming_001",
             "naming_002",
             "pk_001",
@@ -65,6 +66,7 @@ class TestRegistryContents:
     def test_the_default_set_is_the_pre_0420_default_behaviour(self) -> None:
         default_on = {rule.code for rule in LINT_RULES if rule.default_on}
         assert default_on == {
+            "UNPARSEABLE",
             "naming_001",
             "naming_002",
             "pk_001",
@@ -95,6 +97,7 @@ class TestRegistryContents:
 
     def test_families_are_reported_in_registry_order(self) -> None:
         assert families() == (
+            "parse",
             "naming",
             "pk",
             "doc",
@@ -116,6 +119,7 @@ class TestSelection:
     def test_no_selection_is_the_default_set(self) -> None:
         assert resolve_selection(None, ()) == frozenset(
             {
+                "UNPARSEABLE",
                 "naming_001",
                 "naming_002",
                 "pk_001",
@@ -153,6 +157,7 @@ class TestSelection:
                 "build_003",
                 "sec_001",
                 "qual_001",
+                "UNPARSEABLE",
                 "replica_001",
             }
         )
@@ -168,6 +173,7 @@ class TestSelection:
     def test_ignore_accepts_a_family(self) -> None:
         assert resolve_selection([DEFAULT_SELECTOR], ["naming"]) == frozenset(
             {
+                "UNPARSEABLE",
                 "pk_001",
                 "doc_001",
                 "doc_002",

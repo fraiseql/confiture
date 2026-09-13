@@ -74,14 +74,29 @@ def test_every_rule_that_runs_through_the_linter_turns_on_a_switch() -> None:
     The rules whose subject is a *tree of files* are dispatched by code in
     `_tree_rule_findings`, after the linter has run, so they legitimately turn
     on no switch.
+
+    `UNPARSEABLE` turns on none either, and for a different reason: it is not a
+    check a caller enables but what *every* reader of a file reports when
+    PostgreSQL's parser refuses it. There is no switch because there is nothing
+    to switch off — `--ignore UNPARSEABLE` is how a project with a deliberately
+    non-SQL file silences it (#274).
     """
     from confiture.cli.commands.schema import TREE_RULE_CODES
+    from confiture.core.linting.rule_registry import UNPARSEABLE_RULE_ID
 
-    by_tree = {"replica_001", "sec_002", "func_001", "own_001", "own_002", *TREE_RULE_CODES}
+    no_switch = {
+        "replica_001",
+        "sec_002",
+        "func_001",
+        "own_001",
+        "own_002",
+        UNPARSEABLE_RULE_ID,
+        *TREE_RULE_CODES,
+    }
     orphans = [
         rule.code
         for rule in LINT_RULES
-        if rule.code not in by_tree and not _switches_for(rule.code)
+        if rule.code not in no_switch and not _switches_for(rule.code)
     ]
 
     assert orphans == []

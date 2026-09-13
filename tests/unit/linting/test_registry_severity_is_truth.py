@@ -82,6 +82,15 @@ $$ LANGUAGE plpgsql;
 """
 
 FIXTURES: dict[str, Fixture] = {
+    # One file the parser refuses beside one it reads: the rule is the notice
+    # that the first was not read, and the second is there so the run has
+    # something to have linted (#274).
+    "UNPARSEABLE": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY);\n",
+            "020.sql": "CREATE TABEL broken (;\n",
+        }
+    ),
     "naming_001": Fixture({"010.sql": "CREATE TABLE BadName (id INT PRIMARY KEY);\n"}),
     "naming_002": Fixture({"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, badCol INT);\n"}),
     "pk_001": Fixture({"010.sql": "CREATE TABLE tb_t (id INT);\n"}),
