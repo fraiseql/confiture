@@ -135,3 +135,55 @@ class TestTheParseTextIsNotTheBuild:
 
         assert "0b6f1c2e-1111-4a4a-8888-000000000001" not in linter._parse_sql
         assert "CREATE TABLE app.tb_widget" in linter._parse_sql
+
+
+_INLINE = """CREATE SCHEMA app;
+CREATE TABLE app.tb_first (id uuid PRIMARY KEY);
+COPY app.tb_first (id) FROM stdin;
+0b6f1c2e-1111-4a4a-8888-000000000001
+0b6f1c2e-1111-4a4a-8888-000000000002
+0b6f1c2e-1111-4a4a-8888-000000000003
+0b6f1c2e-1111-4a4a-8888-000000000004
+\\.
+CREATE TABLE app.tb_after (x int);
+"""
+
+
+@pytest.fixture
+def inline_copy_project(tmp_path: Path) -> Iterator[Path]:
+    """One schema file whose last `CREATE TABLE` sits after an inline COPY block."""
+    (tmp_path / "db" / "schema").mkdir(parents=True)
+    (tmp_path / "db" / "environments").mkdir(parents=True)
+    (tmp_path / "db" / "schema" / "01_inline.sql").write_text(_INLINE)
+    (tmp_path / "db" / "environments" / "local.yaml").write_text(_ENV + "  - db/schema\n")
+
+    old_cwd = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        yield tmp_path
+    finally:
+        os.chdir(old_cwd)
+
+
+class TestALineIsStillItsOwnLine:
+    """The pin that stops "just strip the block" from coming back quietly.
+
+    Deleting a COPY block fixes the parse and passes every assertion above,
+    because those findings sit *before* the block. A finding after one is where
+    the two fixes differ: stripping moves it up by the number of data rows.
+    """
+
+    def test_a_finding_after_a_copy_block_keeps_its_line(self, inline_copy_project: Path) -> None:
+        found = [i for i in _lint("local")["violations"]["items"] if i["rule_id"] == "pk_001"]
+
+        assert [(i["location"], i["file"], i["line"]) for i in found] == [
+            ("app.tb_after", "db/schema/01_inline.sql", 9)
+        ]
+
+    def test_that_line_is_where_the_create_is_written(self, inline_copy_project: Path) -> None:
+        """Read off the fixture, so the expectation above cannot drift from it."""
+        written_on = _INLINE.splitlines().index("CREATE TABLE app.tb_after (x int);") + 1
+
+        found = [i for i in _lint("local")["violations"]["items"] if i["rule_id"] == "pk_001"]
+
+        assert found[0]["line"] == written_on
