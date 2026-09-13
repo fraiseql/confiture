@@ -34,8 +34,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 import confiture
 
 PACKAGE = Path(confiture.__file__).resolve().parent
@@ -164,14 +162,6 @@ def test_the_canonicaliser_still_holds_a_table() -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "the two `_PG_CATALOG_ALIASES` copies under core/linting/ are deleted in this "
-        "phase's fourth cycle, once `signature_key` gives func_001 and sec_002 somewhere "
-        "else to ask; the guard lands first so the target is in the diff from the start"
-    ),
-)
 def test_no_second_type_alias_table() -> None:
     offenders = [
         f"{module}:{line}"

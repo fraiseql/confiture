@@ -14,7 +14,8 @@ notice when pglast is unavailable, opt-in via the
 Kind-aware key
 ==============
 The duplicate-detection key is ``(kind, schema, name,
-param_types_tuple)`` where ``kind`` ∈ ``{"function", "procedure"}``.
+param_types_tuple)`` where ``kind`` ∈ ``{"function", "procedure"}`` and the
+types are canonical — ``int8`` and ``bigint`` are one signature.
 PostgreSQL keeps functions and procedures in separate namespaces, so
 ``CREATE FUNCTION foo()`` and ``CREATE PROCEDURE foo()`` do not
 collide.  Overloads (different argument types) are likewise distinct.
@@ -44,6 +45,7 @@ import pglast.parser
 from confiture.config.environment import FunctionCoverage
 from confiture.core import sql_lexer
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
+from confiture.core.linting.inventory import type_key, type_text
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
 
@@ -61,25 +63,6 @@ _FUNC_ALLOW_DUPLICATE = "func-allow-duplicate"
 # with mode FUNC_PARAM_TABLE and are likewise non-signature.
 _NON_SIGNATURE_MODES: frozenset[str] = frozenset({"FUNC_PARAM_OUT", "FUNC_PARAM_TABLE"})
 
-# Common pg_catalog type aliases.  pglast canonicalizes user-written
-# ``integer`` to ``pg_catalog.int4``; we map it back so the key matches
-# regardless of which alias the author used.  Equality of the key is the
-# only thing that matters — these names also surface in violation
-# messages so we keep the human form.
-_PG_CATALOG_ALIASES: dict[str, str] = {
-    "int2": "smallint",
-    "int4": "integer",
-    "int8": "bigint",
-    "float4": "real",
-    "float8": "double precision",
-    "bool": "boolean",
-    "varchar": "varchar",
-    "bpchar": "char",
-    "timestamp": "timestamp",
-    "timestamptz": "timestamp with time zone",
-    "timetz": "time with time zone",
-}
-
 
 @dataclass(frozen=True)
 class _CallableDefinition:
@@ -88,7 +71,12 @@ class _CallableDefinition:
     kind: str  # "function" or "procedure"
     schema: str
     name: str
-    param_types: tuple[str, ...]
+    #: The canonical argument types — what decides whether two definitions are
+    #: the same signature. `int8` and `bigint` are one entry here and two in
+    #: `param_text`, which is the whole of #275.
+    param_types: tuple[tuple[str | None, str], ...]
+    #: The same arguments as the author wrote them, for the message.
+    param_text: tuple[str, ...]
     file: Path
     line: int
 
@@ -97,13 +85,12 @@ class _CallableDefinition:
         return f"{self.schema}.{self.name}"
 
     @property
-    def signature_key(self) -> tuple[str, str, str, tuple[str, ...]]:
+    def signature_key(self) -> tuple[str, str, str, tuple[tuple[str | None, str], ...]]:
         return (self.kind, self.schema, self.name, self.param_types)
 
     @property
     def display_signature(self) -> str:
-        params = ", ".join(self.param_types) if self.param_types else ""
-        return f"{self.qualified_name}({params})"
+        return f"{self.qualified_name}({', '.join(self.param_text)})"
 
 
 class Func001FunctionUniqueness:
@@ -257,12 +244,14 @@ class Func001FunctionUniqueness:
             kind = "procedure" if stmt.is_procedure else "function"
             schema, name = self._split_funcname(stmt.funcname)
             param_types = self._extract_param_types(stmt.parameters)
+            param_text = self._extract_param_text(stmt.parameters)
             definitions.append(
                 _CallableDefinition(
                     kind=kind,
                     schema=schema,
                     name=name,
                     param_types=param_types,
+                    param_text=param_text,
                     file=file_path,
                     line=line,
                 )
@@ -281,33 +270,35 @@ class Func001FunctionUniqueness:
         return parts[-2], parts[-1]
 
     @staticmethod
-    def _extract_param_types(parameters: Any) -> tuple[str, ...]:
-        """Return signature-significant parameter types, normalized."""
-        if not parameters:
-            return ()
-        types: list[str] = []
-        for p in parameters:
-            mode = p.mode
-            mode_name = mode.name if mode else ""
-            if mode_name in _NON_SIGNATURE_MODES:
-                continue
-            type_name = Func001FunctionUniqueness._render_typename(p.argType)
-            types.append(type_name)
-        return tuple(types)
+    def _signature_parameters(parameters: Any) -> list[Any]:
+        """The parameters that take part in overload resolution."""
+        return [
+            p
+            for p in parameters or []
+            if (p.mode.name if p.mode else "") not in _NON_SIGNATURE_MODES
+        ]
 
     @staticmethod
-    def _render_typename(type_node: Any) -> str:
-        """Render a pglast ``TypeName`` node into a normalized string."""
-        names = [n.sval for n in type_node.names]
-        if len(names) == 2 and names[0] == "pg_catalog":
-            base = _PG_CATALOG_ALIASES.get(names[1], names[1])
-        else:
-            base = ".".join(names)
-        # Append array bounds if present (e.g. integer[])
-        bounds = getattr(type_node, "arrayBounds", None)
-        if bounds:
-            base = f"{base}{'[]' * len(bounds)}"
-        return base
+    def _extract_param_types(parameters: Any) -> tuple[tuple[str | None, str], ...]:
+        """The canonical argument types: the identity two definitions are compared on.
+
+        `inventory.type_key`, not a table of this module's own. The one that
+        lived here mapped `pg_catalog.int4` back to `integer`, which resolves a
+        pair written `int` against `integer` and does nothing for `int8`
+        against `bigint` — a bare internal name never reached it, so `func_001`
+        reported no duplicate for two `CREATE`s PostgreSQL rejects (#275).
+        """
+        return tuple(
+            type_key(p.argType) for p in Func001FunctionUniqueness._signature_parameters(parameters)
+        )
+
+    @staticmethod
+    def _extract_param_text(parameters: Any) -> tuple[str, ...]:
+        """The same arguments as written, for the message the operator reads."""
+        return tuple(
+            type_text(p.argType)
+            for p in Func001FunctionUniqueness._signature_parameters(parameters)
+        )
 
     # ------------------------------------------------------------------ #
     # Directives                                                          #

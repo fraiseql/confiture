@@ -313,7 +313,6 @@ max-returns = 8
 "python/confiture/core/linting/libraries/general.py" = ["PLR2004"]
 "python/confiture/core/linting/libraries/hipaa.py" = ["PLR2004"]
 "python/confiture/core/linting/libraries/pci_dss.py" = ["PLR2004"]
-"python/confiture/core/linting/libraries/security_definer.py" = ["PLR2004"]
 "python/confiture/core/linting/libraries/sox.py" = ["PLR2004"]
 "python/confiture/core/linting/schema_linter.py" = ["PLR0913", "PLR2004"]
 "python/confiture/core/lock_profile.py" = ["PLR0911"]

@@ -330,6 +330,8 @@ def _has_primary_constraint(constraints: Any) -> bool:
 
 
 # Two functions over one `TypeName`, and they answer different questions.
+# Public, because `func_001` and `sec_002` walk their own files and each kept a
+# pasted alias table of its own rather than asking (#275).
 # `_type_text` is the **prose**: what a finding prints, spelled the way the
 # author wrote it, so `app.fn_c(integer)` and never `app.fn_c(int4)`.
 # `_type_key` is the **identity**: what decides whether two routines are the
@@ -337,7 +339,7 @@ def _has_primary_constraint(constraints: Any) -> bool:
 # the prose is exactly what cannot be compared (#275).
 
 
-def _type_text(type_name: Any) -> str:
+def type_text(type_name: Any) -> str:
     """``integer[]`` for a ``TypeName``, typmods dropped — an argument, as written.
 
     A leading ``pg_catalog.`` is dropped too. ``RawStream`` prints the qualifier
@@ -353,7 +355,7 @@ def _type_text(type_name: Any) -> str:
     return rendered.removeprefix(f"{_CATALOG_SCHEMA}.")
 
 
-def _type_key(type_name: Any) -> tuple[str | None, str]:
+def type_key(type_name: Any) -> tuple[str | None, str]:
     """``(schema, canonical name)`` — an argument's identity, not its spelling.
 
     Typmods are dropped first, because PostgreSQL ignores them in a routine
@@ -373,11 +375,11 @@ def _type_key(type_name: Any) -> tuple[str | None, str]:
 
 
 def _signature(parameters: Any) -> str:
-    return ", ".join(_type_text(p.argType) for p in _input_parameters(parameters))
+    return ", ".join(type_text(p.argType) for p in _input_parameters(parameters))
 
 
 def _signature_key(parameters: Any) -> tuple[tuple[str | None, str], ...]:
-    return tuple(_type_key(p.argType) for p in _input_parameters(parameters))
+    return tuple(type_key(p.argType) for p in _input_parameters(parameters))
 
 
 def _input_parameters(parameters: Any) -> list[Any]:
@@ -598,7 +600,7 @@ def _comment_target(
         schema, name = split_names(obj.objname)
         if getattr(obj, "args_unspecified", False) or obj.objargs is None:
             return schema, name, None
-        return schema, name, tuple(_type_key(t) for t in obj.objargs)
+        return schema, name, tuple(type_key(t) for t in obj.objargs)
     if node_kind == "TypeName":
         schema, name = split_names(obj.names)
         return schema, name, None
