@@ -276,6 +276,13 @@ def canonical_type(raw: str | None) -> str | None:
     the captured type through this so the two backends stay byte-identical, which
     ``test_pglast_and_regex_agree`` requires. An unparseable type is returned
     lowercased rather than dropped.
+
+    That lower-casing folds a quoted user type into an unquoted one: a type
+    created as ``"MyType"`` canonicalises to ``mytype`` and keys the same as a
+    distinct ``mytype``. pglast's ``sval`` does not record whether the
+    identifier was quoted, so the two cannot be told apart here. Accepted, and
+    pinned by ``TestAQuotedTypeNameFoldsWithAnUnquotedOne`` so it stays a
+    choice rather than becoming a surprise.
     """
     parsed = parse_type(raw)
     if parsed is None:

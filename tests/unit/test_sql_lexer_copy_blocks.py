@@ -16,7 +16,7 @@ import pglast.parser
 import pytest
 
 from confiture.core import sql_lexer
-from confiture.core.sql_lexer import blank_copy_blocks
+from confiture.core.sql_lexer import blank_copy_blocks, parse, skip_leading_comments
 
 SQL = (
     "CREATE SCHEMA app;\n"
@@ -54,12 +54,21 @@ class TestBlankingPreservesOffsets:
         ]
 
     def test_a_location_still_indexes_the_original_text(self) -> None:
-        """The last statement's offset finds it in ``SQL``, on the line it is written on."""
-        statements = pglast.parser.parse_sql(blank_copy_blocks(SQL))
+        """A position found in the blanked text is that position in the original.
 
-        offset = statements[-1].stmt_location
-        assert SQL[offset:].startswith("CREATE TABLE app.tb_after")
-        assert _line_of(SQL, offset) == _line_of(SQL, SQL.index("CREATE TABLE app.tb_after"))
+        Read through ``sql_lexer.parse``, not off ``stmt_location`` directly:
+        before PostgreSQL 18 a statement's location included the whitespace
+        before it, so on pglast 6 and 7 the raw offset here is the newline after
+        the previous ``;`` and every blanked character after it. That is the
+        difference the lexer's ``skip_leading_comments`` exists to absorb, and
+        absorbing it is the only portable way to ask this question.
+        """
+        statements = parse(blank_copy_blocks(SQL))
+
+        last = statements[-1]
+        start = skip_leading_comments(blank_copy_blocks(SQL), last.location)
+        assert SQL[start:].startswith("CREATE TABLE app.tb_after")
+        assert last.line == _line_of(SQL, SQL.index("CREATE TABLE app.tb_after"))
 
     def test_the_raw_text_does_not_parse(self) -> None:
         """The premise: without blanking there is nothing to read at all."""

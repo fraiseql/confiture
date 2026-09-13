@@ -24,6 +24,7 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
+import pglast.parser
 import pytest
 from typer.testing import CliRunner
 
@@ -231,3 +232,95 @@ class TestBuildOOneGroupsTheSpellings:
         )
 
         assert _lint("--select", "build_001")["violations"]["items"] == []
+
+
+class TestTheSplitPairsArePinnedAtTheKey:
+    """The table, asserted on `type_key` directly rather than through a lint run.
+
+    The CLI cases above prove the rules use the key; these prove the key itself,
+    so a regression names the function that broke rather than the rule that
+    noticed.
+    """
+
+    @staticmethod
+    def _key(spelling: str):
+        from confiture.core.linting.inventory import type_key
+
+        sql = f"CREATE FUNCTION f(x {spelling}) RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;"
+        return type_key(pglast.parser.parse_sql(sql)[0].stmt.parameters[0].argType)
+
+    @pytest.mark.parametrize(
+        ("keyword", "internal"), SPLIT_PAIRS, ids=lambda p: p.replace(" ", "_")
+    )
+    def test_both_spellings_give_one_key(self, keyword: str, internal: str) -> None:
+        assert self._key(keyword) == self._key(internal)
+
+    def test_the_char_row_needs_the_typmod_dropped(self) -> None:
+        """pglast gives keyword ``char`` an implicit typmod of 1; bare ``bpchar`` none.
+
+        Without dropping typmods first this row keys as ``char(1)`` against
+        ``char`` and stays split — the one pair of the ten that the
+        `pg_catalog` strip alone does not join.
+        """
+        assert self._key("char") == (None, "char")
+        assert self._key("bpchar") == (None, "char")
+
+    def test_distinct_types_keep_distinct_keys(self) -> None:
+        """The table joins spellings of one type, never two types."""
+        keys = {self._key(k) for k, _ in SPLIT_PAIRS}
+
+        assert len(keys) == len(SPLIT_PAIRS)
+
+    def test_an_array_is_a_different_key(self) -> None:
+        assert self._key("int[]") != self._key("int")
+        assert self._key("int[]") == self._key("int4[]")
+
+
+class TestTheCatalogueQualifierIsNeverInTheKey:
+    """`json` is the one spelling whose `names` differ between pglast majors.
+
+    On 6.16 it arrives bare; on 7.18 and 8.4 it arrives `pg_catalog`-qualified.
+    Dropping the qualifier makes the key the same string on all three — so the
+    matrix leg is asserting an invariant, not re-measuring a version.
+    """
+
+    @pytest.mark.parametrize("spelling", ["json", "bit", "jsonb", "uuid", "text"])
+    def test_no_key_carries_the_catalogue_schema(self, spelling: str) -> None:
+        schema, name = TestTheSplitPairsArePinnedAtTheKey._key(spelling)
+
+        assert schema is None
+        assert not name.startswith("pg_catalog")
+
+    @pytest.mark.parametrize("spelling", ["json", "bit"])
+    def test_no_rendering_carries_it_either(self, spelling: str) -> None:
+        """The prose half of the same fact: `RawStream` prints what pglast attached."""
+        from confiture.core.linting.inventory import type_text
+
+        sql = f"CREATE FUNCTION f(x {spelling}) RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;"
+        rendered = type_text(pglast.parser.parse_sql(sql)[0].stmt.parameters[0].argType)
+
+        assert rendered == spelling
+
+
+class TestAQuotedTypeNameFoldsWithAnUnquotedOne:
+    """A documented limitation, not an oversight.
+
+    `canonical_type` lower-cases anything it cannot parse, so a type created as
+    `"MyType"` keys the same as a distinct unquoted `mytype`. pglast's `sval`
+    does not record whether the identifier was quoted, so the two cannot be told
+    apart at this layer. Two user types differing only in the case of a quoted
+    name is vanishingly rare and a build that has them has worse problems; the
+    choice is pinned here so it is a choice and not a surprise.
+    """
+
+    def test_a_quoted_name_keys_lowercased(self) -> None:
+        assert TestTheSplitPairsArePinnedAtTheKey._key('"MyType"') == (None, "mytype")
+        assert TestTheSplitPairsArePinnedAtTheKey._key("mytype") == (None, "mytype")
+
+    def test_but_the_finding_still_prints_the_quoting(self) -> None:
+        from confiture.core.linting.inventory import type_text
+
+        sql = 'CREATE FUNCTION f(x "MyType") RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;'
+        rendered = type_text(pglast.parser.parse_sql(sql)[0].stmt.parameters[0].argType)
+
+        assert rendered == '"MyType"'
