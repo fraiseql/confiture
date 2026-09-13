@@ -15,6 +15,7 @@ from __future__ import annotations
 import pglast.parser
 import pytest
 
+from confiture.core import sql_lexer
 from confiture.core.sql_lexer import blank_copy_blocks
 
 SQL = (
@@ -98,3 +99,29 @@ class TestBlankingIsNotStripping:
         r"""A ``\.`` inside a routine body is body text, so the lexer never sees a block."""
         sql = "CREATE FUNCTION f() RETURNS text AS $$ SELECT '\\.' $$ LANGUAGE sql;\n"
         assert blank_copy_blocks(sql) == sql
+
+
+class TestOneCopyBlockFunction:
+    """The lexer answers "where are the COPY blocks" once, and blanking is the answer.
+
+    ``strip_copy_blocks`` was the first answer (#194) and its only caller was
+    ``core/differ.py``, which parses and then regex-scans. Blanking serves that
+    caller unchanged *and* keeps a ``DIFFER_400`` position pointing at the real
+    file, so keeping both would be two answers to one question — the standing
+    rule ``test_one_sql_lexer.py`` exists to hold.
+    """
+
+    def test_the_lexer_exposes_no_stripping_variant(self) -> None:
+        assert not hasattr(sql_lexer, "strip_copy_blocks")
+
+    def test_the_stripped_fixture_is_blanked_in_place(self) -> None:
+        """The case ``strip_copy_blocks`` used to shorten, kept at full length."""
+        sql = (
+            "CREATE TABLE t (a int);\nCOPY t (a) FROM stdin;\n1\n'\n\\.\nCREATE TABLE u (b int);\n"
+        )
+
+        blanked = blank_copy_blocks(sql)
+
+        assert blanked == (
+            "CREATE TABLE t (a int);\n                      \n \n \n  \nCREATE TABLE u (b int);\n"
+        )

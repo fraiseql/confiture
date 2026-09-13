@@ -16,8 +16,8 @@ literals and nested tags (ANA-05). Every consumer now goes through here:
   for line, for the applier's ``psql`` meta-command scan.
 - :func:`comments` / :func:`directives` — comment tokens, and the
   ``-- confiture:<name>`` directives among them with the statement each attaches to.
-- :func:`strip_copy_blocks` — the text without its inline COPY blocks.
-- :func:`blank_copy_blocks` — the same blocks blanked in place, offsets preserved.
+- :func:`blank_copy_blocks` — ``COPY … FROM stdin`` blocks blanked in place, so
+  the text parses and every offset after a block is still its own.
 """
 
 from __future__ import annotations
@@ -455,11 +455,10 @@ def blank_copy_blocks(sql: str) -> str:
     """``sql`` with its ``COPY … FROM stdin`` blocks blanked to spaces.
 
     Same length, same newlines, same line numbers: a character offset into the
-    result is the same offset in ``sql``. That is the difference from
-    :func:`strip_copy_blocks`, and the reason this exists — a lint reports
+    result is the same offset in ``sql``. That is the whole point — a lint reports
     ``file:line`` on every finding and ``parse_error_line`` counts newlines up
-    to an index into the text it parsed, so deleting a block silently moves
-    every finding after it (#274).
+    to an index into the text it parsed, so deleting a block — which is what
+    this replaced (#194) — silently moves every finding after it (#274).
 
     Do not "simplify" this back to a strip. The technique is #270's: when the
     parser must not see some characters but the caller must keep every
@@ -479,16 +478,3 @@ def blank_copy_blocks(sql: str) -> str:
         cursor = stop
     parts.append(sql[cursor:])
     return "".join(parts)
-
-
-def strip_copy_blocks(sql: str) -> str:
-    """``sql`` without its ``COPY … FROM stdin`` statements and their data rows.
-
-    The rows are psql client protocol, not SQL: pglast rejects them, and one
-    block anywhere in a concatenated schema used to fail the whole parse (#194).
-    Each block is removed from its ``COPY`` through the line after its ``\\.``.
-    """
-    _, blocks = _lex(sql)
-    for start, end in reversed(blocks):
-        sql = sql[:start] + sql[end:]
-    return sql
