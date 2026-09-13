@@ -30,7 +30,7 @@ from confiture.core.linting.inventory import (
     distinct,
     label_for,
 )
-from confiture.core.linting.rule_registry import UNPARSEABLE_RULE_ID
+from confiture.core.linting.rule_registry import LINT_RULES, UNPARSEABLE_RULE_ID
 from confiture.core.sql_lexer import blank_copy_blocks, blank_preserving_lines
 from confiture.exceptions import ConfiturError
 
@@ -364,26 +364,38 @@ class SchemaLinter:
         # What the two tables owe each other is agreement, and two guards hold
         # it: `test_every_rule_is_registered` (no rule emits without an entry)
         # and `test_every_switch_has_a_rule` (no switch runs without a rule).
-        for enabled, check in (
-            (self.config.check_naming, self._check_naming_conventions),
-            (self.config.check_primary_keys, self._check_primary_keys),
-            (self.config.check_documentation, self._check_documentation),
-            (self.config.check_restatements, self._check_restatements),
-            (self.config.check_security, self._check_security),
-            (self.config.check_duplicates, self._check_duplicates),
+        # The third column is the rule family the switch runs, and it is on the
+        # row rather than in a table of its own so a new rule cannot be added
+        # without answering "what does this lose when a file will not parse".
+        # `None` means the answer is "nothing an unread file explains": the
+        # `body` family degrades on its live tier, and `tenant_001` parses the
+        # build itself and reports its own notice when that fails.
+        ran: set[str] = set()
+        for enabled, check, family in (
+            (self.config.check_naming, self._check_naming_conventions, "naming"),
+            (self.config.check_primary_keys, self._check_primary_keys, "pk"),
+            (self.config.check_documentation, self._check_documentation, "doc"),
+            (self.config.check_restatements, self._check_restatements, "doc"),
+            (self.config.check_security, self._check_security, "security"),
+            (self.config.check_duplicates, self._check_duplicates, "build"),
             (
                 self.config.check_qualification or self.config.check_qualification_relations,
                 self._check_qualification,
+                "qual",
             ),
-            (self.config.check_references, self._check_references),
+            (self.config.check_references, self._check_references, "build"),
             (
                 self.config.check_bodies or self.config.check_body_warnings,
                 self._check_bodies,
+                None,
             ),
-            (self.config.check_tenant_isolation, self._check_tenant_isolation),
+            (self.config.check_tenant_isolation, self._check_tenant_isolation, None),
         ):
             if enabled:
                 check(report)
+                if family is not None:
+                    ran.add(family)
+        self._report_blinded_rules(report, ran, rejected)
 
         # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
         # the environment YAML.  The mere presence of an ``acls:`` block
@@ -758,6 +770,41 @@ class SchemaLinter:
             SchemaLinter._add_unparseable(
                 report, Path(rejection.label), rejection.text, rejection.error
             )
+
+    @staticmethod
+    def _report_blinded_rules(
+        report: LintReport, ran: frozenset[str] | set[str], rejected: list[Rejected]
+    ) -> None:
+        """Say which rules read less of the schema than the build contains.
+
+        A rejected file is missing from *both* object lists — the whole-build
+        inventory never saw it, and `inventory_texts` skips it, so the per-file
+        list has none of its objects either. So every rule whose subject is DDL
+        examined a short schema, `build_001` and `qual_001` included; the first
+        draft of this exempted them, and a duplicate defined in the broken file
+        then went unreported with nothing saying so.
+
+        This is the channel a `--baseline` does not touch (D6): a project can
+        record the `UNPARSEABLE` finding as known, and the blindness still says
+        so on every run.
+        """
+        if not rejected:
+            return
+        files = ", ".join(sorted(r.label for r in rejected))
+        were = "file was" if len(rejected) == 1 else "files were"
+        report.degraded.extend(
+            RuleStatus(
+                code=rule.code,
+                state="degraded",
+                reason=(
+                    f"ran on less than the whole schema: {len(rejected)} {were} "
+                    f"not read, so nothing they define or reference is checked "
+                    f"({files})"
+                ),
+            )
+            for rule in LINT_RULES
+            if rule.family in ran
+        )
 
     @staticmethod
     def _add_unparseable(

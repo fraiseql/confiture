@@ -160,3 +160,64 @@ class TestTheNoticeNamesTheFile:
         assert len(notices) == 1
         assert notices[0].file_path is None
         assert notices[0].severity is RuleSeverity.ERROR
+
+
+class TestTheBlindedRulesSaySo:
+    """Every rule that reads DDL lost the rejected file, and `degraded` names it.
+
+    The plan for this phase expected only the nine inventory-backed rules to be
+    blinded, on the reasoning that `build_001` / `build_002` / `qual_001` read
+    per file and so "lost nothing". Measured, they lose the file too:
+    `_file_objects` comes from `inventory_texts`, which *skips* a file it cannot
+    parse. A duplicate defined in the broken file is not reported, and neither
+    is an unqualified `CREATE` in it.
+
+    That matters more than the false positive it replaces: `build_001` is an
+    `error` and is the gate. Saying "doc_001 ran short" while letting the
+    duplicate gate run short in silence is #274 one level down.
+    """
+
+    def test_every_ddl_rule_that_ran_is_degraded(self, one_broken_file: Path) -> None:
+        payload, _ = _lint("--fail-on", "never")
+        degraded = {s["code"] for s in payload["degraded"]}
+
+        assert degraded == {
+            "naming_001",
+            "naming_002",
+            "pk_001",
+            "doc_001",
+            "doc_002",
+            "doc_003",
+            "doc_004",
+            "sec_001",
+            "build_001",
+            "build_002",
+            "build_003",
+            "qual_001",
+        }
+
+    def test_each_reason_names_the_file(self, one_broken_file: Path) -> None:
+        payload, _ = _lint("--fail-on", "never")
+
+        assert all("db/schema/030_broken.sql" in s["reason"] for s in payload["degraded"])
+
+    def test_a_deselected_rule_is_not_degraded(self, one_broken_file: Path) -> None:
+        """`degraded` follows the selection, as the findings do."""
+        payload, _ = _lint("--fail-on", "never", "--select", "pk_001")
+
+        assert {s["code"] for s in payload["degraded"]} == {"pk_001"}
+
+    def test_nothing_is_degraded_when_every_file_parses(self, tmp_path: Path) -> None:
+        (tmp_path / "db" / "schema").mkdir(parents=True)
+        (tmp_path / "db" / "environments").mkdir(parents=True)
+        (tmp_path / "db" / "schema" / "010_widget.sql").write_text(_GOOD)
+        (tmp_path / "db" / "environments" / "local.yaml").write_text(_ENV)
+
+        old_cwd = Path.cwd()
+        os.chdir(tmp_path)
+        try:
+            payload, _ = _lint("--fail-on", "never")
+        finally:
+            os.chdir(old_cwd)
+
+        assert payload["degraded"] == []
