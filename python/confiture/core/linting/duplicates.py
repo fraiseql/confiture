@@ -71,14 +71,30 @@ class Duplicate:
 
 def inventory_files(
     files: Iterable[Path], root: Path | None = None
-) -> tuple[list[SchemaObject], list[SchemaObject], list[str]]:
+) -> tuple[list[SchemaObject], list[SchemaObject], list[Rejected]]:
     """Inventory each file on its own, so every object knows its file."""
     return inventory_texts((_label(path, root), path.read_text(encoding="utf-8")) for path in files)
 
 
+@dataclass(frozen=True)
+class Rejected:
+    """A file pglast refused, with what is needed to report it.
+
+    The label alone was enough while the answer was "something here did not
+    parse". It is not enough to say *where*: the notice names a line, and the
+    line comes from the error and the text it indexes. Recomputing both by
+    parsing the file a second time would be throwing away what this already
+    holds.
+    """
+
+    label: str
+    text: str
+    error: BaseException
+
+
 def inventory_texts(
     sources: Iterable[tuple[str | None, str]],
-) -> tuple[list[SchemaObject], list[SchemaObject], list[str]]:
+) -> tuple[list[SchemaObject], list[SchemaObject], list[Rejected]]:
     """The same, for text already read — one ``(label, text)`` pair per file.
 
     Returns the objects, the ``CREATE SCHEMA`` declarations and the files
@@ -91,13 +107,13 @@ def inventory_texts(
     """
     objects: list[SchemaObject] = []
     schemas: list[SchemaObject] = []
-    unparseable: list[str] = []
+    unparseable: list[Rejected] = []
     for label, text in sources:
         try:
             inventory = build_inventory(text)
-        except pglast.parser.ParseError:
+        except pglast.parser.ParseError as exc:
             if label is not None:
-                unparseable.append(label)
+                unparseable.append(Rejected(label=label, text=text, error=exc))
             continue
         for obj in (*inventory.objects, *inventory.schemas):
             obj.file = label

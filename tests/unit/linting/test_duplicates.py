@@ -150,7 +150,7 @@ class TestKeys:
         paths = _files(tmp_path, a="CREATE TABLE t (id int);\n", b="CREATE TABEL broken (;\n")
         objects, _schemas, unparseable = inventory_files(paths, root=tmp_path / "schema")
         assert [o.identity for o in objects] == ["t"]
-        assert unparseable == ["b.sql"]
+        assert [r.label for r in unparseable] == ["b.sql"]
 
     def test_a_single_string_inventory_has_no_file(self) -> None:
         sql = f"CREATE OR REPLACE FUNCTION f() {BODY}\nCREATE OR REPLACE FUNCTION f() {BODY}\n"

@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pglast
 import pglast.parser
@@ -31,8 +31,11 @@ from confiture.core.linting.inventory import (
     label_for,
 )
 from confiture.core.parser_info import parse_error_line
-from confiture.core.sql_lexer import blank_copy_blocks
+from confiture.core.sql_lexer import blank_copy_blocks, blank_preserving_lines
 from confiture.exceptions import ConfiturError
+
+if TYPE_CHECKING:
+    from confiture.core.linting.duplicates import Rejected
 
 logger = logging.getLogger(__name__)
 
@@ -319,8 +322,9 @@ class SchemaLinter:
         # rules below read what they can, and this notice says the rest was
         # not read (ANA-02).
         self._inventory = Inventory()
-        self._parse_sql = self._assemble_parse_text()
-        self._file_objects, self._file_schemas = self._inventory_per_file()
+        self._file_objects, self._file_schemas, rejected = self._inventory_per_file()
+        self._parse_sql = self._assemble_parse_text({r.label for r in rejected})
+        self._report_rejected_files(report, rejected)
         try:
             self._inventory = build_inventory(self._parse_sql)
             attribute_files(self._inventory, self._file_objects)
@@ -402,19 +406,25 @@ class SchemaLinter:
 
         return report
 
-    def _inventory_per_file(self) -> tuple[list[SchemaObject], list[SchemaObject]]:
-        """``(objects, CREATE SCHEMA declarations)``, each knowing the file it is in.
+    def _inventory_per_file(
+        self,
+    ) -> tuple[list[SchemaObject], list[SchemaObject], list[Rejected]]:
+        """``(objects, CREATE SCHEMA declarations, rejected files)``, each knowing its file.
 
-        Both empty for a whole-string lint (``lint(schema=...)``), which has no
-        files and therefore no locations to report.
+        The first two are empty for a whole-string lint (``lint(schema=...)``),
+        which has no files and therefore no locations to report.
+
+        The third used to be discarded here, which is how a broken file could
+        cost the whole build: the per-file pass already knew exactly which file
+        pglast refused, and threw that away, leaving the whole-build parse to
+        fail on it and take the other files' objects with it (#274).
         """
         # Reason: import cycle (duplicates imports this module's inventory at module level)
         from confiture.core.linting.duplicates import inventory_texts
 
         if not self._schema_files:
-            return [], []
-        objects, schemas, _unparseable = inventory_texts(self._sources())
-        return objects, schemas
+            return [], [], []
+        return inventory_texts(self._sources())
 
     def _load_schema(self) -> None:
         """Load schema SQL from files."""
@@ -734,8 +744,30 @@ class SchemaLinter:
             )
         return self._source_cache
 
-    def _assemble_parse_text(self) -> str:
+    @staticmethod
+    def _report_rejected_files(report: LintReport, rejected: list[Rejected]) -> None:
+        """One ``UNPARSEABLE`` finding per file pglast refused, naming that file.
+
+        Before #274 there was one notice for the whole build, carrying no file
+        and a line into a generated artefact — which was all the whole-build
+        parse could say, because it failed as a unit.
+        """
+        # Reason: import cycle (unparseable imports LintViolation from this module)
+        from confiture.core.linting.unparseable import unparseable_notice
+
+        for rejection in rejected:
+            report.add_violation(
+                unparseable_notice(Path(rejection.label), rejection.text, rejection.error)
+            )
+
+    def _assemble_parse_text(self, rejected: set[str]) -> str:
         """The text pglast is asked to read — the blanked files, concatenated.
+
+        A file in ``rejected`` contributes its own length in spaces and nothing
+        else. That is what makes a broken file cost one file: the remaining
+        files still parse as *one* text, so a ``COMMENT ON`` in one of them
+        still resolves against a ``CREATE`` in another — which is the only
+        reason a whole-build inventory exists beside the per-file one.
 
         Deliberately **not** ``self._schema_sql``. The three things
         ``SchemaBuilder.build`` adds — a header, a per-file separator, and the
@@ -755,8 +787,8 @@ class SchemaLinter:
         throwaway database, and ``tenant_001`` scans it as text.
         """
         parts: list[str] = []
-        for _label, text in self._sources():
-            parts.append(text)
+        for label, text in self._sources():
+            parts.append(blank_preserving_lines(text) if label in rejected else text)
             if text and not text.endswith("\n"):
                 parts.append("\n")
         return "".join(parts)

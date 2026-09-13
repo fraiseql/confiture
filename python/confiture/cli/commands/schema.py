@@ -591,7 +591,7 @@ def _duplicate_gate(
         return [], []
 
     objects, _schemas, unparseable = inventory_files(sql_files, root=project_dir)
-    warnings = [BuildWarning.of("SCHEMA_206", file=label) for label in unparseable]
+    warnings = [BuildWarning.of("SCHEMA_206", file=r.label) for r in unparseable]
     duplicates = find_duplicates(objects)
     if not duplicates:
         return [], warnings

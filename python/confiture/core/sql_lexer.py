@@ -18,6 +18,8 @@ literals and nested tags (ANA-05). Every consumer now goes through here:
   ``-- confiture:<name>`` directives among them with the statement each attaches to.
 - :func:`blank_copy_blocks` — ``COPY … FROM stdin`` blocks blanked in place, so
   the text parses and every offset after a block is still its own.
+- :func:`blank_preserving_lines` — the same blanking over a whole string, for a
+  caller that must hide a span from the parser without moving anything after it.
 """
 
 from __future__ import annotations
@@ -472,9 +474,18 @@ def blank_copy_blocks(sql: str) -> str:
     for start, end in blocks:
         stop = min(end, len(sql))
         parts.append(sql[cursor:start])
-        # Newlines survive so the line count does not move; everything else in
-        # the block — the COPY statement and its data rows — becomes a space.
-        parts.append("\n".join(" " * len(line) for line in sql[start:stop].split("\n")))
+        parts.append(blank_preserving_lines(sql[start:stop]))
         cursor = stop
     parts.append(sql[cursor:])
     return "".join(parts)
+
+
+def blank_preserving_lines(text: str) -> str:
+    """``text`` with every character but its newlines replaced by a space.
+
+    Same length, same line count, so an offset into the result is an offset into
+    ``text``. The one way to hide a span from the parser without moving what
+    follows it: :func:`blank_copy_blocks` uses it on a COPY block, and the lint
+    uses it on a whole file pglast rejected (#274).
+    """
+    return "\n".join(" " * len(line) for line in text.split("\n"))
