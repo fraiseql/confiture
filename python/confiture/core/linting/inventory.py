@@ -660,9 +660,12 @@ def label_for(path: Path, root: Path | None) -> str:
     return path.as_posix()
 
 
-def object_key(
-    obj: SchemaObject,
-) -> tuple[str, str, str, tuple[tuple[str | None, str], ...] | None]:
+#: What identifies one object: kind, schema, name, and — for a routine — the
+#: canonical types of its input parameters.
+ObjectKey = tuple[str, str | None, str, tuple[tuple[str | None, str], ...] | None]
+
+
+def object_key(obj: SchemaObject) -> ObjectKey:
     """What makes two ``CREATE`` statements definitions of the same object.
 
     The folded spelling, so ``app."TbWidget"`` and ``app.tbwidget`` are one
@@ -704,7 +707,7 @@ def distinct(objects: Iterable[SchemaObject]) -> list[SchemaObject]:
     return first
 
 
-def _statement_key(obj: SchemaObject) -> tuple[str, str | None, str, str | None]:
+def _statement_key(obj: SchemaObject) -> ObjectKey:
     """What makes two inventory entries the same ``CREATE`` statement."""
     return (obj.kind, obj.folded_schema, obj.folded_name, obj.signature_key)
 
