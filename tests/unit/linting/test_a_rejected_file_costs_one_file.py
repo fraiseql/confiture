@@ -237,7 +237,9 @@ class TestTheDegradedLineReadsItsOwnReason:
         )
 
         assert "pk_001 ran on less than the whole schema" in result.output
-        assert "1 file was not read" in result.output
+        assert "1 file was not read, so nothing it defines or references is checked" in (
+            " ".join(result.output.split())
+        )
         assert "db/schema/030_broken.sql" in result.output
 
     def test_it_does_not_claim_a_live_tier(self, one_broken_file: Path) -> None:
@@ -252,3 +254,28 @@ class TestTheDegradedLineReadsItsOwnReason:
         payload, _ = _lint("--fail-on", "never", "--select", "pk_001")
 
         assert not payload["degraded"][0]["reason"].startswith("ran on less than")
+
+
+class TestABaselineHidesTheFindingAndNotTheBlindness:
+    """D6: a baseline is a project's own opt-out, and it never sees `degraded`.
+
+    #274's complaint about `--baseline` is not that it makes the finding quiet —
+    that is what a baseline is — but that it makes the *blindness* invisible and
+    therefore permanent. Inventing a per-code exception to baselining would be a
+    special case to explain forever; putting the blindness in a channel the
+    baseline does not touch answers it at the root.
+    """
+
+    def test_a_baselined_unparseable_still_degrades(self, one_broken_file: Path) -> None:
+        baseline = "lint-baseline.json"
+        first = runner.invoke(
+            app, ["lint", "--env", "local", "--baseline", baseline, "--write-baseline"]
+        )
+        assert first.exit_code == 0, first.output
+
+        payload, exit_code = _lint("--baseline", baseline)
+
+        assert [i["rule_id"] for i in payload["violations"]["items"]] == []
+        assert exit_code == 0
+        assert {s["code"] for s in payload["degraded"]} >= {"pk_001", "build_001", "doc_001"}
+        assert all("db/schema/030_broken.sql" in s["reason"] for s in payload["degraded"])

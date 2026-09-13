@@ -791,14 +791,15 @@ class SchemaLinter:
         if not rejected:
             return
         files = ", ".join(sorted(r.label for r in rejected))
-        were = "file was" if len(rejected) == 1 else "files were"
+        one = len(rejected) == 1
+        were = "file was" if one else "files were"
+        define = "it defines or references" if one else "they define or reference"
         report.degraded.extend(
             RuleStatus(
                 code=rule.code,
                 state="degraded",
                 reason=(
-                    f"{len(rejected)} {were} not read, so nothing they define "
-                    f"or reference is checked ({files})"
+                    f"{len(rejected)} {were} not read, so nothing {define} is checked ({files})"
                 ),
             )
             for rule in LINT_RULES
