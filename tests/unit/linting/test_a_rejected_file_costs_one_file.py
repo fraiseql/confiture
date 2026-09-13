@@ -221,3 +221,34 @@ class TestTheBlindedRulesSaySo:
             os.chdir(old_cwd)
 
         assert payload["degraded"] == []
+
+
+class TestTheDegradedLineReadsItsOwnReason:
+    """The summary line prints the reason the rule gave, not one hardcoded phrase.
+
+    `build_003`'s live tier was the only degradation when the formatter was
+    written, so `_STATE_VERB` said "ran without the live tier" for every
+    `degraded` entry. There is no live tier in an unread file.
+    """
+
+    def test_a_degraded_line_reads_the_reason_it_was_given(self, one_broken_file: Path) -> None:
+        result = runner.invoke(
+            app, ["lint", "--env", "local", "--select", "pk_001", "--fail-on", "never"]
+        )
+
+        assert "pk_001 ran on less than the whole schema" in result.output
+        assert "1 file was not read" in result.output
+        assert "db/schema/030_broken.sql" in result.output
+
+    def test_it_does_not_claim_a_live_tier(self, one_broken_file: Path) -> None:
+        result = runner.invoke(
+            app, ["lint", "--env", "local", "--select", "pk_001", "--fail-on", "never"]
+        )
+
+        assert "live tier" not in result.output
+
+    def test_the_reason_does_not_repeat_the_verb(self, one_broken_file: Path) -> None:
+        """`<code> <verb>: <reason>` — the reason says what was lost, not the state again."""
+        payload, _ = _lint("--fail-on", "never", "--select", "pk_001")
+
+        assert not payload["degraded"][0]["reason"].startswith("ran on less than")

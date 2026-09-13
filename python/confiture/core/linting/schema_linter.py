@@ -797,9 +797,8 @@ class SchemaLinter:
                 code=rule.code,
                 state="degraded",
                 reason=(
-                    f"ran on less than the whole schema: {len(rejected)} {were} "
-                    f"not read, so nothing they define or reference is checked "
-                    f"({files})"
+                    f"{len(rejected)} {were} not read, so nothing they define "
+                    f"or reference is checked ({files})"
                 ),
             )
             for rule in LINT_RULES
