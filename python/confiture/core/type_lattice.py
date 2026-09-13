@@ -62,11 +62,18 @@ class TypeChange(Enum):
 
 @dataclass(frozen=True)
 class SqlType:
-    """A parsed SQL type name with its typmod, normalised to a canonical spelling."""
+    """A parsed SQL type name with its typmod and array depth, canonically spelled.
+
+    ``dimensions`` is how many ``[]`` the type carries. It is part of the type's
+    identity, not decoration: ``text`` and ``text[]`` share a name and nothing
+    else, and a lattice that dropped the suffix answered ``IDENTICAL`` for a
+    change that rewrites every page.
+    """
 
     name: str
     precision: int | None = None
     scale: int | None = None
+    dimensions: int = 0
 
 
 # Aliases → the canonical name used throughout the lattice.
@@ -102,7 +109,7 @@ _STRING = frozenset({"varchar", "text", "char"})
 
 _TYPE_RE = re.compile(
     r"^\s*(?P<name>[A-Za-z_][\w ]*?)\s*(?:\(\s*(?P<p>\d+)\s*(?:,\s*(?P<s>\d+)\s*)?\))?\s*"
-    r"(?:\[\s*\])?\s*$"
+    r"(?P<arr>(?:\[\s*\d*\s*\])*)\s*$"
 )
 
 
@@ -120,7 +127,12 @@ def parse_type(raw: str | None) -> SqlType | None:
     name = _ALIASES.get(name, name)
     precision = int(match.group("p")) if match.group("p") else None
     scale = int(match.group("s")) if match.group("s") else None
-    return SqlType(name=name, precision=precision, scale=scale)
+    return SqlType(
+        name=name,
+        precision=precision,
+        scale=scale,
+        dimensions=(match.group("arr") or "").count("["),
+    )
 
 
 def compare_types(old: str | None, new: str | None) -> TypeChange:
@@ -134,6 +146,12 @@ def compare_types(old: str | None, new: str | None) -> TypeChange:
         return TypeChange.UNKNOWN
     if old_type == new_type:
         return TypeChange.IDENTICAL
+    if old_type.dimensions or new_type.dimensions:
+        # Equal arrays are IDENTICAL above. Anything else involving one —
+        # element to array, array to element, one dimension to two, or two
+        # different element types — is a conversion this module does not model,
+        # and an unmodelled change never reads as safe.
+        return TypeChange.UNKNOWN
     if not _is_modelled(old_type) or not _is_modelled(new_type):
         return TypeChange.UNKNOWN
     if old_type.name == new_type.name:
@@ -237,6 +255,10 @@ def changes_rewrite_table(old: str | None, new: str | None) -> bool:
         return True
     if old_type == new_type:
         return False
+    if old_type.dimensions or new_type.dimensions:
+        # The binary-coercible cases below are between scalars. `varchar[]` to
+        # `text[]` is not one of them, whatever `varchar` to `text` costs.
+        return True
     # varchar(n) → varchar(m>n) and varchar/char → text are binary coercible.
     if old_type.name in {"varchar", "char"} and new_type.name == "text":
         return False
@@ -258,8 +280,9 @@ def canonical_type(raw: str | None) -> str | None:
     parsed = parse_type(raw)
     if parsed is None:
         return raw.strip().lower() or None if raw else None
+    suffix = "[]" * parsed.dimensions
     if parsed.precision is None:
-        return parsed.name
+        return parsed.name + suffix
     if parsed.scale is None:
-        return f"{parsed.name}({parsed.precision})"
-    return f"{parsed.name}({parsed.precision},{parsed.scale})"
+        return f"{parsed.name}({parsed.precision}){suffix}"
+    return f"{parsed.name}({parsed.precision},{parsed.scale}){suffix}"

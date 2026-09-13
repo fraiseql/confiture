@@ -114,10 +114,17 @@ def column_has_default(coldef: object) -> bool:
 
 
 def type_name(type_node: Any) -> str | None:
-    """Render a pglast ``TypeName`` back to ``varchar(50)`` / ``numeric(10,2)``.
+    """Render a pglast ``TypeName`` back to ``varchar(50)`` / ``numeric(10,2)[]``.
 
     The ``pg_catalog`` qualifier the parser adds is dropped; the internal spelling
     (``int8``) is left alone, since :mod:`confiture.core.type_lattice` aliases it.
+
+    The array bounds are **not** dropped. They live on ``arrayBounds`` rather
+    than in ``names``, and reading only ``names`` made ``int[]`` render ``int4`` —
+    the same string as ``int``. Both callers compose this with ``canonical_type``
+    over an ``ALTER COLUMN … TYPE``, so a column going ``varchar(50)`` to
+    ``text[]`` was captured as ``text`` and compared as a free, rewrite-less
+    widening (#275).
     """
     if type_node is None:
         return None
@@ -134,4 +141,5 @@ def type_name(type_node: Any) -> str | None:
         )
         if ival is not None
     ]
-    return f"{name}({', '.join(mods)})" if mods else name
+    bounds = "[]" * len(getattr(type_node, "arrayBounds", None) or ())
+    return (f"{name}({', '.join(mods)})" if mods else name) + bounds
