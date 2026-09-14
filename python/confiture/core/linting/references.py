@@ -37,11 +37,15 @@ file, and :func:`file_line` places a body-relative line on that file — and
 there is one answer to "which line is this, really", not two.
 
 A body has a third possible outcome beside "read" and "dynamic": *not
-returned*. ``libpg_query`` serialises a trigger function's implicit ``TG_``
-datums as malformed JSON, so ``parse_plpgsql`` raises on every ``RETURNS
-TRIGGER`` body regardless of what that body contains. :func:`read_references`
-names those routines instead of raising or staying quiet, because a rule that
-skipped a body has not established that the body is clean.
+returned*. The compiler behind ``parse_plpgsql`` has no catalogue, and there
+are still shapes it will not resolve without one — an array whose element type
+it cannot name being the one left (#270, #272 repaired the rest).
+:func:`read_references` names those routines instead of raising or staying
+quiet, because a rule that skipped a body has not established that the body is
+clean. What it takes to keep that list short is
+:mod:`confiture.core.plpgsql_parse`'s work, not this module's: everything here
+asks :func:`~confiture.core.plpgsql_parse.parse_body` for a tree and reports
+the routine when it does not get one.
 """
 
 from __future__ import annotations
@@ -321,10 +325,11 @@ def _plpgsql_references(
         # read is the failure #270 is filed on.
         raise _UnreadableBody(obj.identity) from exc
     except json.JSONDecodeError as exc:
-        # `libpg_query` emits `{}}` for a trigger function's implicit `TG_`
-        # datums, so its JSON does not decode — every `RETURNS TRIGGER` body,
-        # whatever it contains. Not this rule's to fix and not this rule's to
-        # die of: the caller names the routine as unread.
+        # `libpg_query`'s serialisation did not decode, and the one defect
+        # confiture repairs — the stray brace on a trigger function's implicit
+        # `TG_` datums (#272) — is not what stopped it. So what the tree holds
+        # is unknown, and an unknown tree is an unread body: named, not
+        # half-read and not passed off as clean.
         raise _UnreadableBody(obj.identity) from exc
     found: list[Reference] = []
     exact = first is not None

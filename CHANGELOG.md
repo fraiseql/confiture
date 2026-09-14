@@ -14,6 +14,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-09-10
+
+`build_003` read **no** `RETURNS TRIGGER` or `RETURNS event_trigger` body
+([#272](https://github.com/fraiseql/confiture/issues/272), a sibling of
+[#270](https://github.com/fraiseql/confiture/issues/270) found while fixing it) — not some of them,
+all of them, whatever the body contained. In confiture's own SQL corpora that was 5 of 8 plpgsql
+routines. 1.7.0 made it *audible* — the routine is named in the report's `degraded` array — but not
+smaller, and "unread but named" is a permanent notice rather than a finding when it is where every
+trigger function in the tree ends up.
+
+Trigger functions are where a schema puts its audit writes, its denormalisation maintenance and its
+cross-table invariants: bodies that reference plenty and are rarely covered by a call path a test
+exercises. They are exactly what the rule is for.
+
+The cause is neither confiture's nor the compiler's but the **serialiser's**. `libpg_query` writes
+the implicit `TG_*` datums it synthesises for a trigger function as `{}}` — one closing brace too
+many each, 10 for `RETURNS trigger` and 2 for `RETURNS event_trigger` — so
+`pg_query_parse_plpgsql`'s output is not valid JSON, and `pglast.parse_plpgsql`, which is
+`json.loads` over it, raised `json.JSONDecodeError` before a tree existed. **pglast 8 only**: 6.16
+and 7.18 do not write those datums at all.
+
+### Fixed
+
+- **`build_003` reads a trigger body.** The issue's reproduction reports both of the trigger's
+  unresolved names beside the control's, at the lines they are written on, and leaves no `degraded`
+  entry behind. Every plpgsql routine in `db/schema/`, `examples/` and `tests/fixtures/` is now
+  read — 8 of 8, from 3 of 8 — and one test row per routine says so, so the next one to go unread is
+  named rather than counted.
+
+### Changed
+
+- **The repair is positional, and that is the design.** A global `raw.replace("{}}", "{}")` is
+  wrong, and not marginally: `{"PLpgSQL_stmt_return":{}}` — the implicit `RETURN` PL/pgSQL appends
+  to a body that falls off its end — is a legitimate `{}}` in the serialisation of very nearly every
+  routine, and replacing it corrupts an ordinary `RETURNS void` function outright. So the deletion
+  is driven by `json.JSONDecodeError.pos`, which names a stray brace exactly, and the characters
+  there are checked before one byte goes. A serialisation that decodes never enters the loop and is
+  returned byte-for-byte, however many `{}}` it contains.
+- **A serialisation broken some other way still raises**, so the routine stays named in `degraded`
+  rather than being half-read. A tree missing something without saying so is the failure #270 was
+  filed on, and the repair must not become a new way to produce one.
+- `Compiled` carries `repaired`, the count of braces deleted — 0 on every well-formed
+  serialisation, which is what makes "nothing was deleted, so nothing was invented" checkable. Each
+  repaired datum decodes to `{}`: the array keeps its length and its positions, but those entries
+  carry nothing, and **a datum index is not a fact that tree holds**. Nothing downstream reads one
+  (the consumers want `lineno`s and `PLpgSQL_expr` query strings), and the three majors do not agree
+  on that array anyway — 6.16 and 7.18 emit 6 datums where 8.4 emits 16.
+- Verified by hand on pglast 6.16, 7.18 and 8.4, in three clean `git archive` checkouts. The
+  `pglast-matrix` CI leg already runs both body suites, and both **probe** this interpreter's
+  libpg_query rather than reading a version number, so the skips retire on their own if the defect
+  is fixed upstream.
+
 ## [1.7.0] - 2026-09-10
 
 `build_003` silently skipped any routine whose signature or declarations named a schema-qualified type
