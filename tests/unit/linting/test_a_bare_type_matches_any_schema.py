@@ -199,5 +199,5 @@ class TestTheMatchIsPinnedAtThePredicate:
         ["integer", "int8", "json", "bit", "timestamptz", "timestamp with time zone", "text[]"],
     )
     def test_a_built_in_carries_no_schema_for_the_wildcard_to_match(self, spelling: str) -> None:
-        """`pg_catalog` is dropped by Phase 03, so the ten pairs are untouched by D9."""
+        """The canonicaliser drops `pg_catalog`, so the ten split pairs are untouched."""
         assert self._key(spelling)[0][0] is None

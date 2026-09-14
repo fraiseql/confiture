@@ -14,11 +14,19 @@ notice when pglast is unavailable, opt-in via the
 Kind-aware key
 ==============
 The duplicate-detection key is ``(kind, schema, name,
-param_types_tuple)`` where ``kind`` ∈ ``{"function", "procedure"}`` and the
+param_type_names)`` where ``kind`` ∈ ``{"function", "procedure"}`` and the
 types are canonical — ``int8`` and ``bigint`` are one signature.
 PostgreSQL keeps functions and procedures in separate namespaces, so
 ``CREATE FUNCTION foo()`` and ``CREATE PROCEDURE foo()`` do not
 collide.  Overloads (different argument types) are likewise distinct.
+
+It is a bucket rather than the whole answer, and
+:func:`~confiture.core.linting.inventory.group_by_signature` gives the rest:
+a type schema written on one definition and left off the other still names
+one type, so ``app.f(app.custom_t)`` and ``app.f(custom_t)`` are a duplicate
+while ``app.f(other.custom_t)`` is a third signature.  That is the
+inventory's rule, read from the inventory — ``doc_002``, ``build_001`` and
+this rule agree by construction rather than by coincidence.
 
 OUT parameters do not participate in PostgreSQL's overload resolution,
 so they are excluded from the key — two definitions that differ only in
@@ -34,7 +42,6 @@ the duplicate-detection map (mirrors ``-- confiture:owner-skip``).
 from __future__ import annotations
 
 import fnmatch
-from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
@@ -45,7 +52,13 @@ import pglast.parser
 from confiture.config.environment import FunctionCoverage
 from confiture.core import sql_lexer
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
-from confiture.core.linting.inventory import type_key, type_text
+from confiture.core.linting.inventory import (
+    Signature,
+    group_by_signature,
+    signature_bucket,
+    type_key,
+    type_text,
+)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
 
@@ -74,7 +87,7 @@ class _CallableDefinition:
     #: The canonical argument types — what decides whether two definitions are
     #: the same signature. `int8` and `bigint` are one entry here and two in
     #: `param_text`, which is the whole of #275.
-    param_types: tuple[tuple[str | None, str], ...]
+    param_types: Signature
     #: The same arguments as the author wrote them, for the message.
     param_text: tuple[str, ...]
     file: Path
@@ -85,8 +98,15 @@ class _CallableDefinition:
         return f"{self.schema}.{self.name}"
 
     @property
-    def signature_key(self) -> tuple[str, str, str, tuple[tuple[str | None, str], ...]]:
-        return (self.kind, self.schema, self.name, self.param_types)
+    def bucket_key(self) -> tuple[str, str, str, tuple[str, ...] | None]:
+        """What could be the same signature; :func:`group_by_signature` says what is.
+
+        The argument types' own schemas are left out, so a bare spelling and a
+        qualified one share a bucket — a dict key cannot express "a missing
+        schema matches any schema". Same shape, same reason, as
+        :func:`~confiture.core.linting.inventory.object_key`.
+        """
+        return (self.kind, self.schema, self.name, signature_bucket(self.param_types))
 
     @property
     def display_signature(self) -> str:
@@ -149,21 +169,19 @@ class Func001FunctionUniqueness:
         if not all_definitions:
             return notices
 
-        # Group by signature key, drop the unique ones, emit one
-        # violation per duplicate cluster.
-        clusters: dict[tuple[str, str, str, tuple[str, ...]], list[_CallableDefinition]] = (
-            defaultdict(list)
+        # Group by signature, drop the unique ones, emit one violation per
+        # duplicate cluster.
+        clusters = group_by_signature(
+            [defn for defn in all_definitions if self._in_scope(defn)],
+            lambda defn: defn.bucket_key,
+            lambda defn: defn.param_types,
         )
-        for defn in all_definitions:
-            if not self._in_scope(defn):
-                continue
-            clusters[defn.signature_key].append(defn)
 
         violations: list[LintViolation] = list(notices)
-        for key, defs in clusters.items():
+        for defs in clusters:
             if len(defs) < 2:
                 continue
-            kind = key[0]
+            kind = defs[0].kind
             display = defs[0].display_signature
             files = ", ".join(str(d.file.name) for d in defs)
             violations.append(
