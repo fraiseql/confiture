@@ -170,3 +170,35 @@ class TestPsqlInvocations:
             "`-d` has already filled psql's `dbname` slot, so this positional is read as a "
             f"username or discarded outright — it is not the database being asked: {offenders}"
         )
+
+
+class TestNoWorkflowOpensAPullRequest:
+    """The `fraiseql` org forbids Actions from creating pull requests.
+
+        ##[error]GitHub Actions is not permitted to create or approve pull requests.
+
+    `Lockfile Bump` failed on that every Monday: `uv lock --upgrade` ran, the branch
+    pushed, and only the last step failed — so the run was red for a reason no commit
+    could cause and no log line above it hinted at. The policy is organisation-wide
+    (a repository-level `can_approve_pull_request_reviews` cannot override it), so a
+    workflow that opens a PR is a workflow that fails after doing all of its work.
+    Push the branch and say so somewhere a person will look.
+    """
+
+    _PR_CREATORS = (
+        "peter-evans/create-pull-request",
+        "gh pr create",
+        "repos/{owner}/{repo}/pulls",
+    )
+
+    def test_no_workflow_step_creates_a_pull_request(self) -> None:
+        offenders = []
+        for workflow in sorted(WORKFLOWS.glob("*.yml")):
+            text = workflow.read_text()
+            offenders.extend(
+                f"{workflow.name}: {creator}" for creator in self._PR_CREATORS if creator in text
+            )
+        assert offenders == [], (
+            "the organisation blocks Actions from creating pull requests, so this step "
+            f"fails after the job has already done its work: {offenders}"
+        )

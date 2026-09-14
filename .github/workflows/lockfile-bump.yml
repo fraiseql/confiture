@@ -2,9 +2,19 @@ name: Lockfile Bump
 
 # Committing uv.lock (#191) makes CI reproducible, but a pinned lock that is
 # never refreshed just trades red-on-an-unrelated-PR for silently rotting
-# dependencies. This job proposes the upgrade on ITS OWN pull request, so an
-# upstream break is triaged where it belongs instead of ambushing whoever opens
-# the next feature PR — which is exactly what pglast 8.2 did to #183.
+# dependencies. This job proposes the upgrade on its own branch, so an upstream
+# break is triaged where it belongs instead of ambushing whoever opens the next
+# feature PR — which is exactly what pglast 8.2 did to #183.
+#
+# It pushes the branch and files an issue; it does NOT open the pull request.
+# The `fraiseql` organisation forbids Actions from creating pull requests, and
+# that policy cannot be overridden per repository:
+#
+#     ##[error]GitHub Actions is not permitted to create or approve pull requests.
+#
+# So the job used to run to completion — upgrade, commit, push — and fail on its
+# last step, every Monday, for a reason no commit could cause. Opening the PR is
+# one click from the issue, and it is that PR, not this job, that runs the gate.
 
 on:
   schedule:
@@ -15,11 +25,15 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+  issues: write
 
 concurrency:
   group: lockfile-bump
   cancel-in-progress: true
+
+env:
+  BUMP_BRANCH: chore/lockfile-bump
+  ISSUE_TITLE: 'chore(deps): lockfile refresh available'
 
 jobs:
   bump:
@@ -56,33 +70,55 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Open pull request
+      - name: Push the bump branch
         if: steps.upgrade.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
-        with:
-          branch: chore/lockfile-bump
-          base: main
-          title: 'chore(deps): refresh uv.lock and Cargo.lock'
-          # The label is the triage handle: these PRs are expected to go red
-          # sometimes, and that is the whole point of them existing.
-          labels: dependencies
-          commit-message: |
-            chore(deps): refresh uv.lock and Cargo.lock
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BUMP_BRANCH"
+          git add uv.lock Cargo.lock
+          git commit -m "chore(deps): refresh uv.lock and Cargo.lock" -m \
+            "Scheduled \`uv lock --upgrade\` + \`cargo update\`. The full quality gate runs on the pull request opened from this branch, so an upstream break surfaces there rather than on an unrelated change (#191)."
+          # Plain --force: this branch is produced by this job and nothing else,
+          # it is rebuilt from main every run, and the concurrency group above
+          # means two runs never race for it. --force-with-lease would need a
+          # remote-tracking ref that a fetch-depth-1 checkout has not got.
+          git push --force origin "HEAD:refs/heads/$BUMP_BRANCH"
 
-            Scheduled `uv lock --upgrade` + `cargo update`. The full quality
-            gate runs on this PR, so an upstream break surfaces here rather
-            than on an unrelated change (#191).
-          body: |
-            Scheduled dependency refresh — `uv lock --upgrade` and `cargo update`.
+      - name: Report the branch on an issue
+        if: steps.upgrade.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUMMARY: ${{ steps.upgrade.outputs.summary }}
+        run: |
+          compare="${{ github.server_url }}/${{ github.repository }}/compare/${{ github.event.repository.default_branch }}...${BUMP_BRANCH}?expand=1"
+          body=$(cat <<EOF
+          Scheduled dependency refresh — \`uv lock --upgrade\` and \`cargo update\` — is
+          pushed to [\`${BUMP_BRANCH}\`](${{ github.server_url }}/${{ github.repository }}/tree/${BUMP_BRANCH}).
 
-            ```
-            ${{ steps.upgrade.outputs.summary }}
-            ```
+          \`\`\`
+          ${SUMMARY}
+          \`\`\`
 
-            **If the quality gate is red on this PR, that is the mechanism
-            working.** An upstream release broke something; triage it here.
-            Do not merge a red bump, and do not work around it on an unrelated
-            branch — that is the failure mode #191 exists to prevent.
+          **[Open the pull request](${compare})** — the quality gate runs on the PR, not on
+          this job, so nothing has been verified yet. This workflow cannot open it itself:
+          the organisation does not permit GitHub Actions to create pull requests.
 
-            Reviewing: skim the diff for major-version jumps, confirm the gate
-            is green, merge.
+          **If the gate is red on that PR, that is the mechanism working.** An upstream
+          release broke something; triage it there. Do not merge a red bump, and do not
+          work around it on an unrelated branch — that is the failure mode #191 exists to
+          prevent.
+
+          Reviewing: skim the diff for major-version jumps, confirm the gate is green, merge.
+
+          _Updated by [this run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})._
+          EOF
+          )
+          existing=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" \
+            --json number,title --jq "[.[] | select(.title == \"$ISSUE_TITLE\")][0].number // empty")
+          if [ -n "$existing" ]; then
+            echo "Updating issue #$existing"
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$ISSUE_TITLE" --body "$body" --label dependencies
+          fi
