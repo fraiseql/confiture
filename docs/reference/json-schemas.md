@@ -27,7 +27,9 @@ from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
 # Load the schema and the shared $defs file (referenced by relative URI).
-schema = json.loads(open("docs/reference/json-schemas/migrate-validate-idempotent.schema.json").read())
+schema = json.loads(
+    open("docs/reference/json-schemas/migrate-validate-idempotent.schema.json").read()
+)
 common = json.loads(open("docs/reference/json-schemas/_common.schema.json").read())
 
 registry = Registry().with_resource(

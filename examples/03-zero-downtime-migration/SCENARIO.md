@@ -158,13 +158,13 @@ def split_full_name(full_name: str) -> tuple[str, str]:
 
     full_name = full_name.strip()
 
-    if ' ' not in full_name:
+    if " " not in full_name:
         return (full_name, "")
 
     # Find last space
-    last_space_idx = full_name.rfind(' ')
+    last_space_idx = full_name.rfind(" ")
     first_name = full_name[:last_space_idx].strip()
-    last_name = full_name[last_space_idx + 1:].strip()
+    last_name = full_name[last_space_idx + 1 :].strip()
 
     return (first_name, last_name)
 ```

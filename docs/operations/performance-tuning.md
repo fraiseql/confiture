@@ -116,11 +116,12 @@ confiture migrate up
 ```python
 from confiture.core.large_tables import BatchedMigration, BatchConfig
 
+
 def up(connection):
     config = BatchConfig(
-        batch_size=10000,           # Rows per batch
+        batch_size=10000,  # Rows per batch
         sleep_between_batches=0.1,  # 100ms pause
-        progress_callback=print,     # Optional progress reporting
+        progress_callback=print,  # Optional progress reporting
     )
 
     batched = BatchedMigration(connection, config)
@@ -244,6 +245,7 @@ FROM pg_stat_progress_create_index;
 ```python
 from confiture.core.large_tables import OnlineIndexBuilder
 
+
 def up(connection):
     builder = OnlineIndexBuilder(connection)
 
@@ -282,6 +284,7 @@ migration:
 ```python
 __lock_timeout__ = 60000  # 60 seconds for this migration
 
+
 def up(connection):
     # Long-running operation
     ...
@@ -302,6 +305,7 @@ def up(connection):
     connection.execute("ALTER TABLE users ADD COLUMN a TEXT")
     connection.execute("ALTER TABLE orders ADD COLUMN b TEXT")
     connection.execute("ALTER TABLE products ADD COLUMN c TEXT")
+
 
 # Good: Separate migrations
 # 001_add_users_column.py

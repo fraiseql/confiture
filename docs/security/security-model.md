@@ -150,10 +150,7 @@ All database operations MUST use parameterized queries:
 
 ```python
 # CORRECT - Parameterized query
-cursor.execute(
-    "SELECT * FROM users WHERE id = %s",
-    (user_id,)
-)
+cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
 
 # WRONG - String interpolation (NEVER DO THIS)
 cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")

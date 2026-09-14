@@ -267,7 +267,7 @@ config = SyncConfig(
     tables=TableSelection(include=["products"]),
     anonymization={
         "products": [AnonymizationRule(column="sku", strategy="hash")]
-    }  # SKU is not PII!
+    },  # SKU is not PII!
 )
 ```
 
@@ -277,7 +277,7 @@ config = SyncConfig(
 
 ```python
 # ✅ Good: Only PII columns
-anonymization={
+anonymization = {
     "users": [
         AnonymizationRule(column="email", strategy="email"),
         AnonymizationRule(column="ssn", strategy="redact"),
@@ -285,7 +285,7 @@ anonymization={
 }
 
 # ❌ Bad: Anonymizing everything
-anonymization={
+anonymization = {
     "users": [
         AnonymizationRule(column="email", strategy="email"),
         AnonymizationRule(column="name", strategy="name"),
@@ -310,12 +310,12 @@ config = SyncConfig(
 # ⚙️ Tune for specific scenarios
 config = SyncConfig(
     tables=TableSelection(include=["very_wide_table"]),
-    batch_size=2000  # Reduce for wide tables (many columns)
+    batch_size=2000,  # Reduce for wide tables (many columns)
 )
 
 config = SyncConfig(
     tables=TableSelection(include=["narrow_table"]),
-    batch_size=10000  # Increase for narrow tables
+    batch_size=10000,  # Increase for narrow tables
 )
 ```
 
@@ -454,6 +454,7 @@ psql -c "SELECT * FROM pg_stat_activity"
 ```python
 # Profile anonymization
 import cProfile
+
 cProfile.run('syncer.sync_table("users", rules)')
 
 # Reduce anonymized columns
@@ -474,11 +475,12 @@ htop  # Should see Python at ~100% CPU during anonymization
 # Reduce batch size
 config = SyncConfig(
     tables=TableSelection(include=["wide_table"]),
-    batch_size=1000  # Reduced from default 5000
+    batch_size=1000,  # Reduced from default 5000
 )
 
 # Monitor memory
 import psutil
+
 print(f"Memory: {psutil.Process().memory_info().rss / 1024 / 1024:.1f} MB")
 ```
 

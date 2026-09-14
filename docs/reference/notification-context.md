@@ -13,7 +13,7 @@ The `NotificationContext` value object renderers consume, plus the Jinja sandbox
 class NotificationContext:
     migration_name: str = "unknown"
     migration_version: str = ""
-    direction: str = "up"           # "up" or "down"
+    direction: str = "up"  # "up" or "down"
     success: bool = True
     duration_ms: int = 0
     database_name: str = ""
@@ -24,11 +24,11 @@ class NotificationContext:
     migrations_applied: list[str] = field(default_factory=list)
 
     @property
-    def status_word(self) -> str: ...          # "succeeded" | "FAILED"
+    def status_word(self) -> str: ...  # "succeeded" | "FAILED"
     @property
-    def timestamp_iso(self) -> str: ...        # ISO 8601, seconds resolution
+    def timestamp_iso(self) -> str: ...  # ISO 8601, seconds resolution
     @property
-    def timestamp_human(self) -> str: ...      # "YYYY-MM-DD HH:MM UTC"
+    def timestamp_human(self) -> str: ...  # "YYYY-MM-DD HH:MM UTC"
 ```
 
 Renderers receive a `NotificationContext` and return a `TransportPayload`. Both are immutable; renderers stay pure.

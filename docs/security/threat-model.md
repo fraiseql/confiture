@@ -137,7 +137,7 @@ class DeterministicHashStrategy(AnonymizationStrategy):
             message,
             hashlib.sha256,
         )
-        return h.hexdigest()[:self.config.length]
+        return h.hexdigest()[: self.config.length]
 ```
 
 **Verification**:
@@ -219,6 +219,7 @@ orders.customer_email: john@example.com → hash_x9y8z7  ❌ DIFFERENT!
 class AnonymizationProfile(BaseModel):
     global_seed: int | None = None  # Ensures consistency
     ...
+
 
 def resolve_seed_for_column(
     rule: AnonymizationRule,
@@ -417,17 +418,17 @@ python -m pytest tests/unit/test_syncer_audit_integration.py::TestProfileHashing
 ```python
 # Each sync operation creates an immutable record:
 entry = AuditEntry(
-    user="dba@company.com",                      # WHO
-    timestamp=datetime.now(UTC),                 # WHEN
-    source_database="production",                # WHERE FROM
-    target_database="staging",                   # WHERE TO
-    profile_name="production_anon_v1",          # WHAT PROFILE
-    profile_hash="abc123...",                   # INTEGRITY PROOF
-    tables_synced=["users", "orders"],          # WHICH TABLES
-    rows_anonymized={"users": 10000},           # HOW MANY
-    strategies_applied={"email": 10000},        # HOW (strategies)
-    verification_passed=True,                    # VERIFICATION
-    signature="hmac_signed...",                 # TAMPER PROOF
+    user="dba@company.com",  # WHO
+    timestamp=datetime.now(UTC),  # WHEN
+    source_database="production",  # WHERE FROM
+    target_database="staging",  # WHERE TO
+    profile_name="production_anon_v1",  # WHAT PROFILE
+    profile_hash="abc123...",  # INTEGRITY PROOF
+    tables_synced=["users", "orders"],  # WHICH TABLES
+    rows_anonymized={"users": 10000},  # HOW MANY
+    strategies_applied={"email": 10000},  # HOW (strategies)
+    verification_passed=True,  # VERIFICATION
+    signature="hmac_signed...",  # TAMPER PROOF
 )
 ```
 
@@ -478,9 +479,7 @@ aws secretsmanager get-secret-value --secret-id confiture/audit
 conn = psycopg.connect("postgresql://user:pass@localhost/db")
 
 # ✅ DO: Use SSL/TLS
-conn = psycopg.connect(
-    "postgresql://user:pass@localhost/db?sslmode=require"
-)
+conn = psycopg.connect("postgresql://user:pass@localhost/db?sslmode=require")
 ```
 
 ### 3. Profile Management

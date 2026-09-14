@@ -29,8 +29,8 @@ from confiture import generate_rollback, suggest_backup_for_destructive_operatio
 
 suggestion = generate_rollback("CREATE TABLE users (id int);")
 if suggestion:
-    print(suggestion.rollback_sql)   # "DROP TABLE users;"
-    print(suggestion.confidence)     # "high" | "medium" | "low"
+    print(suggestion.rollback_sql)  # "DROP TABLE users;"
+    print(suggestion.confidence)  # "high" | "medium" | "low"
 
 # Destructive ops can't be auto-reversed — get backup guidance instead:
 for hint in suggest_backup_for_destructive_operations("DROP TABLE users;"):
