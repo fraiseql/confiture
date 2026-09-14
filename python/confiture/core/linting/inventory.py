@@ -18,10 +18,11 @@ from __future__ import annotations
 
 import copy
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections import defaultdict
+from collections.abc import Callable, Hashable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import pglast
 from pglast.stream import RawStream
@@ -30,6 +31,8 @@ from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import column_is_not_null
 from confiture.core.ddl_walk import type_name as ddl_type_name
 from confiture.core.type_lattice import canonical_type
+
+_T = TypeVar("_T")
 
 _CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
 _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
@@ -103,6 +106,11 @@ class SchemaColumn:
     default: str | None = None
 
 
+#: A routine's input parameter types, each as ``(schema, canonical name)``.
+#: ``None`` for every kind that is not a routine.
+Signature = tuple[tuple[str | None, str], ...]
+
+
 @dataclass
 class SchemaObject:
     """One ``CREATE`` statement, with what the rules need to know about it.
@@ -139,7 +147,7 @@ class SchemaObject:
     is_temporary: bool = False
     comment: str | None = None
     signature: str | None = None
-    signature_key: tuple[tuple[str | None, str], ...] | None = None
+    signature_key: Signature | None = None
     offset: int = 0
     file: str | None = None
     replace: bool = False
@@ -197,7 +205,7 @@ class Inventory:
         kinds: tuple[str, ...],
         folded_schema: str | None,
         folded_name: str,
-        signature_key: tuple[tuple[str | None, str], ...] | None = None,
+        signature_key: Signature | None = None,
     ) -> list[SchemaObject]:
         """Every definition of the object a statement names, in source order.
 
@@ -205,7 +213,10 @@ class Inventory:
         narrows routines to one overload when given. It is the *canonical*
         argument types, never the text a finding prints: a ``COMMENT ON
         FUNCTION f(timestamp with time zone)`` documents ``f(timestamptz)``,
-        because PostgreSQL resolves both to one function (#275).
+        because PostgreSQL resolves both to one function (#275). The same
+        wildcard runs one level down, over each argument's own schema, so
+        ``COMMENT ON FUNCTION app.f(custom_t)`` documents
+        ``app.f(app.custom_t)``.
         """
         matches: list[SchemaObject] = []
         for obj in self.objects:
@@ -217,7 +228,7 @@ class Inventory:
                 and obj.folded_schema != folded_schema
             ):
                 continue
-            if signature_key is not None and obj.signature_key != signature_key:
+            if signature_key is not None and not signatures_match(obj.signature_key, signature_key):
                 continue
             matches.append(obj)
         return matches
@@ -374,11 +385,39 @@ def type_key(type_name: Any) -> tuple[str | None, str]:
     return (schema or None), (canonical_type(name) or name)
 
 
+def types_match(a: tuple[str | None, str], b: tuple[str | None, str]) -> bool:
+    """Whether two argument types, as each side spelled them, are one type.
+
+    The names must agree exactly — they are canonical by then, and the array
+    suffix is part of the name — but a schema written on one side and left off
+    the other matches, because PostgreSQL resolves the bare spelling through
+    ``search_path`` and lands on the same type. Two schemas that are both
+    present and disagree never match: ``app.custom_t`` and ``other.custom_t``
+    are two types (D9).
+    """
+    if a[1] != b[1]:
+        return False
+    return a[0] is None or b[0] is None or a[0] == b[0]
+
+
+def signatures_match(a: Signature | None, b: Signature | None) -> bool:
+    """Whether two canonical signatures name one routine, argument by argument.
+
+    ``None`` is not a signature but the absence of one — every kind that is not
+    a routine — so it matches only itself and never an empty argument list.
+    """
+    if a is None or b is None:
+        return a is None and b is None
+    if len(a) != len(b):
+        return False
+    return all(types_match(x, y) for x, y in zip(a, b, strict=True))
+
+
 def _signature(parameters: Any) -> str:
     return ", ".join(type_text(p.argType) for p in _input_parameters(parameters))
 
 
-def _signature_key(parameters: Any) -> tuple[tuple[str | None, str], ...]:
+def _signature_key(parameters: Any) -> Signature:
     return tuple(type_key(p.argType) for p in _input_parameters(parameters))
 
 
@@ -663,24 +702,83 @@ def label_for(path: Path, root: Path | None) -> str:
 
 
 #: What identifies one object: kind, schema, name, and — for a routine — the
-#: canonical types of its input parameters.
-ObjectKey = tuple[str, str | None, str, tuple[tuple[str | None, str], ...] | None]
+#: canonical *names* of its input parameter types. A dict key cannot express a
+#: wildcard, so the types' own schemas are left out of it and
+#: :func:`group_definitions` decides which entries in a bucket really are one
+#: object; see :func:`types_match`.
+ObjectKey = tuple[str, str | None, str, tuple[str, ...] | None]
+
+
+def signature_bucket(signature: Signature | None) -> tuple[str, ...] | None:
+    """The part of a signature every spelling of one routine shares."""
+    return None if signature is None else tuple(name for _schema, name in signature)
 
 
 def object_key(obj: SchemaObject) -> ObjectKey:
-    """What makes two ``CREATE`` statements definitions of the same object.
+    """What makes two ``CREATE`` statements candidates for the same object.
 
     The folded spelling, so ``app."TbWidget"`` and ``app.tbwidget`` are one
     object; the name *and* the input parameter types for a routine, so two
     overloads are two; and :data:`DEFAULT_SCHEMA` for a statement that names
     none, so ``f()`` and ``public.f()`` are one and ``tenant.f()`` is another.
+
+    Candidates, not certainties: an argument type's schema is not in the key,
+    so ``app.f(app.custom_t)`` and ``app.f(other.custom_t)`` share a bucket and
+    are separated by :func:`group_definitions`. Group through that function
+    rather than through this key.
     """
     return (
         obj.kind,
         (obj.folded_schema or DEFAULT_SCHEMA).lower(),
         obj.folded_name,
-        obj.signature_key,
+        signature_bucket(obj.signature_key),
     )
+
+
+def group_by_signature(
+    items: Iterable[_T],
+    key: Callable[[_T], Hashable],
+    signature: Callable[[_T], Signature | None],
+) -> list[list[_T]]:
+    """Group ``items`` that define one routine, in first-seen order.
+
+    ``key`` buckets what could be the same — it cannot be the whole answer,
+    because a dict key cannot express "a missing schema matches any schema" —
+    and ``signature`` is then compared within a bucket.
+
+    A definition joins a group only when it matches *every* member. The
+    relation is not an equivalence: ``app.f(custom_t)`` matches both
+    ``app.f(app.custom_t)`` and ``app.f(other.custom_t)``, which do not match
+    each other, so matching one member is not enough. Requiring all of them
+    stops the bare spelling chaining the two qualified ones together and
+    reporting three definitions of one routine where PostgreSQL has two of one
+    and one of another.
+    """
+    buckets: dict[Hashable, list[list[_T]]] = defaultdict(list)
+    order: list[list[_T]] = []
+    for item in items:
+        groups = buckets[key(item)]
+        item_signature = signature(item)
+        for group in groups:
+            if all(signatures_match(item_signature, signature(member)) for member in group):
+                group.append(item)
+                break
+        else:
+            new_group = [item]
+            groups.append(new_group)
+            order.append(new_group)
+    return order
+
+
+def group_definitions(objects: Iterable[SchemaObject]) -> list[list[SchemaObject]]:
+    """Every definition of one object, grouped, in source order.
+
+    The one answer to "are these the same object": ``build_001`` reports a group
+    of more than one, and the rules that report a property of an object once
+    (LINT-10) keep the first of each group. They must agree, or a duplicate
+    would silence a documentation finding it did not cover.
+    """
+    return group_by_signature(objects, object_key, lambda obj: obj.signature_key)
 
 
 def distinct(objects: Iterable[SchemaObject]) -> list[SchemaObject]:
@@ -698,19 +796,17 @@ def distinct(objects: Iterable[SchemaObject]) -> list[SchemaObject]:
     schema does this ``CREATE`` land in — reads the objects directly, because
     for it a second definition really is a second thing to answer for.
     """
-    seen: set[tuple[str, str, str, str | None]] = set()
-    first: list[SchemaObject] = []
-    for obj in objects:
-        key = object_key(obj)
-        if key in seen:
-            continue
-        seen.add(key)
-        first.append(obj)
-    return first
+    return [group[0] for group in group_definitions(objects)]
 
 
-def _statement_key(obj: SchemaObject) -> ObjectKey:
-    """What makes two inventory entries the same ``CREATE`` statement."""
+def _statement_key(obj: SchemaObject) -> tuple[str, str | None, str, Signature | None]:
+    """What makes two inventory entries the same ``CREATE`` statement.
+
+    Not :func:`object_key`: its caller walks two parses of the *same* text, so
+    the exact signature is available on both sides and the wildcard that keeps
+    ``object_key`` a bucket would only make this laxer. What it wants is the
+    opposite — to stop at the first pair that disagrees.
+    """
     return (obj.kind, obj.folded_schema, obj.folded_name, obj.signature_key)
 
 
