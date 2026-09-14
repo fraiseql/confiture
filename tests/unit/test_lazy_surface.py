@@ -39,6 +39,21 @@ def _probe() -> dict:
     return json.loads(out.stdout)
 
 
+_SAMPLES = 5
+
+
+def _fastest_import_ms(samples: int = _SAMPLES) -> float:
+    """The floor of ``samples`` fresh interpreters.
+
+    One subprocess measures the machine as much as it measures the import. Locally
+    the floor is ~13 ms, yet one sample in 25 still lands past 30 ms — which is how
+    the nightly benchmark leg failed at 30.022986999995283. The floor is the number
+    the bound is about: an eager import that drags the rule library back into
+    ``import confiture`` moves it, and scheduler noise does not.
+    """
+    return min(_probe()["elapsed_ms"] for _ in range(samples))
+
+
 def test_import_confiture_leaves_the_linter_unloaded() -> None:
     result = _probe()
     assert result["linting_loaded"] is False, result
@@ -48,8 +63,8 @@ def test_import_confiture_leaves_the_linter_unloaded() -> None:
 @pytest.mark.benchmark
 def test_import_confiture_is_cheap() -> None:
     """The confiture portion of ``import confiture`` stays under 30 ms (a fresh interpreter)."""
-    result = _probe()
-    assert result["elapsed_ms"] < 30, result
+    elapsed_ms = _fastest_import_ms()
+    assert elapsed_ms < 30, elapsed_ms
 
 
 def test_schema_linter_and_external_generator_error_are_lazy() -> None:
