@@ -281,7 +281,11 @@ jobs:
       fail-fast: false
       matrix:
         # The floor and the current major. Both are claimed by the
-        # `pglast>=6.0` dependency, so both are tested.
+        # `pglast>=6.0` dependency, so both are tested. They are not the same
+        # parser: #270 was a PL/pgSQL *compiler* stub that only pglast 8 has,
+        # refusing every schema-qualified type name, and pglast 6.16 and 7.18
+        # resolve all of them — so the body suites below assert the contract on
+        # every major and probe for the stub before pinning its behaviour.
         pglast: ['>=6,<7', '>=8']
     steps:
     - uses: actions/checkout@v6
@@ -313,6 +317,8 @@ jobs:
           tests/unit/test_idempotency_captures.py \
           tests/unit/test_idempotency_suggestion_wiring.py \
           tests/unit/test_pglast_enum_binding.py \
+          tests/unit/test_plpgsql_parse.py \
+          tests/unit/linting/test_build_003_references.py \
           -q
 
   plpgsql-check:

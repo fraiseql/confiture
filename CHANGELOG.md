@@ -14,6 +14,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-09-10
+
+`build_003` silently skipped any routine whose signature or declarations named a schema-qualified type
+([#270](https://github.com/fraiseql/confiture/issues/270), a follow-up to
+[#246](https://github.com/fraiseql/confiture/issues/246)). On the schema the report was filed from that
+was **233 of 297 plpgsql routines — 78.5 %** — and they were exactly the mutations, the routines carrying
+the application's write logic. The rule reported 3 findings there; a hand-written 30-line regex found 6
+more in a single routine, none of them declared anywhere in the tree, in a function reachable from the
+public API that had never completed a call.
+
+Not "composite types": **a schema qualifier on a type name.** `libpg_query`'s PL/pgSQL compiler is
+PostgreSQL's own with the catalogue stubbed out, and on **pglast 8** that stub resolves `pg_catalog` and
+`public` and nothing else — so `app.mutation_response` in a parameter, a return type, a `SETOF`, a
+`RETURNS TABLE` column or a `DECLARE` made it refuse the whole routine before reading a line of the body.
+`references.py` caught that `ParseError` and returned an empty reference list: no finding, and no
+degradation either, so silence and a clean result were the same output.
+
+pglast 6.16 and 7.18 have none of it. This was a pglast-8-only regression that the `pglast-matrix` CI leg
+could not have caught, because it never ran the linting suites; it does now.
+
+### Added
+
+- **`core/plpgsql_parse.py` — the one place a PL/pgSQL body is compiled.** `parse_body()` returns
+  `Compiled(tree, text, neutralised)`. Nothing downstream of the parse reads a type, so the schema
+  qualifier the compiler cannot resolve is **blanked with spaces** — every offset and every line number
+  preserved to the character — and the routine compiles.
+- **The decision is the compiler's, not a grammar's.** A qualifier it refuses is a type; a qualifier it
+  accepts is a reference, and blanking `app.tv_summary` down to `tv_summary` would leave a name
+  `build_003` declines to judge — the same silent miss, one step along. So a guess (the signature, plus
+  every `DECLARE … BEGIN` region) narrows the search and every blank in it is then tested by **putting it
+  back**. The guess is a performance hint and never the decision.
+
+### Fixed
+
+- **`build_003` reads a qualified-type routine.** The issue's four-function reproduction reports four of
+  four, at the lines the statements are written on.
+- **A body no parser returned is named**, whatever raised. The `ReferenceScan.unread` channel already
+  existed for `RETURNS TRIGGER` bodies; the `ParseError` arm never raised into it. Two shapes still reach
+  it and both now say so: an array whose element type the stub cannot resolve (`app.type_input[]`, and
+  equally `public.type_input[]` and a bare `type_input[]` — naming the array type means resolving the
+  element), and a trigger function's body, whose implicit `TG_` datums `libpg_query` serialises as
+  malformed JSON.
+
+### Changed
+
+- The `pglast-matrix` CI leg runs `tests/unit/test_plpgsql_parse.py` and
+  `tests/unit/linting/test_build_003_references.py`. Both **probe** this interpreter's libpg_query rather
+  than reading a version number, so the contract — every shape compiles, no accepted qualifier is ever
+  blanked, an unread body is named — is asserted on every major, and the pglast-8 facts only where they
+  hold. Verified on 6.16, 7.18 and 8.4.
+
 ## [1.6.0] - 2026-09-10
 
 Two issues in one release, because the second deletes what the first would otherwise have wired.
@@ -5863,6 +5914,8 @@ confiture seed apply --sequential --database-url postgresql://localhost/db
 ## [1.4.0] - 2026-09-08
 
 ## [1.5.0] - 2026-09-09
+
+## [1.7.0] - 2026-09-10
 
 ## [Unreleased]
 

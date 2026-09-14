@@ -330,6 +330,45 @@ is written on; each fragment is re-parsed and walked for `RangeVar` and
 `FuncCall`. A `LANGUAGE sql` body, a `BEGIN ATOMIC` body and a view definition
 are SQL already and parse directly.
 
+#### A schema-qualified type is not a reason to skip a routine
+
+`libpg_query`'s PL/pgSQL compiler is PostgreSQL's own with the catalogue
+stubbed out, and on pglast 8 that stub resolves `pg_catalog` and `public` and
+nothing else. A type written `app.mutation_response` therefore made it refuse
+the **whole routine** before reading a line of the body — in a parameter, a
+return type, a `SETOF`, a `RETURNS TABLE` column or a `DECLARE`. Since 1.7.0
+(#270) confiture blanks that qualifier before handing the statement over, with
+spaces, so every line number is still the file's:
+
+```sql
+CREATE OR REPLACE FUNCTION app.m_submit(pk uuid, input_data app.type_input)
+RETURNS app.mutation_response LANGUAGE plpgsql AS $$
+DECLARE
+    v_res app.mutation_response;                  -- three type qualifiers,
+BEGIN                                             -- none of them a reference
+    SELECT * INTO v_res FROM app.tv_summary;      -- reported, qualified
+    RETURN v_res;
+END;
+$$;
+```
+
+Which qualifier is a type is the compiler's answer, not a guess: one it refuses
+is blanked, one it accepts is put back. A reference is never rewritten, because
+`app.tv_summary` reduced to `tv_summary` would be a name the rule declines to
+judge — the same silent miss, one step along.
+
+Two shapes are still refused, and both are **named** rather than passed off as
+clean (see `degraded`, below):
+
+- an array whose element type the stub cannot resolve — `app.type_input[]`, and
+  equally `public.type_input[]` and a bare `type_input[]`, since naming the
+  array type means resolving the element and telling `type_input[]` from
+  `text[]` needs the catalogue that is not there;
+- a `RETURNS TRIGGER` body, whose implicit `TG_` datums `libpg_query`
+  serialises as malformed JSON.
+
+Both are pglast 8's alone: pglast 6.16 and 7.18 read all of it.
+
 What the rule deliberately does **not** report:
 
 - **A forward reference inside one build.** The inventory is the whole build,
