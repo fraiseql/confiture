@@ -591,7 +591,7 @@ def _duplicate_gate(
         return [], []
 
     objects, _schemas, unparseable = inventory_files(sql_files, root=project_dir)
-    warnings = [BuildWarning.of("SCHEMA_206", file=label) for label in unparseable]
+    warnings = [BuildWarning.of("SCHEMA_206", file=r.label) for r in unparseable]
     duplicates = find_duplicates(objects)
     if not duplicates:
         return [], warnings
@@ -1523,6 +1523,15 @@ def _keep_selected_rules(linter_report: LinterReport, selected: frozenset[str]) 
     known = {rule.code for rule in LINT_RULES}
     for bucket in (linter_report.errors, linter_report.warnings, linter_report.info):
         bucket[:] = [v for v in bucket if v.rule_id in selected or v.rule_id not in known]
+    # `degraded` is a claim about a rule, so a rule nobody selected makes no
+    # claim. The linter reports per family — `check_documentation` is one switch
+    # over four codes — so this is where `--select doc_002` narrows it, exactly
+    # as it narrows that switch's findings above.
+    linter_report.degraded[:] = [
+        status
+        for status in linter_report.degraded
+        if status.code in selected or status.code not in known
+    ]
 
 
 def _resolve_lint_rules(

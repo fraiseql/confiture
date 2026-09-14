@@ -133,8 +133,11 @@ class LintReport:
     Attributes:
         violations: List of all violations found
         schema_name: Name of schema that was linted
-        tables_checked: Total number of tables checked
-        columns_checked: Total number of columns checked
+        tables_checked: Tables in the files that parsed. A file pglast rejects
+            contributes none of its objects (#274), so on a tree with one this
+            is smaller than the tree holds — which is honest only because
+            ``degraded`` names the file and the rules that read it short.
+        columns_checked: Columns of those same tables, on the same terms.
         errors_count: Number of ERROR level violations
         warnings_count: Number of WARNING level violations
         info_count: Number of INFO level violations
@@ -145,9 +148,11 @@ class LintReport:
             itself has none.
         skipped: Rules that did not run, each with a reason. A skip is not a
             pass, and a payload that omitted it would read as one.
-        degraded: Rules that ran without one of the things they resolve
-            against, so they can over-report — ``build_003`` with no live
-            database is the first of them.
+        degraded: Rules that ran on less than the whole schema, each with its
+            own reason: ``build_003`` with no live database was the first, and
+            every rule that reads DDL when a file would not parse is the other.
+            Never written to a baseline, so a project that records an
+            ``UNPARSEABLE`` as known still sees what it costs on every run.
         documentation: How much of the schema carries a comment and how long
             those comments are, per ``doc`` rule and for the family (#250).
             ``None`` when the family did not run: absent means unmeasured,

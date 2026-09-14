@@ -18,16 +18,21 @@ from __future__ import annotations
 
 import copy
 import re
-from collections.abc import Callable, Iterable, Sequence
+from collections import defaultdict
+from collections.abc import Callable, Hashable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import pglast
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import column_is_not_null
+from confiture.core.ddl_walk import type_name as ddl_type_name
+from confiture.core.type_lattice import canonical_type
+
+_T = TypeVar("_T")
 
 _CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
 _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
@@ -76,6 +81,8 @@ KIND_KEYWORD: dict[str, str] = {
 #: Parameter modes that take part in a function's identity (IN, INOUT, VARIADIC
 #: and the default mode); OUT and TABLE parameters do not.
 _INPUT_MODES = frozenset({"d", "i", "b", "v"})
+#: The schema pglast attaches to a type written in SQL-standard keyword form.
+_CATALOG_SCHEMA = "pg_catalog"
 
 #: Where an unqualified ``CREATE`` lands, for the purpose of deciding whether
 #: two statements define the same object: ``f()`` and ``public.f()`` are one.
@@ -99,6 +106,11 @@ class SchemaColumn:
     default: str | None = None
 
 
+#: A routine's input parameter types, each as ``(schema, canonical name)``.
+#: ``None`` for every kind that is not a routine.
+Signature = tuple[tuple[str | None, str], ...]
+
+
 @dataclass
 class SchemaObject:
     """One ``CREATE`` statement, with what the rules need to know about it.
@@ -106,8 +118,12 @@ class SchemaObject:
     ``kind`` is one of ``table``, ``function``, ``procedure``, ``aggregate``,
     ``view``, ``matview``, ``type`` (composite or enum), ``domain`` or
     ``sequence`` — the keys of :data:`KIND_KEYWORD`. ``signature`` is the
-    comma-joined input parameter types of a routine — the part of its identity
-    after the name — and ``None`` for every other kind. ``offset``
+    comma-joined input parameter types of a routine *as written*, which is what
+    a finding prints; ``signature_key`` is the same types canonicalised, which
+    is what decides whether two routines are the same routine. Both ``None``
+    for every other kind. They are two fields because pglast renders a type the
+    way it was written, so ``timestamptz`` and ``timestamp with time zone``
+    print differently and must compare equal (#275). ``offset``
     is the character position of the statement in the parsed text; ``file`` is
     set by callers that inventory one file at a time. ``replace`` and
     ``if_not_exists`` record ``CREATE OR REPLACE`` / ``IF NOT EXISTS``, which
@@ -131,6 +147,7 @@ class SchemaObject:
     is_temporary: bool = False
     comment: str | None = None
     signature: str | None = None
+    signature_key: Signature | None = None
     offset: int = 0
     file: str | None = None
     replace: bool = False
@@ -188,12 +205,18 @@ class Inventory:
         kinds: tuple[str, ...],
         folded_schema: str | None,
         folded_name: str,
-        signature: str | None = None,
+        signature_key: Signature | None = None,
     ) -> list[SchemaObject]:
         """Every definition of the object a statement names, in source order.
 
-        A missing schema on either side matches any schema; ``signature`` narrows
-        routines to one overload when given.
+        A missing schema on either side matches any schema; ``signature_key``
+        narrows routines to one overload when given. It is the *canonical*
+        argument types, never the text a finding prints: a ``COMMENT ON
+        FUNCTION f(timestamp with time zone)`` documents ``f(timestamptz)``,
+        because PostgreSQL resolves both to one function (#275). The same
+        wildcard runs one level down, over each argument's own schema, so
+        ``COMMENT ON FUNCTION app.f(custom_t)`` documents
+        ``app.f(app.custom_t)``.
         """
         matches: list[SchemaObject] = []
         for obj in self.objects:
@@ -205,7 +228,7 @@ class Inventory:
                 and obj.folded_schema != folded_schema
             ):
                 continue
-            if signature is not None and obj.signature != signature:
+            if signature_key is not None and not signatures_match(obj.signature_key, signature_key):
                 continue
             matches.append(obj)
         return matches
@@ -317,19 +340,90 @@ def _has_primary_constraint(constraints: Any) -> bool:
     )
 
 
-def _type_text(type_name: Any) -> str:
-    """``integer[]`` for a ``TypeName``, typmods dropped — an argument's identity."""
+# Two functions over one `TypeName`, and they answer different questions.
+# Public, because `func_001` and `sec_002` walk their own files and each kept a
+# pasted alias table of its own rather than asking (#275).
+# `_type_text` is the **prose**: what a finding prints, spelled the way the
+# author wrote it, so `app.fn_c(integer)` and never `app.fn_c(int4)`.
+# `_type_key` is the **identity**: what decides whether two routines are the
+# same routine. Do not unify them — pglast renders a type as it was written, so
+# the prose is exactly what cannot be compared (#275).
+
+
+def type_text(type_name: Any) -> str:
+    """``integer[]`` for a ``TypeName``, typmods dropped — an argument, as written.
+
+    A leading ``pg_catalog.`` is dropped too. ``RawStream`` prints the qualifier
+    pglast attached, which for ``json`` and ``bit`` is the whole rendering:
+    a ``doc_002`` finding read ``Function 'app.fn_j(pg_catalog.json)' should
+    have a COMMENT`` and its suggested fix told the author to write that. No
+    user schema can be called ``pg_catalog`` — the ``pg_`` prefix is reserved —
+    so the qualifier is always the parser's.
+    """
     bare = copy.deepcopy(type_name)
     bare.typmods = None
-    return RawStream()(bare)
+    rendered = RawStream()(bare)
+    return rendered.removeprefix(f"{_CATALOG_SCHEMA}.")
+
+
+def type_key(type_name: Any) -> tuple[str | None, str]:
+    """``(schema, canonical name)`` — an argument's identity, not its spelling.
+
+    Typmods are dropped first, because PostgreSQL ignores them in a routine
+    signature *and* because pglast gives the keyword form ``char`` an implicit
+    typmod of 1 that bare ``bpchar`` does not have: without the drop those two
+    key as ``char(1)`` and ``char``.
+
+    The schema is kept apart from the name rather than joined, so that "a
+    missing schema matches any schema" — the rule ``find_all`` already applies
+    to an object's own schema — can be expressed one level down.
+    """
+    bare = copy.deepcopy(type_name)
+    bare.typmods = None
+    rendered = ddl_type_name(bare) or ""
+    schema, _, name = rendered.rpartition(".")
+    return (schema or None), (canonical_type(name) or name)
+
+
+def types_match(a: tuple[str | None, str], b: tuple[str | None, str]) -> bool:
+    """Whether two argument types, as each side spelled them, are one type.
+
+    The names must agree exactly — they are canonical by then, and the array
+    suffix is part of the name — but a schema written on one side and left off
+    the other matches, because PostgreSQL resolves the bare spelling through
+    ``search_path`` and lands on the same type. Two schemas that are both
+    present and disagree never match: ``app.custom_t`` and ``other.custom_t``
+    are two types (D9).
+    """
+    if a[1] != b[1]:
+        return False
+    return a[0] is None or b[0] is None or a[0] == b[0]
+
+
+def signatures_match(a: Signature | None, b: Signature | None) -> bool:
+    """Whether two canonical signatures name one routine, argument by argument.
+
+    ``None`` is not a signature but the absence of one — every kind that is not
+    a routine — so it matches only itself and never an empty argument list.
+    """
+    if a is None or b is None:
+        return a is None and b is None
+    if len(a) != len(b):
+        return False
+    return all(types_match(x, y) for x, y in zip(a, b, strict=True))
 
 
 def _signature(parameters: Any) -> str:
-    return ", ".join(
-        _type_text(p.argType)
-        for p in parameters or []
-        if getattr(p.mode, "value", p.mode) in _INPUT_MODES
-    )
+    return ", ".join(type_text(p.argType) for p in _input_parameters(parameters))
+
+
+def _signature_key(parameters: Any) -> Signature:
+    return tuple(type_key(p.argType) for p in _input_parameters(parameters))
+
+
+def _input_parameters(parameters: Any) -> list[Any]:
+    """The parameters that are part of the signature: ``OUT`` and ``TABLE`` are not."""
+    return [p for p in parameters or [] if getattr(p.mode, "value", p.mode) in _INPUT_MODES]
 
 
 def split_names(names: Any) -> tuple[str | None, str]:
@@ -404,6 +498,7 @@ def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         _line_of(sql, offset),
         offset,
         signature=_signature(stmt.parameters),
+        signature_key=_signature_key(stmt.parameters),
         replace=bool(getattr(stmt, "replace", False)),
     )
 
@@ -428,6 +523,7 @@ def _aggregate_from_define(sql: str, stmt: Any, offset: int) -> SchemaObject | N
         _line_of(sql, offset),
         offset,
         signature=_signature(args[0] if args else None),
+        signature_key=_signature_key(args[0] if args else None),
     )
 
 
@@ -533,15 +629,17 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
                 table.has_primary_key = True
 
 
-def _comment_target(stmt: Any) -> tuple[str | None, str, str | None] | None:
-    """``(schema, name, signature)`` the comment names; signature ``None`` = any."""
+def _comment_target(
+    stmt: Any,
+) -> tuple[str | None, str, tuple[tuple[str | None, str], ...] | None] | None:
+    """``(schema, name, signature key)`` the comment names; key ``None`` = any overload."""
     obj = stmt.object
     node_kind = type(obj).__name__
     if node_kind == "ObjectWithArgs":
         schema, name = split_names(obj.objname)
         if getattr(obj, "args_unspecified", False) or obj.objargs is None:
             return schema, name, None
-        return schema, name, ", ".join(_type_text(t) for t in obj.objargs)
+        return schema, name, tuple(type_key(t) for t in obj.objargs)
     if node_kind == "TypeName":
         schema, name = split_names(obj.names)
         return schema, name, None
@@ -564,8 +662,8 @@ def _apply_comment(stmt: Any, inventory: Inventory) -> None:
     target = _comment_target(stmt)
     if target is None:
         return
-    schema, name, signature = target
-    for obj in inventory.find_all(kinds, schema, name, signature):
+    schema, name, signature_key = target
+    for obj in inventory.find_all(kinds, schema, name, signature_key):
         obj.comment = getattr(stmt, "comment", None)
 
 
@@ -603,15 +701,84 @@ def label_for(path: Path, root: Path | None) -> str:
     return path.as_posix()
 
 
-def object_key(obj: SchemaObject) -> tuple[str, str, str, str | None]:
-    """What makes two ``CREATE`` statements definitions of the same object.
+#: What identifies one object: kind, schema, name, and — for a routine — the
+#: canonical *names* of its input parameter types. A dict key cannot express a
+#: wildcard, so the types' own schemas are left out of it and
+#: :func:`group_definitions` decides which entries in a bucket really are one
+#: object; see :func:`types_match`.
+ObjectKey = tuple[str, str | None, str, tuple[str, ...] | None]
+
+
+def signature_bucket(signature: Signature | None) -> tuple[str, ...] | None:
+    """The part of a signature every spelling of one routine shares."""
+    return None if signature is None else tuple(name for _schema, name in signature)
+
+
+def object_key(obj: SchemaObject) -> ObjectKey:
+    """What makes two ``CREATE`` statements candidates for the same object.
 
     The folded spelling, so ``app."TbWidget"`` and ``app.tbwidget`` are one
     object; the name *and* the input parameter types for a routine, so two
     overloads are two; and :data:`DEFAULT_SCHEMA` for a statement that names
     none, so ``f()`` and ``public.f()`` are one and ``tenant.f()`` is another.
+
+    Candidates, not certainties: an argument type's schema is not in the key,
+    so ``app.f(app.custom_t)`` and ``app.f(other.custom_t)`` share a bucket and
+    are separated by :func:`group_definitions`. Group through that function
+    rather than through this key.
     """
-    return (obj.kind, (obj.folded_schema or DEFAULT_SCHEMA).lower(), obj.folded_name, obj.signature)
+    return (
+        obj.kind,
+        (obj.folded_schema or DEFAULT_SCHEMA).lower(),
+        obj.folded_name,
+        signature_bucket(obj.signature_key),
+    )
+
+
+def group_by_signature(
+    items: Iterable[_T],
+    key: Callable[[_T], Hashable],
+    signature: Callable[[_T], Signature | None],
+) -> list[list[_T]]:
+    """Group ``items`` that define one routine, in first-seen order.
+
+    ``key`` buckets what could be the same — it cannot be the whole answer,
+    because a dict key cannot express "a missing schema matches any schema" —
+    and ``signature`` is then compared within a bucket.
+
+    A definition joins a group only when it matches *every* member. The
+    relation is not an equivalence: ``app.f(custom_t)`` matches both
+    ``app.f(app.custom_t)`` and ``app.f(other.custom_t)``, which do not match
+    each other, so matching one member is not enough. Requiring all of them
+    stops the bare spelling chaining the two qualified ones together and
+    reporting three definitions of one routine where PostgreSQL has two of one
+    and one of another.
+    """
+    buckets: dict[Hashable, list[list[_T]]] = defaultdict(list)
+    order: list[list[_T]] = []
+    for item in items:
+        groups = buckets[key(item)]
+        item_signature = signature(item)
+        for group in groups:
+            if all(signatures_match(item_signature, signature(member)) for member in group):
+                group.append(item)
+                break
+        else:
+            new_group = [item]
+            groups.append(new_group)
+            order.append(new_group)
+    return order
+
+
+def group_definitions(objects: Iterable[SchemaObject]) -> list[list[SchemaObject]]:
+    """Every definition of one object, grouped, in source order.
+
+    The one answer to "are these the same object": ``build_001`` reports a group
+    of more than one, and the rules that report a property of an object once
+    (LINT-10) keep the first of each group. They must agree, or a duplicate
+    would silence a documentation finding it did not cover.
+    """
+    return group_by_signature(objects, object_key, lambda obj: obj.signature_key)
 
 
 def distinct(objects: Iterable[SchemaObject]) -> list[SchemaObject]:
@@ -629,20 +796,18 @@ def distinct(objects: Iterable[SchemaObject]) -> list[SchemaObject]:
     schema does this ``CREATE`` land in — reads the objects directly, because
     for it a second definition really is a second thing to answer for.
     """
-    seen: set[tuple[str, str, str, str | None]] = set()
-    first: list[SchemaObject] = []
-    for obj in objects:
-        key = object_key(obj)
-        if key in seen:
-            continue
-        seen.add(key)
-        first.append(obj)
-    return first
+    return [group[0] for group in group_definitions(objects)]
 
 
-def _statement_key(obj: SchemaObject) -> tuple[str, str | None, str, str | None]:
-    """What makes two inventory entries the same ``CREATE`` statement."""
-    return (obj.kind, obj.folded_schema, obj.folded_name, obj.signature)
+def _statement_key(obj: SchemaObject) -> tuple[str, str | None, str, Signature | None]:
+    """What makes two inventory entries the same ``CREATE`` statement.
+
+    Not :func:`object_key`: its caller walks two parses of the *same* text, so
+    the exact signature is available on both sides and the wildcard that keeps
+    ``object_key`` a bucket would only make this laxer. What it wants is the
+    opposite — to stop at the first pair that disagrees.
+    """
+    return (obj.kind, obj.folded_schema, obj.folded_name, obj.signature_key)
 
 
 def attribute_files(inventory: Inventory, located: Sequence[SchemaObject]) -> None:

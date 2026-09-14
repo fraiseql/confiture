@@ -66,7 +66,10 @@ def test_extracts_qualified_signatures_from_create_function(tmp_path: Path) -> N
     assert sig.kind == "function"
     assert sig.schema == "public"
     assert sig.name == "foo"
-    assert sig.param_types == ("integer", "text")
+    # The key is `(schema, canonical name)` per argument — a type's schema is
+    # `None` unless written, which is what lets a bare one match a qualified one.
+    assert sig.param_types == ((None, "integer"), (None, "text"))
+    assert sig.param_text == ("integer", "text")
 
 
 def test_extracts_qualified_signatures_from_create_procedure(tmp_path: Path) -> None:
@@ -83,7 +86,8 @@ def test_extracts_qualified_signatures_from_create_procedure(tmp_path: Path) -> 
     assert sig.kind == "procedure"
     assert sig.schema == "public"
     assert sig.name == "bar"
-    assert sig.param_types == ("integer",)
+    assert sig.param_types == ((None, "integer"),)
+    assert sig.param_text == ("integer",)
 
 
 def test_unqualified_function_defaults_to_public_schema(tmp_path: Path) -> None:
@@ -281,3 +285,146 @@ def test_real_world_failure_mode_from_issue(tmp_path: Path) -> None:
     violations = rule.check([tmp_path])
     assert len(violations) == 1
     assert "stat_etl.sync_tv_dimensions" in violations[0].object_name
+
+
+class TestTwoSpellingsAreOneSignature:
+    """``int8`` and ``bigint`` are one type, so they are one signature (#275).
+
+    `func_001` carried its own `_PG_CATALOG_ALIASES`, pasted from — not shared
+    with — `sec_002`'s copy under a comment saying it was shared. It mapped
+    `pg_catalog.int4` back to `integer`, which handles a pair written `int`
+    against `integer`, and did nothing for `int8` against `bigint`: a bare
+    internal name never reached the table.
+    """
+
+    def test_two_spellings_are_one_signature(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "010_a.sql",
+            "CREATE FUNCTION app.g(p INT8) RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n",
+        )
+        _write(
+            tmp_path,
+            "020_b.sql",
+            "CREATE FUNCTION app.g(p BIGINT) RETURNS int AS $$ SELECT 2 $$ LANGUAGE sql;\n",
+        )
+
+        violations = Func001FunctionUniqueness(coverage=_make_coverage()).check([tmp_path])
+
+        assert [v.rule_id for v in violations] == ["func_001"]
+        assert "app.g" in violations[0].object_name
+
+    def test_timestamptz_and_the_keyword_form_are_one_signature(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "010_a.sql",
+            "CREATE FUNCTION app.f(p TIMESTAMPTZ) RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n",
+        )
+        _write(
+            tmp_path,
+            "020_b.sql",
+            "CREATE FUNCTION app.f(p TIMESTAMP WITH TIME ZONE) RETURNS int"
+            " AS $$ SELECT 2 $$ LANGUAGE sql;\n",
+        )
+
+        violations = Func001FunctionUniqueness(coverage=_make_coverage()).check([tmp_path])
+
+        assert [v.rule_id for v in violations] == ["func_001"]
+
+    def test_an_array_is_still_a_different_overload(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "010_a.sql",
+            "CREATE FUNCTION app.k(p INT[]) RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n",
+        )
+        _write(
+            tmp_path,
+            "020_b.sql",
+            "CREATE FUNCTION app.k(p INT) RETURNS int AS $$ SELECT 2 $$ LANGUAGE sql;\n",
+        )
+
+        assert Func001FunctionUniqueness(coverage=_make_coverage()).check([tmp_path]) == []
+
+    def test_the_message_prints_the_type_as_written(self, tmp_path: Path) -> None:
+        """The key is canonical; what the operator reads is what they typed."""
+        _write(
+            tmp_path,
+            "010_a.sql",
+            "CREATE FUNCTION app.h(p INT) RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n",
+        )
+        _write(
+            tmp_path,
+            "020_b.sql",
+            "CREATE FUNCTION app.h(p INT) RETURNS int AS $$ SELECT 2 $$ LANGUAGE sql;\n",
+        )
+
+        violations = Func001FunctionUniqueness(coverage=_make_coverage()).check([tmp_path])
+
+        assert "app.h(integer)" in violations[0].message
+
+
+class TestABareTypeMatchesAnySchema:
+    """A type schema on one definition and not the other is still one signature (D9).
+
+    The same rule the inventory applies to `doc_002` and `build_001`: a missing
+    schema matches any schema, because PostgreSQL resolves the bare spelling
+    through `search_path`. Both modules read it from
+    `inventory.group_by_signature`, so they agree by construction.
+    """
+
+    def test_a_qualified_and_a_bare_spelling_are_one_signature(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "010_a.sql",
+            "CREATE FUNCTION app.f(p app.custom_t) RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n",
+        )
+        _write(
+            tmp_path,
+            "020_b.sql",
+            "CREATE FUNCTION app.f(p custom_t) RETURNS int AS $$ SELECT 2 $$ LANGUAGE sql;\n",
+        )
+
+        violations = Func001FunctionUniqueness(coverage=_make_coverage()).check([tmp_path])
+
+        assert [v.rule_id for v in violations] == ["func_001"]
+        assert "app.f" in violations[0].object_name
+
+    def test_two_present_schemas_stay_two_signatures(self, tmp_path: Path) -> None:
+        _write(
+            tmp_path,
+            "010_a.sql",
+            "CREATE FUNCTION app.f(p app.custom_t) RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n",
+        )
+        _write(
+            tmp_path,
+            "020_b.sql",
+            "CREATE FUNCTION app.f(p other.custom_t) RETURNS int AS $$ SELECT 2 $$ LANGUAGE sql;\n",
+        )
+
+        assert Func001FunctionUniqueness(coverage=_make_coverage()).check([tmp_path]) == []
+
+    def test_a_bare_spelling_does_not_chain_two_qualified_ones(self, tmp_path: Path) -> None:
+        """Three definitions, two signatures — and the finding names the right two files."""
+        _write(
+            tmp_path,
+            "010_a.sql",
+            "CREATE FUNCTION app.f(p app.custom_t) RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;\n",
+        )
+        _write(
+            tmp_path,
+            "020_b.sql",
+            "CREATE FUNCTION app.f(p custom_t) RETURNS int AS $$ SELECT 2 $$ LANGUAGE sql;\n",
+        )
+        _write(
+            tmp_path,
+            "030_c.sql",
+            "CREATE FUNCTION app.f(p other.custom_t) RETURNS int AS $$ SELECT 3 $$ LANGUAGE sql;\n",
+        )
+
+        violations = Func001FunctionUniqueness(coverage=_make_coverage()).check([tmp_path])
+
+        assert [v.rule_id for v in violations] == ["func_001"]
+        assert "defined in 2 files" in violations[0].message
+        assert "010_a.sql" in violations[0].message
+        assert "020_b.sql" in violations[0].message
+        assert "030_c.sql" not in violations[0].message

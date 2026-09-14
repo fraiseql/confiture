@@ -14,6 +14,142 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-14
+
+Two reports a week apart, both against `confiture lint`, both the same shape of failure: **the rule
+reports nothing, and that reads as nothing to report.**
+[#274](https://github.com/fraiseql/confiture/issues/274) is a whole build going unread —
+one seed file with a `COPY … FROM stdin` block, and nine rules examine zero objects while the run
+still looks alive. [#275](https://github.com/fraiseql/confiture/issues/275) is one object going
+unmatched — a `COMMENT` that spells a type differently from its `CREATE`. Neither said so.
+
+They ship together because they are one release's worth of the same fix, a lint that is honest about
+what it examined, and because both land in `core/linting/`: #274 at the parse boundary, #275 in the
+inventory the parse produces.
+
+### Fixed
+
+- **A `COPY … FROM stdin` block no longer blinds every AST rule** (#274). The block is psql client
+  protocol, not SQL, and pglast rejects the text it sits in; `SchemaLinter` parsed the whole
+  concatenated build in one call, so one seed file left `self._inventory` empty and
+  `naming_001`/`naming_002`, `pk_001`, `sec_001` and `doc_001`–`doc_005` read nothing. The
+  reporter's two environments over one tree, before and after:
+
+  | | `schema_only` before | `with_seed` before | both after |
+  |---|---|---|---|
+  | `tables_checked` | 1 | **0** | 1 |
+  | `doc_001` documented / undocumented | 0 / 1 | **0 / 0** | 0 / 1 |
+  | `doc_002` documented / undocumented | 0 / 1 | **0 / 0** | 0 / 1 |
+  | findings | `doc_001`, `doc_002` | `UNPARSEABLE` only | `doc_001`@2, `doc_002`@3 |
+
+  The point of the third column is that it is one column: adding the seed directory stops changing
+  the answer.
+
+  Each block is **blanked** — its characters replaced with spaces, its newlines left alone — so the
+  surrounding statements parse and every finding after the block keeps the line its author wrote.
+  Nothing to configure and nothing to exclude: put `db/seed` in `include_dirs` and the lint reads
+  the schema around it.
+- **A file confiture cannot parse now costs that file, not the build** (#274). The remaining files
+  still parse as one text, so a `COMMENT ON` in one still resolves against a `CREATE` in another.
+  The rejected file is reported, and every rule that lost it is named in `degraded` with what it
+  lost — a channel `--baseline` does not touch, so the blindness stays visible in an adopted
+  project even when the finding is silenced.
+- **Two spellings of one PostgreSQL type are one type** (#275). `doc_002` matched a `COMMENT ON
+  FUNCTION` to its `CREATE` on the *rendered* argument types, and pglast renders a type the way it
+  was written: the SQL-standard keyword forms come back `pg_catalog`-qualified, the internal names
+  bare. **Ten pairs split, not one:**
+
+  | | | | | |
+  |---|---|---|---|---|
+  | `smallint` / `int2` | `integer` / `int4` | `bigint` / `int8` | `real` / `float4` | `double precision` / `float8` |
+  | `boolean` / `bool` | `char` / `bpchar` | `timestamp with time zone` / `timestamptz` | `time with time zone` / `timetz` | `bit varying` / `varbit` |
+
+  `numeric`/`decimal`, `varchar`/`character varying` and `timestamp`/`timestamp without time zone`
+  do **not** split — both spellings arrive `pg_catalog`-qualified — which is why the reporter's
+  controls passed and made the bug look specific to `timestamptz`. The issue's five functions go
+  from documented 3 / undocumented 2 to **5 / 0**.
+- **The missed duplicate, which is the worse half** (#275). The same string was the routine half of
+  `object_key`, so `CREATE FUNCTION app.f(p TIMESTAMPTZ)` and `CREATE FUNCTION app.f(p TIMESTAMP
+  WITH TIME ZONE)` — which PostgreSQL rejects as already existing — were two objects to `build_001`,
+  an `error` that is on by default. Both are now reported, and `func_001` matches them too. A false
+  positive is noise; this one was the gate not firing.
+- **A type schema on one side and not the other still names one type.** `CREATE FUNCTION app.f(x
+  app.custom_t)` with `COMMENT ON FUNCTION app.f(custom_t)` reported undocumented, and so did the
+  reverse. A missing schema now matches any schema — the rule the inventory already applied to the
+  object's own schema, one level down — while two schemas that are both present and disagree stay
+  two types.
+- **Also fixed: the array suffix, in `core/ddl_walk.type_name` and `core/type_lattice`.**
+  `canonical_type("integer[]")` returned `"integer"`, and `ddl_walk.type_name` — the reader that
+  feeds it — never looked at `arrayBounds` at all, so `int[]`, `int4[]`, `integer[]` and `int[][]`
+  all rendered `int4`. Wiring signatures through the canonicaliser without fixing that would have
+  made `f(int[])` and `f(int)` one function. It was also a **live preflight bug in the expensive
+  direction**: an `ALTER COLUMN c TYPE text[]` was captured as `text`, so `compare_types` called a
+  `varchar(50)` → `text[]` change `IDENTICAL` and `changes_rewrite_table` reported it lock-cheap
+  while it rewrites every page.
+- **Two `pg_catalog` qualifiers leaked into user-facing prose**, `json` and `bit`. A `doc_002`
+  finding read `Function 'app.fn_j(pg_catalog.json)' should have a COMMENT` and its suggested fix
+  told the author to type that. The author wrote `json`. No user schema can be called `pg_catalog` —
+  the `pg_` prefix is reserved — so a leading `pg_catalog.` in a rendered `TypeName` is always the
+  parser's. It is also a cross-major difference: bare `json` is `['json']` on pglast 6.16 and
+  `['pg_catalog', 'json']` on 7.18 and 8.4, so the signature string was not the same string on all
+  three.
+- **`examples/05-multi-environment-workflow/db/schema/00_common/roles.sql` is valid PostgreSQL.** It
+  carried `CREATE ROLE IF NOT EXISTS` (there is no such clause) and `GRANT … ON DATABASE
+  current_database()` (the database is a name, not an expression), three of each. It is excluded in
+  local and CI but included in staging and production, where linting either reported nothing about
+  the schema at all.
+
+### Changed
+
+- ⚠️ **`UNPARSEABLE` is a registered rule at `error`, where it was an unregistered `info`.** #274's
+  complaint is that the default gate cannot pass over a file nobody read, and the default gate is
+  `--fail-on error`. Three consequences worth stating:
+  - **All six call sites are promoted, not one.** The notice is constructed from `func_001`,
+    `sec_002`, `replica_001`, `tenant_001` and `own_001`/`own_002` as well as from the schema
+    build. Promoting one would leave `func_001` reading a file it could not parse and saying `info`,
+    and `test_registry_severity_is_truth.py` would carry a declaration five sites contradict without
+    being able to catch it. `replica_001`, `own_001` and `own_002` read **migration** files, where a
+    psql meta-command is likelier than under `db/schema/`; all three are opt-in and require
+    configuration.
+  - **It is now deselectable**, because registering a code is what makes `--select` / `--ignore` and
+    `--list-rules` able to see it. `--ignore UNPARSEABLE` is the escape hatch for a project with a
+    deliberately non-SQL file; `--select doc_002` now hides the notice where it did not before. The
+    blindness survives either way: `degraded` is not filtered by selection.
+  - **`gate.reachable` moves in one narrow case** — a selection that keeps `UNPARSEABLE` while
+    dropping every other `error` rule, e.g. `--ignore build_001,acl_001 --fail-on error`. A default
+    run's ceiling is already `error` via `build_001`.
+- **One `UNPARSEABLE` per rejected file, however many rules found it.** `func_001`, `sec_002` and
+  the build open the same files, so two broken files produced five identical notices — and after the
+  promotion, five errors. The notice is a fact about a file, not about the rule that happened to
+  read it.
+- **`sql_lexer.strip_copy_blocks` is retired, not kept alongside `blank_copy_blocks`.** Deleting a
+  block moves every line after it, and lint reports `file:line` on every finding. Its only caller,
+  `core/differ.py`, moved to the blanking variant and gains error positions that point at the real
+  file. One answer per question is the standing rule (`tests/unit/test_one_sql_lexer.py`).
+- **One type canonicaliser.** There were **six** alias tables in the package resolving in **three**
+  directions. The two under `core/linting/` — `_PG_CATALOG_ALIASES` in `libraries/functions.py` and
+  a *copy* of it in `libraries/security_definer.py`, under a comment claiming it was shared — are
+  deleted; `core/type_lattice.canonical_type` answers for both.
+  `tests/unit/test_one_type_canonicaliser.py` allow-lists the other three with the reason each is a
+  different question, and fails on an entry that no longer matches anything.
+- **A routine's identity and its spelling are two fields.** `SchemaObject.signature` stays the types
+  as written, because it is what a finding prints and `app.fn_c(integer)` is better prose than
+  `app.fn_c(int4)`; `signature_key` is the canonical types, and is what decides whether two routines
+  are the same routine. `object_key` is a **bucket**, not an identity — a dict key cannot express
+  "a missing schema matches any schema" — so `build_001`, the once-per-object rules and `func_001`
+  all group through `inventory.group_by_signature` rather than through the key alone.
+
+### Notes
+
+- Verified on pglast 6.16, 7.18 and 8.4 in three clean virtualenvs, with the installed version
+  asserted inside the loop: 860 / 860 / 864 passed on the AST-backed suites. The matrix was run
+  inside each phase rather than at the end, and caught a real difference in-flight — before
+  PostgreSQL 18 a statement's `stmt_location` includes the whitespace before it.
+- Unit suite 8265 → 8410.
+- `db/` and `tests/fixtures/` parse clean. Of 3806 `.sql` files under `db/`, `examples/` and
+  `tests/fixtures/`, one tracked file is rejected: `examples/04-production-sync-anonymization/`
+  `verify_anonymization.sql`, a psql script (`\set`, `\echo`) in no environment's `include_dirs`.
+
 ## [1.8.0] - 2026-09-10
 
 `build_003` read **no** `RETURNS TRIGGER` or `RETURNS event_trigger` body
@@ -5962,14 +6098,6 @@ confiture seed apply --sequential --database-url postgresql://localhost/db
 ## [0.3.14] - 2026-01-31
 
 ## [0.3.13] - 2026-01-31
-
-## [1.4.0] - 2026-09-08
-
-## [1.5.0] - 2026-09-09
-
-## [1.7.0] - 2026-09-10
-
-## [Unreleased]
 
 ## [0.3.11] - 2026-01-29
 

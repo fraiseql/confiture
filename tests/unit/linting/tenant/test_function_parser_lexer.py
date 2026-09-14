@@ -114,6 +114,9 @@ class TestRuleOnUnparseableSql:
             view_sqls=[], function_sqls=["CREATE FUNCTION ("], report=report, file_path="f.sql"
         )
 
-        assert [v.rule_id for v in report.info] == ["UNPARSEABLE"]
-        assert report.info[0].file_path == "f.sql"
-        assert report.errors == [] and report.warnings == []
+        # `error` since 1.9.0 (#274, D10): a file this rule could not read is
+        # a finding about that file, at the severity every other unparseable
+        # surface in confiture already uses.
+        assert [v.rule_id for v in report.errors] == ["UNPARSEABLE"]
+        assert report.errors[0].file_path == "f.sql"
+        assert report.info == [] and report.warnings == []

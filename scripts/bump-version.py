@@ -21,6 +21,35 @@ from datetime import datetime
 from pathlib import Path
 
 
+def bump_changelog(changelog: Path, root: Path, new_version: str) -> int:
+    """Open a section for *new_version* above ``## [Unreleased]``. Returns files changed.
+
+    Exactly one marker, or nothing is written. This used to be a global
+    ``str.replace``, which inserts an empty header above *every* marker — three
+    releases' worth of them accumulated in the middle of the file, below the
+    2026-01 entries, before anyone read that far.
+    """
+    content = changelog.read_text()
+    markers = content.count("## [Unreleased]")
+    if markers > 1:
+        print(f"❌ {changelog.relative_to(root)} has {markers} '## [Unreleased]' markers")
+        print("Expected exactly one, at the top. Remove the strays and re-run.")
+        sys.exit(1)
+    if markers == 0:
+        print(f"⏭️  No [Unreleased] section in {changelog.relative_to(root)}")
+        return 0
+    today = datetime.now().strftime("%Y-%m-%d")
+    changelog.write_text(
+        content.replace(
+            "## [Unreleased]",
+            f"## [Unreleased]\n\n## [{new_version}] - {today}",
+            1,
+        )
+    )
+    print(f"✅ Updated {changelog.relative_to(root)}")
+    return 1
+
+
 def bump_version(new_version: str) -> None:
     """Bump version to new_version across all files."""
     root = Path(__file__).parent.parent
@@ -112,27 +141,7 @@ def bump_version(new_version: str) -> None:
         print(f"⏭️  No changes needed in {claude_file.relative_to(root)}")
 
     # 5. Update CHANGELOG.md
-    changelog = root / "CHANGELOG.md"
-    content = changelog.read_text()
-    original = content
-
-    # Check if unreleased section exists
-    if "## [Unreleased]" in content:
-        # Replace [Unreleased] with version and date
-        today = datetime.now().strftime("%Y-%m-%d")
-        content = content.replace(
-            "## [Unreleased]",
-            f"## [{new_version}] - {today}\n\n## [Unreleased]",
-        )
-
-        if content != original:
-            changelog.write_text(content)
-            print(f"✅ Updated {changelog.relative_to(root)}")
-            files_updated += 1
-        else:
-            print(f"⏭️  No changes needed in {changelog.relative_to(root)}")
-    else:
-        print(f"⏭️  No [Unreleased] section in {changelog.relative_to(root)}")
+    files_updated += bump_changelog(root / "CHANGELOG.md", root, new_version)
 
     print()
     print("=" * 50)

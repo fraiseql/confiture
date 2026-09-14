@@ -358,6 +358,63 @@ that turns it off.
 
 ---
 
+## A file confiture cannot parse costs that file, loudly
+
+Every rule that reads DDL reads it through pglast. A file pglast rejects used to
+cost the **whole build**: the inventory came back empty, nine rules read nothing,
+and the run reported an `info` notice and exit 0. A green tick that means
+"examined nothing" is worse than a red one.
+
+Since 1.9.0 a rejected file costs one file, and says so in three places at once:
+
+```console
+$ confiture lint --env local
+naming_001 ran on less than the whole schema: 1 file was not read, so nothing it
+defines or references is checked (db/schema/030_broken.sql)
+...
+UNPARSEABLE  error  db/schema/030_broken.sql:1
+$ echo $?
+1
+```
+
+* **The finding.** One `UNPARSEABLE` per rejected file — not per rule that
+  happened to open it — naming the file and the line pglast stopped at. It is a
+  registered rule at **`error`**, so the default `--fail-on error` gate fails on
+  it, the way `migrate diff` and `migrate preflight` already treat a file they
+  cannot read. `--ignore UNPARSEABLE` is the escape hatch for a project with a
+  deliberately non-SQL file under `db/schema/`.
+* **The `degraded` array.** Every rule that lost the file is named there with
+  what it lost. A `--baseline` silences the *finding*, as a baseline does; it
+  does not touch `degraded`, so the blindness stays visible even in an adopted
+  project.
+* **The counts.** `tables_checked` and `columns_checked` count what was in the
+  files that parsed, and the JSON schema says so.
+
+### `COPY … FROM stdin` is not a parse failure
+
+A seed file is the common shape, and it is not broken SQL: `COPY … FROM stdin`
+followed by tab-separated rows and a `\.` terminator is psql *client protocol*,
+which no SQL parser accepts. Adding `db/seed` to `include_dirs` used to take the
+whole lint down with it.
+
+Confiture now blanks each `COPY` block — replacing its characters with spaces and
+keeping its newlines — before parsing, so the surrounding statements parse and
+every finding after the block still reports the line its author wrote. Nothing
+needs configuring, and nothing needs excluding:
+
+```yaml
+# db/environments/local.yaml
+include_dirs:
+  - db/schema
+  - db/seed        # a COPY block here no longer blinds the lint
+```
+
+The blanked text is what the *parser* sees. The rules that want the real build —
+the `body` family, which materialises it into a throwaway database, and
+`tenant_001`, which scans it as text — still get every seed row.
+
+---
+
 ## Making lint block — `--fail-on`
 
 A lint whose findings never fail a pipeline is a lint nobody fixes. One flag

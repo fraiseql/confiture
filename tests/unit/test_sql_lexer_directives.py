@@ -1,4 +1,4 @@
-"""``sql_lexer.comments`` / ``directives`` / ``strip_copy_blocks``.
+"""``sql_lexer.comments`` / ``directives``.
 
 A ``-- confiture:<name>`` comment directive used to be found by one regex per
 rule, each walking lines on its own: a directive inside a dollar-quoted body or
@@ -9,7 +9,7 @@ directive, and it attaches to the first statement after it.
 
 from __future__ import annotations
 
-from confiture.core.sql_lexer import Directive, comments, directives, strip_copy_blocks
+from confiture.core.sql_lexer import Directive, comments, directives
 
 
 class TestDirectives:
@@ -69,15 +69,3 @@ class TestComments:
 
     def test_a_comment_inside_a_literal_is_not_a_comment(self) -> None:
         assert comments("SELECT '-- x', $$ /* y */ $$;") == []
-
-
-class TestStripCopyBlocks:
-    def test_removes_the_statement_and_its_data(self) -> None:
-        sql = (
-            "CREATE TABLE t (a int);\nCOPY t (a) FROM stdin;\n1\n'\n\\.\nCREATE TABLE u (b int);\n"
-        )
-        assert strip_copy_blocks(sql) == "CREATE TABLE t (a int);\nCREATE TABLE u (b int);\n"
-
-    def test_text_without_a_block_is_unchanged(self) -> None:
-        sql = "COPY t FROM '/path';\n-- COPY x FROM stdin\nSELECT 1;\n"
-        assert strip_copy_blocks(sql) == sql

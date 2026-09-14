@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pglast
 import pglast.parser
@@ -30,8 +30,12 @@ from confiture.core.linting.inventory import (
     distinct,
     label_for,
 )
-from confiture.core.parser_info import parse_error_line
+from confiture.core.linting.rule_registry import LINT_RULES, UNPARSEABLE_RULE_ID
+from confiture.core.sql_lexer import blank_copy_blocks, blank_preserving_lines
 from confiture.exceptions import ConfiturError
+
+if TYPE_CHECKING:
+    from confiture.core.linting.duplicates import Rejected
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +113,11 @@ class LintReport:
     #: carries a comment and how long those comments are (#250). ``None`` when
     #: the family was not selected — absent, not zero.
     documentation: dict[str, Any] | None = None
+    #: ``(file, line)`` of every ``UNPARSEABLE`` already held. Six rules open
+    #: files of their own, so one broken file used to be reported by each of
+    #: them *and* by the build — several identical errors about one fact. The
+    #: notice is about the file, not about the rule that happened to find it.
+    _unparseable_seen: set[tuple[str | None, int | None]] = field(default_factory=set)
 
     @property
     def has_errors(self) -> bool:
@@ -131,7 +140,12 @@ class LintReport:
         return len(self.errors) + len(self.warnings) + len(self.info)
 
     def add_violation(self, violation: LintViolation) -> None:
-        """Add a violation to the report."""
+        """Add a violation to the report, keeping one ``UNPARSEABLE`` per file."""
+        if violation.rule_id == UNPARSEABLE_RULE_ID:
+            seen = (violation.file_path, violation.line_number)
+            if seen in self._unparseable_seen:
+                return
+            self._unparseable_seen.add(seen)
         if violation.severity == RuleSeverity.ERROR:
             self.errors.append(violation)
         elif violation.severity == RuleSeverity.WARNING:
@@ -270,8 +284,17 @@ class SchemaLinter:
         # Load environment configuration
         self.environment = Environment.load(env, project_dir=project_dir)
 
-        # Schema cache
+        # Schema cache. Two strings, deliberately, and they are not
+        # interchangeable (#274):
+        #   `_schema_sql` is the build as `SchemaBuilder` produced it, COPY
+        #     rows and all. It is what gets materialised into a database
+        #     (`bodies.diagnose`) or scanned as text (`tenant_001`).
+        #   `_parse_sql` is what pglast is asked to read: the same files with
+        #     their COPY blocks blanked, assembled by `_assemble_parse_text`.
+        # Handing the first to pglast reads nothing; handing the second to a
+        # database drops the seed rows.
         self._schema_sql: str | None = None
+        self._parse_sql: str = ""
         self._inventory: Inventory = Inventory()
         self._tables: dict[str, dict[str, Any]] | None = None
         self._schema_files: list[Path] = []
@@ -309,23 +332,17 @@ class SchemaLinter:
         # rules below read what they can, and this notice says the rest was
         # not read (ANA-02).
         self._inventory = Inventory()
-        self._file_objects, self._file_schemas = self._inventory_per_file()
+        self._file_objects, self._file_schemas, rejected = self._inventory_per_file()
+        self._parse_sql = self._assemble_parse_text({r.label for r in rejected})
+        self._report_rejected_files(report, rejected)
         try:
-            self._inventory = build_inventory(self._schema_sql)
+            self._inventory = build_inventory(self._parse_sql)
             attribute_files(self._inventory, self._file_objects)
         except pglast.parser.ParseError as exc:
-            report.add_violation(
-                LintViolation(
-                    rule_id="UNPARSEABLE",
-                    rule_name="Unparseable SQL",
-                    severity=RuleSeverity.INFO,
-                    object_type="schema",
-                    object_name="schema",
-                    message=f"pglast could not parse the schema: {exc}",
-                    line_number=parse_error_line(self._schema_sql, exc),
-                    suggested_fix="Fix the SQL syntax; rules cannot see past a parse error.",
-                )
-            )
+            # A file-backed run has already reported each rejected file by name
+            # above; reaching here means the *concatenation* failed, or there
+            # were no files at all — `lint(schema=...)`, which has none to name.
+            self._add_unparseable(report, None, self._parse_sql, exc)
 
         report.tables_checked = len(self._inventory.tables)
         report.columns_checked = sum(len(t.columns) for t in self._inventory.tables)
@@ -347,26 +364,38 @@ class SchemaLinter:
         # What the two tables owe each other is agreement, and two guards hold
         # it: `test_every_rule_is_registered` (no rule emits without an entry)
         # and `test_every_switch_has_a_rule` (no switch runs without a rule).
-        for enabled, check in (
-            (self.config.check_naming, self._check_naming_conventions),
-            (self.config.check_primary_keys, self._check_primary_keys),
-            (self.config.check_documentation, self._check_documentation),
-            (self.config.check_restatements, self._check_restatements),
-            (self.config.check_security, self._check_security),
-            (self.config.check_duplicates, self._check_duplicates),
+        # The third column is the rule family the switch runs, and it is on the
+        # row rather than in a table of its own so a new rule cannot be added
+        # without answering "what does this lose when a file will not parse".
+        # `None` means the answer is "nothing an unread file explains": the
+        # `body` family degrades on its live tier, and `tenant_001` parses the
+        # build itself and reports its own notice when that fails.
+        ran: set[str] = set()
+        for enabled, check, family in (
+            (self.config.check_naming, self._check_naming_conventions, "naming"),
+            (self.config.check_primary_keys, self._check_primary_keys, "pk"),
+            (self.config.check_documentation, self._check_documentation, "doc"),
+            (self.config.check_restatements, self._check_restatements, "doc"),
+            (self.config.check_security, self._check_security, "security"),
+            (self.config.check_duplicates, self._check_duplicates, "build"),
             (
                 self.config.check_qualification or self.config.check_qualification_relations,
                 self._check_qualification,
+                "qual",
             ),
-            (self.config.check_references, self._check_references),
+            (self.config.check_references, self._check_references, "build"),
             (
                 self.config.check_bodies or self.config.check_body_warnings,
                 self._check_bodies,
+                None,
             ),
-            (self.config.check_tenant_isolation, self._check_tenant_isolation),
+            (self.config.check_tenant_isolation, self._check_tenant_isolation, None),
         ):
             if enabled:
                 check(report)
+                if family is not None:
+                    ran.add(family)
+        self._report_blinded_rules(report, ran, rejected)
 
         # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
         # the environment YAML.  The mere presence of an ``acls:`` block
@@ -391,19 +420,25 @@ class SchemaLinter:
 
         return report
 
-    def _inventory_per_file(self) -> tuple[list[SchemaObject], list[SchemaObject]]:
-        """``(objects, CREATE SCHEMA declarations)``, each knowing the file it is in.
+    def _inventory_per_file(
+        self,
+    ) -> tuple[list[SchemaObject], list[SchemaObject], list[Rejected]]:
+        """``(objects, CREATE SCHEMA declarations, rejected files)``, each knowing its file.
 
-        Both empty for a whole-string lint (``lint(schema=...)``), which has no
-        files and therefore no locations to report.
+        The first two are empty for a whole-string lint (``lint(schema=...)``),
+        which has no files and therefore no locations to report.
+
+        The third used to be discarded here, which is how a broken file could
+        cost the whole build: the per-file pass already knew exactly which file
+        pglast refused, and threw that away, leaving the whole-build parse to
+        fail on it and take the other files' objects with it (#274).
         """
         # Reason: import cycle (duplicates imports this module's inventory at module level)
         from confiture.core.linting.duplicates import inventory_texts
 
         if not self._schema_files:
-            return [], []
-        objects, schemas, _unparseable = inventory_texts(self._sources())
-        return objects, schemas
+            return [], [], []
+        return inventory_texts(self._sources())
 
     def _load_schema(self) -> None:
         """Load schema SQL from files."""
@@ -699,20 +734,120 @@ class SchemaLinter:
         concatenate into — needs the same pair, and a whole-string lint
         (``lint(schema=...)``) has no file to name, so its label is ``None``.
 
+        The text is **blanked**: a ``COPY … FROM stdin`` block is psql client
+        protocol and pglast rejects the text it sits in, so one seed file used
+        to empty the inventory (#274). Blanking keeps every offset and every
+        line number, so a finding still points at the line its author wrote —
+        which deleting the block would not (:func:`sql_lexer.blank_copy_blocks`).
+
         Read once per lint and held: six rules want it, and a schema tree is
         thousands of files. ``lint()`` clears it, so a reused linter still sees
         what is on disk now.
         """
         if self._source_cache is None:
             self._source_cache = (
-                [(None, self._schema_sql or "")]
+                [(None, blank_copy_blocks(self._schema_sql or ""))]
                 if not self._schema_files
                 else [
-                    (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
+                    (
+                        label_for(path, self.project_dir),
+                        blank_copy_blocks(path.read_text(encoding="utf-8")),
+                    )
                     for path in self._schema_files
                 ]
             )
         return self._source_cache
+
+    @staticmethod
+    def _report_rejected_files(report: LintReport, rejected: list[Rejected]) -> None:
+        """One ``UNPARSEABLE`` finding per file pglast refused, naming that file.
+
+        Before #274 there was one notice for the whole build, carrying no file
+        and a line into a generated artefact — which was all the whole-build
+        parse could say, because it failed as a unit.
+        """
+        for rejection in rejected:
+            SchemaLinter._add_unparseable(
+                report, Path(rejection.label), rejection.text, rejection.error
+            )
+
+    @staticmethod
+    def _report_blinded_rules(
+        report: LintReport, ran: frozenset[str] | set[str], rejected: list[Rejected]
+    ) -> None:
+        """Say which rules read less of the schema than the build contains.
+
+        A rejected file is missing from *both* object lists — the whole-build
+        inventory never saw it, and `inventory_texts` skips it, so the per-file
+        list has none of its objects either. So every rule whose subject is DDL
+        examined a short schema, `build_001` and `qual_001` included; the first
+        draft of this exempted them, and a duplicate defined in the broken file
+        then went unreported with nothing saying so.
+
+        This is the channel a `--baseline` does not touch (D6): a project can
+        record the `UNPARSEABLE` finding as known, and the blindness still says
+        so on every run.
+        """
+        if not rejected:
+            return
+        files = ", ".join(sorted(r.label for r in rejected))
+        one = len(rejected) == 1
+        were = "file was" if one else "files were"
+        define = "it defines or references" if one else "they define or reference"
+        report.degraded.extend(
+            RuleStatus(
+                code=rule.code,
+                state="degraded",
+                reason=(
+                    f"{len(rejected)} {were} not read, so nothing {define} is checked ({files})"
+                ),
+            )
+            for rule in LINT_RULES
+            if rule.family in ran
+        )
+
+    @staticmethod
+    def _add_unparseable(
+        report: LintReport, path: Path | None, text: str, exc: BaseException
+    ) -> None:
+        """One constructor for the notice, reached from both of this module's sites."""
+        # Reason: import cycle (unparseable imports LintViolation from this module)
+        from confiture.core.linting.unparseable import unparseable_notice
+
+        report.add_violation(unparseable_notice(path, text, exc))
+
+    def _assemble_parse_text(self, rejected: set[str]) -> str:
+        """The text pglast is asked to read — the blanked files, concatenated.
+
+        A file in ``rejected`` contributes its own length in spaces and nothing
+        else. That is what makes a broken file cost one file: the remaining
+        files still parse as *one* text, so a ``COMMENT ON`` in one of them
+        still resolves against a ``CREATE`` in another — which is the only
+        reason a whole-build inventory exists beside the per-file one.
+
+        Deliberately **not** ``self._schema_sql``. The three things
+        ``SchemaBuilder.build`` adds — a header, a per-file separator, and the
+        ``build.two_pass`` FK rewrite — reach no rule: the inventory reads
+        ``CREATE`` statements, their columns and their primary keys, and
+        two-pass moves only foreign keys. What assembling it here buys is worth
+        more than byte-equality with an artefact nobody edits:
+
+        * the whole-build inventory and the per-file inventory then walk the
+          same statements in the same order *by construction*, which is what
+          :func:`attribute_files` needs and cannot check — it zips positionally
+          and stops at the first disagreement;
+        * every file's span in this text is known, because this laid it out.
+
+        ``_schema_sql`` keeps the real build, COPY rows and all, for the two
+        consumers that want it: ``bodies.diagnose()`` materialises it into a
+        throwaway database, and ``tenant_001`` scans it as text.
+        """
+        parts: list[str] = []
+        for label, text in self._sources():
+            parts.append(blank_preserving_lines(text) if label in rejected else text)
+            if text and not text.endswith("\n"):
+                parts.append("\n")
+        return "".join(parts)
 
     def _directive_lines(self, name: str) -> frozenset[tuple[str | None, int]]:
         """``(file, statement line)`` of every statement carrying ``-- confiture:<name>``.

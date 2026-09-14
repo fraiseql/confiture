@@ -15,7 +15,7 @@ from pglast.enums.parsenodes import ConstrType
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.sql_lexer import strip_copy_blocks
+from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.models.schema import (
     CheckConstraint,
     Column,
@@ -195,10 +195,15 @@ class SchemaDiffer:
         if not sql or not sql.strip():
             return ParsedSchema()
 
-        # Strip inline-COPY data blocks before ANY parser or regex pass sees
+        # Blank inline-COPY data blocks before ANY parser or regex pass sees
         # the text: pglast rejects them outright (#194), and the free-form data
         # lines could false-match the regex passes below.
-        sql = strip_copy_blocks(sql)
+        #
+        # Blanked, not deleted: the block keeps its length and its newlines, so
+        # the `DIFFER_400` a rejected statement raises below carries a position
+        # into the text the author wrote, not one shifted by however many data
+        # rows an earlier seed file happened to carry.
+        sql = blank_copy_blocks(sql)
 
         result = ParsedSchema()
 

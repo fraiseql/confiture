@@ -339,11 +339,15 @@ def test_directive_only_suppresses_next_function(tmp_path: Path) -> None:
 
 
 def test_unparseable_file_is_reported_not_skipped(tmp_path: Path) -> None:
-    """Unparseable SQL is one UNPARSEABLE notice, never a clean result (ANA-02)."""
+    """Unparseable SQL is one UNPARSEABLE finding, never a clean result (ANA-02).
+
+    At `error` since 1.9.0: a file this rule could not read is not an `info`
+    about the files it could (#274, D10).
+    """
     f = _write(tmp_path, "bad.sql", "THIS IS NOT SQL $$$$$$$$;\n")
     violations = _make_rule().check([f])
     assert [(v.rule_id, v.severity.value, v.line_number) for v in violations] == [
-        ("UNPARSEABLE", "info", 1)
+        ("UNPARSEABLE", "error", 1)
     ]
 
 

@@ -8,11 +8,12 @@ same object with its file, offset and line and says which one the database
 ends up with; ``build_002`` reports a routine whose overloads live in
 different files, which is legal but is how the first kind of mistake starts.
 
-The identity of an object is :func:`~confiture.core.linting.inventory.object_key`
-— ``(kind, schema, name, signature)``, an unqualified name being the ``public``
+The identity of an object is what
+:func:`~confiture.core.linting.inventory.group_definitions` groups on —
+``(kind, schema, name, signature)``, an unqualified name being the ``public``
 schema, so ``f()`` and ``public.f()`` are one object and ``tenant.f()`` another.
-The rules that report a property of an object once group by that same key, so a
-duplicate can never silence a finding it does not cover.
+The rules that report a property of an object once group through that same
+function, so a duplicate can never silence a finding it does not cover.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ import pglast
 from confiture.core.linting.inventory import (
     SchemaObject,
     build_inventory,
+    group_definitions,
     label_for,
     object_key,
 )
@@ -71,14 +73,30 @@ class Duplicate:
 
 def inventory_files(
     files: Iterable[Path], root: Path | None = None
-) -> tuple[list[SchemaObject], list[SchemaObject], list[str]]:
+) -> tuple[list[SchemaObject], list[SchemaObject], list[Rejected]]:
     """Inventory each file on its own, so every object knows its file."""
     return inventory_texts((_label(path, root), path.read_text(encoding="utf-8")) for path in files)
 
 
+@dataclass(frozen=True)
+class Rejected:
+    """A file pglast refused, with what is needed to report it.
+
+    The label alone was enough while the answer was "something here did not
+    parse". It is not enough to say *where*: the notice names a line, and the
+    line comes from the error and the text it indexes. Recomputing both by
+    parsing the file a second time would be throwing away what this already
+    holds.
+    """
+
+    label: str
+    text: str
+    error: BaseException
+
+
 def inventory_texts(
     sources: Iterable[tuple[str | None, str]],
-) -> tuple[list[SchemaObject], list[SchemaObject], list[str]]:
+) -> tuple[list[SchemaObject], list[SchemaObject], list[Rejected]]:
     """The same, for text already read — one ``(label, text)`` pair per file.
 
     Returns the objects, the ``CREATE SCHEMA`` declarations and the files
@@ -91,13 +109,13 @@ def inventory_texts(
     """
     objects: list[SchemaObject] = []
     schemas: list[SchemaObject] = []
-    unparseable: list[str] = []
+    unparseable: list[Rejected] = []
     for label, text in sources:
         try:
             inventory = build_inventory(text)
-        except pglast.parser.ParseError:
+        except pglast.parser.ParseError as exc:
             if label is not None:
-                unparseable.append(label)
+                unparseable.append(Rejected(label=label, text=text, error=exc))
             continue
         for obj in (*inventory.objects, *inventory.schemas):
             obj.file = label
@@ -113,7 +131,12 @@ _label = label_for
 #: inventory's answer, not one of this module's own: the rules that report a
 #: property of an object once (LINT-10) must group exactly as ``build_001`` does,
 #: or a duplicate would silence a documentation finding it did not cover.
-_key = object_key
+_group = group_definitions
+
+
+def _family(obj: SchemaObject) -> tuple[str, str | None, str]:
+    """The overload family a routine belongs to: its identity minus the signature."""
+    return object_key(obj)[:3]
 
 
 def _definition(obj: SchemaObject) -> Definition:
@@ -131,9 +154,7 @@ def _wins(group: Sequence[SchemaObject]) -> str:
 
 def find_duplicates(objects: Sequence[SchemaObject]) -> list[Duplicate]:
     """``build_001`` per object defined more than once, ``build_002`` per split overload family."""
-    by_key: dict[tuple[str, str, str, str | None], list[SchemaObject]] = defaultdict(list)
-    for obj in objects:
-        by_key[_key(obj)].append(obj)
+    groups = _group(objects)
 
     findings: list[Duplicate] = []
     findings.extend(
@@ -144,14 +165,15 @@ def find_duplicates(objects: Sequence[SchemaObject]) -> list[Duplicate]:
             definitions=tuple(_definition(obj) for obj in group),
             wins=_wins(group),
         )
-        for group in by_key.values()
+        for group in groups
         if len(group) > 1
     )
 
-    routines: dict[tuple[str, str, str], list[SchemaObject]] = defaultdict(list)
-    for key, group in by_key.items():
-        if key[0] in ("function", "procedure"):
-            routines[key[:3]].append(group[0])
+    routines: dict[tuple[str, str | None, str], list[SchemaObject]] = defaultdict(list)
+    for group in groups:
+        first = group[0]
+        if first.kind in ("function", "procedure"):
+            routines[_family(first)].append(first)
     for family in routines.values():
         files = {obj.file for obj in family}
         if len(family) > 1 and len(files) > 1:

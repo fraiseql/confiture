@@ -20,11 +20,13 @@
     },
     "tables_checked": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "description": "Tables found in the files that parsed. A file pglast rejected contributes nothing to this count and is reported as an `UNPARSEABLE` finding naming the file, with an entry in `degraded` for every rule that lost it."
     },
     "columns_checked": {
       "type": "integer",
-      "minimum": 0
+      "minimum": 0,
+      "description": "Columns found in the files that parsed; see `tables_checked`."
     },
     "execution_time_ms": {
       "type": [

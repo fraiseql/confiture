@@ -46,6 +46,7 @@ import psycopg.rows
 
 from confiture.core import sql_lexer
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
+from confiture.core.linting.inventory import type_text
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
 
@@ -124,48 +125,27 @@ def _split_funcname(funcname: Any) -> tuple[str, str]:
     return parts[-2], parts[-1]
 
 
-# Shared with func_001: map pg_catalog type aliases to human form.
-_PG_CATALOG_ALIASES: dict[str, str] = {
-    "int2": "smallint",
-    "int4": "integer",
-    "int8": "bigint",
-    "float4": "real",
-    "float8": "double precision",
-    "bool": "boolean",
-    "bpchar": "char",
-    "timestamp": "timestamp",
-    "timestamptz": "timestamp with time zone",
-    "timetz": "time with time zone",
-}
-
 _NON_SIGNATURE_MODES: frozenset[str] = frozenset({"FUNC_PARAM_OUT", "FUNC_PARAM_TABLE"})
 
 
-def _render_param_type(type_node: Any) -> str:
-    """Render a pglast ``TypeName`` node into a normalised string."""
-    names = [n.sval for n in type_node.names]
-    if len(names) == 2 and names[0] == "pg_catalog":
-        base = _PG_CATALOG_ALIASES.get(names[1], names[1])
-    else:
-        base = ".".join(names)
-    bounds = getattr(type_node, "arrayBounds", None)
-    if bounds:
-        base = f"{base}{'[]' * len(bounds)}"
-    return base
-
-
 def _render_param_list(parameters: Any) -> str:
-    """Return a comma-separated arg-type string for an ALTER FUNCTION signature."""
+    """A comma-separated arg-type string for an ``ALTER FUNCTION`` signature.
+
+    `inventory.type_text` — the types **as written** — and deliberately not the
+    canonical key `func_001` compares on. This string goes into the
+    ``ALTER FUNCTION app.f(…) SET search_path`` statement the finding tells the
+    operator to run, so it should read the way their `CREATE` reads. A copy of
+    `func_001`'s alias table lived here under a comment saying it was shared
+    with it; it was not shared, it was pasted, and neither covered a bare
+    internal name (#275).
+    """
     if not parameters:
         return ""
-    types: list[str] = []
-    for p in parameters:
-        mode = p.mode
-        mode_name = mode.name if mode else ""
-        if mode_name in _NON_SIGNATURE_MODES:
-            continue
-        types.append(_render_param_type(p.argType))
-    return ", ".join(types)
+    return ", ".join(
+        type_text(p.argType)
+        for p in parameters
+        if (p.mode.name if p.mode else "") not in _NON_SIGNATURE_MODES
+    )
 
 
 def _make_alter_sql(schema: str, name: str, param_list: str) -> str:

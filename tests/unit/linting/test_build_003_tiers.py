@@ -93,7 +93,10 @@ def test_a_run_without_the_live_tier_says_so_in_the_table(in_tmp: Path) -> None:
     result = runner.invoke(app, ["lint", "--select", "build_003", "--fail-on", "never"])
 
     assert result.exit_code == 0
-    assert "build_003 ran without the live tier" in result.output
+    # The verb is the state; which tier was missing is the rule's own reason,
+    # since 1.9.0 — an unread file degrades a rule that has no live tier (#274).
+    assert "build_003 ran on less than the whole schema" in result.output
+    assert "no database answered" in result.output
 
 
 def test_nothing_is_said_when_every_name_resolved(in_tmp: Path) -> None:

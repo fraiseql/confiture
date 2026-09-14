@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.8.0
-**Last Updated**: September 10, 2026
+**Version**: 1.9.0
+**Last Updated**: September 14, 2026
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -193,13 +193,43 @@ grammar; do not repair the JSON with a global replace.
 
 **One lexer too.** `core/sql_lexer.py` is the only module that tokenises SQL text
 (`split_statements`, `strip_comments`, `tokens`, `code_text`, `comments`,
-`directives`, `strip_copy_blocks`). A regex outside it whose pattern carries a
+`directives`, `blank_copy_blocks`). A regex outside it whose pattern carries a
 lexical marker — `--`, `/*`, a dollar quote, a `'…'` shape, `stdin`, `\.` — fails
 `tests/unit/test_one_sql_lexer.py` (allow-list entries state why the text is not
 SQL); a regex that matches a statement's shape (`^CREATE\s+TABLE`) counts against
 the shrink-only `sql_keyword_regex` dimension of `tests/budgets.json`. Read a
 `-- confiture:<name>` directive through `sql_lexer.directives()`, never with a
 line walker of your own.
+
+A `COPY … FROM stdin` block is **blanked, never stripped** (since 1.9.0, #274).
+`blank_copy_blocks` replaces the block's characters with spaces and leaves its
+newlines alone, so the text pglast reads is the same length, the same line count
+and the same offsets as the text on disk. `strip_copy_blocks` is retired, not
+kept alongside: deleting a block moves every finding after it, and `confiture
+lint` reports `file:line` on all of them. The same technique — #270's — blanks a
+whole file the lint could not parse, which is what makes a rejected file cost
+that file rather than the build.
+
+**One type canonicaliser too** (since 1.9.0, #275). `core/type_lattice.py` holds
+the only alias table: `canonical_type` decides that `int8` and `bigint` are one
+type, and `core/ddl_walk.type_name` is its reader for a pglast `TypeName` — it
+drops the `pg_catalog` qualifier the parser adds, keeps the array suffix, and
+leaves the internal spelling for the lattice to alias. There were **six** such
+tables resolving in **three** directions; `tests/unit/test_one_type_canonicaliser.py`
+deleted the two under `core/linting/` and allow-lists the other three with the
+reason each is a different question (`core/differ.py` writes upper-case column
+types into a migration, `core/function_signature_parser.py` resolves the
+*opposite* way for what `--check-signatures` prints, `core/drift.py` compares a
+live column type against a DDL one). An allow-list entry that no longer matches
+anything fails, as in the one-lexer guard.
+
+A type's *identity* and its *spelling* are two fields, deliberately:
+`SchemaObject.signature` is the arguments as the author wrote them, because it is
+what a finding prints, and `signature_key` is `canonical_type(type_name(arg))` per
+argument, because it is what decides whether two routines are the same routine.
+`object_key` is a **bucket**, not an identity — a dict key cannot express "a type
+schema written on one side and left off the other still matches" — so group
+through `inventory.group_by_signature`, never through the key alone.
 
 **One path matcher too** (since 1.5.0, #256). `core/path_globs.py` answers "does
 this path, relative to its include directory, match this configured glob" and
@@ -1211,8 +1241,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: September 10, 2026
-**Version**: 1.8.0
+**Last Updated**: September 14, 2026
+**Version**: 1.9.0
 
 ---
 
