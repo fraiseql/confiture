@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.9.0
+**Version**: 1.9.1
 **Last Updated**: September 14, 2026
 **Current Status**: Production-Ready
 
@@ -209,6 +209,18 @@ kept alongside: deleting a block moves every finding after it, and `confiture
 lint` reports `file:line` on all of them. The same technique — #270's — blanks a
 whole file the lint could not parse, which is what makes a rejected file cost
 that file rather than the build.
+
+`_lex` reads the file once however many blocks are in it (since 1.9.1, #278).
+After a block whose data it cannot resume across, the rescan grows a window from
+the resume point until a complete `COPY … FROM stdin;` is inside it, rather than
+handing `pglast.parser.scan` the rest of the file — the scanner reads its whole
+buffer however early its error is, so that cost O(n × total) for n blocks. A
+window is trusted for exactly the one block it was grown to hold: its tokens stop
+at the window, not at the end of the file, so resuming inside one drops
+everything past it. Note that `\.` does **not** make the scanner error
+(`scan("\\.\n")` is `ASCII_92`, `ASCII_46`); an unterminated quote does, which
+is why a corpus whose data rows lex cleanly never reaches the rescan at all and
+proves nothing about it.
 
 **One type canonicaliser too** (since 1.9.0, #275). `core/type_lattice.py` holds
 the only alias table: `canonical_type` decides that `int8` and `bigint` are one
@@ -936,10 +948,11 @@ A rule that emits violations without a registry entry still reports (unregistere
 codes are never filtered out), but it is invisible to `--list-rules` and cannot
 be selected or ignored.
 
-Confiture runs a **deliberately focused ruff ruleset** (`E, W, F, I, B, C4, UP,
-ARG, SIM`), not the full prescribed superset. The heavier families (`PL, PERF,
-FURB, ERA, PTH, TCH, RUF`) are intentionally off for now; `[tool.ruff.lint]` in
-`pyproject.toml` is the source of truth and documents the rationale.
+Confiture runs `E, W, F, I, B, C4, UP, ARG, SIM` plus the heavier families the
+top-notch plan turned on in Phase 11 — `RUF`, `ERA`, `PTH`, `PERF`, `PL` and
+`C901`, the last two with their design metrics baselined in `tests/budgets.json`.
+Only `FURB` and `TCH` are still off. `[tool.ruff.lint]` in `pyproject.toml` is the
+source of truth and documents the rationale, per-rule ignores included.
 
 ### Pre-commit Hooks
 
@@ -1242,7 +1255,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: September 14, 2026
-**Version**: 1.9.0
+**Version**: 1.9.1
 
 ---
 

@@ -14,6 +14,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-09-14
+
+Two scheduled workflows that had been red since 2026-09-10 — one every night, one every
+Monday — without anyone opening the logs, and a lexer that read the file once per `COPY`
+block instead of once. Between them: a step that announced it had created databases it had
+not, a timing bound measured from a single cold sample, a job that did all its work and
+failed on the last line, and a rescan that was quadratic in a file's block count.
+
+### Fixed
+
+- **`sql_lexer._lex` is linear in the number of `COPY … FROM stdin` blocks**
+  ([#278](https://github.com/fraiseql/confiture/issues/278)). It was two quadratics, and the
+  issue names one. *The rescan*: `pglast.parser.scan` reads its whole buffer however early its
+  error is, so the rescan after each block cost O(remaining) and n blocks O(n × total);
+  `_scan_after_block` now grows a window from the resume point until it holds a complete
+  `COPY … FROM stdin;`, and a prefix is safe to scan alone because cutting text short can only
+  destroy structure, never invent it. *The index searches*: `_lex` filtered the whole remaining
+  token list to find the tokens before a block's data, and `_resume_index` walked from index 0
+  to find the boundary — quadratic even when nothing rescans. Both are now bounded by the
+  block's own content. At 1600 blocks: 38 003.9 ms → 188.5 ms where the data carries an
+  apostrophe, 3 906.4 ms → 79.1 ms where it does not. Answers are unchanged — 5000 generated
+  inputs and all 3812 `.sql` files in the repository lex byte-identically across all eight
+  public functions.
+
+  Worth recording, because the issue and the plan both had it wrong: `\.` does **not** make the
+  scanner error (`scan("\\.\n")` returns `ASCII_92`, `ASCII_46`). An unterminated quote does —
+  an apostrophe in a text value, which is in every real dump. A seed file whose rows happen to
+  lex cleanly never reaches the rescan at all.
+
+- **`Migration Performance Monitoring` creates every database it hands its tests.** Two of the
+  three never existed, and the step printed `✅ Performance test database created` anyway.
+  `psql -U confiture -d postgres -c "SELECT 1" confiture_source_test` is not a probe of
+  `confiture_source_test`: psql takes at most `[dbname [username]]` positionally and `-d`/`-U`
+  had filled both, so the name was discarded with a warning that the line's own
+  `>/dev/null 2>&1` swallowed. `SELECT 1` ran against `postgres`, could not fail, and the `||`
+  that creates the database never ran — 8 errors a night.
+
+- **`test_import_confiture_is_cheap` measures a floor, not one cold sample.** It failed the
+  nightly leg at 30.022986999995283 ms against a 30 ms bound. One subprocess measures the
+  machine as much as the import: 25 local samples run 13.3/15.1/34.4 ms (min/median/max). It
+  now takes the best of five; the bound is unchanged.
+
+### Changed
+
+- **`Lockfile Bump` files an issue instead of opening a pull request.** `uv lock --upgrade` ran
+  and the branch pushed, and then the last step failed every Monday with `GitHub Actions is not
+  permitted to create or approve pull requests` — organisation policy, which no repository-level
+  setting overrides. The job now pushes `chore/lockfile-bump` and opens (or updates) one issue
+  carrying the diffstat and a one-click compare link. The quality gate runs on the pull request
+  a person opens from there, as it always did; what changed is that the job no longer claims it
+  will open that pull request itself.
+
+### Internal
+
+- `TestScanWindowIsInvisible` pins every public `sql_lexer` answer as identical at scan-window
+  sizes from 1 byte to 1 MiB — a window past the input takes the whole-remainder branch, which
+  is the pre-#278 algorithm, so the differential against it is kept rather than discarded.
+  `TestTheTextIsScannedOnce` holds the same property without a clock: the text handed to the
+  scanner stays proportional to the file as the block count grows (it was 602× the file at 800
+  blocks). `TestMigrationPerformance`, `TestPsqlInvocations` and `TestNoWorkflowOpensAPullRequest`
+  fail on the three workflow defects above rather than waiting for a schedule.
+
 ## [1.9.0] - 2026-09-14
 
 Two reports a week apart, both against `confiture lint`, both the same shape of failure: **the rule

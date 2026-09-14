@@ -72,16 +72,28 @@ jobs:
         pg_isready -h localhost -p 5432 -U confiture && echo '✅ PostgreSQL Ready' || exit 1
         uv run python -c "import psycopg; conn = psycopg.connect('$DATABASE_URL'); print('✅ DB connection successful'); conn.close()" || exit 1
 
-    - name: Create performance test database
+    - name: Create performance test databases
       env:
         PGPASSWORD: confiture
+      # Every database named in the benchmark step's environment is created here, on
+      # the path that always runs. The previous form probed first and created only on
+      # failure — but `psql -d postgres -c "SELECT 1" confiture_source_test` does not
+      # probe `confiture_source_test`: `-d` and `-U` have already taken psql's two
+      # positional slots, so the name was discarded ("extra command-line argument
+      # ignored", into the line's own `>/dev/null 2>&1`) and `SELECT 1` ran against
+      # `postgres`. The probe could not fail, so the `||` never fired and two of the
+      # three databases were never created. DROP-then-CREATE is idempotent; do not
+      # reintroduce a conditional, and spell each name out — the guard in
+      # tests/unit/test_ci_workflows.py reads these lines literally.
       run: |
-        echo "=== Creating Performance Test Database ==="
+        echo "=== Creating Performance Test Databases ==="
         psql -h localhost -U confiture -d postgres -c "DROP DATABASE IF EXISTS confiture_perf_test;"
         psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_perf_test;"
-        psql -h localhost -U confiture -d postgres -c "SELECT 1" confiture_source_test >/dev/null 2>&1 || psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_source_test;"
-        psql -h localhost -U confiture -d postgres -c "SELECT 1" confiture_target_test >/dev/null 2>&1 || psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_target_test;"
-        echo "✅ Performance test database created"
+        psql -h localhost -U confiture -d postgres -c "DROP DATABASE IF EXISTS confiture_source_test;"
+        psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_source_test;"
+        psql -h localhost -U confiture -d postgres -c "DROP DATABASE IF EXISTS confiture_target_test;"
+        psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_target_test;"
+        echo "✅ Performance test databases created"
 
     - name: Run benchmark-marked tests
       # Every test asserting an upper bound on a measured duration is marked

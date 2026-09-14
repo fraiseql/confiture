@@ -40,6 +40,14 @@ _COMMENT_TOKENS = frozenset({"SQL_COMMENT", "C_COMMENT"})
 _STRING_TOKENS = frozenset({"SCONST", "USCONST", "BCONST", "XCONST"})
 _SEMICOLON = "ASCII_59"
 _COPY_TERMINATOR = "\\."
+# Bytes to scan ahead when looking for the next COPY block. Doubling from here
+# rescans from scratch, so reaching a block d bytes away costs ~2d whatever the
+# floor is; the floor only has to clear the statement that introduces one. Measured
+# over 1600 dense blocks (a pg_dump seed, the shape #278 is about) and over blocks
+# 3 KB apart: 128 costs 56.7 ms / 3.1x the file on the first and is within noise of
+# every other value on the second, while 512 costs 105 ms / 9.0x and 4096 costs
+# 645 ms / 55x.
+_SCAN_WINDOW = 128
 #: What a comment must start with to be a directive: ``-- confiture:<name> [argument]``.
 DIRECTIVE_PREFIX = "confiture:"
 _WHITESPACE = " \t\n\r\f\v"
@@ -291,6 +299,7 @@ def _lex(sql: str) -> tuple[list[Any], list[tuple[int, int]]]:
     blocks: list[tuple[int, int]] = []
     n = len(sql)
     toks = _scan_recovering(sql)
+    windowed = False
     base = 0
     idx = 0
     while True:
@@ -302,18 +311,56 @@ def _lex(sql: str) -> tuple[list[Any], list[tuple[int, int]]]:
         newline = sql.find("\n", base + toks[semicolon].end + 1)
         data_start = n if newline == -1 else newline + 1
         # The rest of the COPY line is still code: psql lexes it before it reads data.
-        out.extend(_shift([t for t in toks[idx:] if base + t.start < data_start], base))
+        # Tokens are sorted by offset, so the run ends at the first one that is not —
+        # searching from the semicolon rather than filtering the whole tail, which cost
+        # O(tokens) per block and was the larger half of #278's quadratic.
+        data_first = _index_at_or_after(toks, semicolon + 1, base, data_start)
+        out.extend(_shift(toks[idx:data_first], base))
         data_end = _terminator_end(sql, data_start)
         blocks.append((base + toks[first].start, data_end))
         if data_end >= n:
             return out, blocks
-        resume = _resume_index(sql, toks, base, data_end)
+        # A windowed scan is trusted for the one block it was grown to hold and no
+        # further: its tokens stop at the window, not at the end of the file, so
+        # resuming inside one would drop everything past it without a word. The
+        # scanner tokenises `\.` quite happily (`ASCII_92`, `ASCII_46`), so a window
+        # that reaches past a block's data really can look in sync at `data_end` —
+        # measured, 1359 of 2198 windowed rescans over generated input. Dropping this
+        # guard loses text, silently.
+        resume = None if windowed else _resume_index(sql, toks, data_first, base, data_end)
         if resume is None:
-            toks = _scan_recovering(sql[data_end:])
+            toks, windowed = _scan_after_block(sql, data_end)
             base = data_end
             idx = 0
         else:
             idx = resume
+
+
+def _scan_after_block(sql: str, start: int) -> tuple[list[Any], bool]:
+    """Tokens of ``sql[start:]`` scanned only as far as the next COPY block needs.
+
+    Returns ``(tokens, windowed)``; offsets are relative to ``start``. ``windowed``
+    is false when the tokens cover the whole of ``sql[start:]``, and true when they
+    stop at a window that was grown until it held a complete ``COPY … FROM stdin;``.
+
+    ``pglast.parser.scan`` reads its whole buffer however early its error is, so
+    handing it the rest of the file after every block cost O(remaining) each time
+    and O(n × total) for n blocks (issue #278). It only ever needs to reach the
+    *next* block, and a prefix is safe to scan on its own because cutting text short
+    can only destroy structure, never invent it: an unterminated string, comment or
+    dollar quote makes the scanner error and ``_scan_recovering`` cuts back to
+    before it, so a ``COPY … FROM stdin;`` found inside a window stands at that same
+    offset in the whole text. A window holding no complete block is grown, never
+    trusted.
+    """
+    remaining = len(sql) - start
+    window = _SCAN_WINDOW
+    while window < remaining:
+        toks = _scan_recovering(sql[start : start + window])
+        if _first_copy_statement(toks, 0) is not None:
+            return toks, True
+        window *= 2
+    return _scan_recovering(sql[start:]), False
 
 
 def _scan_recovering(text: str) -> list[Any]:
@@ -370,21 +417,31 @@ def _terminator_end(sql: str, start: int) -> int:
     return n
 
 
-def _resume_index(sql: str, toks: list[Any], base: int, data_end: int) -> int | None:
+def _index_at_or_after(toks: list[Any], lo: int, base: int, offset: int) -> int:
+    """Index of the first token from ``lo`` whose start is at or past ``offset``."""
+    j = lo
+    while j < len(toks) and base + toks[j].start < offset:
+        j += 1
+    return j
+
+
+def _resume_index(sql: str, toks: list[Any], lo: int, base: int, data_end: int) -> int | None:
     """Index of the first token at or after ``data_end`` if the scan is still in sync there.
 
     The scanner tokenised the data rows as if they were SQL. Its tokens after
     the block are trustworthy only if it was between tokens where the code
     resumes: a token starts exactly at the first code character and no earlier
     token spans the boundary. ``None`` means rescan.
+
+    ``lo`` is a token index known to sit at or before ``data_end`` — the search for
+    the boundary starts there, so each block pays for its own data rather than for
+    every token before it (#278).
     """
     code_start = data_end
     n = len(sql)
     while code_start < n and sql[code_start] in _WHITESPACE:
         code_start += 1
-    j = 0
-    while j < len(toks) and base + toks[j].start < data_end:
-        j += 1
+    j = _index_at_or_after(toks, lo, base, data_end)
     if j and base + toks[j - 1].end >= data_end:
         return None
     if code_start >= n:

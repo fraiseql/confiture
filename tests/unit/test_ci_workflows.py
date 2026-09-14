@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
@@ -82,3 +83,122 @@ class TestExamplesJob:
             if "set -euo pipefail" not in text:
                 offenders.append(f"{script.parent.name}: missing `set -euo pipefail`")
         assert offenders == []
+
+
+class TestMigrationPerformance:
+    """The benchmark leg is told which databases to use; something has to create them.
+
+    `psql -h … -U confiture -d postgres -c "SELECT 1" confiture_source_test` reads as an
+    existence probe and is not one: psql's positional arguments are `[dbname [username]]`
+    and `-d`/`-U` had already filled both, so the name was discarded with a warning that
+    the line's own `>/dev/null 2>&1` swallowed. The probe asked `postgres` instead, always
+    succeeded, and the `||` branch that creates the database never ran — so every test
+    reaching for `confiture_source_test` errored at setup, nightly, unnoticed.
+    """
+
+    WORKFLOW = "migration-performance.yml"
+    JOB = "performance-monitoring"
+
+    @staticmethod
+    def _database_names(env: dict) -> set[str]:
+        names = set()
+        for key, value in env.items():
+            if key != "DATABASE_URL" and not key.endswith("_DB_URL"):
+                continue
+            path = urlparse(str(value)).path.lstrip("/")
+            if path:
+                names.add(path)
+        return names
+
+    @staticmethod
+    def _unconditionally_created(script: str) -> set[str]:
+        """Databases this script creates on the path that always runs.
+
+        A `CREATE DATABASE` behind a `||` runs only when the probe to its left fails,
+        and the probe here could not fail — so the text was present and the database
+        was not. Creation has to be unconditional to count.
+        """
+        always_runs = "\n".join(line.split("||")[0] for line in script.splitlines())
+        return set(re.findall(r"CREATE DATABASE\s+(\w+)", always_runs))
+
+    def test_every_database_the_tests_are_given_is_created_first(self) -> None:
+        data = yaml.safe_load((WORKFLOWS / self.WORKFLOW).read_text())
+        job = data["jobs"][self.JOB]
+        # The service container creates its own POSTGRES_DB before any step runs.
+        available = {
+            service.get("env", {}).get("POSTGRES_DB")
+            for service in job.get("services", {}).values()
+        } - {None}
+        missing: list[str] = []
+        for step in job["steps"]:
+            missing.extend(
+                f"{step.get('name', '?')}: {name}"
+                for name in sorted(self._database_names(step.get("env", {})))
+                if name not in available
+            )
+            available.update(self._unconditionally_created(step.get("run", "")))
+        assert missing == [], (
+            "these databases are named in a step's environment but nothing creates them "
+            f"beforehand, so the tests that use them error at setup: {missing}"
+        )
+
+
+class TestPsqlInvocations:
+    """A positional after `-d` is not the database psql will connect to."""
+
+    # psql takes at most `[dbname [username]]`. `-d` fills the first slot, so any
+    # positional that follows can only land in `username` — never the database the
+    # author meant — and once `-U` has filled that too it is discarded with a warning.
+    _CALL = re.compile(r'psql\s(?P<args>[^\n]*?)-c\s+"[^"]*"\s+(?P<trailing>\S+)')
+    _NOT_AN_ARGUMENT = re.compile(r"^(?:[0-9]*[<>]|[|&;)]|\\$|-)")
+
+    def test_no_positional_database_follows_an_explicit_d_flag(self) -> None:
+        offenders = []
+        for workflow in sorted(WORKFLOWS.glob("*.yml")):
+            data = yaml.safe_load(workflow.read_text())
+            for job in data.get("jobs", {}).values():
+                for step in job.get("steps", []):
+                    for line in step.get("run", "").splitlines():
+                        for match in self._CALL.finditer(line):
+                            trailing = match.group("trailing")
+                            if self._NOT_AN_ARGUMENT.match(trailing):
+                                continue
+                            if not re.search(r"(?:^|\s)-d\s", match.group("args")):
+                                continue  # no -d: the positional legitimately is the dbname
+                            offenders.append(f"{workflow.name}: {line.strip()}")
+        assert offenders == [], (
+            "`-d` has already filled psql's `dbname` slot, so this positional is read as a "
+            f"username or discarded outright — it is not the database being asked: {offenders}"
+        )
+
+
+class TestNoWorkflowOpensAPullRequest:
+    """The `fraiseql` org forbids Actions from creating pull requests.
+
+        ##[error]GitHub Actions is not permitted to create or approve pull requests.
+
+    `Lockfile Bump` failed on that every Monday: `uv lock --upgrade` ran, the branch
+    pushed, and only the last step failed — so the run was red for a reason no commit
+    could cause and no log line above it hinted at. The policy is organisation-wide
+    (a repository-level `can_approve_pull_request_reviews` cannot override it), so a
+    workflow that opens a PR is a workflow that fails after doing all of its work.
+    Push the branch and say so somewhere a person will look.
+    """
+
+    _PR_CREATORS = (
+        "peter-evans/create-pull-request",
+        "gh pr create",
+        "repos/{owner}/{repo}/pulls",
+    )
+
+    def test_no_workflow_step_creates_a_pull_request(self) -> None:
+        offenders = []
+        for workflow in sorted(WORKFLOWS.glob("*.yml")):
+            text = workflow.read_text()
+            offenders.extend(
+                f"{workflow.name}: {creator}" for creator in self._PR_CREATORS if creator in text
+            )
+        assert offenders == [], (
+            "the organisation blocks Actions from creating pull requests, so this step "
+            f"fails after the job has already done its work: {offenders}"
+        )
