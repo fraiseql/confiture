@@ -250,10 +250,29 @@ class TestScanWindowIsInvisible:
                 "change how much text is read"
             )
 
-    def test_the_corpus_actually_exercises_the_rescan(self) -> None:
-        """A corpus of inputs with no COPY block would pass this whole class vacuously."""
-        with_blocks = [name for name, sql in self.CORPUS.items() if sql_lexer._lex(sql)[1]]
-        assert len(with_blocks) >= 12, with_blocks
+    def test_the_corpus_reaches_the_code_it_guards(self, monkeypatch) -> None:
+        """Holding COPY blocks is not enough, and assuming it was is how this started.
+
+        A block whose rows lex cleanly leaves the scan in sync, resumes, and never
+        calls ``_scan_after_block`` at all — so a corpus of those exercises the window
+        nowhere while looking thorough. Count the entries that actually rescan.
+        """
+        real = sql_lexer._scan_after_block
+        current: dict[str, str] = {}
+        rescanned: set[str] = set()
+
+        def counting(sql: str, start: int):
+            rescanned.add(current["name"])
+            return real(sql, start)
+
+        monkeypatch.setattr(sql_lexer, "_scan_after_block", counting)
+        with_blocks = set()
+        for name, sql in self.CORPUS.items():
+            current["name"] = name
+            if sql_lexer._lex(sql)[1]:
+                with_blocks.add(name)
+        assert len(with_blocks) >= 15, sorted(with_blocks)
+        assert len(rescanned) >= 4, sorted(rescanned)
 
 
 class TestTheTextIsScannedOnce:
