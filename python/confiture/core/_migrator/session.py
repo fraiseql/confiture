@@ -590,17 +590,23 @@ class MigratorSession:
         dry_run: bool = False,
         apply_seeds: bool = False,
         backup_tracking: bool = False,
+        seeds_dir: Path | None = None,
     ) -> MigrateRebuildResult:
         """Rebuild database from DDL and bootstrap tracking table.
 
         Orchestrates a full rebuild: drops schemas (optional), applies DDL,
         bootstraps tracking, and optionally applies seeds.
 
+        The DDL comes from the environment's ``include_dirs``; redirect the
+        schema source there, not here.
+
         Args:
             drop_schemas: Drop all user schemas before rebuild.
             dry_run: Report what would happen without executing.
             apply_seeds: Apply seed files after DDL.
             backup_tracking: Dump tracking table before clearing.
+            seeds_dir: Directory to read seed files from when ``apply_seeds``
+                is set. Defaults to ``db/seeds``.
 
         Returns:
             :class:`~confiture.models.results.MigrateRebuildResult` (its fields are documented there).
@@ -622,6 +628,7 @@ class MigratorSession:
             apply_seeds=apply_seeds,
             backup_tracking=backup_tracking,
             migrations_dir=self._migrations_dir,
+            seeds_dir=seeds_dir,
             env_config=self._config,
         )
 
