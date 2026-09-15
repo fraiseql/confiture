@@ -28,4 +28,16 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$schema"
 confiture migrate baseline --through 003 --config "$cfg" --migrations-dir db/migrations
 confiture migrate status --config "$cfg" --migrations-dir db/migrations | grep -q "0 pending"
 psql "$DB_URL" -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('users', 'projects', 'tasks')" | grep -qx 3
+
+# The seed files, applied in the order they sort. A seed file nothing applies is
+# data that has never loaded: both of these inserted a task as 'done' without the
+# completed_at that the table's own CHECK constraint demands, and for as long as
+# run.sh stopped at the schema, nothing said so (#266).
+for seed in db/seeds/ci/*.sql db/seeds/local/*.sql; do
+    psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$seed" > /dev/null
+done
+# Tasks that are done are what exercises tasks_completed_when_done; a fixture that
+# stopped choosing 'done' would apply cleanly and prove nothing.
+psql "$DB_URL" -v ON_ERROR_STOP=1 -Atc "SELECT count(*) > 0 FROM tasks WHERE status = 'done'" | grep -qx t
+
 echo "✅ 05-multi-environment-workflow: ok"

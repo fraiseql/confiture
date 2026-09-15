@@ -25,7 +25,7 @@ WHERE u.email LIKE 'test%@example.com'
 ON CONFLICT (owner_id, name) DO NOTHING;
 
 -- Test tasks with various statuses and priorities
-INSERT INTO tasks (project_id, assigned_to, title, priority, status, due_date)
+INSERT INTO tasks (project_id, assigned_to, title, priority, status, due_date, completed_at)
 SELECT
     p.id,
     p.owner_id,
@@ -42,7 +42,11 @@ SELECT
         WHEN 2 THEN 'done'
         ELSE 'cancelled'
     END,
-    NOW() + (ROW_NUMBER() OVER (ORDER BY p.id) || ' days')::INTERVAL
+    NOW() + (ROW_NUMBER() OVER (ORDER BY p.id) || ' days')::INTERVAL,
+    -- tasks_completed_when_done: a done task carries a completion timestamp and
+    -- nothing else does. set_task_completed_at() fills this in on UPDATE only, so
+    -- a row inserted as 'done' has to say it here.
+    CASE WHEN ROW_NUMBER() OVER (ORDER BY p.id) % 4 = 2 THEN NOW() END
 FROM projects p
 ON CONFLICT DO NOTHING;
 

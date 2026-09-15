@@ -23,7 +23,7 @@ WHERE u.email IN ('alice@example.com', 'bob@example.com', 'charlie@example.com')
 ON CONFLICT (owner_id, name) DO NOTHING;
 
 -- Sample tasks
-INSERT INTO tasks (project_id, assigned_to, title, description, priority, status, due_date)
+INSERT INTO tasks (project_id, assigned_to, title, description, priority, status, due_date, completed_at)
 SELECT
     p.id,
     u.id,
@@ -31,6 +31,9 @@ SELECT
     'Install and configure local development tools',
     'high',
     'done',
+    NOW() - INTERVAL '2 days',
+    -- tasks_completed_when_done: status = 'done' requires completed_at, and the
+    -- trigger that would set it fires on UPDATE, not on this INSERT.
     NOW() - INTERVAL '2 days'
 FROM projects p
 JOIN users u ON u.id = p.owner_id

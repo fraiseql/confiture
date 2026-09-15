@@ -265,10 +265,10 @@ def test_analytics_views_work(test_db):
 
         cur.execute(
             """
-                INSERT INTO tasks (project_id, title, status)
+                INSERT INTO tasks (project_id, title, status, completed_at)
                 VALUES
-                    (%s, 'Task 1', 'todo'),
-                    (%s, 'Task 2', 'done')
+                    (%s, 'Task 1', 'todo', NULL),
+                    (%s, 'Task 2', 'done', NOW())
             """,
             (project_id, project_id),
         )
