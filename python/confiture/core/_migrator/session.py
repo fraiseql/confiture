@@ -1,4 +1,21 @@
-"""MigratorSession — context manager for managed migration sessions."""
+"""MigratorSession — context manager for managed migration sessions.
+
+The file is a facade, and it is long because it is documented: of its ~690 lines,
+~330 are the ``Args:``/``Raises:``/``Example:`` blocks of the public library API
+and ~290 are code. The longest verb, ``up()``, is 43 code lines against a budget
+of 150. A line count is the wrong instrument here — the 2026-06 remediation
+target of ≤500 could only be met by deleting or relocating the documentation a
+library user reads, so it was retired rather than met (ARCHITECTURE.md
+Decision 10).
+
+What does constrain this file is that every public verb stays a pass-through:
+resolve the lock settings, hand every parameter to ``apply_loop``,
+``rollback_loop``, ``replay``, ``reporting`` or the engine, return.
+``tests/unit/test_one_session_signature.py`` fails on a verb that neither
+delegates nor is listed as deliberately not delegating, and pins the three echoes
+of each signature — the ``Args:`` block, the forwarding call, and the fence in
+``docs/api/migrator.md`` — against the signature itself.
+"""
 
 from __future__ import annotations
 
