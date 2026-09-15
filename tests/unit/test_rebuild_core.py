@@ -444,3 +444,61 @@ class TestRebuildOrchestrator:
 
         assert result.success is True
         assert "extension uuid-ossp not available" in result.warnings
+
+
+class TestRebuildHonoursItsEnvironment:
+    """The ``Environment`` the caller passed is the one the build reads."""
+
+    def _make_migrator(self):
+        from confiture.core.migrator import Migrator
+
+        conn = MagicMock()
+        conn.autocommit = False
+        cursor = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        return Migrator(connection=conn)
+
+    @staticmethod
+    def _nameless_env(**overrides):
+        """The minimal migrate-only config #168 made valid: no ``name:`` key."""
+        from confiture.config.environment import Environment
+
+        return Environment.model_validate({"database_url": "postgresql://localhost/x", **overrides})
+
+    @patch("confiture.core.builder.SchemaBuilder", autospec=True)
+    def test_builder_receives_the_environment_not_its_name(self, MockBuilder):
+        """``SchemaBuilder`` accepts ``str | Environment``. Passing ``env_config.name``
+        instead re-reads the YAML from disk and discards the caller's own config."""
+        migrator = self._make_migrator()
+        MockBuilder.return_value.build.return_value = "CREATE TABLE t (id INT);"
+        migrator._apply_ddl_string = MagicMock(return_value=(1, []))
+        migrator.initialize = MagicMock()
+        migrator.reinit = MagicMock(return_value=MagicMock(migrations_marked=[]))
+
+        env = self._nameless_env(include_dirs=["db/schema"])
+        migrator.rebuild(migrations_dir=Path("db/migrations"), env_config=env)
+
+        assert MockBuilder.call_args.kwargs["env"] is env
+
+    def test_nameless_environment_does_not_send_the_loader_after_a_yaml_file(self):
+        """A config with no ``name:`` used to fail on ``db/environments/.yaml``, which
+        names neither the caller's mistake nor anything they can create."""
+        migrator = self._make_migrator()
+
+        with pytest.raises(RebuildError) as excinfo:
+            migrator.rebuild(migrations_dir=Path("db/migrations"), env_config=self._nameless_env())
+
+        message = str(excinfo.value)
+        assert "db/environments/.yaml" not in message
+        assert "include_dirs" in message
+
+    def test_a_configuration_failure_is_not_blamed_on_the_ddl(self):
+        """The build reads a config to find the DDL; either can be at fault, and the
+        remedy for one is no use for the other."""
+        migrator = self._make_migrator()
+
+        with pytest.raises(RebuildError) as excinfo:
+            migrator.rebuild(migrations_dir=Path("db/migrations"), env_config=self._nameless_env())
+
+        assert "syntax errors" not in (excinfo.value.resolution_hint or "")
