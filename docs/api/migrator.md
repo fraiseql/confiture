@@ -50,7 +50,9 @@ def from_config(
     cls,
     config: "Environment | Path | str",
     *,
-    migrations_dir: "Path | str" = "db/migrations",
+    migrations_dir: "Path | str" = Path("db/migrations"),
+    connection_factory: "Callable[[Any], Any] | None" = None,
+    migration_loader: "Callable[[Path], type] | None" = None,
 ) -> "MigratorSession":
     """Create a managed MigratorSession from an environment config.
 
@@ -58,6 +60,10 @@ def from_config(
         config: an ``Environment`` instance, or a ``Path``/``str`` to a YAML
                 config file (e.g. ``"db/environments/prod.yaml"``).
         migrations_dir: directory containing migration files.
+        connection_factory: opens the connection instead of confiture's own —
+                the seam an embedder uses to supply a pooled connection.
+        migration_loader: turns a migration file into a class, for an embedder
+                that keeps migrations somewhere other than on disk.
 
     Returns:
         A MigratorSession. Must be used as a context manager.
@@ -111,13 +117,17 @@ def up(
     verify_checksums: bool = True,
     on_checksum_mismatch: str = "fail",
     force: bool = False,
-    lock_timeout: int = 30000,
-    no_lock: bool = False,
+    lock_timeout: int | None = None,
+    no_lock: bool | None = None,
     require_reversible: bool = False,
+    allow_destructive: bool = False,
+    online: bool = False,
+    backfill: "BackfillSettings | None" = None,
     strict_mode: bool | None = None,
     auto_baseline: Path | None = None,
     install_view_helpers: bool | None = None,
     on_event: Callable[[UpEvent], None] | None = None,
+    batch: "BatchConfig | None" = None,
 ) -> "MigrateUpResult":
     """Apply pending migrations (atomically) up to an optional target."""
 ```
@@ -128,6 +138,20 @@ EXISTS` happen under it; checksums are verified before anything is applied. A lo
 that cannot be taken raises `LockAcquisitionError`; a failing migration is a
 `success=False` result whose `failure` attribute holds the exception.
 
+- `lock_timeout` / `no_lock`: `None` — the default for both — reads
+  `migration.locking` from the environment (`timeout_ms`, else 30000; `enabled`,
+  else take the lock). An explicit argument wins.
+- `allow_destructive`: apply migrations the destructive gate holds back — a
+  `-- confiture:destructive` directive, or `destructive = True` on a Python
+  migration. The default refuses them with `VALID_002` before anything is applied.
+- `online`: apply a migration the classifier marks multi-step as expand →
+  backfill → contract stages, checkpointing after each (the CLI's `--online`).
+  Every other migration applies the classic way.
+- `backfill`: a `BackfillSettings` governing an `online` backfill — rows per
+  committed batch, and the pause taken while another session waits for a lock on
+  the table. `None` takes the environment's `migration.backfill`.
+- `batch`: a `BatchConfig` set on every migration as `batch_config` before it
+  runs (the CLI's `--batched`). `None` leaves the class defaults.
 - `strict_mode`: fail on warnings/notices; `None` follows the environment's
   `migration.strict_mode`.
 - `auto_baseline`: a snapshots directory — self-baseline a database whose ledger is
@@ -173,8 +197,8 @@ def down(
     *,
     steps: int = 1,
     dry_run: bool = False,
-    lock_timeout: int = 30000,
-    no_lock: bool = False,
+    lock_timeout: int | None = None,
+    no_lock: bool | None = None,
     command: str | None = None,
 ) -> "MigrateDownResult":
     """Roll back the most recently applied migrations, newest first."""
@@ -194,8 +218,8 @@ def down_to(
     target: str,
     *,
     dry_run: bool = False,
-    lock_timeout: int = 30000,
-    no_lock: bool = False,
+    lock_timeout: int | None = None,
+    no_lock: bool | None = None,
     command: str | None = None,
 ) -> "DownToResult":
     """Roll back every migration newer than ``target`` (kept applied)."""
@@ -212,8 +236,8 @@ def apply_one(
     version: str,
     *,
     applied_by: str | None = None,
-    lock_timeout: int = 30000,
-    no_lock: bool = False,
+    lock_timeout: int | None = None,
+    no_lock: bool | None = None,
 ) -> "MigrationApplied":
     """Apply exactly one migration by version, under the migration lock."""
 ```

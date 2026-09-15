@@ -1,4 +1,21 @@
-"""MigratorSession — context manager for managed migration sessions."""
+"""MigratorSession — context manager for managed migration sessions.
+
+The file is a facade, and it is long because it is documented: of its ~690 lines,
+~330 are the ``Args:``/``Raises:``/``Example:`` blocks of the public library API
+and ~290 are code. The longest verb, ``up()``, is 43 code lines against a budget
+of 150. A line count is the wrong instrument here — the 2026-06 remediation
+target of ≤500 could only be met by deleting or relocating the documentation a
+library user reads, so it was retired rather than met (ARCHITECTURE.md
+Decision 10).
+
+What does constrain this file is that every public verb stays a pass-through:
+resolve the lock settings, hand every parameter to ``apply_loop``,
+``rollback_loop``, ``replay``, ``reporting`` or the engine, return.
+``tests/unit/test_one_session_signature.py`` fails on a verb that neither
+delegates nor is listed as deliberately not delegating, and pins the three echoes
+of each signature — the ``Args:`` block, the forwarding call, and the fence in
+``docs/api/migrator.md`` — against the signature itself.
+"""
 
 from __future__ import annotations
 
@@ -327,6 +344,18 @@ class MigratorSession:
                 ``migration.locking.enabled`` from the environment (else lock).
             require_reversible: If True, abort before applying any migration
                      if any pending migration lacks a ``.down.sql`` file.
+            allow_destructive: Apply migrations the destructive gate holds back —
+                     a ``-- confiture:destructive`` directive, or ``destructive =
+                     True`` on a Python migration. False (the default) refuses them
+                     with ``VALID_002`` before anything is applied.
+            online: Apply a migration the classifier marks multi-step as
+                     expand → backfill → contract stages, checkpointing after each
+                     (the CLI's ``--online``). Every other migration applies the
+                     classic way.
+            backfill: A :class:`~confiture.core.backfill.BackfillSettings` governing
+                     an ``online`` backfill: rows per committed batch, and the pause
+                     taken while another session waits for a lock on the table.
+                     None (default) takes the environment's ``migration.backfill``.
             strict_mode: Fail on warnings/notices. None (default) takes the
                      environment's ``migration.strict_mode``.
             auto_baseline: Snapshots directory for self-baselining a database
@@ -443,6 +472,9 @@ class MigratorSession:
             dry_run: If True, analyze without executing SQL (no lock taken).
             lock_timeout: Lock acquisition timeout in milliseconds (default: 30000).
             no_lock: If True, skip distributed locking.
+            command: Recorded in the lock-holder metadata, so an operator blocked on
+                   the lock sees which command holds it (issue #147). None records
+                   the command the session was opened with.
 
         Returns:
             :class:`~confiture.models.results.MigrateDownResult` (its fields are documented there).
@@ -493,6 +525,9 @@ class MigratorSession:
             lock_timeout: Lock acquisition timeout in milliseconds; ``None`` reads
                 ``migration.locking`` from the environment.
             no_lock: Skip distributed locking; ``None`` reads ``migration.locking``.
+            command: Recorded in the lock-holder metadata, so an operator blocked on
+                the lock sees which command holds it (issue #147). None records the
+                command the session was opened with.
 
         Returns:
             DownToResult with from/to/rolled_back/skipped/errors.

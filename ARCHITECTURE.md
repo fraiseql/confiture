@@ -481,6 +481,24 @@ guard test (`tests/unit/test_cli_has_no_apply_loop.py`) fails on any `for … in
 pending` in `cli/`, and the function-length and complexity budgets in
 `tests/budgets.json` only shrink, so a second loop cannot grow back quietly.
 
+**The session is a facade, and its length is documentation.** Of `session.py`'s
+~690 lines, ~330 are the `Args:`/`Raises:`/`Example:` blocks of the public library
+API and ~290 are code; the longest verb is 43 code lines against a budget of 150.
+The 2026-06 remediation plan set a ≤500-line target for this file. It is
+**retired, not outstanding**: every way of meeting it — shortening the docstrings,
+moving them to a docs page, splitting one public class across modules — trades an
+API a user reads for a number nothing enforces. `tests/budgets.json` has no
+file-length dimension, and deliberately gains none.
+
+The constraint that replaces it is one with meaning: each verb must *stay* a
+pass-through, and its signature is written once.
+`tests/unit/test_one_session_signature.py` fails on a public verb that neither
+delegates nor carries a stated reason not to, and holds the three echoes of every
+signature — the docstring's `Args:` block, the argument list forwarded to the
+delegate, and the fence copied into `docs/api/migrator.md` — against the signature
+itself. Each of those three had drifted at least once before the guard existed;
+forwarding, the one echo the interpreter would have punished, had not.
+
 ---
 
 ### Decision 11: One SQL lexer, one parser
