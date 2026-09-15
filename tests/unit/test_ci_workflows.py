@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -19,6 +20,23 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 EXAMPLES = REPO_ROOT / "examples"
+MIN_SEED_FILES = 6
+
+
+def _tracked(pathspec: str) -> list[Path]:
+    """Tracked files matching the git pathspec, as absolute paths.
+
+    ``git ls-files`` rather than ``glob``: a clean checkout sees exactly this, and a
+    build that left SQL under ``examples/`` cannot satisfy a check about what ships.
+    """
+    out = subprocess.run(
+        ["git", "ls-files", "--", pathspec],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return sorted(REPO_ROOT / line for line in out.splitlines() if line)
 
 
 def _steps(workflow: str, job: str) -> list[dict]:
@@ -71,6 +89,52 @@ class TestExamplesJob:
     def test_at_least_three_examples_are_runnable(self) -> None:
         scripts = sorted(EXAMPLES.glob("*/run.sh"))
         assert len(scripts) >= 3, [p.parent.name for p in scripts]
+
+    def test_every_seed_file_is_applied_by_the_run_script_of_its_example(self) -> None:
+        """A seed file no run applies is data that has never loaded.
+
+        ``examples/05`` shipped two fixtures that inserted a task as ``'done'`` with no
+        ``completed_at``, which its own ``tasks_completed_when_done`` forbids. Its
+        ``run.sh`` built ``db/schema`` and stopped there, so applying them was nobody's
+        job and the violation sat in the tree unreported (#266). ``examples/basic``
+        shipped four more whose only route into a database is a ``confiture build`` its
+        ``run.sh`` never ran.
+
+        A seed file counts as applied when the run script names the directory it lives
+        in, or when that directory is inside an ``include_dirs`` entry of an environment
+        the script builds. Both are literal readings of the script — no path globbing,
+        which is ``core/path_globs.py``'s job alone.
+        """
+        seeds = _tracked("examples/*/db/seeds/**/*.sql")
+        assert len(seeds) >= MIN_SEED_FILES, "the examples lost their seed files"
+
+        unapplied: list[str] = []
+        for script in sorted(EXAMPLES.glob("*/run.sh")):
+            example = script.parent
+            # Comments are not application: a run script that mentions db/seeds/test in
+            # a comment and never reads it leaves the file exactly as unexercised as one
+            # that does not mention it at all. Everything from an unquoted `#` goes.
+            code = "\n".join(line.split("#", 1)[0] for line in script.read_text().splitlines())
+            built = set(re.findall(r"--env\s+([A-Za-z0-9_-]+)", code))
+            included = {
+                entry["path"] if isinstance(entry, dict) else entry
+                for env_file in sorted((example / "db" / "environments").glob("*.yaml"))
+                if env_file.stem in built
+                for entry in (yaml.safe_load(env_file.read_text()) or {}).get("include_dirs") or []
+            }
+            for seed in (s for s in seeds if example in s.parents):
+                directory = seed.parent.relative_to(example).as_posix()
+                named = directory in code
+                built_in = any(
+                    directory == entry or directory.startswith(f"{entry.rstrip('/')}/")
+                    for entry in included
+                )
+                if not (named or built_in):
+                    unapplied.append(f"{example.name}: {seed.relative_to(example)}")
+        assert unapplied == [], (
+            "these seed files are applied by nothing, so nothing checks that they still "
+            f"load against the schema shipped beside them: {unapplied}"
+        )
 
     def test_every_run_script_is_executable_and_strict(self) -> None:
         offenders = []

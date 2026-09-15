@@ -28,6 +28,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `str | Environment`; it is now handed the object, and the hint tells a configuration
   fault from a DDL one.
 
+- **The examples' seed data runs, and satisfies the schema it ships beside**
+  ([#266](https://github.com/fraiseql/confiture/issues/266)).
+  `examples/05-multi-environment-workflow` inserted a task as `'done'` with no
+  `completed_at` in three places — both seed files and its own
+  `test_analytics_views_work` — which its own `tasks_completed_when_done` CHECK
+  forbids. `set_task_completed_at()` fills that column in on UPDATE and the trigger
+  never fires on an INSERT, so each of them failed on application; nothing applied
+  them, because `run.sh` built `db/schema` and stopped. Both run scripts now apply
+  what their example ships. That exposed `examples/basic`, whose `10_tables/` files
+  were concatenated alphabetically: `comments.sql` (FK to posts) preceded
+  `posts.sql`, so all three of its environments failed to apply with
+  `relation "posts" does not exist`. They are now numbered in the dependency order
+  its README already described. A new guard
+  (`test_every_seed_file_is_applied_by_the_run_script_of_its_example`) fails when an
+  example ships a seed file that no run applies.
+
 ### Added
 
 - **`MigratorSession.rebuild(seeds_dir=…)`.** `baseline.rebuild` has always read
