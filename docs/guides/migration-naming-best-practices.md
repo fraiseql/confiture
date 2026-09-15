@@ -423,6 +423,7 @@ ls -1 db/migrations/
 
 from confiture.models.migration import Migration
 
+
 class AddEmail(Migration):
     version = "20260403120115"
     name = "add_email"

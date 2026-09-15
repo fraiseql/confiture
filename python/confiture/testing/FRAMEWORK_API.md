@@ -121,12 +121,12 @@ Represents a single mutation for test validation.
 **Properties:**
 
 ```python
-mutation.id              # str: Mutation identifier (e.g., "SCH_001")
-mutation.description    # str: Human-readable description
-mutation.category       # str: Category (SCHEMA, DATA, ROLLBACK, PERFORMANCE)
-mutation.severity       # str: CRITICAL, HIGH, MEDIUM, LOW
-mutation.apply_function # callable: Function to apply mutation
-mutation.keywords       # list[str]: Keywords for filtering
+mutation.id  # str: Mutation identifier (e.g., "SCH_001")
+mutation.description  # str: Human-readable description
+mutation.category  # str: Category (SCHEMA, DATA, ROLLBACK, PERFORMANCE)
+mutation.severity  # str: CRITICAL, HIGH, MEDIUM, LOW
+mutation.apply_function  # callable: Function to apply mutation
+mutation.keywords  # list[str]: Keywords for filtering
 ```
 
 **Example:**
@@ -176,7 +176,7 @@ result = runner.run_mutation(mutation, test_function)
 report = runner.run_mutation_suite(
     registry,
     timeout_seconds=300,
-    max_mutations=None  # None = all mutations
+    max_mutations=None,  # None = all mutations
 )
 # Returns: MutationReport
 ```
@@ -187,6 +187,7 @@ report = runner.run_mutation_suite(
 from confiture.testing.frameworks.mutation import MutationRunner
 
 runner = MutationRunner()
+
 
 # Define test function
 def test_with_mutation(mutation):
@@ -201,6 +202,7 @@ def test_with_mutation(mutation):
     except AssertionError:
         return False  # Mutation survived
 
+
 # Run test suite
 report = runner.run_mutation_suite(registry)
 print(f"Kill rate: {report.kill_rate}%")
@@ -213,13 +215,13 @@ Analysis of mutation testing results.
 **Properties:**
 
 ```python
-report.total_mutations      # int: Total mutations in suite
-report.killed_mutations     # int: Mutations that failed tests
-report.survived_mutations   # int: Mutations that passed tests
-report.error_mutations      # int: Mutations with errors
-report.results              # list[MutationResult]: Individual results
-report.timestamp            # datetime: Report generation time
-report.duration_seconds     # float: Total execution time
+report.total_mutations  # int: Total mutations in suite
+report.killed_mutations  # int: Mutations that failed tests
+report.survived_mutations  # int: Mutations that passed tests
+report.error_mutations  # int: Mutations with errors
+report.results  # list[MutationResult]: Individual results
+report.timestamp  # datetime: Report generation time
+report.duration_seconds  # float: Total execution time
 ```
 
 **Methods:**
@@ -287,15 +289,13 @@ profiler = MigrationPerformanceProfiler()
 profile = profiler.profile_operation(
     operation="CREATE TABLE",
     sql="CREATE TABLE users (id UUID PRIMARY KEY)",
-    db_connection=conn  # Optional
+    db_connection=conn,  # Optional
 )
 # Returns: PerformanceProfile
 
 # Profile with custom timeout
 profile = profiler.profile_operation(
-    operation="Complex Migration",
-    sql=complex_sql,
-    timeout_seconds=60
+    operation="Complex Migration", sql=complex_sql, timeout_seconds=60
 )
 
 # Get baseline
@@ -318,7 +318,7 @@ conn = psycopg.connect("postgresql://localhost/confiture_test")
 profile = profiler.profile_operation(
     operation="CREATE TABLE users",
     sql="CREATE TABLE users (id UUID PRIMARY KEY, name VARCHAR(255))",
-    db_connection=conn
+    db_connection=conn,
 )
 
 print(f"Duration: {profile.duration_seconds}s")
@@ -334,12 +334,12 @@ Single operation performance metrics.
 **Properties:**
 
 ```python
-profile.operation          # str: Operation name
-profile.duration_seconds   # float: Execution duration
-profile.timestamp          # str: ISO timestamp
-profile.success            # bool: Operation succeeded
-profile.memory_mb          # Optional[float]: Memory used
-profile.query_plan         # Optional[str]: EXPLAIN output
+profile.operation  # str: Operation name
+profile.duration_seconds  # float: Execution duration
+profile.timestamp  # str: ISO timestamp
+profile.success  # bool: Operation succeeded
+profile.memory_mb  # Optional[float]: Memory used
+profile.query_plan  # Optional[str]: EXPLAIN output
 ```
 
 **Methods:**
@@ -390,10 +390,7 @@ baseline = PerformanceBaseline()
 
 ```python
 # Add a performance profile
-baseline.add_profile(
-    operation_name="CREATE TABLE",
-    duration_seconds=0.5
-)
+baseline.add_profile(operation_name="CREATE TABLE", duration_seconds=0.5)
 # Returns: None
 
 # Get baseline for operation
@@ -404,7 +401,7 @@ operation_baseline = baseline.get_baseline("CREATE TABLE")
 is_regression = baseline.detect_regression(
     operation="CREATE TABLE",
     current_seconds=0.6,
-    threshold_pct=20  # 20% increase
+    threshold_pct=20,  # 20% increase
 )
 # Returns: bool
 
@@ -494,11 +491,11 @@ def test_with_schema(sample_confiture_schema, test_db_connection):
 **Available Schemas:**
 ```python
 sample_confiture_schema = {
-    "extensions.sql": Path(...),    # PostgreSQL extensions
-    "users.sql": Path(...),         # Users table
-    "posts.sql": Path(...),         # Posts table
-    "comments.sql": Path(...),      # Comments table
-    "user_stats.sql": Path(...),    # User aggregates
+    "extensions.sql": Path(...),  # PostgreSQL extensions
+    "users.sql": Path(...),  # Users table
+    "posts.sql": Path(...),  # Posts table
+    "comments.sql": Path(...),  # Comments table
+    "user_stats.sql": Path(...),  # User aggregates
 }
 ```
 
@@ -527,9 +524,7 @@ Provides configured PerformanceProfiler for tests.
 def test_with_performance(performance_profiler, test_db_connection):
     """Test using performance profiling."""
     profile = performance_profiler.profile_operation(
-        operation="CREATE TABLE",
-        sql="CREATE TABLE test (...)",
-        db_connection=test_db_connection
+        operation="CREATE TABLE", sql="CREATE TABLE test (...)", db_connection=test_db_connection
     )
 
     assert profile.duration_seconds < 5.0
@@ -560,8 +555,8 @@ def test_forward_migration(test_db_connection):
         """)
 
         columns = {row[0]: row[1] for row in cur.fetchall()}
-        assert 'id' in columns
-        assert 'name' in columns
+        assert "id" in columns
+        assert "name" in columns
 ```
 
 ### Testing Rollback Safety
@@ -700,7 +695,7 @@ psql -h localhost -U confiture -d confiture_test
 ```python
 # Make sure test actually validates the mutation
 # Good:
-assert migrated_schema.columns['id'].type == 'UUID'
+assert migrated_schema.columns["id"].type == "UUID"
 
 # Bad:
 assert True  # Always passes, mutation not detected

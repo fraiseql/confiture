@@ -401,6 +401,7 @@ def test_fk_consistency_across_systems():
 ```python
 from confiture.core.anonymization.profile import resolve_seed_for_column
 
+
 def test_seed_precedence():
     profile = AnonymizationProfile(
         global_seed=1000,
@@ -411,20 +412,14 @@ def test_seed_precedence():
                     AnonymizationRule(column="ssn", strategy="hash", seed=2000),
                 ]
             )
-        }
+        },
     )
 
     # Email uses global seed
-    assert resolve_seed_for_column(
-        profile.tables["users"].rules[0],
-        profile
-    ) == 1000
+    assert resolve_seed_for_column(profile.tables["users"].rules[0], profile) == 1000
 
     # SSN uses column-specific seed
-    assert resolve_seed_for_column(
-        profile.tables["users"].rules[1],
-        profile
-    ) == 2000
+    assert resolve_seed_for_column(profile.tables["users"].rules[1], profile) == 2000
 ```
 
 ---

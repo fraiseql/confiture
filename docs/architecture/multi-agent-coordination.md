@@ -793,10 +793,7 @@ uv run pytest tests/performance/test_coordination_benchmarks.py -v -s
 
 ```python
 # Good: Parameterized query (used everywhere in codebase)
-cursor.execute(
-    "SELECT * FROM tb_pggit_intent WHERE id = %s",
-    (intent_id,)
-)
+cursor.execute("SELECT * FROM tb_pggit_intent WHERE id = %s", (intent_id,))
 
 # Bad: String interpolation (NEVER used)
 cursor.execute(f"SELECT * FROM tb_pggit_intent WHERE id = '{intent_id}'")
@@ -931,8 +928,8 @@ class ExtendedIntentStatus(Enum):
     CONFLICTED = "conflicted"
     # Custom statuses
     PENDING_REVIEW = "pending_review"  # NEW
-    APPROVED = "approved"              # NEW
-    REJECTED = "rejected"              # NEW
+    APPROVED = "approved"  # NEW
+    REJECTED = "rejected"  # NEW
 ```
 
 ---

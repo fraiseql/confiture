@@ -556,6 +556,7 @@ linting:
 
 from confiture.linting import Rule, RuleContext, Violation
 
+
 class EmailConstraintRule(Rule):
     """Custom rule: email columns must have uniqueness."""
 
@@ -569,8 +570,8 @@ class EmailConstraintRule(Rule):
 
         for table in context.schema.tables:
             for column in table.columns:
-                if 'email' in column.name.lower():
-                    if not column.has_constraint('unique'):
+                if "email" in column.name.lower():
+                    if not column.has_constraint("unique"):
                         violations.append(
                             Violation(
                                 rule=self.name,
@@ -578,7 +579,7 @@ class EmailConstraintRule(Rule):
                                 table=table.name,
                                 column=column.name,
                                 message=f"Email column '{column.name}' must have UNIQUE constraint",
-                                fix=f"ALTER TABLE {table.name} ADD CONSTRAINT {table.name}__{column.name}_unique UNIQUE ({column.name})"
+                                fix=f"ALTER TABLE {table.name} ADD CONSTRAINT {table.name}__{column.name}_unique UNIQUE ({column.name})",
                             )
                         )
 
@@ -631,13 +632,14 @@ linting:
 
 from confiture.linting import Rule, RuleContext, Violation
 
+
 class PIIEncryptionRule(Rule):
     """Ensure PII columns are encrypted."""
 
     name = "pii_encryption"
     severity = "critical"
 
-    PII_PATTERNS = ['email', 'ssn', 'credit_card', 'phone', 'password']
+    PII_PATTERNS = ["email", "ssn", "credit_card", "phone", "password"]
 
     def check(self, context: RuleContext) -> list[Violation]:
         violations = []
@@ -647,7 +649,7 @@ class PIIEncryptionRule(Rule):
                 # Check if column matches PII patterns
                 if any(pii in column.name.lower() for pii in self.PII_PATTERNS):
                     # Check if encrypted
-                    if not column.has_comment('encrypted') and 'hash' not in column.name:
+                    if not column.has_comment("encrypted") and "hash" not in column.name:
                         violations.append(
                             Violation(
                                 rule=self.name,
@@ -655,7 +657,7 @@ class PIIEncryptionRule(Rule):
                                 table=table.name,
                                 column=column.name,
                                 message=f"PII column '{column.name}' must be encrypted or hashed",
-                                fix=f"Add comment to {column.name}: -- encrypted"
+                                fix=f"Add comment to {column.name}: -- encrypted",
                             )
                         )
 
@@ -690,6 +692,7 @@ linting:
 
 from confiture.linting import Rule, RuleContext, Violation
 
+
 class MissingIndexRule(Rule):
     """Detect columns that should have indices."""
 
@@ -697,10 +700,7 @@ class MissingIndexRule(Rule):
     severity = "warning"
 
     # Columns commonly queried
-    COMMONLY_QUERIED = [
-        'id', 'user_id', 'email', 'created_at',
-        'status', 'type', 'category'
-    ]
+    COMMONLY_QUERIED = ["id", "user_id", "email", "created_at", "status", "type", "category"]
 
     def check(self, context: RuleContext) -> list[Violation]:
         violations = []
@@ -721,7 +721,7 @@ class MissingIndexRule(Rule):
                                 fix=(
                                     f"CREATE INDEX idx_{table.name}_{column.name} "
                                     f"ON {table.name}({column.name});"
-                                )
+                                ),
                             )
                         )
 
@@ -739,6 +739,7 @@ class MissingIndexRule(Rule):
 
 from confiture.linting import Rule, RuleContext, Violation
 
+
 class GDPRComplianceRule(Rule):
     """Ensure GDPR compliance requirements."""
 
@@ -750,8 +751,8 @@ class GDPRComplianceRule(Rule):
 
         for table in context.schema.tables:
             # Check for required audit columns
-            has_created_at = any(c.name == 'created_at' for c in table.columns)
-            has_updated_at = any(c.name == 'updated_at' for c in table.columns)
+            has_created_at = any(c.name == "created_at" for c in table.columns)
+            has_updated_at = any(c.name == "updated_at" for c in table.columns)
 
             if not has_created_at:
                 violations.append(
@@ -760,7 +761,7 @@ class GDPRComplianceRule(Rule):
                         severity="critical",
                         table=table.name,
                         message="Table must have 'created_at' column for GDPR audit trail",
-                        fix=f"ALTER TABLE {table.name} ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW();"
+                        fix=f"ALTER TABLE {table.name} ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW();",
                     )
                 )
 
@@ -771,21 +772,21 @@ class GDPRComplianceRule(Rule):
                         severity="critical",
                         table=table.name,
                         message="Table must have 'updated_at' column for tracking changes",
-                        fix=f"ALTER TABLE {table.name} ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();"
+                        fix=f"ALTER TABLE {table.name} ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();",
                     )
                 )
 
             # Check for PII columns without encryption
             for column in table.columns:
-                if 'email' in column.name.lower() and 'encrypted' not in column.name:
-                    if not column.has_comment('encrypted'):
+                if "email" in column.name.lower() and "encrypted" not in column.name:
+                    if not column.has_comment("encrypted"):
                         violations.append(
                             Violation(
                                 rule=self.name,
                                 severity="critical",
                                 table=table.name,
                                 column=column.name,
-                                message="PII must be encrypted for GDPR compliance"
+                                message="PII must be encrypted for GDPR compliance",
                             )
                         )
 
@@ -876,6 +877,7 @@ class CustomRule(Rule):
 ```python
 class CustomRule(Rule):
     """Check something"""
+
     pass
 ```
 
@@ -887,7 +889,7 @@ violations.append(
     Violation(
         rule="naming",
         message="Table name should be snake_case",
-        fix="Rename to lowercase"  # Clear fix
+        fix="Rename to lowercase",  # Clear fix
     )
 )
 ```
@@ -897,7 +899,7 @@ violations.append(
 violations.append(
     Violation(
         rule="naming",
-        message="Bad table name"  # Vague
+        message="Bad table name",  # Vague
         # No fix suggestion
     )
 )

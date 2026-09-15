@@ -253,6 +253,7 @@ def up(self) -> None:
     """Apply migration."""
     self.execute("ALTER TABLE users ADD COLUMN bio TEXT")
 
+
 def down(self) -> None:
     """Rollback migration."""
     self.execute("ALTER TABLE users DROP COLUMN bio")
@@ -759,6 +760,7 @@ def up(self) -> None:
     """Apply migration."""
     self.execute("ALTER TABLE users ADD COLUMN verified BOOLEAN DEFAULT FALSE")
 
+
 def down(self) -> None:
     """Rollback migration."""
     self.execute("ALTER TABLE users DROP COLUMN verified")
@@ -830,6 +832,7 @@ Ensure your migration file has a class that inherits from `Migration`:
 
 ```python
 from confiture.models.migration import Migration
+
 
 class MyMigration(Migration):  # Must inherit from Migration
     version = "001"
