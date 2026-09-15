@@ -327,7 +327,6 @@ def rebuild(
     dry_run: bool = False,
     apply_seeds: bool = False,
     backup_tracking: bool = False,
-    schema_dir: Path | None = None,
     migrations_dir: Path | None = None,
     seeds_dir: Path | None = None,
     env_config: Environment | None = None,
@@ -343,8 +342,6 @@ def rebuild(
     ddl_count = 0
     seeds_applied: int | None = None
 
-    if schema_dir is None:
-        schema_dir = Path("db") / "schema"
     if migrations_dir is None:
         migrations_dir = Path("db") / "migrations"
     if seeds_dir is None:

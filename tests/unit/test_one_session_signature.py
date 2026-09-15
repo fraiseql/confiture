@@ -77,10 +77,6 @@ NOT_DELEGATING: dict[str, str] = {
 # Delegate parameters the facade deliberately does not surface, with the reason.
 # An entry that stops matching fails, as in the one-lexer guard.
 NOT_SURFACED: dict[tuple[str, str], str] = {
-    ("rebuild", "schema_dir"): (
-        "the session does not let a caller redirect the DDL source; `baseline.rebuild` "
-        "defaults it to `db/schema`. Surfacing it widens the public library API"
-    ),
     ("rebuild", "seeds_dir"): (
         "as `schema_dir` — `baseline.rebuild` defaults it to `db/seeds`, and the session "
         "has no parameter for it"

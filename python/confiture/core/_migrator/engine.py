@@ -558,7 +558,6 @@ class Migrator:
         dry_run: bool = False,
         apply_seeds: bool = False,
         backup_tracking: bool = False,
-        schema_dir: Path | None = None,
         migrations_dir: Path | None = None,
         seeds_dir: Path | None = None,
         env_config: Environment | None = None,
@@ -574,7 +573,6 @@ class Migrator:
             dry_run: Build DDL and report what would happen without executing.
             apply_seeds: Apply seed files after DDL.
             backup_tracking: Dump tracking table before clearing.
-            schema_dir: Path to schema directory (default: db/schema).
             migrations_dir: Path to migrations directory (default: db/migrations).
             seeds_dir: Path to seeds directory (default: db/seeds).
             env_config: Optional Environment config for SchemaBuilder.
@@ -591,7 +589,6 @@ class Migrator:
             dry_run=dry_run,
             apply_seeds=apply_seeds,
             backup_tracking=backup_tracking,
-            schema_dir=schema_dir,
             migrations_dir=migrations_dir,
             seeds_dir=seeds_dir,
             env_config=env_config,
