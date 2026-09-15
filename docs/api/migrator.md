@@ -257,12 +257,40 @@ result = session.up()
 A session over an engine that already owns its connection — the connection is not
 closed when the block ends. `Migrator.migrate_up()` is implemented this way.
 
+### `MigratorSession.rebuild()`
+
+```python
+def rebuild(
+    self,
+    *,
+    drop_schemas: bool = False,
+    dry_run: bool = False,
+    apply_seeds: bool = False,
+    backup_tracking: bool = False,
+    seeds_dir: Path | None = None,
+) -> "MigrateRebuildResult":
+    """Rebuild the database from DDL and re-baseline the ledger."""
+```
+
+Not a tracking-table operation — that is `reinit(...)`. `rebuild` drops the user
+schemas (with `drop_schemas`), builds and applies the DDL, initialises the tracking
+table, marks every migration on disk as applied, and optionally applies seeds. It is
+the library face of `confiture migrate rebuild`.
+
+The DDL comes from the environment's `include_dirs`, not from a parameter: the
+session passes the `Environment` it was opened with straight to the builder, so a
+project that keeps its schema somewhere other than `db/schema` says so in its
+environment YAML and `rebuild` follows. `seeds_dir` is the one directory the call
+overrides, and only when `apply_seeds` is set; it defaults to `db/seeds`.
+
+Use `dry_run=True` to get the statement and migration counts without touching the
+database.
+
 ### Other operations
 
 | Method | Purpose |
 |--------|---------|
 | `reinit(...)` | Rebuild the tracking table from the migration files on disk. |
-| `rebuild(...)` | Drop and recreate the tracking table (recovery). |
 | `preflight(...)` | Static safety checks on pending migrations (the `migrate preflight` engine). On a database with no migration ledger it skips the checksum step and sets `checksum_verified=False` with a `checksum_skipped_reason`, rather than raising — consistent with `status()` and `current_revision()`. |
 | `run_against(...)` | SAVEPOINT-replay pending migrations against a target database. |
 | `is_locked()` | Whether the migration advisory lock is currently held. |

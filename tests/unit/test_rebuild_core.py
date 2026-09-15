@@ -306,7 +306,6 @@ class TestRebuildOrchestrator:
 
         result = migrator.rebuild(
             drop_schemas=True,
-            schema_dir=Path("db/schema"),
             migrations_dir=Path("db/migrations"),
         )
 
@@ -331,7 +330,6 @@ class TestRebuildOrchestrator:
 
         result = migrator.rebuild(
             drop_schemas=False,
-            schema_dir=Path("db/schema"),
             migrations_dir=Path("db/migrations"),
         )
 
@@ -355,7 +353,6 @@ class TestRebuildOrchestrator:
         result = migrator.rebuild(
             drop_schemas=True,
             dry_run=True,
-            schema_dir=Path("db/schema"),
             migrations_dir=Path("db/migrations"),
         )
 
@@ -383,7 +380,6 @@ class TestRebuildOrchestrator:
         result = migrator.rebuild(
             apply_seeds=True,
             seeds_dir=Path("db/seeds"),
-            schema_dir=Path("db/schema"),
             migrations_dir=Path("db/migrations"),
         )
 
@@ -406,7 +402,6 @@ class TestRebuildOrchestrator:
 
         result = migrator.rebuild(
             backup_tracking=True,
-            schema_dir=Path("db/schema"),
             migrations_dir=Path("db/migrations"),
         )
 
@@ -421,7 +416,6 @@ class TestRebuildOrchestrator:
 
         with pytest.raises(RebuildError, match="Schema build failed"):
             migrator.rebuild(
-                schema_dir=Path("db/schema"),
                 migrations_dir=Path("db/migrations"),
             )
 
@@ -438,9 +432,134 @@ class TestRebuildOrchestrator:
         migrator.reinit = MagicMock(return_value=MagicMock(migrations_marked=[]))
 
         result = migrator.rebuild(
-            schema_dir=Path("db/schema"),
             migrations_dir=Path("db/migrations"),
         )
 
         assert result.success is True
         assert "extension uuid-ossp not available" in result.warnings
+
+
+class TestRebuildHonoursItsEnvironment:
+    """The ``Environment`` the caller passed is the one the build reads."""
+
+    def _make_migrator(self):
+        from confiture.core.migrator import Migrator
+
+        conn = MagicMock()
+        conn.autocommit = False
+        cursor = MagicMock()
+        conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        return Migrator(connection=conn)
+
+    @staticmethod
+    def _nameless_env(**overrides):
+        """The minimal migrate-only config #168 made valid: no ``name:`` key."""
+        from confiture.config.environment import Environment
+
+        return Environment.model_validate({"database_url": "postgresql://localhost/x", **overrides})
+
+    @patch("confiture.core.builder.SchemaBuilder", autospec=True)
+    def test_builder_receives_the_environment_not_its_name(self, MockBuilder):
+        """``SchemaBuilder`` accepts ``str | Environment``. Passing ``env_config.name``
+        instead re-reads the YAML from disk and discards the caller's own config."""
+        migrator = self._make_migrator()
+        MockBuilder.return_value.build.return_value = "CREATE TABLE t (id INT);"
+        migrator._apply_ddl_string = MagicMock(return_value=(1, []))
+        migrator.initialize = MagicMock()
+        migrator.reinit = MagicMock(return_value=MagicMock(migrations_marked=[]))
+
+        env = self._nameless_env(include_dirs=["db/schema"])
+        migrator.rebuild(migrations_dir=Path("db/migrations"), env_config=env)
+
+        assert MockBuilder.call_args.kwargs["env"] is env
+
+    def test_nameless_environment_does_not_send_the_loader_after_a_yaml_file(self):
+        """A config with no ``name:`` used to fail on ``db/environments/.yaml``, which
+        names neither the caller's mistake nor anything they can create."""
+        migrator = self._make_migrator()
+
+        with pytest.raises(RebuildError) as excinfo:
+            migrator.rebuild(migrations_dir=Path("db/migrations"), env_config=self._nameless_env())
+
+        message = str(excinfo.value)
+        assert "db/environments/.yaml" not in message
+        assert "include_dirs" in message
+
+    def test_a_configuration_failure_is_not_blamed_on_the_ddl(self):
+        """The build reads a config to find the DDL; either can be at fault, and the
+        remedy for one is no use for the other."""
+        migrator = self._make_migrator()
+
+        with pytest.raises(RebuildError) as excinfo:
+            migrator.rebuild(migrations_dir=Path("db/migrations"), env_config=self._nameless_env())
+
+        assert "syntax errors" not in (excinfo.value.resolution_hint or "")
+
+
+class TestRebuildDeclaresNoDeadParameter:
+    """A parameter that only assigns itself a default is never read.
+
+    ``schema_dir`` was such a parameter on the public ``Migrator.rebuild`` for as
+    long as it existed: declared, defaulted to ``db/schema``, and never consulted —
+    the DDL source is the environment's ``include_dirs``, which the builder reads.
+    Ruff's ARG family cannot see it, because ``if schema_dir is None:`` is a read.
+    """
+
+    @staticmethod
+    def _defaults_itself(stmt) -> str | None:
+        """The name *stmt* defaults, if it is an ``if <name> is None: <name> = …``."""
+        import ast
+
+        if not isinstance(stmt, ast.If):
+            return None
+        test = stmt.test
+        if not (
+            isinstance(test, ast.Compare)
+            and len(test.ops) == 1
+            and isinstance(test.ops[0], ast.Is)
+            and isinstance(test.left, ast.Name)
+            and isinstance(test.comparators[0], ast.Constant)
+            and test.comparators[0].value is None
+        ):
+            return None
+        assigned = [
+            target.id
+            for inner in stmt.body
+            if isinstance(inner, ast.Assign)
+            for target in inner.targets
+            if isinstance(target, ast.Name)
+        ]
+        return test.left.id if assigned == [test.left.id] else None
+
+    def test_every_parameter_is_read_somewhere(self):
+        import ast
+
+        from confiture.core._migrator import baseline
+
+        source = Path(baseline.__file__).read_text()
+        fn = next(
+            node
+            for node in ast.parse(source).body
+            if isinstance(node, ast.FunctionDef) and node.name == "rebuild"
+        )
+        declared = [
+            arg.arg for arg in (*fn.args.args, *fn.args.kwonlyargs) if arg.arg != "migrator"
+        ]
+        assert declared, "rebuild declares no parameters — the guard is watching nothing"
+
+        dead = []
+        for param in declared:
+            read = any(
+                isinstance(node, ast.Name) and node.id == param and isinstance(node.ctx, ast.Load)
+                for stmt in fn.body
+                if self._defaults_itself(stmt) != param
+                for node in ast.walk(stmt)
+            )
+            if not read:
+                dead.append(param)
+
+        assert not dead, (
+            f"baseline.rebuild declares {dead}, which it never reads — only defaults. "
+            f"A caller who passes one gets no effect and no error. Delete it, or use it."
+        )

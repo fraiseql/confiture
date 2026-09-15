@@ -31,7 +31,7 @@ from confiture.core.checksum import compute_checksum
 from confiture.core.seed import applier as _core_seed_applier
 from confiture.core.sql_lexer import split_statements
 from confiture.core.sql_utils import strip_transaction_wrappers
-from confiture.exceptions import RebuildError
+from confiture.exceptions import ConfigurationError, RebuildError, SchemaError
 from confiture.models.results import MigrateRebuildResult, MigrateReinitResult, MigrationApplied
 
 logger = logging.getLogger(__name__)
@@ -327,7 +327,6 @@ def rebuild(
     dry_run: bool = False,
     apply_seeds: bool = False,
     backup_tracking: bool = False,
-    schema_dir: Path | None = None,
     migrations_dir: Path | None = None,
     seeds_dir: Path | None = None,
     env_config: Environment | None = None,
@@ -343,8 +342,6 @@ def rebuild(
     ddl_count = 0
     seeds_applied: int | None = None
 
-    if schema_dir is None:
-        schema_dir = Path("db") / "schema"
     if migrations_dir is None:
         migrations_dir = Path("db") / "migrations"
     if seeds_dir is None:
@@ -354,17 +351,26 @@ def rebuild(
     if backup_tracking:
         migrator._backup_tracking_table()  # result used by CLI for JSON dump
 
-    # Step 2: Build DDL via SchemaBuilder
+    # Step 2: Build DDL via SchemaBuilder.  The builder takes the Environment
+    # itself: passing ``env_config.name`` sent it back to
+    # ``db/environments/<name>.yaml``, discarding the config the caller had
+    # already resolved — and ``from_config`` does not inject ``name``, so a
+    # migrate-only config (#168) resolved to ``db/environments/.yaml``.
     try:
         builder = _core_builder.SchemaBuilder(
-            env=env_config.name if env_config and hasattr(env_config, "name") else "rebuild",
+            env=env_config if env_config is not None else "rebuild"
         )
         ddl = builder.build(schema_only=True)
-    # Reason: any schema build failure is a RebuildError with the DDL remedy
+    # Reason: any schema build failure is a RebuildError, with the remedy for whichever half failed
     except Exception as exc:
         raise RebuildError(
             f"Schema build failed: {exc}",
-            resolution_hint="Check your schema DDL files for syntax errors and ensure the schema directory exists",
+            resolution_hint=(
+                "Check the environment config that selects the DDL — its include_dirs "
+                "must name the directories to build from"
+                if isinstance(exc, ConfigurationError | SchemaError)
+                else "Check your schema DDL files for syntax errors and ensure the schema directory exists"
+            ),
         ) from exc
 
     if dry_run:

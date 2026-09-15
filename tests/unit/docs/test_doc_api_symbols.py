@@ -111,6 +111,7 @@ SIGNATURE_FENCES: dict[str, tuple[str, str]] = {
     "down": ("core/_migrator/session.py", "MigratorSession"),
     "down_to": ("core/_migrator/session.py", "MigratorSession"),
     "apply_one": ("core/_migrator/session.py", "MigratorSession"),
+    "rebuild": ("core/_migrator/session.py", "MigratorSession"),
 }
 
 PACKAGE = Path(confiture.__file__).resolve().parent
