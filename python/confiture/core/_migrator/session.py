@@ -327,6 +327,18 @@ class MigratorSession:
                 ``migration.locking.enabled`` from the environment (else lock).
             require_reversible: If True, abort before applying any migration
                      if any pending migration lacks a ``.down.sql`` file.
+            allow_destructive: Apply migrations the destructive gate holds back —
+                     a ``-- confiture:destructive`` directive, or ``destructive =
+                     True`` on a Python migration. False (the default) refuses them
+                     with ``VALID_002`` before anything is applied.
+            online: Apply a migration the classifier marks multi-step as
+                     expand → backfill → contract stages, checkpointing after each
+                     (the CLI's ``--online``). Every other migration applies the
+                     classic way.
+            backfill: A :class:`~confiture.core.backfill.BackfillSettings` governing
+                     an ``online`` backfill: rows per committed batch, and the pause
+                     taken while another session waits for a lock on the table.
+                     None (default) takes the environment's ``migration.backfill``.
             strict_mode: Fail on warnings/notices. None (default) takes the
                      environment's ``migration.strict_mode``.
             auto_baseline: Snapshots directory for self-baselining a database
@@ -443,6 +455,9 @@ class MigratorSession:
             dry_run: If True, analyze without executing SQL (no lock taken).
             lock_timeout: Lock acquisition timeout in milliseconds (default: 30000).
             no_lock: If True, skip distributed locking.
+            command: Recorded in the lock-holder metadata, so an operator blocked on
+                   the lock sees which command holds it (issue #147). None records
+                   the command the session was opened with.
 
         Returns:
             :class:`~confiture.models.results.MigrateDownResult` (its fields are documented there).
@@ -493,6 +508,9 @@ class MigratorSession:
             lock_timeout: Lock acquisition timeout in milliseconds; ``None`` reads
                 ``migration.locking`` from the environment.
             no_lock: Skip distributed locking; ``None`` reads ``migration.locking``.
+            command: Recorded in the lock-holder metadata, so an operator blocked on
+                the lock sees which command holds it (issue #147). None records the
+                command the session was opened with.
 
         Returns:
             DownToResult with from/to/rolled_back/skipped/errors.

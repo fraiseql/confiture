@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import re
 from pathlib import Path
 from typing import Any
 
@@ -288,3 +289,89 @@ def test_runtime_signature_matches_the_parsed_one() -> None:
             f"MigratorSession.{name} on disk and in memory disagree — the guard is "
             f"reading a different file from the one under test"
         )
+
+
+# Google-style section headers that end the ``Args:`` block.
+_SECTIONS = frozenset(
+    {
+        "Args:",
+        "Returns:",
+        "Raises:",
+        "Yields:",
+        "Example:",
+        "Examples:",
+        "Note:",
+        "Notes:",
+    }
+)
+
+
+def _documented_args(fn: ast.FunctionDef) -> set[str] | None:
+    """The parameters a method's ``Args:`` block names, or None if it has no block.
+
+    Entries sit at the block's minimum indent; anything deeper is a continuation
+    line, which is why the indent has to be measured rather than assumed.
+    """
+    doc = ast.get_docstring(fn, clean=True) or ""
+    lines = doc.splitlines()
+    heads = [i for i, line in enumerate(lines) if line.strip() == "Args:"]
+    if not heads:
+        return None
+    head = heads[0]
+    indent = len(lines[head]) - len(lines[head].lstrip())
+
+    block: list[str] = []
+    for line in lines[head + 1 :]:
+        if not line.strip():
+            continue
+        if len(line) - len(line.lstrip()) <= indent:
+            break
+        block.append(line)
+    if not block:
+        return set()
+
+    base = min(len(line) - len(line.lstrip()) for line in block)
+    named: set[str] = set()
+    for line in block:
+        if len(line) - len(line.lstrip()) != base:
+            continue
+        match = re.match(r"^(\w+)\s*(\([^)]*\))?\s*:", line.strip())
+        if match:
+            named.add(match.group(1))
+    return named
+
+
+def _documented_verbs() -> dict[str, ast.FunctionDef]:
+    """Delegating verbs that take at least one parameter."""
+    return {name: fn for name, fn in _delegating_methods().items() if _declared(fn)}
+
+
+def test_every_parameter_is_documented() -> None:
+    """Agreement 4: the docstring's `Args:` block names every parameter.
+
+    This is the echo that had drifted: `up()` gained `allow_destructive`, `online`
+    and `backfill`, and `down()`/`down_to()` gained `command`, with no `Args:` entry
+    between them. A library user reads the docstring; an undocumented parameter is
+    one they cannot know exists.
+    """
+    verbs = _documented_verbs()
+    assert verbs, "the guard found no verb with parameters — it is inspecting nothing"
+    for name, fn in verbs.items():
+        documented = _documented_args(fn)
+        assert documented is not None, (
+            f"MigratorSession.{name} takes {_declared(fn)} and has no `Args:` block"
+        )
+        missing = [p for p in _declared(fn) if p not in documented]
+        assert not missing, (
+            f"MigratorSession.{name} accepts {missing} and documents neither — add an "
+            f"`Args:` entry, because the docstring is the library API's documentation"
+        )
+
+
+def test_no_documented_parameter_has_gone() -> None:
+    """The mirror drift: an `Args:` entry for a parameter that no longer exists."""
+    for name, fn in _documented_verbs().items():
+        documented = _documented_args(fn) or set()
+        declared = set(_declared(fn))
+        ghosts = sorted(documented - declared)
+        assert not ghosts, f"MigratorSession.{name} documents {ghosts}, which it does not accept"
