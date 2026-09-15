@@ -14,6 +14,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`rebuild()` builds from the environment it was given.** `baseline.rebuild` handed
+  `SchemaBuilder` the environment's *name*, so the builder went back to
+  `db/environments/<name>.yaml` and re-read a config the caller had already resolved.
+  `Migrator.from_config(path)` validates with `model_validate`, which does not inject
+  `name` (only `Environment.load` does) — so for the minimal migrate-only config
+  [#168](https://github.com/fraiseql/confiture/issues/168) deliberately made valid,
+  `rebuild()` resolved `db/environments/.yaml` and failed with `RebuildError: Schema build
+  failed: Environment config not found: db/environments/.yaml`, under a hint about DDL
+  syntax for a failure that never reached any DDL. `SchemaBuilder` already accepts
+  `str | Environment`; it is now handed the object, and the hint tells a configuration
+  fault from a DDL one.
+
+### Added
+
+- **`MigratorSession.rebuild(seeds_dir=…)`.** `baseline.rebuild` has always read
+  `seeds_dir` — it is what the `SeedApplier` is built from — but the session never passed
+  it, so through `Migrator.from_config`, the only supported library entry point, the seed
+  directory was fixed at `db/seeds` with no way to say otherwise, and `Environment` carries
+  no seed directory either. The default is unchanged. `docs/api/migrator.md` gains a
+  `rebuild` section whose signature fence is pinned to the source, and loses a row that
+  described the method as "Drop and recreate the tracking table" — which is `reinit`'s job.
+
+### Removed
+
+- **`rebuild(schema_dir=…)`**, on `Migrator` and the `baseline` implementation behind it.
+  It was declared, defaulted to `db/schema`, and never read: the DDL source is the
+  environment's `include_dirs` and there is no schema-directory input to that path at all,
+  so a caller who passed one got no effect and no error while the docstring advertised
+  "Path to schema directory (default: db/schema)". Redirect the schema source with
+  `include_dirs`. A new guard fails on any `baseline.rebuild` parameter that is never read —
+  a shape Ruff's ARG family cannot see, because `if schema_dir is None:` is itself a read.
+
 ## [1.9.1] - 2026-09-14
 
 Two scheduled workflows that had been red since 2026-09-10 — one every night, one every
