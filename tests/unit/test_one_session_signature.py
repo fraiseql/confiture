@@ -17,7 +17,7 @@ so a caller's explicit argument does nothing and nothing says so. This guard is
 what makes that impossible; it is prevention, not a fix, because forwarding is
 the one echo that had not drifted.
 
-Three agreements, per delegating verb:
+Four agreements, per delegating verb:
 
 1. every parameter the verb declares reaches the delegate. Positional forwarding
    counts: ``apply_one``, ``down_to`` and ``run_against`` forward positionally,
@@ -27,6 +27,8 @@ Three agreements, per delegating verb:
 3. every parameter the delegate declares receives an argument, so a delegate that
    grows one cannot quietly fall back to its default forever. ``NOT_SURFACED``
    holds the deliberate exceptions, each with its reason.
+4. every parameter is named in the docstring's ``Args:`` block, and the block
+   names no parameter that has gone. This is the echo that had drifted.
 
 ``DELEGATES`` is exhaustive by assertion: a verb added to the facade without an
 entry fails, and an entry naming a verb that no longer delegates fails too, as in
