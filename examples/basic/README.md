@@ -102,14 +102,14 @@ Let's add a `bio` column to users:
 
 ```bash
 # 1. Edit schema file
-vim db/schema/10_tables/users.sql
+vim db/schema/10_tables/10_users.sql
 # Add: bio TEXT
 
 # 2. Generate diff (create temp old schema first)
 pg_dump blog_app_local --schema-only > /tmp/old_schema.sql
 
 # 3. Generate migration
-confiture migrate diff /tmp/old_schema.sql db/schema/10_tables/users.sql \
+confiture migrate diff /tmp/old_schema.sql db/schema/10_tables/10_users.sql \
     --generate \
     --name add_user_bio
 
@@ -243,7 +243,7 @@ ORDER BY c.created_at;
 
 ```bash
 # 1. Edit schema file to add index
-echo "CREATE INDEX idx_posts_title ON posts(title);" >> db/schema/10_tables/posts.sql
+echo "CREATE INDEX idx_posts_title ON posts(title);" >> db/schema/10_tables/20_posts.sql
 
 # 2. Generate migration
 confiture migrate generate add_posts_title_index
@@ -321,9 +321,9 @@ examples/basic/
 │   │   ├── 00_common/
 │   │   │   └── extensions.sql          # Load first: PostgreSQL extensions
 │   │   └── 10_tables/
-│   │       ├── users.sql               # Core tables
-│   │       ├── posts.sql               # Posts depend on users
-│   │       └── comments.sql            # Comments depend on posts
+│   │       ├── 10_users.sql            # Core tables
+│   │       ├── 20_posts.sql            # Posts depend on users
+│   │       └── 30_comments.sql         # Comments depend on posts
 │   │
 │   ├── seeds/                          # INSERT statements
 │   │   ├── common/                     # All non-prod environments
@@ -566,9 +566,9 @@ confiture build --env local --dry-run
 
 📂 Files to process (7 total):
   ✓ db/schema/00_common/extensions.sql
-  ✓ db/schema/10_tables/users.sql
-  ✓ db/schema/10_tables/posts.sql
-  ✓ db/schema/10_tables/comments.sql
+  ✓ db/schema/10_tables/10_users.sql
+  ✓ db/schema/10_tables/20_posts.sql
+  ✓ db/schema/10_tables/30_comments.sql
   ✓ db/seeds/common/00_users.sql
   ✓ db/seeds/development/00_posts.sql
   ✓ db/seeds/development/01_comments.sql

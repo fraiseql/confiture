@@ -96,7 +96,7 @@ def test_task_priority_constraint(test_db):
         # Create test data
         cur.execute("""
                 INSERT INTO users (email, display_name)
-                VALUES ('test2@example.com', 'Test User 2')
+                VALUES ('priority_test@example.com', 'Priority Test')
                 RETURNING id
             """)
         user_id = cur.fetchone()[0]
@@ -145,8 +145,12 @@ def test_migration_idempotency(test_db):
                 SELECT COUNT(*)
                 FROM information_schema.tables
                 WHERE table_schema = 'public'
+                  AND table_type = 'BASE TABLE'
+                  AND table_name IN ('users', 'projects', 'tasks')
             """)
         table_count = cur.fetchone()[0]
 
-        # Should have exactly 3 tables
+        # Should have exactly 3 tables. information_schema.tables also lists the
+        # three analytics views and confiture's own ledger, so the count has to
+        # name what it is counting.
         assert table_count == 3
