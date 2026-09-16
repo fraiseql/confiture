@@ -260,3 +260,47 @@ def test_sync_verifies_row_count(source_db, target_db, source_config, target_con
         rows_synced = syncer.sync_table("users")
 
     assert rows_synced == 3
+
+
+def test_sync_keeps_rows_of_tables_that_reference_each_other(
+    source_db, target_db, source_config, target_config
+):
+    """A child table copied before its parent still holds its rows afterwards.
+
+    Each target table used to be truncated with CASCADE immediately before being
+    copied, and tables are copied in the order ``select_tables`` returns them —
+    alphabetical. ``posts`` sorts before ``users``, so ``posts`` was copied, and
+    then ``TRUNCATE users CASCADE`` emptied it again. The sync reported both
+    tables at their full row counts and exited 0, because the count it reports is
+    what it inserted, not what the target holds at the end.
+
+    On a nine-table schema this emptied five of eight tables. The failure needs
+    only a foreign key to reproduce, which is why no existing test saw it: the
+    multi-table cases all sync tables that do not reference one another.
+    """
+    ddl = """
+        CREATE TABLE users (id INT PRIMARY KEY, name TEXT);
+        CREATE TABLE posts (id INT PRIMARY KEY, user_id INT REFERENCES users(id), title TEXT);
+    """
+    for db in (source_db, target_db):
+        with db.cursor() as cur:
+            cur.execute(ddl)
+
+    with source_db.cursor() as cur:
+        cur.execute("""
+            INSERT INTO users (id, name) VALUES (1, 'Alice'), (2, 'Bob');
+            INSERT INTO posts (id, user_id, title) VALUES (1, 1, 'A'), (2, 1, 'B'), (3, 2, 'C');
+        """)
+
+    with ProductionSyncer(source_config, target_config) as syncer:
+        results = syncer.sync(config=SyncConfig(tables=TableSelection(include=["users", "posts"])))
+
+    assert results == {"posts": 3, "users": 2}
+
+    # The assertion that matters: what the target actually holds once the whole
+    # sync has finished, not what each table reported on its way past.
+    with target_db.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM posts")
+        assert cur.fetchone()[0] == 3, "posts was emptied by a later table's TRUNCATE CASCADE"
+        cur.execute("SELECT COUNT(*) FROM users")
+        assert cur.fetchone()[0] == 2
