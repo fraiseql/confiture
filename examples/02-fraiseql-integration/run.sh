@@ -11,7 +11,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 DB_URL="${CONFITURE_EXAMPLE_DB_URL:-postgresql://localhost/confiture_test_examples}"
 
 schema="$(mktemp)"
-trap 'rm -f "$schema"' EXIT
+# The example's config names its own database; run against $DB_URL instead
+# through a copy whose database_url is swapped (migrate commands read the config).
+cfg="$(mktemp --suffix=.yaml)"
+trap 'rm -f "$schema" "$cfg"' EXIT
+sed "s|^database_url: .*|database_url: $DB_URL|" "db/environments/local.yaml" > "$cfg"
 
 psql "$DB_URL" -v ON_ERROR_STOP=1 -q -c "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;"
 
@@ -58,5 +62,12 @@ SQL
 psql "$DB_URL" -v ON_ERROR_STOP=1 -Atc \
     "SELECT email = 'alice@example.com' AND username = 'alice' AND is_active
      FROM tv_user LIMIT 1" | grep -qx t
+
+# Medium 2: the migration in db/migrations/ is what an *existing* database needs
+# to reach the shape the DDL already describes. A database built from current DDL
+# is already there, so the ledger is baselined rather than replayed — the same
+# split as 01-basic-migration.
+confiture migrate baseline --through 001 --config "$cfg" --migrations-dir db/migrations
+confiture migrate status --config "$cfg" --migrations-dir db/migrations | grep -q "0 pending"
 
 echo "✅ 02-fraiseql-integration: ok"

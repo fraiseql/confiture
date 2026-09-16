@@ -1,20 +1,15 @@
 """
 Blog API Schema using FraiseQL
 
-This schema is the SINGLE SOURCE OF TRUTH for:
-1. GraphQL API types
-2. PostgreSQL table definitions
-3. Python type hints
+These types define the GraphQL API surface: the types the resolvers speak, and
+the Python type hints that check them.
 
-FraiseQL automatically generates:
-- GraphQL schema with proper types
-- PostgreSQL DDL with constraints
-- Type-safe resolvers
+They are not what the database is built from. Confiture's premise is that DDL is
+the single source of truth, so the PostgreSQL side is checked in at
+db/schema/10_tables/generated.sql in the tb_*/tv_* CQRS shape FraiseQL's
+convention produces. Keep the two in step when a type changes.
 
 Usage:
-    # Generate PostgreSQL DDL
-    fraiseql generate-ddl schema.py --output db/schema/10_tables/
-
     # Build database with Confiture
     confiture build --env local
 
