@@ -1,0 +1,110 @@
+# Anonymization rules for `confiture sync --anonymize`.
+#
+# This is the path the CLI reads by default (`--anonymization-config`, default
+# `db/sync/anonymization.yaml`), and the shape it expects:
+#
+#     <table>:
+#       - column: <name>
+#         strategy: email | phone | name | hash | redact
+#         seed: <int>          # optional
+#
+# That is the whole grammar. There is no `filter:`, no `sample_rate:`, no
+# `exclude_tables:`, no `performance:` block — table selection is `--tables` /
+# `--exclude` on the command line, and everything else belongs to your own
+# tooling. A key confiture does not read is a key that silently does nothing.
+#
+# THE FIVE STRATEGIES
+#
+#   email   -> user_<8 hex>@example.com
+#   phone   -> +1-555-<4 digits>
+#   name    -> User <4 HEX>
+#   hash    -> <16 hex>          one-way, uniqueness-preserving
+#   redact  -> [REDACTED]        the same constant for every row
+#
+# The first four are *keyed*: the pseudonym is an HMAC under
+# ANONYMIZATION_SECRET, which has no default — `confiture sync --anonymize`
+# fails with CONFIG_009 if it is unset rather than falling back to something
+# guessable. Keyed output is stable within a deployment (so the same customer is
+# the same pseudonym in every table, and joins survive) and unrelated across
+# deployments (so an anonymized dump cannot be matched back by hashing
+# candidate emails).
+#
+# `seed` is a domain separator, not a secret: two columns with different seeds
+# get unrelated pseudonyms from the same input. Use it to keep staff identities
+# from being correlated with customer identities.
+#
+# A column that is absent from this file is copied VERBATIM. Read that the other
+# way round: this file, not the schema, decides what reaches staging intact.
+
+users:
+  - column: email
+    strategy: email
+  - column: full_name
+    strategy: name
+  - column: phone
+    strategy: phone
+  # There is no "partial" redaction: ssn becomes the literal [REDACTED] in every
+  # row. Formats that "preserve shape" preserve information; for a national
+  # identifier that is not a trade worth making.
+  - column: ssn
+    strategy: redact
+
+orders:
+  # Same strategy and no seed as users.email, so the same address masks to the
+  # same pseudonym in both tables and "orders belonging to one customer" is still
+  # a question staging can answer.
+  - column: billing_email
+    strategy: email
+  # Free text written by humans about humans. Nothing can reliably find the PII
+  # inside it, so the whole column goes.
+  - column: customer_notes
+    strategy: redact
+
+payments:
+  - column: cardholder_name
+    strategy: name
+  - column: card_last4
+    strategy: redact
+  # hash, not redact: the processor's customer id has to stay *unique* for
+  # payment-reconciliation code to be exercised at all, but it must not be
+  # resolvable back to an account in the processor's dashboard.
+  - column: stripe_customer_id
+    strategy: hash
+  # billing_zip is deliberately absent: fraud rules are geographic, and a zip
+  # code on its own is not an identifier.
+
+user_sessions:
+  # An IP address identifies a household. `hash` keeps "same visitor, same
+  # session bucket" analysable without keeping the address.
+  - column: ip_address
+    strategy: hash
+  # user_agent is deliberately absent - it is what staging is usually debugging.
+
+support_tickets:
+  - column: customer_email
+    strategy: email
+  - column: subject
+    strategy: redact
+  - column: body
+    strategy: redact
+
+employees:
+  # seed 2 keeps staff pseudonyms unrelated to customer pseudonyms, so an
+  # employee who is also a customer does not appear as the same pseudonym in
+  # both tables.
+  - column: email
+    strategy: email
+    seed: 2
+  - column: full_name
+    strategy: name
+    seed: 2
+  - column: phone
+    strategy: phone
+    seed: 2
+  - column: ssn
+    strategy: redact
+  - column: bank_account_number
+    strategy: redact
+
+# products, order_items: no PII, no rules, copied verbatim.
+# audit_logs: not listed here because it is not synced at all (--exclude).

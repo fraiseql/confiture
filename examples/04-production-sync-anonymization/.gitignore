@@ -11,13 +11,22 @@
 .env.staging
 *.local.yaml
 
-# Database dumps and backups
-*.sql
+# Database dumps and backups.
+#
+# NOT `*.sql`: this example is made of SQL — the schema in db/schema/, the demo
+# seed, and verify_anonymization.sql are the example. Ignoring them means a
+# clean checkout has no schema to build and no verification to run, while
+# everything still works for whoever wrote it. Match the dumps, not the source.
 *.sql.gz
 *.dump
 *.backup
 staging-backup-*
 prod-backup-*
+pg_dump-*.sql
+
+# Sync run artifacts
+sync-*.log
+.sync-checkpoint.json
 
 # Log files
 *.log
