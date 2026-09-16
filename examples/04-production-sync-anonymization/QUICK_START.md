@@ -1,354 +1,299 @@
-# Quick Start Guide - Production Data Sync with Anonymization
+# Quick Start — Production Data Sync with Anonymization
 
-**5-Minute Setup for Confiture Production Sync**
+The short path. [README.md](README.md) has the reasoning; this is the sequence.
+
+**Time**: ~15 minutes plus however long your data takes to copy.
+
+---
+
+## Try it with no production database at all
+
+```bash
+CONFITURE_EXAMPLE_DB_URL=postgresql://localhost/scratch ./run.sh
+```
+
+Two scratch databases are created on that server, one seeded with recognisable
+PII, synced with masking, verified, and dropped. Nothing in this guide is
+claimed that this script does not do.
 
 ---
 
 ## Prerequisites Checklist
 
-- [ ] Confiture installed: `pip install fraiseql-confiture`
-- [ ] PostgreSQL client tools: `psql`, `pg_dump`
-- [ ] Production database credentials (read-only)
-- [ ] Staging database credentials (read-write)
-- [ ] VPN access (if required)
+- [ ] `confiture --version` works
+- [ ] `psql --version` works (building the target, running verification)
+- [ ] `pg_dump --version` works (the pre-overwrite backup in `sync_script.sh`)
+- [ ] Read-only credentials for production
+- [ ] Write credentials for staging, **owning** the tables (the copy disables triggers)
+- [ ] Staging already has the schema — `confiture sync` copies rows, not tables
 
 ---
 
-## Step 1: Set Environment Variables (2 minutes)
+## Step 1: Environment variables (2 minutes)
 
 ```bash
-# Export database passwords
-export PROD_DB_PASSWORD="your-production-password"
-export STAGING_DB_PASSWORD="your-staging-password"
+export PROD_DB_PASSWORD='…'
+export STAGING_DB_PASSWORD='…'
+export ANONYMIZATION_SECRET='…'
 
-# Optional: Slack notifications
-export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-
-# Verify
-echo $PROD_DB_PASSWORD | wc -c  # Should show character count (not empty)
+# Verify all three are set — the sync refuses without the third
+: "${PROD_DB_PASSWORD:?}" "${STAGING_DB_PASSWORD:?}" "${ANONYMIZATION_SECRET:?}" && echo ok
 ```
 
-**Security Tip**: Add these to your `~/.bashrc` or use a credential manager:
+`ANONYMIZATION_SECRET` is the HMAC key behind every pseudonym. It has **no
+default**: `confiture sync --anonymize` stops with `CONFIG_009` rather than
+falling back to something guessable.
+
+From a secret store rather than your shell history:
+
 ```bash
-# AWS Secrets Manager
-export PROD_DB_PASSWORD=$(aws secretsmanager get-secret-value \
-  --secret-id prod-db-password --query SecretString --output text)
+export ANONYMIZATION_SECRET="$(aws secretsmanager get-secret-value \
+    --secret-id staging/anonymization --query SecretString --output text)"
 ```
+
+Keep it away from the people who have staging access — the secret plus a list of
+candidate emails reverses the masking.
 
 ---
 
-## Step 2: Configure Database Connections (3 minutes)
+## Step 2: Database connections (3 minutes)
 
-Edit `db/environments/production.yaml`:
+One file per environment, one `database_url` each:
+
 ```yaml
+# db/environments/production.yaml
 name: production
-database_url: postgresql://confiture_sync_user:${PROD_DB_PASSWORD}@your-prod-host.example.com:5432/your_database_name
-include_dirs: []
+database_url: postgresql://confiture_sync_user:${PROD_DB_PASSWORD}@prod-db.example.com:5432/ecommerce_prod?sslmode=require
+include_dirs:
+  - db/schema
+exclude_dirs: []
 ```
 
-Edit `db/environments/staging.yaml`:
-```yaml
-name: staging
-database_url: postgresql://confiture_sync_user:${STAGING_DB_PASSWORD}@your-staging-host.example.com:5432/your_database_name
-include_dirs: []
-```
+Test both ends:
 
-**Test connections**:
 ```bash
-# Test production (read-only)
-psql postgresql://$PROD_DB_PASSWORD@your-prod-host/your_db -c "SELECT version();"
+psql "postgresql://confiture_sync_user:${PROD_DB_PASSWORD}@prod-db.example.com:5432/ecommerce_prod" -c 'SELECT 1'
+psql "postgresql://confiture_sync_user:${STAGING_DB_PASSWORD}@staging-db.example.com:5432/ecommerce_staging" -c 'SELECT 1'
+```
 
-# Test staging (read-write)
-psql postgresql://$STAGING_DB_PASSWORD@your-staging-host/your_db -c "SELECT version();"
+Build the target if it is empty:
+
+```bash
+confiture build --env staging --output /tmp/schema.sql
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f /tmp/schema.sql
 ```
 
 ---
 
-## Step 3: Customize Anonymization Rules (5 minutes)
+## Step 3: Anonymization rules (5 minutes)
 
-Edit `anonymization_config.yaml` to match your schema:
+`db/sync/anonymization.yaml` — the whole grammar:
 
 ```yaml
-tables:
-  # Add your tables here
-  users:
-    anonymization:
-      - column: email
-        strategy: email
-      - column: phone
-        strategy: phone
-      - column: ssn
-        strategy: redact
+users:
+  - column: email
+    strategy: email        # -> user_3698af8f@example.com
+  - column: full_name
+    strategy: name         # -> User 40A9
+  - column: phone
+    strategy: phone        # -> +1-555-6633
+  - column: ssn
+    strategy: redact       # -> [REDACTED]
 
-  # Tables without PII (no anonymization needed)
-  products:
-    # No anonymization block = direct copy
+payments:
+  - column: stripe_customer_id
+    strategy: hash         # -> 9d4e1a77b3c05f28, unique and one-way
 ```
 
-**Finding PII columns**:
+**A column with no rule is copied verbatim.** So the job is to find every PII
+column, not to review the ones already listed:
+
 ```bash
-# Connect to production and list columns
-psql postgresql://prod-host/db -c "
-  SELECT table_name, column_name
+psql "$PROD_URL" -Atc "
+  SELECT table_name || '.' || column_name
   FROM information_schema.columns
-  WHERE column_name ILIKE ANY(ARRAY['%email%', '%phone%', '%ssn%', '%address%'])
-  ORDER BY table_name, column_name;
-"
+  WHERE table_schema = 'public'
+    AND column_name ~ '(email|phone|ssn|name|address|birth|ip_)'
+  ORDER BY 1"
 ```
+
+That regex is a starting point, not an audit — confiture has no PII discovery.
 
 ---
 
-## Step 4: Dry Run (1 minute)
-
-Validate configuration without copying data:
+## Step 4: Check the preconditions (1 minute)
 
 ```bash
 ./sync_script.sh --dry-run
 ```
 
-**Expected Output**:
-```
-Pre-Sync Validation Report
-==========================
+This validates that every strategy named is one of the five that exist. Worth
+doing: confiture masks an **unknown strategy to `[REDACTED]`** instead of
+failing, so `strategy: emial` would quietly destroy the column.
 
-Source Database: your_prod_db (250 GB, 45 tables)
-Target Database: your_staging_db (will be overwritten)
-
-PII Columns Detected: 12
-  users.email              → email strategy
-  users.phone              → phone strategy
-  users.ssn                → redact strategy
-
-Estimated Sync Time: 35 minutes
-
-✓ Configuration valid
-```
-
-**If errors**: Fix configuration and re-run dry-run.
+`--dry-run` is the script's flag. `confiture sync` has none.
 
 ---
 
-## Step 5: Run Actual Sync (30-60 minutes depending on size)
-
-Execute production-to-staging sync:
+## Step 5: Sync
 
 ```bash
 ./sync_script.sh
 ```
 
-**Progress Output**:
-```
-Syncing Production → Staging
-============================
+or directly:
 
-[✓] users (50,000 rows, 12 MB) - 3s - 3 columns anonymized
-[✓] orders (250,000 rows, 450 MB) - 45s - 1 column anonymized
-[✓] products (5,000 rows, 2 MB) - 1s - no PII
-...
-
-Total: 45 tables, 1.2M rows, 1.8 GB in 8m 23s
-Anonymized: 12 PII columns across 4 tables
-```
-
-**If sync fails mid-process**:
 ```bash
-# Resume from checkpoint
-./sync_script.sh --resume
+confiture sync --from production --to staging \
+    --anonymize --anonymization-config db/sync/anonymization.yaml \
+    --exclude audit_logs \
+    --checkpoint .sync-checkpoint.json
 ```
+
+If it dies partway:
+
+```bash
+confiture sync … --checkpoint .sync-checkpoint.json --resume
+```
+
+Resume is per table — an interrupted table is redone from the start.
 
 ---
 
-## Step 6: Verify Anonymization (2 minutes)
-
-Check that PII was properly anonymized:
+## Step 6: Verify (2 minutes)
 
 ```bash
-# Connect to staging
-psql postgresql://staging-host/staging_db
-
-# Run verification SQL
-\i verify_anonymization.sql
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f verify_anonymization.sql
 ```
 
-**Expected Results**: All checks should show `✓ PASS`:
 ```
-Test 1: Email Anonymization Check
-  users.email: 50,000 emails, 50,000 anonymized, 0 violations ✓ PASS
-
-Test 2: Phone Number Anonymization Check
-  users.phone: 48,523 phones, 48,523 anonymized, 0 violations ✓ PASS
-
-Test 3: SSN Redaction Check
-  users.ssn: 50,000 SSNs, 50,000 redacted, 0 violations ✓ PASS
-
-Overall: ✓ ALL CHECKS PASSED - DATABASE IS SAFE TO USE
+NOTICE:  1. no source PII survived
+NOTICE:  2. masked values have the shape each strategy promises
+NOTICE:  3. NULL stayed NULL
+NOTICE:  4. pseudonyms are stable across tables
+NOTICE:  5. seeds separate staff pseudonyms from customer pseudonyms
+NOTICE:  6. hash preserved uniqueness
+NOTICE:  7. referential integrity survived
+NOTICE:  8. non-PII columns survived intact
+✅ verification passed: staging holds no source PII, and is still usable
 ```
+
+Do not skip this. A sync that exits 0 tells you rows moved, not that they were
+masked.
 
 ---
 
-## Step 7: Use Staging Database
-
-Your staging database now has anonymized production data!
+## Step 7: Use staging
 
 ```bash
-# Connect to staging
-psql postgresql://staging-host/staging_db
-
-# Example: Check anonymized emails
-SELECT id, email, first_name, created_at
-FROM users
-LIMIT 5;
-
-# Output:
-#  id |        email         | first_name  |     created_at
-# ----+----------------------+-------------+-------------------
-#   1 | user_a3f5e9b2@anon.local | User-A3F5E9 | 2024-01-15 10:23:45
-#   2 | user_b7d2c4e1@anon.local | User-B7D2C4 | 2024-01-16 14:56:12
+psql "$STAGING_URL" -c "SELECT id, email, full_name FROM users ORDER BY id LIMIT 3"
 ```
 
----
+```
+ id |           email           | full_name
+----+---------------------------+-----------
+  1 | user_3698af8f@example.com | User 40A9
+  2 | user_75787de6@example.com | User CE02
+  3 | user_4dd48789@example.com | User 8B31
+```
 
-## Common Issues and Solutions
+Joins still work, because one address masks to one pseudonym everywhere:
 
-### Issue 1: Connection Refused
-
-**Error**: `psql: could not connect to server: Connection refused`
-
-**Solution**:
-1. Check VPN connection
-2. Verify hostname: `ping prod-db.example.com`
-3. Check firewall rules
-4. Verify credentials
-
-### Issue 2: Permission Denied
-
-**Error**: `ERROR: permission denied for table users`
-
-**Solution**:
 ```sql
--- Grant SELECT on production (read-only user)
-GRANT CONNECT ON DATABASE your_db TO confiture_sync_user;
-GRANT USAGE ON SCHEMA public TO confiture_sync_user;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO confiture_sync_user;
-
--- Grant ALL on staging (write access needed)
-GRANT ALL PRIVILEGES ON DATABASE staging_db TO confiture_sync_user;
-```
-
-### Issue 3: Verification Failed (PII Detected)
-
-**Error**: `✗ FAIL - LEAKED EMAILS DETECTED`
-
-**Solution**:
-1. Check `anonymization_config.yaml` - missing column?
-2. Add missing anonymization rule:
-   ```yaml
-   tables:
-     users:
-       anonymization:
-         - column: backup_email  # Add this!
-           strategy: email
-   ```
-3. Re-run sync: `./sync_script.sh --force`
-
-### Issue 4: Slow Sync Performance
-
-**Symptom**: Sync taking >2 hours for 100 GB database
-
-**Solution**:
-```yaml
-# In anonymization_config.yaml
-performance:
-  parallel_workers: 8           # Increase from 4
-  batch_size: 50000             # Increase from 10000
-  disable_indexes: true         # Drop indexes, recreate after
+SELECT u.email, count(*) AS orders
+FROM users u JOIN orders o ON o.user_id = u.id
+GROUP BY u.email;
 ```
 
 ---
 
-## Automation (Weekly Staging Refresh)
+## Common Issues
 
-### Option 1: Cron Job
+### `CONFIG_009: ANONYMIZATION_SECRET is not set`
+
+Working as intended. Set it (Step 1).
+
+### `CONFIG_002` from the config file
+
+Not in the `table: [{column, strategy}]` shape — often a rule missing `column`
+or `strategy`, or a file written for a different tool.
+
+### Verification failed — PII detected
+
+Treat staging as holding production PII: restrict access first, diagnose second.
+
+1. Does the column have a rule? Absent means verbatim.
+2. Does the rule's `column` match the real column name? A rule naming a column
+   that is not in the table is skipped silently.
+3. Was `--anonymize` passed? Check `warnings` in `--format json`.
+
+### `must be owner of table`
+
+The copy disables triggers on the target, which needs table ownership.
+
+### Slow
+
+Raise `--batch-size` (default 5000); copy less with `--tables` / `--exclude`.
+There is no parallel-worker option.
+
+---
+
+## Automation
+
+### Cron
 
 ```bash
-# Add to crontab: crontab -e
-0 2 * * 1 cd /path/to/example && ./sync_script.sh >> /var/log/confiture-sync.log 2>&1
+# Mondays at 03:00
+0 3 * * 1 cd /srv/app && ./sync_script.sh --skip-backup >> /var/log/staging-refresh.log 2>&1
 ```
 
-### Option 2: CI/CD (GitHub Actions)
+### GitHub Actions
 
 ```yaml
-# .github/workflows/refresh-staging.yml
-name: Refresh Staging DB
-
 on:
   schedule:
-    - cron: '0 2 * * 1'  # Monday 2 AM
-
+    - cron: '0 3 * * 1'
 jobs:
-  sync:
+  refresh:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Sync Production to Staging
+      - uses: actions/checkout@v6
+      - run: pip install confiture
+      - run: ./sync_script.sh --skip-backup
         env:
-          PROD_DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
-          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
-        run: |
-          cd examples/04-production-sync-anonymization
-          ./sync_script.sh
+          PROD_DB_PASSWORD:     ${{ secrets.PROD_DB_PASSWORD }}
+          STAGING_DB_PASSWORD:  ${{ secrets.STAGING_DB_PASSWORD }}
+          ANONYMIZATION_SECRET: ${{ secrets.ANONYMIZATION_SECRET }}
 ```
 
----
-
-## Next Steps
-
-1. **Schedule Weekly Refreshes**: Set up cron or CI/CD automation
-2. **Sync to Local**: `confiture sync staging-to-local --anonymize`
-3. **Customize Verification**: Add custom checks to `verify_anonymization.sql`
-4. **Monitor Performance**: Track sync duration and optimize
+Never add `--skip-verify` to a scheduled job: it turns a check into an
+assumption.
 
 ---
 
 ## Useful Commands
 
 ```bash
-# Dry run (no data copied)
+# The demo, end to end, on scratch databases
+CONFITURE_EXAMPLE_DB_URL=postgresql://localhost/scratch ./run.sh
+
+# Preconditions only
 ./sync_script.sh --dry-run
 
-# Normal sync
-./sync_script.sh
+# Sync a subset
+confiture sync --from production --to staging --anonymize --tables users,orders
 
-# Resume failed sync
-./sync_script.sh --resume
+# Machine-readable result
+confiture sync --from production --to staging --anonymize --format json
 
-# Force sync (overwrite even if newer)
-./sync_script.sh --force
-
-# Verbose logging
-./sync_script.sh --verbose
-
-# Skip verification (not recommended)
-./sync_script.sh --skip-verify
-
-# Check last sync status
-tail -n 100 sync-*.log | grep -E "(PASS|FAIL|ERROR)"
-
-# Connect to staging
-psql postgresql://staging-host/staging_db
+# Verify
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f verify_anonymization.sql
 ```
 
 ---
 
-## Help and Support
+## Next Steps
 
-- **Documentation**: See [README.md](./README.md) for detailed guide
-- **Configuration Reference**: See [anonymization_config.yaml](./anonymization_config.yaml)
-- **Verification SQL**: See [verify_anonymization.sql](./verify_anonymization.sql)
-- **Confiture Docs**: https://confiture.readthedocs.io
-
----
-
-**Total Setup Time**: ~15 minutes + sync time (30-60 minutes for typical database)
-
-**You're Done!** Your staging database now has safe, anonymized production data for debugging and testing.
+- [README.md](README.md) — strategies, GDPR posture, security
+- [Production Sync guide](../../docs/guides/03-production-sync.md)
+- `confiture sync --help`

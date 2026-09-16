@@ -13,7 +13,7 @@
 -- the command line, all leave you with a green sync and plaintext PII in
 -- staging. The masking is the claim, so the masking is what gets asserted.
 --
--- There is no `confiture audit-pii`. This is the audit.
+-- Confiture ships no PII-audit command. This file is the audit.
 
 \set ON_ERROR_STOP on
 

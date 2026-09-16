@@ -97,11 +97,10 @@ check_prerequisites() {
 }
 
 check_config_parses() {
-    # There is no `confiture validate-config` for this file — that command
-    # validates a *migration* config, and `validate-profile` validates the
-    # AnonymizationProfile shape, which is a different format. So check the two
-    # things that are cheap to check here, and let `confiture sync` reject the
-    # rest with CONFIG_002.
+    # No confiture command validates this file: `validate-config` is for a
+    # *migration* config, and `validate-profile` reads the AnonymizationProfile
+    # shape, which is a different format. So check what is cheap to check here,
+    # and let the sync itself reject the rest with CONFIG_002.
     log INFO "Checking $ANON_CONFIG parses…"
     python3 - "$ANON_CONFIG" <<'PY' || { log ERROR "anonymization config is not usable"; exit 1; }
 import sys, yaml
