@@ -46,8 +46,10 @@ ENV/
 db/backups/
 db/dumps/
 
-# Generated files
-db/schema/10_tables/generated.sql
+# NOTE: db/schema/ is deliberately NOT ignored. Confiture builds from DDL, so
+# the DDL is the source of truth and lives in the repository — including
+# 10_tables/generated.sql, which FraiseQL emits but the example ships, so that
+# `confiture build` works on a fresh clone with no code-generation step.
 
 # Logs
 *.log
