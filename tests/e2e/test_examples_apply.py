@@ -17,20 +17,19 @@ So this asks the other half of the question — does the built schema survive
   invisible until the first was fixed. A green run here means the whole file
   applied, not that its first statement did.
 
-Environments that declare ``include_dirs: []`` are excluded by construction:
-they are sync endpoints (``examples/04-production-sync-anonymization`` names
-both of its own that way in a comment) and build no schema. That is a statement
-the example makes on purpose, not a gap — the test asserts they say it clearly
-rather than asserting they build.
+An environment that declares ``include_dirs: []`` is skipped rather than failed:
+it builds no schema on purpose. ``04-production-sync-anonymization`` used to have
+two, because a sync endpoint has no DDL of its own — and ``SCHEMA_001 No
+include_dirs specified`` was duly filed against it as a bug. If you add one back,
+say why in a comment beside it, or the next reader will file it again.
 """
 
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
-import psycopg
 import pytest
 
 from confiture.config.environment import Environment
@@ -86,13 +85,13 @@ def test_every_example_schema_applies(
         where = env_file.relative_to(REPO_ROOT)
         try:
             schema = SchemaBuilder(env=env).build()
-        except Exception as exc:  # noqa: BLE001 - the report names the example
+        except Exception as exc:
             failures.append(f"{where}: build failed: {exc}")
             continue
         url = fresh_database_factory("confiture_ex")
         try:
             apply_sql_via_psql(url, schema)
-        except Exception as exc:  # noqa: BLE001 - the report names the example
+        except Exception as exc:
             failures.append(f"{where}: apply failed: {exc}")
             continue
         applied += 1
@@ -114,7 +113,7 @@ def test_every_example_schema_is_tracked(monkeypatch: pytest.MonkeyPatch) -> Non
     assertion is on *tracked* files: whatever the working tree happens to hold is
     not what a reader clones.
     """
-    tracked = {p for p in _tracked("examples/**/*.sql")}
+    tracked = set(_tracked("examples/**/*.sql"))
     failures: list[str] = []
     for env_file in _environment_files():
         env = _load(env_file, monkeypatch)
@@ -136,24 +135,3 @@ def test_every_example_schema_is_tracked(monkeypatch: pytest.MonkeyPatch) -> Non
                 f"(absent on a clean checkout): {names}"
             )
     assert failures == [], "example schemas that do not survive a clone:\n" + "\n".join(failures)
-
-
-def test_schemaless_environments_say_why(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An environment that builds nothing states that in the file, so it reads as a choice.
-
-    Without this, ``include_dirs: []`` is indistinguishable from a forgotten key,
-    and ``SCHEMA_001 No include_dirs specified`` gets filed as a bug against an
-    example that is working exactly as intended.
-    """
-    failures: list[str] = []
-    for env_file in _environment_files():
-        env = _load(env_file, monkeypatch)
-        if env.include_dirs:
-            continue
-        text = env_file.read_text().lower()
-        if "builds no schema" not in text:
-            failures.append(
-                f"{env_file.relative_to(REPO_ROOT)}: empty include_dirs with no stated reason "
-                "(say 'builds no schema' in a comment)"
-            )
-    assert failures == [], "\n".join(failures)

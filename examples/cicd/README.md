@@ -152,11 +152,18 @@ deploy-eu-west:
 
 ### Blue-Green Deployments
 
-Use Confiture's blue-green orchestration:
+Medium 4 moves data between two schemas over a Foreign Data Wrapper, so the old
+schema keeps serving traffic until cutover. `schema-to-schema` is a group of
+steps, not one command:
 
 ```yaml
 - name: Blue-green migration
-  run: confiture migrate blue-green --source public --target public_new
+  run: |
+    confiture migrate schema-to-schema setup  --source public --target public_new
+    confiture migrate schema-to-schema migrate --source public --target public_new \
+        --mapping db/column_mapping.yaml
+    confiture migrate schema-to-schema verify --source public --target public_new
+    confiture migrate schema-to-schema cleanup --source public --target public_new
 ```
 
 ## Troubleshooting
@@ -170,8 +177,8 @@ Use Confiture's blue-green orchestration:
 
 2. **"Checksum mismatch" errors**
    - Someone modified a migration after it ran
-   - Use `--skip-checksum` if intentional
-   - Reset checksums: `confiture migrate reset-checksums`
+   - `--on-checksum-mismatch warn` if intentional (there is no `--skip-checksum`)
+   - Reset checksums: `confiture verify-checksums --fix`
 
 3. **"Connection refused" errors**
    - Verify DATABASE_URL format

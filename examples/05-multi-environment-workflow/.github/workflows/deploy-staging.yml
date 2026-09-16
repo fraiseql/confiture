@@ -26,7 +26,7 @@ jobs:
 
       - name: Check migration status
         run: |
-          confiture migrate status --env staging
+          confiture migrate status --config db/environments/staging.yaml
         env:
           STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
           STAGING_DB_PORT: ${{ secrets.STAGING_DB_PORT }}
@@ -36,7 +36,7 @@ jobs:
 
       - name: Dry-run migration
         run: |
-          confiture migrate up --env staging --dry-run | tee dry-run.log
+          confiture migrate up --config db/environments/staging.yaml --dry-run | tee dry-run.log
         env:
           STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
           STAGING_DB_PORT: ${{ secrets.STAGING_DB_PORT }}
@@ -61,7 +61,7 @@ jobs:
 
       - name: Apply migrations
         run: |
-          confiture migrate up --env staging --verbose
+          confiture migrate up --config db/environments/staging.yaml --verbose
         env:
           STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
           STAGING_DB_PORT: ${{ secrets.STAGING_DB_PORT }}

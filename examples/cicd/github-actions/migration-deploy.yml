@@ -73,7 +73,7 @@ jobs:
           DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
         run: |
           # Basic connectivity check
-          confiture health check --timeout 30
+          confiture migrate status
 
   deploy-production:
     name: Deploy to Production
@@ -96,7 +96,7 @@ jobs:
       - name: Pre-migration health check
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-        run: confiture health check --timeout 60
+        run: confiture migrate status
 
       - name: Run migrations
         id: migrate
@@ -115,7 +115,7 @@ jobs:
       - name: Post-migration health check
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-        run: confiture health check --timeout 60
+        run: confiture migrate status
 
       - name: Notify on success
         if: success()

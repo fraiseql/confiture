@@ -331,8 +331,8 @@ pg_restore --list backup_before_migration_*.dump | head -20
 ```bash
 cd /home/lionel/code/confiture/examples/03-zero-downtime-migration
 
-# Initialize Confiture for new schema
-confiture init --schema-dir db/new_schema
+# Initialize Confiture (it takes no options; it scaffolds into the cwd)
+confiture init
 
 # Review new schema files
 cat db/new_schema/01_users_table.sql

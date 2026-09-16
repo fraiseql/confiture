@@ -361,7 +361,7 @@ make status-local
 ```bash
 # On a database that predates the change (built before you edited db/schema/);
 # a database you just rebuilt from the schema already has the column — baseline it instead
-confiture migrate up --env local
+confiture migrate up --config db/environments/local.yaml
 
 # Verify table structure
 psql confiture_workflow -c "\d users"
@@ -374,13 +374,13 @@ psql confiture_workflow -c "SELECT email, avatar_url FROM users LIMIT 5"
 
 ```bash
 # Rollback migration
-confiture migrate down --env local
+confiture migrate down --config db/environments/local.yaml
 
 # Verify column removed
 psql confiture_workflow -c "\d users"
 
 # Re-apply
-confiture migrate up --env local
+confiture migrate up --config db/environments/local.yaml
 ```
 
 **Test fresh build includes change:**
@@ -518,15 +518,15 @@ jobs:
           STAGING_DB_HOST: ${{ secrets.STAGING_DB_HOST }}
           STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
         run: |
-          confiture migrate status --env staging
+          confiture migrate status --config db/environments/staging.yaml
 
       - name: Dry-run migration
         run: |
-          confiture migrate up --env staging --dry-run
+          confiture migrate up --config db/environments/staging.yaml --dry-run
 
       - name: Apply migrations
         run: |
-          confiture migrate up --env staging
+          confiture migrate up --config db/environments/staging.yaml
 
       - name: Verify deployment
         run: |
@@ -558,7 +558,7 @@ export STAGING_DB_PASSWORD=<secret>
 make status-staging
 
 # Dry-run
-confiture migrate up --env staging --dry-run
+confiture migrate up --config db/environments/staging.yaml --dry-run
 
 # Apply
 make deploy-staging
@@ -645,11 +645,11 @@ jobs:
           PRODUCTION_DB_HOST: ${{ secrets.PRODUCTION_DB_HOST }}
           PRODUCTION_DB_PASSWORD: ${{ secrets.PRODUCTION_DB_PASSWORD }}
         run: |
-          confiture migrate status --env production
+          confiture migrate status --config db/environments/production.yaml
 
       - name: Dry-run migration (required)
         run: |
-          confiture migrate up --env production --dry-run > dry-run.log
+          confiture migrate up --config db/environments/production.yaml --dry-run > dry-run.log
           cat dry-run.log
 
       - name: Wait for approval
@@ -660,7 +660,7 @@ jobs:
 
       - name: Apply migrations
         run: |
-          confiture migrate up --env production --verbose
+          confiture migrate up --config db/environments/production.yaml --verbose
 
       - name: Verify deployment
         run: |
@@ -767,7 +767,7 @@ Database restored to previous state
 
 ```bash
 # Check current migration status
-confiture migrate status --env production
+confiture migrate status --config db/environments/production.yaml
 
 # Review recent migrations
 psql production -c "
@@ -781,7 +781,7 @@ psql production -c "
 
 ```bash
 # Rollback last migration
-confiture migrate down --env production
+confiture migrate down --config db/environments/production.yaml
 
 # Expected output:
 # Rolling back migration 004_add_user_avatar...
@@ -793,7 +793,7 @@ confiture migrate down --env production
 
 ```bash
 # Check migration status
-confiture migrate status --env production
+confiture migrate status --config db/environments/production.yaml
 
 # Verify column removed
 psql production -c "\d users"
@@ -841,7 +841,7 @@ pg_dump > "emergency-backup-$(date +%Y%m%d-%H%M%S).sql"
 
 # Rollback
 echo "Rolling back..."
-confiture migrate down --env "$ENV"
+confiture migrate down --config "db/environments/$ENV.yaml"
 
 # Verify
 echo "Verifying..."
@@ -856,13 +856,13 @@ echo "✅ Rollback complete"
 
 ```bash
 # Test rollback in staging
-confiture migrate down --env staging
+confiture migrate down --config db/environments/staging.yaml
 
 # Verify rollback worked
 psql staging -c "\d users"
 
 # Re-apply migration
-confiture migrate up --env staging
+confiture migrate up --config db/environments/staging.yaml
 
 # Verify re-application worked
 psql staging -c "\d users"
@@ -888,7 +888,7 @@ echo "🔍 Verifying migration for environment: $ENV"
 
 # Check migration status
 echo "Checking migration status..."
-confiture migrate status --env "$ENV" || EXIT_CODE=1
+confiture migrate status --config "db/environments/$ENV.yaml" || EXIT_CODE=1
 
 # Verify table structures
 echo "Verifying table structures..."
@@ -1151,7 +1151,7 @@ WHERE datname = 'confiture_staging';
 SELECT pg_terminate_backend(pid);
 
 # Retry migration
-confiture migrate up --env staging
+confiture migrate up --config db/environments/staging.yaml
 ```
 
 ---
@@ -1218,7 +1218,7 @@ WHERE column_name = 'bio';
 DROP VIEW user_profiles;
 
 # Retry rollback
-confiture migrate down --env production
+confiture migrate down --config db/environments/production.yaml
 
 # Recreate view
 CREATE VIEW user_profiles AS ...;

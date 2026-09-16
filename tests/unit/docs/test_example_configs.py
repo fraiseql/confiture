@@ -165,6 +165,6 @@ def test_no_example_ships_an_unreadable_root_config() -> None:
     for config in _tracked("examples/**/confiture.yaml", "examples/*/confiture.yaml"):
         try:
             Environment.load(config.stem, project_dir=config.parent)
-        except Exception as exc:  # noqa: BLE001 - the report names the file
+        except Exception as exc:
             failures.append(f"{config.relative_to(REPO_ROOT)}: {exc}")
     assert failures == [], "root configs the model cannot read:\n" + "\n".join(failures)

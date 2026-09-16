@@ -30,7 +30,7 @@ lint-migrations:
   extends: .migration-base
   stage: lint
   script:
-    - confiture lint db/migrations/
+    - confiture lint --env $CONFITURE_ENV
     - confiture verify-checksums
   rules:
     - changes:
@@ -49,7 +49,7 @@ dry-run-migrations:
   script:
     - confiture build --env test
     - confiture migrate up --dry-run
-    - confiture migrate test-rollback db/migrations/*.py
+    - confiture migrate down --steps 1 --dry-run
   rules:
     - changes:
         - db/migrations/**/*
@@ -65,7 +65,7 @@ schema-diff-check:
     DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/${POSTGRES_DB}
   script:
     - confiture build --env test
-    - confiture migrate drift-detect
+    - confiture drift --config db/environments/$CONFITURE_ENV.yaml
   rules:
     - changes:
         - db/migrations/**/*
@@ -87,13 +87,13 @@ deploy-staging:
         echo "No pending migrations"
         exit 0
       fi
-    - confiture health check --timeout 30
+    - confiture migrate status
     - |
       confiture migrate up \
         --lock-timeout 30000 \
         --verify-checksums
     - confiture migrate status
-    - confiture health check --timeout 30
+    - confiture migrate status
   variables:
     DATABASE_URL: ${STAGING_DATABASE_URL}
   rules:
@@ -128,7 +128,7 @@ deploy-production:
         exit 0
       fi
     - echo "Running pre-migration health check..."
-    - confiture health check --timeout 60
+    - confiture migrate status
     - echo "Applying $PENDING migrations..."
     - |
       confiture migrate up \
@@ -136,7 +136,7 @@ deploy-production:
         --verify-checksums
     - confiture migrate status
     - echo "Running post-migration health check..."
-    - confiture health check --timeout 60
+    - confiture migrate status
   variables:
     DATABASE_URL: ${PRODUCTION_DATABASE_URL}
   rules:
@@ -162,7 +162,7 @@ drift-detection:
   extends: .migration-base
   stage: lint
   script:
-    - confiture migrate drift-detect
+    - confiture drift --config db/environments/$CONFITURE_ENV.yaml
   variables:
     DATABASE_URL: ${PRODUCTION_DATABASE_URL}
   rules:

@@ -27,7 +27,7 @@ fi
 
 echo ""
 echo "📊 Current migration status:"
-confiture migrate status --env "$ENV"
+confiture migrate status --config "db/environments/$ENV.yaml"
 
 echo ""
 read -p "Continue with rollback? (y/N): " continue
@@ -66,7 +66,7 @@ echo "✅ Backup created: $BACKUP_FILE"
 # Perform rollback
 echo ""
 echo "🔄 Rolling back last migration..."
-confiture migrate down --env "$ENV" --verbose
+confiture migrate down --config "db/environments/$ENV.yaml" --verbose
 
 # Verify rollback
 echo ""
@@ -76,7 +76,7 @@ echo "🔍 Verifying rollback..."
 # Check migration status
 echo ""
 echo "📊 New migration status:"
-confiture migrate status --env "$ENV"
+confiture migrate status --config "db/environments/$ENV.yaml"
 
 echo ""
 echo "──────────────────────────────────────────────"

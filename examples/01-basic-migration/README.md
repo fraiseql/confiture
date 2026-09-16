@@ -244,7 +244,7 @@ built in Step 3 therefore already has the column, and the migration must be *rec
 
 ```bash
 # Confiture does not know yet that 001's effect is already in place
-confiture migrate status --env local
+confiture migrate status --config db/environments/local.yaml
 
 # Expected output:
 # ⏳ 001_add_user_bio (pending)
@@ -253,13 +253,13 @@ confiture migrate status --env local
 confiture migrate baseline --through 001 --config db/environments/local.yaml --migrations-dir db/migrations
 
 # Check status again
-confiture migrate status --env local
+confiture migrate status --config db/environments/local.yaml
 
 # Expected output:
 # ✅ 001_add_user_bio (applied 2025-10-12 10:30:00)
 ```
 
-`confiture migrate up --env local` is what a database that predates the change runs — a staging or
+`confiture migrate up --config db/environments/local.yaml` is what a database that predates the change runs — a staging or
 production database built before `bio` existed applies the migration for real. This is exactly what
 `run.sh` does: `build`, then `migrate baseline --through 001`, then `migrate status` must report
 `0 pending`.
@@ -288,7 +288,7 @@ The baseline recorded 001 as applied, so it can be rolled back and re-applied li
 
 ```bash
 # Rollback the migration
-confiture migrate down --env local
+confiture migrate down --config db/environments/local.yaml
 
 # Expected output:
 # Rolling back migration 001_add_user_bio...
@@ -300,7 +300,7 @@ psql confiture_tutorial -c "\d users"
 # (bio column should be missing)
 
 # Re-apply the migration
-confiture migrate up --env local
+confiture migrate up --config db/environments/local.yaml
 ```
 
 **Why test rollback?**
@@ -372,15 +372,15 @@ vim db/schema/10_tables/users.sql
 vim db/migrations/002_next_change.py
 
 # 3. Test migration locally
-confiture migrate up --env local
+confiture migrate up --config db/environments/local.yaml
 psql confiture_tutorial -c "\d users"  # Verify
 
 # 4. Test rollback
-confiture migrate down --env local
+confiture migrate down --config db/environments/local.yaml
 psql confiture_tutorial -c "\d users"  # Verify
 
 # 5. Re-apply
-confiture migrate up --env local
+confiture migrate up --config db/environments/local.yaml
 
 # 6. Commit both schema and migration
 git add db/schema/10_tables/users.sql
@@ -413,10 +413,10 @@ confiture build --env local
 confiture build --env ci
 
 # Staging
-confiture migrate up --env staging
+confiture migrate up --config db/environments/staging.yaml
 
 # Production
-confiture migrate up --env production
+confiture migrate up --config db/environments/production.yaml
 ```
 
 ---
