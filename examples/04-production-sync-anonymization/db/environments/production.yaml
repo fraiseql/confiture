@@ -1,11 +1,14 @@
 # Production database — the SOURCE of `confiture sync`.
 #
 # Use read-only credentials: sync never writes to its source. The password is
-# resolved from the environment at load time (${VAR} expansion).
+# resolved from the environment at load time (${VAR} expansion), so no secret
+# is committed.
 
 name: production
 database_url: postgresql://confiture_sync_user:${PROD_DB_PASSWORD}@prod-db.example.com:5432/ecommerce_prod?sslmode=require
 
-# This example syncs data between existing databases; it builds no schema.
-include_dirs: []
+# Both ends build from the same DDL: `confiture sync` copies rows, never tables,
+# so staging must already have the schema before a sync can land in it.
+include_dirs:
+  - db/schema
 exclude_dirs: []

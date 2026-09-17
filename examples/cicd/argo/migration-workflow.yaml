@@ -59,7 +59,7 @@ spec:
           - |
             pip install --quiet confiture
             echo "Linting migrations..."
-            confiture lint db/migrations/
+            confiture lint --env $CONFITURE_ENV
             echo "Verifying checksums..."
             confiture verify-checksums
 
@@ -114,7 +114,7 @@ spec:
             pip install --quiet confiture
             echo "Deploying migrations to {{inputs.parameters.environment}}..."
             echo "Pre-migration health check..."
-            confiture health check --timeout 60
+            confiture migrate status
             echo "Applying migrations..."
             confiture migrate up \
               --lock-timeout {{inputs.parameters.lock-timeout}} \
@@ -122,7 +122,7 @@ spec:
             echo "Migration status:"
             confiture migrate status
             echo "Post-migration health check..."
-            confiture health check --timeout 60
+            confiture migrate status
         env:
           - name: DATABASE_URL
             valueFrom:
@@ -276,7 +276,7 @@ spec:
         args:
           - |
             pip install --quiet confiture
-            confiture lint db/migrations/
+            confiture lint --env $CONFITURE_ENV
             confiture verify-checksums
 
     - name: dry-run-migration
@@ -316,10 +316,10 @@ spec:
         args:
           - |
             pip install --quiet confiture
-            confiture health check --timeout 60
+            confiture migrate status
             confiture migrate up --lock-timeout 60000 --verify-checksums
             confiture migrate status
-            confiture health check --timeout 60
+            confiture migrate status
         env:
           - name: DATABASE_URL
             valueFrom:
@@ -361,7 +361,7 @@ spec:
             - |
               pip install --quiet confiture
               echo "Checking for schema drift..."
-              confiture migrate drift-detect
+              confiture drift --config db/environments/$CONFITURE_ENV.yaml
               if [ $? -ne 0 ]; then
                 echo "Schema drift detected! Sending alert..."
                 # Add your alerting mechanism here

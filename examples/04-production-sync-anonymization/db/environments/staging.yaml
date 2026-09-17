@@ -1,11 +1,12 @@
 # Staging database — the TARGET of `confiture sync`.
 #
-# Receives anonymized production data (see anonymization_config.yaml); the
+# Receives anonymized production data (see db/sync/anonymization.yaml); these
 # credentials need write access. The password is resolved from the environment.
 
 name: staging
 database_url: postgresql://confiture_sync_user:${STAGING_DB_PASSWORD}@staging-db.example.com:5432/ecommerce_staging?sslmode=prefer
 
-# This example syncs data between existing databases; it builds no schema.
-include_dirs: []
+# The same DDL as production — see the note there.
+include_dirs:
+  - db/schema
 exclude_dirs: []

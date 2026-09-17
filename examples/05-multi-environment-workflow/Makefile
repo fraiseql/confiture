@@ -44,15 +44,15 @@ rebuild-local:
 
 migrate-local:
 	@echo "📈 Applying migrations to local database..."
-	confiture migrate up --env local
+	confiture migrate up --config db/environments/local.yaml
 
 rollback-local:
 	@echo "📉 Rolling back last migration..."
-	confiture migrate down --env local
+	confiture migrate down --config db/environments/local.yaml
 
 status-local:
 	@echo "📊 Migration status:"
-	confiture migrate status --env local
+	confiture migrate status --config db/environments/local.yaml
 
 verify-local:
 	@echo "🔍 Verifying local database..."
@@ -89,11 +89,11 @@ deploy-staging:
 	@echo "🚀 Deploying to staging..."
 	@echo "⚠️  This will apply migrations to the staging database"
 	@read -p "Continue? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
-	confiture migrate up --env staging --dry-run
+	confiture migrate up --config db/environments/staging.yaml --dry-run
 	@echo ""
 	@echo "Dry-run complete. Review the output above."
 	@read -p "Apply migrations? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
-	confiture migrate up --env staging
+	confiture migrate up --config db/environments/staging.yaml
 	./scripts/verify_migration.sh staging
 	@echo "✅ Staging deployment complete"
 
@@ -113,11 +113,11 @@ deploy-production:
 	./scripts/backup_production.sh
 	@echo ""
 	@echo "🔍 Dry-run migration..."
-	confiture migrate up --env production --dry-run | tee dry-run.log
+	confiture migrate up --config db/environments/production.yaml --dry-run | tee dry-run.log
 	@echo ""
 	@echo "Review dry-run.log"
 	@read -p "Apply migrations? (y/N): " confirm && [ "$$confirm" = "y" ] || exit 1
-	confiture migrate up --env production
+	confiture migrate up --config db/environments/production.yaml
 	./scripts/verify_migration.sh production
 	@echo "✅ Production deployment complete"
 

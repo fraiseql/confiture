@@ -1,6 +1,8 @@
 # Production Data Sync with PII Anonymization
 
-**Example 04** - Confiture Migration Tool
+**Medium 3: realistic data in staging, without shipping anyone's personal data into it**
+
+**Time to complete**: 20 minutes
 
 ---
 
@@ -9,39 +11,50 @@
 1. [Overview](#overview)
 2. [Use Case](#use-case)
 3. [What This Example Demonstrates](#what-this-example-demonstrates)
-4. [Prerequisites](#prerequisites)
-5. [Quick Start](#quick-start)
-6. [Detailed Workflow](#detailed-workflow)
-7. [Anonymization Strategies](#anonymization-strategies)
-8. [Configuration Reference](#configuration-reference)
-9. [Verification and Testing](#verification-and-testing)
-10. [GDPR Compliance](#gdpr-compliance)
-11. [Best Practices](#best-practices)
-12. [Troubleshooting](#troubleshooting)
-13. [Security Considerations](#security-considerations)
-14. [Performance Tuning](#performance-tuning)
+4. [Run It](#run-it)
+5. [Prerequisites](#prerequisites)
+6. [Quick Start](#quick-start)
+7. [Detailed Workflow](#detailed-workflow)
+8. [Anonymization Strategies](#anonymization-strategies)
+9. [Configuration Reference](#configuration-reference)
+10. [Verification and Testing](#verification-and-testing)
+11. [GDPR Compliance](#gdpr-compliance)
+12. [Best Practices](#best-practices)
+13. [Troubleshooting](#troubleshooting)
+14. [Security Considerations](#security-considerations)
+15. [Performance](#performance)
+16. [Additional Resources](#additional-resources)
 
 ---
 
 ## Overview
 
-This example demonstrates **Medium 3** of Confiture: Production Data Sync with PII (Personally Identifiable Information) anonymization.
-
 ### The Challenge
 
-You need production data locally to debug issues, but:
-- Production contains sensitive customer data (emails, SSNs, phone numbers)
-- GDPR/CCPA require protecting PII
-- Manual anonymization is error-prone
-- You need realistic data volumes and patterns
+Staging with synthetic data does not reproduce production bugs. The bugs that
+matter live in the shape of real data: the customer with 4,000 orders, the
+address with an emoji in it, the row that predates a column's `NOT NULL`.
+
+Staging with a copy of production data reproduces those bugs and creates a much
+worse problem — every engineer with staging access now has your customers'
+email addresses, phone numbers and national identifiers, in a system with a
+fraction of production's controls.
 
 ### The Solution
 
-Confiture's `sync` command:
-1. Copies production schema and data to staging/local
-2. Automatically anonymizes PII based on configuration
-3. Preserves data relationships and referential integrity
-4. Provides verification tools to ensure compliance
+Copy the data, mask the columns that identify people, and prove the masking
+worked before anyone connects to it:
+
+```bash
+confiture sync --from production --to staging \
+    --anonymize --anonymization-config db/sync/anonymization.yaml \
+    --exclude audit_logs
+
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f verify_anonymization.sql
+```
+
+The second command is not optional decoration. A sync that exits 0 tells you
+rows moved; it does not tell you they were masked.
 
 ---
 
@@ -49,49 +62,51 @@ Confiture's `sync` command:
 
 ### Scenario: E-Commerce Debugging
 
-**Problem**: Production users report checkout failures, but you can't reproduce locally with synthetic data.
+A checkout bug only reproduces for customers with a particular order history.
+You want that history in staging on Monday morning, and you want nothing in
+staging that could identify the customers it came from.
 
-**Solution**: Sync production to staging with anonymization:
 ```bash
-# Copy production data to staging, anonymize PII
-confiture sync production-to-staging --anonymize
+# Friday: refresh staging from production, masked
+./sync_script.sh
 
-# Now debug locally with realistic data
-confiture sync staging-to-local --anonymize
+# Monday: debug against realistic data
+psql "$STAGING_URL" -c "SELECT * FROM orders WHERE user_id = 1"
+#  billing_email is user_3698af8f@example.com, the order history is real
 ```
-
-**Result**:
-- 50,000 real orders with anonymized customer data
-- Actual payment patterns, edge cases, and data distributions
-- Zero PII exposure - GDPR compliant
 
 ---
 
 ## What This Example Demonstrates
 
-### Core Features
+| | |
+|---|---|
+| **Column-level masking** | Five strategies, applied per column, opt-in |
+| **Keyed pseudonyms** | HMAC under a per-deployment secret — stable inside a deployment, unrelated across deployments |
+| **Referential survival** | One customer is one pseudonym in every table, so joins still work |
+| **Domain separation** | `seed` keeps staff identities uncorrelated with customer identities |
+| **Table exclusion** | Some tables never leave production, masked or not |
+| **Proof, not assertion** | Eight SQL checks that fail the build if PII survived |
+| **Resumable copies** | `--checkpoint` / `--resume` for syncs that die halfway |
 
-1. **Production-to-Staging Sync**
-   - Full database copy with pg_dump/restore
-   - Parallel data transfer for speed
-   - Progress reporting
+What it deliberately does **not** claim: confiture has no PII discovery, no
+sampling, no row filtering, no scheduling and no notification. Those are real
+needs and they belong to your tooling — [Best Practices](#best-practices) shows
+where to put them.
 
-2. **PII Anonymization**
-   - Email anonymization (preserves format)
-   - Phone number masking
-   - SSN redaction
-   - Address anonymization
-   - Custom anonymization rules
+---
 
-3. **Referential Integrity**
-   - Foreign keys remain valid
-   - Deterministic anonymization (same input → same output)
-   - Data relationships preserved
+## Run It
 
-4. **Verification**
-   - SQL queries to check anonymization
-   - Pattern matching to find leaked PII
-   - Compliance reports
+```bash
+CONFITURE_EXAMPLE_DB_URL=postgresql://localhost/scratch ./run.sh
+```
+
+`run.sh` stands up two scratch databases on that server — one playing
+production, one playing staging — seeds "production" with deliberately
+recognisable PII, syncs with `--anonymize`, runs the full verification, and
+drops both. It is what CI runs on every commit, which is the only reason you
+should believe anything on this page.
 
 ---
 
@@ -99,1079 +114,578 @@ confiture sync staging-to-local --anonymize
 
 ### Infrastructure
 
+| Role | Needs |
+|---|---|
+| Production (source) | Reachable, read-only credentials |
+| Staging (target) | Reachable, write credentials, **the same schema already built** |
+
+`confiture sync` copies rows, not tables. Build the target first:
+
 ```bash
-# Production database (source)
-postgresql://prod-host:5432/ecommerce_prod
-
-# Staging database (target)
-postgresql://staging-host:5432/ecommerce_staging
-
-# Local database (optional)
-postgresql://localhost:5432/ecommerce_local
+confiture build --env staging --output /tmp/schema.sql
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f /tmp/schema.sql
 ```
 
 ### Permissions Required
 
-**Source (Production)**:
+On **production**, the source role needs `CONNECT`, `USAGE` on the schema and
+`SELECT` on the tables being copied — nothing more. Sync never writes to its
+source:
+
 ```sql
--- Read-only access is sufficient
+CREATE ROLE confiture_sync_user LOGIN PASSWORD '…';
 GRANT CONNECT ON DATABASE ecommerce_prod TO confiture_sync_user;
 GRANT USAGE ON SCHEMA public TO confiture_sync_user;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO confiture_sync_user;
-GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO confiture_sync_user;
 ```
 
-**Target (Staging)**:
+On **staging**, the target role needs `TRUNCATE` and `INSERT`, plus ownership of
+the tables (sync disables triggers during the copy, which requires it):
+
 ```sql
--- Full access required
-GRANT ALL PRIVILEGES ON DATABASE ecommerce_staging TO confiture_sync_user;
+GRANT INSERT, TRUNCATE ON ALL TABLES IN SCHEMA public TO confiture_sync_user;
+ALTER TABLE users OWNER TO confiture_sync_user;  -- and so on
 ```
 
 ### Software
 
 ```bash
-# Confiture installed
-pip install fraiseql-confiture
-
-# PostgreSQL client tools (for pg_dump/restore)
-sudo apt-get install postgresql-client-15
-
-# Optional: AWS CLI (if using RDS)
-pip install awscli
+confiture --version          # the tool
+psql --version               # for building the target and running verification
+pg_dump --version            # for sync_script.sh's pre-overwrite backup
 ```
 
 ---
 
 ## Quick Start
 
-### 1. Clone This Example
+### 1. Configure environments
 
-```bash
-cd /home/lionel/code/confiture/examples
-cp -r 04-production-sync-anonymization my-sync-project
-cd my-sync-project
-```
+One file per environment under `db/environments/`, each with a single
+`database_url`. `${VAR}` is expanded at load time, so no secret is committed:
 
-### 2. Configure Environments
-
-Edit `db/environments/production.yaml`:
 ```yaml
+# db/environments/production.yaml
 name: production
 database_url: postgresql://confiture_sync_user:${PROD_DB_PASSWORD}@prod-db.example.com:5432/ecommerce_prod?sslmode=require
-include_dirs: []
+include_dirs:
+  - db/schema
 exclude_dirs: []
 ```
 
-Edit `db/environments/staging.yaml`:
+### 2. Configure anonymization
+
+`db/sync/anonymization.yaml` — the path `--anonymization-config` defaults to:
+
 ```yaml
-name: staging
-database_url: postgresql://confiture_sync_user:${STAGING_DB_PASSWORD}@staging-db.example.com:5432/ecommerce_staging?sslmode=prefer
-include_dirs: []
-exclude_dirs: []
+users:
+  - column: email
+    strategy: email
+  - column: full_name
+    strategy: name
+  - column: ssn
+    strategy: redact
 ```
 
-### 3. Configure Anonymization
-
-Review `anonymization_config.yaml` and adjust for your schema:
-```yaml
-tables:
-  users:
-    anonymization:
-      - column: email
-        strategy: email
-        seed: 12345
-      - column: phone
-        strategy: phone
-```
-
-### 4. Run Sync
+### 3. Set the secret
 
 ```bash
-# Set passwords
-export PROD_DB_PASSWORD="your-prod-password"
-export STAGING_DB_PASSWORD="your-staging-password"
-
-# Execute sync with anonymization
-./sync_script.sh
+export PROD_DB_PASSWORD=…
+export STAGING_DB_PASSWORD=…
+export ANONYMIZATION_SECRET=…     # no default; see below
 ```
 
-### 5. Verify Anonymization
+`ANONYMIZATION_SECRET` is the HMAC key behind every pseudonym. There is no
+default — `confiture sync --anonymize` stops with `CONFIG_009` rather than
+falling back to something guessable, because a predictable key makes the
+pseudonyms reversible by anyone who can guess it.
+
+### 4. Sync
 
 ```bash
-# Connect to staging
-psql postgresql://staging-db.example.com/ecommerce_staging
-
-# Run verification queries
-\i verify_anonymization.sql
+confiture sync --from production --to staging \
+    --anonymize --anonymization-config db/sync/anonymization.yaml \
+    --exclude audit_logs
 ```
+
+### 5. Verify
+
+```bash
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f verify_anonymization.sql
+```
+
+Or let `./sync_script.sh` do steps 4 and 5 with a backup in between.
 
 ---
 
 ## Detailed Workflow
 
-### Step 1: Pre-Sync Checks
+### Step 1: Pre-sync checks
 
-Before syncing, Confiture validates:
+`sync_script.sh` refuses to start unless `confiture` and `psql` are on PATH, the
+anonymization config parses, every strategy in it is one of the five that exist,
+and all three environment variables are set.
 
-```bash
-confiture sync production-to-staging --dry-run --anonymize
-```
-
-**Checks**:
-- Source database connectivity
-- Target database connectivity
-- Sufficient disk space on target
-- Anonymization config validity
-- PII columns identified
-- No missing anonymization rules
-
-**Output**:
-```
-Pre-Sync Validation Report
-==========================
-
-Source Database: ecommerce_prod (250 GB, 45 tables)
-Target Database: ecommerce_staging (will be overwritten)
-
-PII Columns Detected: 12
-  users.email              → email strategy
-  users.phone              → phone strategy
-  users.ssn                → redact strategy
-  orders.billing_address   → redact strategy
-  ...
-
-Estimated Sync Time: 35 minutes
-Estimated Anonymization Time: 8 minutes
-
-Warnings:
-  - Target database will be dropped and recreated
-  - 3 foreign key constraints will be temporarily disabled
-
-Proceed? [y/N]
-```
-
-### Step 2: Schema Copy
-
-Confiture copies the schema first:
+The strategy check earns its place: confiture masks an **unknown strategy to
+`[REDACTED]`** rather than rejecting it. That is the safe default — a typo can
+never leak data — but it means `strategy: emial` silently destroys a column.
+Catch it before the sync, not after.
 
 ```bash
-# Internally runs:
-pg_dump --schema-only --no-owner --no-acl \
-  postgresql://prod-host/ecommerce_prod | \
-psql postgresql://staging-host/ecommerce_staging
+./sync_script.sh --dry-run
 ```
 
-**Features**:
-- Excludes ownership (--no-owner)
-- Excludes privileges (--no-acl)
-- Includes indexes, constraints, triggers
-- Creates sequences with correct values
+`--dry-run` here is the script's own flag. `confiture sync` has no `--dry-run`.
 
-### Step 3: Data Copy with Anonymization
+### Step 2: Schema copy
 
-Confiture streams data table-by-table:
-
-```python
-# Pseudocode
-for table in database.tables:
-    if table.has_pii:
-        # Copy with anonymization
-        COPY (
-            SELECT
-                id,
-                anonymize_email(email, seed=12345) AS email,
-                anonymize_phone(phone) AS phone,
-                created_at
-            FROM production.{table}
-        ) TO staging.{table}
-    else:
-        # Direct copy (faster)
-        COPY production.{table} TO staging.{table}
-```
-
-**Progress Output**:
-```
-Syncing Production → Staging
-============================
-
-[✓] users (50,000 rows, 12 MB) - 3s - 3 columns anonymized
-[✓] orders (250,000 rows, 450 MB) - 45s - 1 column anonymized
-[✓] products (5,000 rows, 2 MB) - 1s - no PII
-[✓] order_items (800,000 rows, 120 MB) - 18s - no PII
-...
-
-Total: 45 tables, 1.2M rows, 1.8 GB in 8m 23s
-Anonymized: 12 PII columns across 4 tables
-```
-
-### Step 4: Post-Sync Verification
-
-Confiture automatically verifies:
-
-```sql
--- Check for leaked emails
-SELECT COUNT(*) FROM users
-WHERE email LIKE '%@realdomain.com';
--- Expected: 0
-
--- Check for leaked phone numbers
-SELECT COUNT(*) FROM users
-WHERE phone ~ '^[0-9]{3}-[0-9]{3}-[0-9]{4}$';
--- Expected: 0 (should be anonymized format)
-
--- Check referential integrity
-SELECT COUNT(*) FROM orders o
-LEFT JOIN users u ON o.user_id = u.id
-WHERE u.id IS NULL;
--- Expected: 0 (no orphaned orders)
-```
-
-### Step 5: Resume Support
-
-If sync fails mid-process:
+There isn't one. The target must already have the tables:
 
 ```bash
-# Confiture tracks progress
-confiture sync production-to-staging --resume
+confiture build --env staging --output /tmp/schema.sql
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f /tmp/schema.sql
 ```
 
-**Resume Logic**:
-```
-Resuming from checkpoint: 18/45 tables completed
+This is why both environments in this example list the same `include_dirs`.
+Build once, sync often.
 
-Skipping:
-  [✓] users (already synced)
-  [✓] orders (already synced)
-  ...
+### Step 3: Data copy with anonymization
 
-Continuing from:
-  [ ] products (pending)
-  [ ] order_items (pending)
-  ...
+For each selected table, confiture truncates the target, reads the source rows,
+applies the column rules, and inserts in batches.
+
+Two details worth knowing:
+
+- **Every selected table is truncated before any is copied**, in one statement.
+  Truncating each table just before copying it looks equivalent and is not:
+  `TRUNCATE … CASCADE` empties everything referencing the named table, so a
+  parent copied late would empty children copied earlier.
+- **Triggers are disabled on the target during the copy**, so foreign keys and
+  application triggers do not fire per row. They are re-enabled afterwards.
+
+```bash
+confiture sync --from production --to staging \
+    --anonymize --anonymization-config db/sync/anonymization.yaml \
+    --tables users,orders,payments \
+    --batch-size 10000
 ```
+
+### Step 4: Post-sync verification
+
+```bash
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f verify_anonymization.sql
+```
+
+See [Verification and Testing](#verification-and-testing).
+
+### Step 5: Resume support
+
+```bash
+confiture sync --from production --to staging --anonymize \
+    --checkpoint .sync-checkpoint.json      # writes progress as it goes
+
+confiture sync --from production --to staging --anonymize \
+    --checkpoint .sync-checkpoint.json --resume   # skips completed tables
+```
+
+Resume is per table, not per row: an interrupted table is redone from the start.
 
 ---
 
 ## Anonymization Strategies
 
-Confiture provides built-in strategies for common PII types:
+Five strategies. Four are *keyed* — the output is an HMAC of the input under
+`ANONYMIZATION_SECRET`, so it is stable within a deployment and unrelated across
+deployments. `redact` is not keyed and needs no secret.
 
-### 1. Email Anonymization
+### 1. `email`
 
-**Strategy**: `email`
-
-**How It Works**:
-```python
-# Input:  john.doe@gmail.com
-# Output: user_a3f5e9b2@anon.local
-
-# Deterministic: same email always generates same anonymized version
-anonymize_email("john.doe@gmail.com", seed=12345)
-# → user_a3f5e9b2@anon.local (always)
-
-anonymize_email("john.doe@gmail.com", seed=12345)
-# → user_a3f5e9b2@anon.local (same output)
+```
+alice.martin@realmail.example.org  ->  user_3698af8f@example.com
 ```
 
-**Configuration**:
+Eight hex characters under a fixed domain. The domain is not configurable, and
+the original domain is never preserved — `@gmail.com` versus `@yourcompany.com`
+is itself information about the person.
+
+### 2. `name`
+
+```
+Alice Martin  ->  User 40A9
+```
+
+### 3. `phone`
+
+```
++1-617-555-0101  ->  +1-555-6633
+```
+
+`555` is the reserved fictional range, so an anonymized number cannot ring a
+real phone if some job dials it.
+
+### 4. `hash`
+
+```
+cus_NffrFeUfNV2Hib  ->  9d4e1a77b3c05f28
+```
+
+Sixteen hex characters, one-way, and **uniqueness-preserving** — distinct inputs
+stay distinct. Use it where code needs values to differ but must not resolve
+them: processor customer ids, IP addresses, device identifiers.
+
+### 5. `redact`
+
+```
+123-45-6789  ->  [REDACTED]
+```
+
+The same constant for every row. Not keyed, needs no secret. Use it where even a
+stable pseudonym is too much: national identifiers, bank accounts, free-text
+fields that may contain anything.
+
+`redact` is also what confiture applies to a strategy name it does not
+recognise, which is safe but silent — see [Step 1](#step-1-pre-sync-checks).
+
+### Determinism, and why it matters
+
+```bash
+# Same secret, twice:
+user_3698af8f@example.com     user_3698af8f@example.com
+
+# Different secret:
+user_ff597a71@example.com
+```
+
+Stability is what keeps the data *usable*: `users.email` and
+`orders.billing_email` share a strategy and a seed, so one customer is one
+pseudonym on both sides and "every order this customer placed" is still a
+question staging can answer. Randomised masking would break every such join.
+
+Unrelatedness across deployments is what keeps it *safe*: an attacker with an
+anonymized dump cannot hash a list of candidate addresses and look for matches,
+because they do not have the key.
+
+### Domain separation with `seed`
+
+`seed` is a domain separator, not a secret. Two columns with different seeds get
+unrelated pseudonyms from the same input:
+
 ```yaml
-- column: email
-  strategy: email
-  seed: 12345                    # Optional: for deterministic output
-  domain: anon.local             # Optional: custom domain
-  preserve_domain: false         # Optional: keep original domain
+employees:
+  - column: email
+    strategy: email
+    seed: 2          # unrelated to users.email, which has no seed
 ```
 
-**Preservation Options**:
-```yaml
-# Preserve domain for testing email delivery
-- column: email
-  strategy: email
-  preserve_domain: true
+Without it, a person who is both a customer and an employee appears as the same
+pseudonym in both tables, and the two roles can be correlated.
 
-# Input:  john.doe@gmail.com
-# Output: user_a3f5e9b2@gmail.com (domain preserved)
-```
+### Strategy selection guide
 
-### 2. Phone Number Anonymization
+| Column | Strategy | Why |
+|---|---|---|
+| `users.email` | `email` | Joinable, plausible shape |
+| `orders.billing_email` | `email`, same seed | Must match `users.email` |
+| `users.full_name` | `name` | |
+| `users.phone` | `phone` | |
+| `users.ssn` | `redact` | No stable pseudonym is acceptable |
+| `payments.stripe_customer_id` | `hash` | Must stay unique, must not resolve |
+| `user_sessions.ip_address` | `hash` | Identifies a household |
+| `orders.customer_notes` | `redact` | Free text; nothing can find the PII inside it |
+| `payments.billing_zip` | *(none)* | Not an identifier alone; fraud rules need it |
+| `user_sessions.user_agent` | *(none)* | What staging is usually debugging |
 
-**Strategy**: `phone`
-
-**How It Works**:
-```python
-# Input:  +1-555-123-4567
-# Output: +1-555-000-0000
-
-# Preserves format, redacts last 7 digits
-anonymize_phone("+1-555-123-4567")
-# → +1-555-000-0000
-```
-
-**Configuration**:
-```yaml
-- column: phone
-  strategy: phone
-  format: national               # Options: e164, national, international
-  redact_digits: 7               # How many digits to redact
-```
-
-### 3. SSN Redaction
-
-**Strategy**: `redact`
-
-**How It Works**:
-```python
-# Input:  123-45-6789
-# Output: ***-**-****
-
-anonymize_ssn("123-45-6789")
-# → ***-**-****
-```
-
-**Configuration**:
-```yaml
-- column: ssn
-  strategy: redact
-  replacement: "***-**-****"     # Custom redaction string
-```
-
-### 4. Address Anonymization
-
-**Strategy**: `address`
-
-**How It Works**:
-```python
-# Input:  1234 Main St, San Francisco, CA 94102
-# Output: [REDACTED ADDRESS]
-
-anonymize_address("1234 Main St, San Francisco, CA 94102")
-# → [REDACTED ADDRESS]
-```
-
-**Advanced** (preserve city/state for analytics):
-```yaml
-- column: billing_address
-  strategy: address
-  preserve_fields: [city, state, zip]
-
-# Input:  1234 Main St, San Francisco, CA 94102
-# Output: [REDACTED], San Francisco, CA 94102
-```
-
-### 5. Name Anonymization
-
-**Strategy**: `name`
-
-**How It Works**:
-```python
-# Input:  John Doe
-# Output: User-A3F5E9B2
-
-anonymize_name("John Doe", seed=12345)
-# → User-A3F5E9B2 (deterministic)
-```
-
-**Configuration**:
-```yaml
-- column: first_name
-  strategy: name
-  seed: 12345
-  preserve_initial: true         # Optional: preserve first letter
-
-# Input:  John
-# Output: J-User-A3F5E9 (starts with J)
-```
-
-### 6. Custom Anonymization
-
-**Strategy**: `custom`
-
-**How It Works**:
-```yaml
-- column: credit_card_last4
-  strategy: custom
-  function: |
-    -- SQL function
-    CREATE OR REPLACE FUNCTION anonymize_cc_last4(cc TEXT)
-    RETURNS TEXT AS $$
-    BEGIN
-        RETURN '****';
-    END;
-    $$ LANGUAGE plpgsql;
-```
-
-### Strategy Selection Guide
-
-| Data Type | Recommended Strategy | Preserves Format | Deterministic | Use Case |
-|-----------|---------------------|------------------|---------------|----------|
-| Email | `email` | Yes | Yes | User accounts, testing email logic |
-| Phone | `phone` | Yes | No | Contact info, SMS testing |
-| SSN | `redact` | Yes | No | Tax IDs, compliance |
-| Address | `address` | Optional | No | Shipping, analytics |
-| Name | `name` | No | Yes | User profiles, foreign keys |
-| Credit Card | `custom` | Custom | Custom | Payment testing |
+A column absent from the config is copied **verbatim**. Read that the other way
+round: this file, not the schema, decides what reaches staging intact.
 
 ---
 
 ## Configuration Reference
 
-### anonymization_config.yaml Structure
+### `db/sync/anonymization.yaml`
+
+The whole grammar:
 
 ```yaml
-# Global settings
-global:
-  seed: 12345                      # Global seed for deterministic anonymization
-  verify_after_sync: true          # Run verification queries automatically
-  fail_on_pii_leak: true           # Exit with error if PII detected post-sync
-
-# Per-table configuration
-tables:
-  users:
-    # Anonymization rules
-    anonymization:
-      - column: email
-        strategy: email
-        seed: 12345
-        domain: anon.local
-
-      - column: phone
-        strategy: phone
-        format: national
-
-      - column: ssn
-        strategy: redact
-        replacement: "***-**-****"
-
-      - column: first_name
-        strategy: name
-        seed: 12345
-
-      - column: last_name
-        strategy: name
-        seed: 12345
-
-    # Optional: custom WHERE clause to filter data
-    filter: "created_at > NOW() - INTERVAL '1 year'"
-
-    # Optional: sample data (for large tables)
-    sample_rate: 0.1               # Copy 10% of rows
-
-  orders:
-    anonymization:
-      - column: billing_address
-        strategy: address
-        preserve_fields: [city, state, zip]
-
-      - column: shipping_address
-        strategy: address
-        preserve_fields: [city, state, zip]
-
-    # Preserve all data (no sampling)
-    sample_rate: 1.0
-
-  # Tables without PII (no anonymization needed)
-  products:
-    # No anonymization block = direct copy
-
-  order_items:
-    # No anonymization needed
-
-# Exclusions
-exclude_tables:
-  - audit_logs                     # Skip sensitive audit logs
-  - session_data                   # Skip temporary session data
-
-# Performance tuning
-performance:
-  parallel_workers: 4              # Number of parallel table copies
-  batch_size: 10000                # Rows per batch
-  disable_triggers: true           # Disable triggers during sync
-  disable_indexes: true            # Recreate indexes after sync
+<table>:
+  - column: <name>
+    strategy: email | phone | name | hash | redact
+    seed: <int>        # optional domain separator
 ```
 
-### Environment Configuration
+There is no `filter:`, no `sample_rate:`, no `exclude_tables:`, no
+`performance:` block. Table selection is `--tables` / `--exclude` on the command
+line. A key confiture does not read is a key that silently does nothing.
 
-**db/environments/production.yaml**:
-```yaml
-name: production
-database_url: postgresql://confiture_sync_user:${PROD_DB_PASSWORD}@prod-db.example.com:5432/ecommerce_prod?sslmode=require
-include_dirs: []
-exclude_dirs: []
+### `confiture sync` options
+
+| Option | Meaning |
+|---|---|
+| `--from` | Source: environment name or DSN *(required)* |
+| `--to` | Target: environment name or DSN *(required)* |
+| `--anonymize` | Apply the rules. Without it the copy is verbatim and a warning is printed |
+| `--anonymization-config` | Rules file (default `db/sync/anonymization.yaml`) |
+| `--tables` | Comma-separated include list (default: all) |
+| `--exclude` | Comma-separated exclude list |
+| `--batch-size` | Rows per insert batch (default 5000) |
+| `--checkpoint` | Progress file for resumable syncs |
+| `--resume` | Skip tables the checkpoint marks complete |
+| `--format` | `text` or `json` |
+
+### JSON output
+
+```json
+{
+  "ok": true,
+  "command": "sync",
+  "anonymized": true,
+  "tables": { "users": 3, "orders": 3 },
+  "total_rows": 6,
+  "warnings": [],
+  "parser": { "pglast": "8.4", "pg_major": 18 }
+}
 ```
 
-**db/environments/staging.yaml**:
-```yaml
-name: staging
-database_url: postgresql://confiture_sync_user:${STAGING_DB_PASSWORD}@staging-db.example.com:5432/ecommerce_staging?sslmode=prefer
-include_dirs: []
-exclude_dirs: []
-```
+`anonymized: false` with a populated `warnings` array is what an un-masked copy
+looks like — worth alerting on.
 
 ---
 
 ## Verification and Testing
 
-### Automated Verification
+`verify_anonymization.sql` runs eight checks against the **target**, each
+`RAISE`ing on violation so that with `-v ON_ERROR_STOP=1` the exit code is the
+verdict:
 
-After sync, Confiture runs verification queries automatically:
+| # | Check |
+|---|---|
+| 1 | No source PII survived — the exact values seeded into "production" are absent |
+| 2 | Masked values have the shape each strategy promises |
+| 3 | `NULL` stayed `NULL` — masking a missing value into a present one invents data |
+| 4 | Pseudonyms are stable across tables, so joins work |
+| 5 | Different seeds gave unrelated pseudonyms |
+| 6 | `hash` preserved uniqueness |
+| 7 | Referential integrity survived |
+| 8 | Non-PII columns survived intact |
 
-```bash
-confiture sync production-to-staging --anonymize --verify
-```
+Checks 1 and 2 are deliberately a pair. A column emptied to `NULL`, or dropped
+from the sync entirely, contains no PII and is useless; check 8 is the same idea
+applied to over-masking.
 
-**Built-in Checks**:
+Check 1 works because `demo/seed_production.sql` uses recognisable values —
+real-looking domains, a `+1-617` area code, well-formed national identifiers. A
+seed of `aaa`/`bbb` placeholders would let a completely broken sync pass.
 
-1. **Email Pattern Check**
-```sql
--- Should return 0
-SELECT COUNT(*)
-FROM users
-WHERE email NOT LIKE '%@anon.local';
-```
-
-2. **Phone Pattern Check**
-```sql
--- Should return 0 (all phones should be anonymized)
-SELECT COUNT(*)
-FROM users
-WHERE phone ~ '^[0-9]{3}-[0-9]{3}-[0-9]{4}$';
-```
-
-3. **SSN Pattern Check**
-```sql
--- Should return 0 (all SSNs should be redacted)
-SELECT COUNT(*)
-FROM users
-WHERE ssn ~ '^[0-9]{3}-[0-9]{2}-[0-9]{4}$';
-```
-
-4. **Referential Integrity Check**
-```sql
--- Should return 0 (no orphaned orders)
-SELECT COUNT(*)
-FROM orders o
-LEFT JOIN users u ON o.user_id = u.id
-WHERE u.id IS NULL;
-```
-
-### Manual Verification
-
-Use `verify_anonymization.sql` for manual checks:
-
-```bash
-psql postgresql://staging-db.example.com/ecommerce_staging < verify_anonymization.sql
-```
-
-**Sample Output**:
-```
-Verification Report
-===================
-
-Email Anonymization:
-  Total emails: 50,000
-  Anonymized: 50,000 (100%)
-  Format: user_XXXXXXXX@anon.local
-  ✓ PASS
-
-Phone Anonymization:
-  Total phones: 48,523
-  Anonymized: 48,523 (100%)
-  Format: +1-555-000-0000
-  ✓ PASS
-
-SSN Redaction:
-  Total SSNs: 50,000
-  Redacted: 50,000 (100%)
-  Format: ***-**-****
-  ✓ PASS
-
-Referential Integrity:
-  Orders with valid users: 250,000 (100%)
-  Orphaned orders: 0
-  ✓ PASS
-
-Overall: ✓ ALL CHECKS PASSED
-```
-
-### Custom Verification Queries
-
-Add custom checks to `verify_anonymization.sql`:
+### Adding a check
 
 ```sql
--- Check for leaked production domains
-SELECT 'Email Domain Check' AS test_name,
-       COUNT(*) AS violations,
-       CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS status
-FROM users
-WHERE email LIKE '%@gmail.com'
-   OR email LIKE '%@yahoo.com'
-   OR email LIKE '%@hotmail.com';
-
--- Check for realistic phone area codes (should be anonymized)
-SELECT 'Phone Area Code Check' AS test_name,
-       COUNT(*) AS violations,
-       CASE WHEN COUNT(*) = 0 THEN 'PASS' ELSE 'FAIL' END AS status
-FROM users
-WHERE phone ~ '^[0-9]{3}'
-  AND phone !~ '^555';  -- 555 is anonymized area code
+DO $$
+DECLARE bad INTEGER;
+BEGIN
+    SELECT count(*) INTO bad FROM my_table WHERE my_column LIKE '%@ourcustomers.com';
+    IF bad > 0 THEN
+        RAISE EXCEPTION 'my_table.my_column: % row(s) not masked', bad;
+    END IF;
+END $$;
 ```
 
 ---
 
 ## GDPR Compliance
 
-### Legal Requirements
+### Anonymization vs. pseudonymization
 
-Confiture's anonymization helps meet GDPR requirements:
+This distinction decides whether the GDPR still applies to your staging
+database, so it is worth being precise:
 
-| GDPR Requirement | Confiture Feature | Compliance Status |
-|------------------|-------------------|-------------------|
-| Right to Erasure (Art. 17) | PII redaction | ✓ Supported |
-| Data Minimization (Art. 5) | Column-level anonymization | ✓ Supported |
-| Purpose Limitation (Art. 5) | Environment-specific configs | ✓ Supported |
-| Storage Limitation (Art. 5) | Temporary staging data | ✓ Manual process |
-| Integrity & Confidentiality (Art. 32) | Encrypted connections | ✓ Supported |
+- **Anonymized** data cannot be attributed to a person by *anyone*, by any
+  reasonably likely means. It falls outside the GDPR (Recital 26).
+- **Pseudonymized** data can be re-attributed with additional information held
+  separately. It remains personal data and stays fully in scope (Art. 4(5)).
 
-### GDPR Anonymization vs. Pseudonymization
+What confiture produces is **pseudonymized**, not anonymized:
 
-**Anonymization** (Confiture default):
-- Irreversibly removes PII
-- Data cannot be linked back to individuals
-- No longer subject to GDPR
+- `hash` and the keyed strategies are reversible by anyone holding
+  `ANONYMIZATION_SECRET` plus a list of candidate values.
+- Rows that are not masked at all — order totals, timestamps, geography — can
+  re-identify an individual in combination even when every masked column holds a
+  pseudonym.
 
-**Pseudonymization** (optional):
-- Replaces identifiers with pseudonyms
-- Reversible with additional information
-- Still subject to GDPR
+Treat the staging database as personal data: access controls, retention limits,
+a lawful basis, and inclusion in your records of processing. A page claiming
+otherwise would be doing you an active disservice.
 
-**Configuration**:
-```yaml
-# Anonymization (GDPR-exempt)
-- column: email
-  strategy: email
-  seed: 12345                # Deterministic but irreversible
+### DPIA prompts
 
-# Pseudonymization (still GDPR-covered)
-- column: user_id
-  strategy: custom
-  function: encrypt_id       # Reversible with key
-```
+- What is the lawful basis for copying production data into staging? (Commonly
+  legitimate interest, Art. 6(1)(f) — which requires a balancing test.)
+- Who has staging access, and is that list smaller than it was last quarter?
+- How long does a staging refresh persist before it is purged?
+- Is `ANONYMIZATION_SECRET` held somewhere staging users cannot read?
 
-### Data Protection Impact Assessment (DPIA)
+### Checklist
 
-When syncing production data, document:
-
-1. **Purpose**: Why do you need production data?
-   - Example: "Debugging checkout failures requires realistic order patterns"
-
-2. **Legal Basis**: What justifies this processing?
-   - Example: "Legitimate interest (Art. 6(1)(f)) - business continuity"
-
-3. **Risks**: What could go wrong?
-   - Example: "PII leak if anonymization fails"
-
-4. **Mitigations**: How do you prevent harm?
-   - Example: "Automated verification, encrypted connections, access controls"
-
-5. **Retention**: How long will staging data exist?
-   - Example: "Staging database refreshed weekly, old data purged"
-
-### Compliance Checklist
-
-- [ ] Anonymization config reviewed by DPO (Data Protection Officer)
-- [ ] Verification queries validate anonymization
-- [ ] Access to staging database restricted (principle of least privilege)
-- [ ] Staging data retention policy defined (e.g., 7 days)
-- [ ] Sync operations logged for audit trail
-- [ ] Encrypted connections (SSL/TLS) enforced
-- [ ] DPIA completed and approved
-- [ ] Data breach response plan in place
+- [ ] Every PII column has a rule (review after **every** schema change)
+- [ ] `ANONYMIZATION_SECRET` lives in a secret store, not a file or CI log
+- [ ] Verification runs after every sync and fails the pipeline
+- [ ] Staging access is reviewed and logged
+- [ ] Retention policy exists and is enforced
+- [ ] Tables that must never leave production are in `--exclude`
 
 ---
 
 ## Best Practices
 
-### 1. Start with Dry Run
-
-Always test sync configuration before production:
+### 1. Dry-run the preconditions
 
 ```bash
-# Validate config without copying data
-confiture sync production-to-staging --dry-run --anonymize
-
-# Review the report
-confiture sync production-to-staging --dry-run --anonymize --verbose > sync-report.txt
+./sync_script.sh --dry-run
 ```
 
-### 2. Use Deterministic Anonymization
+### 2. Keep the config in step with the schema
 
-For data with foreign key relationships:
+A new PII column with no rule is copied verbatim, and nothing warns you.
+Confiture has no PII discovery, so make it a review checklist item, or write the
+check yourself:
 
-```yaml
-tables:
-  users:
-    anonymization:
-      - column: email
-        strategy: email
-        seed: 12345           # Same seed = consistent anonymization
-
-  orders:
-    anonymization:
-      - column: customer_email
-        strategy: email
-        seed: 12345           # Same seed as users.email
+```bash
+psql "$PROD_URL" -Atc "
+  SELECT table_name || '.' || column_name
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND (column_name ~ '(email|phone|ssn|name|address|birth)')
+" | sort > /tmp/candidates.txt
+# diff against the columns named in db/sync/anonymization.yaml
 ```
 
-**Why**: Ensures `orders.customer_email` matches anonymized `users.email`.
+### 3. Use one seed per identity domain
 
-### 3. Sample Large Tables
+Customers, staff, and vendors should not share a seed. See
+[Domain separation](#domain-separation-with-seed).
 
-For massive tables, sync a representative sample:
+### 4. Automate the refresh
 
-```yaml
-tables:
-  page_views:
-    sample_rate: 0.01         # Copy 1% of rows
-    sampling_method: random   # Options: random, stratified, time-based
-```
-
-**Stratified Sampling** (better for analytics):
-```yaml
-tables:
-  page_views:
-    sample_rate: 0.01
-    sampling_method: stratified
-    stratify_by: user_id      # Ensure all users represented
-```
-
-### 4. Automate with CI/CD
-
-Refresh staging weekly:
+Confiture has no scheduler. Use your CI:
 
 ```yaml
 # .github/workflows/refresh-staging.yml
-name: Refresh Staging Database
-
 on:
   schedule:
-    - cron: '0 2 * * 1'       # Every Monday at 2 AM
-
+    - cron: '0 3 * * 1'        # Mondays, 03:00
 jobs:
-  sync:
+  refresh:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Install Confiture
-        run: pip install fraiseql-confiture
-
-      - name: Sync Production to Staging
+      - uses: actions/checkout@v6
+      - run: pip install confiture
+      - run: ./examples/04-production-sync-anonymization/sync_script.sh --skip-backup
         env:
-          PROD_DB_PASSWORD: ${{ secrets.PROD_DB_PASSWORD }}
-          STAGING_DB_PASSWORD: ${{ secrets.STAGING_DB_PASSWORD }}
-        run: |
-          confiture sync production-to-staging --anonymize --verify
-
-      - name: Notify Team
-        run: |
-          echo "Staging refreshed with production data (anonymized)"
+          PROD_DB_PASSWORD:     ${{ secrets.PROD_DB_PASSWORD }}
+          STAGING_DB_PASSWORD:  ${{ secrets.STAGING_DB_PASSWORD }}
+          ANONYMIZATION_SECRET: ${{ secrets.ANONYMIZATION_SECRET }}
 ```
 
-### 5. Monitor Anonymization Drift
+### 5. Never skip verification
 
-Track schema changes that might introduce new PII:
-
-```bash
-# Weekly audit: check for columns with "email", "phone", "ssn" in name
-confiture audit-pii --warn-on-new-columns
-```
-
-**Output**:
-```
-PII Audit Report
-================
-
-New Columns Detected:
-  users.backup_email (added 2024-10-01)
-  → WARNING: Contains "email" in name
-  → Recommendation: Add to anonymization config
-
-Changed Columns:
-  users.phone_verified (type changed: boolean → text)
-  → WARNING: May now contain PII
-  → Recommendation: Review and update anonymization strategy
-
-Overall: 2 warnings, 0 errors
-```
+`--skip-verify` exists for debugging the script. If it appears in a scheduled
+job, the job is asserting that the masking worked rather than checking.
 
 ---
 
 ## Troubleshooting
 
-### Issue 1: Sync Fails Mid-Process
+### `CONFIG_009: ANONYMIZATION_SECRET is not set`
 
-**Symptoms**:
-```
-Error: Connection lost to staging database
-Synced 18/45 tables before failure
-```
+Working as intended. There is no default key. Set it from your secret store.
 
-**Solution**:
+### `CONFIG_002` from the anonymization config
+
+The file is not `table: [{column, strategy}]`. Most often it is a config written
+against some other tool's format, or a rule missing `column`/`strategy`.
+
+### A column reached staging unmasked
+
+Three usual causes, in order of likelihood:
+
+1. The column has no rule. Absent means verbatim.
+2. The rule names a column that does not exist — a rule whose column is not in
+   the table is skipped silently.
+3. `--anonymize` was not passed. Check the `warnings` array in `--format json`.
+
+### Sync fails partway
+
 ```bash
-# Resume from last checkpoint
-confiture sync production-to-staging --resume
-
-# If resume fails, start fresh
-confiture sync production-to-staging --force --anonymize
+confiture sync … --checkpoint .sync-checkpoint.json --resume
 ```
 
-### Issue 2: Referential Integrity Violations
+If resume also fails, delete the checkpoint and start fresh; a partial target is
+not safe to hand to anyone regardless.
 
-**Symptoms**:
-```
-Error: Foreign key constraint violated
-  orders.user_id references users.id
-  Orphaned order IDs: 1234, 5678, 9012
-```
+### `permission denied` / `must be owner of table`
 
-**Cause**: Non-deterministic anonymization broke foreign keys.
+Sync disables triggers on the target for the duration of the copy, which
+requires table ownership. See [Permissions Required](#permissions-required).
 
-**Solution**:
-```yaml
-# Use same seed for related columns
-tables:
-  users:
-    anonymization:
-      - column: id
-        strategy: preserve    # Don't anonymize primary keys
-      - column: email
-        strategy: email
-        seed: 12345
+### Slow sync
 
-  orders:
-    # user_id not anonymized (references users.id)
-```
-
-### Issue 3: PII Detected After Sync
-
-**Symptoms**:
-```
-Verification FAILED:
-  Found 23 emails not matching anonymization pattern
-  Sample: john.doe@gmail.com, jane.smith@yahoo.com
-```
-
-**Cause**: Missing anonymization rule for new column.
-
-**Solution**:
-```yaml
-tables:
-  users:
-    anonymization:
-      # ... existing rules ...
-
-      # Add missing column
-      - column: backup_email
-        strategy: email
-        seed: 12345
-```
-
-Then re-run sync:
-```bash
-confiture sync production-to-staging --anonymize --force
-```
-
-### Issue 4: Slow Sync Performance
-
-**Symptoms**:
-```
-Syncing users table: 50,000 rows in 15 minutes (55 rows/sec)
-Estimated remaining time: 3 hours
-```
-
-**Solution 1**: Increase parallelism
-```yaml
-performance:
-  parallel_workers: 8         # Increase from default 4
-  batch_size: 50000           # Larger batches
-```
-
-**Solution 2**: Disable indexes during sync
-```yaml
-performance:
-  disable_indexes: true       # Recreate after data copy
-  disable_triggers: true      # Skip trigger execution
-```
-
-**Solution 3**: Use direct copy for non-PII tables
-```yaml
-tables:
-  products:
-    # No anonymization = faster direct copy
-
-  order_items:
-    # No anonymization = faster direct copy
-```
+Raise `--batch-size` (default 5000). Copying is single-threaded — confiture has
+no parallel-worker option — so for very large tables, sync a subset with
+`--tables` and exclude what staging does not need.
 
 ---
 
 ## Security Considerations
 
-### 1. Credential Management
+### 1. Credentials
 
-**Bad** (hardcoded passwords):
 ```yaml
-# db/environments/production.yaml
-password: "my-secret-password"    # ❌ Never commit credentials
+# Good — resolved from the environment at load time
+database_url: postgresql://sync_user:${PROD_DB_PASSWORD}@prod-db:5432/app?sslmode=require
+
+# Bad — committed
+database_url: postgresql://sync_user:hunter2@prod-db:5432/app
 ```
 
-**Good** (environment variables):
-```yaml
-# db/environments/production.yaml
-password: ${PROD_DB_PASSWORD}     # ✓ Use environment variables
-```
+Prefer `--from production` (an environment name) over `--from postgresql://…`:
+a DSN on the command line is visible in `ps aux` and in shell history.
 
-**Better** (credential manager):
-```bash
-# Use AWS Secrets Manager
-export PROD_DB_PASSWORD=$(aws secretsmanager get-secret-value \
-  --secret-id prod-db-password --query SecretString --output text)
+### 2. Network
 
-confiture sync production-to-staging --anonymize
-```
-
-### 2. Network Security
-
-**Require SSL**:
-```yaml
-# db/environments/production.yaml
-ssl_mode: require                 # Enforce encrypted connections
-ssl_root_cert: /path/to/ca.pem    # Verify server identity
-```
-
-**Use SSH Tunnels** (for locked-down production):
-```bash
-# Open SSH tunnel to production
-ssh -L 5433:prod-db-internal:5432 bastion-host -N &
-
-# Connect through tunnel
-confiture sync production-to-staging \
-  --source-host localhost \
-  --source-port 5433 \
-  --anonymize
-```
-
-### 3. Access Controls
-
-**Principle of Least Privilege**:
-```sql
--- Create read-only sync user
-CREATE USER confiture_sync_user WITH PASSWORD 'strong-password';
-
--- Grant minimal permissions
-GRANT CONNECT ON DATABASE ecommerce_prod TO confiture_sync_user;
-GRANT USAGE ON SCHEMA public TO confiture_sync_user;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO confiture_sync_user;
-
--- Explicitly deny write access
-REVOKE INSERT, UPDATE, DELETE, TRUNCATE
-ON ALL TABLES IN SCHEMA public
-FROM confiture_sync_user;
-```
-
-### 4. Audit Logging
-
-Track all sync operations:
+Require TLS on the source (`?sslmode=require`), and reach production over a
+tunnel rather than exposing it:
 
 ```bash
-# Enable audit logging
-confiture sync production-to-staging --anonymize --audit-log sync-audit.log
+ssh -L 5433:prod-db.internal:5432 bastion.example.com -N &
+confiture sync --from postgresql://user@localhost:5433/app --to staging --anonymize
 ```
 
-**Audit Log Format**:
-```json
-{
-  "timestamp": "2024-10-12T14:30:00Z",
-  "operation": "sync",
-  "source": "production",
-  "target": "staging",
-  "user": "john.doe@example.com",
-  "anonymization_enabled": true,
-  "tables_synced": 45,
-  "rows_copied": 1250000,
-  "pii_columns_anonymized": 12,
-  "verification_passed": true,
-  "duration_seconds": 503
-}
-```
+### 3. The secret
+
+`ANONYMIZATION_SECRET` reverses the pseudonyms for anyone who holds it plus a
+candidate list. It must not be readable by the people with staging access — that
+combination reconstitutes the production data you just masked. Keep it in a
+secret store, out of CI logs, and rotate it when staging access changes.
+
+### 4. Treat staging as personal data
+
+See [GDPR Compliance](#gdpr-compliance). Access logs, retention, and a smaller
+access list than production's.
 
 ---
 
-## Performance Tuning
+## Performance
 
-### Baseline Performance
+Copying is single-threaded and row-by-row when anonymizing (the fast `COPY` path
+is only used for tables with no rules). The knobs that exist:
 
-**Typical Sync Performance** (single worker):
-- **Small databases** (<1 GB): 2-5 minutes
-- **Medium databases** (1-10 GB): 10-30 minutes
-- **Large databases** (10-100 GB): 1-3 hours
-- **Very large databases** (>100 GB): 3+ hours
+| Knob | Effect |
+|---|---|
+| `--batch-size` | Rows per insert. Higher trades memory for round trips |
+| `--tables` / `--exclude` | The biggest lever by far — do not copy what staging does not need |
+| `--checkpoint` | Does not speed anything up; makes a failure cost minutes instead of hours |
 
-### Optimization 1: Parallel Workers
-
-```yaml
-performance:
-  parallel_workers: 8           # Copy 8 tables simultaneously
-```
-
-**Benchmark**:
-- 1 worker: 45 tables in 60 minutes
-- 4 workers: 45 tables in 18 minutes (3.3x faster)
-- 8 workers: 45 tables in 11 minutes (5.5x faster)
-
-**Diminishing Returns**: Beyond 8 workers, performance plateaus due to I/O limits.
-
-### Optimization 2: Batch Size
-
-```yaml
-performance:
-  batch_size: 50000             # Rows per batch (default: 10000)
-```
-
-**Benchmark**:
-- 1,000 rows/batch: 100,000 rows in 15 minutes
-- 10,000 rows/batch: 100,000 rows in 8 minutes (1.9x faster)
-- 50,000 rows/batch: 100,000 rows in 5 minutes (3x faster)
-
-**Trade-off**: Larger batches use more memory.
-
-### Optimization 3: Index Management
-
-```yaml
-performance:
-  disable_indexes: true         # Drop indexes before sync, recreate after
-```
-
-**Benchmark** (10 indexes on users table):
-- Indexes enabled: 50,000 rows in 12 minutes
-- Indexes disabled: 50,000 rows in 3 minutes (4x faster)
-
-**Caveat**: Index recreation adds 2-5 minutes after sync.
-
-### Optimization 4: Sampling
-
-For non-production environments:
-
-```yaml
-tables:
-  page_views:
-    sample_rate: 0.1            # Copy 10% of rows
-```
-
-**Benchmark** (10M row table):
-- 100% sample: 45 minutes
-- 10% sample: 5 minutes (9x faster)
-- 1% sample: 30 seconds (90x faster)
+Triggers are disabled on the target during the copy, so FK checks and
+application triggers do not fire per row.
 
 ---
 
@@ -1179,49 +693,19 @@ tables:
 
 ### Documentation
 
-- [Confiture Sync Command Reference](../../docs/reference/cli.md#confiture-sync)
-- [Anonymization Strategies Guide](../../docs/anonymization-strategies.md)
-- [GDPR Compliance Checklist](../../docs/gdpr-compliance.md)
+- [Production Sync guide](../../docs/guides/03-production-sync.md)
+- [Anonymization API](../../docs/api/anonymization.md)
+- [Security model](../../docs/security/)
 
-### Related Examples
+### Related examples
 
-- [Example 03: Zero-Downtime Migration](../03-zero-downtime-migration/)
-- [Example 05: FraiseQL Integration](../05-fraiseql-integration/)
+- [01-basic-migration](../01-basic-migration) — Medium 1 and 2
+- [02-fraiseql-integration](../02-fraiseql-integration) — build from DDL
+- [03-zero-downtime-migration](../03-zero-downtime-migration) — Medium 4
 
-### External Resources
+### External
 
-- [GDPR Official Text](https://gdpr-info.eu/)
-- [PostgreSQL Security Best Practices](https://www.postgresql.org/docs/current/security-best-practices.html)
-- [PII Anonymization Techniques (NIST)](https://www.nist.gov/privacy-framework/de-identification)
-
----
-
-## Summary
-
-This example demonstrated:
-
-1. **Production Data Sync**: Copy production databases to staging/local
-2. **PII Anonymization**: 6 built-in strategies (email, phone, SSN, etc.)
-3. **Verification**: Automated checks to ensure compliance
-4. **GDPR Compliance**: Legal considerations and best practices
-5. **Performance**: Optimization techniques for large databases
-
-**Key Takeaways**:
-
-- Use deterministic anonymization for referential integrity
-- Always verify anonymization with SQL queries
-- Automate staging refreshes with CI/CD
-- Follow GDPR guidelines for data protection
-- Optimize with parallel workers and batching
-
-**Next Steps**:
-
-1. Customize `anonymization_config.yaml` for your schema
-2. Run dry-run sync to validate configuration
-3. Execute production-to-staging sync
-4. Verify anonymization with `verify_anonymization.sql`
-5. Automate weekly staging refreshes
-
----
-
-*Making production data safe for development, one sync at a time.*
+- [GDPR Recital 26](https://gdpr-info.eu/recitals/no-26/) — anonymous information
+- [GDPR Art. 4(5)](https://gdpr-info.eu/art-4-gdpr/) — pseudonymisation
+- [PostgreSQL Anonymizer](https://postgresql-anonymizer.readthedocs.io/) — an
+  in-database alternative, worth comparing

@@ -1,640 +1,278 @@
--- Confiture Anonymization Verification SQL
--- Production Data Sync - Example 04
+-- Verification: prove the anonymization actually happened.
 --
--- This SQL script verifies that PII has been properly anonymized after
--- syncing production data to staging/local environments.
+-- Run against the SYNC TARGET (staging), after `confiture sync --anonymize`:
 --
--- Usage:
---   psql postgresql://staging-host/staging_db < verify_anonymization.sql
+--     psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f verify_anonymization.sql
 --
--- Expected Result: All checks should return 0 violations
+-- Every check RAISEs on violation, so with ON_ERROR_STOP=1 the script's exit
+-- code is the verdict and this can sit in CI unattended.
+--
+-- Why this file exists at all: `confiture sync` exiting 0 tells you rows moved.
+-- It does not tell you they were masked — a rule naming a column that does not
+-- exist, a table absent from the config, a `--anonymize` someone dropped from
+-- the command line, all leave you with a green sync and plaintext PII in
+-- staging. The masking is the claim, so the masking is what gets asserted.
+--
+-- Confiture ships no PII-audit command. This file is the audit.
 
 \set ON_ERROR_STOP on
-\timing on
-\pset border 2
-
-\echo ''
-\echo '============================================================================'
-\echo '  Confiture Anonymization Verification Report'
-\echo '============================================================================'
-\echo ''
-\echo 'Database: ' :DBNAME
-\echo 'Host: ' :HOST
-\echo 'Date: ' `date`
-\echo ''
-
--- ============================================================================
--- Test 1: Email Anonymization Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 1: Email Anonymization Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Verifying all emails are anonymized to @anon.local domain'
-\echo ''
-
-WITH email_check AS (
-    SELECT
-        'users.email' AS column_name,
-        COUNT(*) AS total_emails,
-        COUNT(*) FILTER (WHERE email LIKE '%@anon.local') AS anonymized,
-        COUNT(*) FILTER (WHERE email NOT LIKE '%@anon.local') AS violations
-    FROM users
-    WHERE email IS NOT NULL
-
-    UNION ALL
-
-    SELECT
-        'users.backup_email' AS column_name,
-        COUNT(*) AS total_emails,
-        COUNT(*) FILTER (WHERE backup_email LIKE '%@anon.local') AS anonymized,
-        COUNT(*) FILTER (WHERE backup_email NOT LIKE '%@anon.local') AS violations
-    FROM users
-    WHERE backup_email IS NOT NULL
-
-    UNION ALL
-
-    SELECT
-        'orders.billing_email' AS column_name,
-        COUNT(*) AS total_emails,
-        COUNT(*) FILTER (WHERE billing_email LIKE '%@anon.local') AS anonymized,
-        COUNT(*) FILTER (WHERE billing_email NOT LIKE '%@anon.local') AS violations
-    FROM orders
-    WHERE billing_email IS NOT NULL
-
-    UNION ALL
-
-    SELECT
-        'marketing_subscriptions.email' AS column_name,
-        COUNT(*) AS total_emails,
-        COUNT(*) FILTER (WHERE email LIKE '%@anon.local') AS anonymized,
-        COUNT(*) FILTER (WHERE email NOT LIKE '%@anon.local') AS violations
-    FROM marketing_subscriptions
-    WHERE email IS NOT NULL
-)
-SELECT
-    column_name,
-    total_emails,
-    anonymized,
-    violations,
-    CASE
-        WHEN violations = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL'
-    END AS status
-FROM email_check
-ORDER BY column_name;
-
--- Overall email check
-SELECT
-    'Email Anonymization' AS test_name,
-    SUM(violations) AS total_violations,
-    CASE
-        WHEN SUM(violations) = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL - LEAKED EMAILS DETECTED'
-    END AS overall_status
-FROM (
-    SELECT COUNT(*) FILTER (WHERE email NOT LIKE '%@anon.local') AS violations
-    FROM users WHERE email IS NOT NULL
-    UNION ALL
-    SELECT COUNT(*) FILTER (WHERE backup_email NOT LIKE '%@anon.local')
-    FROM users WHERE backup_email IS NOT NULL
-    UNION ALL
-    SELECT COUNT(*) FILTER (WHERE billing_email NOT LIKE '%@anon.local')
-    FROM orders WHERE billing_email IS NOT NULL
-    UNION ALL
-    SELECT COUNT(*) FILTER (WHERE email NOT LIKE '%@anon.local')
-    FROM marketing_subscriptions WHERE email IS NOT NULL
-) AS all_violations;
-
--- ============================================================================
--- Test 2: Phone Number Anonymization Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 2: Phone Number Anonymization Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Verifying phone numbers are anonymized (should use 555 area code)'
-\echo ''
-
-WITH phone_check AS (
-    SELECT
-        'users.phone' AS column_name,
-        COUNT(*) AS total_phones,
-        COUNT(*) FILTER (WHERE phone LIKE '%555-%') AS anonymized,
-        COUNT(*) FILTER (WHERE phone !~ '^.*555-.*$') AS violations
-    FROM users
-    WHERE phone IS NOT NULL
-
-    UNION ALL
-
-    SELECT
-        'users.mobile_phone' AS column_name,
-        COUNT(*) AS total_phones,
-        COUNT(*) FILTER (WHERE mobile_phone LIKE '%555-%') AS anonymized,
-        COUNT(*) FILTER (WHERE mobile_phone !~ '^.*555-.*$') AS violations
-    FROM users
-    WHERE mobile_phone IS NOT NULL
-
-    UNION ALL
-
-    SELECT
-        'employees.phone' AS column_name,
-        COUNT(*) AS total_phones,
-        COUNT(*) FILTER (WHERE phone LIKE '%555-%') AS anonymized,
-        COUNT(*) FILTER (WHERE phone !~ '^.*555-.*$') AS violations
-    FROM employees
-    WHERE phone IS NOT NULL
-)
-SELECT
-    column_name,
-    total_phones,
-    anonymized,
-    violations,
-    CASE
-        WHEN violations = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL'
-    END AS status
-FROM phone_check
-ORDER BY column_name;
-
--- Check for real area codes (should not exist)
-SELECT
-    'Real Area Codes' AS test_name,
-    COUNT(*) AS violations,
-    CASE
-        WHEN COUNT(*) = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL - REAL PHONE NUMBERS DETECTED'
-    END AS status
-FROM users
-WHERE phone ~ '^[0-9]{3}-[0-9]{3}-[0-9]{4}$'
-  AND phone NOT LIKE '555-%'
-  AND phone IS NOT NULL;
-
--- ============================================================================
--- Test 3: SSN Redaction Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 3: SSN Redaction Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Verifying SSNs are fully redacted (***-**-****)'
-\echo ''
-
-WITH ssn_check AS (
-    SELECT
-        'users.ssn' AS column_name,
-        COUNT(*) AS total_ssns,
-        COUNT(*) FILTER (WHERE ssn = '***-**-****') AS redacted,
-        COUNT(*) FILTER (WHERE ssn ~ '^[0-9]{3}-[0-9]{2}-[0-9]{4}$') AS violations
-    FROM users
-    WHERE ssn IS NOT NULL
-
-    UNION ALL
-
-    SELECT
-        'employees.ssn' AS column_name,
-        COUNT(*) AS total_ssns,
-        COUNT(*) FILTER (WHERE ssn = '***-**-****') AS redacted,
-        COUNT(*) FILTER (WHERE ssn ~ '^[0-9]{3}-[0-9]{2}-[0-9]{4}$') AS violations
-    FROM employees
-    WHERE ssn IS NOT NULL
-)
-SELECT
-    column_name,
-    total_ssns,
-    redacted,
-    violations,
-    CASE
-        WHEN violations = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL'
-    END AS status
-FROM ssn_check
-ORDER BY column_name;
-
--- Overall SSN check
-SELECT
-    'SSN Redaction' AS test_name,
-    SUM(violations) AS total_violations,
-    CASE
-        WHEN SUM(violations) = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL - UNREDACTED SSNs DETECTED'
-    END AS overall_status
-FROM (
-    SELECT COUNT(*) FILTER (WHERE ssn ~ '^[0-9]{3}-[0-9]{2}-[0-9]{4}$') AS violations
-    FROM users WHERE ssn IS NOT NULL
-    UNION ALL
-    SELECT COUNT(*) FILTER (WHERE ssn ~ '^[0-9]{3}-[0-9]{2}-[0-9]{4}$')
-    FROM employees WHERE ssn IS NOT NULL
-) AS all_violations;
-
--- ============================================================================
--- Test 4: Address Anonymization Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 4: Address Anonymization Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Verifying addresses are redacted (street removed, geo data preserved)'
-\echo ''
-
-WITH address_check AS (
-    SELECT
-        'orders.billing_address' AS column_name,
-        COUNT(*) AS total_addresses,
-        COUNT(*) FILTER (WHERE billing_address LIKE '[REDACTED]%') AS anonymized,
-        COUNT(*) FILTER (WHERE billing_address NOT LIKE '[REDACTED]%') AS violations
-    FROM orders
-    WHERE billing_address IS NOT NULL
-
-    UNION ALL
-
-    SELECT
-        'orders.shipping_address' AS column_name,
-        COUNT(*) AS total_addresses,
-        COUNT(*) FILTER (WHERE shipping_address LIKE '[REDACTED]%') AS anonymized,
-        COUNT(*) FILTER (WHERE shipping_address NOT LIKE '[REDACTED]%') AS violations
-    FROM orders
-    WHERE shipping_address IS NOT NULL
-
-    UNION ALL
-
-    SELECT
-        'employees.home_address' AS column_name,
-        COUNT(*) AS total_addresses,
-        COUNT(*) FILTER (WHERE home_address LIKE '[REDACTED]%' OR home_address = '[REDACTED ADDRESS]') AS anonymized,
-        COUNT(*) FILTER (WHERE home_address NOT LIKE '[REDACTED]%' AND home_address != '[REDACTED ADDRESS]') AS violations
-    FROM employees
-    WHERE home_address IS NOT NULL
-)
-SELECT
-    column_name,
-    total_addresses,
-    anonymized,
-    violations,
-    CASE
-        WHEN violations = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL'
-    END AS status
-FROM address_check
-ORDER BY column_name;
-
--- ============================================================================
--- Test 5: Name Anonymization Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 5: Name Anonymization Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Verifying names are anonymized (should start with User- or similar)'
-\echo ''
-
-WITH name_check AS (
-    SELECT
-        'users.first_name' AS column_name,
-        COUNT(*) AS total_names,
-        COUNT(*) FILTER (WHERE first_name LIKE 'User-%') AS anonymized,
-        COUNT(*) FILTER (WHERE first_name NOT LIKE 'User-%') AS violations
-    FROM users
-    WHERE first_name IS NOT NULL
-
-    UNION ALL
-
-    SELECT
-        'users.last_name' AS column_name,
-        COUNT(*) AS total_names,
-        COUNT(*) FILTER (WHERE last_name LIKE 'User-%') AS anonymized,
-        COUNT(*) FILTER (WHERE last_name NOT LIKE 'User-%') AS violations
-    FROM users
-    WHERE last_name IS NOT NULL
-)
-SELECT
-    column_name,
-    total_names,
-    anonymized,
-    violations,
-    CASE
-        WHEN violations = 0 THEN '✓ PASS'
-        WHEN violations < total_names * 0.05 THEN '⚠ WARNING'
-        ELSE '✗ FAIL'
-    END AS status
-FROM name_check
-ORDER BY column_name;
-
--- ============================================================================
--- Test 6: Payment Data Redaction Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 6: Payment Data Redaction Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Verifying credit card and payment data is redacted'
-\echo ''
-
-SELECT
-    'payments.card_last4' AS column_name,
-    COUNT(*) AS total_cards,
-    COUNT(*) FILTER (WHERE card_last4 = '****') AS redacted,
-    COUNT(*) FILTER (WHERE card_last4 ~ '^[0-9]{4}$') AS violations,
-    CASE
-        WHEN COUNT(*) FILTER (WHERE card_last4 ~ '^[0-9]{4}$') = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL'
-    END AS status
-FROM payments
-WHERE card_last4 IS NOT NULL;
-
--- Check Stripe customer IDs are anonymized
-SELECT
-    'payments.stripe_customer_id' AS column_name,
-    COUNT(*) AS total_ids,
-    COUNT(*) FILTER (WHERE stripe_customer_id LIKE 'cus_%') AS anonymized,
-    CASE
-        WHEN COUNT(*) = COUNT(*) FILTER (WHERE stripe_customer_id LIKE 'cus_%') THEN '✓ PASS'
-        ELSE '✗ FAIL'
-    END AS status
-FROM payments
-WHERE stripe_customer_id IS NOT NULL;
-
--- ============================================================================
--- Test 7: IP Address Anonymization Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 7: IP Address Anonymization Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Verifying IP addresses are anonymized (last 2 octets should be masked)'
-\echo ''
-
-SELECT
-    'user_sessions.ip_address' AS column_name,
-    COUNT(*) AS total_ips,
-    COUNT(*) FILTER (WHERE ip_address ~ '\d+\.\d+\.0\.0$') AS anonymized,
-    COUNT(*) FILTER (WHERE ip_address !~ '\d+\.\d+\.0\.0$') AS violations,
-    CASE
-        WHEN COUNT(*) FILTER (WHERE ip_address !~ '\d+\.\d+\.0\.0$') = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL'
-    END AS status
-FROM user_sessions
-WHERE ip_address IS NOT NULL;
-
--- ============================================================================
--- Test 8: Referential Integrity Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 8: Referential Integrity Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Verifying foreign key relationships remain valid after anonymization'
-\echo ''
-
--- Orders → Users
-SELECT
-    'orders.user_id → users.id' AS foreign_key,
-    COUNT(*) AS total_orders,
-    COUNT(u.id) AS valid_references,
-    COUNT(*) - COUNT(u.id) AS violations,
-    CASE
-        WHEN COUNT(*) = COUNT(u.id) THEN '✓ PASS'
-        ELSE '✗ FAIL - ORPHANED ORDERS'
-    END AS status
-FROM orders o
-LEFT JOIN users u ON o.user_id = u.id;
-
--- Order items → Orders
-SELECT
-    'order_items.order_id → orders.id' AS foreign_key,
-    COUNT(*) AS total_items,
-    COUNT(ord.id) AS valid_references,
-    COUNT(*) - COUNT(ord.id) AS violations,
-    CASE
-        WHEN COUNT(*) = COUNT(ord.id) THEN '✓ PASS'
-        ELSE '✗ FAIL - ORPHANED ORDER ITEMS'
-    END AS status
-FROM order_items oi
-LEFT JOIN orders ord ON oi.order_id = ord.id;
-
--- Order items → Products
-SELECT
-    'order_items.product_id → products.id' AS foreign_key,
-    COUNT(*) AS total_items,
-    COUNT(p.id) AS valid_references,
-    COUNT(*) - COUNT(p.id) AS violations,
-    CASE
-        WHEN COUNT(*) = COUNT(p.id) THEN '✓ PASS'
-        ELSE '✗ FAIL - ORPHANED PRODUCT REFERENCES'
-    END AS status
-FROM order_items oi
-LEFT JOIN products p ON oi.product_id = p.id;
-
--- Payments → Orders
-SELECT
-    'payments.order_id → orders.id' AS foreign_key,
-    COUNT(*) AS total_payments,
-    COUNT(ord.id) AS valid_references,
-    COUNT(*) - COUNT(ord.id) AS violations,
-    CASE
-        WHEN COUNT(*) = COUNT(ord.id) THEN '✓ PASS'
-        ELSE '✗ FAIL - ORPHANED PAYMENTS'
-    END AS status
-FROM payments p
-LEFT JOIN orders ord ON p.order_id = ord.id;
-
--- ============================================================================
--- Test 9: Text Field PII Pattern Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 9: Text Field PII Pattern Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Searching for PII patterns in text fields (notes, comments, reviews)'
-\echo ''
-
--- Check for email patterns in order notes
-SELECT
-    'orders.customer_notes (email pattern)' AS field,
-    COUNT(*) AS violations,
-    CASE
-        WHEN COUNT(*) = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL - EMAILS IN TEXT FIELDS'
-    END AS status
-FROM orders
-WHERE customer_notes ~ '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b';
-
--- Check for phone patterns in order notes
-SELECT
-    'orders.customer_notes (phone pattern)' AS field,
-    COUNT(*) AS violations,
-    CASE
-        WHEN COUNT(*) = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL - PHONE NUMBERS IN TEXT FIELDS'
-    END AS status
-FROM orders
-WHERE customer_notes ~ '\b\d{3}[-.]?\d{3}[-.]?\d{4}\b';
-
--- Check for SSN patterns in order notes
-SELECT
-    'orders.customer_notes (SSN pattern)' AS field,
-    COUNT(*) AS violations,
-    CASE
-        WHEN COUNT(*) = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL - SSNs IN TEXT FIELDS'
-    END AS status
-FROM orders
-WHERE customer_notes ~ '\b\d{3}-\d{2}-\d{4}\b';
-
--- Check for email patterns in support tickets
-SELECT
-    'support_tickets.body (email pattern)' AS field,
-    COUNT(*) AS violations,
-    CASE
-        WHEN COUNT(*) = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL - EMAILS IN SUPPORT TICKETS'
-    END AS status
-FROM support_tickets
-WHERE body ~ '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b';
-
--- Check for email patterns in product reviews
-SELECT
-    'product_reviews.review_text (email pattern)' AS field,
-    COUNT(*) AS violations,
-    CASE
-        WHEN COUNT(*) = 0 THEN '✓ PASS'
-        ELSE '✗ FAIL - EMAILS IN REVIEWS'
-    END AS status
-FROM product_reviews
-WHERE review_text ~ '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b';
-
--- ============================================================================
--- Test 10: Data Completeness Check
--- ============================================================================
-
-\echo ''
-\echo '--------------------------------------------------------------------'
-\echo 'Test 10: Data Completeness Check'
-\echo '--------------------------------------------------------------------'
-\echo 'Verifying data was copied completely (no missing rows)'
-\echo ''
-
--- Count rows per table
-SELECT
-    'users' AS table_name,
-    COUNT(*) AS row_count,
-    CASE
-        WHEN COUNT(*) > 0 THEN '✓ HAS DATA'
-        ELSE '⚠ EMPTY TABLE'
-    END AS status
-FROM users
-
-UNION ALL
-
-SELECT
-    'orders' AS table_name,
-    COUNT(*) AS row_count,
-    CASE
-        WHEN COUNT(*) > 0 THEN '✓ HAS DATA'
-        ELSE '⚠ EMPTY TABLE'
-    END AS status
-FROM orders
-
-UNION ALL
-
-SELECT
-    'order_items' AS table_name,
-    COUNT(*) AS row_count,
-    CASE
-        WHEN COUNT(*) > 0 THEN '✓ HAS DATA'
-        ELSE '⚠ EMPTY TABLE'
-    END AS status
-FROM order_items
-
-UNION ALL
-
-SELECT
-    'products' AS table_name,
-    COUNT(*) AS row_count,
-    CASE
-        WHEN COUNT(*) > 0 THEN '✓ HAS DATA'
-        ELSE '⚠ EMPTY TABLE'
-    END AS status
-FROM products
-
-ORDER BY table_name;
-
--- ============================================================================
--- Final Summary
--- ============================================================================
-
-\echo ''
-\echo '============================================================================'
-\echo '  Verification Summary'
-\echo '============================================================================'
-\echo ''
-
--- Overall summary query
-WITH all_checks AS (
-    SELECT 'Email Anonymization' AS check_name,
-           CASE WHEN (SELECT COUNT(*) FROM users WHERE email NOT LIKE '%@anon.local' AND email IS NOT NULL) = 0
-                THEN 'PASS' ELSE 'FAIL' END AS result
-    UNION ALL
-    SELECT 'Phone Anonymization',
-           CASE WHEN (SELECT COUNT(*) FROM users WHERE phone !~ '^.*555-.*$' AND phone IS NOT NULL) = 0
-                THEN 'PASS' ELSE 'FAIL' END
-    UNION ALL
-    SELECT 'SSN Redaction',
-           CASE WHEN (SELECT COUNT(*) FROM users WHERE ssn ~ '^[0-9]{3}-[0-9]{2}-[0-9]{4}$' AND ssn IS NOT NULL) = 0
-                THEN 'PASS' ELSE 'FAIL' END
-    UNION ALL
-    SELECT 'Address Anonymization',
-           CASE WHEN (SELECT COUNT(*) FROM orders WHERE billing_address NOT LIKE '[REDACTED]%' AND billing_address IS NOT NULL) = 0
-                THEN 'PASS' ELSE 'FAIL' END
-    UNION ALL
-    SELECT 'Payment Data Redaction',
-           CASE WHEN (SELECT COUNT(*) FROM payments WHERE card_last4 ~ '^[0-9]{4}$' AND card_last4 IS NOT NULL) = 0
-                THEN 'PASS' ELSE 'FAIL' END
-    UNION ALL
-    SELECT 'Referential Integrity',
-           CASE WHEN (SELECT COUNT(*) FROM orders o LEFT JOIN users u ON o.user_id = u.id WHERE u.id IS NULL) = 0
-                THEN 'PASS' ELSE 'FAIL' END
-)
-SELECT
-    check_name,
-    result,
-    CASE
-        WHEN result = 'PASS' THEN '✓'
-        ELSE '✗'
-    END AS icon
-FROM all_checks
-ORDER BY check_name;
-
--- Final verdict
-\echo ''
-SELECT
-    CASE
-        WHEN COUNT(*) FILTER (WHERE result = 'FAIL') = 0
-        THEN '✓✓✓ ALL CHECKS PASSED - DATABASE IS SAFE TO USE ✓✓✓'
-        ELSE '✗✗✗ SOME CHECKS FAILED - DO NOT USE THIS DATABASE ✗✗✗'
-    END AS final_verdict
-FROM (
-    SELECT CASE WHEN (SELECT COUNT(*) FROM users WHERE email NOT LIKE '%@anon.local' AND email IS NOT NULL) = 0
-                THEN 'PASS' ELSE 'FAIL' END AS result
-    UNION ALL
-    SELECT CASE WHEN (SELECT COUNT(*) FROM users WHERE phone !~ '^.*555-.*$' AND phone IS NOT NULL) = 0
-                THEN 'PASS' ELSE 'FAIL' END
-    UNION ALL
-    SELECT CASE WHEN (SELECT COUNT(*) FROM users WHERE ssn ~ '^[0-9]{3}-[0-9]{2}-[0-9]{4}$' AND ssn IS NOT NULL) = 0
-                THEN 'PASS' ELSE 'FAIL' END
-) AS all_results;
-
-\echo ''
-\echo '============================================================================'
-\echo '  End of Verification Report'
-\echo '============================================================================'
-\echo ''
+
+-- =============================================================================
+-- 1. No source PII survived
+--
+-- The strongest check available, and the reason demo/seed_production.sql uses
+-- recognisable values: these exact strings existed in production, so finding
+-- one in staging is proof of a leak rather than a heuristic about it.
+-- =============================================================================
+
+DO $$
+DECLARE
+    leaked RECORD;
+    n      INTEGER := 0;
+BEGIN
+    FOR leaked IN
+        SELECT 'users.email'            AS where_, email  AS value FROM users            WHERE email  LIKE '%realmail.example.org' OR email LIKE '%othermail.example.net'
+        UNION ALL
+        SELECT 'users.full_name',       full_name        FROM users            WHERE full_name IN ('Alice Martin', 'Bob Chen', 'Carla Diaz')
+        UNION ALL
+        SELECT 'users.phone',           phone            FROM users            WHERE phone LIKE '+1-617-%'
+        UNION ALL
+        SELECT 'users.ssn',             ssn              FROM users            WHERE ssn ~ '^\d{3}-\d{2}-\d{4}$'
+        UNION ALL
+        SELECT 'employees.email',       email            FROM employees        WHERE email LIKE '%corp.example.com' OR email LIKE '%realmail.example.org'
+        UNION ALL
+        SELECT 'employees.ssn',         ssn              FROM employees        WHERE ssn ~ '^\d{3}-\d{2}-\d{4}$'
+        UNION ALL
+        SELECT 'employees.bank_account_number', bank_account_number FROM employees WHERE bank_account_number LIKE 'GB%'
+        UNION ALL
+        SELECT 'orders.billing_email',  billing_email    FROM orders           WHERE billing_email LIKE '%realmail.example.org'
+        UNION ALL
+        SELECT 'orders.customer_notes', customer_notes   FROM orders           WHERE customer_notes IS NOT NULL AND customer_notes <> '[REDACTED]'
+        UNION ALL
+        SELECT 'payments.cardholder_name', cardholder_name FROM payments       WHERE cardholder_name IN ('Alice Martin', 'Bob Chen')
+        UNION ALL
+        SELECT 'payments.card_last4',   card_last4       FROM payments         WHERE card_last4 ~ '^\d{4}$'
+        UNION ALL
+        SELECT 'payments.stripe_customer_id', stripe_customer_id FROM payments WHERE stripe_customer_id LIKE 'cus_%'
+        UNION ALL
+        SELECT 'user_sessions.ip_address', ip_address    FROM user_sessions    WHERE ip_address ~ '^\d+\.\d+\.\d+\.\d+$'
+        UNION ALL
+        SELECT 'support_tickets.customer_email', customer_email FROM support_tickets WHERE customer_email LIKE '%realmail.example.org'
+        UNION ALL
+        SELECT 'support_tickets.body',  body             FROM support_tickets  WHERE body <> '[REDACTED]'
+    LOOP
+        n := n + 1;
+        RAISE WARNING 'PII LEAK: % still holds %', leaked.where_, leaked.value;
+    END LOOP;
+
+    IF n > 0 THEN
+        RAISE EXCEPTION 'anonymization failed: % column value(s) reached staging unmasked', n;
+    END IF;
+    RAISE NOTICE '1. no source PII survived';
+END $$;
+
+-- =============================================================================
+-- 2. The masked values have the shape each strategy promises
+--
+-- The mirror of check 1. A column emptied to NULL, or dropped from the sync
+-- entirely, also contains no PII — and is useless. This asserts the data is
+-- still there and still the right kind of thing.
+-- =============================================================================
+
+DO $$
+DECLARE
+    bad INTEGER;
+BEGIN
+    -- email -> user_<8 hex>@example.com
+    SELECT count(*) INTO bad FROM users WHERE email !~ '^user_[0-9a-f]{8}@example\.com$';
+    IF bad > 0 THEN RAISE EXCEPTION 'users.email: % row(s) are not email-strategy output', bad; END IF;
+
+    SELECT count(*) INTO bad FROM orders
+     WHERE billing_email IS NOT NULL AND billing_email !~ '^user_[0-9a-f]{8}@example\.com$';
+    IF bad > 0 THEN RAISE EXCEPTION 'orders.billing_email: % row(s) not masked', bad; END IF;
+
+    -- name -> User <4 HEX>
+    SELECT count(*) INTO bad FROM users WHERE full_name !~ '^User [0-9A-F]{4}$';
+    IF bad > 0 THEN RAISE EXCEPTION 'users.full_name: % row(s) are not name-strategy output', bad; END IF;
+
+    -- phone -> +1-555-<4 digits>
+    SELECT count(*) INTO bad FROM users
+     WHERE phone IS NOT NULL AND phone !~ '^\+1-555-\d{4}$';
+    IF bad > 0 THEN RAISE EXCEPTION 'users.phone: % row(s) are not phone-strategy output', bad; END IF;
+
+    -- redact -> the literal constant
+    SELECT count(*) INTO bad FROM users WHERE ssn IS NOT NULL AND ssn <> '[REDACTED]';
+    IF bad > 0 THEN RAISE EXCEPTION 'users.ssn: % row(s) not redacted', bad; END IF;
+
+    -- hash -> 16 hex, one-way
+    SELECT count(*) INTO bad FROM payments WHERE stripe_customer_id !~ '^[0-9a-f]{16}$';
+    IF bad > 0 THEN RAISE EXCEPTION 'payments.stripe_customer_id: % row(s) are not hash output', bad; END IF;
+
+    SELECT count(*) INTO bad FROM user_sessions
+     WHERE ip_address IS NOT NULL AND ip_address !~ '^[0-9a-f]{16}$';
+    IF bad > 0 THEN RAISE EXCEPTION 'user_sessions.ip_address: % row(s) are not hash output', bad; END IF;
+
+    RAISE NOTICE '2. masked values have the shape each strategy promises';
+END $$;
+
+-- =============================================================================
+-- 3. NULL stays NULL
+--
+-- Anonymizing a missing value into a present one invents data: staging would
+-- show a phone number for a customer who never gave one, and any code path
+-- branching on "has a phone" would be exercised wrongly.
+-- =============================================================================
+
+DO $$
+DECLARE
+    bad INTEGER;
+BEGIN
+    SELECT count(*) INTO bad FROM orders WHERE id = 2 AND customer_notes IS NOT NULL;
+    IF bad > 0 THEN
+        RAISE EXCEPTION 'orders.customer_notes: a NULL was masked into a value';
+    END IF;
+    RAISE NOTICE '3. NULL stayed NULL';
+END $$;
+
+-- =============================================================================
+-- 4. Pseudonyms are stable, so the data is still joinable
+--
+-- The point of a keyed strategy over a random one. users.email and
+-- orders.billing_email share a strategy and a seed, so one customer is one
+-- pseudonym on both sides and "every order this customer placed" is still a
+-- question staging can answer.
+-- =============================================================================
+
+DO $$
+DECLARE
+    mismatched INTEGER;
+BEGIN
+    SELECT count(*) INTO mismatched
+      FROM orders o
+      JOIN users u ON u.id = o.user_id
+     WHERE o.billing_email IS NOT NULL
+       AND o.billing_email <> u.email;
+    IF mismatched > 0 THEN
+        RAISE EXCEPTION
+            'pseudonyms are not stable: % order(s) whose billing_email does not '
+            'match the owning user''s masked email', mismatched;
+    END IF;
+
+    -- Same input, same output, within a table too: Alice placed orders 1 and 3.
+    IF (SELECT count(DISTINCT billing_email) FROM orders WHERE user_id = 1) <> 1 THEN
+        RAISE EXCEPTION 'one customer''s address masked to more than one pseudonym';
+    END IF;
+
+    RAISE NOTICE '4. pseudonyms are stable across tables';
+END $$;
+
+-- =============================================================================
+-- 5. Different seeds give unrelated pseudonyms
+--
+-- employees uses seed 2 precisely so that a person who is both a customer and
+-- an employee does not appear as the same pseudonym in both tables. Alice
+-- (users.id 1, employees.id 2) is that person in the demo data.
+-- =============================================================================
+
+DO $$
+DECLARE
+    customer_pseudonym TEXT;
+    staff_pseudonym    TEXT;
+BEGIN
+    SELECT email INTO customer_pseudonym FROM users     WHERE id = 1;
+    SELECT email INTO staff_pseudonym    FROM employees WHERE id = 2;
+
+    IF customer_pseudonym IS NULL OR staff_pseudonym IS NULL THEN
+        RAISE EXCEPTION 'expected the demo rows for the customer-and-employee case';
+    END IF;
+
+    IF customer_pseudonym = staff_pseudonym THEN
+        RAISE EXCEPTION
+            'seed separation failed: the same address masked identically in '
+            'users and employees (%), so the two roles can be correlated',
+            customer_pseudonym;
+    END IF;
+
+    RAISE NOTICE '5. seeds separate staff pseudonyms from customer pseudonyms';
+END $$;
+
+-- =============================================================================
+-- 6. Uniqueness survived where it has to
+--
+-- `hash` is used for stripe_customer_id rather than `redact` because
+-- reconciliation code needs distinct customers to stay distinct. Two customers
+-- collapsing to one value would pass check 1 and still break staging.
+-- =============================================================================
+
+DO $$
+DECLARE
+    distinct_sources INTEGER;
+    distinct_masked  INTEGER;
+BEGIN
+    -- The demo has two distinct processor ids across three payments.
+    SELECT count(DISTINCT stripe_customer_id) INTO distinct_masked FROM payments;
+    distinct_sources := 2;
+    IF distinct_masked <> distinct_sources THEN
+        RAISE EXCEPTION
+            'hash collapsed distinct values: % distinct processor ids became %',
+            distinct_sources, distinct_masked;
+    END IF;
+    RAISE NOTICE '6. hash preserved uniqueness';
+END $$;
+
+-- =============================================================================
+-- 7. Referential integrity survived
+--
+-- Masking touches columns, never keys — but a sync that copies tables in the
+-- wrong order, or skips one, produces orphans. Cheap to check, and the failure
+-- is confusing to debug from the application side.
+-- =============================================================================
+
+DO $$
+DECLARE
+    orphans INTEGER;
+BEGIN
+    SELECT count(*) INTO orphans FROM orders o LEFT JOIN users u ON u.id = o.user_id WHERE u.id IS NULL;
+    IF orphans > 0 THEN RAISE EXCEPTION 'orders: % row(s) with no user', orphans; END IF;
+
+    SELECT count(*) INTO orphans FROM payments p LEFT JOIN orders o ON o.id = p.order_id WHERE o.id IS NULL;
+    IF orphans > 0 THEN RAISE EXCEPTION 'payments: % row(s) with no order', orphans; END IF;
+
+    SELECT count(*) INTO orphans FROM order_items i LEFT JOIN orders o ON o.id = i.order_id WHERE o.id IS NULL;
+    IF orphans > 0 THEN RAISE EXCEPTION 'order_items: % row(s) with no order', orphans; END IF;
+
+    SELECT count(*) INTO orphans FROM support_tickets t LEFT JOIN users u ON u.id = t.user_id WHERE u.id IS NULL;
+    IF orphans > 0 THEN RAISE EXCEPTION 'support_tickets: % row(s) with no user', orphans; END IF;
+
+    RAISE NOTICE '7. referential integrity survived';
+END $$;
+
+-- =============================================================================
+-- 8. The columns that were meant to survive, survived
+--
+-- Anonymization is opt-in per column: anything absent from
+-- db/sync/anonymization.yaml is copied verbatim. That is easy to state and easy
+-- to get wrong in the other direction — over-masking quietly destroys the
+-- analytical value staging exists for.
+-- =============================================================================
+
+DO $$
+DECLARE
+    n INTEGER;
+BEGIN
+    SELECT count(*) INTO n FROM payments WHERE billing_zip IN ('02139', '02140');
+    IF n <> 3 THEN RAISE EXCEPTION 'payments.billing_zip was masked; fraud rules need it (% of 3)', n; END IF;
+
+    SELECT count(*) INTO n FROM user_sessions WHERE user_agent LIKE 'Mozilla/%';
+    IF n <> 3 THEN RAISE EXCEPTION 'user_sessions.user_agent was masked; debugging needs it (% of 3)', n; END IF;
+
+    SELECT count(*) INTO n FROM users WHERE country_code IN ('US', 'ES');
+    IF n <> 3 THEN RAISE EXCEPTION 'users.country_code was masked (% of 3)', n; END IF;
+
+    SELECT count(*) INTO n FROM orders WHERE total_cents > 0;
+    IF n <> 3 THEN RAISE EXCEPTION 'orders.total_cents did not survive (% of 3)', n; END IF;
+
+    RAISE NOTICE '8. non-PII columns survived intact';
+END $$;
+
+\echo '✅ verification passed: staging holds no source PII, and is still usable'

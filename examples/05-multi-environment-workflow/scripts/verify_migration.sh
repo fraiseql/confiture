@@ -20,7 +20,7 @@ EXIT_CODE=0
 # Check migration status
 echo ""
 echo "📊 Checking migration status..."
-confiture migrate status --env "$ENV" || EXIT_CODE=1
+confiture migrate status --config "db/environments/$ENV.yaml" || EXIT_CODE=1
 
 # Verify table structures
 echo ""

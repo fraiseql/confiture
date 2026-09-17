@@ -40,7 +40,7 @@ pipeline {
             }
             steps {
                 echo 'Linting migrations...'
-                sh 'confiture lint db/migrations/'
+                sh 'confiture lint --env $CONFITURE_ENV
                 sh 'confiture verify-checksums'
             }
         }
@@ -68,7 +68,7 @@ pipeline {
             }
             steps {
                 echo 'Testing rollback...'
-                sh 'confiture migrate test-rollback db/migrations/*.py'
+                sh 'confiture migrate down --steps 1 --dry-run
             }
         }
 
@@ -100,7 +100,7 @@ pipeline {
                 }
 
                 echo 'Pre-migration health check...'
-                sh 'confiture health check --timeout 30'
+                sh 'confiture migrate status'
 
                 echo 'Running migrations...'
                 sh '''
@@ -113,7 +113,7 @@ pipeline {
                 sh 'confiture migrate status'
 
                 echo 'Post-migration health check...'
-                sh 'confiture health check --timeout 30'
+                sh 'confiture migrate status'
             }
             post {
                 success {
@@ -164,7 +164,7 @@ pipeline {
                 }
 
                 echo 'Pre-migration health check...'
-                sh 'confiture health check --timeout 60'
+                sh 'confiture migrate status'
 
                 echo 'Running production migrations...'
                 sh '''
@@ -177,7 +177,7 @@ pipeline {
                 sh 'confiture migrate status'
 
                 echo 'Post-migration health check...'
-                sh 'confiture health check --timeout 60'
+                sh 'confiture migrate status'
             }
             post {
                 success {

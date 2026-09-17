@@ -107,3 +107,64 @@ def test_every_example_readme_config_snippet_validates() -> None:
                 failures.append(f"{where}: {exc}")
     assert checked > 0, "no environment snippet found in any example README"
     assert failures == [], "README snippets the model rejects:\n" + "\n".join(failures)
+
+
+# Keys that belong to no Confiture configuration format, past or present. They
+# come from `examples/02-fraiseql-integration/confiture.yaml`, which nested
+# per-environment `database:` blocks under a top-level `environments:` mapping
+# and listed `schema_dirs:`. Confiture read none of it: the file sat at exactly
+# the path `--config` defaults to, and `migrate status` reported "unknown (no
+# config)" rather than rejecting it. The block above only inspects snippets that
+# already look like an environment file (they set `name`, `include_dirs` or
+# `database_url`), so a snippet in an entirely invented shape sailed past it.
+_INVENTED_KEYS = ("schema_dirs", "migration_table", "medium_selection", "migration_metadata")
+
+
+def _yaml_blocks(markdown: Path) -> list[tuple[int, dict]]:
+    """Every YAML block in *markdown* that parses to a mapping."""
+    text = markdown.read_text(encoding="utf-8")
+    blocks = []
+    for match in _YAML_BLOCK.finditer(text):
+        try:
+            data = yaml.safe_load(_ENV_VAR.sub("placeholder", match.group(1)))
+        except yaml.YAMLError:
+            continue
+        if isinstance(data, dict):
+            blocks.append((text[: match.start()].count("\n") + 1, data))
+    return blocks
+
+
+def test_no_example_documents_an_invented_config_format() -> None:
+    """No example README describes a configuration shape Confiture cannot read."""
+    files = _readme_files()
+    assert len(files) >= MIN_README_FILES, "the examples lost their READMEs"
+    failures: list[str] = []
+    for markdown in files:
+        for line, data in _yaml_blocks(markdown):
+            where = f"{markdown.relative_to(REPO_ROOT)}:{line}"
+            found = sorted(k for k in _INVENTED_KEYS if k in yaml.dump(data))
+            if found:
+                failures.append(f"{where}: invented config key(s) {', '.join(found)}")
+            envs = data.get("environments")
+            if isinstance(envs, dict) and any(isinstance(v, dict) for v in envs.values()):
+                failures.append(
+                    f"{where}: environments are one file each under db/environments/, "
+                    "not a mapping in a single config file"
+                )
+    assert failures == [], "config formats Confiture does not have:\n" + "\n".join(failures)
+
+
+def test_no_example_ships_an_unreadable_root_config() -> None:
+    """A tracked ``confiture.yaml`` in an example loads as an ``Environment``.
+
+    ``confiture.yaml`` is the default ``--config`` path. A file sitting there in
+    some other shape is not an error the CLI reports — it is silently no config
+    at all, which is worse than its absence.
+    """
+    failures: list[str] = []
+    for config in _tracked("examples/**/confiture.yaml", "examples/*/confiture.yaml"):
+        try:
+            Environment.load(config.stem, project_dir=config.parent)
+        except Exception as exc:
+            failures.append(f"{config.relative_to(REPO_ROOT)}: {exc}")
+    assert failures == [], "root configs the model cannot read:\n" + "\n".join(failures)

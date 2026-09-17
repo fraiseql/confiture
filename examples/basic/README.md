@@ -557,7 +557,7 @@ confiture build --env local --schema-only
 ### Verify Build Plan
 
 ```bash
-confiture build --env local --dry-run
+confiture build --env local --list-files
 ```
 
 **Output**:

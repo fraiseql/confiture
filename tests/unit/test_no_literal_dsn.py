@@ -34,6 +34,10 @@ SENTINEL_DSNS: frozenset[str] = frozenset(
         "postgresql://localhost/nonexistent_for_fix_test",
         "postgresql://prod-host/db",
         "postgresql://x/y",
+        # tests/e2e/test_examples_apply.py binds it to the ${VAR} an example's
+        # environment file interpolates, so the file validates through the model.
+        # Never dialled: the test connects only to fresh_database_factory URLs.
+        "postgresql://user:secret@db.example.internal:5432/app",
     }
 )
 

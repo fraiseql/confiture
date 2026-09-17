@@ -83,12 +83,12 @@ strict_mode() {
 
 # Relaxed mode: only fail on errors, ignore warnings
 errors_only() {
-    confiture lint --fail-on-error --no-fail-on-warning
+    confiture lint --fail-on error
 }
 
 # Very relaxed: don't fail on errors (just report)
 report_only() {
-    confiture lint --no-fail-on-error
+    confiture lint --fail-on never
 }
 
 # ============================================================================

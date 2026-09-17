@@ -74,7 +74,7 @@ jobs:
 
       - name: Test migration up
         run: |
-          confiture migrate up --env ci
+          confiture migrate up --config db/environments/ci.yaml
         env:
           PGHOST: localhost
           PGPORT: 5432
@@ -90,8 +90,8 @@ jobs:
 
       - name: Test migration rollback
         run: |
-          confiture migrate down --env ci
-          confiture migrate up --env ci
+          confiture migrate down --config db/environments/ci.yaml
+          confiture migrate up --config db/environments/ci.yaml
         env:
           PGHOST: localhost
           PGPORT: 5432

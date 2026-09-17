@@ -34,7 +34,7 @@ jobs:
         run: pip install fraiseql-confiture
 
       - name: Lint migrations
-        run: confiture lint db/migrations/
+        run: confiture lint --env $CONFITURE_ENV
 
       # Scoped to migrations this PR actually touched, so a pre-existing
       # backlog does not block the branch. Drop --base-ref to scan everything.
@@ -89,7 +89,7 @@ jobs:
       - name: Test rollback
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
-        run: confiture migrate test-rollback db/migrations/*.py
+        run: confiture migrate down --steps 1 --dry-run
 
   schema-diff:
     name: Schema Diff Check
@@ -128,4 +128,4 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
         run: |
           confiture build --env test
-          confiture migrate drift-detect || echo "::warning::Schema drift detected"
+          confiture drift --config db/environments/$CONFITURE_ENV.yaml || echo "::warning::Schema drift detected"

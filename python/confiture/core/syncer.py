@@ -228,6 +228,7 @@ class ProductionSyncer:
         batch_size: int = 5000,  # Optimized based on benchmarks
         progress_task: Any = None,
         progress: Progress | None = None,
+        truncate: bool = True,
     ) -> int:
         """Sync a single table from source to target.
 
@@ -237,6 +238,9 @@ class ProductionSyncer:
             batch_size: Number of rows per batch (default 5000, optimized via benchmarks)
             progress_task: Rich progress task ID for updating progress
             progress: Progress instance
+            truncate: Empty the target table first. :meth:`sync` passes ``False``
+                because it has already truncated every selected table in one
+                statement; see :meth:`_truncate_targets` for why that matters.
 
         Returns:
             Number of rows synced
@@ -249,8 +253,11 @@ class ProductionSyncer:
         with self._source_conn.cursor() as src_cursor, self._target_conn.cursor() as dst_cursor:
             table_ident = pgsql.Identifier(table_name)
 
-            # Truncate target table first
-            dst_cursor.execute(pgsql.SQL("TRUNCATE TABLE {} CASCADE").format(table_ident))
+            # Truncate target table first (unless the caller already has —
+            # CASCADE here would empty any table already copied that references
+            # this one).
+            if truncate:
+                dst_cursor.execute(pgsql.SQL("TRUNCATE TABLE {} CASCADE").format(table_ident))
 
             # Get row count for verification
             src_cursor.execute(pgsql.SQL("SELECT COUNT(*) FROM {}").format(table_ident))
@@ -454,6 +461,32 @@ class ProductionSyncer:
 
         cursor.executemany(query, rows)
 
+    def _truncate_targets(self, tables: list[str]) -> None:
+        """Empty every target table in *tables* in one statement.
+
+        Truncating each table immediately before copying it looks equivalent and
+        is not. ``TRUNCATE ... CASCADE`` empties every table that references the
+        one named, so with tables copied in alphabetical order a parent copied
+        late silently emptied children copied earlier — ``users`` wiping
+        ``orders``, and through it ``order_items`` and ``payments``. The sync
+        reported every table at its full row count, because that count is what
+        it inserted rather than what the target ends up holding.
+
+        One ``TRUNCATE a, b, c CASCADE`` has no such ordering: all the named
+        tables are emptied together, before anything is copied. CASCADE is still
+        needed for tables that reference these but are not themselves being
+        synced — truncating a parent without it would simply fail.
+        """
+        if not tables or not self._target_conn:
+            return
+        with self._target_conn.cursor() as cur:
+            cur.execute(
+                pgsql.SQL("TRUNCATE TABLE {} CASCADE").format(
+                    pgsql.SQL(", ").join(pgsql.Identifier(name) for name in tables)
+                )
+            )
+        self._target_conn.commit()
+
     def sync(self, config: SyncConfig) -> dict[str, int]:
         """Sync multiple tables based on configuration.
 
@@ -473,6 +506,11 @@ class ProductionSyncer:
         # Filter out completed tables if resuming
         if config.resume:
             tables = [t for t in tables if t not in self._completed_tables]
+
+        # Empty every target table before copying any of them; see
+        # _truncate_targets. On a resumed run the already-completed tables are
+        # not in this list and keep the rows the interrupted run gave them.
+        self._truncate_targets(tables)
 
         if config.show_progress:
             # Use rich progress bar
@@ -497,6 +535,7 @@ class ProductionSyncer:
                         batch_size=config.batch_size,
                         progress_task=task,
                         progress=progress,
+                        truncate=False,
                     )
                     results[table] = rows_synced
         else:
@@ -510,6 +549,7 @@ class ProductionSyncer:
                     table,
                     anonymization_rules=anonymization_rules,
                     batch_size=config.batch_size,
+                    truncate=False,
                 )
                 results[table] = rows_synced
 

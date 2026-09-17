@@ -133,9 +133,7 @@ class User:
 
 **Instant Database Builds**
 ```bash
-# Generate DDL from GraphQL types
-fraiseql generate-ddl schema.py --output db/schema/
-
+# The DDL lives in db/schema/, checked in beside the types it mirrors
 # Build database in <1 second
 confiture build --env local
 
@@ -163,15 +161,15 @@ confiture build --env local
 ├── requirements.txt                # Python dependencies
 ├── .gitignore                      # Ignore generated files
 │
-├── schema.py                       # FraiseQL GraphQL schema (SOURCE OF TRUTH)
-├── app.py                          # FastAPI + GraphQL application
+├── run.sh                          # Smoke run against a real database
+├── schema.py                       # GraphQL types (what the DDL mirrors)
 │
 ├── db/
-│   ├── schema/                     # Generated DDL files
+│   ├── schema/                     # DDL — the source of truth, checked in
 │   │   ├── 00_extensions/
 │   │   │   └── extensions.sql      # PostgreSQL extensions
 │   │   ├── 10_tables/
-│   │   │   └── generated.sql       # Auto-generated from schema.py
+│   │   │   └── generated.sql       # Tables, tb_*/tv_* CQRS pairs
 │   │   └── 20_indexes/
 │   │       └── indexes.sql         # Performance indexes
 │   │
@@ -179,11 +177,11 @@ confiture build --env local
 │   │   └── 001_add_post_views.py   # Example migration
 │   │
 │   └── environments/
-│       ├── local.yaml              # Local development config
-│       └── production.yaml         # Production config
+│       └── local.yaml              # Local development config
 │
-├── confiture.yaml                  # Confiture configuration
-└── .env.example                    # Environment variables template
+└── (no confiture.yaml — the per-environment files above are the config)
+
+You write app.py yourself — its source is in Step 4.
 ```
 
 ---
@@ -350,17 +348,23 @@ bio: Optional[str] = None
 
 ## Step 2: Generate PostgreSQL DDL
 
-### Generate DDL Files
+### Where the DDL Comes From
 
-FraiseQL can generate PostgreSQL DDL from your Python types:
+The PostgreSQL DDL for these types lives in `db/schema/10_tables/generated.sql`
+and is **checked into the repository**, written to mirror the types in
+`schema.py`.
+
+It is checked in rather than produced at build time for two reasons. Confiture
+builds *from* DDL — `db/schema/` is the single source of truth — so the DDL has
+to exist in a fresh clone for there to be anything to build. And FraiseQL's CLI
+has no DDL generator for this shape today; `fraiseql --help` lists `compile`,
+`extract`, `generate-views` and friends, and no `generate-ddl`.
 
 ```bash
-# Generate DDL files
-fraiseql generate-ddl schema.py --output db/schema/10_tables/
+# What the checked-in DDL defines
+grep -c 'CREATE TABLE' db/schema/10_tables/generated.sql
 
-# Expected output:
-# ✓ Generated db/schema/10_tables/generated.sql (478 lines)
-# ✓ Detected 3 types: User, Post, Comment
+# 6 tables: tb_user, tv_user, tb_post, tv_post, tb_comment, tv_comment
 # ✓ Created 6 tables: tb_user, tv_user, tb_post, tv_post, tb_comment, tv_comment
 ```
 
@@ -369,8 +373,8 @@ fraiseql generate-ddl schema.py --output db/schema/10_tables/
 **db/schema/10_tables/generated.sql**:
 
 ```sql
--- Auto-generated from schema.py
--- DO NOT EDIT MANUALLY - regenerate with: fraiseql generate-ddl
+-- Table DDL for the blog schema, in the shape FraiseQL's CQRS convention
+-- produces. Checked in: confiture builds from DDL.
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -507,44 +511,37 @@ Write → tb_post → Sync → tv_post → Read
 
 ### Configure Confiture
 
-**confiture.yaml**:
+One file per environment, under `db/environments/`. The file name is the
+environment name: `local.yaml` is what `--env local` resolves to.
+
+**db/environments/local.yaml**:
 
 ```yaml
-project:
-  name: fraiseql-blog
-  description: Blog API with FraiseQL + Confiture
+name: local
+database_url: postgresql://postgres:postgres@localhost:5432/fraiseql_blog
 
-environments:
-  local:
-    database:
-      host: localhost
-      port: 5432
-      database: fraiseql_blog
-      user: postgres
-      password: postgres
+# Files are applied in sorted path order, so the numbered subdirectories under
+# db/schema/ already give extensions → tables → indexes.
+include_dirs:
+  - db/schema
 
-    schema_dirs:
-      - db/schema/00_extensions
-      - db/schema/10_tables
-      - db/schema/20_indexes
-
-    migrations_dir: db/migrations
-
-  production:
-    database:
-      host: ${DB_HOST}
-      port: ${DB_PORT}
-      database: ${DB_NAME}
-      user: ${DB_USER}
-      password: ${DB_PASSWORD}
-
-    schema_dirs:
-      - db/schema/00_extensions
-      - db/schema/10_tables
-      - db/schema/20_indexes
-
-    migrations_dir: db/migrations
+exclude_dirs: []
 ```
+
+A production environment is the same file with a different name, and reads its
+credentials from the environment rather than carrying them:
+
+**db/environments/production.yaml**:
+
+```yaml
+name: production
+database_url: ${DATABASE_URL}
+include_dirs:
+  - db/schema
+exclude_dirs: []
+```
+
+`${VAR}` is expanded when the file is loaded, so no secret is committed.
 
 ### Build the Database
 
@@ -866,10 +863,12 @@ class Post:
     view_count: int = Field(default=0)
 ```
 
-**Step 2: Regenerate DDL**
+**Step 2: Update the DDL**
 
-```bash
-fraiseql generate-ddl schema.py --output db/schema/10_tables/
+Add the column to `db/schema/10_tables/generated.sql` so a fresh build has it:
+
+```sql
+ALTER TABLE tb_post ADD COLUMN view_count INTEGER DEFAULT 0;  -- in the CREATE TABLE
 ```
 
 **Step 3: Create Migration**
@@ -922,13 +921,15 @@ class AddPostViews(Migration):
 
 ```bash
 # Check migration status
-confiture migrate status --env local
+confiture migrate status --config db/environments/local.yaml \
+    --migrations-dir db/migrations
 
 # Expected output:
 # ⏳ 001_add_post_views (pending)
 
 # Apply migration
-confiture migrate up --env local
+confiture migrate up --config db/environments/local.yaml \
+    --migrations-dir db/migrations
 
 # Expected output:
 # Applying migration 001_add_post_views...
@@ -1066,15 +1067,18 @@ SELECT * FROM tb_post WHERE tags @> ARRAY['python', 'tutorial'];
 
 ## Troubleshooting
 
-### Issue: DDL Generation Fails
+### Issue: `confiture build` finds fewer files than you expect
 
 **Symptom**:
 ```bash
-fraiseql generate-ddl schema.py
-# Error: No @fraise_type decorators found
+confiture build --env local
+# 📊 Files: 2      <- expected 3
 ```
 
-**Solution**: Ensure your types use `@fraise_type` decorator:
+**Solution**: check that none of `db/schema/` is gitignored. Confiture builds
+from the DDL on disk; a schema file that is ignored is absent on a fresh clone,
+and the build happily produces a schema with no tables in it. The types below
+should have a matching table in `db/schema/10_tables/`:
 ```python
 from fraiseql import fraise_type
 
@@ -1131,11 +1135,13 @@ confiture migrate up
 **Solution**: Check migration status:
 ```bash
 # View applied migrations
-confiture migrate status --env local
+confiture migrate status --config db/environments/local.yaml \
+    --migrations-dir db/migrations
 
 # Reset migration history (development only!)
 psql fraiseql_blog -c "DROP TABLE IF EXISTS confiture_migrations CASCADE"
-confiture migrate up --env local
+confiture migrate up --config db/environments/local.yaml \
+    --migrations-dir db/migrations
 ```
 
 ---
@@ -1179,24 +1185,23 @@ You've learned:
 ### Key Commands
 
 ```bash
-# Generate DDL from GraphQL schema
-fraiseql generate-ddl schema.py --output db/schema/
-
-# Build database from DDL
+# Build database from DDL (db/schema/ is the source of truth)
 confiture build --env local
 
 # Apply migrations
-confiture migrate up --env local
+confiture migrate up --config db/environments/local.yaml \
+    --migrations-dir db/migrations
 
 # Check migration status
-confiture migrate status --env local
+confiture migrate status --config db/environments/local.yaml \
+    --migrations-dir db/migrations
 ```
 
 ### The Workflow
 
 ```
-1. Edit schema.py (source of truth)
-2. fraiseql generate-ddl (update DDL)
+1. Edit schema.py (the GraphQL types)
+2. Update db/schema/ to match (the DDL confiture builds from)
 3. confiture build (instant database)
 4. python app.py (run GraphQL API)
 5. Test queries (GraphQL playground)

@@ -16,6 +16,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`confiture sync` no longer empties tables it has already copied.** Each target table
+  was truncated with `CASCADE` immediately before being copied, and `CASCADE` empties
+  every table that references the one named. Tables are copied in the order
+  `select_tables` returns them — alphabetical — so a parent copied late emptied children
+  copied earlier: `users` wiped `orders`, and through `orders` also `order_items` and
+  `payments`. On a nine-table schema this left **five of eight synced tables empty** while
+  the CLI printed `✅ Synced 8 table(s), 22 rows (anonymized)` and exited 0, because the
+  number it reports is what it inserted rather than what the target holds at the end.
+  Truncation now happens once, before anything is copied: a single
+  `TRUNCATE a, b, c CASCADE` over every selected table, which has no ordering to get
+  wrong. CASCADE is kept, because a target may hold tables that reference these and are
+  not themselves being synced. On a resumed run the completed tables are not in the list
+  and keep their rows. No existing test saw it: the multi-table cases all sync tables that
+  do not reference one another.
+
+- **The examples run, and document commands that exist.**
+  `examples/02-fraiseql-integration` could not produce a working database for two
+  independent reasons that hid each other. Its DDL was **gitignored** — treated as a
+  code-generation artifact — so a clean checkout had no tables at all, and `confiture
+  build` reported success over a schema of indexes on relations that were never created.
+  And the DDL was not valid PostgreSQL: three partial `UNIQUE` *constraints* (PostgreSQL
+  has partial indexes only) and three `GENERATED ALWAYS AS ((data->>'createdAt')::timestamptz)
+  STORED` columns (a stored generated expression must be IMMUTABLE, and every text→timestamp
+  cast is STABLE). `examples/04-production-sync-anonymization` shipped 2,688 lines
+  describing a CLI that does not exist — 18 invocations of a positional `confiture sync
+  production-to-staging`, an anonymization config that failed the real schema with 15
+  validation errors, and `verify-checksums` used as a PII check — and was rebuilt against
+  the real `sync --from/--to`, with a `run.sh` that performs a real anonymized sync
+  between two scratch databases and asserts the result in eight checks.
+  Repo-wide, commands and flags that do not exist were corrected in `examples/cicd`
+  (`confiture health check`, four fictional `migrate` subcommands), `examples/01` and
+  `examples/05` (`--env` on `migrate` commands, which appears in `--help` prose but is not
+  an option), `examples/basic` (`build --dry-run`), `examples/linting`
+  (`lint --no-fail-on-error`), `examples/03` (`init --schema-dir`) and the examples index
+  (`coordinate init` / `coordinate complete`).
+
 - **`rebuild()` builds from the environment it was given.** `baseline.rebuild` handed
   `SchemaBuilder` the environment's *name*, so the builder went back to
   `db/environments/<name>.yaml` and re-read a config the caller had already resolved.
@@ -46,6 +82,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Guards that make an example's claims checkable.** `tests/e2e/test_examples_apply.py`
+  builds every example environment and applies it under `ON_ERROR_STOP=1` — the *apply*
+  is the assertion, because `confiture build` is a concatenation and does not parse — and
+  requires the SQL it builds from to be **tracked**, since a build over gitignored files
+  passes on the author's laptop and is empty in CI.
+  `tests/unit/docs/test_examples_reference_real_commands.py` resolves every
+  `confiture …` invocation in `examples/` against the live Typer app, to any depth,
+  including its flags. `tests/unit/docs/test_examples_are_executed.py` requires each
+  example directory to ship an executable `run.sh` or hold an allow-list entry saying why
+  it cannot be run, with a stale entry failing as in the one-lexer guard.
+  `tests/unit/docs/test_example_configs.py` gains two checks for the hole that let an
+  invented configuration format ship: a `confiture.yaml` the model cannot read is not an
+  error the CLI reports, it is silently no config at all.
+
 - **`MigratorSession.rebuild(seeds_dir=…)`.** `baseline.rebuild` has always read
   `seeds_dir` — it is what the `SeedApplier` is built from — but the session never passed
   it, so through `Migrator.from_config`, the only supported library entry point, the seed
@@ -55,6 +105,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   described the method as "Drop and recreate the tracking table" — which is `reinit`'s job.
 
 ### Removed
+
+- **`examples/11-consistency-validation` and `examples/workflows`.** Neither could execute
+  a line. The first imported `confiture.core.seed.validation.consistency_cli`,
+  `…consistency_validator` and `…environment_comparator`, named five validator classes,
+  and called `seed validate --consistency-check`; none of them exist, and the real
+  prep-seed validation it shadowed is `examples/06-prep-seed-validation`. The second
+  imported `confiture.workflows.orchestrator`; there is no `confiture.workflows` package.
 
 - **`rebuild(schema_dir=…)`**, on `Migrator` and the `baseline` implementation behind it.
   It was declared, defaulted to `db/schema`, and never read: the DDL source is the

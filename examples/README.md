@@ -137,15 +137,19 @@ Copy production database to staging or local environments with automatic PII ano
 **PII Handling**:
 - Email addresses → `user_N@example.com`
 - Names → `User N`, `Anonymous N`
-- Phone numbers → Randomized
-- Credit cards → `****-****-****-1234` (last 4 digits)
-- SSN → `***-**-NNNN` (masked)
-- IP addresses → Anonymized
+- Phone numbers → `+1-555-6633` (the reserved fictional range)
+- Names → `User 40A9`
+- SSN, card digits → `[REDACTED]` (one constant; no shape is preserved)
+- IP addresses, processor ids → a 16-hex one-way hash that keeps values distinct
 
 **Key commands**:
 ```bash
-confiture sync production local --anonymize
-confiture sync production staging --anonymize --columns emails,names,phones
+confiture sync --from production --to staging \
+    --anonymize --anonymization-config db/sync/anonymization.yaml
+
+# Then prove it worked — a sync exiting 0 means rows moved, not that they
+# were masked.
+psql "$STAGING_URL" -v ON_ERROR_STOP=1 -f verify_anonymization.sql
 ```
 
 [→ Go to Production Sync Example](./04-production-sync-anonymization/README.md)
@@ -219,10 +223,8 @@ Enable safe parallel schema development with automatic conflict detection. Learn
 
 **Key commands**:
 ```bash
-# Initialize coordination
-confiture coordinate init --db-url postgresql://localhost/confiture_coord
-
-# Register intention
+# Register intention (the coordination tables are created on first use;
+# there is no separate init step)
 confiture coordinate register \
     --agent-id alice \
     --feature-name user_profiles \
@@ -233,11 +235,15 @@ confiture coordinate check \
     --agent-id bob \
     --tables-affected users
 
-# View status
+# View status (of everything, or of one intent)
 confiture coordinate status --format json
+confiture coordinate status --intent-id int_abc123
 
-# Complete work
-confiture coordinate complete --intent-id int_abc123
+# Resolve a conflict once the two agents have agreed
+confiture coordinate resolve --conflict-id cfl_abc123 --notes "alice goes first"
+
+# Drop an intent that was never carried out
+confiture coordinate abandon --intent-id int_abc123 --reason "superseded"
 ```
 
 **Perfect for**:
