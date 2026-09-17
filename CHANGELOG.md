@@ -16,6 +16,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Prep-seed level 5 counted catalogue entries and reported them as data violations.**
+  Four of its five detectors never read a row. Each selected from `information_schema`
+  and took `COUNT(*)` of *that*, unfiltered by schema — which is **2** for every column
+  in any prep-seed project, since `prep_seed.tb_x` and `catalog.tb_x` are the pattern —
+  then reported the number as violating rows. Every NOT NULL column produced a CRITICAL
+  "found 2 NULL values", every CHECK constraint an ERROR (and PostgreSQL lists NOT NULL
+  constraints as CHECK constraints, so each column was reported twice), and every `fk_%`
+  column a CRITICAL "NULL values after resolution" — that last one in the **standard**
+  cycle, so `confiture seed validate --prep-seed --full-execution` reached it from the
+  CLI. `examples/06-prep-seed-validation`, run as its own README describes, reported 8
+  violations against four valid rows. The fifth detector named
+  `information_schema.referential_constraints.column_name`, which that view has not got:
+  it raised on every call into a bare `except psycopg.Error: pass`, so it had never
+  reported anything, and it left the caller's transaction aborted. All four now query the
+  table — `COUNT(*) WHERE col IS NULL` for NULL FKs and NOT NULL, the constraint
+  expression from `pg_constraint` tested `IS FALSE` for CHECK (NULL is unknown and
+  passes), and `NOT EXISTS` against the parent for FK — each inside its own SAVEPOINT.
+  The unit tests handed `fetchall()` the rows they wanted back and pinned
+  `execute.side_effect` to the call sequence, so they asserted only that a list built
+  from hand-fed rows was non-empty; they are deleted rather than re-mocked, and the
+  coverage is now `tests/integration/test_level_5_measures_data.py` against a real
+  database. `catalog_schema`, a documented `OrchestrationConfig` field level 5 ignored,
+  is honoured.
+
 - **`docs/` documented two features that were never written, and 127 command lines
   that do not parse.** The guard that examined `examples/` last week was pointed at
   `docs/`, `README.md`, `PRD.md`, `ARCHITECTURE.md` and `CLAUDE.md`: 1282 `confiture …`

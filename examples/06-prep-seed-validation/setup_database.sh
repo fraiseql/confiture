@@ -35,9 +35,9 @@ PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -f db/s
 echo "Creating functions..."
 PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -f db/schema/functions/fn_resolve_tb_manufacturer.sql
 
-# Load seed data
-echo "Loading seed data..."
-PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -f db/seeds/prep/01_manufacturers.sql
+# The seed data is deliberately NOT loaded here. Level 5 loads it itself, inside
+# a transaction it rolls back; pre-loading it made validate_full.py fail on a
+# duplicate key against this example's own primary key.
 
 echo ""
 echo "✅ Database setup complete!"
@@ -45,3 +45,6 @@ echo ""
 echo "To run validation:"
 echo "  export DATABASE_URL='postgresql://$DB_USER:$DB_PASSWORD@$DB_HOST/$DB_NAME'"
 echo "  python validate_full.py"
+echo ""
+echo "Or run the whole example end to end, against a scratch database:"
+echo "  CONFITURE_EXAMPLE_DB_URL='postgresql://$DB_HOST/postgres' ./run.sh"

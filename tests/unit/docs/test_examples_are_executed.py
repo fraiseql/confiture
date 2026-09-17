@@ -56,11 +56,6 @@ NOT_EXECUTABLE: dict[str, str] = {
         "scripts under scripts/ are the walkthrough; executing them needs two "
         "servers and a traffic switch."
     ),
-    "06-prep-seed-validation": (
-        "The 5-level prep-seed orchestrator. Levels 4 and 5 need a database "
-        "with the customer's own prep tables in it; validate_static.py covers "
-        "levels 1-3 and is exercised by the seed-validation unit tests."
-    ),
     "07-external-emitter": (
         "An emitter plugin registered through an entry point. It is loaded by "
         "confiture at runtime from an installed distribution, and is exercised "
