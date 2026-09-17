@@ -627,11 +627,31 @@ def _retyped(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
     A retype never invents a column: naming one the tree has not created is an
     ``ALTER`` against a schema built elsewhere, which both readers ignore.
     """
-    written = _sql_type(getattr(edit.coldef, "typeName", None))
+    _edited(table, edit.column, type_text=_sql_type(getattr(edit.coldef, "typeName", None)))
+
+
+def _edited(table: SchemaObject, column_name: str | None, **changes: Any) -> None:
+    """Replace one column with a copy carrying *changes*; a name not there is ignored."""
     table.columns = [
-        replace(column, type_text=written) if column.folded == edit.column else column
+        replace(column, **changes) if column.folded == column_name else column
         for column in table.columns
     ]
+
+
+def _set_not_null(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    _edited(table, edit.column, not_null=True)
+
+
+def _drop_not_null(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    _edited(table, edit.column, not_null=False)
+
+
+def _set_default(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    _edited(table, edit.column, default=RawStream()(edit.default))
+
+
+def _drop_default(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    _edited(table, edit.column, default=None)
 
 
 #: ``ColumnEdit.kind`` -> how the inventory applies it to its own model. The
@@ -641,6 +661,10 @@ _COLUMN_APPLIERS: dict[str, Callable[[str, SchemaObject, ColumnEdit], None]] = {
     "add": _added,
     "drop": _dropped,
     "retype": _retyped,
+    "set_not_null": _set_not_null,
+    "drop_not_null": _drop_not_null,
+    "set_default": _set_default,
+    "drop_default": _drop_default,
 }
 
 

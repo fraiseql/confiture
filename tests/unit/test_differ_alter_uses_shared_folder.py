@@ -29,6 +29,8 @@ CREATE TABLE tb_widget (
 ALTER TABLE tb_widget DROP COLUMN legacy_drop;
 ALTER TABLE tb_widget ALTER COLUMN ratio TYPE BIGINT;
 ALTER TABLE tb_widget ADD COLUMN added_later TEXT;
+ALTER TABLE tb_widget ALTER COLUMN maybe_null SET NOT NULL;
+ALTER TABLE tb_widget ALTER COLUMN serial SET DEFAULT 'x';
 """
 
 
@@ -81,3 +83,26 @@ def test_an_add_column_of_a_name_already_written_overwrites_it() -> None:
     columns = parsed.tables[0].columns
     assert [column.name for column in columns] == ["a"]
     assert columns[0].type is ColumnType.BIGINT
+
+
+def test_set_not_null_lands_on_the_column(widget: Table) -> None:
+    maybe_null = widget.get_column("maybe_null")
+    assert maybe_null is not None
+    assert maybe_null.nullable is False
+
+
+def test_set_default_lands_on_the_column(widget: Table) -> None:
+    serial = widget.get_column("serial")
+    assert serial is not None
+    assert serial.default == "'x'"
+
+
+def test_drop_not_null_and_drop_default_land_on_the_column() -> None:
+    parsed = SchemaDiffer().parse_schema(
+        "CREATE TABLE t (a int NOT NULL DEFAULT 7);"
+        "ALTER TABLE t ALTER COLUMN a DROP NOT NULL;"
+        "ALTER TABLE t ALTER COLUMN a DROP DEFAULT;"
+    )
+    column = parsed.tables[0].columns[0]
+    assert column.nullable is True
+    assert column.default is None

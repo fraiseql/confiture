@@ -85,3 +85,31 @@ def test_retyping_a_column_the_tree_never_created_adds_nothing() -> None:
     ).find(None, "t")
     assert table is not None
     assert [column.folded for column in table.columns] == ["a"]
+
+
+def test_set_not_null_lands_on_the_column(widget: SchemaObject) -> None:
+    """#301's third item: neither reader folded this, in either direction."""
+    maybe_null = next(column for column in widget.columns if column.folded == "maybe_null")
+    assert maybe_null.not_null is True
+
+
+def test_drop_not_null_lands_on_the_column() -> None:
+    table = build_inventory(
+        "CREATE TABLE t (a int NOT NULL); ALTER TABLE t ALTER COLUMN a DROP NOT NULL;"
+    ).find(None, "t")
+    assert table is not None
+    assert table.columns[0].not_null is False
+
+
+def test_set_default_and_drop_default_land_on_the_column() -> None:
+    table = build_inventory(
+        "CREATE TABLE t (a int); ALTER TABLE t ALTER COLUMN a SET DEFAULT 7;"
+    ).find(None, "t")
+    assert table is not None
+    assert table.columns[0].default == "7"
+
+    dropped = build_inventory(
+        "CREATE TABLE t (a int DEFAULT 7); ALTER TABLE t ALTER COLUMN a DROP DEFAULT;"
+    ).find(None, "t")
+    assert dropped is not None
+    assert dropped.columns[0].default is None

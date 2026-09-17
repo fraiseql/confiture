@@ -17,7 +17,12 @@ from __future__ import annotations
 import pglast
 import pytest
 
-from confiture.core.ddl_walk import column_edit, type_name
+from confiture.core.ddl_walk import (
+    FOLDED,
+    ColumnEdit,
+    column_edit,
+    type_name,
+)
 from confiture.core.type_lattice import canonical_type
 
 
@@ -81,3 +86,47 @@ def test_add_column_if_not_exists_is_the_same_edit() -> None:
     edit = column_edit(cmd_of("ALTER TABLE t ADD COLUMN IF NOT EXISTS a int"))
     assert edit is not None
     assert edit.kind == "add"
+
+def test_set_not_null_and_drop_not_null() -> None:
+    assert column_edit(cmd_of("ALTER TABLE t ALTER COLUMN c SET NOT NULL")) == ColumnEdit(
+        "set_not_null", column="c"
+    )
+    assert column_edit(cmd_of("ALTER TABLE t ALTER COLUMN c DROP NOT NULL")) == ColumnEdit(
+        "drop_not_null", column="c"
+    )
+
+
+def test_one_member_carries_both_default_operations() -> None:
+    """``SET DEFAULT`` and ``DROP DEFAULT`` are both ``AT_ColumnDefault``.
+
+    They are told apart by ``cmd.def_ is None``, not by a second member. A
+    dispatch keyed on the member alone turns a ``DROP DEFAULT`` into a
+    ``SET DEFAULT None`` — which happens to be right, and stops being right the
+    moment anything distinguishes "no default" from "default removed".
+    """
+    set_default = column_edit(cmd_of("ALTER TABLE t ALTER COLUMN c SET DEFAULT 1"))
+    assert set_default is not None
+    assert (set_default.kind, set_default.column) == ("set_default", "c")
+    assert set_default.default is not None
+
+    dropped = column_edit(cmd_of("ALTER TABLE t ALTER COLUMN c DROP DEFAULT"))
+    assert dropped == ColumnEdit("drop_default", column="c")
+
+
+def test_every_folded_subtype_reads_a_real_statement() -> None:
+    """``FOLDED`` is a claim about what works, so each member is exercised.
+
+    A member listed there whose builder never fires would look exactly like a
+    subtype deliberately folded, which is the failure #288 named.
+    """
+    exercised = {
+        "AT_AddColumn": "ALTER TABLE t ADD COLUMN a int",
+        "AT_DropColumn": "ALTER TABLE t DROP COLUMN b",
+        "AT_AlterColumnType": "ALTER TABLE t ALTER COLUMN c TYPE bigint",
+        "AT_SetNotNull": "ALTER TABLE t ALTER COLUMN c SET NOT NULL",
+        "AT_DropNotNull": "ALTER TABLE t ALTER COLUMN c DROP NOT NULL",
+        "AT_ColumnDefault": "ALTER TABLE t ALTER COLUMN c SET DEFAULT 1",
+    }
+    assert set(exercised) == set(FOLDED), "a folded subtype with no statement to prove it"
+    for sql in exercised.values():
+        assert column_edit(cmd_of(sql)) is not None, sql

@@ -74,7 +74,15 @@ class ColumnEdit:
     edit, which is how a renumbered enum member disappeared in #192.
     """
 
-    kind: Literal["add", "drop", "retype"]
+    kind: Literal[
+        "add",
+        "drop",
+        "retype",
+        "set_not_null",
+        "drop_not_null",
+        "set_default",
+        "drop_default",
+    ]
     column: str | None = None
     coldef: Any | None = None
     default: Any | None = None
@@ -102,13 +110,54 @@ def _retyped_column(cmd: Any) -> ColumnEdit | None:
     return ColumnEdit("retype", column=str(name), coldef=definition)
 
 
-#: ``AlterTableType`` member -> how to read one cmd of that subtype. A table
-#: rather than an ``elif`` chain so that adding a subtype is a row, and so that
-#: the set of subtypes folded is something a reader can see at a glance.
+def _set_not_null(cmd: Any) -> ColumnEdit | None:
+    name = getattr(cmd, "name", None)
+    return ColumnEdit("set_not_null", column=str(name)) if name else None
+
+
+def _drop_not_null(cmd: Any) -> ColumnEdit | None:
+    name = getattr(cmd, "name", None)
+    return ColumnEdit("drop_not_null", column=str(name)) if name else None
+
+
+def _column_default(cmd: Any) -> ColumnEdit | None:
+    """``SET DEFAULT`` and ``DROP DEFAULT``, which are one ``AlterTableType`` member.
+
+    They are told apart by ``cmd.def_``, not by a second member. Reading the
+    member alone turns a ``DROP DEFAULT`` into a ``SET DEFAULT None`` — right by
+    accident today, and wrong the moment anything distinguishes "no default"
+    from "default removed".
+    """
+    name = getattr(cmd, "name", None)
+    if not name:
+        return None
+    expression = getattr(cmd, "def_", None)
+    if expression is None:
+        return ColumnEdit("drop_default", column=str(name))
+    return ColumnEdit("set_default", column=str(name), default=expression)
+
+
+#: ``AlterTableType`` member name -> how to read one cmd of that subtype. A table
+#: rather than an ``elif`` chain so that adding a subtype is a row, and keyed by
+#: *name* so that :data:`FOLDED` and the ordinal dispatch cannot disagree about
+#: which subtypes are folded.
+_COLUMN_EDITS_BY_NAME: dict[str, Callable[[Any], ColumnEdit | None]] = {
+    "AT_AddColumn": _added_column,
+    "AT_DropColumn": _dropped_column,
+    "AT_AlterColumnType": _retyped_column,
+    "AT_SetNotNull": _set_not_null,
+    "AT_DropNotNull": _drop_not_null,
+    "AT_ColumnDefault": _column_default,
+}
+
+#: The subtypes an expected schema is built from. Read by
+#: ``tests/unit/test_alter_subtypes_are_exhaustive.py``, which requires every
+#: member of pglast's own enum to be here, in :data:`MODELLED_ELSEWHERE`, or in
+#: :data:`NOT_AN_EXPECTED_SCHEMA_FACT` with a reason.
+FOLDED: frozenset[str] = frozenset(_COLUMN_EDITS_BY_NAME)
+
 _COLUMN_EDITS: dict[int, Callable[[Any], ColumnEdit | None]] = {
-    _AT_ADD_COLUMN: _added_column,
-    _AT_DROP_COLUMN: _dropped_column,
-    _AT_ALTER_COLUMN_TYPE: _retyped_column,
+    _pg_member("AlterTableType", name): build for name, build in _COLUMN_EDITS_BY_NAME.items()
 }
 
 

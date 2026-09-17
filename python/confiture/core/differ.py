@@ -479,6 +479,22 @@ class SchemaDiffer:
             table.columns = [c for c in table.columns if c.name != edit.column]
         elif edit.kind == "retype":
             self._retype_column(table, edit)
+        else:
+            self._edit_column_property(table, edit)
+
+    def _edit_column_property(self, table: Table, edit: ColumnEdit) -> None:
+        """Nullability and defaults, which change a column rather than replace it."""
+        existing = table.get_column(edit.column) if edit.column else None
+        if existing is None:
+            return
+        if edit.kind == "set_not_null":
+            existing.nullable = False
+        elif edit.kind == "drop_not_null":
+            existing.nullable = True
+        elif edit.kind == "set_default":
+            existing.default = self._render_default_pglast(edit.default)
+        elif edit.kind == "drop_default":
+            existing.default = None
 
     def _retype_column(self, table: Table, edit: ColumnEdit) -> None:
         retyped = self._parse_column_pglast(edit.coldef, ConstrType)
