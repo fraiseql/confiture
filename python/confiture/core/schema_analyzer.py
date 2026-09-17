@@ -184,42 +184,57 @@ class SchemaAnalyzer:
         return info
 
     def _read_columns(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:
-        """Tables and their columns, from ``information_schema``."""
+        """Tables and their columns, as PostgreSQL's own catalogue spells them.
+
+        The type comes from ``format_type(atttypid, atttypmod)``, which answers
+        "what type is this column" in the vocabulary the DDL is written in.
+        ``information_schema.columns.data_type`` does not: it spells an array
+        ``ARRAY``, a user-defined type ``USER-DEFINED``, a domain by its *base*
+        type, and drops every typmod — so ``tags TEXT[]`` in a schema file met
+        ``array`` from the database and reported a ``type_mismatch`` against the
+        tree it was built from (#302).
+
+        ``relkind IN ('r', 'p')`` reproduces the old ``table_type = 'BASE
+        TABLE'``: a partitioned parent is ``'p'`` and the expected side models
+        it, while a view, a matview and a foreign table are compared — where they
+        are compared — as objects rather than as tables with columns.
+
+        ``NOT attisdropped AND attnum > 0`` is required: ``pg_attribute`` keeps a
+        tombstone row for a dropped column and negative rows for the system
+        columns. The ordering is the column-order comparison's input, and
+        ``attnum`` and ``ordinal_position`` agree — measured, including across a
+        dropped column.
+        """
         with self.connection.cursor() as cur:
             cur.execute(
                 """
                 SELECT
-                    t.table_schema,
-                    t.table_name,
-                    c.column_name,
-                    c.data_type,
-                    c.is_nullable,
-                    c.column_default,
-                    c.character_maximum_length,
-                    c.numeric_precision,
-                    c.numeric_scale
-                FROM information_schema.tables t
-                JOIN information_schema.columns c
-                    ON t.table_name = c.table_name
-                    AND t.table_schema = c.table_schema
-                WHERE t.table_schema = ANY(%s)
-                AND t.table_type = 'BASE TABLE'
-                ORDER BY t.table_schema, t.table_name, c.ordinal_position
+                    n.nspname,
+                    c.relname,
+                    a.attname,
+                    format_type(a.atttypid, a.atttypmod),
+                    NOT a.attnotnull,
+                    pg_get_expr(d.adbin, d.adrelid)
+                FROM pg_attribute a
+                JOIN pg_class c ON c.oid = a.attrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+                WHERE n.nspname = ANY(%s)
+                  AND c.relkind IN ('r', 'p')
+                  AND a.attnum > 0
+                  AND NOT a.attisdropped
+                ORDER BY n.nspname, c.relname, a.attnum
             """,
                 (wanted,),
             )
-            for full_row in cur.fetchall():
-                table_name = key(full_row[0], full_row[1])
-                row = full_row[1:]
+            for schema, relname, column, written, nullable, default in cur.fetchall():
+                table_name = key(schema, relname)
                 if table_name not in info.tables:
                     info.tables[table_name] = {}
-                info.tables[table_name][row[1]] = {
-                    "type": row[2],
-                    "nullable": row[3] == "YES",
-                    "default": row[4],
-                    "max_length": row[5],
-                    "precision": row[6],
-                    "scale": row[7],
+                info.tables[table_name][column] = {
+                    "type": written,
+                    "nullable": nullable,
+                    "default": default,
                 }
 
     def _read_indexes(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:

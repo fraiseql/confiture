@@ -19,7 +19,16 @@ was copied, and neither covered a bare internal name, so ``int8`` and ``bigint``
 were two signatures and `build_001` reported no duplicate for a pair PostgreSQL
 rejects (#275). They are gone; `canonical_type` answers for both.
 
-The remaining three are listed below with the reason, and a listed module that
+The thirteenth table was ``core/drift.py``'s ``_types_compatible``, an
+eleven-entry dict resolving toward the internal name (``integer`` -> ``int4``) to
+compare a live column type against a DDL one. It is **gone**: `confiture drift`
+asks ``type_lattice.same_type``, so the expected side's spelling and
+``format_type``'s meet in the one canonicaliser, and eight columns of a schema
+applied verbatim from its own DDL stopped reporting a ``type_mismatch`` (#302).
+Deleting the dict without deleting its allow-list entry turns
+``test_allow_list_is_current`` red, which is how that rule earns its keep.
+
+The remaining **two** are listed below with the reason, and a listed module that
 no longer matches anything fails, as in the one-lexer and one-path-matcher
 guards. Each of them is a *different* direction from the lattice's and feeds a
 published output, so folding one in is a behaviour change to a surface neither
@@ -108,12 +117,6 @@ ALLOWED: dict[str, str] = {
         "(`varchar` -> `character varying`), the opposite of `canonical_type`, because its "
         "output is the signature text `--check-signatures` prints and diffs; adopting the "
         "lattice would move that text for every project with a `varchar` parameter"
-    ),
-    "core/drift.py": (
-        "`_types_compatible` resolves toward the internal name (`integer` -> `int4`) to "
-        "compare a live column type against a DDL one; it is a predicate over two live "
-        "spellings, not a rendering, and `confiture drift`'s output moves if the direction "
-        "changes"
     ),
 }
 

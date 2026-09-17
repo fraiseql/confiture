@@ -38,6 +38,7 @@ __all__ = [
     "changes_rewrite_table",
     "compare_types",
     "parse_type",
+    "same_type",
 ]
 
 
@@ -314,3 +315,42 @@ def canonical_type(raw: str | None) -> str | None:
     if parsed.scale is None:
         return f"{parsed.name}({parsed.precision}){suffix}"
     return f"{parsed.name}({parsed.precision},{parsed.scale}){suffix}"
+
+def same_type(written: str | None, other: str | None) -> bool:
+    """Whether two spellings name one type — the drift comparison's predicate.
+
+    Both sides are canonicalised, so ``bigserial`` meets ``bigint`` and
+    ``varchar(50)`` meets ``character varying(50)``. On top of that, **a schema
+    written on one side and left off the other matches**: ``format_type`` omits a
+    schema that is visible through ``search_path``, so a DDL that spelled
+    ``public.citext`` meets a live ``citext``. Two schemas that both say
+    something and disagree are two types — ``app.custom_t`` and
+    ``other.custom_t`` (D9).
+
+    That wildcard is the rule
+    :func:`confiture.core.linting.inventory.types_match` applies to a routine's
+    argument types, and the two are deliberately not one function: a signature
+    drops typmods, because PostgreSQL ignores them there, and a **column** type
+    must keep them or ``varchar(50)`` and ``varchar(100)`` compare equal. One
+    rule, two questions.
+
+    A missing side is never a match: nothing is known, so nothing is claimed.
+    """
+    if not written or not other:
+        return False
+    left, right = _schema_and_type(written), _schema_and_type(other)
+    if left[1] != right[1]:
+        return False
+    return left[0] is None or right[0] is None or left[0] == right[0]
+
+
+def _schema_and_type(written: str) -> tuple[str | None, str | None]:
+    """``(schema, canonical type)``; the ``pg_catalog`` qualifier is the parser's."""
+    schema, _, name = written.strip().rpartition(".")
+    schema = schema.strip().lower() or None
+    return (None if schema == _CATALOG_SCHEMA else schema), canonical_type(name)
+
+
+#: No user schema can be called this — the ``pg_`` prefix is reserved — so the
+#: qualifier is always the parser's rather than something the author wrote.
+_CATALOG_SCHEMA = "pg_catalog"
