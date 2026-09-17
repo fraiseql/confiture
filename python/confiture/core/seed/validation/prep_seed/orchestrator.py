@@ -401,7 +401,10 @@ class PrepSeedOrchestrator:
             connection.execute("BEGIN;")
 
             # Create validator
-            validator = Level5ExecutionValidator()
+            # `catalog_schema` is a documented OrchestrationConfig field that
+            # level 5 used to ignore: `catalog.` was hardwired into one query and
+            # absent from the rest.
+            validator = Level5ExecutionValidator(catalog_schema=self.config.catalog_schema)
 
             # Choose execution mode
             if self.config.level_5_mode == "comprehensive":

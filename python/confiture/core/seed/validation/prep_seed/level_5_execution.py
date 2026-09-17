@@ -8,16 +8,38 @@ Catches runtime issues that static analysis can't detect.
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import psycopg
+from psycopg import sql
 
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
     ViolationSeverity,
 )
+
+
+@contextmanager
+def _probe(connection: Any) -> Iterator[None]:
+    """Run a read-only probe without leaving the caller's transaction aborted.
+
+    Level 5 runs inside one ``BEGIN``. A failed statement poisons it, so each
+    probe gets a SAVEPOINT of its own and rolls back to it on error.
+    """
+    connection.execute("SAVEPOINT confiture_level5_probe")
+    try:
+        yield
+    except psycopg.Error:
+        connection.execute("ROLLBACK TO SAVEPOINT confiture_level5_probe")
+        raise
+    finally:
+        with contextlib.suppress(psycopg.Error):
+            connection.execute("RELEASE SAVEPOINT confiture_level5_probe")
 
 
 class Level5ExecutionValidator:
@@ -132,6 +154,32 @@ class Level5ExecutionValidator:
 
         return violations
 
+    def __init__(self, catalog_schema: str = "catalog") -> None:
+        """Args: catalog_schema: schema holding the resolved (BIGINT-keyed) tables."""
+        self.catalog_schema = catalog_schema
+
+    def _relation(self, table: str) -> sql.Identifier:
+        return sql.Identifier(self.catalog_schema, table)
+
+    def _columns(self, connection: Any, table: str, where: str, *args: Any) -> list[str]:
+        """Column names of ``catalog.<table>`` matching an extra predicate."""
+        query = f"""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s AND {where}
+            ORDER BY ordinal_position
+        """
+        with _probe(connection):
+            rows = connection.execute(query, (self.catalog_schema, table, *args)).fetchall()
+        return [row[0] for row in rows]
+
+    def _count(self, connection: Any, table: str, predicate: sql.Composable) -> int:
+        """How many rows of ``catalog.<table>`` satisfy *predicate*."""
+        query = sql.SQL("SELECT COUNT(*) FROM {} WHERE {}").format(self._relation(table), predicate)
+        with _probe(connection):
+            row = connection.execute(query).fetchone()
+        return int(row[0]) if row else 0
+
     def detect_null_fks(
         self,
         connection: Any,
@@ -139,7 +187,9 @@ class Level5ExecutionValidator:
     ) -> list[PrepSeedViolation]:
         """Detect NULL foreign keys after resolution.
 
-        Checks all fk_* columns for NULL values that should be non-NULL.
+        A resolution function that missed its join leaves an ``fk_`` column
+        NULL rather than failing, which is the whole reason this level exists.
+        The count is of rows, from the table itself.
 
         Args:
             connection: Database connection
@@ -152,44 +202,35 @@ class Level5ExecutionValidator:
 
         for table in tables:
             try:
-                # Query for NULL FKs in fk_* columns
-                query = f"""
-                    SELECT table_name, column_name, COUNT(*) as null_count
-                    FROM (
-                        SELECT '{table}' as table_name, column_name
-                        FROM information_schema.columns
-                        WHERE table_name = '{table}'
-                        AND column_name LIKE 'fk_%'
-                    ) fk_cols
-                    GROUP BY table_name, column_name;
-                """
-
-                result = connection.execute(query)
-                null_fk_data = result.fetchall()
-
-                # Process results
-                for table_name, col_name, null_count in null_fk_data:
-                    if null_count and null_count > 0:
+                # The pattern is a parameter, not inlined: psycopg reads a literal
+                # `%` in a query that also carries placeholders as a placeholder.
+                columns = self._columns(connection, table, "column_name LIKE %s", r"fk\_%")
+                for column in columns:
+                    null_count = self._count(
+                        connection,
+                        table,
+                        sql.SQL("{} IS NULL").format(sql.Identifier(column)),
+                    )
+                    if null_count > 0:
                         violations.append(
                             PrepSeedViolation(
                                 pattern=PrepSeedPattern.NULL_FK_AFTER_RESOLUTION,
                                 severity=ViolationSeverity.CRITICAL,
                                 message=(
                                     f"Found {null_count} NULL values in "
-                                    f"catalog.{table_name}.{col_name} "
+                                    f"{self.catalog_schema}.{table}.{column} "
                                     f"after resolution"
                                 ),
-                                file_path=f"db/schema/{table_name}.sql",
+                                file_path=f"db/schema/{table}.sql",
                                 line_number=1,
                                 impact=(
                                     "Data integrity compromised - foreign key constraint violated"
                                 ),
                             )
                         )
-
             except psycopg.Error:
-                # Ignore query errors (table might not exist)
-                pass
+                # The table may not exist; a missing table is level 4's finding.
+                continue
 
         return violations
 
@@ -212,15 +253,12 @@ class Level5ExecutionValidator:
         for table in tables:
             try:
                 # Check for duplicate identifiers
-                query = f"""
-                    SELECT id, COUNT(*) as cnt
-                    FROM catalog.{table}
-                    GROUP BY id
-                    HAVING COUNT(*) > 1;
-                """
+                query = sql.SQL(
+                    "SELECT id, COUNT(*) AS cnt FROM {} GROUP BY id HAVING COUNT(*) > 1"
+                ).format(self._relation(table))
 
-                result = connection.execute(query)
-                duplicates = result.fetchall()
+                with _probe(connection):
+                    duplicates = connection.execute(query).fetchall()
 
                 if duplicates:
                     for identifier, count in duplicates:
@@ -251,6 +289,10 @@ class Level5ExecutionValidator:
     ) -> list[PrepSeedViolation]:
         """Detect NOT NULL constraint violations.
 
+        PostgreSQL enforces an ordinary NOT NULL, so this reports only where a
+        row outlived the constraint — a ``NOT VALID`` NOT NULL (PostgreSQL 18)
+        or a constraint added to data that already broke it.
+
         Args:
             connection: Database connection
             tables: List of final table names
@@ -262,41 +304,29 @@ class Level5ExecutionValidator:
 
         for table in tables:
             try:
-                # Query for NULL values in NOT NULL columns
-                query = f"""
-                    SELECT table_name, column_name, COUNT(*) as null_count
-                    FROM (
-                        SELECT '{table}' as table_name, column_name
-                        FROM information_schema.columns
-                        WHERE table_name = '{table}'
-                        AND is_nullable = 'NO'
-                    ) not_null_cols
-                    GROUP BY table_name, column_name;
-                """
-
-                result = connection.execute(query)
-                not_null_data = result.fetchall()
-
-                # Process results
-                for table_name, col_name, null_count in not_null_data:
-                    if null_count and null_count > 0:
+                columns = self._columns(connection, table, "is_nullable = 'NO'")
+                for column in columns:
+                    null_count = self._count(
+                        connection,
+                        table,
+                        sql.SQL("{} IS NULL").format(sql.Identifier(column)),
+                    )
+                    if null_count > 0:
                         violations.append(
                             PrepSeedViolation(
                                 pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                                 severity=ViolationSeverity.CRITICAL,
                                 message=(
-                                    f"NOT NULL constraint violation in {table_name}.{col_name}: "
+                                    f"NOT NULL constraint violation in {table}.{column}: "
                                     f"found {null_count} NULL values"
                                 ),
-                                file_path=f"db/schema/{table_name}.sql",
+                                file_path=f"db/schema/{table}.sql",
                                 line_number=1,
                                 impact="Data integrity compromised - NOT NULL constraint violated",
                             )
                         )
-
             except psycopg.Error:
-                # Ignore query errors (table might not exist)
-                pass
+                continue
 
         return violations
 
@@ -307,6 +337,11 @@ class Level5ExecutionValidator:
     ) -> list[PrepSeedViolation]:
         """Detect CHECK constraint violations.
 
+        A row violates a CHECK when the expression evaluates to FALSE; NULL is
+        unknown and passes, which is why the test is ``IS FALSE`` and not
+        ``NOT (...)``. As with NOT NULL, an enforced constraint cannot be broken
+        — what this finds is a ``NOT VALID`` one.
+
         Args:
             connection: Database connection
             tables: List of final table names
@@ -318,41 +353,41 @@ class Level5ExecutionValidator:
 
         for table in tables:
             try:
-                # Query for CHECK constraint violations
-                query = f"""
-                    SELECT table_name, constraint_name, COUNT(*) as violation_count
-                    FROM (
-                        SELECT '{table}' as table_name, constraint_name
-                        FROM information_schema.table_constraints
-                        WHERE table_name = '{table}'
-                        AND constraint_type = 'CHECK'
-                    ) check_constraints
-                    GROUP BY table_name, constraint_name;
-                """
+                with _probe(connection):
+                    constraints = connection.execute(
+                        """
+                        SELECT c.conname, pg_get_expr(c.conbin, c.conrelid)
+                        FROM pg_constraint c
+                        JOIN pg_class t ON t.oid = c.conrelid
+                        JOIN pg_namespace n ON n.oid = t.relnamespace
+                        WHERE c.contype = 'c' AND n.nspname = %s AND t.relname = %s
+                        ORDER BY c.conname
+                        """,
+                        (self.catalog_schema, table),
+                    ).fetchall()
 
-                result = connection.execute(query)
-                check_data = result.fetchall()
-
-                # Process results
-                for table_name, constraint_name, violation_count in check_data:
-                    if violation_count and violation_count > 0:
+                for name, expression in constraints:
+                    if not expression:
+                        continue
+                    violation_count = self._count(
+                        connection, table, sql.SQL("({}) IS FALSE").format(sql.SQL(expression))
+                    )
+                    if violation_count > 0:
                         violations.append(
                             PrepSeedViolation(
                                 pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                                 severity=ViolationSeverity.ERROR,
                                 message=(
-                                    f"CHECK constraint violation in {table_name}.{constraint_name}: "
+                                    f"CHECK constraint violation in {table}.{name}: "
                                     f"found {violation_count} violations"
                                 ),
-                                file_path=f"db/schema/{table_name}.sql",
+                                file_path=f"db/schema/{table}.sql",
                                 line_number=1,
                                 impact="Data integrity compromised - CHECK constraint violated",
                             )
                         )
-
             except psycopg.Error:
-                # Ignore query errors (table might not exist)
-                pass
+                continue
 
         return violations
 
@@ -361,9 +396,13 @@ class Level5ExecutionValidator:
         connection: Any,
         tables: list[str],
     ) -> list[PrepSeedViolation]:
-        """Detect foreign key constraint violations.
+        """Detect foreign keys pointing at rows that do not exist.
 
-        Checks that all foreign key values reference existing rows in the target tables.
+        The previous query named ``information_schema.referential_constraints.
+        column_name``, which is not a column of that view, so it raised on every
+        call and the error was swallowed: this detector had never reported
+        anything. Referencing columns come from ``pg_constraint`` instead, and
+        the orphans are counted with a ``NOT EXISTS`` against the parent.
 
         Args:
             connection: Database connection
@@ -376,42 +415,78 @@ class Level5ExecutionValidator:
 
         for table in tables:
             try:
-                # Query for FK constraint violations (orphaned references)
-                query = f"""
-                    SELECT table_name, column_name, referenced_table_name, COUNT(*) as violation_count
-                    FROM (
-                        SELECT '{table}' as table_name, column_name,
-                               referenced_table_name
-                        FROM information_schema.referential_constraints
-                        WHERE table_name = '{table}'
-                    ) fk_constraints
-                    GROUP BY table_name, column_name, referenced_table_name;
-                """
+                with _probe(connection):
+                    constraints = connection.execute(
+                        """
+                        SELECT c.conname,
+                               parent_ns.nspname,
+                               parent.relname,
+                               (SELECT array_agg(a.attname ORDER BY k.ord)
+                                FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
+                                JOIN pg_attribute a
+                                  ON a.attrelid = c.conrelid AND a.attnum = k.attnum),
+                               (SELECT array_agg(a.attname ORDER BY k.ord)
+                                FROM unnest(c.confkey) WITH ORDINALITY AS k(attnum, ord)
+                                JOIN pg_attribute a
+                                  ON a.attrelid = c.confrelid AND a.attnum = k.attnum)
+                        FROM pg_constraint c
+                        JOIN pg_class child ON child.oid = c.conrelid
+                        JOIN pg_namespace child_ns ON child_ns.oid = child.relnamespace
+                        JOIN pg_class parent ON parent.oid = c.confrelid
+                        JOIN pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
+                        WHERE c.contype = 'f'
+                          AND child_ns.nspname = %s AND child.relname = %s
+                        ORDER BY c.conname
+                        """,
+                        (self.catalog_schema, table),
+                    ).fetchall()
 
-                result = connection.execute(query)
-                fk_data = result.fetchall()
-
-                # Process results
-                for table_name, fk_col, ref_table, violation_count in fk_data:
-                    if violation_count and violation_count > 0:
+                for _name, parent_schema, parent_table, child_cols, parent_cols in constraints:
+                    if not child_cols or not parent_cols:
+                        continue
+                    joins = sql.SQL(" AND ").join(
+                        sql.SQL("parent.{} = child.{}").format(
+                            sql.Identifier(parent_col), sql.Identifier(child_col)
+                        )
+                        for child_col, parent_col in zip(child_cols, parent_cols, strict=True)
+                    )
+                    set_cols = sql.SQL(" AND ").join(
+                        sql.SQL("child.{} IS NOT NULL").format(sql.Identifier(col))
+                        for col in child_cols
+                    )
+                    query = sql.SQL(
+                        "SELECT COUNT(*) FROM {child} AS child "
+                        "WHERE {set_cols} AND NOT EXISTS ("
+                        "SELECT 1 FROM {parent} AS parent WHERE {joins})"
+                    ).format(
+                        child=self._relation(table),
+                        parent=sql.Identifier(parent_schema, parent_table),
+                        set_cols=set_cols,
+                        joins=joins,
+                    )
+                    with _probe(connection):
+                        row = connection.execute(query).fetchone()
+                    orphans = int(row[0]) if row else 0
+                    if orphans > 0:
                         violations.append(
                             PrepSeedViolation(
                                 pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                                 severity=ViolationSeverity.ERROR,
                                 message=(
-                                    f"Foreign key constraint violation in {table_name}.{fk_col} "
-                                    f"referencing {ref_table}: "
-                                    f"found {violation_count} orphaned references"
+                                    f"Foreign key constraint violation in "
+                                    f"{table}.{', '.join(child_cols)} "
+                                    f"referencing {parent_table}: "
+                                    f"found {orphans} orphaned references"
                                 ),
-                                file_path=f"db/schema/{table_name}.sql",
+                                file_path=f"db/schema/{table}.sql",
                                 line_number=1,
-                                impact="Data integrity compromised - foreign key constraint violated",
+                                impact=(
+                                    "Data integrity compromised - foreign key constraint violated"
+                                ),
                             )
                         )
-
             except psycopg.Error:
-                # Ignore query errors (table might not exist)
-                pass
+                continue
 
         return violations
 

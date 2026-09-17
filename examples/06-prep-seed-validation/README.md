@@ -107,8 +107,18 @@ sleep 3
 # Create database
 createdb -h localhost -U postgres test_db
 
+# Apply the schema (this does not load the seeds — level 5 loads them itself)
+./setup_database.sh
+
 # Run full validation
 DATABASE_URL="postgresql://postgres:password@localhost/test_db" python validate_full.py
+```
+
+Or run the whole example — both levels, plus the resolution it describes —
+against a scratch database:
+
+```bash
+CONFITURE_EXAMPLE_DB_URL="postgresql://localhost/postgres" ./run.sh
 ```
 
 This additionally checks:
