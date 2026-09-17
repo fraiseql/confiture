@@ -14,6 +14,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`confiture coordinate start`, `complete` and `merge`** (#286): the three status
+  transitions `list-intents --status-filter` could filter for and nothing could produce.
+  Of the six documented statuses, `registered` was set when an intent was created and
+  `conflicted` by the registry during `check`, leaving `abandon` as the only transition a
+  user could run — and it records the *opposite* outcome and demands a `--reason` for it.
+  The issue named `completed` and `merged`; `in_progress` was the same gap and was not
+  reported, so an agent could say neither that it had started nor that it had finished.
+
+  `IntentRegistry` has had `mark_in_progress`, `mark_completed`, `mark_merged` and
+  `mark_abandoned` since it was written: `mark_completed` and `mark_merged` had no caller
+  at all, and `mark_in_progress` had one in a docstring. What was missing was three
+  commands, which is also what answers the design question the issue raised — `merged` is
+  a separate transition from `completed` because the registry has always had both, and
+  work can be finished for days before it lands.
+
+  `--notes` is optional on all three and reaches the registry as the change reason.
+  `abandon` keeps its required `--reason`: a cancellation that does not say why is not
+  worth recording, and that asymmetry is exactly why substituting it for `complete` was
+  the repair the docs campaign refused to make.
+
+  `docs/getting-started.md` and `docs/guides/integrations.md` named the gap rather than
+  papering over it (see the same release's docs campaign); both now show the real
+  commands, and the GitHub Actions example records the merge it has just performed
+  instead of printing a status.
+
 ### Fixed
 
 - **An unknown anonymization strategy name silently redacted the column instead of

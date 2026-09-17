@@ -516,6 +516,136 @@ def resolve(
     conn.close()
 
 
+def _transition(
+    intent_id: str,
+    database_url: str | None,
+    format_output: str,
+    *,
+    mark: str,
+    reason: str,
+    status: IntentStatus,
+    headline: str,
+) -> None:
+    """Record one status transition for an intent, and say what it did.
+
+    Shared by ``start``, ``complete`` and ``merge``. ``abandon`` keeps its own
+    body: it is the one transition that *requires* a reason, because recording a
+    cancellation without saying why is what made it useless as a stand-in for
+    the others (#286).
+    """
+    conn = _get_connection(database_url)
+    registry = IntentRegistry(conn)
+
+    intent = registry.get_intent(intent_id)
+    if not intent:
+        raise ConfiturError(
+            f"Intention not found: {intent_id}",
+            context={"intent_id": intent_id},
+        )
+
+    getattr(registry, mark)(intent_id, reason=reason)
+
+    if format_output == "json":
+        _output_json(
+            {
+                "intent_id": intent_id,
+                "feature_name": intent.feature_name,
+                "status": status.value,
+                "reason": reason,
+            }
+        )
+    else:
+        console.print(f"[green]✓ {headline}[/green]")
+        console.print(f"  Feature: {intent.feature_name}")
+        console.print(f"  Status: {status.value}")
+
+    conn.close()
+
+
+@coordinate_app.command()
+@cli_boundary
+def start(
+    intent_id: str = typer.Option(..., help="Intention ID"),
+    notes: str = typer.Option("Agent started work", help="Why the status changed"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
+    format_output: str = format_option("text", "json"),
+) -> None:
+    """Record that work on an intention has begun.
+
+    Example:
+        confiture coordinate start \\
+            --intent-id 550e8400-e29b-41d4-a716-446655440000
+    """
+    _transition(
+        intent_id,
+        database_url,
+        format_output,
+        mark="mark_in_progress",
+        reason=notes,
+        status=IntentStatus.IN_PROGRESS,
+        headline="Intention in progress",
+    )
+
+
+@coordinate_app.command()
+@cli_boundary
+def complete(
+    intent_id: str = typer.Option(..., help="Intention ID"),
+    notes: str = typer.Option("Changes completed", help="Why the status changed"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
+    format_output: str = format_option("text", "json"),
+) -> None:
+    """Record that an intention's changes are finished.
+
+    The success counterpart to ``abandon``. Unlike it, ``--notes`` is optional:
+    a finished feature does not owe an explanation the way a cancelled one does.
+
+    Example:
+        confiture coordinate complete \\
+            --intent-id 550e8400-e29b-41d4-a716-446655440000 \\
+            --notes "Migration 004 applied and verified"
+    """
+    _transition(
+        intent_id,
+        database_url,
+        format_output,
+        mark="mark_completed",
+        reason=notes,
+        status=IntentStatus.COMPLETED,
+        headline="Intention completed",
+    )
+
+
+@coordinate_app.command()
+@cli_boundary
+def merge(
+    intent_id: str = typer.Option(..., help="Intention ID"),
+    notes: str = typer.Option("Changes merged to main", help="Why the status changed"),
+    database_url: str | None = typer.Option(None, help="Database URL"),
+    format_output: str = format_option("text", "json"),
+) -> None:
+    """Record that an intention's changes have reached the main line.
+
+    This *records* a merge; it does not perform one. ``merged`` is a separate
+    status from ``completed`` because the registry has always had both — an
+    agent's work can be finished for days before it lands.
+
+    Example:
+        confiture coordinate merge \\
+            --intent-id 550e8400-e29b-41d4-a716-446655440000 \\
+            --notes "Merged in PR #214"
+    """
+    _transition(
+        intent_id,
+        database_url,
+        format_output,
+        mark="mark_merged",
+        reason=notes,
+        status=IntentStatus.MERGED,
+        headline="Intention merged",
+    )
+
+
 @coordinate_app.command()
 @cli_boundary
 def abandon(
