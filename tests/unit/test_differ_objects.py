@@ -252,3 +252,89 @@ class TestTypesAndDomains:
         assert types_of(
             "CREATE TYPE e_status AS ENUM ('a');", "CREATE TYPE e_status AS ENUM ('a', 'b');"
         ) == ["CHANGE_ENUM_VALUES"]
+
+
+class TestTheKindsNothingElseModelled:
+    """Triggers, policies, extensions, schemas — each one a migrate-only
+    environment never receives if the tree gains it and no migration carries it."""
+
+    TRIGGER = (
+        "CREATE TRIGGER trg_touch BEFORE UPDATE ON tb_user "
+        "FOR EACH ROW EXECUTE FUNCTION fn_touch();"
+    )
+
+    def test_added_trigger_is_reported(self):
+        assert "ADD_TRIGGER" in types_of("", self.TRIGGER)
+
+    def test_dropped_trigger_is_reported(self):
+        assert "DROP_TRIGGER" in types_of(self.TRIGGER, "")
+
+    def test_a_trigger_is_named_per_table(self):
+        """Two tables may each have a ``trg_touch``; they are two objects."""
+        other = (
+            "CREATE TABLE tb_other (pk BIGINT);\n"
+            "CREATE TRIGGER trg_touch BEFORE UPDATE ON tb_other "
+            "FOR EACH ROW EXECUTE FUNCTION fn_touch();"
+        )
+        types = types_of(self.TRIGGER, self.TRIGGER + "\n" + other)
+        assert types.count("ADD_TRIGGER") == 1
+        assert "DROP_TRIGGER" not in types
+
+    def test_a_retargeted_trigger_is_a_drop_and_an_add_not_a_replace(self):
+        moved = self.TRIGGER.replace("ON tb_user", "ON tb_other")
+        types = sorted(
+            types_of(
+                "CREATE TABLE tb_other (pk BIGINT);\n" + self.TRIGGER,
+                "CREATE TABLE tb_other (pk BIGINT);\n" + moved,
+            )
+        )
+        assert types == ["ADD_TRIGGER", "DROP_TRIGGER"]
+
+    def test_added_policy_is_reported(self):
+        assert "ADD_POLICY" in types_of("", "CREATE POLICY p_own ON tb_user USING (true);")
+
+    def test_redefined_policy_is_reported(self):
+        assert "REPLACE_POLICY" in types_of(
+            "CREATE POLICY p_own ON tb_user USING (true);",
+            "CREATE POLICY p_own ON tb_user USING (pk_user > 0);",
+        )
+
+    def test_added_extension_is_reported(self):
+        """A migrate-only environment without the extension fails at first use."""
+        assert "ADD_EXTENSION" in types_of("", "CREATE EXTENSION pgcrypto;")
+
+    def test_if_not_exists_does_not_make_an_extension_a_different_object(self):
+        assert (
+            types_of("CREATE EXTENSION pgcrypto;", "CREATE EXTENSION IF NOT EXISTS pgcrypto;") == []
+        )
+
+    def test_added_schema_is_reported(self):
+        assert "ADD_SCHEMA" in types_of("", "CREATE SCHEMA app;")
+
+    def test_added_rule_is_reported(self):
+        assert "ADD_RULE" in types_of(
+            "", "CREATE RULE r_noop AS ON DELETE TO tb_user DO INSTEAD NOTHING;"
+        )
+
+    def test_added_event_trigger_is_reported(self):
+        assert "ADD_EVENT_TRIGGER" in types_of(
+            "", "CREATE EVENT TRIGGER et ON ddl_command_start EXECUTE FUNCTION fn_t();"
+        )
+
+    def test_added_range_type_is_reported(self):
+        assert "ADD_TYPE" in types_of("", "CREATE TYPE tr_span AS RANGE (subtype = INT);")
+
+    def test_added_statistics_is_reported(self):
+        assert "ADD_STATISTICS" in types_of(
+            "", "CREATE STATISTICS st ON pk_user, name FROM tb_user;"
+        )
+
+    def test_added_foreign_table_is_reported(self):
+        assert "ADD_FOREIGN_TABLE" in types_of("", "CREATE FOREIGN TABLE ft (a INT) SERVER srv;")
+
+    def test_added_server_is_reported(self):
+        assert "ADD_SERVER" in types_of("", "CREATE SERVER srv FOREIGN DATA WRAPPER fdw;")
+
+    def test_a_declined_statement_is_still_not_reported(self):
+        """A role is cluster-scoped; `build` does not create one either."""
+        assert types_of("", "CREATE ROLE app_reader;") == []

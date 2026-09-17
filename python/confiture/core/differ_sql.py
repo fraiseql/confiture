@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from confiture.core.ddl_objects import TABLE_SCOPED_KINDS
 from confiture.exceptions import UnsafeOperationError
 from confiture.models.schema import SchemaChange
 
@@ -29,19 +30,67 @@ class DifferSQLGenerator:
 
     def generate_up(self, change: SchemaChange) -> str:
         """Generate the forward DDL SQL for a schema change."""
-        method_name = f"_up_{change.type.lower()}"
-        method = getattr(self, method_name, None)
-        if method is None:
-            raise NotImplementedError(f"No DDL generator for change type: {change.type}")
-        return method(change)
+        method = getattr(self, f"_up_{change.type.lower()}", None)
+        if method is not None:
+            return method(change)
+        generic = self._generic_object_sql(change, forward=True)
+        if generic is not None:
+            return generic
+        raise NotImplementedError(f"No DDL generator for change type: {change.type}")
 
     def generate_down(self, change: SchemaChange) -> str:
         """Generate the rollback DDL SQL for a schema change."""
-        method_name = f"_down_{change.type.lower()}"
-        method = getattr(self, method_name, None)
-        if method is None:
-            return f"-- WARNING: No automatic rollback for {change.type}\n"
-        return method(change)
+        method = getattr(self, f"_down_{change.type.lower()}", None)
+        if method is not None:
+            return method(change)
+        generic = self._generic_object_sql(change, forward=False)
+        if generic is not None:
+            return generic
+        return f"-- WARNING: No automatic rollback for {change.type}\n"
+
+    # ------------------------------------------------------------------
+    # The object kinds #288 tracks that have no bespoke generator
+    # ------------------------------------------------------------------
+
+    def _generic_object_sql(self, change: SchemaChange, *, forward: bool) -> str | None:
+        """Create-or-drop DDL for a tracked object, from what the change carries.
+
+        ``None`` when the change is not one of #288's objects, or when its kind
+        is in :data:`REPLACE_IS_AUTHORS_WORK` — every ``REPLACE`` whose one
+        right statement PostgreSQL does not have. Those reach the migration as
+        the generator's own ``-- WARNING: no SQL derived``, which is the
+        existing way of saying "this changed, you write it".
+        """
+        details = change.details or {}
+        kind = details.get("kind")
+        keyword = details.get("keyword")
+        if not kind or not keyword:
+            return None
+        verb, _, _ = change.type.partition("_")
+        if verb == "REPLACE":
+            # Every kind reaching here is in REPLACE_IS_AUTHORS_WORK; the ones
+            # with one right statement have a bespoke `_up_replace_*` above.
+            return None
+        dropping = (verb == "DROP") == forward
+        if dropping:
+            if verb == "DROP" and forward and not self._force:
+                raise UnsafeOperationError(
+                    f"DROP {keyword} {change.table!r} is destructive. "
+                    "Re-run with --force to generate this DDL."
+                )
+            return self._drop_object(kind, keyword, change)
+        source = change.old_value if verb == "DROP" else change.new_value
+        return self._statement(source, f"{change.type} {change.table}")
+
+    @staticmethod
+    def _drop_object(kind: str, keyword: str, change: SchemaChange) -> str:
+        """``DROP <keyword> IF EXISTS <name>``, with the table a trigger hangs off."""
+        name = (change.details or {}).get("name") or change.table or ""
+        if kind in TABLE_SCOPED_KINDS:
+            qualified, _, local = name.rpartition(".")
+            if qualified:
+                return f"DROP {keyword} IF EXISTS {local} ON {qualified};\n"
+        return f"DROP {keyword} IF EXISTS {name};\n"
 
     def _up_add_table(self, change: SchemaChange) -> str:
         details = change.details or {}

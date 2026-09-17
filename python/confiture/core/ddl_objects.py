@@ -32,10 +32,12 @@ from pglast.stream import RawStream
 
 from confiture.core.linting.inventory import (
     DEFAULT_SCHEMA,
+    KIND_KEYWORD,
     Signature,
     object_from_statement,
     signature_bucket,
     signatures_match,
+    split_names,
 )
 
 #: Which parse nodes this module turns into objects, and why each one that
@@ -51,8 +53,55 @@ TRACKED_NODES: frozenset[str] = frozenset(
         "DefineStmt",  # only when it spells CREATE AGGREGATE
         "CreateDomainStmt",
         "CompositeTypeStmt",
+        # The kinds the lint inventory does not model, read by _EXTRA below.
+        "CreateTrigStmt",
+        "CreatePolicyStmt",
+        "RuleStmt",
+        "CreateExtensionStmt",
+        "CreateSchemaStmt",
+        "CreateEventTrigStmt",
+        "CreateRangeStmt",
+        "CreateStatsStmt",
+        "CreateForeignTableStmt",
+        "CreateFdwStmt",
+        "CreateForeignServerStmt",
+        "CreatePublicationStmt",
+        "CreateConversionStmt",
+        "CreateOpClassStmt",
+        "CreateOpFamilyStmt",
+        "CreateAmStmt",
     }
 )
+
+#: Statements that create something the accompaniment gate does not ask about,
+#: with the reason. The reason is the point: a hole the gate has on purpose is a
+#: decision someone made, and a node in neither this table nor a tracked one
+#: fails ``tests/unit/test_ddl_objects_are_exhaustive.py``.
+NOT_A_SCHEMA_OBJECT: dict[str, str] = {
+    "CreateRoleStmt": (
+        "a role is cluster-scoped: `confiture build` never creates one either, "
+        "so a migrate-only environment is no worse off than a rebuilt one"
+    ),
+    "CreatedbStmt": "a database is cluster-scoped, and is what confiture builds *into*",
+    "CreateTableSpaceStmt": "a tablespace is cluster-scoped and filesystem-bound",
+    "CreateSubscriptionStmt": (
+        "logical replication is cluster configuration, not schema; it carries a "
+        "connection string that has no business in a schema tree"
+    ),
+    "CreateCastStmt": (
+        "a cast's identity is a pair of types with no name of its own, so it has "
+        "nothing to key on; it is also vanishingly rare outside an extension, "
+        "which arrives as CREATE EXTENSION and is tracked"
+    ),
+    "CreateTransformStmt": "identity is a (type, language) pair with no name of its own",
+    "CreateUserMappingStmt": (
+        "identity is a (role, server) pair, and the role half is cluster-scoped"
+    ),
+    "CreatePLangStmt": (
+        "PostgreSQL parses CREATE LANGUAGE as CreateExtensionStmt, which is "
+        "tracked; this node is unreachable from a parse"
+    ),
+}
 
 #: The kinds whose ``REPLACE`` is a *body* edit. ``--require-migration-bodies``
 #: (#178) already reports these and is off by default, so the accompaniment gate
@@ -72,6 +121,107 @@ MODELLED_ELSEWHERE: dict[str, str] = {
     ),
     "CreateSeqStmt": "ParsedSchema.sequences",
     "IndexStmt": "Table.indexes",
+}
+
+
+@dataclass(frozen=True)
+class _Extra:
+    """How to read the identity of a node the lint inventory does not model.
+
+    ``name_attr`` is where the object's own name lives — a plain string on most
+    nodes, a ``(String, …)`` list on the ones that can be schema-qualified.
+    ``parent_attr`` names a ``RangeVar`` the object hangs off: a trigger, a
+    policy and a rule are named *per table*, so two tables may each have a
+    ``trg_audit`` and they are two objects.
+    """
+
+    kind: str
+    name_attr: str
+    parent_attr: str | None = None
+
+
+#: One row per tracked node the lint inventory has no builder for. The kinds it
+#: *does* model are read through :func:`object_from_statement` instead, so there
+#: is one answer to "what does this statement define" and not two.
+_EXTRA: dict[str, _Extra] = {
+    "CreateTrigStmt": _Extra("trigger", "trigname", "relation"),
+    "CreatePolicyStmt": _Extra("policy", "policy_name", "table"),
+    "RuleStmt": _Extra("rule", "rulename", "relation"),
+    "CreateExtensionStmt": _Extra("extension", "extname"),
+    "CreateSchemaStmt": _Extra("schema", "schemaname"),
+    "CreateEventTrigStmt": _Extra("event_trigger", "trigname"),
+    "CreateRangeStmt": _Extra("type", "typeName"),
+    "CreateStatsStmt": _Extra("statistics", "defnames"),
+    "CreateForeignTableStmt": _Extra("foreign_table", "base"),
+    "CreateFdwStmt": _Extra("foreign_data_wrapper", "fdwname"),
+    "CreateForeignServerStmt": _Extra("server", "servername"),
+    "CreatePublicationStmt": _Extra("publication", "pubname"),
+    "CreateConversionStmt": _Extra("conversion", "conversion_name"),
+    "CreateOpClassStmt": _Extra("operator_class", "opclassname"),
+    "CreateOpFamilyStmt": _Extra("operator_family", "opfamilyname"),
+    "CreateAmStmt": _Extra("access_method", "amname"),
+}
+
+#: The SQL keyword each kind is dropped with. Composed from the inventory's own
+#: table rather than restated beside it, so the two cannot disagree about what a
+#: ``matview`` is called.
+OBJECT_KEYWORD: dict[str, str] = {
+    **KIND_KEYWORD,
+    "trigger": "TRIGGER",
+    "policy": "POLICY",
+    "rule": "RULE",
+    "extension": "EXTENSION",
+    "schema": "SCHEMA",
+    "event_trigger": "EVENT TRIGGER",
+    "statistics": "STATISTICS",
+    "foreign_table": "FOREIGN TABLE",
+    "foreign_data_wrapper": "FOREIGN DATA WRAPPER",
+    "server": "SERVER",
+    "publication": "PUBLICATION",
+    "conversion": "CONVERSION",
+    "operator_class": "OPERATOR CLASS",
+    "operator_family": "OPERATOR FAMILY",
+    "access_method": "ACCESS METHOD",
+}
+
+#: Kinds whose object is named *inside* a table: ``DROP TRIGGER trg ON t``, not
+#: ``DROP TRIGGER t.trg``. The reference spells the identity with a dot because
+#: that is what makes two same-named triggers on two tables two objects; the
+#: DDL has to spell it back out.
+TABLE_SCOPED_KINDS: frozenset[str] = frozenset({"trigger", "policy", "rule"})
+
+#: Kinds whose redefinition has no one statement that is plainly right, with the
+#: reason. ``migrate diff --generate`` writes ``-- WARNING: no SQL derived`` for
+#: these — the change is still *reported*, which is what the gate needs; what is
+#: left to the author is the DDL. An entry that stops matching a kind the differ
+#: emits fails ``tests/unit/test_differ_sql_objects.py``.
+REPLACE_IS_AUTHORS_WORK: dict[str, str] = {
+    "domain": "a domain's constraints are altered one at a time; dropping it takes "
+    "every column that uses it",
+    "type": "a composite type's attributes are altered one at a time",
+    "trigger": "CREATE OR REPLACE TRIGGER needs PostgreSQL 14, and dropping one "
+    "silently changes what fires during the migration itself",
+    "policy": "ALTER POLICY changes a clause at a time, and a dropped policy "
+    "leaves rows unprotected for the length of the transaction",
+    "rule": "a rewrite rule redefined by drop and create changes what the table "
+    "does to concurrent writers mid-migration",
+    "extension": "ALTER EXTENSION UPDATE TO a version is the operation; dropping "
+    "one takes every object it owns",
+    "statistics": "statistics are dropped and recreated, but the estimate they "
+    "carry is lost and only ANALYZE brings it back",
+    "foreign_table": "a foreign table's columns are altered one at a time, as a table's are",
+    "server": "ALTER SERVER changes options in place; dropping one takes its "
+    "foreign tables and user mappings",
+    "foreign_data_wrapper": "ALTER FOREIGN DATA WRAPPER changes handlers in place",
+    "publication": "ALTER PUBLICATION changes its table set; dropping one breaks every subscriber",
+    "operator_class": "an operator class is altered by ALTER OPERATOR FAMILY",
+    "operator_family": "ALTER OPERATOR FAMILY adds and drops members",
+    "access_method": "PostgreSQL has no ALTER ACCESS METHOD beyond rename and owner",
+    "conversion": "ALTER CONVERSION only renames; a redefinition is a drop and a "
+    "create, and a dropped conversion changes how bytes decode meanwhile",
+    "event_trigger": "a dropped event trigger stops firing during the migration "
+    "that replaces it, which is when it matters most",
+    "schema": "a schema is not redefined; what changed is something in it",
 }
 
 #: The statement-level attributes that say what happens when the object already
@@ -183,16 +333,48 @@ def _creating_statement(stmt: Any) -> str:
     return _rendered_with(stmt, wanted)
 
 
-def object_of(sql: str, raw: Any) -> DDLObject | None:
-    """The object this statement defines, or ``None`` when it defines none here.
+def _named(value: Any) -> tuple[str | None, str] | None:
+    """``(schema, name)`` from a node attribute that holds an identifier.
 
-    ``None`` covers three cases that are not failures: a node this module does
-    not track, a node it tracks that this statement does not use to create an
-    object (``CREATE TABLE … AS`` shares :class:`CreateTableAsStmt` with
-    ``CREATE MATERIALIZED VIEW``), and a statement the inventory declines.
+    A plain string is the unqualified case; a ``(String, …)`` list is the
+    qualified one and is read by the inventory's own ``split_names``, so a
+    dotted name is split the same way everywhere.
     """
-    if type(raw.stmt).__name__ not in TRACKED_NODES:
+    if value is None:
         return None
+    if isinstance(value, str):
+        return None, value
+    if type(value).__name__ == "CreateStmt":  # CREATE FOREIGN TABLE embeds one
+        return value.relation.schemaname, value.relation.relname
+    try:
+        return split_names(value)
+    except (AttributeError, IndexError, TypeError):
+        return None
+
+
+def _extra_ref(stmt: Any, spec: _Extra) -> ObjectRef | None:
+    """The reference for a node the lint inventory does not model."""
+    named = _named(getattr(stmt, spec.name_attr, None))
+    if named is None:
+        return None
+    schema, name = named
+    parent = getattr(stmt, spec.parent_attr, None) if spec.parent_attr else None
+    if spec.parent_attr is not None and parent is None:
+        return None
+    if parent is not None:
+        schema = parent.schemaname or schema
+        name = f"{parent.relname}.{name}"
+    return ObjectRef(
+        kind=spec.kind,
+        schema=(schema or DEFAULT_SCHEMA).lower(),
+        name=name.lower(),
+        signature=None,
+        display=f"{schema}.{name}" if schema else name,
+    )
+
+
+def _inventory_ref(sql: str, raw: Any) -> tuple[ObjectRef, Signature | None] | None:
+    """The reference for a node the lint inventory models — its answer, not ours."""
     obj = object_from_statement(sql, raw)
     if obj is None:
         return None
@@ -203,11 +385,39 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
         signature=signature_bucket(obj.signature_key),
         display=obj.identity,
     )
+    return ref, obj.signature_key
+
+
+def object_of(sql: str, raw: Any) -> DDLObject | None:
+    """The object this statement defines, or ``None`` when it defines none here.
+
+    ``None`` covers three cases that are not failures: a node this module does
+    not track, a node it tracks that this statement does not use to create an
+    object (``CREATE TABLE … AS`` shares :class:`CreateTableAsStmt` with
+    ``CREATE MATERIALIZED VIEW``, and ``DefineStmt`` with ``CREATE OPERATOR``),
+    and a statement whose name is not where the grammar usually keeps it.
+    """
+    stmt = raw.stmt
+    node = type(stmt).__name__
+    if node not in TRACKED_NODES:
+        return None
+
+    spec = _EXTRA.get(node)
+    if spec is not None:
+        ref = _extra_ref(stmt, spec)
+        signature = None
+    else:
+        found = _inventory_ref(sql, raw)
+        if found is None:
+            return None
+        ref, signature = found
+    if ref is None:
+        return None
     return DDLObject(
         ref=ref,
-        definition=_canonical_definition(raw.stmt),
-        create_sql=_creating_statement(raw.stmt),
-        signature=obj.signature_key,
+        definition=_canonical_definition(stmt),
+        create_sql=_creating_statement(stmt),
+        signature=signature,
     )
 
 

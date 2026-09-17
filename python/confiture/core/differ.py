@@ -15,7 +15,7 @@ from pglast.enums.parsenodes import ConstrType
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.ddl_objects import objects_in, pair_definitions
+from confiture.core.ddl_objects import OBJECT_KEYWORD, objects_in, pair_definitions
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.models.schema import (
     CheckConstraint,
@@ -161,7 +161,11 @@ def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
 
 
 def _object_details(ref: Any) -> dict[str, Any]:
-    return {"kind": ref.kind, "name": ref.qualified}
+    return {
+        "kind": ref.kind,
+        "name": ref.qualified,
+        "keyword": OBJECT_KEYWORD.get(ref.kind, ref.kind.replace("_", " ").upper()),
+    }
 
 
 def _added_change(ref: Any, obj: Any) -> SchemaChange:
