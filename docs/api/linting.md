@@ -542,14 +542,15 @@ LINTING_CONFIG = {
 ### CLI Usage
 
 ```bash
-# Check schema against all rules
-confiture lint --database postgresql://localhost/mydb
+# Check the environment's schema files against every default rule
+confiture lint
 
-# Check specific rule
-confiture lint --rule require_primary_key --database postgresql://localhost/mydb
+# Check one family, or one rule
+confiture lint --select pk
+confiture lint --select pk_001
 
-# Fix warnings
-confiture lint --fix --database postgresql://localhost/mydb
+# The body family needs a server to build its scratch database on
+confiture lint --select body --server-url postgresql://localhost
 ```
 
 ### Programmatic Usage

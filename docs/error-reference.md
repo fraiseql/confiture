@@ -386,9 +386,9 @@ done
    confiture seed validate --fix
    ```
 
-4. **Test with dry-run**
+4. **Validate before applying**
    ```bash
-   confiture seed apply --dry-run
+   confiture seed validate --all
    ```
 
 **Examples**:

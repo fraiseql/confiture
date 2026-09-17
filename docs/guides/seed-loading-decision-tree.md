@@ -124,7 +124,7 @@ seed:
 ```bash
 confiture seed apply --sequential --copy-format --env local
 # or (recommended)
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://localhost/myapp
 ```
 
@@ -142,7 +142,7 @@ confiture build --sequential --copy-format \
 ### Example
 ```bash
 # Maximum speed for large datasets
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://localhost/myapp
 
 # Output:
@@ -282,7 +282,7 @@ confiture build --sequential --database-url postgresql://localhost/myapp
 #### **Web Application**
 ```bash
 # Typical web app has 10-50K rows
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://localhost/myapp
 
 # Files:
@@ -309,7 +309,7 @@ confiture build --sequential --database-url $DATABASE_URL
 #### **Testing Suite**
 ```bash
 # CI/CD needs fast, reliable setup
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --continue-on-error \
   --database-url postgresql://localhost/test_db
 
@@ -331,7 +331,7 @@ confiture build --sequential --database-url postgresql://localhost/myapp
 ### Step 2: Add COPY Format (when speed matters)
 ```bash
 # If builds are slow:
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://localhost/myapp
 ```
 
@@ -401,7 +401,7 @@ Reason: Detected NOW() function in VALUES clause
 → **Solution:** That file stays as INSERT (automatic), others convert
 ```bash
 # Just continue - graceful fallback is automatic
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://localhost/myapp
 ```
 

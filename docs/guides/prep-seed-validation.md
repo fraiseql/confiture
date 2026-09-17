@@ -217,7 +217,7 @@ report = orchestrator.run()
 confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test
 
 # Comprehensive mode (slower, checks all constraints)
-confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test --comprehensive
+confiture seed validate --prep-seed --full-execution --database-url postgresql://localhost/test
 ```
 
 **Python:**

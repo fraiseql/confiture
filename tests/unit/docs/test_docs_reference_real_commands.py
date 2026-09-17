@@ -16,8 +16,10 @@ record what shipped at a version — ``confiture verify`` was real until 0.51.0
 removed it — and editing them to satisfy a guard would falsify the record rather
 than fix a document. They are not instructions, so they are not checked.
 
-:data:`KNOWN_ROT` is the rot this guard was introduced on top of, grouped by
-cause, shrinking to nothing. A stale entry fails, so it cannot outlive its fix.
+The guard shipped with a `KNOWN_ROT` allow-list of all 127 sites, grouped by
+cause, and four phases emptied it. It is gone with the rot it described; what
+survives is the shape of the repair, in this module's git history and in the
+mutation pins at the bottom.
 """
 
 from __future__ import annotations
@@ -52,48 +54,6 @@ NOT_INSTRUCTIONS: dict[tuple[str, str], str] = {
     ),
 }
 
-# Every disagreement this guard found on the day it was written (2026-09-17),
-# grouped by what is actually wrong. Each group is one phase of the repair.
-KNOWN_ROT: dict[str, tuple[tuple[str, str], ...]] = {
-    "the command is real and the flag it is given is not": (
-        ("PRD.md", "confiture migrate generate --auto-detect"),
-        ("PRD.md", "confiture migrate generate --name"),
-        ("PRD.md", "confiture migrate schema-to-schema --strategy"),
-        ("PRD.md", "confiture migrate up --env"),
-        ("docs/api/linting.md", "confiture lint --database"),
-        ("docs/api/linting.md", "confiture lint --fix"),
-        ("docs/api/linting.md", "confiture lint --rule"),
-        ("docs/comparison-with-alembic.md", "confiture migrate generate --name"),
-        ("docs/error-reference.md", "confiture seed apply --dry-run"),
-        ("docs/guides/01-build-from-ddl.md", "confiture build --dry-run"),
-        ("docs/guides/02-incremental-migrations.md", "confiture migrate down --target"),
-        ("docs/guides/04-schema-to-schema.md", "confiture build --from-ddl"),
-        ("docs/guides/copy-format-examples.md", "confiture build --copy-format"),
-        ("docs/guides/copy-format-index.md", "confiture build --copy-format"),
-        ("docs/guides/copy-format-loading.md", "confiture build --copy-format"),
-        ("docs/guides/copy-format-loading.md", "confiture build --copy-threshold"),
-        ("docs/guides/git-aware-validation.md", "confiture migrate up --env"),
-        ("docs/guides/legacy-bootstrap.md", "confiture migrate generate --name"),
-        ("docs/guides/named-schemas.md", "confiture migrate generate --name"),
-        ("docs/guides/prep-seed-validation.md", "confiture seed validate --comprehensive"),
-        ("docs/guides/schema-linting.md", "confiture lint --rules"),
-        ("docs/guides/seed-loading-decision-tree.md", "confiture build --copy-format"),
-        ("docs/guides/seed-validation.md", "confiture seed validate --strict"),
-        ("docs/guides/superuser-migrations.md", "confiture migrate up --env"),
-        ("docs/index.md", "confiture migrate generate --name"),
-        ("docs/index.md", "confiture migrate schema-to-schema --source"),
-        ("docs/index.md", "confiture migrate schema-to-schema --target"),
-        ("docs/linting.md", "confiture lint --no-fail-on-error"),
-        ("docs/linting.md", "confiture migrate up --env"),
-        ("docs/organizing-sql-files.md", "confiture migrate generate --name"),
-        ("docs/troubleshooting.md", "confiture migrate up --statement-timeout"),
-    ),
-}
-
-
-def _allowed() -> set[tuple[str, str]]:
-    return {entry for group in KNOWN_ROT.values() for entry in group}
-
 
 def _doc_invocations():
     files = [path for path in tracked("docs/**") if "/release-notes/" not in str(path)]
@@ -111,34 +71,21 @@ def _found() -> set[tuple[str, str]]:
 
 
 def test_docs_invoke_only_commands_and_flags_that_exist() -> None:
-    """Nothing in the corpus disagrees with the CLI, beyond the rot listed above."""
-    known = _allowed() | set(NOT_INSTRUCTIONS)
+    """Nothing in the corpus disagrees with the CLI."""
     new = sorted(
         f"{f.path}: {f.detail}"
         for f in findings(_doc_invocations())
-        if (f.path, f.what) not in known
+        if (f.path, f.what) not in NOT_INSTRUCTIONS
     )
     assert new == [], "docs naming commands or flags that do not exist:\n" + "\n".join(new)
 
 
-def test_no_entry_outlives_its_fix() -> None:
-    """A repaired document must take its allow-list entry with it.
+def test_no_exemption_outlives_its_sentence() -> None:
+    """A deleted sentence must free its exemption.
 
     Without this the list becomes a second document to forget to update — the
     exact failure the guard exists to catch, one level up.
     """
-    found = _found()
-    stale = sorted(
-        f"{cause}: {path} — {what}"
-        for cause, group in KNOWN_ROT.items()
-        for path, what in group
-        if (path, what) not in found
-    )
-    assert stale == [], "allow-list entries that no longer match anything:\n" + "\n".join(stale)
-
-
-def test_no_exemption_outlives_its_sentence() -> None:
-    """Same for the permanent exemptions: a deleted sentence must free its entry."""
     found = _found()
     stale = sorted(
         f"{path} — {what} ({reason})"

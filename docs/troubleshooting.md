@@ -298,14 +298,16 @@ export DATABASE_URL="postgresql://user:pass@host/db?sslmode=require"
 
 **Solutions**:
 
-1. Increase timeout:
+1. Increase the timeout — `--lock-timeout` is applied as
+   `SET LOCAL statement_timeout`, so it bounds the statement, not just the
+   lock wait:
    ```bash
-   confiture migrate up --statement-timeout 600000
+   confiture migrate up --lock-timeout 600000
    ```
 
-2. Set per-migration timeout:
-   ```python
-   __timeout__ = 600  # seconds
+2. Per migration, set it in the migration's own SQL:
+   ```sql
+   SET LOCAL statement_timeout = '600s';
    ```
 
 ---
