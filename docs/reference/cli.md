@@ -3508,10 +3508,10 @@ confiture coordinate complete [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--intent-id` | - | text | - | Intention ID |
-| `--notes` | - | text | `Changes completed` | Why the status changed |
-| `--database-url` | - | text | - | Database URL |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--intent-id` | - | str | - | Intention ID |
+| `--notes` | - | str | `Changes completed` | Why the status changed |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate complete -->
 
@@ -3531,10 +3531,10 @@ confiture coordinate merge [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--intent-id` | - | text | - | Intention ID |
-| `--notes` | - | text | `Changes merged to main` | Why the status changed |
-| `--database-url` | - | text | - | Database URL |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--intent-id` | - | str | - | Intention ID |
+| `--notes` | - | str | `Changes merged to main` | Why the status changed |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate merge -->
 
@@ -3554,10 +3554,10 @@ confiture coordinate start [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--intent-id` | - | text | - | Intention ID |
-| `--notes` | - | text | `Agent started work` | Why the status changed |
-| `--database-url` | - | text | - | Database URL |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--intent-id` | - | str | - | Intention ID |
+| `--notes` | - | str | `Agent started work` | Why the status changed |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate start -->
 
