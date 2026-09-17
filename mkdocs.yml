@@ -149,7 +149,6 @@ nav:
       - 'Blue-Green Orchestration API Reference': api/blue-green.md
       - 'SchemaBuilder API': api/builder.md
       - 'Hook API Reference': api/hooks.md
-      - 'Linting Rule API Reference': api/linting.md
       - 'Migrator API': api/migrator.md
       - 'PostgreSQL Version Detection API Reference': api/pg-version.md
       - 'Rollback Generation API Reference': api/rollback-generator.md
