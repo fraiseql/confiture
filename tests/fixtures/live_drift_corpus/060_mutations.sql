@@ -1,5 +1,5 @@
 -- The statement kinds that change what a tree declares and are not
--- `AlterTableStmt` (Phase 03b): a DROP, a RENAME and a SET SCHEMA.
+-- `AlterTableStmt`: a DROP, a RENAME and a SET SCHEMA.
 --
 --   ALTER TABLE t RENAME COLUMN a TO b  -> RenameStmt
 --   ALTER TABLE t RENAME TO t2          -> RenameStmt

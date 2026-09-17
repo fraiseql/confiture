@@ -10,11 +10,11 @@ holds two things and nothing else:
   xfail is the completion signal, and flipping green without removing it fails.
 * the mutation table — one real change per row, each asserting that it adds
   **exactly one** drift item of a stated type and severity. The first rows pass
-  today and must keep passing through every phase; the rest are the RED of the
-  phase named in their marker.
+  today and must keep passing through every change; the rest are red because
+  the comparison their marker names does not exist yet.
 
 The mutation rows assert on the *difference* a mutation makes, not on the whole
-report, so they are independent of how much of the campaign has landed. Their
+report, so they are independent of how much of the comparison exists yet. Their
 targets are chosen to have nothing in the identity baseline — a row whose
 mutation changed an item the baseline already carried would measure the
 baseline, not the mutation.
@@ -33,19 +33,21 @@ from confiture.core.psql_applier import apply_sql_via_psql
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "live_drift_corpus"
 
-#: The item list the identity run produces on `main` at f93aa8e9 (1.10.1),
-#: measured against a live PostgreSQL 18.4 / pglast 8.4. Written out so that a
-#: number moving is visible in the diff of this file.
-MEASURED_TODAY = """28 items on a database applied verbatim from this corpus:
-  3 missing_table  + 2 extra_table   (DROP TABLE / RENAME TO / SET SCHEMA unfolded — phase 03b)
-  1 missing_column + 1 extra_column  (RENAME COLUMN unfolded             — phase 03b)
-  1 missing_column (legacy_drop)     (ALTER TABLE DROP COLUMN unfolded   — phase 02)
-  1 nullable_mismatch (maybe_null)   (ALTER COLUMN SET NOT NULL unfolded — phase 03)
-  1 type_mismatch (ratio)            (ALTER COLUMN TYPE unfolded         — phase 02)
- 18 type_mismatch on core.tb_types   (two type vocabularies              — phase 04)
+#: The item list the identity run produces, measured against a live PostgreSQL
+#: 18.4 / pglast 8.4. Written out so that a number moving is visible in the diff
+#: of this file.
+MEASURED_TODAY = """26 items on a database applied verbatim from this corpus:
+  3 missing_table  + 2 extra_table   DROP TABLE / RENAME TO / SET SCHEMA unfolded
+  1 missing_column + 1 extra_column  RENAME COLUMN unfolded
+  1 nullable_mismatch (maybe_null)   ALTER COLUMN SET NOT NULL unfolded
+ 18 type_mismatch on core.tb_types   two type vocabularies
+
+It was 28 before the `ALTER TABLE` fold moved into one place: the critical
+`missing_column` for `legacy_drop`, a column the tree itself drops, and the
+`type_mismatch` on `ratio`, a column the tree itself retypes.
 
 `core.tb_types.c1` (`CHAR`) is *not* among them, and is the corpus' trap for
-phase 04: `_types_compatible` folds `char` and `character` today, while
+the comparator: `_types_compatible` folds `char` and `character` today, while
 `canonical_type` renders the live `character(1)` as `char(1)` and the DDL's bare
 `char` as `char`. A comparator switched over without handling an implicit
 typmod makes this column report where it never did.
@@ -89,7 +91,9 @@ def _keys(report: DriftReport) -> list[tuple[str, str, str]]:
     )
 
 
-@pytest.mark.xfail(strict=True, reason=f"phases 02, 03, 03b and 04 close this.\n{MEASURED_TODAY}")
+@pytest.mark.xfail(
+    strict=True, reason=f"the ALTER folds and the type vocabulary close this.\n{MEASURED_TODAY}"
+)
 def test_a_database_built_from_its_ddl_has_no_drift(built_from_corpus: Built) -> None:
     report = built_from_corpus.drift()
     assert report.drift_items == [], "\n".join(
@@ -98,8 +102,8 @@ def test_a_database_built_from_its_ddl_has_no_drift(built_from_corpus: Built) ->
     )
 
 
-#: ``(mutation SQL, drift type, severity, object)``. Adding a kind in a later
-#: phase is a row, and a row's marker names the phase that turns it green.
+#: ``(mutation SQL, drift type, severity, object)``. A kind of comparison is a
+#: row, and a row's marker names the comparison that does not exist yet.
 MUTATIONS = [
     pytest.param(
         "ALTER TABLE core.tb_other DROP COLUMN id",
@@ -149,7 +153,7 @@ MUTATIONS = [
         "critical",
         "core.v_widget",
         id="drop-view",
-        marks=pytest.mark.xfail(strict=True, reason="phase 05: views are not compared"),
+        marks=pytest.mark.xfail(strict=True, reason="a view's existence is not compared"),
     ),
     pytest.param(
         "DROP MATERIALIZED VIEW core.mv_widget",
@@ -157,7 +161,7 @@ MUTATIONS = [
         "critical",
         "core.mv_widget",
         id="drop-matview",
-        marks=pytest.mark.xfail(strict=True, reason="phase 05: matviews are not compared"),
+        marks=pytest.mark.xfail(strict=True, reason="a matview's existence is not compared"),
     ),
     pytest.param(
         "DROP TRIGGER trg_touch ON core.tb_widget",
@@ -165,7 +169,7 @@ MUTATIONS = [
         "critical",
         "core.tb_widget.trg_touch",
         id="drop-trigger",
-        marks=pytest.mark.xfail(strict=True, reason="phase 05: triggers are not compared"),
+        marks=pytest.mark.xfail(strict=True, reason="a trigger's existence is not compared"),
     ),
     pytest.param(
         "DROP FUNCTION core.fn_gone(bigint)",
@@ -173,7 +177,7 @@ MUTATIONS = [
         "critical",
         "core.fn_gone(bigint)",
         id="drop-routine",
-        marks=pytest.mark.xfail(strict=True, reason="phase 05: routines are not compared"),
+        marks=pytest.mark.xfail(strict=True, reason="a routine's existence is not compared"),
     ),
 ]
 

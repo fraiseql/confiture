@@ -23,6 +23,8 @@ _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
 _AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
 _AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
 _AT_ALTER_COLUMN_TYPE = _pg_member("AlterTableType", "AT_AlterColumnType")
+_AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
+_CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
 
 
 def walk_nodes(node: Any) -> Iterator[Any]:
@@ -120,6 +122,22 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
     """
     build = _COLUMN_EDITS.get(enum_int(getattr(cmd, "subtype", None)))
     return build(cmd) if build is not None else None
+
+
+def adds_primary_key(cmd: Any) -> bool:
+    """Whether ``cmd`` is an ``ADD CONSTRAINT … PRIMARY KEY``.
+
+    Not a :class:`ColumnEdit`: a table-level constraint is the table's fact, not
+    a column's, and folding it into the column vocabulary would make every
+    reader unpack something it did not ask for. It lives here for the same
+    reason ``column_edit`` does — one module knows what an ``AlterTableType``
+    member means, because a literal ordinal silently stopped matching once
+    already (#192).
+    """
+    if enum_int(getattr(cmd, "subtype", None)) != _AT_ADD_CONSTRAINT:
+        return False
+    definition = getattr(cmd, "def_", None)
+    return enum_int(getattr(definition, "contype", None)) == _CONSTR_PRIMARY
 
 
 def routine_body(stmt: Any) -> tuple[str | None, str | None]:

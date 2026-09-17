@@ -16,6 +16,7 @@ from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_objects import OBJECT_KEYWORD, objects_in, pair_definitions
+from confiture.core.ddl_walk import ColumnEdit, column_edit
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.models.schema import (
     CheckConstraint,
@@ -124,9 +125,6 @@ _PG_FK_DEL_ACTION: dict[str, str | None] = {
     "": None,
     "\x00": None,
 }
-_AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
-_AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
-_AT_ALTER_COLUMN_TYPE = _pg_member("AlterTableType", "AT_AlterColumnType")
 _CONSTR_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
 _CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
 _CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
@@ -459,29 +457,36 @@ class SchemaDiffer:
         self._collect_alter_table_constraints(stmt, result)
 
     def _apply_alter_column(self, cmd: Any, table: Table) -> None:
-        """Add, drop or retype one column, by ``AlterTableType`` member name.
+        """Add, drop or retype one column, as ``ddl_walk.column_edit`` reads ``cmd``.
 
-        Resolved by name through ``_pglast_enums``: PostgreSQL 18 renumbered
-        ``AlterTableType`` at index >= 13, so a literal ordinal stops matching
-        silently and the branch is simply never taken (#192).
+        *What* the cmd does is decided there, once, for both readers of a DDL
+        tree — this one and the lint inventory, whose object model shares none of
+        these types (#301). *How* it lands is here, because only the differ knows
+        what a ``Column`` is.
+
+        Nothing in this module names an ``AlterTableType`` member: PostgreSQL 18
+        renumbered the enum at index >= 13 and a literal ordinal then stops
+        matching silently, which is the whole of #192.
         """
-        subtype = _enum_value(getattr(cmd, "subtype", None))
-        definition = getattr(cmd, "def_", None)
-        is_column_def = definition is not None and type(definition).__name__ == "ColumnDef"
-
-        if subtype == _AT_ADD_COLUMN and is_column_def:
-            column = self._parse_column_pglast(definition, ConstrType)
+        edit = column_edit(cmd)
+        if edit is None:
+            return
+        if edit.kind == "add":
+            column = self._parse_column_pglast(edit.coldef, ConstrType)
             if column is not None:
                 self._replace_column(table, column)
-        elif subtype == _AT_DROP_COLUMN and getattr(cmd, "name", None):
-            table.columns = [c for c in table.columns if c.name != cmd.name]
-        elif subtype == _AT_ALTER_COLUMN_TYPE and is_column_def:
-            retyped = self._parse_column_pglast(definition, ConstrType)
-            existing = table.get_column(cmd.name) if getattr(cmd, "name", None) else None
-            if retyped is not None and existing is not None:
-                existing.type = retyped.type
-                existing.raw_sql_type = retyped.raw_sql_type
-                existing.length = retyped.length
+        elif edit.kind == "drop":
+            table.columns = [c for c in table.columns if c.name != edit.column]
+        elif edit.kind == "retype":
+            self._retype_column(table, edit)
+
+    def _retype_column(self, table: Table, edit: ColumnEdit) -> None:
+        retyped = self._parse_column_pglast(edit.coldef, ConstrType)
+        existing = table.get_column(edit.column) if edit.column else None
+        if retyped is not None and existing is not None:
+            existing.type = retyped.type
+            existing.raw_sql_type = retyped.raw_sql_type
+            existing.length = retyped.length
 
     @staticmethod
     def _replace_column(table: Table, column: Column) -> None:

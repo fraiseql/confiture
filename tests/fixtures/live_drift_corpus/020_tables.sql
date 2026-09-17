@@ -22,7 +22,7 @@ CREATE TABLE core.tb_other (
 
 -- A partitioned parent: `information_schema` reports it as BASE TABLE and
 -- `parse_expected_schema` does model it, so it matches. The control that says
--- `relkind IN ('r','p')` is the right live filter (Phase 04).
+-- a live read filtered to `relkind = 'r'` would drop it.
 CREATE TABLE core.tb_event (
     id BIGINT NOT NULL,
     occurred_at DATE NOT NULL
