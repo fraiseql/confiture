@@ -14,7 +14,176 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`tests/unit/docs/test_docs_reference_real_api.py`** (#287): every
+  `from confiture… import …` in the documentation resolves against the installed package.
+  `tests/unit/docs/` held twenty guards, two of them about fictional API surface — and
+  1940 lines documenting two Python modules that never existed passed both, because
+  `test_doc_api_symbols.py` checks a hand-listed set of documents (a document nobody adds
+  is not checked) and `test_doc_no_fictional_names.py` is a five-string blocklist (it can
+  only catch fiction someone has already found). Neither asked the general question. This
+  one extracts every import from the **code regions** of the corpus — prose is excluded,
+  because repairing a fiction often means naming it, which is how the command guard's own
+  corrective sentences became findings — and resolves the module with `importlib` and each
+  symbol with `getattr`. `CHANGELOG.md` and `docs/release-notes/` are out, as they are for
+  the command guard: they record what was announced at a version.
+
+  It found **19 sites across four files**, and ships with an **empty** allow-list.
+  Three classes, as the issue predicted: modules that do not exist
+  (`confiture.scenarios.healthcare`, `confiture.core.anonymization.factory`,
+  `confiture.core.anonymization.rules`), real modules missing a symbol
+  (`confiture.core.syncer.Syncer` — it is `ProductionSyncer`;
+  `confiture.core.hooks.MigrationHook` — it is `Hook`; `confiture.config.Config` — it is
+  `Environment`; a `Confiture` facade class that has never existed), and real symbols at
+  the wrong path (`MigrationConfig` is in `confiture.config.environment`, `SyncResult` and
+  the migrate results are in `confiture.models.results`).
+
+  `docs/guides/anonymization.md` carried a banner admitting three of its sections predated
+  the shipped API. They are gone rather than rewritten: `@register_strategy` decorates a
+  **class**, not a function, and the profile format and registry are already documented and
+  doctested in `docs/api/anonymization.md`, so the guide points there instead of becoming a
+  second source. `has_rust_extension()` was never a function; the flag is
+  `confiture.core.builder.HAS_RUST`.
+
+### Changed
+
+- **`ProductionSyncer` and `SchemaToSchemaMigrator` are importable from the top level.**
+  The four mediums are a set in the documentation and in `CLAUDE.md`, and two of them were
+  in `confiture.__all__` while two were not — which is why `docs/api/index.md` documented
+  a `from confiture import … ProductionSyncer` that did not work. Found by the new API
+  guard (#287).
+
+- **`confiture coordinate start`, `complete` and `merge`** (#286): the three status
+  transitions `list-intents --status-filter` could filter for and nothing could produce.
+  Of the six documented statuses, `registered` was set when an intent was created and
+  `conflicted` by the registry during `check`, leaving `abandon` as the only transition a
+  user could run — and it records the *opposite* outcome and demands a `--reason` for it.
+  The issue named `completed` and `merged`; `in_progress` was the same gap and was not
+  reported, so an agent could say neither that it had started nor that it had finished.
+
+  `IntentRegistry` has had `mark_in_progress`, `mark_completed`, `mark_merged` and
+  `mark_abandoned` since it was written: `mark_completed` and `mark_merged` had no caller
+  at all, and `mark_in_progress` had one in a docstring. What was missing was three
+  commands, which is also what answers the design question the issue raised — `merged` is
+  a separate transition from `completed` because the registry has always had both, and
+  work can be finished for days before it lands.
+
+  `--notes` is optional on all three and reaches the registry as the change reason.
+  `abandon` keeps its required `--reason`: a cancellation that does not say why is not
+  worth recording, and that asymmetry is exactly why substituting it for `complete` was
+  the repair the docs campaign refused to make.
+
+  `docs/getting-started.md` and `docs/guides/integrations.md` named the gap rather than
+  papering over it (see the same release's docs campaign); both now show the real
+  commands, and the GitHub Actions example records the merge it has just performed
+  instead of printing a status.
+
 ### Fixed
+
+- **An unknown anonymization strategy name silently redacted the column instead of
+  failing.** `sync --anonymization-config` took any string as a strategy;
+  `_anonymize_value` fell through to `[REDACTED]` for a name it did not recognise, which
+  is the documented behaviour of `redact`. So `strategy: emial`, one transposition from
+  `email`, replaced a column with a constant that no longer parses as an address, is no
+  longer unique across rows and cannot be joined on — while the sync printed
+  `✅ Synced 1 table(s)` and exited 0. The name is now checked on
+  `core.syncer.AnonymizationRule` itself rather than in the CLI loader, because the loader
+  is not the only way to build one: a library caller passing
+  `SyncConfig(anonymization=…)` gets the same `CONFIG_002`, with the five allowed names
+  and a "did you mean" for a near miss. `[REDACTED]` is unchanged as the runtime behaviour
+  of `redact`; what changed is that the catch-all can now only be reached by a strategy
+  that got past a validated boundary, which is the case a defensive default is for.
+
+  **The other YAML format had the same hole, and the issue said it did not.** #285 held up
+  `AnonymizationProfile` as already getting this right. It validates a
+  `StrategyDefinition`'s `type` against the `StrategyType` enum — but a *rule* names a
+  strategy by the key it was given under `strategies:`, and nothing checked that the key
+  existed. A profile whose only rule said `strategy: emial_mask` beside a definition
+  called `email_mask` passed `confiture validate-profile`, which printed
+  `✅ Valid profile!` and exited 0 — a validation command calling a dangling reference
+  valid. A `model_validator` now cross-checks every rule against the profile's own
+  strategies, and names them in the message, because the vocabulary there is the author's
+  rather than PostgreSQL's.
+
+  `examples/04-production-sync-anonymization` hand-rolled a strategy-name check *because*
+  of this, and said so in a comment. The check is kept — it runs before the script backs
+  staging up and the sync truncates it, so a typo now costs a re-run rather than a
+  restore — but its stated reason was rewritten, along with the two places the README and
+  QUICK_START explained the old behaviour.
+
+- **Four commands accepted a `--config` they never read; unparseable or missing was still
+  exit 0.** `migrate status`, `migrate validate`, `migrate fix` and `migrate preflight`
+  took a path on the command line and never opened it, so a file that would not parse, or
+  that did not exist at all, produced the same green output and the same exit 0 as a valid
+  one. The report named two; a sweep of all **38** commands declaring `--config`, each run
+  against a broken config and then a missing one, found four — and the two it did not name
+  were the worse pair. **`migrate preflight` rendered its whole Pre-flight Check table**
+  against a configuration file that was not there, which is a pre-deployment gate
+  reporting on nothing. `migrate fix --idempotent --config broken.yaml` rewrote migration
+  files without opening the file it was handed, and with no fix type at all it printed a
+  usage warning and exited 0. Every other command already refused: exit 5 with a
+  `CONFIG_00x`, or exit 2 for a usage error. A path the operator *typed* is now read
+  before anything reports — `CONFIG_004` when it is absent, `CONFIG_002` when it does not
+  parse, `load_config`'s own codes, so the commands that already got this right and the
+  four that did not say the same thing. The **ambient** `confiture.yaml` is untouched:
+  #152's precedence contract says merely being present must not force a command to read
+  it, and `config_is_explicit` is what tells the two apart. Explicitness is asked of the
+  config parameter *alone*, not of that function's `("config", "env")` default — a command
+  given `--env production` and no `--config` still carries its defaulted path, which the
+  pair-wise question calls explicit, so the check would have demanded a `confiture.yaml`
+  nobody named. `migrate fix`'s `--config` now defaults to `None` rather than
+  `confiture.yaml`, which is how its body tells a typed path from the documented default
+  without a `ctx` parameter: that would have been a ninth argument, and `tests/budgets.json`
+  refuses to raise a number. The documented default is unchanged. A new guard,
+  `tests/unit/test_config_is_read.py`, runs every command declaring `--config` against a
+  missing file and an unparseable one and requires that none of them exits 0 — an
+  invariant a command with a required argument satisfies honestly by exiting 2, so it
+  needs no allow-list.
+
+- **`migrate validate --require-migration` passed green on almost everything a schema
+  tree defines.** `SchemaDiffer.parse_schema` populated tables, enum types and sequences,
+  so a view, a function, a trigger, an extension or a schema added to `db/schema/` and not
+  to a migration reported `has_ddl_changes: False` with `migration_error: None` — not a
+  skipped check but a check that looked and saw nothing — and the CLI printed
+  `✅ No DDL changes detected`, exit 0. For a project whose staging and production are
+  migrate-only, that is the gate's whole purpose failing silently. The report named views
+  and `CREATE OR REPLACE FUNCTION`; a sweep of every object kind against
+  `SchemaDiffer.compare` found **sixteen** statement kinds producing zero changes,
+  including **`ALTER TABLE … ADD COLUMN`**, which went into the sweep as a *control* —
+  `_collect_alter_table_constraints` read only `Constraint` nodes out of `stmt.cmds`, so a
+  `ColumnDef` was dropped on the floor and a tree written with `ALTER` statements rather
+  than edited `CREATE TABLE`s had no column gate at all.
+
+  `core/ddl_objects.py` now compares every object a tree defines by `(kind, identity) →
+  definition`. Identity is the lint inventory's answer, not a second one:
+  `inventory.object_from_statement` already decides what a statement defines, how a schema
+  qualifier is read and which overload a routine is, over canonical argument types (#275).
+  What the module adds is the **definition** — `RawStream`'s canonical rendering, so a view
+  reformatted, recommented or given `OR REPLACE` is the same view, and one whose body
+  changed is a `REPLACE`. A second rendering with each kind's existence clause (`OR REPLACE`
+  for a view, `IF NOT EXISTS` for a materialized view, which PostgreSQL gives no replace at
+  all) is what a generated migration carries, so `migrate diff --generate` writes the real
+  DDL rather than `-- WARNING: no SQL derived` for an object whose whole definition the
+  differ is holding.
+
+  Adding or dropping a **routine** always reports. Redefining one in place stays behind
+  `--require-migration-bodies` (#178), measured rather than assumed: that flag already
+  reports exactly those edits and is off by default, and an added overload was already
+  caught by `FunctionSignatureChecker`. Reporting them unconditionally would have turned a
+  deliberate opt-in into an always-on check. A redefined **view** is unconditional, because
+  nothing else in that gate reports one.
+
+- **A schema `migrate validate --require-migration` could not parse exited 0 with a yellow
+  warning.** A skipped gate and a passed gate differed by a line of console output and
+  nothing else. The reason recorded in the code was the sqlparse token limit, which has not
+  been reachable since pglast became the only parser (D13, 0.50.0); what reaches that branch
+  today is a schema **PostgreSQL itself rejects**, which `confiture build` would refuse too,
+  and which confiture already calls a finding everywhere else it appears (`IDEM_UNPARSEABLE`,
+  `PFLIGHT_UNPARSEABLE` forcing `window_safe: false`, lint's `UNPARSEABLE`, `DIFFER_400`).
+  A check that could not run is now `is_valid: false`, exit 1. The report and the JSON
+  envelope gain `was_skipped`, because "the schema does not parse" and "you forgot a
+  migration" are both exit 1 and are not the same problem.
 
 - **Prep-seed level 5 counted catalogue entries and reported them as data violations.**
   Four of its five detectors never read a row. Each selected from `information_schema`
@@ -85,7 +254,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tests/unit/docs/command_truth.py`). It shipped with an allow-list of all 127 sites
   grouped by cause; four phases emptied it and it is gone.
 
-
 - **`confiture sync` no longer empties tables it has already copied.** Each target table
   was truncated with `CASCADE` immediately before being copied, and `CASCADE` empties
   every table that references the one named. Tables are copied in the order
@@ -152,6 +320,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`tests/unit/test_ddl_objects_are_exhaustive.py`** — every `Create…Stmt` in pglast's
+  grammar, plus the five creating statements PostgreSQL does not spell with that prefix,
+  must be tracked, modelled elsewhere in `SchemaDiffer`, or declined in
+  `NOT_A_SCHEMA_OBJECT` **with the reason**. A node in none fails; a node in two fails; a
+  declined node pglast no longer defines fails, so a reason cannot outlive the thing it
+  explains — the allow-list idiom of `test_one_sql_lexer.py`. The sixteen invisible kinds
+  were not sixteen oversights but one: nothing said which statements the differ answered
+  for, so a kind never considered looked exactly like a kind deliberately skipped. The
+  guard bit on its first run, on `CreateOpClassItem` — a sub-node, not a statement.
+
+- **Sixteen more object kinds compared**: triggers, policies and rules (named *per table*,
+  so `tb_user.trg_audit` and `tb_other.trg_audit` are two objects — and the DDL spells that
+  back out as `DROP TRIGGER trg ON t`), extensions, schemas, event triggers, range types,
+  statistics, foreign tables, foreign-data wrappers, servers, publications, conversions,
+  operator classes and families, access methods. Nine statements are declined with a
+  reason: a role, a database, a tablespace and a subscription are cluster-scoped, so a
+  migrate-only environment is no worse off than a rebuilt one; a cast, a transform and a
+  user mapping have no name of their own to key on.
+
+- **`REPLACE_IS_AUTHORS_WORK`** records, per kind, why a redefinition has no one statement
+  that is plainly right — a dropped policy leaves rows unprotected for the length of the
+  transaction; a dropped event trigger stops firing during the migration that replaces it,
+  which is when it matters most. Those reach the generated migration as the generator's own
+  `-- WARNING: no SQL derived`: the change is still *reported*, which is what the gate
+  needs, and only the DDL is left to the author.
+
 - **Guards that make an example's claims checkable.** `tests/e2e/test_examples_apply.py`
   builds every example environment and applies it under `ON_ERROR_STOP=1` — the *apply*
   is the assertion, because `confiture build` is a concatenation and does not parse — and
@@ -173,6 +367,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no seed directory either. The default is unchanged. `docs/api/migrator.md` gains a
   `rebuild` section whose signature fence is pinned to the source, and loses a row that
   described the method as "Drop and recreate the tracking table" — which is `reinit`'s job.
+
+### Internal
+
+- **Lockfile refresh** (#280): `uv.lock` and `Cargo.lock` regenerated. Notable moves are
+  `ty` 0.0.43 → 0.0.81, `typer` 0.26.7 → 0.27.2, `click` 8.4.1 → 8.5.0, `pytest` 9.0.3 →
+  9.1.1, `sqlglot` 30.9.0 → 30.18.0 and `fastapi` 0.136.3 → 0.141.1. `pglast` is
+  unchanged: `uv.lock` pins the current major and the `pglast-matrix` CI leg covers the
+  range (#192).
+
+  The newer `ty` found two real things, both fixed rather than suppressed: a
+  `ty: ignore[invalid-assignment]` in `core/hooks/context.py` that the checker no longer
+  needs, and `old_status.value if old_status else None` in the pgGit coordination
+  registry, where `old_status` is `intent.status` and an `IntentStatus` is never falsy —
+  so the `else None` branch could not be taken.
+
+  `typer` 0.27 changed how it prints a positional argument (`[PATH]` → `[path]`) and names
+  the string type (`text` → `str`), which moved 281 lines of `docs/reference/cli.md`. The
+  block is regenerated rather than normalised: `confiture init --help` really does print
+  `[path]` now, and a generated reference that disagreed with the command it documents is
+  the exact untruth the command-truth campaign removed.
 
 ### Removed
 

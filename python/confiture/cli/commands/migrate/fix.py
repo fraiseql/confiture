@@ -14,7 +14,13 @@ from confiture.cli.helpers import console, is_json
 from confiture.cli.idempotency import _fix_idempotency
 from confiture.cli.options import format_option
 from confiture.cli.ownership import _fix_ownership
+from confiture.core.connection import load_config
 from confiture.exceptions import ConfigurationError
+
+#: Where ``--ownership`` looks when no ``--config`` is given. The option's
+#: default is ``None`` so the body can tell "not given" from "given this"; the
+#: documented default lives here.
+DEFAULT_CONFIG_PATH = Path("confiture.yaml")
 
 
 @cli_boundary
@@ -38,8 +44,13 @@ def migrate_fix(
             "config and the [ast] extra (pglast)."
         ),
     ),
-    config_path: Path = typer.Option(
-        Path("confiture.yaml"),
+    config_path: Path | None = typer.Option(
+        # None, not Path("confiture.yaml"), so the body can tell a path the
+        # operator typed from the documented default and read the former even
+        # when this run has nothing to do with it (#284). The alternative — a
+        # `ctx: typer.Context` and `config_is_explicit` — is a ninth parameter,
+        # which `tests/budgets.json` refuses: its numbers only go down.
+        None,
         "-c",
         "--config",
         help="Config file (needed for --ownership; defaults to confiture.yaml)",
@@ -93,6 +104,14 @@ def migrate_fix(
       confiture migrate generate - Create new migration
     """
     is_json(format_output)
+    # A --config the operator typed is read whatever this run goes on to do
+    # (#284). Only --ownership uses it, so `migrate fix --idempotent --config
+    # broken.yaml` used to rewrite migration files while never opening the file
+    # the operator named, and `migrate fix --config broken.yaml` with no fix
+    # type printed a usage warning and exited 0.
+    if config_path is not None:
+        load_config(config_path)
+    config_path = config_path or DEFAULT_CONFIG_PATH
     if not migrations_dir.exists():
         raise ConfigurationError(
             f"Migrations directory not found: {migrations_dir.absolute()}",

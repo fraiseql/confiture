@@ -105,6 +105,8 @@ __all__ = [
     "PreflightAgainstResult",
     # Preflight
     "PreflightResult",
+    # Medium 3: production data sync
+    "ProductionSyncer",
     "RebuildError",
     "RestoreError",
     "RollbackError",
@@ -120,6 +122,8 @@ __all__ = [
     "SchemaIntrospector",
     "SchemaLinter",
     "SchemaSnapshotGenerator",
+    # Medium 4: schema-to-schema via FDW
+    "SchemaToSchemaMigrator",
     # Seed operations
     "SeedApplier",
     "SeedError",
@@ -156,6 +160,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Core
     "SchemaBuilder": ("confiture.core.builder", "SchemaBuilder"),
     "Migrator": ("confiture.core.migrator", "Migrator"),
+    # The four mediums are a set in the documentation and in CLAUDE.md;
+    # two of them were importable from the top level and two were not (#287).
+    "ProductionSyncer": ("confiture.core.syncer", "ProductionSyncer"),
+    "SchemaToSchemaMigrator": ("confiture.core.schema_to_schema", "SchemaToSchemaMigrator"),
     "MigratorSession": ("confiture.core.migrator", "MigratorSession"),
     "Environment": ("confiture.config.environment", "Environment"),
     "SchemaSnapshotGenerator": ("confiture.core.schema_snapshot", "SchemaSnapshotGenerator"),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from confiture.core.ddl_objects import TABLE_SCOPED_KINDS
 from confiture.exceptions import UnsafeOperationError
 from confiture.models.schema import SchemaChange
 
@@ -29,19 +30,67 @@ class DifferSQLGenerator:
 
     def generate_up(self, change: SchemaChange) -> str:
         """Generate the forward DDL SQL for a schema change."""
-        method_name = f"_up_{change.type.lower()}"
-        method = getattr(self, method_name, None)
-        if method is None:
-            raise NotImplementedError(f"No DDL generator for change type: {change.type}")
-        return method(change)
+        method = getattr(self, f"_up_{change.type.lower()}", None)
+        if method is not None:
+            return method(change)
+        generic = self._generic_object_sql(change, forward=True)
+        if generic is not None:
+            return generic
+        raise NotImplementedError(f"No DDL generator for change type: {change.type}")
 
     def generate_down(self, change: SchemaChange) -> str:
         """Generate the rollback DDL SQL for a schema change."""
-        method_name = f"_down_{change.type.lower()}"
-        method = getattr(self, method_name, None)
-        if method is None:
-            return f"-- WARNING: No automatic rollback for {change.type}\n"
-        return method(change)
+        method = getattr(self, f"_down_{change.type.lower()}", None)
+        if method is not None:
+            return method(change)
+        generic = self._generic_object_sql(change, forward=False)
+        if generic is not None:
+            return generic
+        return f"-- WARNING: No automatic rollback for {change.type}\n"
+
+    # ------------------------------------------------------------------
+    # The object kinds #288 tracks that have no bespoke generator
+    # ------------------------------------------------------------------
+
+    def _generic_object_sql(self, change: SchemaChange, *, forward: bool) -> str | None:
+        """Create-or-drop DDL for a tracked object, from what the change carries.
+
+        ``None`` when the change is not one of #288's objects, or when its kind
+        is in :data:`REPLACE_IS_AUTHORS_WORK` — every ``REPLACE`` whose one
+        right statement PostgreSQL does not have. Those reach the migration as
+        the generator's own ``-- WARNING: no SQL derived``, which is the
+        existing way of saying "this changed, you write it".
+        """
+        details = change.details or {}
+        kind = details.get("kind")
+        keyword = details.get("keyword")
+        if not kind or not keyword:
+            return None
+        verb, _, _ = change.type.partition("_")
+        if verb == "REPLACE":
+            # Every kind reaching here is in REPLACE_IS_AUTHORS_WORK; the ones
+            # with one right statement have a bespoke `_up_replace_*` above.
+            return None
+        dropping = (verb == "DROP") == forward
+        if dropping:
+            if verb == "DROP" and forward and not self._force:
+                raise UnsafeOperationError(
+                    f"DROP {keyword} {change.table!r} is destructive. "
+                    "Re-run with --force to generate this DDL."
+                )
+            return self._drop_object(kind, keyword, change)
+        source = change.old_value if verb == "DROP" else change.new_value
+        return self._statement(source, f"{change.type} {change.table}")
+
+    @staticmethod
+    def _drop_object(kind: str, keyword: str, change: SchemaChange) -> str:
+        """``DROP <keyword> IF EXISTS <name>``, with the table a trigger hangs off."""
+        name = (change.details or {}).get("name") or change.table or ""
+        if kind in TABLE_SCOPED_KINDS:
+            qualified, _, local = name.rpartition(".")
+            if qualified:
+                return f"DROP {keyword} IF EXISTS {local} ON {qualified};\n"
+        return f"DROP {keyword} IF EXISTS {name};\n"
 
     def _up_add_table(self, change: SchemaChange) -> str:
         details = change.details or {}
@@ -229,11 +278,197 @@ class DifferSQLGenerator:
         )
 
     def _up_add_function(self, change: SchemaChange) -> str:
-        details = change.details or {}
-        source = details.get("source", "")
-        if source:
-            return f"{source}\n"
-        return f"-- WARNING: No source provided for ADD_FUNCTION {change.table}\n"
+        """The routine's own ``CREATE OR REPLACE``.
+
+        ``details["source"]`` predates #288 and is kept: a caller that builds
+        the change by hand — the only kind there was, since ``SchemaDiffer``
+        never emitted this type until #288 — still works.
+        """
+        source = (change.details or {}).get("source") or change.new_value
+        return self._statement(source, f"ADD_FUNCTION {change.table}")
+
+    def _down_add_function(self, change: SchemaChange) -> str:
+        return self._drop_routine("FUNCTION", change)
+
+    def _up_replace_function(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"REPLACE_FUNCTION {change.table}")
+
+    def _down_replace_function(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"REPLACE_FUNCTION {change.table}")
+
+    def _up_drop_function(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP FUNCTION {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return self._drop_routine("FUNCTION", change)
+
+    def _down_drop_function(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_FUNCTION {change.table}")
+
+    def _up_add_procedure(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_PROCEDURE {change.table}")
+
+    def _down_add_procedure(self, change: SchemaChange) -> str:
+        return self._drop_routine("PROCEDURE", change)
+
+    def _up_replace_procedure(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"REPLACE_PROCEDURE {change.table}")
+
+    def _down_replace_procedure(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"REPLACE_PROCEDURE {change.table}")
+
+    def _up_drop_procedure(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP PROCEDURE {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return self._drop_routine("PROCEDURE", change)
+
+    def _down_drop_procedure(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_PROCEDURE {change.table}")
+
+    def _up_add_aggregate(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_AGGREGATE {change.table}")
+
+    def _down_add_aggregate(self, change: SchemaChange) -> str:
+        return self._drop_routine("AGGREGATE", change)
+
+    def _up_replace_aggregate(self, change: SchemaChange) -> str:
+        """An aggregate has no ``OR REPLACE`` either: drop it, then define it again."""
+        return self._drop_routine("AGGREGATE", change) + self._statement(
+            change.new_value, f"REPLACE_AGGREGATE {change.table}"
+        )
+
+    def _down_replace_aggregate(self, change: SchemaChange) -> str:
+        return self._drop_routine("AGGREGATE", change) + self._statement(
+            change.old_value, f"REPLACE_AGGREGATE {change.table}"
+        )
+
+    def _up_drop_aggregate(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP AGGREGATE {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return self._drop_routine("AGGREGATE", change)
+
+    def _down_drop_aggregate(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_AGGREGATE {change.table}")
+
+    def _up_add_domain(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_DOMAIN {change.table}")
+
+    def _down_add_domain(self, change: SchemaChange) -> str:
+        return f"DROP DOMAIN IF EXISTS {change.table};\n"
+
+    def _up_drop_domain(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP DOMAIN {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return f"DROP DOMAIN IF EXISTS {change.table};\n"
+
+    def _down_drop_domain(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_DOMAIN {change.table}")
+
+    def _up_add_type(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_TYPE {change.table}")
+
+    def _down_add_type(self, change: SchemaChange) -> str:
+        return f"DROP TYPE IF EXISTS {change.table};\n"
+
+    def _up_drop_type(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP TYPE {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return f"DROP TYPE IF EXISTS {change.table};\n"
+
+    def _down_drop_type(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_TYPE {change.table}")
+
+    @staticmethod
+    def _drop_routine(keyword: str, change: SchemaChange) -> str:
+        """``DROP <keyword> IF EXISTS name(args)``.
+
+        ``change.table`` carries the routine's identity — ``fn_c(bigint)`` — so
+        the argument list PostgreSQL needs to pick the overload is already
+        there. Without it the statement is ambiguous the moment a second
+        overload exists.
+        """
+        return f"DROP {keyword} IF EXISTS {change.table};\n"
+
+    # ------------------------------------------------------------------
+    # Objects carried as whole definitions (#288)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _statement(sql: str | None, missing: str) -> str:
+        """A definition the differ captured, terminated; a warning when it has none."""
+        if not sql:
+            return f"-- WARNING: no definition captured for {missing}\n"
+        return f"{sql.rstrip().rstrip(';')};\n"
+
+    def _up_add_view(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_VIEW {change.table}")
+
+    def _down_add_view(self, change: SchemaChange) -> str:
+        return f"DROP VIEW IF EXISTS {change.table};\n"
+
+    def _up_replace_view(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"REPLACE_VIEW {change.table}")
+
+    def _down_replace_view(self, change: SchemaChange) -> str:
+        """Back to the definition that was there — a replace is not undone by a drop."""
+        return self._statement(change.old_value, f"REPLACE_VIEW {change.table}")
+
+    def _up_drop_view(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP VIEW {change.table!r} is destructive. Re-run with --force to generate this DDL."
+            )
+        return f"DROP VIEW IF EXISTS {change.table};\n"
+
+    def _down_drop_view(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_VIEW {change.table}")
+
+    def _up_add_matview(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_MATVIEW {change.table}")
+
+    def _down_add_matview(self, change: SchemaChange) -> str:
+        return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n"
+
+    def _up_replace_matview(self, change: SchemaChange) -> str:
+        """PostgreSQL has no ``CREATE OR REPLACE MATERIALIZED VIEW``: drop, then create.
+
+        The rows are lost and rebuilt, which is what a matview is for; what a
+        reader has to know is that dependent objects are dropped with it, so the
+        statement says ``CASCADE`` nowhere and will fail loudly if any exist.
+        """
+        return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n" + self._statement(
+            change.new_value, f"REPLACE_MATVIEW {change.table}"
+        )
+
+    def _down_replace_matview(self, change: SchemaChange) -> str:
+        return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n" + self._statement(
+            change.old_value, f"REPLACE_MATVIEW {change.table}"
+        )
+
+    def _up_drop_matview(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP MATERIALIZED VIEW {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n"
+
+    def _down_drop_matview(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_MATVIEW {change.table}")
 
     def _up_add_enum_type(self, change: SchemaChange) -> str:
         details = change.details or {}

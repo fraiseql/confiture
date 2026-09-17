@@ -459,9 +459,12 @@ jobs:
         uv venv
         uv sync --locked --no-install-project --all-extras
         # Pinned: ty is pre-1.0 and adds default rules frequently, so an unpinned
-        # install can turn CI red on an unrelated PR. Keep in lockstep with the ty
-        # pre-commit hook / dev extra, deliberately.
-        uv pip install 'ty==0.0.43'
+        # install can turn CI red on an unrelated PR. Two places carry this pin —
+        # here and publish.yml — and `uv.lock` carries a third version, the one
+        # the pre-commit hook and a local `uv run ty` actually use. Move all
+        # three together: a lockfile bump that leaves the pins behind fails here
+        # and nowhere else, because the code was fixed for the newer checker.
+        uv pip install 'ty==0.0.81'
     - name: Run ty type check on Python code
       # --no-sync: don't let `uv run` rebuild the project (which needs Rust).
       run: uv run --no-sync ty check python/confiture/

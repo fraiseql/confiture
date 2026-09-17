@@ -273,9 +273,12 @@ jobs:
             --format json \
             | jq -r ".[0].intent_id")
 
-          # There is no `coordinate complete` — no command sets the
-          # `completed` status. Report the intention's state instead.
-          confiture coordinate status --intent-id "$INTENT_ID"
+          # The merge just happened, so record it. `coordinate complete` is
+          # the step before this one, for when the changes are finished but
+          # not yet landed.
+          confiture coordinate merge \
+            --intent-id "$INTENT_ID" \
+            --notes "Merged in PR #${{ github.event.pull_request.number }}"
 ```
 
 ### Dashboard Integration

@@ -193,6 +193,12 @@ class ParsedSchema:
     tables: list["Table"] = field(default_factory=list)
     enum_types: list[EnumType] = field(default_factory=list)
     sequences: list[Sequence] = field(default_factory=list)
+    #: The objects compared by definition rather than by structure (#288) —
+    #: views, and in later phases everything else a schema tree defines. Keyed
+    #: by what makes two ``CREATE`` statements the same object; the value
+    #: carries the definition, so a redefinition in place is visible. Typed
+    #: loosely here because ``core.ddl_objects`` imports this module.
+    objects: dict[Any, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -293,11 +299,27 @@ class SchemaChange:
     new_value: str | None = None
     details: dict[str, Any] | None = None
 
+    def _object_str(self) -> str | None:
+        """``ADD TRIGGER public.tb_user.trg_touch`` for a change #288 tracks.
+
+        The keyword travels in ``details`` rather than in a template row per
+        kind: there are sixty of those and no one would notice a missing one,
+        whereas a change built without its keyword simply falls back.
+        """
+        details = self.details or {}
+        keyword = details.get("keyword")
+        if not keyword:
+            return None
+        verb, _, _ = self.type.partition("_")
+        return f"{verb} {keyword} {details.get('name', self.table)}"
+
     def __str__(self) -> str:
         """String representation of change."""
         template = _CHANGE_TEMPLATES.get(self.type)
         if template is None:
-            return f"{self.type}: {self.table}.{self.column if self.column else ''}"
+            return self._object_str() or (
+                f"{self.type}: {self.table}.{self.column if self.column else ''}"
+            )
         details = self.details or {}
         return template.format(
             table=self.table,

@@ -207,11 +207,24 @@ class TestPglastParser:
         assert len(result.tables) == 1
 
 
-class TestAccompanimentGracefulDegradation:
-    """Cycle 3: accompaniment checker degrades gracefully on parse failures."""
+class TestAccompanimentReportsAParseFailure:
+    """Cycle 3, superseded by #288: a parse failure is reported, and it fails.
+
+    Issue #78 made the checker *degrade gracefully* — return a report carrying
+    `migration_error` and `is_valid: True` — so a schema too large for sqlparse
+    did not block CI. Half of that still holds and is tested below: the checker
+    returns a report rather than crashing, and the original error text survives
+    into it.
+
+    The other half is gone. `is_valid` is now False, because pglast has been the
+    only parser since D13 (0.50.0) and the sqlparse token limit these tests were
+    written against cannot occur. What reaches this branch is a schema
+    PostgreSQL rejects, which `confiture build` would refuse too — so the gate
+    saying "passed" was saying something it had no way to know (#288).
+    """
 
     def test_accompaniment_checker_returns_report_when_parse_fails(self):
-        """SQLParseError in compare_refs() => report with migration_error, not a crash."""
+        """A parse failure is a report with `migration_error`, not a crash."""
         from confiture.core.git_accompaniment import MigrationAccompanimentChecker
         from confiture.models.git import MigrationAccompanimentReport
 
@@ -221,24 +234,23 @@ class TestAccompanimentGracefulDegradation:
             patch.object(
                 checker.differ,
                 "compare_refs",
-                side_effect=Exception("Maximum number of tokens exceeded (10000)."),
+                side_effect=Exception('syntax error at or near ","'),
             ),
             patch.object(checker, "_get_new_migrations", return_value=[]),
         ):
             report = checker.check_accompaniment("HEAD~1", "HEAD")
 
         assert isinstance(report, MigrationAccompanimentReport)
-        # "check couldn't run" is not a validation failure
-        assert report.is_valid is True
         assert report.migration_error is not None
-        assert "10000" in report.migration_error or "tokens" in report.migration_error.lower()
+        assert report.was_skipped is True
+        assert report.is_valid is False
 
     def test_accompaniment_checker_sets_error_message_on_failure(self):
         """migration_error is populated with the original error description."""
         from confiture.core.git_accompaniment import MigrationAccompanimentChecker
 
         checker = MigrationAccompanimentChecker("local", Path())
-        original_error = "Maximum number of tokens exceeded (10000)."
+        original_error = 'syntax error at or near ","'
 
         with (
             patch.object(
@@ -253,8 +265,8 @@ class TestAccompanimentGracefulDegradation:
         assert report.migration_error is not None
         assert original_error in report.migration_error
 
-    def test_validate_migration_accompaniment_warns_on_parse_failure(self):
-        """validate_migration_accompaniment emits ⚠️ warning, not ❌ error, when parse fails."""
+    def test_validate_migration_accompaniment_fails_and_says_why(self):
+        """The CLI names the parse failure rather than passing with a warning."""
         from confiture.cli.git_validation import validate_migration_accompaniment
         from confiture.models.git import MigrationAccompanimentReport
 
@@ -263,7 +275,7 @@ class TestAccompanimentGracefulDegradation:
         mock_report = MigrationAccompanimentReport(
             has_ddl_changes=False,
             has_new_migrations=False,
-            migration_error="Maximum number of tokens exceeded (10000).",
+            migration_error='syntax error at or near ","',
         )
 
         with (
@@ -279,13 +291,11 @@ class TestAccompanimentGracefulDegradation:
                 format_output="text",
             )
 
-        # Should be valid (check skipped, not failed)
-        assert result["is_valid"] is True
-        # Should print a warning (⚠️ or yellow)
-        print_calls = [str(call) for call in console.print.call_args_list]
-        assert any(
-            "⚠" in c or "warning" in c.lower() or "skipped" in c.lower() for c in print_calls
-        )
+        assert result["is_valid"] is False
+        assert result["was_skipped"] is True
+        printed = " ".join(str(call) for call in console.print.call_args_list)
+        assert "could not run" in printed
+        assert 'syntax error at or near ","' in printed
 
 
 class TestGetNewMigrationsPyFiles:

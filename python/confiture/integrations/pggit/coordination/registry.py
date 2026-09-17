@@ -508,7 +508,7 @@ class IntentRegistry:
                 """,
                 (
                     intent_id,
-                    old_status.value if old_status else None,
+                    old_status.value,
                     new_status.value,
                     reason,
                     changed_by,

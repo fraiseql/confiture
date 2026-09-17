@@ -16,7 +16,9 @@ The full feature laundry list — for the 30-second pitch and quick-start, see [
 - **Migration hooks** — run custom logic before/after each migration.
 
 ## Schema Intelligence
-- **Schema diff detection** — two-tier parser: pglast (PostgreSQL's C parser) primary, sqlparse fallback.
+- **Schema diff detection** — pglast (PostgreSQL's own C parser, via `libpg_query`), the only
+  parser confiture has. Tables, columns, indexes and constraints structurally; views,
+  routines, types, triggers, policies and extensions by their definition.
 - **Schema linting** — configurable rules to catch common DDL mistakes.
 - **Function introspection** — `FunctionIntrospector`, `TypeMapper`, and `DependencyGraph` for deep schema analysis.
 - **Grant accompaniment checker** — detect permission changes without corresponding migrations.

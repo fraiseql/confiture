@@ -462,6 +462,34 @@ class {class_name}(Migration):
             "CHANGE_ENUM_VALUES",
             "ADD_SEQUENCE",
             "DROP_SEQUENCE",
+            # Objects carried as whole definitions (#288). Without these the
+            # generator writes `-- WARNING: no SQL derived` for a view whose
+            # entire definition the differ is holding.
+            "ADD_VIEW",
+            "DROP_VIEW",
+            "REPLACE_VIEW",
+            "ADD_MATVIEW",
+            "DROP_MATVIEW",
+            "REPLACE_MATVIEW",
+            "ADD_FUNCTION",
+            "DROP_FUNCTION",
+            "REPLACE_FUNCTION",
+            "ADD_PROCEDURE",
+            "DROP_PROCEDURE",
+            "REPLACE_PROCEDURE",
+            "ADD_AGGREGATE",
+            "DROP_AGGREGATE",
+            "REPLACE_AGGREGATE",
+            "ADD_DOMAIN",
+            "DROP_DOMAIN",
+            "ADD_TYPE",
+            "DROP_TYPE",
+            # REPLACE_DOMAIN and REPLACE_TYPE are deliberately absent. Neither
+            # has a single statement in PostgreSQL — a domain's constraints and
+            # a composite's attributes are altered one at a time, and dropping
+            # either takes every column that uses it. `_up_statements` writes
+            # `-- WARNING: no SQL derived for: …` for them, which is the
+            # generator's existing way of saying "this changed, you write it".
         }
     )
 

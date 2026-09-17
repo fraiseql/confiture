@@ -96,8 +96,12 @@ class CreditCardAnonymizer(AnonymizationStrategy):
 ### Using Your Custom Strategy
 
 ```python
-from confiture.core.syncer import Syncer, SyncConfig, TableSelection
-from confiture.core.anonymization.rules import AnonymizationRule
+from confiture.core.syncer import (
+    AnonymizationRule,
+    ProductionSyncer,
+    SyncConfig,
+    TableSelection,
+)
 
 # Register custom strategy
 custom_strategy = CreditCardAnonymizer(CreditCardConfig(seed="your-seed"))
@@ -117,7 +121,7 @@ config = SyncConfig(
     }
 )
 
-syncer = Syncer(config)
+syncer = ProductionSyncer(config)
 result = await syncer.sync()
 ```
 
@@ -178,9 +182,9 @@ Confiture provides 6 hook phases for complete control over migrations:
 ### Example: Complex Migration with All Hooks
 
 ```python
-from confiture.core.hooks import MigrationHook, HookPhase, HookContext
+from confiture.core.hooks import Hook, HookContext, HookPhase
 
-class ComplexMigrationHook(MigrationHook):
+class ComplexMigrationHook(Hook):
     """Orchestrate complex migration with multiple steps."""
 
     async def execute(self, context: HookContext) -> None:
@@ -327,7 +331,8 @@ class ComplexMigrationHook(MigrationHook):
 ### Using the Hook
 
 ```python
-from confiture.core.migrator import Migrator, MigrationConfig
+from confiture.config.environment import MigrationConfig
+from confiture.core.migrator import Migrator
 
 config = MigrationConfig(
     environment="production",
@@ -347,7 +352,7 @@ result = await migrator.migrate_up()
 ### Batch Size Tuning
 
 ```python
-from confiture.core.syncer import Syncer, SyncConfig
+from confiture.core.syncer import ProductionSyncer, SyncConfig
 
 # For tables with many columns (wide tables)
 config_wide = SyncConfig(
@@ -379,14 +384,14 @@ config = SyncConfig(
     parallelism=4  # Sync 4 tables at once
 )
 
-syncer = Syncer(config)
+syncer = ProductionSyncer(config)
 result = await syncer.sync()
 ```
 
 ### Progress Monitoring
 
 ```python
-from confiture.core.syncer import Syncer, SyncConfig
+from confiture.core.syncer import ProductionSyncer, SyncConfig
 
 config = SyncConfig(
     source_url="postgresql://prod:5432/production",
@@ -397,7 +402,7 @@ config = SyncConfig(
     verbose=True  # Show detailed logging
 )
 
-syncer = Syncer(config)
+syncer = ProductionSyncer(config)
 try:
     result = await syncer.sync()
 except KeyboardInterrupt:
@@ -412,9 +417,9 @@ except KeyboardInterrupt:
 ### Scenario: Rename Column with Backfill
 
 ```python
-from confiture.core.hooks import MigrationHook, HookPhase, HookContext
+from confiture.core.hooks import Hook, HookContext, HookPhase
 
-class RenameColumnHook(MigrationHook):
+class RenameColumnHook(Hook):
     """Rename column with gradual backfill."""
 
     async def execute(self, context: HookContext) -> None:
@@ -446,7 +451,7 @@ class RenameColumnHook(MigrationHook):
 ### Scenario: Add Column to Large Table
 
 ```python
-class AddColumnToLargeTableHook(MigrationHook):
+class AddColumnToLargeTableHook(Hook):
     """Add column to table with 100M+ rows without locking."""
 
     async def execute(self, context: HookContext) -> None:
@@ -489,7 +494,7 @@ class AddColumnToLargeTableHook(MigrationHook):
 ### Syncing Read Models After Schema Changes
 
 ```python
-class CQRSBackfillHook(MigrationHook):
+class CQRSBackfillHook(Hook):
     """Backfill CQRS read models after schema change."""
 
     async def execute(self, context: HookContext) -> None:

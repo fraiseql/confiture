@@ -4,12 +4,12 @@
 
 Mask sensitive data when syncing production data to development/staging.
 
-> **⚠️ This guide is being revised.** Some examples below predate the shipped
-> API (e.g. function-style `@register_strategy`, a `StrategyFactory`, and
-> `confiture.scenarios.*`). For the authoritative, tested surface, see the
-> **[Anonymization API Reference](../api/anonymization.md)** (custom strategies)
-> and the **[Production Sync guide](03-production-sync.md)** (`confiture sync
-> --anonymize`).
+> The programmatic surface — writing a custom strategy, the registry, the
+> profile format — is documented and doctested in the
+> **[Anonymization API Reference](../api/anonymization.md)**. For the CLI path,
+> see the **[Production Sync guide](03-production-sync.md)**
+> (`confiture sync --anonymize`). This guide is the tour; those two are the
+> contract.
 
 ---
 
@@ -89,47 +89,20 @@ strategy = StrategyRegistry.get("credit_card", {
 
 ## Using Profiles
 
-Define column mappings in a profile:
+A profile maps tables and columns to named strategies and is validated on load.
+The format, the whitelist its `type` values must come from, and a worked example
+are in the **[Anonymization API Reference](../api/anonymization.md#anonymizationprofile)**.
 
 ```python
-from confiture.core.anonymization.factory import StrategyFactory, StrategyProfile
+from confiture import AnonymizationProfile
 
-profile = StrategyProfile(
-    name="user_data",
-    seed=42,
-    columns={
-        "user_id": "preserve",
-        "name": "name",
-        "email": "text_redaction",
-        "phone": "text_redaction:phone_us",
-        "birthdate": "date:year_month",
-        "ip_address": "ip_address",
-    },
-    defaults="preserve"
-)
-
-factory = StrategyFactory(profile)
-anonymized = factory.anonymize(record)
+profile = AnonymizationProfile.load("db/anonymization/production.yaml")
 ```
 
 ---
 
+
 ## Custom Strategies
-
-### Function-Based
-
-```python
-from confiture.anonymization import register_strategy
-
-@register_strategy('email')
-def anonymize_email(value: str, field_name: str, row_context: dict = None) -> str:
-    if not value or '@' not in value:
-        return "invalid@example.com"
-
-    local, domain = value.rsplit('@', 1)
-    hash_val = hashlib.sha256(local.encode()).hexdigest()[:6]
-    return f"user_{hash_val}@{domain}"
-```
 
 ### Class-Based
 
@@ -150,38 +123,15 @@ class MyStrategy(AnonymizationStrategy):
 StrategyRegistry.register("my_strategy", MyStrategy)
 ```
 
-### Row Context
-
-Access other columns for conditional logic:
-
-```python
-@register_strategy('credit_card')
-def anonymize_card(value, field_name, row_context=None):
-    # Keep test accounts unchanged
-    if row_context and row_context.get('is_test_account'):
-        return value
-
-    return f"****-****-****-{value[-4:]}"
-```
-
 ### Deterministic Anonymization
 
-Same input always produces same output (preserves relationships):
-
-```python
-@register_strategy('user_id')
-def anonymize_id(value, field_name, row_context=None):
-    hash_digest = sha256(str(value).encode()).digest()
-    return struct.unpack('>Q', hash_digest[:8])[0]
-```
+The same input produces the same output, so rows that joined before
+anonymization still join after it. `confiture sync --anonymize` gets this from
+its keyed pseudonymizer and a per-column `seed`; see the
+**[Production Sync guide](03-production-sync.md)**.
 
 ---
 
-## Compliance Scenarios
-
-```python
-from confiture.scenarios.healthcare import HealthcareScenario
-from confiture.scenarios.compliance import RegulationType
 
 # GDPR compliance
 anonymized = HealthcareScenario.anonymize(data, RegulationType.GDPR)
@@ -196,7 +146,16 @@ result = HealthcareScenario.verify_compliance(data, anonymized, RegulationType.G
 
 ### 1. Use Consistent Seeds
 
-```python
+```yaml
+# The same seed gives the same pseudonym for the same input, which is what
+# keeps a foreign key joinable after both sides are anonymized.
+users:
+  - column: email
+    strategy: email
+    seed: 42
+```
+
+
 # Same seed = same output for same input
 profile = StrategyProfile(seed=42, ...)
 ```

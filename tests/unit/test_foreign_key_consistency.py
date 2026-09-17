@@ -370,7 +370,10 @@ class TestSeedPrecedence:
             name="production",
             version="1.0",
             global_seed=1111,
-            strategies={},
+            # A rule must name a strategy the profile defines (#285). These four
+            # tests are about *seed* precedence; the strategies dict was empty
+            # scaffolding, and an empty one now fails the model.
+            strategies={"hash": StrategyDefinition(type="hash")},
             tables={
                 "table1": TableDefinition(
                     rules=[
@@ -394,7 +397,10 @@ class TestSeedPrecedence:
             name="production",
             version="1.0",
             global_seed=2222,
-            strategies={},
+            # A rule must name a strategy the profile defines (#285). These four
+            # tests are about *seed* precedence; the strategies dict was empty
+            # scaffolding, and an empty one now fails the model.
+            strategies={"hash": StrategyDefinition(type="hash")},
             tables={
                 "table1": TableDefinition(
                     rules=[
@@ -418,7 +424,10 @@ class TestSeedPrecedence:
             name="production",
             version="1.0",
             # No global_seed
-            strategies={},
+            # A rule must name a strategy the profile defines (#285). These four
+            # tests are about *seed* precedence; the strategies dict was empty
+            # scaffolding, and an empty one now fails the model.
+            strategies={"hash": StrategyDefinition(type="hash")},
             tables={
                 "table1": TableDefinition(
                     rules=[
@@ -442,7 +451,10 @@ class TestSeedPrecedence:
             name="production",
             version="1.0",
             global_seed=5555,
-            strategies={},
+            # A rule must name a strategy the profile defines (#285). These four
+            # tests are about *seed* precedence; the strategies dict was empty
+            # scaffolding, and an empty one now fails the model.
+            strategies={"hash": StrategyDefinition(type="hash")},
             tables={
                 "users": TableDefinition(
                     rules=[

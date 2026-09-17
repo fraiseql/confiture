@@ -65,17 +65,33 @@ class MigrationAccompanimentReport:
         return len(self.body_violations) > 0
 
     @property
+    def was_skipped(self) -> bool:
+        """Whether the comparison never ran, because the schema would not parse."""
+        return self.migration_error is not None
+
+    @property
     def is_valid(self) -> bool:
         """Check if accompaniment validation passed.
 
         Valid if:
-        - No DDL changes (nothing to accompany), or
-        - DDL changes exist AND new migrations exist
+        - The check ran at all, AND
+        - No DDL changes (nothing to accompany), or DDL changes exist AND new
+          migrations exist,
         AND no function signature violations AND no function body violations.
+
+        A check that could not run has not passed (#288). It used to return
+        True, so a skipped gate and a passed gate differed by a line of console
+        output and nothing else. What reaches that branch is a schema
+        **PostgreSQL itself rejects** — which ``confiture build`` would also
+        refuse, and which confiture calls a finding everywhere else it appears:
+        ``IDEM_UNPARSEABLE``, ``PFLIGHT_UNPARSEABLE`` forcing
+        ``window_safe: false``, lint's ``UNPARSEABLE``, ``DIFFER_400``.
 
         Returns:
             True if validation passed, False otherwise
         """
+        if self.was_skipped:
+            return False
         if self.has_signature_violations or self.has_body_violations:
             return False
         if not self.has_ddl_changes:
@@ -88,6 +104,8 @@ class MigrationAccompanimentReport:
         Returns:
             One-line summary (e.g., "Valid: DDL changes with 2 new migrations")
         """
+        if self.was_skipped:
+            return f"Could not run: {self.migration_error}"
         if not self.has_ddl_changes:
             return "No DDL changes"
         if self.is_valid:
@@ -102,6 +120,7 @@ class MigrationAccompanimentReport:
         """
         return {
             "is_valid": self.is_valid,
+            "was_skipped": self.was_skipped,
             "has_ddl_changes": self.has_ddl_changes,
             "has_new_migrations": self.has_new_migrations,
             "ddl_changes": [

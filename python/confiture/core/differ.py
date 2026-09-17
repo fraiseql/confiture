@@ -15,6 +15,7 @@ from pglast.enums.parsenodes import ConstrType
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.ddl_objects import OBJECT_KEYWORD, objects_in, pair_definitions
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.models.schema import (
     CheckConstraint,
@@ -123,6 +124,9 @@ _PG_FK_DEL_ACTION: dict[str, str | None] = {
     "": None,
     "\x00": None,
 }
+_AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
+_AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
+_AT_ALTER_COLUMN_TYPE = _pg_member("AlterTableType", "AT_AlterColumnType")
 _CONSTR_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
 _CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
 _CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
@@ -149,6 +153,47 @@ def _column_details(table: Table) -> list[dict[str, Any]]:
         }
         for column in table.columns
     ]
+
+
+def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
+    """A stable order for object changes: kind, then schema, then name."""
+    return (ref.kind, ref.schema, ref.name, str(ref.signature))
+
+
+def _object_details(ref: Any) -> dict[str, Any]:
+    return {
+        "kind": ref.kind,
+        "name": ref.qualified,
+        "keyword": OBJECT_KEYWORD.get(ref.kind, ref.kind.replace("_", " ").upper()),
+    }
+
+
+def _added_change(ref: Any, obj: Any) -> SchemaChange:
+    return SchemaChange(
+        type=f"ADD_{ref.kind.upper()}",
+        table=ref.qualified,
+        new_value=obj.create_sql,
+        details=_object_details(ref),
+    )
+
+
+def _dropped_change(ref: Any, obj: Any) -> SchemaChange:
+    return SchemaChange(
+        type=f"DROP_{ref.kind.upper()}",
+        table=ref.qualified,
+        old_value=obj.create_sql,
+        details=_object_details(ref),
+    )
+
+
+def _replaced_change(ref: Any, before: Any, after: Any) -> SchemaChange:
+    return SchemaChange(
+        type=f"REPLACE_{ref.kind.upper()}",
+        table=ref.qualified,
+        old_value=before.create_sql,
+        new_value=after.create_sql,
+        details=_object_details(ref),
+    )
 
 
 class SchemaDiffer:
@@ -180,7 +225,7 @@ class SchemaDiffer:
         return self.parse_schema(sql).tables
 
     def parse_schema(self, sql: str) -> ParsedSchema:
-        """Parse SQL DDL into a ParsedSchema (tables, enums, sequences).
+        """Parse SQL DDL into a ParsedSchema (tables, enums, sequences, objects).
 
         Uses pglast (PostgreSQL's own parser) when available for accurate,
         limit-free parsing.
@@ -210,7 +255,9 @@ class SchemaDiffer:
         # One parse, one walk (ANA-04): pglast.parser.ParseError propagates —
         # what PostgreSQL rejects is not a schema to diff, and `migrate diff`
         # reports it as DIFFER_400. A commented-out statement is not a node.
-        statements = [raw.stmt for raw in pglast.parse_sql(sql) or []]
+        raws = list(pglast.parse_sql(sql) or [])
+        result.objects = objects_in(sql, raws)
+        statements = [raw.stmt for raw in raws]
         for stmt in statements:
             if type(stmt).__name__ == "CreateStmt":
                 table = self._parse_create_table_pglast(stmt)
@@ -225,7 +272,7 @@ class SchemaDiffer:
             elif kind == "CreateSeqStmt":
                 result.sequences.append(_sequence_from_stmt(stmt))
             elif kind == "AlterTableStmt":
-                self._collect_alter_table_constraints(stmt, result)
+                self._collect_alter_table(stmt, result)
         return result
 
     # ------------------------------------------------------------------
@@ -392,6 +439,59 @@ class SchemaDiffer:
             )
         )
 
+    def _collect_alter_table(self, stmt: Any, result: ParsedSchema) -> None:
+        """Fold an ``ALTER TABLE`` into the table the tree already created.
+
+        A build-from-DDL tree may append ``ALTER TABLE`` rather than edit the
+        ``CREATE TABLE``; what a database ends up with is the two together, so
+        that is what the comparison has to see. Before #288 only ``Constraint``
+        nodes were read out of ``stmt.cmds``, which meant a ``ColumnDef`` — an
+        added or dropped *column* — was dropped on the floor.
+
+        An ``ALTER`` naming a table this tree never creates has nothing to fold
+        into and is ignored: it belongs to a schema built elsewhere.
+        """
+        table = self._table_named(result, stmt.relation)
+        if table is None:
+            return
+        for cmd in stmt.cmds or []:
+            self._apply_alter_column(cmd, table)
+        self._collect_alter_table_constraints(stmt, result)
+
+    def _apply_alter_column(self, cmd: Any, table: Table) -> None:
+        """Add, drop or retype one column, by ``AlterTableType`` member name.
+
+        Resolved by name through ``_pglast_enums``: PostgreSQL 18 renumbered
+        ``AlterTableType`` at index >= 13, so a literal ordinal stops matching
+        silently and the branch is simply never taken (#192).
+        """
+        subtype = _enum_value(getattr(cmd, "subtype", None))
+        definition = getattr(cmd, "def_", None)
+        is_column_def = definition is not None and type(definition).__name__ == "ColumnDef"
+
+        if subtype == _AT_ADD_COLUMN and is_column_def:
+            column = self._parse_column_pglast(definition, ConstrType)
+            if column is not None:
+                self._replace_column(table, column)
+        elif subtype == _AT_DROP_COLUMN and getattr(cmd, "name", None):
+            table.columns = [c for c in table.columns if c.name != cmd.name]
+        elif subtype == _AT_ALTER_COLUMN_TYPE and is_column_def:
+            retyped = self._parse_column_pglast(definition, ConstrType)
+            existing = table.get_column(cmd.name) if getattr(cmd, "name", None) else None
+            if retyped is not None and existing is not None:
+                existing.type = retyped.type
+                existing.raw_sql_type = retyped.raw_sql_type
+                existing.length = retyped.length
+
+    @staticmethod
+    def _replace_column(table: Table, column: Column) -> None:
+        """Append the column, or overwrite one of the same name written earlier."""
+        for index, existing in enumerate(table.columns):
+            if existing.name == column.name:
+                table.columns[index] = column
+                return
+        table.columns.append(column)
+
     def _collect_alter_table_constraints(self, stmt: Any, result: ParsedSchema) -> None:
         table = self._table_named(result, stmt.relation)
         if table is None:
@@ -503,7 +603,42 @@ class SchemaDiffer:
         # --- Sequence changes ---
         changes.extend(self._compare_sequences(old_schema.sequences, new_schema.sequences))
 
+        # --- Objects compared by definition: views, and #288's later kinds ---
+        changes.extend(self._compare_objects(old_schema.objects, new_schema.objects))
+
         return SchemaDiff(changes=changes)
+
+    # ------------------------------------------------------------------
+    # Objects compared by definition (#288)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _compare_objects(
+        old_objects: dict[Any, Any], new_objects: dict[Any, Any]
+    ) -> list[SchemaChange]:
+        """Added, dropped and redefined objects, in a stable order.
+
+        An object present on both sides whose canonical definition differs is a
+        ``REPLACE``: for a view or a routine that is the entire change a
+        migration has to carry, and it is invisible to a structural comparison
+        because nothing about the object's shape moved.
+
+        The keys are buckets, not identities, so each one's definitions are
+        paired by ``pair_definitions`` rather than assumed to be one apiece.
+        """
+        changes: list[SchemaChange] = []
+        for ref in sorted(old_objects.keys() | new_objects.keys(), key=_object_sort_key):
+            pairs, dropped, added = pair_definitions(
+                old_objects.get(ref, []), new_objects.get(ref, [])
+            )
+            changes.extend(_added_change(ref, obj) for obj in added)
+            changes.extend(_dropped_change(ref, obj) for obj in dropped)
+            changes.extend(
+                _replaced_change(ref, before, after)
+                for before, after in pairs
+                if before.definition != after.definition
+            )
+        return changes
 
     # ------------------------------------------------------------------
     # Table column comparison

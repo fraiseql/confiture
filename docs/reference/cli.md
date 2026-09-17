@@ -75,14 +75,14 @@ If the `db/` directory already exists, Confiture will:
 **Usage**
 
 ```bash
-confiture init [OPTIONS] [PATH]
+confiture init [OPTIONS] [path]
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `PATH` | path | no | Project directory to initialize |
+| `path` | path | no | Project directory to initialize |
 
 <!-- END GENERATED: cli confiture init -->
 
@@ -277,7 +277,7 @@ confiture build [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--env` | `-e` | text | `local` | Environment to build (default: local) |
+| `--env` | `-e` | str | `local` | Environment to build (default: local) |
 | `--output` | `-o` | path | - | Output file path (default: db/generated/schema_{env}.sql) |
 | `--project-dir` | - | path | `.` | Project directory (default: current directory) |
 | `--show-hash` | - | Flag | off | Display schema hash after build (default: off) |
@@ -286,18 +286,18 @@ confiture build [OPTIONS]
 | `--fail-on-unclosed` / `--no-fail-on-unclosed` | - | Flag | - | Fail on unclosed block comments (default: from config) |
 | `--fail-on-spillover` / `--no-fail-on-spillover` | - | Flag | - | Fail on comment spillover into next file (default: from config) |
 | `--two-pass` / `--no-two-pass` | - | Flag | - | Two-pass FK emission: strip REFERENCES from CREATE TABLE, emit ALTER TABLE after (default: from config) |
-| `--separator-style` | - | text | - | Separator style: block_comment, line_comment, mysql, custom (default: from config) |
-| `--separator-template` | - | text | - | Custom separator template with {file_path} placeholder (default: none) |
+| `--separator-style` | - | str | - | Separator style: block_comment, line_comment, mysql, custom (default: from config) |
+| `--separator-template` | - | str | - | Custom separator template with {file_path} placeholder (default: none) |
 | `--sequential` | - | Flag | off | Apply seed files sequentially after build (default: off) |
-| `--database-url` | - | text | - | Database connection URL (required for --sequential, default: from config) |
+| `--database-url` | - | str | - | Database connection URL (required for --sequential, default: from config) |
 | `--continue-on-error` | - | Flag | off | Continue applying seed files if one fails (only with --sequential) |
 | `--warn-duplicates` | - | Flag | off | Report objects defined more than once across the build's files (build_001/build_002), then build |
 | `--fail-on-duplicates` | - | Flag | off | Report duplicate definitions and exit 1 without building |
-| `--format` | `-f` | text | `text` | Output format: text or json or csv (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json or csv (default: text) |
 | `--report` | - | path | - | Save structured build report (JSON/CSV) to file (default: stdout). Distinct from --output/-o, which is the generated *schema* file. |
 | `--dump` | - | path | - | Also emit a content-addressed pg_dump -Fc artifact restorable by 'confiture restore'. Pass a file path, or an existing directory to auto-name 'schema_{env}.{profile}.{hash}.pgdump' inside it (cache by db/ hash). |
-| `--dump-format` | - | text | `custom` | Artifact format for --dump: custom (-Fc) or directory (-Fd, parallel). Default: custom. |
-| `--seed-profile` | - | text | - | Apply only the named seed profile (seed.profiles.<name>) during --sequential seed application and --dump. Unknown name → exit 5. |
+| `--dump-format` | - | str | `custom` | Artifact format for --dump: custom (-Fc) or directory (-Fd, parallel). Default: custom. |
+| `--seed-profile` | - | str | - | Apply only the named seed profile (seed.profiles.<name>) during --sequential seed application and --dump. Unknown name → exit 5. |
 | `--list-files` | - | Flag | off | Print the files this build would read — with the include_dirs entry, its order and the pattern that matched each — and build nothing |
 
 <!-- END GENERATED: cli confiture build -->
@@ -355,14 +355,14 @@ confiture test-db clone [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--template` | - | text | - | Source template database. |
-| `--target` | - | text | - | Clone database name to create. |
-| `--env` | `-e` | text | `local` | Environment (for server URL). |
+| `--template` | - | str | - | Source template database. |
+| `--target` | - | str | - | Clone database name to create. |
+| `--env` | `-e` | str | `local` | Environment (for server URL). |
 | `--project-dir` | - | path | `.` | Project directory. |
-| `--database-url` | - | text | - | PG server URL. |
+| `--database-url` | - | str | - | PG server URL. |
 | `--sync-commit-off` / `--no-sync-commit-off` | - | Flag | on | Set synchronous_commit=off on the clone (default on; opt out for durable commits). |
-| `--max-clone-concurrency` | - | integer | - | Bound concurrent clones of this template across processes (>=1); default unbounded. Throttles WAL/checkpoint thrash on fsync=on clusters. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--max-clone-concurrency` | - | int | - | Bound concurrent clones of this template across processes (>=1); default unbounded. Throttles WAL/checkpoint thrash on fsync=on clusters. |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture test-db clone -->
 
@@ -382,12 +382,12 @@ confiture test-db drop [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--target` | - | text | - | Database to drop. |
+| `--target` | - | str | - | Database to drop. |
 | `--force` | - | Flag | off | Drop even if not confiture-managed (use with care). |
-| `--env` | `-e` | text | `local` | Environment (for server URL). |
+| `--env` | `-e` | str | `local` | Environment (for server URL). |
 | `--project-dir` | - | path | `.` | Project directory. |
-| `--database-url` | - | text | - | PG server URL. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--database-url` | - | str | - | PG server URL. |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture test-db drop -->
 
@@ -407,10 +407,10 @@ confiture test-db list [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--env` | `-e` | text | `local` | Environment (for server URL). |
+| `--env` | `-e` | str | `local` | Environment (for server URL). |
 | `--project-dir` | - | path | `.` | Project directory. |
-| `--database-url` | - | text | - | PG server URL. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--database-url` | - | str | - | PG server URL. |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture test-db list -->
 
@@ -430,14 +430,14 @@ confiture test-db provision-template [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--template` | - | text | - | Template database name. |
-| `--env` | `-e` | text | `local` | Environment to build. |
+| `--template` | - | str | - | Template database name. |
+| `--env` | `-e` | str | `local` | Environment to build. |
 | `--project-dir` | - | path | `.` | Project directory. |
 | `--from-artifact` | - | path | - | Restore a pg_dump -Fc/-Fd artifact (from 'build --dump') instead of applying DDL. |
-| `--seed-profile` | - | text | - | Apply only the named seed profile (seed.profiles.<name>) on the DDL path. |
+| `--seed-profile` | - | str | - | Apply only the named seed profile (seed.profiles.<name>) on the DDL path. |
 | `--force` | - | Flag | off | Replace a same-named database even if not confiture-managed. |
-| `--database-url` | - | text | - | PG server URL (default: from env config). |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--database-url` | - | str | - | PG server URL (default: from env config). |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture test-db provision-template -->
 
@@ -457,11 +457,11 @@ confiture test-db prune [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--template` | - | text | - | Template whose clones to drop. |
-| `--env` | `-e` | text | `local` | Environment (for server URL). |
+| `--template` | - | str | - | Template whose clones to drop. |
+| `--env` | `-e` | str | `local` | Environment (for server URL). |
 | `--project-dir` | - | path | `.` | Project directory. |
-| `--database-url` | - | text | - | PG server URL. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--database-url` | - | str | - | PG server URL. |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture test-db prune -->
 
@@ -481,14 +481,14 @@ confiture test-db ram-setup [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--tablespace` | - | text | - | Tablespace name to (re)create. |
-| `--location` | - | text | - | tmpfs LOCATION directory (e.g. /dev/shm/<dir>). |
-| `--owner` | - | text | `postgres` | OS user the PG server runs as (owns the LOCATION dir). |
+| `--tablespace` | - | str | - | Tablespace name to (re)create. |
+| `--location` | - | str | - | tmpfs LOCATION directory (e.g. /dev/shm/<dir>). |
+| `--owner` | - | str | `postgres` | OS user the PG server runs as (owns the LOCATION dir). |
 | `--force` | - | Flag | off | Drop non-managed DBs in the tablespace and bypass the tmpfs-root allowlist. |
-| `--env` | `-e` | text | `local` | Environment (for server URL). |
+| `--env` | `-e` | str | `local` | Environment (for server URL). |
 | `--project-dir` | - | path | `.` | Project directory. |
-| `--database-url` | - | text | - | PG server URL. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--database-url` | - | str | - | PG server URL. |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture test-db ram-setup -->
 
@@ -508,11 +508,11 @@ confiture test-db status [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--template` | - | text | - | Template database name. |
-| `--env` | `-e` | text | `local` | Environment to hash. |
+| `--template` | - | str | - | Template database name. |
+| `--env` | `-e` | str | `local` | Environment to hash. |
 | `--project-dir` | - | path | `.` | Project directory. |
-| `--database-url` | - | text | - | PG server URL. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--database-url` | - | str | - | PG server URL. |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture test-db status -->
 
@@ -562,16 +562,16 @@ confiture sync [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--from` | - | text | - | Source database: env name or DSN. |
-| `--to` | - | text | - | Target database: env name or DSN. |
+| `--from` | - | str | - | Source database: env name or DSN. |
+| `--to` | - | str | - | Target database: env name or DSN. |
 | `--anonymize` | - | Flag | off | Mask PII during the copy (see --anonymization-config). |
 | `--anonymization-config` | - | path | `db/sync/anonymization.yaml` | Anonymization rules YAML (default: db/sync/anonymization.yaml). |
-| `--tables` | - | text | - | Comma-separated tables to include (default: all). |
-| `--exclude` | - | text | - | Comma-separated tables to exclude. |
-| `--batch-size` | - | integer | `5000` | Rows per batch for anonymized inserts. |
+| `--tables` | - | str | - | Comma-separated tables to include (default: all). |
+| `--exclude` | - | str | - | Comma-separated tables to exclude. |
+| `--batch-size` | - | int | `5000` | Rows per batch for anonymized inserts. |
 | `--checkpoint` | - | path | - | Checkpoint file for resumable syncs. |
 | `--resume` | - | Flag | off | Resume from --checkpoint, skipping completed tables. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture sync -->
 
@@ -737,12 +737,12 @@ confiture migrate status [OPTIONS]
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--config` | `-c` | path | - | Config file for database connection. Must appear after 'status': confiture migrate status -c config.yaml |
-| `--database-url` | `-d` | text | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
-| `--format` | `-f` | text | `table` | Output format: table or json or csv (default: table) |
+| `--format` | `-f` | str | `table` | Output format: table or json or csv (default: table) |
 | `--output` | `-o` | path | - | Save output to file (default: stdout, useful with json/csv) |
 | `--check-rebuild` | - | Flag | off | Check whether a full rebuild is recommended instead of migrate up |
-| `--rebuild-threshold` | - | integer | - | Number of pending migrations that triggers rebuild advisory (default: from config or 5) |
+| `--rebuild-threshold` | - | int | - | Number of pending migrations that triggers rebuild advisory (default: from config or 5) |
 
 <!-- END GENERATED: cli confiture migrate status -->
 
@@ -797,9 +797,9 @@ confiture migrate current [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
-| `--database-url` | `-d` | text | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--output` | `-o` | path | - | Save output to file (default: stdout) |
 
 <!-- END GENERATED: cli confiture migrate current -->
@@ -888,27 +888,27 @@ from confiture.models.migration import Migration
 **Usage**
 
 ```bash
-confiture migrate generate [OPTIONS] NAME
+confiture migrate generate [OPTIONS] {name}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `NAME` | text | yes | Migration name (snake_case) |
+| `name` | str | yes | Migration name (snake_case) |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--force` | - | Flag | off | Overwrite existing migration file (default: off) |
 | `--dry-run` | - | Flag | off | Show what would be generated without creating (default: off) |
 | `--verbose` | `-v` | Flag | off | Show version calculation details (default: off) |
 | `--from` | - | path | - | Old schema file path (required with --generator) |
 | `--to` | - | path | - | New schema file path (required with --generator) |
-| `--generator` | - | text | - | Named external generator from migration_generators config |
+| `--generator` | - | str | - | Named external generator from migration_generators config |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Environment config file (default: db/environments/local.yaml) |
 | `--snapshot` / `--no-snapshot` | - | Flag | - | Write schema history snapshot (default: from config, True) |
 | `--snapshots-dir` | - | path | - | Override snapshot output directory (default: db/schema_history) |
@@ -1050,27 +1050,27 @@ confiture migrate up
 **Usage**
 
 ```bash
-confiture migrate diff [OPTIONS] [OLD_SCHEMA] [NEW_SCHEMA]
+confiture migrate diff [OPTIONS] [old_schema] [new_schema]
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `OLD_SCHEMA` | path | no | Old schema file |
-| `NEW_SCHEMA` | path | no | New schema file |
+| `old_schema` | path | no | Old schema file |
+| `new_schema` | path | no | New schema file |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--from` | - | text | - | Current state: a schema file, a directory of .sql files, '-' for stdin, or 'db' for the configured database (default: the first positional) |
-| `--to` | - | text | - | Desired state: a schema file, a directory of .sql files (what fraiseql's emit-ddl option writes), or '-' for stdin (default: the second positional) |
+| `--from` | - | str | - | Current state: a schema file, a directory of .sql files, '-' for stdin, or 'db' for the configured database (default: the first positional) |
+| `--to` | - | str | - | Desired state: a schema file, a directory of .sql files (what fraiseql's emit-ddl option writes), or '-' for stdin (default: the second positional) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Environment config, read for `--from db` (default: db/environments/local.yaml) |
 | `--generate` | - | Flag | off | Generate a migration from the differences: a .up.sql/.down.sql pair with --from/--to, a Python migration with positional files |
-| `--name` | - | text | - | Migration name (default: none, required with --generate) |
+| `--name` | - | str | - | Migration name (default: none, required with --generate) |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
-| `--format` | `-f` | text | `text` | Output format: text or json or csv (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json or csv (default: text) |
 | `--allow-destructive` | - | Flag | off | Write data-losing DDL unmarked, whatever migration.destructive says |
 | `--forbid-destructive` | - | Flag | off | Refuse to generate a migration that loses data (exit 5, DIFFER_401) |
 | `--report` | `-o` | path | - | Save report to file (default: stdout) |
@@ -1227,28 +1227,28 @@ confiture migrate up [OPTIONS]
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
-| `--database-url` | `-d` | text | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
-| `--target` | `-t` | text | - | Target migration version (default: applies all pending) |
+| `--target` | `-t` | str | - | Target migration version (default: applies all pending) |
 | `--strict` | - | Flag | off | Enable strict mode, fail on warnings (default: off) |
 | `--force` | - | Flag | off | Force application, skip state checks (default: off) |
-| `--lock-timeout` | - | integer | - | Lock timeout in milliseconds (default: migration.locking.timeout_ms, else 30000) |
+| `--lock-timeout` | - | int | - | Lock timeout in milliseconds (default: migration.locking.timeout_ms, else 30000) |
 | `--no-lock` | - | Flag | off | Disable migration locking (default: migration.locking.enabled; DANGEROUS in multi-pod) |
 | `--dry-run` | - | Flag | off | Analyze without executing (default: off) |
 | `--dry-run-execute` | - | Flag | off | Execute in SAVEPOINT for testing (default: off, guaranteed rollback) |
 | `--verify-checksums` / `--no-verify-checksums` | - | Flag | on | Verify migration checksums before running (default: on) |
-| `--on-checksum-mismatch` | - | text | `fail` | Checksum mismatch behavior: fail, warn, ignore (default: fail) |
+| `--on-checksum-mismatch` | - | str | `fail` | Checksum mismatch behavior: fail, warn, ignore (default: fail) |
 | `--verbose` | `-v` | Flag | off | Show detailed analysis in dry-run (default: off) |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--output` | `-o` | path | - | Save report to file (default: stdout) |
 | `--auto-detect-baseline` | - | Flag | off | Introspect DB and self-baseline if tb_confiture is missing (default: off) |
 | `--snapshots-dir` | - | path | - | Schema history snapshots directory for --auto-detect-baseline (default: db/schema_history) |
 | `--require-reversible` | - | Flag | off | Abort if any pending migration lacks a .down.sql file (guarantees rollback capability). |
 | `--allow-destructive` | - | Flag | off | Apply migrations gated as destructive (data is lost): the generator's -- confiture:destructive directive, or destructive = True on a Python migration. |
 | `--online` | - | Flag | off | Apply a migration the classifier marks multi-step as expand → backfill → contract stages with a checkpoint each (see migrate steps); other migrations apply the classic way. |
-| `--max-lock-ms` | - | integer | - | With --online: pause this many ms between backfill batches while another session waits for a lock on the table (overrides migration.backfill.max_lock_ms). |
+| `--max-lock-ms` | - | int | - | With --online: pause this many ms between backfill batches while another session waits for a lock on the table (overrides migration.backfill.max_lock_ms). |
 | `--batched` | - | Flag | off | Use batch processing for large-table operations (default: off) |
-| `--batch-size` | - | integer | `10000` | Rows per batch when --batched is active (default: 10000) |
+| `--batch-size` | - | int | `10000` | Rows per batch when --batched is active (default: 10000) |
 | `--batch-sleep` | - | float | `0.1` | Seconds to sleep between batches to reduce lock pressure (default: 0.1) |
 | `--yes` | `-y` | Flag | off | Skip the --dry-run-execute confirmation prompt (default: off) |
 
@@ -1347,14 +1347,14 @@ confiture migrate down [OPTIONS]
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
-| `--database-url` | `-d` | text | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
-| `--steps` | `-n` | integer | `1` | Number of migrations to rollback (default: 1) |
+| `--steps` | `-n` | int | `1` | Number of migrations to rollback (default: 1) |
 | `--dry-run` | - | Flag | off | Analyze rollback without executing (default: off) |
-| `--lock-timeout` | - | integer | - | Lock timeout in milliseconds (default: migration.locking.timeout_ms, else 30000) |
+| `--lock-timeout` | - | int | - | Lock timeout in milliseconds (default: migration.locking.timeout_ms, else 30000) |
 | `--no-lock` | - | Flag | off | Disable migration locking (default: migration.locking.enabled; DANGEROUS in multi-pod) |
 | `--verbose` | `-v` | Flag | off | Show detailed analysis in dry-run (default: off) |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--output` | `-o` | path | - | Save report to file (default: stdout) |
 
 <!-- END GENERATED: cli confiture migrate down -->
@@ -1405,14 +1405,14 @@ Edge cases and exit codes:
 **Usage**
 
 ```bash
-confiture migrate down-to [OPTIONS] REVISION
+confiture migrate down-to [OPTIONS] {revision}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `REVISION` | text | yes | Target revision to roll back to (stays applied). Use 'migrate current' to find it. |
+| `revision` | str | yes | Target revision to roll back to (stays applied). Use 'migrate current' to find it. |
 
 **Options**
 
@@ -1420,10 +1420,10 @@ confiture migrate down-to [OPTIONS] REVISION
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
-| `--database-url` | `-d` | text | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
 | `--dry-run` | - | Flag | off | Print the rollback plan and exit 0 without applying anything. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--output` | `-o` | path | - | Save output to file (default: stdout) |
 
 <!-- END GENERATED: cli confiture migrate down-to -->
@@ -1495,7 +1495,7 @@ confiture migrate rebuild [OPTIONS]
 | `--verify` | - | Flag | off | Run status check after rebuild to confirm 0 pending |
 | `--dry-run` | - | Flag | off | Show what would happen without making changes |
 | `--yes` | `-y` | Flag | off | Skip confirmation prompt |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate rebuild -->
 
@@ -1701,8 +1701,8 @@ confiture migrate validate [OPTIONS]
 | `--require-migration` | - | Flag | off | Ensure DDL changes have migration files (static, no DB required). Also detects function parameter type changes missing a DROP FUNCTION. Companion to --check-signatures which detects stale overloads in a live DB. |
 | `--require-migration-bodies` | - | Flag | off | Additionally require a function/procedure BODY change (between --base-ref and HEAD) to be carried by a migration that re-defines it (#178). Static, no DB. Implies --require-migration. OFF by default — drain the standing backlog first (see --list-unmigrated-bodies). The runtime counterpart is --check-body-replay. |
 | `--list-unmigrated-bodies` | - | Flag | off | Report-only: list function body changes (between --base-ref and HEAD) not carried by a migration, WITHOUT failing (exit 0). Use to size and drain the backlog before enabling --require-migration-bodies. Report mode: cannot be combined with any other check. |
-| `--base-ref` | - | text | `origin/main` | Base git reference for comparison (default: origin/main) |
-| `--since` | - | text | - | Shortcut for --base-ref (default: none) |
+| `--base-ref` | - | str | `origin/main` | Base git reference for comparison (default: origin/main) |
+| `--since` | - | str | - | Shortcut for --base-ref (default: none) |
 | `--staged` | - | Flag | off | Validate staged files only, pre-commit mode (default: off) |
 | `--require-grant-migration` | - | Flag | off | Verify that each changed GRANT/REVOKE in the grant directory is carried by an accompanying migration (SQL or Python). Semantic match across table/schema/sequence/function objects; grants that can't be statically verified degrade to a file-presence check and are surfaced as notes (default: off). |
 | `--allow-grant-only` | - | Flag | off | Suppress --require-grant-migration failure for build-only branches (default: off) |
@@ -1715,7 +1715,7 @@ confiture migrate validate [OPTIONS]
 | `--show-diff` | - | Flag | off | With --check-body: also emit, per drifted function, the expected body, the live body, and a unified diff of the two (normalised) bodies. Requires --check-body. Opt-in because bodies can be large; the default output stays hash-only for terse CI logs. Also applies to --check-body-views. |
 | `--check-body-views` | - | Flag | off | Compare view and materialized-view definitions between the source schema and the live database. The expected views are built into a scratch DB and read back through the same pg_get_viewdef deparser as live, so only genuine predicate/projection changes register (formatting, schema-qualification and *-expansion differences do not). Requires --config (or --env) and --schema. Honours --schemas and --ssh (with --scratch-url). |
 | `--check-body-replay` | - | Flag | off | Detect out-of-band function/procedure hot-patches by REPLAY: rebuild the expected database by replaying all migrations into a scratch DB, then diff prosrc against live. Unlike --check-body (expected = source DDL, swamped by the build-vs-migrate backlog), this reports only definitions no migration produced — the clean production drift signal. Requires --config (or --env); honours --schemas, --migrations-dir, --ssh (with --scratch-url). Heaviest drift check (replays the full migration history). |
-| `--scratch-url` | - | text | - | Writable PostgreSQL server on which to build the expected scratch database for --check-body-views / --check-body-replay (default: the live server from the config). Required when using --ssh, since the scratch DB cannot be built on the remote read-only live server. |
+| `--scratch-url` | - | str | - | Writable PostgreSQL server on which to build the expected scratch database for --check-body-views / --check-body-replay (default: the live server from the config). Required when using --ssh, since the scratch DB cannot be built on the remote read-only live server. |
 | `--check-acls` / `--check-acl-coverage` | - | Flag | off | Static: verify every `CREATE TABLE` in db/migrations/ has a matching `GRANT` either in the same migration or in the configured global grant sweep directory (defaults to db/7_grant). No-op when the config has no `acls:` block. No database connection required. Use --check-acls; --check-acl-coverage is a deprecated alias. |
 | `--check-ownership-coverage` | - | Flag | off | Static: verify every `CREATE { TABLE \| VIEW \| MATERIALIZED VIEW \| SEQUENCE }` in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` in the same file (`own_001`). Also flags bare `ALTER … OWNER TO` on objects the migration didn't create (`own_002` — three severity tiers: silent when guarded + companion `requires_superuser=True`, WARNING when only guarded, ERROR when bare). No-op when the config has no `ownership:` block, or when `ownership.lint_enabled` is false. Requires the [ast] extra (pglast). |
 | `--check-function-uniqueness` | - | Flag | off | Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` in the configured DDL directories has a unique fully-qualified signature. Two files defining the same `schema.name(args)` are silently shadowed by `confiture build` — this rule (`func_001`) catches the duplicate first. No-op when the config has no `function_coverage:` block, or when `function_coverage.enabled` is false. Requires the [ast] extra (pglast). |
@@ -1723,12 +1723,12 @@ confiture migrate validate [OPTIONS]
 | `--against-db` | - | Flag | off | Used with `--check-security-definer`: query the live database (`pg_proc.proconfig`) instead of scanning DDL source files. Authoritative for migrate-strategy databases where `ALTER FUNCTION … SET search_path` may have been applied after the original CREATE. |
 | `--emit-remediation` | - | path | - | Used with `--check-security-definer`: write a SQL remediation script containing one `ALTER FUNCTION … SET search_path = …` statement per flagged callable to the given file path. Does nothing when no violations are found. |
 | `--ddl-dir` | - | path | - | DDL directory to scan for `--check-function-uniqueness` and `--check-security-definer` (repeatable). Defaults to `db/schema` if not provided. |
-| `--schemas` | - | text | `public` | Comma-separated list of schemas to inspect for stale overloads (default: public). Used with --check-signatures. |
+| `--schemas` | - | str | `public` | Comma-separated list of schemas to inspect for stale overloads (default: public). Used with --check-signatures. |
 | `--config` | `-c` | path | `confiture.yaml` | Config file path. Use --env as a shortcut for db/environments/{name}.yaml. |
-| `--env` | - | text | - | Environment name — shortcut for --config db/environments/{name}.yaml (e.g. --env production). Cannot be combined with --config. |
-| `--ssh` | - | text | - | Open an SSH tunnel before connecting: user@host or host (e.g. lionel@printoptim.io). Used with --check-signatures and --check-live-drift. Overrides the ssh_tunnel block in the config file. |
+| `--env` | - | str | - | Environment name — shortcut for --config db/environments/{name}.yaml (e.g. --env production). Cannot be combined with --config. |
+| `--ssh` | - | str | - | Open an SSH tunnel before connecting: user@host or host (e.g. lionel@printoptim.io). Used with --check-signatures and --check-live-drift. Overrides the ssh_tunnel block in the config file. |
 | `--schema` | - | path | - | Schema SQL file to compare against. If omitted with --check-signatures, schema is auto-built from DDL files. |
-| `--format` | `-f` | text | `text` | Output format: text or json or csv (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json or csv (default: text) |
 | `--output` | `-o` | path | - | Save output to file (default: stdout) |
 
 <!-- END GENERATED: cli confiture migrate validate -->
@@ -1882,16 +1882,16 @@ confiture migrate preflight [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
-| `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
+| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
 | `--output` | `-o` | path | - | Save output to file (default: stdout) |
-| `--against` | - | text | - | PostgreSQL URL of the preflight database to test migrations against. Typically seeded from pg_dump --schema-only. Migrations are executed inside a transaction that is always rolled back. |
+| `--against` | - | str | - | PostgreSQL URL of the preflight database to test migrations against. Typically seeded from pg_dump --schema-only. Migrations are executed inside a transaction that is always rolled back. |
 | `--config` | `-c` | path | - | Config file for pending-migration detection. Connects to the configured database to read the tracking table. |
-| `--database-url` | `-d` | text | - | PostgreSQL DSN of the tracking database for pending-migration detection (distinct from --against, which is the throwaway target). Takes precedence over --config / --env and the CONFITURE_DATABASE_URL / DATABASE_URL env vars. |
-| `--env` | - | text | - | Environment shortcut — db/environments/{name}.yaml (e.g. --env production). |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN of the tracking database for pending-migration detection (distinct from --against, which is the throwaway target). Takes precedence over --config / --env and the CONFITURE_DATABASE_URL / DATABASE_URL env vars. |
+| `--env` | - | str | - | Environment shortcut — db/environments/{name}.yaml (e.g. --env production). |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
-| `--since` | - | text | - | Test migrations with version >= SINCE (e.g. --since 20260428000000). Inclusive. Alternative to --config when no second DB connection is available. |
+| `--since` | - | str | - | Test migrations with version >= SINCE (e.g. --since 20260428000000). Inclusive. Alternative to --config when no second DB connection is available. |
 | `--allow-non-transactional` | - | Flag | off | Run non-transactional migrations (CREATE INDEX CONCURRENTLY, etc.) outside the rollback SAVEPOINT in autocommit mode. The preflight DB will be permanently modified (db_consumed=True). By default such migrations are skipped. |
-| `--check-dependents` | - | text | `off` | Enumerate live dependents of CREATE OR REPLACE targets via pg_depend on the --against preflight DB. 'off' (default), 'fail' (exit 1 on dependents found), or 'warn' (render dependents as informational, exit code unchanged). Requires the [ast] extra (pglast). |
+| `--check-dependents` | - | str | `off` | Enumerate live dependents of CREATE OR REPLACE targets via pg_depend on the --against preflight DB. 'off' (default), 'fail' (exit 1 on dependents found), or 'warn' (render dependents as informational, exit code unchanged). Requires the [ast] extra (pglast). |
 | `--strict` | - | Flag | off | Treat warnings as errors for exit purposes (warnings → exit 7). |
 
 <!-- END GENERATED: cli confiture migrate preflight -->
@@ -1944,10 +1944,10 @@ confiture migrate verify [OPTIONS]
 |---|---|---|---|---|
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--config` | `-c` | path | - | Configuration file path |
-| `--database-url` | `-d` | text | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--no-config` | - | Flag | off | Suppress config-file discovery entirely; the environment (CONFITURE_DATABASE_URL, else DATABASE_URL) becomes the sole DSN source. Use this for runtime-resolved DSNs that must not be exposed in argv. |
-| `--version` | - | text | - | Verify a single migration version (default: verify all applied) |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--version` | - | str | - | Verify a single migration version (default: verify all applied) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--output` | `-o` | path | - | Save output to file (default: stdout) |
 | `--allow-uninitialized` | - | Flag | off | Treat a database with no migration ledger as success (exit 0) instead of exit 2. For gates that legitimately run against schema-built databases. |
 
@@ -2000,7 +2000,7 @@ confiture verify-checksums [OPTIONS]
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
 | `--fix` | - | Flag | off | Update stored checksums to match current files (dangerous) |
 | `--allow-uninitialized` | - | Flag | off | Treat a database with no migration ledger as success (exit 0) instead of exit 2. For gates that legitimately run against schema-built databases. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture verify-checksums -->
 
@@ -2393,8 +2393,8 @@ confiture migrate validate [OPTIONS]
 | `--require-migration` | - | Flag | off | Ensure DDL changes have migration files (static, no DB required). Also detects function parameter type changes missing a DROP FUNCTION. Companion to --check-signatures which detects stale overloads in a live DB. |
 | `--require-migration-bodies` | - | Flag | off | Additionally require a function/procedure BODY change (between --base-ref and HEAD) to be carried by a migration that re-defines it (#178). Static, no DB. Implies --require-migration. OFF by default — drain the standing backlog first (see --list-unmigrated-bodies). The runtime counterpart is --check-body-replay. |
 | `--list-unmigrated-bodies` | - | Flag | off | Report-only: list function body changes (between --base-ref and HEAD) not carried by a migration, WITHOUT failing (exit 0). Use to size and drain the backlog before enabling --require-migration-bodies. Report mode: cannot be combined with any other check. |
-| `--base-ref` | - | text | `origin/main` | Base git reference for comparison (default: origin/main) |
-| `--since` | - | text | - | Shortcut for --base-ref (default: none) |
+| `--base-ref` | - | str | `origin/main` | Base git reference for comparison (default: origin/main) |
+| `--since` | - | str | - | Shortcut for --base-ref (default: none) |
 | `--staged` | - | Flag | off | Validate staged files only, pre-commit mode (default: off) |
 | `--require-grant-migration` | - | Flag | off | Verify that each changed GRANT/REVOKE in the grant directory is carried by an accompanying migration (SQL or Python). Semantic match across table/schema/sequence/function objects; grants that can't be statically verified degrade to a file-presence check and are surfaced as notes (default: off). |
 | `--allow-grant-only` | - | Flag | off | Suppress --require-grant-migration failure for build-only branches (default: off) |
@@ -2407,7 +2407,7 @@ confiture migrate validate [OPTIONS]
 | `--show-diff` | - | Flag | off | With --check-body: also emit, per drifted function, the expected body, the live body, and a unified diff of the two (normalised) bodies. Requires --check-body. Opt-in because bodies can be large; the default output stays hash-only for terse CI logs. Also applies to --check-body-views. |
 | `--check-body-views` | - | Flag | off | Compare view and materialized-view definitions between the source schema and the live database. The expected views are built into a scratch DB and read back through the same pg_get_viewdef deparser as live, so only genuine predicate/projection changes register (formatting, schema-qualification and *-expansion differences do not). Requires --config (or --env) and --schema. Honours --schemas and --ssh (with --scratch-url). |
 | `--check-body-replay` | - | Flag | off | Detect out-of-band function/procedure hot-patches by REPLAY: rebuild the expected database by replaying all migrations into a scratch DB, then diff prosrc against live. Unlike --check-body (expected = source DDL, swamped by the build-vs-migrate backlog), this reports only definitions no migration produced — the clean production drift signal. Requires --config (or --env); honours --schemas, --migrations-dir, --ssh (with --scratch-url). Heaviest drift check (replays the full migration history). |
-| `--scratch-url` | - | text | - | Writable PostgreSQL server on which to build the expected scratch database for --check-body-views / --check-body-replay (default: the live server from the config). Required when using --ssh, since the scratch DB cannot be built on the remote read-only live server. |
+| `--scratch-url` | - | str | - | Writable PostgreSQL server on which to build the expected scratch database for --check-body-views / --check-body-replay (default: the live server from the config). Required when using --ssh, since the scratch DB cannot be built on the remote read-only live server. |
 | `--check-acls` / `--check-acl-coverage` | - | Flag | off | Static: verify every `CREATE TABLE` in db/migrations/ has a matching `GRANT` either in the same migration or in the configured global grant sweep directory (defaults to db/7_grant). No-op when the config has no `acls:` block. No database connection required. Use --check-acls; --check-acl-coverage is a deprecated alias. |
 | `--check-ownership-coverage` | - | Flag | off | Static: verify every `CREATE { TABLE \| VIEW \| MATERIALIZED VIEW \| SEQUENCE }` in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` in the same file (`own_001`). Also flags bare `ALTER … OWNER TO` on objects the migration didn't create (`own_002` — three severity tiers: silent when guarded + companion `requires_superuser=True`, WARNING when only guarded, ERROR when bare). No-op when the config has no `ownership:` block, or when `ownership.lint_enabled` is false. Requires the [ast] extra (pglast). |
 | `--check-function-uniqueness` | - | Flag | off | Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` in the configured DDL directories has a unique fully-qualified signature. Two files defining the same `schema.name(args)` are silently shadowed by `confiture build` — this rule (`func_001`) catches the duplicate first. No-op when the config has no `function_coverage:` block, or when `function_coverage.enabled` is false. Requires the [ast] extra (pglast). |
@@ -2415,12 +2415,12 @@ confiture migrate validate [OPTIONS]
 | `--against-db` | - | Flag | off | Used with `--check-security-definer`: query the live database (`pg_proc.proconfig`) instead of scanning DDL source files. Authoritative for migrate-strategy databases where `ALTER FUNCTION … SET search_path` may have been applied after the original CREATE. |
 | `--emit-remediation` | - | path | - | Used with `--check-security-definer`: write a SQL remediation script containing one `ALTER FUNCTION … SET search_path = …` statement per flagged callable to the given file path. Does nothing when no violations are found. |
 | `--ddl-dir` | - | path | - | DDL directory to scan for `--check-function-uniqueness` and `--check-security-definer` (repeatable). Defaults to `db/schema` if not provided. |
-| `--schemas` | - | text | `public` | Comma-separated list of schemas to inspect for stale overloads (default: public). Used with --check-signatures. |
+| `--schemas` | - | str | `public` | Comma-separated list of schemas to inspect for stale overloads (default: public). Used with --check-signatures. |
 | `--config` | `-c` | path | `confiture.yaml` | Config file path. Use --env as a shortcut for db/environments/{name}.yaml. |
-| `--env` | - | text | - | Environment name — shortcut for --config db/environments/{name}.yaml (e.g. --env production). Cannot be combined with --config. |
-| `--ssh` | - | text | - | Open an SSH tunnel before connecting: user@host or host (e.g. lionel@printoptim.io). Used with --check-signatures and --check-live-drift. Overrides the ssh_tunnel block in the config file. |
+| `--env` | - | str | - | Environment name — shortcut for --config db/environments/{name}.yaml (e.g. --env production). Cannot be combined with --config. |
+| `--ssh` | - | str | - | Open an SSH tunnel before connecting: user@host or host (e.g. lionel@printoptim.io). Used with --check-signatures and --check-live-drift. Overrides the ssh_tunnel block in the config file. |
 | `--schema` | - | path | - | Schema SQL file to compare against. If omitted with --check-signatures, schema is auto-built from DDL files. |
-| `--format` | `-f` | text | `text` | Output format: text or json or csv (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json or csv (default: text) |
 | `--output` | `-o` | path | - | Save output to file (default: stdout) |
 
 <!-- END GENERATED: cli confiture migrate validate -->
@@ -2545,10 +2545,10 @@ confiture migrate schema-to-schema analyze [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | text | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | text | - | Target (new) database: env name, config path, or DSN. |
-| `--schema` | - | text | `public` | Schema to analyze (default: public). |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
+| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--schema` | - | str | `public` | Schema to analyze (default: public). |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate schema-to-schema analyze -->
 
@@ -2568,9 +2568,9 @@ confiture migrate schema-to-schema cleanup [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | text | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | text | - | Target (new) database: env name, config path, or DSN. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
+| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate schema-to-schema cleanup -->
 
@@ -2590,11 +2590,11 @@ confiture migrate schema-to-schema migrate [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | text | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | text | - | Target (new) database: env name, config path, or DSN. |
+| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
+| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
 | `--mapping` | - | path | - | Per-table column-mapping YAML (see the guide). |
-| `--strategy` | - | text | `fdw` | Migration strategy: fdw or copy (default: fdw). |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--strategy` | - | str | `fdw` | Migration strategy: fdw or copy (default: fdw). |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate schema-to-schema migrate -->
 
@@ -2614,13 +2614,13 @@ confiture migrate schema-to-schema migrate-table [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | text | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | text | - | Target (new) database: env name, config path, or DSN. |
-| `--source-table` | - | text | - | Source table name. |
-| `--target-table` | - | text | - | Target table name. |
-| `--mapping` | - | text | - | Inline column mapping 'src_col:dst_col,...'. |
-| `--strategy` | - | text | `fdw` | fdw or copy (default: fdw). |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
+| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--source-table` | - | str | - | Source table name. |
+| `--target-table` | - | str | - | Target table name. |
+| `--mapping` | - | str | - | Inline column mapping 'src_col:dst_col,...'. |
+| `--strategy` | - | str | `fdw` | fdw or copy (default: fdw). |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate schema-to-schema migrate-table -->
 
@@ -2640,10 +2640,10 @@ confiture migrate schema-to-schema setup [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | text | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | text | - | Target (new) database: env name, config path, or DSN. |
+| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
+| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
 | `--skip-import` | - | Flag | off | Create the FDW server without importing the foreign schema. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate schema-to-schema setup -->
 
@@ -2663,12 +2663,12 @@ confiture migrate schema-to-schema verify [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--source` | - | text | - | Source (old) database: env name, config path, or DSN. |
-| `--target` | - | text | - | Target (new) database: env name, config path, or DSN. |
-| `--tables` | - | text | - | Comma-separated tables to verify. |
-| `--source-schema` | - | text | `old_schema` |  |
-| `--target-schema` | - | text | `public` |  |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
+| `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
+| `--tables` | - | str | - | Comma-separated tables to verify. |
+| `--source-schema` | - | str | `old_schema` |  |
+| `--target-schema` | - | str | `public` |  |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate schema-to-schema verify -->
 
@@ -2681,24 +2681,24 @@ Apply exactly one migration as an explicit PostgreSQL role.
 **Usage**
 
 ```bash
-confiture migrate apply-as [OPTIONS] ROLE VERSION
+confiture migrate apply-as [OPTIONS] {role} {version}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `ROLE` | text | yes | PostgreSQL role under which to apply the migration. Connection URL is read from `apply_as.<role>.url` in the env config. |
-| `VERSION` | text | yes | Migration version to apply (e.g. 20260528120000). |
+| `role` | str | yes | PostgreSQL role under which to apply the migration. Connection URL is read from `apply_as.<role>.url` in the env config. |
+| `version` | str | yes | Migration version to apply (e.g. 20260528120000). |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | `confiture.yaml` | Config file path. Use --env as a shortcut for db/environments/{name}.yaml. |
-| `--env` | - | text | - | Environment name — shortcut for --config db/environments/{name}.yaml. Cannot be combined with --config. |
+| `--env` | - | str | - | Environment name — shortcut for --config db/environments/{name}.yaml. Cannot be combined with --config. |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations). |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate apply-as -->
 
@@ -2718,9 +2718,9 @@ confiture migrate baseline [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--through` | `-t` | text | - | Mark all migrations through this version as applied. Required unless --from-db is given. |
-| `--from-db` | - | text | - | Source DSN to copy tb_confiture rows from. When set, history is copied from another database rather than marked manually. Combined with --through, the copy is capped at the named version. |
-| `--source-table` | - | text | - | Override the source DB's tracking table name when it differs from the target (default: same as target). |
+| `--through` | `-t` | str | - | Mark all migrations through this version as applied. Required unless --from-db is given. |
+| `--from-db` | - | str | - | Source DSN to copy tb_confiture rows from. When set, history is copied from another database rather than marked manually. Combined with --through, the copy is capped at the named version. |
+| `--source-table` | - | str | - | Override the source DB's tracking table name when it differs from the target (default: same as target). |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
 | `--dry-run` | - | Flag | off | Show what would be marked without making changes (default: off) |
@@ -2744,8 +2744,8 @@ confiture migrate estimate [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
-| `--table` | `-t` | text | - | Tables to estimate (default: all tables) |
-| `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
+| `--table` | `-t` | str | - | Tables to estimate (default: all tables) |
+| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
 
 <!-- END GENERATED: cli confiture migrate estimate -->
 
@@ -2768,10 +2768,10 @@ confiture migrate fix [OPTIONS]
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--idempotent` | - | Flag | off | Fix non-idempotent SQL statements (default: off) |
 | `--ownership` | - | Flag | off | Insert missing `ALTER … OWNER TO <expected_owner>` after each CREATE that lacks one. Requires an `ownership:` block in the config and the [ast] extra (pglast). |
-| `--config` | `-c` | path | `confiture.yaml` | Config file (needed for --ownership; defaults to confiture.yaml) |
+| `--config` | `-c` | path | - | Config file (needed for --ownership; defaults to confiture.yaml) |
 | `--force` | - | Flag | off | With --ownership --apply: rewrite migration files even when their checksum is already recorded in the local tracking table. Use with care — downstream `migrate verify` will report drift. |
 | `--dry-run` | - | Flag | off | Preview changes without modifying files (default: off) |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--output` | `-o` | path | - | Save output to file (default: stdout) |
 
 <!-- END GENERATED: cli confiture migrate fix -->
@@ -2793,12 +2793,12 @@ confiture migrate fix-signatures [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | `confiture.yaml` | Config file path. Use --env as a shortcut for db/environments/{name}.yaml. |
-| `--env` | - | text | - | Environment name — shortcut for --config db/environments/{name}.yaml. |
+| `--env` | - | str | - | Environment name — shortcut for --config db/environments/{name}.yaml. |
 | `--schema` | - | path | - | Schema SQL file containing the authoritative function definitions. If omitted, schema is auto-built from DDL files. |
-| `--schemas` | - | text | `public` | Comma-separated list of schemas to inspect (default: public). |
-| `--ssh` | - | text | - | Open an SSH tunnel before connecting: user@host or host. Overrides the ssh_tunnel block in the config file. |
+| `--schemas` | - | str | `public` | Comma-separated list of schemas to inspect (default: public). |
+| `--ssh` | - | str | - | Open an SSH tunnel before connecting: user@host or host. Overrides the ssh_tunnel block in the config file. |
 | `--apply` | - | Flag | off | Execute the fixes in a single transaction. Default is dry-run: print the SQL and exit without changing the DB. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--output` | `-o` | path | - | Save output to file (default: stdout). |
 | `--check-body` | - | Flag | off | Also detect and fix function body drift (same signature, different body). Runs CREATE OR REPLACE from source for each drifted function — no DROP needed. |
 
@@ -2822,7 +2822,7 @@ confiture migrate introspect [OPTIONS]
 |---|---|---|---|---|
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
 | `--snapshots-dir` | - | path | `db/schema_history` | Schema history snapshots directory (default: db/schema_history) |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate introspect -->
 
@@ -2842,7 +2842,7 @@ confiture migrate reinit [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--through` | `-t` | text | - | Mark migrations as applied through this version (default: all files on disk) |
+| `--through` | `-t` | str | - | Mark migrations as applied through this version (default: all files on disk) |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
 | `--dry-run` | - | Flag | off | Show what would happen without making changes (default: off) |
@@ -2868,10 +2868,10 @@ confiture migrate steps [OPTIONS]
 |---|---|---|---|---|
 | `--config` | `-c` | path | `db/environments/local.yaml` | Path to environment config file |
 | `--migrations-dir` | - | path | `db/migrations` | Directory containing migration files |
-| `--resume` | - | text | - | Continue the online migration with this version from its last checkpoint |
+| `--resume` | - | str | - | Continue the online migration with this version from its last checkpoint |
 | `--allow-destructive` | - | Flag | off | Run a contract stage that drops the old column (data is lost) |
-| `--max-lock-ms` | - | integer | - | Pause this many ms between backfill batches while another session waits for a lock on the table (overrides migration.backfill.max_lock_ms) |
-| `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
+| `--max-lock-ms` | - | int | - | Pause this many ms between backfill batches while another session waits for a lock on the table (overrides migration.backfill.max_lock_ms) |
+| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
 | `--output` | `-o` | path | - | Write output to file |
 
 <!-- END GENERATED: cli confiture migrate steps -->
@@ -2938,22 +2938,22 @@ confiture lint [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--env` | `-e` | text | `local` | Environment to lint (default: local) |
+| `--env` | `-e` | str | `local` | Environment to lint (default: local) |
 | `--project-dir` | - | path | `.` | Project directory (default: current directory) |
-| `--format` | `-f` | text | `table` | Output format: table or json or csv (default: table) |
+| `--format` | `-f` | str | `table` | Output format: table or json or csv (default: table) |
 | `--output` | `-o` | path | - | Output file path (default: stdout, only with json/csv) |
-| `--fail-on` | - | text | - | Severity at which the run fails: error (default), warning, info or never. `--fail-on-error` and `--fail-on-warning` are aliases for the first two; passing both an alias and this exits 2. When no selected rule can emit at the threshold, the run says so instead of passing quietly (#247). |
+| `--fail-on` | - | str | - | Severity at which the run fails: error (default), warning, info or never. `--fail-on-error` and `--fail-on-warning` are aliases for the first two; passing both an alias and this exits 2. When no selected rule can emit at the threshold, the run says so instead of passing quietly (#247). |
 | `--fail-on-error` | - | Flag | on | Alias for `--fail-on error` (default: on) |
 | `--fail-on-warning` | - | Flag | off | Alias for `--fail-on warning` (default: off, stricter) |
-| `--select` | - | text | - | Rules or families to run, comma-separated (#150). `default` means the rules a plain lint runs, so `--select default,replica` is the defaults plus one family. Omit to run the defaults. See `--list-rules`. |
-| `--ignore` | - | text | - | Rules or families to skip, comma-separated. Applied after --select, so --ignore always wins. |
+| `--select` | - | str | - | Rules or families to run, comma-separated (#150). `default` means the rules a plain lint runs, so `--select default,replica` is the defaults plus one family. Omit to run the defaults. See `--list-rules`. |
+| `--ignore` | - | str | - | Rules or families to skip, comma-separated. Applied after --select, so --ignore always wins. |
 | `--baseline` | - | path | - | Baseline file (#219): fail only on findings it does not know, print only those, rewrite it when findings disappear |
 | `--write-baseline` | - | Flag | off | Create or reset the --baseline file from the current findings |
 | `--list-rules` | - | Flag | off | Print the rule catalogue (code, family, severity, default/opt-in) and exit 0. Honours --format json. |
 | `--replica-safe` | - | Flag | off | Deprecated alias for `--select default,replica` (#139). Still supported; new rules register instead of adding a flag. |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory the migration-tree rules read — replica_001, own_001, own_002 (default: db/migrations) |
 | `--overrides-dir` | - | path | - | Overrides mirror directory. tree_004 needs it and is skipped without it: there is no conventional location to guess. |
-| `--server-url` | - | text | - | Writable PostgreSQL server the body family builds its scratch database on. Only the server is used: a throwaway database is created beside the configured one and dropped again. Defaults to the environment's own database_url. |
+| `--server-url` | - | str | - | Writable PostgreSQL server the body family builds its scratch database on. Only the server is used: a throwaway database is created beside the configured one and dropped again. Defaults to the environment's own database_url. |
 | `--check-tenant-isolation` | - | Flag | off | Deprecated alias for `--select default,tenant` (tenant_001): flag function INSERTs missing the FK column a tenant-scoped view requires. |
 | `--check-security-definer` | - | Flag | off | Deprecated alias for `--select default,security-definer`. Runs sec_002 over the env's schema DDL: flag SECURITY DEFINER functions/procedures that do not pin search_path (CVE-2018-1058). No-op when the config has no `security_lint:` block or `security_lint.enabled` is false. Default severity is advisory (warning); set `security_lint.severity: error` to make it a hard gate. |
 
@@ -3038,12 +3038,12 @@ confiture drift [OPTIONS]
 |---|---|---|---|---|
 | `--config` | `-c` | path | `confiture.yaml` | Configuration file (default: confiture.yaml) |
 | `--schema` | - | path | - | Schema SQL file, or a directory of .sql files, to compare against (optional when --check-acls is set) |
-| `--default-schema` | - | text | `public` | Schema an unqualified CREATE TABLE in --schema belongs to (#227) |
+| `--default-schema` | - | str | `public` | Schema an unqualified CREATE TABLE in --schema belongs to (#227) |
 | `--ignore-column-order` | - | Flag | off | Do not report column_order_mismatch (#226); also drift.ignore_column_order in the config |
 | `--check-acls` | - | Flag | off | Also compare live grants against the `acls:` block in the config |
 | `--check-ownership` | - | Flag | off | Also compare live `pg_class.relowner` against the `ownership:` block |
 | `--warn-only` | - | Flag | off | Demote MISSING_GRANT items from critical to warning (progressive rollout) |
-| `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
+| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
 | `--fail-on-warning` | - | Flag | off | Exit with code 1 on warnings as well as critical drift (default: off) |
 
 <!-- END GENERATED: cli confiture drift -->
@@ -3065,12 +3065,12 @@ confiture bootstrap [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | `confiture.yaml` | Config file path. Use --env as a shortcut for db/environments/{name}.yaml. |
-| `--env` | - | text | - | Environment name — shortcut for --config db/environments/{name}.yaml (e.g. --env production). Cannot be combined with --config. |
+| `--env` | - | str | - | Environment name — shortcut for --config db/environments/{name}.yaml (e.g. --env production). Cannot be combined with --config. |
 | `--check` / `--no-check` | - | Flag | on | Read-only: report drift; exit 1 if drift exists. Default mode. |
 | `--dry-run` | - | Flag | off | Print the SQL that --apply would run; no side effects. |
 | `--apply` | - | Flag | off | Execute the bootstrap plan against the database. |
 | `--all-schemas` | - | Flag | off | Authorize `REASSIGN OWNED` across schemas outside `ownership.apply_to`. Required when postgres-owned objects exist in non-scoped schemas. Use during maintenance windows. |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture bootstrap -->
 
@@ -3087,14 +3087,14 @@ Switch to a different schema branch.
 **Usage**
 
 ```bash
-confiture branch checkout [OPTIONS] NAME
+confiture branch checkout [OPTIONS] {name}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `NAME` | text | yes | Branch name to checkout |
+| `name` | str | yes | Branch name to checkout |
 
 **Options**
 
@@ -3113,14 +3113,14 @@ Commit current schema changes.
 **Usage**
 
 ```bash
-confiture branch commit [OPTIONS] MESSAGE
+confiture branch commit [OPTIONS] {message}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `MESSAGE` | text | yes | Commit message |
+| `message` | str | yes | Commit message |
 
 **Options**
 
@@ -3139,20 +3139,20 @@ Create a new schema branch.
 **Usage**
 
 ```bash
-confiture branch create [OPTIONS] NAME
+confiture branch create [OPTIONS] {name}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `NAME` | text | yes | Name of the new branch |
+| `name` | str | yes | Name of the new branch |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--from` | `-f` | text | - | Parent branch (default: current branch) |
+| `--from` | `-f` | str | - | Parent branch (default: current branch) |
 | `--checkout` / `--no-checkout` | - | Flag | on | Checkout new branch after creation (default: on) |
 | `--copy-data` / `--no-copy-data` | - | Flag | on | Copy data from parent branch (default: on) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
@@ -3168,14 +3168,14 @@ Delete a schema branch.
 **Usage**
 
 ```bash
-confiture branch delete [OPTIONS] NAME
+confiture branch delete [OPTIONS] {name}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `NAME` | text | yes | Branch name to delete |
+| `name` | str | yes | Branch name to delete |
 
 **Options**
 
@@ -3195,15 +3195,15 @@ Show differences between branches.
 **Usage**
 
 ```bash
-confiture branch diff [OPTIONS] [SOURCE] [TARGET]
+confiture branch diff [OPTIONS] [source] [target]
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `SOURCE` | text | no | Source branch (default: current branch) |
-| `TARGET` | text | no | Target branch to compare against |
+| `source` | str | no | Source branch (default: current branch) |
+| `target` | str | no | Target branch to compare against |
 
 **Options**
 
@@ -3230,7 +3230,7 @@ confiture branch list [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
-| `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
+| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
 
 <!-- END GENERATED: cli confiture branch list -->
 
@@ -3250,7 +3250,7 @@ confiture branch log [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--limit` | `-n` | integer | `10` | Maximum number of commits to show |
+| `--limit` | `-n` | int | `10` | Maximum number of commits to show |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
 
 <!-- END GENERATED: cli confiture branch log -->
@@ -3264,20 +3264,20 @@ Merge one branch into another.
 **Usage**
 
 ```bash
-confiture branch merge [OPTIONS] SOURCE
+confiture branch merge [OPTIONS] {source}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `SOURCE` | text | yes | Source branch to merge from |
+| `source` | str | yes | Source branch to merge from |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--into` | - | text | - | Target branch (default: current branch) |
+| `--into` | - | str | - | Target branch (default: current branch) |
 | `--dry-run` | - | Flag | off | Show what would be merged without making changes |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
 
@@ -3343,10 +3343,10 @@ confiture coordinate abandon [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--intent-id` | - | text | - | Intention ID |
-| `--reason` | - | text | - | Reason for abandonment |
-| `--database-url` | - | text | - | Database URL |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--intent-id` | - | str | - | Intention ID |
+| `--reason` | - | str | - | Reason for abandonment |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate abandon -->
 
@@ -3366,12 +3366,12 @@ confiture coordinate check [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--agent-id` | - | text | - | Agent ID |
-| `--feature-name` | - | text | - | Feature name |
-| `--schema-changes` | - | text | - | DDL statements or SQL file path |
-| `--tables-affected` | - | text | - | Comma-separated table names |
-| `--database-url` | - | text | - | Database URL |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--agent-id` | - | str | - | Agent ID |
+| `--feature-name` | - | str | - | Feature name |
+| `--schema-changes` | - | str | - | DDL statements or SQL file path |
+| `--tables-affected` | - | str | - | Comma-separated table names |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate check -->
 
@@ -3391,8 +3391,8 @@ confiture coordinate conflicts [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--database-url` | - | text | - | Database URL |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate conflicts -->
 
@@ -3412,10 +3412,10 @@ confiture coordinate list-intents [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--status-filter` | - | text | - | Filter by status (registered, in_progress, completed, merged, abandoned, conflicted) |
-| `--agent-filter` | - | text | - | Filter by agent ID |
-| `--database-url` | - | text | - | Database URL |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--status-filter` | - | str | - | Filter by status (registered, in_progress, completed, merged, abandoned, conflicted) |
+| `--agent-filter` | - | str | - | Filter by agent ID |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate list-intents -->
 
@@ -3435,15 +3435,15 @@ confiture coordinate register [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--agent-id` | - | text | - | Identifier for the agent, e.g. claude-payments (required) |
-| `--feature-name` | - | text | - | Human-readable feature name (required) |
-| `--schema-changes` | - | text | - | DDL statements or path to SQL file (required) |
-| `--tables-affected` | - | text | - | Comma-separated table names affected (default: none) |
-| `--risk-level` | - | text | `low` | Risk assessment: low, medium, high (default: low) |
+| `--agent-id` | - | str | - | Identifier for the agent, e.g. claude-payments (required) |
+| `--feature-name` | - | str | - | Human-readable feature name (required) |
+| `--schema-changes` | - | str | - | DDL statements or path to SQL file (required) |
+| `--tables-affected` | - | str | - | Comma-separated table names affected (default: none) |
+| `--risk-level` | - | str | `low` | Risk assessment: low, medium, high (default: low) |
 | `--estimated-hours` | - | float | `0` | Estimated hours to complete (default: 0) |
-| `--database-url` | - | text | - | Database URL (default: from config) |
-| `--metadata` | - | text | - | JSON metadata string (default: none) |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--database-url` | - | str | - | Database URL (default: from config) |
+| `--metadata` | - | str | - | JSON metadata string (default: none) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate register -->
 
@@ -3463,10 +3463,10 @@ confiture coordinate resolve [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--conflict-id` | - | integer | - | Conflict ID |
-| `--notes` | - | text | - | Resolution notes |
-| `--database-url` | - | text | - | Database URL |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--conflict-id` | - | int | - | Conflict ID |
+| `--notes` | - | str | - | Resolution notes |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate resolve -->
 
@@ -3486,11 +3486,80 @@ confiture coordinate status [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--intent-id` | - | text | - | Intention ID |
-| `--database-url` | - | text | - | Database URL |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--intent-id` | - | str | - | Intention ID |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture coordinate status -->
+
+### `confiture coordinate complete`
+
+Record that an intention's changes are finished.
+
+<!-- BEGIN GENERATED: cli confiture coordinate complete -->
+
+**Usage**
+
+```bash
+confiture coordinate complete [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--intent-id` | - | str | - | Intention ID |
+| `--notes` | - | str | `Changes completed` | Why the status changed |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture coordinate complete -->
+
+### `confiture coordinate merge`
+
+Record that an intention's changes have reached the main line.
+
+<!-- BEGIN GENERATED: cli confiture coordinate merge -->
+
+**Usage**
+
+```bash
+confiture coordinate merge [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--intent-id` | - | str | - | Intention ID |
+| `--notes` | - | str | `Changes merged to main` | Why the status changed |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture coordinate merge -->
+
+### `confiture coordinate start`
+
+Record that work on an intention has begun.
+
+<!-- BEGIN GENERATED: cli confiture coordinate start -->
+
+**Usage**
+
+```bash
+confiture coordinate start [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--intent-id` | - | str | - | Intention ID |
+| `--notes` | - | str | `Agent started work` | Why the status changed |
+| `--database-url` | - | str | - | Database URL |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture coordinate start -->
 
 ## `confiture debug`
 
@@ -3512,11 +3581,11 @@ confiture debug cte [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--database-url` | `-d` | text | - | PostgreSQL connection URL |
-| `--sql` | `-s` | text | - | SQL query to debug |
+| `--database-url` | `-d` | str | - | PostgreSQL connection URL |
+| `--sql` | `-s` | str | - | SQL query to debug |
 | `--file` | `-f` | path | - | SQL file to debug |
-| `--max-rows` | `-n` | integer | `20` | Max rows per CTE step (default: 20) |
-| `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
+| `--max-rows` | `-n` | int | `20` | Max rows per CTE step (default: 20) |
+| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
 | `--stop-on-error` / `--continue-on-error` | - | Flag | on | Stop at first failing CTE |
 
 <!-- END GENERATED: cli confiture debug cte -->
@@ -3539,7 +3608,7 @@ confiture diff [OPTIONS]
 |---|---|---|---|---|
 | `--from` | - | path | - | Old schema SQL file |
 | `--to` | - | path | - | New schema SQL file |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture diff -->
 
@@ -3556,21 +3625,21 @@ Return the next sort-stable filename for a schema subtree.
 **Usage**
 
 ```bash
-confiture generate alloc [OPTIONS] TARGET_DIR
+confiture generate alloc [OPTIONS] {target_dir}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `TARGET_DIR` | path | yes | Directory in which to allocate the next filename (must be within --schema-dir). |
+| `target_dir` | path | yes | Directory in which to allocate the next filename (must be within --schema-dir). |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--schema-dir` | - | path | `db/schema` | Root of the schema tree (default: db/schema). |
-| `--verb` | - | text | - | Verb suffix appended after the prefix, e.g. 'create' → '00001_create.sql'. |
+| `--verb` | - | str | - | Verb suffix appended after the prefix, e.g. 'create' → '00001_create.sql'. |
 | `--json` | - | Flag | off | Emit a JSON object {path: ...} instead of plain text. |
 
 <!-- END GENERATED: cli confiture generate alloc -->
@@ -3584,20 +3653,20 @@ Show detailed diff between branches.
 **Usage**
 
 ```bash
-confiture generate diff [OPTIONS] BRANCH
+confiture generate diff [OPTIONS] {branch}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `BRANCH` | text | yes | Branch name to diff |
+| `branch` | str | yes | Branch name to diff |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--base` | `-b` | text | `main` | Base branch to compare against (default: main) |
+| `--base` | `-b` | str | `main` | Base branch to compare against (default: main) |
 | `--show-sql` | `-s` | Flag | off | Show the actual SQL for each change (default: off) |
 | `--config` | - | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
 
@@ -3612,20 +3681,20 @@ Generate migrations from a pgGit branch.
 **Usage**
 
 ```bash
-confiture generate from-branch [OPTIONS] BRANCH
+confiture generate from-branch [OPTIONS] {branch}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `BRANCH` | text | yes | Branch name to generate migrations from |
+| `branch` | str | yes | Branch name to generate migrations from |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--base` | `-b` | text | `main` | Base branch to compare against (default: main) |
+| `--base` | `-b` | str | `main` | Base branch to compare against (default: main) |
 | `--output` | `-o` | path | `db/migrations` | Output directory for migration files (default: db/migrations) |
 | `--combined` | `-c` | Flag | off | Generate single combined migration (default: off) |
 | `--config` | - | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
@@ -3648,10 +3717,10 @@ confiture generate pgtap [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--database-url` | `-d` | text | - | PostgreSQL connection URL |
-| `--schema` | `-s` | text | `public` | Schema to introspect |
+| `--database-url` | `-d` | str | - | PostgreSQL connection URL |
+| `--schema` | `-s` | str | `public` | Schema to introspect |
 | `--output` | `-o` | path | - | Output file path |
-| `--include` | - | text | - | SQL LIKE pattern to filter functions |
+| `--include` | - | str | - | SQL LIKE pattern to filter functions |
 | `--no-volatility` | - | Flag | off | Skip volatility tests (default: include) |
 | `--no-return-type` | - | Flag | off | Skip return type tests (default: include) |
 
@@ -3666,20 +3735,20 @@ Preview what migrations would be generated.
 **Usage**
 
 ```bash
-confiture generate preview [OPTIONS] BRANCH
+confiture generate preview [OPTIONS] {branch}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `BRANCH` | text | yes | Branch name to preview |
+| `branch` | str | yes | Branch name to preview |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--base` | `-b` | text | `main` | Base branch to compare against (default: main) |
+| `--base` | `-b` | str | `main` | Base branch to compare against (default: main) |
 | `--config` | - | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
 
 <!-- END GENERATED: cli confiture generate preview -->
@@ -3693,15 +3762,15 @@ Move a SQL file or subtree and rewrite cross-references.
 **Usage**
 
 ```bash
-confiture generate renumber [OPTIONS] OLD_PATH NEW_PATH
+confiture generate renumber [OPTIONS] {old_path} {new_path}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `OLD_PATH` | path | yes | Source file or directory to move. |
-| `NEW_PATH` | path | yes | Target file path or directory. When a directory is given, the next available prefix is allocated automatically. |
+| `old_path` | path | yes | Source file or directory to move. |
+| `new_path` | path | yes | Target file path or directory. When a directory is given, the next available prefix is allocated automatically. |
 
 **Options**
 
@@ -3730,7 +3799,7 @@ confiture generate scaffold [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--from` | - | text | - | Emitter callable as 'module.path:callable_name'. Called with no args; must return list[EmittedFunction]. |
+| `--from` | - | str | - | Emitter callable as 'module.path:callable_name'. Called with no args; must return list[EmittedFunction]. |
 | `--schema-dir` | - | path | `db/schema` | Root of the schema tree (default: db/schema). |
 | `--overrides-dir` | - | path | - | Override mirror directory. Files present here are skipped during scaffold. |
 | `--dry-run` | - | Flag | off | Show what would be written without touching disk. |
@@ -3754,11 +3823,11 @@ confiture generate stubs [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--database-url` | `-d` | text | - | PostgreSQL connection URL |
-| `--schema` | `-s` | text | `public` | Schema to introspect |
+| `--database-url` | `-d` | str | - | PostgreSQL connection URL |
+| `--schema` | `-s` | str | `public` | Schema to introspect |
 | `--output` | `-o` | path | - | Output file path |
-| `--format` | - | text | `pydantic` | Output format: pydantic\|dataclass\|typeddict |
-| `--include` | - | text | - | SQL LIKE pattern to filter functions |
+| `--format` | - | str | `pydantic` | Output format: pydantic\|dataclass\|typeddict |
+| `--include` | - | str | - | SQL LIKE pattern to filter functions |
 
 <!-- END GENERATED: cli confiture generate stubs -->
 
@@ -3783,8 +3852,8 @@ confiture hooks test [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | `confiture.yaml` | Path to environment config (default: confiture.yaml) |
-| `--env` | `-e` | text | - | Environment name — shortcut for db/environments/{env}.yaml |
-| `--id` | - | text | - | Hook id to test (required when multiple hooks configured) |
+| `--env` | `-e` | str | - | Environment name — shortcut for db/environments/{env}.yaml |
+| `--id` | - | str | - | Hook id to test (required when multiple hooks configured) |
 | `--no-dry-run` | - | Flag | off | Send through the real transport. Default is dry-run — the configured transport is swapped for StdoutTransport so no external service is contacted. |
 
 <!-- END GENERATED: cli confiture hooks test -->
@@ -3806,7 +3875,7 @@ confiture install-helpers [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | - | Configuration file (YAML) |
-| `--env` | `-e` | text | `local` | Environment name (default: local) |
+| `--env` | `-e` | str | `local` | Environment name (default: local) |
 | `--dry-run` | - | Flag | off | Show SQL without executing |
 | `--force` | - | Flag | off | Reinstall even if already installed |
 
@@ -3828,9 +3897,9 @@ confiture introspect [OPTIONS]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--db` | - | text | - | PostgreSQL connection URL (e.g. postgresql://user:pass@host/dbname) |
-| `--schema` | - | text | `public` | Schema to introspect (default: public) |
-| `--format` | `-f` | text | `json` | Output format: json or yaml (default: json) |
+| `--db` | - | str | - | PostgreSQL connection URL (e.g. postgresql://user:pass@host/dbname) |
+| `--schema` | - | str | `public` | Schema to introspect (default: public) |
+| `--format` | `-f` | str | `json` | Output format: json or yaml (default: json) |
 | `--all-tables` | - | Flag | off | Include all tables, not just tb_* (default: off) |
 | `--hints` / `--no-hints` | - | Flag | on | Include naming-convention hints block (default: on) |
 | `--output` | `-o` | path | - | Write output to file instead of stdout |
@@ -3846,25 +3915,25 @@ Run unified SQL lint checks (Squawk, SQLFluff, SchemaLinter, and/or tree numberi
 **Usage**
 
 ```bash
-confiture lint-unified [OPTIONS] [FILES]...
+confiture lint-unified [OPTIONS] [files]...
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `FILES` | path | no | SQL files or directories to lint (default: all schema files) |
+| `files` | path | no | SQL files or directories to lint (default: all schema files) |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--check` | `-c` | text | - | Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (tree_001–tree_004 file-numbering). Default: all. |
+| `--check` | `-c` | str | - | Which checks to run: safety (squawk), format (sqlfluff), schema (SchemaLinter), tree (tree_001–tree_004 file-numbering). Default: all. |
 | `--git-diff` | - | Flag | off | Only lint files changed in the current git diff (default: off) |
-| `--env` | `-e` | text | `local` | Environment for schema lint (default: local) |
+| `--env` | `-e` | str | `local` | Environment for schema lint (default: local) |
 | `--schema-dir` | - | path | - | Root of the DDL file tree for --check tree (default: the directories --env's include_dirs builds from, minus what it excludes). |
 | `--overrides-dir` | - | path | - | Overrides mirror directory for the tree_004 orphan check (optional). |
-| `--format` | `-f` | text | `table` | Output format: table or json (default: table) |
+| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
 | `--fail-on-error` | - | Flag | on | Exit with code 1 if errors found (default: on) |
 
 <!-- END GENERATED: cli confiture lint-unified -->
@@ -3885,11 +3954,11 @@ confiture mcp [OPTIONS] COMMAND [ARGS]...
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--database-url` | `-d` | text | - | PostgreSQL connection URL |
-| `--schema` | `-s` | text | `public` | Schema to expose |
+| `--database-url` | `-d` | str | - | PostgreSQL connection URL |
+| `--schema` | `-s` | str | `public` | Schema to expose |
 | `--stdio` | - | Flag | off | Run in stdio mode (for Claude Code) |
-| `--include` | - | text | - | LIKE pattern to filter functions |
-| `--port` | - | integer | - | HTTP port (not yet implemented) |
+| `--include` | - | str | - | LIKE pattern to filter functions |
+| `--port` | - | int | - | HTTP port (not yet implemented) |
 | `--no-confiture-tools` | - | Flag | off | Disable built-in Confiture migration/introspection tools |
 
 <!-- END GENERATED: cli confiture mcp -->
@@ -3903,30 +3972,30 @@ Restore a PostgreSQL backup using three-phase pg_restore.
 **Usage**
 
 ```bash
-confiture restore [OPTIONS] BACKUP_FILE
+confiture restore [OPTIONS] {backup_file}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `BACKUP_FILE` | path | yes | Path to pg_dump backup file. Must be custom (-Fc) or directory (-Fd) format. |
+| `backup_file` | path | yes | Path to pg_dump backup file. Must be custom (-Fc) or directory (-Fd) format. |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--database` | `-d` | text | - | Target database name |
-| `--host` | - | text | `/var/run/postgresql` | PostgreSQL host or socket path |
-| `--port` | - | integer | `5432` | PostgreSQL port |
-| `--username` | `-U` | text | - | PostgreSQL user |
-| `--jobs` | `-j` | integer | `4` | Parallel workers for the data phase |
+| `--database` | `-d` | str | - | Target database name |
+| `--host` | - | str | `/var/run/postgresql` | PostgreSQL host or socket path |
+| `--port` | - | int | `5432` | PostgreSQL port |
+| `--username` | `-U` | str | - | PostgreSQL user |
+| `--jobs` | `-j` | int | `4` | Parallel workers for the data phase |
 | `--no-owner` / `--owner` | - | Flag | off | Skip ownership restoration |
 | `--no-acl` / `--acl` | - | Flag | off | Skip access privilege restoration |
 | `--exit-on-error` / `--no-exit-on-error` | - | Flag | on | Abort on first error (recommended for production restores) |
-| `--min-tables` | - | integer | `0` | Post-restore: minimum expected table count (0 = skip check) |
-| `--min-tables-schema` | - | text | `public` | Schema for --min-tables validation |
-| `--superuser` | - | text | - | Run pg_restore via sudo as this OS user |
+| `--min-tables` | - | int | `0` | Post-restore: minimum expected table count (0 = skip check) |
+| `--min-tables-schema` | - | str | `public` | Schema for --min-tables validation |
+| `--superuser` | - | str | - | Run pg_restore via sudo as this OS user |
 | `--refresh-matviews` / `--no-refresh-matviews` | - | Flag | on | Refresh materialized views after a database-wide ANALYZE (default). --no-refresh-matviews leaves them WITH NO DATA for you to refresh later. |
 
 <!-- END GENERATED: cli confiture restore -->
@@ -3952,15 +4021,15 @@ confiture seed apply [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--seeds-dir` | - | path | `db/seeds` | Directory containing seed files (default: db/seeds) |
-| `--env` | - | text | `local` | Environment name for database URL lookup (default: local) |
+| `--env` | - | str | `local` | Environment name for database URL lookup (default: local) |
 | `--sequential` | - | Flag | off | Apply files sequentially, solves 650+ row parser limits |
 | `--continue-on-error` | - | Flag | off | Continue if file fails (--sequential only, useful for CI/CD) |
-| `--database-url` | - | text | - | Database URL (overrides environment config) |
+| `--database-url` | - | str | - | Database URL (overrides environment config) |
 | `--copy-format` | - | Flag | off | Use COPY format (2-10x faster for large datasets) |
-| `--copy-threshold` | - | integer | `1000` | Row threshold for auto COPY (default: 1000, use >1000 rows) |
-| `--format` | `-f` | text | `text` | Output format: text or json or csv (default: text) |
+| `--copy-threshold` | - | int | `1000` | Row threshold for auto COPY (default: 1000, use >1000 rows) |
+| `--format` | `-f` | str | `text` | Output format: text or json or csv (default: text) |
 | `--output` / `--report` | `-o` | path | - | Save structured output (JSON/CSV) to file. --report is a back-compat alias for --output/-o (DOCS-M2). |
-| `--profile` | - | text | - | Apply only the named seed profile (seed.profiles.<name> in env config). |
+| `--profile` | - | str | - | Apply only the named seed profile (seed.profiles.<name> in env config). |
 
 <!-- END GENERATED: cli confiture seed apply -->
 
@@ -4015,26 +4084,26 @@ Generate a seed SQL stub for a PostgreSQL table.
 **Usage**
 
 ```bash
-confiture seed generate [OPTIONS] TABLE
+confiture seed generate [OPTIONS] {table}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `TABLE` | text | yes | Table name to generate seed data for |
+| `table` | str | yes | Table name to generate seed data for |
 
 **Options**
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--database-url` | `-d` | text | - | PostgreSQL connection URL |
-| `--schema` | `-s` | text | `public` | Schema name (default: public) |
-| `--env` | `-e` | text | `development` | Seed environment directory |
+| `--database-url` | `-d` | str | - | PostgreSQL connection URL |
+| `--schema` | `-s` | str | `public` | Schema name (default: public) |
+| `--env` | `-e` | str | `development` | Seed environment directory |
 | `--output-dir` | `-o` | path | `db/seeds` | Seeds output directory (default: db/seeds) |
-| `--rows` | `-n` | integer | `10` | Number of stub rows (default: 10) |
+| `--rows` | `-n` | int | `10` | Number of stub rows (default: 10) |
 | `--overwrite` | - | Flag | off | Overwrite existing seed file (default: off) |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture seed generate -->
 
@@ -4055,15 +4124,15 @@ confiture seed validate [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--seeds-dir` | - | path | `db/seeds` | Directory containing seed files (default: db/seeds) |
-| `--env` | - | text | - | Environment name for multi-env validation (default: none) |
+| `--env` | - | str | - | Environment name for multi-env validation (default: none) |
 | `--all` | - | Flag | off | Validate all environments (default: off) |
-| `--database-url` | - | text | - | Database URL for database mode validation (default: none) |
-| `--format` | `-f` | text | `text` | Output format: text or json or csv (default: text) |
+| `--database-url` | - | str | - | Database URL for database mode validation (default: none) |
+| `--format` | `-f` | str | `text` | Output format: text or json or csv (default: text) |
 | `--output` | - | path | - | Output file path (default: stdout) |
 | `--fix` | - | Flag | off | Automatically fix issues where possible (default: off) |
 | `--dry-run` | - | Flag | off | Show what would be fixed without modifying (default: off) |
 | `--prep-seed` | - | Flag | off | Enable prep-seed pattern validation (default: off) |
-| `--level` | `-l` | integer range | `3` | Prep-seed validation level 1-5 (default: 3) |
+| `--level` | `-l` | int range | `3` | Prep-seed validation level 1-5 (default: 3) |
 | `--static-only` | - | Flag | off | Run only Levels 1-3, no database (default: off) |
 | `--full-execution` | - | Flag | off | Run all levels 1-5, requires database (default: off) |
 
@@ -4086,9 +4155,9 @@ confiture validate-config [OPTIONS]
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
 | `--config` | `-c` | path | - | Configuration file to validate (default: db/environments/local.yaml) |
-| `--database-url` | `-d` | text | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
+| `--database-url` | `-d` | str | - | PostgreSQL DSN for the tracking database. Always wins over --config / --env and the env vars. The canonical CONFITURE_DATABASE_URL beats a *default* --config but conflicts with an *explicit* one (CONFIG_007); the ambient DATABASE_URL never overrides a present config. Pass --no-config to make the environment the sole source. When a DSN is supplied, no YAML is required (tracking table defaults to tb_confiture). SSH-tunnel configs still require --config. |
 | `--migrations-path` | - | path | `db/migrations` | Migrations directory to validate (default: db/migrations) |
-| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--strict` | - | Flag | off | Treat warnings as errors for exit purposes. |
 
 <!-- END GENERATED: cli confiture validate-config -->
@@ -4102,14 +4171,14 @@ Validate anonymization profile YAML structure and schema.
 **Usage**
 
 ```bash
-confiture validate-profile [OPTIONS] PATH
+confiture validate-profile [OPTIONS] {path}
 ```
 
 **Arguments**
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `PATH` | path | yes | Path to anonymization profile YAML file |
+| `path` | path | yes | Path to anonymization profile YAML file |
 
 <!-- END GENERATED: cli confiture validate-profile -->
 
