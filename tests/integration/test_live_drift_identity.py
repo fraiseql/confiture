@@ -148,7 +148,6 @@ MUTATIONS = [
         "critical",
         "core.v_widget",
         id="drop-view",
-        marks=pytest.mark.xfail(strict=True, reason="a view's existence is not compared"),
     ),
     pytest.param(
         "DROP MATERIALIZED VIEW core.mv_widget",
@@ -156,7 +155,6 @@ MUTATIONS = [
         "critical",
         "core.mv_widget",
         id="drop-matview",
-        marks=pytest.mark.xfail(strict=True, reason="a matview's existence is not compared"),
     ),
     pytest.param(
         "DROP TRIGGER trg_touch ON core.tb_widget",
@@ -164,7 +162,6 @@ MUTATIONS = [
         "critical",
         "core.tb_widget.trg_touch",
         id="drop-trigger",
-        marks=pytest.mark.xfail(strict=True, reason="a trigger's existence is not compared"),
     ),
     pytest.param(
         "DROP FUNCTION core.fn_gone(bigint)",
@@ -172,7 +169,20 @@ MUTATIONS = [
         "critical",
         "core.fn_gone(bigint)",
         id="drop-routine",
-        marks=pytest.mark.xfail(strict=True, reason="a routine's existence is not compared"),
+    ),
+    pytest.param(
+        "CREATE VIEW core.v_handmade AS SELECT 1 AS one",
+        "extra_view",
+        "info",
+        "core.v_handmade",
+        id="extra-view",
+    ),
+    pytest.param(
+        "CREATE FUNCTION core.fn_handmade() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$",
+        "extra_routine",
+        "info",
+        "core.fn_handmade()",
+        id="extra-routine",
     ),
 ]
 
@@ -196,3 +206,22 @@ def test_one_mutation_reports_exactly_one_item(
         f"{mutation}\n  added:   {added}\n  removed: {removed}"
     )
     assert removed == [], f"{mutation} removed baseline items: {removed}"
+
+
+def test_an_extra_object_makes_fail_on_warning_exit_one(built_from_corpus: Built) -> None:
+    """``has_drift`` counts an INFO item, and ``confiture drift --fail-on-warning``
+    exits 1 on ``has_drift``. So a hand-made view in a schema the DDL declares
+    fails that flag — as a hand-made *index* already did, since ``extra_index``
+    has always been INFO. Pinned rather than discovered in a deploy.
+    """
+    built_from_corpus.apply("CREATE VIEW core.v_handmade AS SELECT 1 AS one")
+    report = built_from_corpus.drift()
+    assert report.has_drift is True
+    assert report.has_critical_drift is False
+    assert report.info_count == 1
+
+
+def test_a_pristine_database_counts_the_objects_it_compared(built_from_corpus: Built) -> None:
+    report = built_from_corpus.drift()
+    assert report.drift_items == []
+    assert report.objects_checked > 0, report.to_dict()
