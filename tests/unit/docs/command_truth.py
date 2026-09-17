@@ -40,7 +40,15 @@ PREFIX = r"(?:[-*>]\s+|\$\s+|sh\s+['\"]?|run:\s*|uv\s+run\s+|&&\s*|\|\|\s*|;\s*|
 # Capture the whole tail, not a fixed number of words: `confiture migrate
 # schema-to-schema setup` is three levels deep, and a guard that assumes two
 # reports `schema-to-schema has no --source` against a correct command line.
-INVOCATION = re.compile(rf"^\s*{PREFIX}confiture\s+(.*)$")
+#
+# One more thing may stand at the head of the line: another command, when the
+# line chains or pipes into confiture — `pg_isready && confiture health check`,
+# `fraiseql compile … | confiture migrate diff --from -`. A shell operator is
+# the marker, and it is not something English produces inside a code span, so
+# the segment before one may be anything at all. That line in
+# `disaster-recovery.md` was the only fiction hiding behind this in either
+# corpus, and it would have survived the whole campaign.
+INVOCATION = re.compile(rf"^\s*(?:[^|&;`]*?(?:&&|\|\||;|\|)\s*)?{PREFIX}confiture\s+(.*)$")
 WORD = re.compile(r"^[a-z][a-z0-9-]*$")
 
 # A usage template names its subcommand with a placeholder — `confiture migrate
@@ -70,7 +78,6 @@ class Invocation(NamedTuple):
 
     path: str
     """Repo-relative path of the file it was found in."""
-    line: str
     words: tuple[str, ...]
     """The leading lower-case words, which is as far as a command name can run."""
     tokens: tuple[str, ...]
@@ -131,7 +138,7 @@ def invocations(files: list[Path]) -> list[Invocation]:
                 tokens = tuple(match.group(1).split())
                 words = tuple(itertools.takewhile(WORD.match, tokens))
                 if words:
-                    found.append(Invocation(rel, line.strip(), words, tokens))
+                    found.append(Invocation(rel, words, tokens))
     return found
 
 
@@ -192,7 +199,7 @@ def _declared_flags(command, *, template: bool) -> set[str]:
 def findings(found: list[Invocation]) -> list[Finding]:
     """Every disagreement between the written command lines and the real CLI."""
     out: list[Finding] = []
-    for path, line, words, tokens in found:
+    for path, words, tokens in found:
         resolved, command, leftover = resolve(words)
         if command is None:
             out.append(
@@ -228,7 +235,11 @@ def findings(found: list[Invocation]) -> list[Finding]:
                 continue
 
         declared = _declared_flags(command, template=template)
-        for flag in FLAG.findall(line):
+        # Scan the tokens after `confiture`, never the whole line: once a line
+        # may begin with another command (`fraiseql compile … --emit-ddl - |
+        # confiture migrate diff --from -`), the upstream command's flags are on
+        # it too, and they are not confiture's to declare.
+        for flag in FLAG.findall(" ".join(tokens)):
             if flag in NOT_OURS or flag in declared:
                 continue
             what = f"confiture {' '.join(resolved)} {flag}"

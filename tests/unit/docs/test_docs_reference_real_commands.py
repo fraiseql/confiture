@@ -55,26 +55,6 @@ NOT_INSTRUCTIONS: dict[tuple[str, str], str] = {
 # Every disagreement this guard found on the day it was written (2026-09-17),
 # grouped by what is actually wrong. Each group is one phase of the repair.
 KNOWN_ROT: dict[str, tuple[tuple[str, str], ...]] = {
-    "the operations runbooks were written against an imagined CLI": (
-        ("docs/operations/disaster-recovery.md", "confiture init --force"),
-        ("docs/operations/disaster-recovery.md", "confiture migrate down --force"),
-        ("docs/operations/disaster-recovery.md", "confiture migrate drift-detect"),
-        ("docs/operations/disaster-recovery.md", "confiture migrate rollback-blue-green"),
-        ("docs/operations/disaster-recovery.md", "confiture migrate status --verbose"),
-        ("docs/operations/disaster-recovery.md", "confiture migrate sync-history"),
-        ("docs/operations/performance-tuning.md", "confiture benchmark"),
-        ("docs/operations/performance-tuning.md", "confiture pool"),
-        ("docs/operations/runbook.md", "confiture health"),
-        ("docs/operations/runbook.md", "confiture init --force"),
-        ("docs/operations/runbook.md", "confiture migrate checksum"),
-        ("docs/operations/runbook.md", "confiture migrate create"),
-        ("docs/operations/runbook.md", "confiture migrate down --skip-checksums"),
-        ("docs/operations/runbook.md", "confiture migrate down --target"),
-        ("docs/operations/runbook.md", "confiture migrate drift-detect"),
-        ("docs/operations/runbook.md", "confiture migrate status --verbose"),
-        ("docs/operations/runbook.md", "confiture migrate sync-history"),
-        ("docs/operations/runbook.md", "confiture migrate update-checksum"),
-    ),
     "the command exists, but not at the path the document spells": (
         ("PRD.md", "confiture status"),
         ("docs/getting-started.md", "confiture coordinate complete"),
