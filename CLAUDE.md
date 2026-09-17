@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.10.0
+**Version**: 1.10.1
 **Last Updated**: September 17, 2026
 **Current Status**: Production-Ready
 
@@ -126,6 +126,19 @@ has one answer, and a file pglast rejects is a **finding**, never a clean result
 `IDEM_UNPARSEABLE` (idempotency, counted as unanalyzed), `PFLIGHT_UNPARSEABLE`
 (preflight, forces `window_safe: false`), lint's `UNPARSEABLE` notice, one
 unclassified change-set entry, `DIFFER_400` from `migrate diff`.
+
+The prose is guarded too, since 1.10.1: `tests/unit/docs/test_no_optional_parser.py`
+fails on any document, help string or docstring that tells a reader to install a
+parser confiture already depends on, or that describes a fallback. It found **19**
+sites that had drifted since D13 — four guides selling the extra, five CLI `--help`
+strings (published twice, since `docs/reference/cli.md` is generated from them), and
+six docstrings promising a skip notice no code can emit. It reads `pyproject.toml`
+and applies only while pglast is a dependency, and it scans **whole documents**: a
+promise about installation lives in a paragraph, not in a code block, which is where
+the guard's own first draft could not see it.
+
+`[ast]` is an **empty alias** (`ast = []`), kept so an older
+`fraiseql-confiture[ast]` still resolves. Installing it changes nothing.
 
 The consumers, all on `pglast.parser.parse_sql`:
 
@@ -1296,7 +1309,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: September 17, 2026
-**Version**: 1.10.0
+**Version**: 1.10.1
 
 ---
 
