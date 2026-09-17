@@ -97,10 +97,12 @@ check_prerequisites() {
 }
 
 check_config_parses() {
-    # No confiture command validates this file: `validate-config` is for a
-    # *migration* config, and `validate-profile` reads the AnonymizationProfile
-    # shape, which is a different format. So check what is cheap to check here,
-    # and let the sync itself reject the rest with CONFIG_002.
+    # No confiture command validates this file on its own: `validate-config` is
+    # for a *migration* config, and `validate-profile` reads the
+    # AnonymizationProfile shape, which is a different format. `confiture sync`
+    # does reject it (CONFIG_002) — but only once it has been asked to run, by
+    # which point staging has already been backed up and truncated. Checking
+    # here fails before any of that happens.
     log INFO "Checking $ANON_CONFIG parses…"
     python3 - "$ANON_CONFIG" <<'PY' || { log ERROR "anonymization config is not usable"; exit 1; }
 import sys, yaml
@@ -118,8 +120,11 @@ for table, rules in data.items():
         if not isinstance(rule, dict) or "column" not in rule or "strategy" not in rule:
             problems.append(f"{table}: every rule needs `column` and `strategy`")
         elif rule["strategy"] not in STRATEGIES:
-            # confiture masks an unknown strategy to [REDACTED] rather than
-            # failing, so a typo destroys a column quietly. Catch it here.
+            # confiture rejects this too, with CONFIG_002 and a "did you mean"
+            # (#285). Before that it masked an unknown strategy to [REDACTED],
+            # so a typo destroyed a column quietly; the check is kept because
+            # it fires before the backup and the truncate, not because
+            # confiture would let it through.
             problems.append(f"{table}.{rule['column']}: unknown strategy {rule['strategy']!r}")
 if problems:
     sys.exit("\n".join(problems))

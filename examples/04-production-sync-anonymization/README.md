@@ -226,10 +226,16 @@ Or let `./sync_script.sh` do steps 4 and 5 with a backup in between.
 anonymization config parses, every strategy in it is one of the five that exist,
 and all three environment variables are set.
 
-The strategy check earns its place: confiture masks an **unknown strategy to
-`[REDACTED]`** rather than rejecting it. That is the safe default — a typo can
-never leak data — but it means `strategy: emial` silently destroys a column.
-Catch it before the sync, not after.
+The strategy check earns its place by running **early**. `confiture sync` does
+reject an unknown strategy name (`CONFIG_002`, naming the five and suggesting
+the nearest), but only once it has been asked to run — by which point this
+script has already backed staging up and the sync has truncated it. Failing at
+the config check costs a re-run; failing later costs a restore.
+
+Until #285 confiture masked an unknown strategy to `[REDACTED]` instead. That is
+a safe default at the value level — a typo can never leak data — but it meant
+`strategy: emial` silently replaced a column with a constant, and the run
+reported success.
 
 ```bash
 ./sync_script.sh --dry-run

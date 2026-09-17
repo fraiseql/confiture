@@ -128,8 +128,10 @@ That regex is a starting point, not an audit — confiture has no PII discovery.
 ```
 
 This validates that every strategy named is one of the five that exist. Worth
-doing: confiture masks an **unknown strategy to `[REDACTED]`** instead of
-failing, so `strategy: emial` would quietly destroy the column.
+doing even though `confiture sync` now rejects an unknown name itself
+(`CONFIG_002`, with a "did you mean"): the script's check runs **before** it
+backs staging up and truncates it, so a typo costs you a re-run rather than a
+restore.
 
 `--dry-run` is the script's flag. `confiture sync` has none.
 

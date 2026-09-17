@@ -8,6 +8,7 @@ import json
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from confiture.config.environment import DatabaseConfig, Environment
 from confiture.core.anonymization.pseudonymizer import Pseudonymizer
 from confiture.core.connection import create_connection
+from confiture.exceptions import ConfigurationError
 
 
 @dataclass
@@ -33,14 +35,53 @@ class TableSelection:
 # per-deployment secret. `redact` (and any unknown strategy) does not.
 KEYED_STRATEGIES = frozenset({"email", "phone", "name", "hash"})
 
+#: Every strategy this sync path accepts: the keyed ones, which pseudonymise a
+#: value into something of the same shape, plus ``redact``, which replaces it
+#: with a constant. This is the *sync* file format's set and has nothing to say
+#: about :class:`~confiture.core.anonymization.profile.AnonymizationProfile`,
+#: whose ``StrategyType`` names a different and larger vocabulary.
+SYNC_STRATEGIES = KEYED_STRATEGIES | frozenset({"redact"})
+
 
 @dataclass
 class AnonymizationRule:
-    """Rule for anonymizing a specific column."""
+    """Rule for anonymizing a specific column.
+
+    The strategy name is checked here, not where a YAML file is read, because
+    the file is not the only way to build one: a library caller passing
+    ``SyncConfig(anonymization=…)`` deserves the same answer (#285).
+    """
 
     column: str
-    strategy: str  # 'email', 'phone', 'name', 'redact', 'hash'
+    strategy: str  # one of SYNC_STRATEGIES
     seed: int | None = None  # Domain separator: different seeds, unrelated pseudonyms
+
+    def __post_init__(self) -> None:
+        """Refuse a strategy name nothing dispatches on.
+
+        ``_anonymize_value`` falls through to ``[REDACTED]`` for any name it
+        does not know, which is right for ``redact`` and wrong for ``emial``:
+        one transposition from ``email``, and the column becomes a constant that
+        no longer parses as an address, is no longer unique across rows and
+        cannot be joined on — while the sync reports success (#285). By the time
+        that dispatch runs, an intention and a mistake are indistinguishable, so
+        the name is checked where the rule is built.
+
+        Raises:
+            ConfigurationError: ``CONFIG_002``, the code the CLI already uses for
+                a configuration file it cannot accept.
+        """
+        if self.strategy in SYNC_STRATEGIES:
+            return
+        allowed = ", ".join(sorted(SYNC_STRATEGIES))
+        near = get_close_matches(self.strategy, sorted(SYNC_STRATEGIES), n=1, cutoff=0.6)
+        hint = f"Did you mean {near[0]!r}?" if near else f"Use one of: {allowed}"
+        raise ConfigurationError(
+            f"Unknown anonymization strategy {self.strategy!r} for column "
+            f"{self.column!r}. Allowed strategies: {allowed}",
+            error_code="CONFIG_002",
+            resolution_hint=hint,
+        )
 
 
 @dataclass
@@ -204,7 +245,10 @@ class ProductionSyncer:
             return None
 
         if strategy not in KEYED_STRATEGIES:
-            # `redact`, and the safe default for any strategy this path does not know.
+            # `redact`. Since #285 `AnonymizationRule` refuses any other name, so
+            # this is no longer a catch-all that a typo can reach — it covers a
+            # strategy that got past a validated boundary, which is the case a
+            # defensive default is for.
             return "[REDACTED]"
 
         keyed = self._pseudonymizer()

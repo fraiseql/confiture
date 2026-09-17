@@ -16,6 +16,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An unknown anonymization strategy name silently redacted the column instead of
+  failing.** `sync --anonymization-config` took any string as a strategy;
+  `_anonymize_value` fell through to `[REDACTED]` for a name it did not recognise, which
+  is the documented behaviour of `redact`. So `strategy: emial`, one transposition from
+  `email`, replaced a column with a constant that no longer parses as an address, is no
+  longer unique across rows and cannot be joined on — while the sync printed
+  `✅ Synced 1 table(s)` and exited 0. The name is now checked on
+  `core.syncer.AnonymizationRule` itself rather than in the CLI loader, because the loader
+  is not the only way to build one: a library caller passing
+  `SyncConfig(anonymization=…)` gets the same `CONFIG_002`, with the five allowed names
+  and a "did you mean" for a near miss. `[REDACTED]` is unchanged as the runtime behaviour
+  of `redact`; what changed is that the catch-all can now only be reached by a strategy
+  that got past a validated boundary, which is the case a defensive default is for.
+
+  **The other YAML format had the same hole, and the issue said it did not.** #285 held up
+  `AnonymizationProfile` as already getting this right. It validates a
+  `StrategyDefinition`'s `type` against the `StrategyType` enum — but a *rule* names a
+  strategy by the key it was given under `strategies:`, and nothing checked that the key
+  existed. A profile whose only rule said `strategy: emial_mask` beside a definition
+  called `email_mask` passed `confiture validate-profile`, which printed
+  `✅ Valid profile!` and exited 0 — a validation command calling a dangling reference
+  valid. A `model_validator` now cross-checks every rule against the profile's own
+  strategies, and names them in the message, because the vocabulary there is the author's
+  rather than PostgreSQL's.
+
+  `examples/04-production-sync-anonymization` hand-rolled a strategy-name check *because*
+  of this, and said so in a comment. The check is kept — it runs before the script backs
+  staging up and the sync truncates it, so a typo now costs a re-run rather than a
+  restore — but its stated reason was rewritten, along with the two places the README and
+  QUICK_START explained the old behaviour.
+
 - **Four commands accepted a `--config` they never read; unparseable or missing was still
   exit 0.** `migrate status`, `migrate validate`, `migrate fix` and `migrate preflight`
   took a path on the command line and never opened it, so a file that would not parse, or
