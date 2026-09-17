@@ -30,12 +30,15 @@ from pglast.stream import RawStream
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import (
     ColumnEdit,
+    ObjectEdit,
     adds_primary_key,
     column_edit,
     column_is_not_null,
+    object_edits,
+    object_kinds,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
-from confiture.core.type_lattice import canonical_type
+from confiture.core.type_lattice import canonical_type, parse_type
 
 _T = TypeVar("_T")
 
@@ -388,6 +391,31 @@ def type_key(type_name: Any) -> tuple[str | None, str]:
     return (schema or None), (canonical_type(name) or name)
 
 
+def signature_from_type_names(written: Iterable[str]) -> Signature:
+    """A routine's signature from argument types spelled as *text*.
+
+    :func:`type_key` answers this for a parse node, and this is the only other
+    way in. A ``DROP FUNCTION f(bigint)`` names its arguments as text, and so
+    does a live catalogue; canonicalising them anywhere else would be a second
+    idea of what makes two routines the same routine, which is exactly what
+    ``signature`` and ``signature_key`` exist to keep apart (#275).
+
+    Typmods are dropped for :func:`type_key`'s reason: PostgreSQL ignores them
+    in a signature, and ``char`` carries an implicit one that ``bpchar`` does not.
+    """
+    return tuple(_type_key_from_text(name) for name in written)
+
+
+def _type_key_from_text(written: str) -> tuple[str | None, str]:
+    schema, _, name = written.rpartition(".")
+    parsed = parse_type(name)
+    bare = parsed.name + "[]" * parsed.dimensions if parsed is not None else name
+    return (
+        None if not schema or schema == _CATALOG_SCHEMA else schema,
+        canonical_type(bare) or bare,
+    )
+
+
 def types_match(a: tuple[str | None, str], b: tuple[str | None, str]) -> bool:
     """Whether two argument types, as each side spelled them, are one type.
 
@@ -690,6 +718,83 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
             apply(sql, table, edit)
 
 
+def _renamed_object(obj: SchemaObject, edit: ObjectEdit) -> None:
+    obj.name = edit.new_name or obj.name
+    obj.folded_name = (edit.new_name or obj.folded_name).lower()
+
+
+def _moved_object(obj: SchemaObject, edit: ObjectEdit) -> None:
+    obj.schema = edit.new_schema or obj.schema
+    obj.folded_schema = (edit.new_schema or obj.folded_schema or "").lower() or None
+
+
+def _renamed_column(obj: SchemaObject, edit: ObjectEdit) -> None:
+    obj.columns = [
+        replace(column, name=edit.new_name or column.name, folded=(edit.new_name or "").lower())
+        if column.folded == edit.column
+        else column
+        for column in obj.columns
+    ]
+
+
+#: ``ObjectEdit.kind`` -> how the inventory applies it to one object it holds.
+#: ``drop`` is not here: it removes the object from the inventory rather than
+#: editing it, so it is the one case that needs the list.
+_OBJECT_APPLIERS: dict[str, Callable[[SchemaObject, ObjectEdit], None]] = {
+    "rename": _renamed_object,
+    "rename_column": _renamed_column,
+    "set_schema": _moved_object,
+}
+
+
+def _targets(inventory: Inventory, edit: ObjectEdit, offset: int) -> list[SchemaObject]:
+    """Every object the edit names that the tree had already declared *at* ``offset``.
+
+    ``find_all`` decides what "the same object" means — a missing schema on
+    either side matches any, and a routine is narrowed to one overload by its
+    canonical argument types. A statement naming a kind the inventory does not
+    model (a trigger, a policy, an extension) matches nothing here, and is
+    ``ddl_objects``' to answer for.
+
+    The offset is what makes ``DROP TABLE IF EXISTS x; CREATE TABLE x (…);`` —
+    an everyday idiom — declare ``x``. :func:`build_inventory` collects every
+    ``CREATE`` before it folds anything, so without it a drop would reach a table
+    written after it and delete something the tree really does declare.
+    """
+    if edit.object_kind == "schema":
+        candidates = [obj for obj in inventory.schemas if obj.folded_name == edit.name.lower()]
+    else:
+        signature_key = (
+            signature_from_type_names(edit.arg_types) if edit.arg_types is not None else None
+        )
+        candidates = inventory.find_all(
+            object_kinds(edit.object_kind), edit.schema, edit.name, signature_key
+        )
+    return [obj for obj in candidates if obj.offset < offset]
+
+
+def _apply_object_edit(inventory: Inventory, edit: ObjectEdit, offset: int) -> None:
+    """Fold one statement's edit into the objects the tree has declared so far.
+
+    A statement naming something the tree never created changes nothing — the
+    rule ``_apply_alter`` follows for the same reason: it belongs to a schema
+    built elsewhere.
+    """
+    targets = _targets(inventory, edit, offset)
+    if not targets:
+        return
+    if edit.kind == "drop":
+        dropped = {id(obj) for obj in targets}
+        inventory.objects = [obj for obj in inventory.objects if id(obj) not in dropped]
+        inventory.schemas = [obj for obj in inventory.schemas if id(obj) not in dropped]
+        return
+    apply = _OBJECT_APPLIERS.get(edit.kind)
+    if apply is None:
+        return
+    for obj in targets:
+        apply(obj, edit)
+
+
 def _comment_target(
     stmt: Any,
 ) -> tuple[str | None, str, tuple[tuple[str | None, str], ...] | None] | None:
@@ -743,6 +848,13 @@ def build_inventory(sql: str) -> Inventory:
             _apply_alter(sql, stmt, inventory)
         elif kind == "CommentStmt":
             _apply_comment(stmt, inventory)
+        else:
+            # A drop, a rename or a schema move: not `ALTER TABLE` at all, and
+            # invisible to every reader of a DDL tree before #301.
+            edits = object_edits(stmt)
+            offset = _statement_offset(sql, raw) if edits else 0
+            for edit in edits:
+                _apply_object_edit(inventory, edit, offset)
     return inventory
 
 

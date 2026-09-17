@@ -16,7 +16,7 @@ from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_objects import OBJECT_KEYWORD, objects_in, pair_definitions
-from confiture.core.ddl_walk import ColumnEdit, column_edit
+from confiture.core.ddl_walk import ColumnEdit, ObjectEdit, column_edit, object_edits
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.models.schema import (
     CheckConstraint,
@@ -125,6 +125,12 @@ _PG_FK_DEL_ACTION: dict[str, str | None] = {
     "": None,
     "\x00": None,
 }
+#: The differ's own model classes, in the kind vocabulary ``ObjectEdit`` speaks.
+#: A ``Table`` answers for a table and a matview alike here, because this model
+#: has only the one; a view and a routine live in ``ParsedSchema.objects``, and
+#: ``ddl_objects`` folds their drops.
+_MODEL_KINDS: dict[str, str] = {"Table": "table", "EnumType": "type", "Sequence": "sequence"}
+
 _CONSTR_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
 _CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
 _CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
@@ -255,23 +261,95 @@ class SchemaDiffer:
         # reports it as DIFFER_400. A commented-out statement is not a node.
         raws = list(pglast.parse_sql(sql) or [])
         result.objects = objects_in(sql, raws)
-        statements = [raw.stmt for raw in raws]
-        for stmt in statements:
-            if type(stmt).__name__ == "CreateStmt":
-                table = self._parse_create_table_pglast(stmt)
+        # Where each model was declared, so a `DROP` folded below reaches what the
+        # tree had written *before* it and not what it writes after: the everyday
+        # `DROP TABLE IF EXISTS x; CREATE TABLE x (…);` declares `x` (#301).
+        declared_at: dict[int, int] = {}
+        for raw in raws:
+            if type(raw.stmt).__name__ == "CreateStmt":
+                table = self._parse_create_table_pglast(raw.stmt)
                 if table:
                     result.tables.append(table)
-        for stmt in statements:
-            kind = type(stmt).__name__
-            if kind == "IndexStmt":
-                self._collect_index(stmt, result)
-            elif kind == "CreateEnumStmt":
-                result.enum_types.append(_enum_type_from_stmt(stmt))
-            elif kind == "CreateSeqStmt":
-                result.sequences.append(_sequence_from_stmt(stmt))
-            elif kind == "AlterTableStmt":
-                self._collect_alter_table(stmt, result)
+                    declared_at[id(table)] = raw.stmt_location or 0
+        for raw in raws:
+            self._collect_statement(raw, result, declared_at)
         return result
+
+    def _collect_statement(
+        self, raw: Any, result: ParsedSchema, declared_at: dict[int, int]
+    ) -> None:
+        stmt = raw.stmt
+        kind = type(stmt).__name__
+        offset = raw.stmt_location or 0
+        if kind == "IndexStmt":
+            self._collect_index(stmt, result, declared_at, offset)
+        elif kind == "CreateEnumStmt":
+            enum_type = _enum_type_from_stmt(stmt)
+            result.enum_types.append(enum_type)
+            declared_at[id(enum_type)] = offset
+        elif kind == "CreateSeqStmt":
+            sequence = _sequence_from_stmt(stmt)
+            result.sequences.append(sequence)
+            declared_at[id(sequence)] = offset
+        elif kind == "AlterTableStmt":
+            self._collect_alter_table(stmt, result)
+        else:
+            self._fold_object_edits(stmt, result, declared_at, offset)
+
+    def _fold_object_edits(
+        self, stmt: Any, result: ParsedSchema, declared_at: dict[int, int], offset: int
+    ) -> None:
+        """Apply a ``DROP`` / ``RENAME`` to the models this tree has declared so far.
+
+        ``SET SCHEMA`` is not among them, and not by omission: a ``Table`` here is
+        keyed by its bare name and carries no schema at all, so a move between
+        schemas is not expressible in this model *and* changes nothing it
+        compares. The lint inventory, which does key on the schema, folds it.
+        """
+        for edit in object_edits(stmt):
+            declared = [
+                model
+                for model in (*result.tables, *result.enum_types, *result.sequences)
+                if declared_at.get(id(model), 0) < offset
+            ]
+            if edit.kind == "drop":
+                self._drop_declared(edit, result, declared)
+            elif edit.kind == "rename":
+                self._rename_declared(edit, declared)
+            elif edit.kind == "rename_column":
+                self._rename_column(edit, declared)
+
+    @staticmethod
+    def _named(edit: ObjectEdit, model: Any) -> bool:
+        """Whether *edit* names *model*, which the differ keys by bare name."""
+        return getattr(model, "name", None) == edit.name
+
+    def _drop_declared(self, edit: ObjectEdit, result: ParsedSchema, declared: list[Any]) -> None:
+        gone = {
+            id(model)
+            for model in declared
+            if self._named(edit, model)
+            and _MODEL_KINDS.get(type(model).__name__) == edit.object_kind
+        }
+        result.tables = [t for t in result.tables if id(t) not in gone]
+        result.enum_types = [e for e in result.enum_types if id(e) not in gone]
+        result.sequences = [s for s in result.sequences if id(s) not in gone]
+        if edit.object_kind == "index":
+            for table in result.tables:
+                table.indexes = [ix for ix in table.indexes if ix.name != edit.name]
+
+    def _rename_declared(self, edit: ObjectEdit, declared: list[Any]) -> None:
+        for model in declared:
+            if self._named(edit, model) and edit.new_name:
+                model.name = edit.new_name
+
+    def _rename_column(self, edit: ObjectEdit, declared: list[Any]) -> None:
+        for model in declared:
+            if not isinstance(model, Table) or not self._named(edit, model):
+                continue
+            column = model.get_column(edit.column) if edit.column else None
+            if column is not None and edit.new_name:
+                column.name = edit.new_name
 
     # ------------------------------------------------------------------
     # pglast-based CREATE TABLE parser (primary path)
@@ -420,22 +498,29 @@ class SchemaDiffer:
         relname = getattr(relation, "relname", None)
         return next((t for t in result.tables if t.name == relname), None)
 
-    def _collect_index(self, stmt: Any, result: ParsedSchema) -> None:
+    def _collect_index(
+        self,
+        stmt: Any,
+        result: ParsedSchema,
+        declared_at: dict[int, int] | None = None,
+        offset: int = 0,
+    ) -> None:
         table = self._table_named(result, stmt.relation)
         if table is None:
             return
         columns = [
             elem.name if elem.name else RawStream()(elem.expr) for elem in stmt.indexParams or []
         ]
-        table.indexes.append(
-            Index(
-                name=stmt.idxname,
-                table=table.name,
-                columns=columns,
-                unique=bool(stmt.unique),
-                where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
-            )
+        index = Index(
+            name=stmt.idxname,
+            table=table.name,
+            columns=columns,
+            unique=bool(stmt.unique),
+            where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
         )
+        table.indexes.append(index)
+        if declared_at is not None:
+            declared_at[id(index)] = offset
 
     def _collect_alter_table(self, stmt: Any, result: ParsedSchema) -> None:
         """Fold an ``ALTER TABLE`` into the table the tree already created.
