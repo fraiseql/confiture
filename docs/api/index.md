@@ -29,12 +29,15 @@ import confiture
 # Check version
 print(confiture.__version__)  # "0.5.0"
 
-# Initialize for a project
-from confiture import Confiture
+# Build a schema for an environment
+from confiture import SchemaBuilder
 
-conf = Confiture(project_dir="/path/to/project")
-conf.init()  # Creates db/ structure
+schema = SchemaBuilder(env="local").build()
 ```
+
+There is no `Confiture` facade class. Scaffolding a project is `confiture init`,
+a CLI command with no library equivalent; the library starts from the object for
+the medium you want.
 
 ---
 
@@ -288,13 +291,12 @@ environments:
 ### Programmatic Configuration
 
 ```python
-from confiture.config import Config
+from confiture.config import Environment
 
-config = Config(
-    env="local",
+config = Environment(
+    name="local",
     database_url="postgresql://localhost/mydb",
-    schema_dirs=["db/schema"],
-    seed_dirs=["db/seeds"]
+    include_dirs=["db/schema"]
 )
 
 builder = SchemaBuilder(config=config)
@@ -308,12 +310,15 @@ All APIs are fully typed for IDE support:
 
 ```python
 from confiture.core.builder import SchemaBuilder
-from confiture.core.migrator import Migrator, MigrationResult
-from confiture.core.syncer import ProductionSyncer, SyncConfig, SyncResult
+from confiture.core.migrator import Migrator
 from confiture.core.schema_to_schema import SchemaToSchemaMigrator
+from confiture.core.syncer import ProductionSyncer, SyncConfig
+
+# Result types live together in confiture.models.results, one per command
+from confiture.models.results import MigrateUpResult, SyncResult
 
 # Type hints work throughout
-def build_and_migrate(env: str) -> MigrationResult:
+def build_and_migrate(env: str) -> MigrateUpResult:
     builder: SchemaBuilder = SchemaBuilder(env=env)
     schema: str = builder.build()
     ...
@@ -358,9 +363,9 @@ When installed with `confiture[rust]`, these operations are 10-50x faster:
 ### Check if Rust is Available
 
 ```python
-from confiture import has_rust_extension
+from confiture.core.builder import HAS_RUST
 
-if has_rust_extension():
+if HAS_RUST:
     print("Rust acceleration enabled")
 else:
     print("Using pure Python (slower)")

@@ -413,13 +413,17 @@ The implementation automatically falls back to pure Python if Rust is unavailabl
 ### Check Rust Status
 
 ```python
-from confiture import has_rust_extension
+from confiture.core.builder import HAS_RUST
 
-if has_rust_extension():
+if HAS_RUST:
     print("Using Rust acceleration")
 else:
     print("Using pure Python")
 ```
+
+`HAS_RUST` is set at import time by whether `confiture._core` is present — it is
+absent on an sdist or editable install with no Rust toolchain, and the Python
+path then runs and says so once at INFO.
 
 ---
 
