@@ -473,7 +473,7 @@ migration:
 
 How `confiture drift --schema` and `migrate validate --check-live-drift` judge
 column order (#226). Both sides carry it — the expected DDL in declaration
-order, the live database by `ordinal_position` — and a table whose columns are
+order, the live database by `pg_attribute.attnum` — and a table whose columns are
 the same set in a different order is one `column_order_mismatch` item.
 
 ```yaml

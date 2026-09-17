@@ -1707,7 +1707,7 @@ confiture migrate validate [OPTIONS]
 | `--require-grant-migration` | - | Flag | off | Verify that each changed GRANT/REVOKE in the grant directory is carried by an accompanying migration (SQL or Python). Semantic match across table/schema/sequence/function objects; grants that can't be statically verified degrade to a file-presence check and are surfaced as notes (default: off). |
 | `--allow-grant-only` | - | Flag | off | Suppress --require-grant-migration failure for build-only branches (default: off) |
 | `--dry-run` | - | Flag | off | Preview changes without renaming (default: off) |
-| `--check-live-drift` | - | Flag | off | Compare the live database schema against the DDL files. Requires --config and a database connection. |
+| `--check-live-drift` | - | Flag | off | Compare the live database schema against the DDL files: tables, columns (existence, type, nullability, order), indexes, and the existence of views, materialized views, triggers and routines. Constraints, sequences and column defaults are NOT compared; grants and ownership are separate checks (--check-acls, --check-ownership-coverage). Requires --config and a database connection. |
 | `--ignore-column-order` | - | Flag | off | With --check-live-drift: do not report column_order_mismatch (#226) |
 | `--check-signatures` | - | Flag | off | Compare function signatures in --schema against the live DB. Detects stale overloads created by CREATE OR REPLACE with changed param types. Companion to --require-migration (static pre-commit check, no DB needed). Requires --config (or --env) and --schema. |
 | `--check-imports` | - | Flag | off | Import-check pending Python migration modules. Level 1: catches syntax errors and missing imports. Level 2: verifies version, name, up(), down() are defined. No database connection required. |
@@ -2400,7 +2400,7 @@ confiture migrate validate [OPTIONS]
 | `--require-grant-migration` | - | Flag | off | Verify that each changed GRANT/REVOKE in the grant directory is carried by an accompanying migration (SQL or Python). Semantic match across table/schema/sequence/function objects; grants that can't be statically verified degrade to a file-presence check and are surfaced as notes (default: off). |
 | `--allow-grant-only` | - | Flag | off | Suppress --require-grant-migration failure for build-only branches (default: off) |
 | `--dry-run` | - | Flag | off | Preview changes without renaming (default: off) |
-| `--check-live-drift` | - | Flag | off | Compare the live database schema against the DDL files. Requires --config and a database connection. |
+| `--check-live-drift` | - | Flag | off | Compare the live database schema against the DDL files: tables, columns (existence, type, nullability, order), indexes, and the existence of views, materialized views, triggers and routines. Constraints, sequences and column defaults are NOT compared; grants and ownership are separate checks (--check-acls, --check-ownership-coverage). Requires --config and a database connection. |
 | `--ignore-column-order` | - | Flag | off | With --check-live-drift: do not report column_order_mismatch (#226) |
 | `--check-signatures` | - | Flag | off | Compare function signatures in --schema against the live DB. Detects stale overloads created by CREATE OR REPLACE with changed param types. Companion to --require-migration (static pre-commit check, no DB needed). Requires --config (or --env) and --schema. |
 | `--check-imports` | - | Flag | off | Import-check pending Python migration modules. Level 1: catches syntax errors and missing imports. Level 2: verifies version, name, up(), down() are defined. No database connection required. |
@@ -2965,11 +2965,29 @@ confiture lint [OPTIONS]
 
 Compare the live database schema against expected DDL and/or the configured `acls:` block.
 
-Structural drift compares tables, columns (type, nullability, order) and indexes. Only the indexes the
+Structural drift compares tables, columns (type, nullability, order), indexes, and — since 1.11.0 —
+the **existence** of views, materialized views, triggers and routines. `migrate validate
+--check-live-drift` runs the same comparison; the two cannot disagree, because they share one detector.
+
+What it does **not** compare, so that nothing has to guess: constraints, sequences, column defaults,
+and the *bodies* of views and routines. Defaults are left out for a measured reason — PostgreSQL
+rewrites a default expression on storage, so `'x'` comes back as `'x'::text` and `1 + 2` as `(1 + 2)`,
+and only 5 of 12 measured columns agreed as text. Bodies have their own opt-in checks
+(`--check-body`, `--check-body-views`, `--check-body-replay`); grants and ownership have theirs
+(`--check-acls`, `--check-ownership-coverage`).
+
+Only the indexes the
 DDL declares with `CREATE INDEX` are compared: the index PostgreSQL creates to back a `PRIMARY KEY`,
 `UNIQUE` or `EXCLUDE` constraint (`t_pkey`, `t_code_key`, or the constraint's name) is never reported
 as `extra_index`, while a free-standing index the live database has and the DDL does not is — on every
 table the DDL declares, whether or not that table declares an index of its own.
+
+An object the live database carries and the DDL does not declare is reported at `info`, and only for a
+kind the DDL declares at least one of, in a schema it declares: "this project does not manage views
+here" and "this project has lost all its views" are not distinguishable from an empty expected set.
+Extension-owned objects are never reported — `citext` alone installs a dozen functions. Note that
+`--fail-on-warning` exits 1 on **any** item including an `info` one, so a hand-made view in a managed
+schema trips it, as a hand-made index always has.
 
 ### Exit Codes
 

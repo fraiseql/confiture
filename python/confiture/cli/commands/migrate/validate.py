@@ -183,7 +183,11 @@ CheckLiveDriftOpt = Annotated[
     bool,
     typer.Option(
         "--check-live-drift",
-        help="Compare the live database schema against the DDL files. "
+        help="Compare the live database schema against the DDL files: tables, "
+        "columns (existence, type, nullability, order), indexes, and the existence "
+        "of views, materialized views, triggers and routines. Constraints, "
+        "sequences and column defaults are NOT compared; grants and ownership are "
+        "separate checks (--check-acls, --check-ownership-coverage). "
         "Requires --config and a database connection.",
     ),
 ]
