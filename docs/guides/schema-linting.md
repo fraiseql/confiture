@@ -507,290 +507,67 @@ that is the point of adopting a rule this way. `--format json` adds
 
 ## Configuring Rules
 
-### Option 1: YAML Configuration
+Rules are a fixed catalogue, not a plug-in point. `--list-rules` prints all of
+them with their code, family, severity and whatever configuration each one
+additionally needs:
+
+```bash
+confiture lint --list-rules
+```
+
+### Choosing which ones run
+
+```bash
+# One rule, or a whole family
+confiture lint --select pk_001
+confiture lint --select pk,naming
+
+# The usual set plus one opt-in family
+confiture lint --select default,replica
+
+# Everything except the documentation family
+confiture lint --ignore doc
+```
+
+`--ignore` wins over `--select`, and an unknown selector exits 5.
+
+### Configuration the rules read
+
+`confiture lint` takes its settings from the environment's config file, under
+keys that belong to the rule families rather than to the linter:
 
 ```yaml
-# db/confiture.yaml
+# db/environments/local.yaml
 
-linting:
-  rules:
-    # Built-in rules
-    naming:
-      table_case: snake_case
-      column_case: snake_case
-      function_case: snake_case
-      max_name_length: 63
-
-    structure:
-      require_primary_key: true
-      require_timestamps: true
-      timestamp_fields:
-        - created_at
-        - updated_at
-
-    security:
-      warn_plain_text_pii: true
-      require_password_hash: true
-      require_ssl_connections: false
-
-    performance:
-      warn_missing_indices: true
-      warn_select_star: true
-      max_index_columns: 5
-
-  # Custom rules
-  custom:
-    - name: "email_constraint"
-      description: "Ensure all email columns have uniqueness"
-      rule: "email_column:unique"
-
-    - name: "audit_table"
-      description: "Ensure audit tables have timestamps"
-      rule: "created_at:required"
+lint:
+  ignore_objects: []      # objects no rule reports on
+  search_path: []         # schemas to resolve unqualified names against
+  status_words:           # words doc_00x treats as an unfinished comment
+    - TODO
+    - FIXME
+    - WIP
+    - DRAFT
 ```
 
-### Option 2: Python Rules
+Some rules need more before they can report anything, and `--list-rules` says
+which: `tree_004` needs `--overrides-dir`, and the `body` family needs a
+writable server for its scratch database (`--server-url`, defaulting to the
+environment's own `database_url`).
 
-```python
-# db/linting/rules.py
+See [Configuration Reference](../reference/configuration.md) for every field.
 
-from confiture.linting import Rule, RuleContext, Violation
+### Adopting a rule against an existing backlog
 
-class EmailConstraintRule(Rule):
-    """Custom rule: email columns must have uniqueness."""
+A rule that fires 400 times on a mature schema is a rule nobody turns on.
+`--write-baseline` records what exists today so that only *new* violations fail
+— see [Adopting a rule with a baseline](#adopting-a-rule-with-a-baseline----baseline----write-baseline).
 
-    name = "email_constraint"
-    severity = "warning"
-    description = "Ensure email columns have unique constraint"
+### Adding a rule
 
-    def check(self, context: RuleContext) -> list[Violation]:
-        """Check for email columns without unique constraint."""
-        violations = []
-
-        for table in context.schema.tables:
-            for column in table.columns:
-                if 'email' in column.name.lower():
-                    if not column.has_constraint('unique'):
-                        violations.append(
-                            Violation(
-                                rule=self.name,
-                                severity=self.severity,
-                                table=table.name,
-                                column=column.name,
-                                message=f"Email column '{column.name}' must have UNIQUE constraint",
-                                fix=f"ALTER TABLE {table.name} ADD CONSTRAINT {table.name}__{column.name}_unique UNIQUE ({column.name})"
-                            )
-                        )
-
-        return violations
-```
-
----
-
-## Example: Naming Convention Rule
-
-**Situation**: Enforce team naming standards (snake_case, no abbreviations).
-
-```yaml
-# db/confiture.yaml
-
-linting:
-  rules:
-    naming:
-      table_case: snake_case           # Users → users ✓
-      column_case: snake_case          # UserName → user_name ✓
-      index_prefix: idx_               # idx_users_email ✓
-      foreign_key_prefix: fk_          # fk_users_id ✓
-      max_name_length: 63              # PostgreSQL limit
-      abbreviations_forbidden:
-        - tbl
-        - col
-        - usr
-        - msg
-```
-
-**Linting Output**:
-```
-⚠️  WARN: users.sql:1 - Table name 'UserTbl' violates convention
-  Expected: user
-  Found: UserTbl
-
-⚠️  WARN: users.sql:5 - Abbreviation 'usr' forbidden
-  Expected: user
-  Found: usr_id
-```
-
----
-
-## Example: Security Rule
-
-**Situation**: Ensure PII is encrypted and passwords are hashed.
-
-```python
-# db/linting/security_rules.py
-
-from confiture.linting import Rule, RuleContext, Violation
-
-class PIIEncryptionRule(Rule):
-    """Ensure PII columns are encrypted."""
-
-    name = "pii_encryption"
-    severity = "critical"
-
-    PII_PATTERNS = ['email', 'ssn', 'credit_card', 'phone', 'password']
-
-    def check(self, context: RuleContext) -> list[Violation]:
-        violations = []
-
-        for table in context.schema.tables:
-            for column in table.columns:
-                # Check if column matches PII patterns
-                if any(pii in column.name.lower() for pii in self.PII_PATTERNS):
-                    # Check if encrypted
-                    if not column.has_comment('encrypted') and 'hash' not in column.name:
-                        violations.append(
-                            Violation(
-                                rule=self.name,
-                                severity=self.severity,
-                                table=table.name,
-                                column=column.name,
-                                message=f"PII column '{column.name}' must be encrypted or hashed",
-                                fix=f"Add comment to {column.name}: -- encrypted"
-                            )
-                        )
-
-        return violations
-```
-
-**Configuration**:
-```yaml
-linting:
-  security:
-    require_encryption:
-      - email
-      - ssn
-      - credit_card
-      - phone
-    require_hash:
-      - password
-    forbidden_plain_text:
-      - api_key
-      - secret
-      - token
-```
-
----
-
-## Example: Performance Rule
-
-**Situation**: Detect missing indices and optimize queries.
-
-```python
-# db/linting/performance_rules.py
-
-from confiture.linting import Rule, RuleContext, Violation
-
-class MissingIndexRule(Rule):
-    """Detect columns that should have indices."""
-
-    name = "missing_indices"
-    severity = "warning"
-
-    # Columns commonly queried
-    COMMONLY_QUERIED = [
-        'id', 'user_id', 'email', 'created_at',
-        'status', 'type', 'category'
-    ]
-
-    def check(self, context: RuleContext) -> list[Violation]:
-        violations = []
-
-        for table in context.schema.tables:
-            for column in table.columns:
-                # Check if commonly queried
-                if column.name in self.COMMONLY_QUERIED:
-                    # Check if indexed
-                    if not column.has_index():
-                        violations.append(
-                            Violation(
-                                rule=self.name,
-                                severity=self.severity,
-                                table=table.name,
-                                column=column.name,
-                                message=f"Column '{column.name}' should probably have an index",
-                                fix=(
-                                    f"CREATE INDEX idx_{table.name}_{column.name} "
-                                    f"ON {table.name}({column.name});"
-                                )
-                            )
-                        )
-
-        return violations
-```
-
----
-
-## Example: Compliance Rule
-
-**Situation**: Ensure GDPR compliance (data retention, audit trails).
-
-```python
-# db/linting/compliance_rules.py
-
-from confiture.linting import Rule, RuleContext, Violation
-
-class GDPRComplianceRule(Rule):
-    """Ensure GDPR compliance requirements."""
-
-    name = "gdpr_compliance"
-    severity = "critical"
-
-    def check(self, context: RuleContext) -> list[Violation]:
-        violations = []
-
-        for table in context.schema.tables:
-            # Check for required audit columns
-            has_created_at = any(c.name == 'created_at' for c in table.columns)
-            has_updated_at = any(c.name == 'updated_at' for c in table.columns)
-
-            if not has_created_at:
-                violations.append(
-                    Violation(
-                        rule=self.name,
-                        severity="critical",
-                        table=table.name,
-                        message="Table must have 'created_at' column for GDPR audit trail",
-                        fix=f"ALTER TABLE {table.name} ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW();"
-                    )
-                )
-
-            if not has_updated_at:
-                violations.append(
-                    Violation(
-                        rule=self.name,
-                        severity="critical",
-                        table=table.name,
-                        message="Table must have 'updated_at' column for tracking changes",
-                        fix=f"ALTER TABLE {table.name} ADD COLUMN updated_at TIMESTAMPTZ DEFAULT NOW();"
-                    )
-                )
-
-            # Check for PII columns without encryption
-            for column in table.columns:
-                if 'email' in column.name.lower() and 'encrypted' not in column.name:
-                    if not column.has_comment('encrypted'):
-                        violations.append(
-                            Violation(
-                                rule=self.name,
-                                severity="critical",
-                                table=table.name,
-                                column=column.name,
-                                message="PII must be encrypted for GDPR compliance"
-                            )
-                        )
-
-        return violations
-```
+There is no user-supplied rule: no `linting:` configuration key, no rules file
+to load, and no registration hook. A new rule is a change to confiture —
+register it in `python/confiture/core/linting/rule_registry.py`, which is what
+drives `--select`, `--ignore` and `--list-rules`.
 
 ---
 
@@ -856,62 +633,14 @@ confiture lint --baseline .confiture-lint-baseline.json
 confiture lint --fail-on error
 ```
 
-### 2. Document Custom Rules
-
-**Good**:
-```python
-class CustomRule(Rule):
-    """
-    Custom rule: All tables must have owner.
-
-    This ensures we can contact the team responsible
-    for each table for schema changes.
-
-    Example fix:
-        COMMENT ON TABLE users IS 'owner: platform-team';
-    """
-```
-
-**Bad**:
-```python
-class CustomRule(Rule):
-    """Check something"""
-    pass
-```
-
-### 3. Include Auto-Fixes
-
-**Good**:
-```python
-violations.append(
-    Violation(
-        rule="naming",
-        message="Table name should be snake_case",
-        fix="Rename to lowercase"  # Clear fix
-    )
-)
-```
-
-**Bad**:
-```python
-violations.append(
-    Violation(
-        rule="naming",
-        message="Bad table name"  # Vague
-        # No fix suggestion
-    )
-)
-```
-
----
-
 ## Troubleshooting
 
 ### ❌ Error: "Rule not found"
 
-**Cause**: Custom rule not loaded or wrong name.
+**Cause**: `--select` or `--ignore` names a rule or family that does not exist.
+An unknown selector exits 5 rather than silently matching nothing.
 
-**Solution**: Check configuration:
+**Solution**: Check the catalogue:
 
 ```bash
 # List all available rules, with the configuration each one needs
@@ -959,11 +688,11 @@ linting:
 ## 🎯 Next Steps
 
 **Ready to lint your schema?**
-- ✅ You now understand: Linting rules, custom rules, CI/CD integration
+- ✅ You now understand: the rule catalogue, selection, baselines, CI/CD integration
 
 **What to do next:**
 
-1. **[Advanced Patterns](./advanced-patterns.md)** - Custom validation rules
+1. **[Advanced Patterns](./advanced-patterns.md)** - Complex validation workflows
 2. **[CLI Reference](../reference/cli.md)** - Full lint command documentation
 3. **[Examples](https://github.com/fraiseql/confiture/tree/main/examples)** - Production linting examples
 
