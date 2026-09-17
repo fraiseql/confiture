@@ -31,7 +31,6 @@ DOCS_WITH_HOOK_SNIPPETS = [
     *HOOK_DOCS,
     "docs/api/index.md",
     "docs/guides/compliance.md",
-    "docs/guides/interactive-migration-wizard.md",
     "docs/guides/integrations.md",
 ]
 

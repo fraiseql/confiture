@@ -153,10 +153,9 @@ migrator.cleanup_fdw()
 
 | API | Module | Description |
 |-----|--------|-------------|
-| [Hooks](hooks.md) | `confiture.hooks` | Lifecycle callbacks for migrations |
+| [Hooks](hooks.md) | `confiture.core.hooks` | Lifecycle callbacks for migrations |
 | [Anonymization](anonymization.md) | `confiture` | Custom data masking strategies |
-| [Linting](linting.md) | `confiture.linting` | Schema validation rules |
-| [Wizard](wizard.md) | `confiture.wizard` | Interactive migration assistant |
+| [Linting](linting.md) | `confiture.core.linting` | Schema validation rules |
 | [Blue-Green](blue-green.md) | `confiture.core.blue_green` | Callback-driven zero-downtime schema swap |
 | [PG Version](pg-version.md) | `confiture.core.pg_version` | Server version detection + feature gating |
 | [Rollback Generation](rollback-generator.md) | `confiture.core.rollback_generator` | Auto-generate `down` SQL for reversible DDL |
