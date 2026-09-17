@@ -273,7 +273,7 @@ Semantic grant-accompaniment report (issue #162): verifies that each *changed* `
 
 [migrate-validate-check-function-uniqueness.schema.json](./json-schemas/migrate-validate-check-function-uniqueness.schema.json)
 
-Static check that every `CREATE FUNCTION` / `CREATE PROCEDURE` across the configured DDL directories has a unique fully-qualified signature. Opt-in via a `function_coverage:` block in the env config. Requires the `[ast]` extra (pglast). No DB required.
+Static check that every `CREATE FUNCTION` / `CREATE PROCEDURE` across the configured DDL directories has a unique fully-qualified signature. Opt-in via a `function_coverage:` block in the env config. No DB required.
 
 ```json
 {

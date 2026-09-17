@@ -3,8 +3,8 @@
 ``pglast.parse_plpgsql`` is the only thing that reads a PL/pgSQL body, and it
 is the wrong shape twice: the compiler behind it refuses a routine it should
 read, and the serialiser behind *that* writes a body it did read as JSON that
-does not decode. Both are pglast 8's alone — 6.16 and 7.18, which the ``[ast]``
-extra equally accepts, have neither — and both ended in the same place, a
+does not decode. Both are pglast 8's alone — 6.16 and 7.18, which the
+dependency equally accepts, have neither — and both ended in the same place, a
 routine ``build_003`` never looked at. So both are answered here, and
 :func:`parse_body` is the one place either is.
 
@@ -69,7 +69,7 @@ it was never read is the bug both of these issues are.
 
 Both are pglast 8's, both are reported upstream as
 https://github.com/pganalyze/libpg_query/issues/337, and neither is repaired
-here for want of a better place: the ``[ast]`` extra accepts ``pglast>=6.0``
+here for want of a better place: confiture depends on ``pglast>=6.0``
 uncapped and confiture cannot ship libpg_query, so a fix that lands upstream
 lands in a future wheel and never in the one an installed environment already
 has. Both repairs are written to retire themselves rather than to be removed —

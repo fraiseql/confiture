@@ -12,6 +12,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [Unreleased]
+
+### Fixed
+
+- **The documentation still sold pglast as something you install.** `sqlparse` and a regex
+  backend were real until 0.50.0 (D13) made pglast the one parser and a **hard
+  dependency**; `[ast]` survives only as an empty alias so an older
+  `fraiseql-confiture[ast]` still resolves. `tests/unit/test_single_parser.py` has
+  forbidden the *code* from asking whether pglast is available ever since — but nothing
+  asked the same of the prose, and it had drifted for two releases across **19 sites**:
+  four guides told the reader to `pip install "fraiseql-confiture[ast]"` to enable a rule;
+  `acl-coverage.md` described a sqlparse + regex fallback and claimed "both code paths are
+  exercised by parameterized unit tests"; five CLI `--help` strings said "Requires the
+  [ast] extra (pglast)", and `docs/reference/cli.md` is generated from them, so the
+  untruth was published twice; six module docstrings described a skip notice for an absent
+  parser that no code can emit — `replica/classifier.py` still said "Uses pglast when
+  available, else a regex fallback; both backends are parity-tested"; and
+  `test_ownership_coverage_rule.py` pointed at `test_ownership_pglast_absent`, a module
+  deleted with the path it covered. `CLAUDE.md` itself attributed the version range to the
+  extra rather than to the dependency.
+
+### Added
+
+- **`tests/unit/docs/test_no_optional_parser.py`** — nothing may tell a reader to install
+  a parser confiture already depends on. The guard is conditional on the fact rather than
+  the wording: it reads `pyproject.toml` and only applies while pglast is in
+  `dependencies`, so if pglast ever became optional again these sentences would become
+  true and the test would stop asking for them. Its corpus is `docs/`, the root documents,
+  `python/confiture/` **and `tests/`** — a module docstring is the documentation a
+  maintainer reads first, and three of them still promised the skip notice.
+
+  It scans **whole documents, not code regions**. The import guard (#287) scans code
+  regions because an import lives in code; a promise about installation lives in a
+  paragraph, and a code-regions scan could not see the very sentence this guard was
+  written for. That was found by mutation: re-introducing "falls back to sqlparse" as
+  prose did not fail the first draft.
+
+  Corrective prose tripped a guard three times while writing this — twice this one, once
+  the pre-existing `test_single_parser.py`, which flagged a docstring for *naming* the
+  identifiers it forbids. Each was reworded rather than exempted, which is the rule the
+  command-truth campaign settled on.
+
 ## [1.10.0] - 2026-09-17
 
 ### Added

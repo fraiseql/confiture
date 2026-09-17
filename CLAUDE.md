@@ -328,7 +328,10 @@ project root. Do not add a fourth resolver.
 
 #### pglast version matrix (since 0.39.0, #192)
 
-The `[ast]` extra accepts **`pglast>=6.0`, uncapped**. Verified green on 6.16,
+Confiture depends on **`pglast>=6.0`, uncapped** — a hard dependency since
+0.50.0 (D13), not an extra. `[ast]` survives as an empty alias so an older
+`fraiseql-confiture[ast]` still resolves; installing it changes nothing.
+Verified green on 6.16,
 7.18 and 8.4; `uv.lock` pins the current major, and a required
 `pglast-matrix` CI leg runs the AST-backed suites against both ends of the
 range (`>=6,<7` and `>=8`).

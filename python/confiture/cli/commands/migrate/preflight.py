@@ -459,8 +459,7 @@ CheckDependentsOpt = Annotated[
         help="Enumerate live dependents of CREATE OR REPLACE targets via "
         "pg_depend on the --against preflight DB. "
         "'off' (default), 'fail' (exit 1 on dependents found), or "
-        "'warn' (render dependents as informational, exit code unchanged). "
-        "Requires the [ast] extra (pglast).",
+        "'warn' (render dependents as informational, exit code unchanged). ",
     ),
 ]
 StrictOpt = Annotated[

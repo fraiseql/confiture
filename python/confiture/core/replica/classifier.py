@@ -297,8 +297,9 @@ class OperationClassifier:
     def classify(self, sql: str) -> list[DdlOperation]:
         """Return the ordered DDL operations in ``sql``.
 
-        Uses pglast when available, else a regex fallback; both backends are
-        parity-tested for the supported operations.
+        Parses with pglast, the one parser since 0.50.0 (D13). The regex
+        fallback this once had, and the parity tests that held the two
+        backends together, went with it.
         """
         # pglast.parser.ParseError propagates: the caller reports the file as
         # unclassifiable instead of reading a guess (ANA-02).

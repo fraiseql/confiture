@@ -5,8 +5,10 @@ The rule walks a migrations directory and verifies that every
 an ``ALTER … OWNER TO <expected_owner>`` later in the same file (or the
 file declares ``-- confiture:run-as <expected_owner>`` front-matter).
 
-AST-only: when pglast is not installed, the rule emits a skip notice and
-returns an empty violation list — see :mod:`tests.unit.linting.test_ownership_pglast_absent`.
+AST-only, and pglast is a dependency (D13) — the rule always runs. The skip
+notice this once described is gone, and so is the module that covered it:
+``tests.unit.linting.test_ownership_pglast_absent`` was deleted with the path
+it tested, and this line went on pointing at it.
 """
 
 from __future__ import annotations

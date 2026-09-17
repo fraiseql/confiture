@@ -2,6 +2,15 @@
 
 These tests are intentionally narrow: they assert the strings users
 will see in --help, not implementation details.
+
+``TestIdempotentMentionsAstExtra`` was here and is deleted rather than
+re-pointed. It required ``--help`` to name the ``[ast]`` extra or pglast,
+because ``--idempotent`` needed a parser the reader had to install. 0.50.0
+(D13) made pglast a dependency, so there is nothing for the help to warn
+about, and the sentence it pinned had become one of the untruths
+``tests/unit/docs/test_no_optional_parser.py`` now forbids. A test that
+requires a warning about a condition that cannot arise is a test asking for
+a false statement.
 """
 
 from __future__ import annotations
@@ -41,13 +50,3 @@ class TestCheckSignaturesSchemaDistinction:
         # vice-versa) so users can tell them apart.
         assert "--schemas" in out
         assert "--schema" in out
-
-
-class TestIdempotentMentionsAstExtra:
-    """`--idempotent` help mentions the [ast] extra prominently."""
-
-    def test_idempotent_flag_description_or_epilog_mentions_ast(self):
-        out = _help("migrate", "validate")
-        # The phrase "[ast] extra" or "pglast" must appear near the
-        # --idempotent description (we check the full --help text).
-        assert "[ast]" in out or "pglast" in out

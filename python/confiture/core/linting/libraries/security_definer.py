@@ -12,9 +12,9 @@ a ``SET search_path = …`` or ``SET search_path FROM CURRENT`` clause.
 they leave the function exposed to the caller's path.
 
 Static path (this module): parses the DDL source with pglast and reports
-per-file/line violations with full object names.  When pglast is absent
-(the ``[ast]`` extra is not installed) the rule emits one skip notice and
-returns no violations.
+per-file/line violations with full object names.  pglast is a dependency
+(D13), so there is no absent-parser path: a file it rejects is a finding,
+not a skip.
 
 Live path: see :mod:`confiture.core.validation.security_definer`
  which queries ``pg_proc.proconfig`` directly.
@@ -171,7 +171,7 @@ class Sec002SecurityDefinerSearchPath:
     """SEC002 — SECURITY DEFINER functions/procedures must pin search_path.
 
     Returns one :class:`~confiture.core.linting.schema_linter.LintViolation`
-    per flagged function.  No-op when pglast is absent.
+    per flagged function.
 
     Args:
         apply_to: Schema-name patterns (``fnmatch``-style) that scope the

@@ -1,7 +1,7 @@
 """Parse PostgreSQL function/procedure signatures from SQL text.
 
 Two-tier strategy mirroring differ.py:
-- Tier 1: pglast (when [ast] extra is installed) — PostgreSQL's own C parser
+- Tier 1: pglast — PostgreSQL's own C parser
 - Tier 2: regex fallback — works without any optional dependencies
 """
 

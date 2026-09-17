@@ -96,9 +96,10 @@ _sentinels = itertools.count(-1000, -1)
 def member(enum_name: str, member_name: str) -> int:
     """Resolve ``pglast.enums.<enum_name>.<member_name>`` to its ordinal.
 
-    Returns a unique never-matching sentinel when pglast is not installed (the
-    AST path is inert then anyway) or when the member has disappeared upstream.
-    The latter case is also recorded in :data:`MISSING_MEMBERS`.
+    Returns a unique never-matching sentinel when the member has disappeared
+    upstream, which is also recorded in :data:`MISSING_MEMBERS`. pglast itself is
+    a dependency (D13) and imported at module scope, so "not installed" is not a
+    case this has to answer for.
     """
     try:
         return int(getattr(getattr(enums, enum_name), member_name))

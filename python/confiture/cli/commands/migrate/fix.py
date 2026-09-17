@@ -41,7 +41,7 @@ def migrate_fix(
         help=(
             "Insert missing `ALTER … OWNER TO <expected_owner>` after each "
             "CREATE that lacks one.  Requires an `ownership:` block in the "
-            "config and the [ast] extra (pglast)."
+            "config."
         ),
     ),
     config_path: Path | None = typer.Option(

@@ -108,19 +108,13 @@ The directive attaches to the *next* non-blank non-comment line.  Use it sparing
 
 ## AST-only by design
 
-`func_001` is AST-only via [pglast](https://github.com/lelit/pglast).  When pglast is not installed, the rule emits one skip notice to stderr and returns no violations:
+`func_001` is AST-only via [pglast](https://github.com/lelit/pglast), which is a
+**dependency** — there is nothing to install and no skip path. It was an optional extra
+until 0.50.0 (D13) made it the one parser; `[ast]` survives as an empty alias so an older
+`fraiseql-confiture[ast]` still resolves, and installing it changes nothing.
 
-```
-func_001 requires the [ast] extra: pip install "fraiseql-confiture[ast]"
-```
-
-Install the extra to enable the rule:
-
-```bash
-pip install "fraiseql-confiture[ast]"
-```
-
-The rule is intentionally false-negative-safe: it would rather skip than ship a half-working regex detector that lets duplicates through silently.
+The rule never fell back to a regex detector, and still does not: a file pglast rejects is
+reported as unparseable rather than passed over.
 
 ---
 

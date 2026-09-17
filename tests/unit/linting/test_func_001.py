@@ -9,8 +9,9 @@ function and a procedure that share a name don't collide (PostgreSQL
 keeps them in separate namespaces), and overloads with different
 parameter types are not flagged.
 
-AST-only: when pglast is not installed, the rule emits a single skip
-notice and returns no violations.
+AST-only, and pglast is a dependency (D13) — the rule always runs. There
+is no skip notice, and a file pglast rejects is reported rather than passed
+over.
 """
 
 from __future__ import annotations
