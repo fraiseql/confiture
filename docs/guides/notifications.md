@@ -85,7 +85,7 @@ transport:
   timeout_seconds: 10
 ```
 
-Passwords are stored as `pydantic.SecretStr`; `repr()` and `confiture validate` output both redact, and traceback frames are scrubbed if `login()` raises.
+Passwords are stored as `pydantic.SecretStr`; `repr()` and `confiture validate-config` output both redact, and traceback frames are scrubbed if `login()` raises.
 
 #### `stdout`
 
@@ -235,7 +235,7 @@ transport:
     attempts: ${RETRY_ATTEMPTS}
 ```
 
-Missing environment variables fail **loud** at config-load time — they never silently expand to empty strings. Validation happens at the entrypoint of every command that fires hooks and via `confiture validate`.
+Missing environment variables fail **loud** at config-load time — they never silently expand to empty strings. Validation happens at the entrypoint of every command that fires hooks and via `confiture validate-config`.
 
 ---
 

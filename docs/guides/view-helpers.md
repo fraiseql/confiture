@@ -51,7 +51,7 @@ migration:
 | Value | Behavior |
 |-------|----------|
 | `auto` | Install helper functions automatically on first `migrate up` (default) |
-| `manual` | You run `confiture admin install-helpers` yourself before using them |
+| `manual` | You run `confiture install-helpers` yourself before using them |
 | `off` | Disabled — manage views in your migration SQL manually |
 
 To opt out, set `view_helpers: off`. Invalid values (typos) are rejected at config load time.
@@ -184,13 +184,13 @@ If you prefer `manual` mode:
 
 ```bash
 # Install helper functions
-confiture admin install-helpers --env local
+confiture install-helpers --env local
 
 # Check what SQL would run (dry-run)
-confiture admin install-helpers --env local --dry-run
+confiture install-helpers --env local --dry-run
 
 # Reinstall (e.g., after upgrade)
-confiture admin install-helpers --env local --force
+confiture install-helpers --env local --force
 ```
 
 ---

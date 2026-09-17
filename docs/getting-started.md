@@ -505,8 +505,10 @@ Initialize the coordination database:
 # Create coordination database
 createdb confiture_coordination
 
-# Initialize coordination tables
-confiture coordinate init --db-url postgresql://localhost/confiture_coordination
+# The coordination tables belong to the pgGit extension, not to confiture —
+# there is no `coordinate init`. Install the extension in that database:
+psql postgresql://localhost/confiture_coordination -c "CREATE EXTENSION IF NOT EXISTS pggit"
+
 ```
 
 ### Coordination Workflow Example
@@ -563,14 +565,18 @@ confiture coordinate status --format json > status.json
 **Completing Work:**
 
 ```bash
-# Step 3: Mark intention as complete when done
-confiture coordinate complete \
+# Step 3: when the work is done
+#
+# There is no `coordinate complete`. `completed` is one of the statuses
+# `list-intents --status-filter` accepts, but no command sets it. That is a
+# gap in the tool, not a spelling mistake in this document.
+# What exists is abandoning an intention that will not land:
+confiture coordinate abandon \
     --intent-id int_abc123def456 \
-    --outcome success \
-    --notes "User profiles implemented and tested"
+    --reason "Superseded by the profiles work in PR #412"
 
 # Output:
-# ✅ Intent int_abc123def456 marked as COMPLETED
+# ✅ Intent int_abc123def456 marked as ABANDONED
 # No longer blocking other agents from 'users' table
 ```
 

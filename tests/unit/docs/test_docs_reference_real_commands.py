@@ -55,16 +55,6 @@ NOT_INSTRUCTIONS: dict[tuple[str, str], str] = {
 # Every disagreement this guard found on the day it was written (2026-09-17),
 # grouped by what is actually wrong. Each group is one phase of the repair.
 KNOWN_ROT: dict[str, tuple[tuple[str, str], ...]] = {
-    "the command exists, but not at the path the document spells": (
-        ("PRD.md", "confiture status"),
-        ("docs/getting-started.md", "confiture coordinate complete"),
-        ("docs/getting-started.md", "confiture coordinate init"),
-        ("docs/guides/git-aware-validation.md", "confiture doc"),
-        ("docs/guides/integrations.md", "confiture coordinate complete"),
-        ("docs/guides/migration-decision-tree.md", "confiture schema-to-schema"),
-        ("docs/guides/notifications.md", "confiture validate"),
-        ("docs/guides/view-helpers.md", "confiture admin"),
-    ),
     "the command is real and the flag it is given is not": (
         ("PRD.md", "confiture migrate generate --auto-detect"),
         ("PRD.md", "confiture migrate generate --name"),
