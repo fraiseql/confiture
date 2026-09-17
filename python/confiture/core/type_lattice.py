@@ -97,7 +97,15 @@ _ALIASES = {
     "timestamp with time zone": "timestamptz",
     "time without time zone": "time",
     "time with time zone": "timetz",
+    "varbit": "bit varying",
 }
+
+#: Spellings PostgreSQL gives an implicit length of 1: ``char`` *is* ``char(1)``,
+#: and ``format_type`` renders the column back as ``character(1)``. ``bpchar``
+#: without a length is deliberately absent — measured on PostgreSQL 18.4, a bare
+#: ``bpchar`` comes back as ``bpchar``, which is the unlimited internal variant
+#: and a different type.
+_IMPLICIT_LENGTH_ONE = frozenset({"char", "character"})
 
 # Ordered families: a later member represents every value of an earlier one.
 _INTEGER_WIDTHS = {"smallint": 16, "integer": 32, "bigint": 64}
@@ -107,8 +115,17 @@ _TEMPORAL_WIDTHS = {"date": 1, "timestamp": 2}
 _EXACT_NUMERIC = frozenset({*_INTEGER_WIDTHS, "numeric"})
 _STRING = frozenset({"varchar", "text", "char"})
 
+#: ``NAME [(typmod)] [TAIL] [arrays]``. The ``TAIL`` is what ``format_type``
+#: writes *after* the typmod — ``timestamp(3) without time zone`` — and the
+#: reason this regex could not read its own live counterpart: it wanted the
+#: typmod last, so the whole value fell through unparsed and lower-cased.
+#:
+#: The tail needs the whitespace in front of it. Without it the non-greedy
+#: ``name`` splits a single word — ``serial`` into ``s`` + ``erial`` — and every
+#: one-word type stops resolving.
 _TYPE_RE = re.compile(
     r"^\s*(?P<name>[A-Za-z_][\w ]*?)\s*(?:\(\s*(?P<p>\d+)\s*(?:,\s*(?P<s>\d+)\s*)?\))?\s*"
+    r"(?:\s+(?P<tail>[A-Za-z][A-Za-z ]*?))?\s*"
     r"(?P<arr>(?:\[\s*\d*\s*\])*)\s*$"
 )
 
@@ -123,9 +140,13 @@ def parse_type(raw: str | None) -> SqlType | None:
     match = _TYPE_RE.match(raw)
     if not match:
         return None
-    name = re.sub(r"\s+", " ", match.group("name")).strip().lower()
-    name = _ALIASES.get(name, name)
+    written = " ".join(part for part in (match.group("name"), match.group("tail")) if part)
+    written = re.sub(r"\s+", " ", written).strip().lower()
+    name = _ALIASES.get(written, written)
     precision = int(match.group("p")) if match.group("p") else None
+    if precision is None and written in _IMPLICIT_LENGTH_ONE:
+        # PostgreSQL's own default, and what `format_type` reports back.
+        precision = 1
     scale = int(match.group("s")) if match.group("s") else None
     return SqlType(
         name=name,
