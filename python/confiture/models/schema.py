@@ -285,30 +285,6 @@ _CHANGE_TEMPLATES: dict[str, str] = {
     "CHANGE_ENUM_VALUES": "CHANGE ENUM VALUES {table}",
     "ADD_SEQUENCE": "ADD SEQUENCE {table}",
     "DROP_SEQUENCE": "DROP SEQUENCE {table}",
-    # Objects the differ tracks by definition rather than by structure (#288).
-    # ``REPLACE`` is a definition that changed in place, which for a view or a
-    # routine is the whole of what a migration has to carry.
-    "ADD_VIEW": "ADD VIEW {table}",
-    "DROP_VIEW": "DROP VIEW {table}",
-    "REPLACE_VIEW": "REPLACE VIEW {table}",
-    "ADD_MATVIEW": "ADD MATERIALIZED VIEW {table}",
-    "DROP_MATVIEW": "DROP MATERIALIZED VIEW {table}",
-    "REPLACE_MATVIEW": "REPLACE MATERIALIZED VIEW {table}",
-    "ADD_FUNCTION": "ADD FUNCTION {table}",
-    "DROP_FUNCTION": "DROP FUNCTION {table}",
-    "REPLACE_FUNCTION": "REPLACE FUNCTION {table}",
-    "ADD_PROCEDURE": "ADD PROCEDURE {table}",
-    "DROP_PROCEDURE": "DROP PROCEDURE {table}",
-    "REPLACE_PROCEDURE": "REPLACE PROCEDURE {table}",
-    "ADD_AGGREGATE": "ADD AGGREGATE {table}",
-    "DROP_AGGREGATE": "DROP AGGREGATE {table}",
-    "REPLACE_AGGREGATE": "REPLACE AGGREGATE {table}",
-    "ADD_DOMAIN": "ADD DOMAIN {table}",
-    "DROP_DOMAIN": "DROP DOMAIN {table}",
-    "REPLACE_DOMAIN": "REPLACE DOMAIN {table}",
-    "ADD_TYPE": "ADD TYPE {table}",
-    "DROP_TYPE": "DROP TYPE {table}",
-    "REPLACE_TYPE": "REPLACE TYPE {table}",
 }
 
 
@@ -323,11 +299,27 @@ class SchemaChange:
     new_value: str | None = None
     details: dict[str, Any] | None = None
 
+    def _object_str(self) -> str | None:
+        """``ADD TRIGGER public.tb_user.trg_touch`` for a change #288 tracks.
+
+        The keyword travels in ``details`` rather than in a template row per
+        kind: there are sixty of those and no one would notice a missing one,
+        whereas a change built without its keyword simply falls back.
+        """
+        details = self.details or {}
+        keyword = details.get("keyword")
+        if not keyword:
+            return None
+        verb, _, _ = self.type.partition("_")
+        return f"{verb} {keyword} {details.get('name', self.table)}"
+
     def __str__(self) -> str:
         """String representation of change."""
         template = _CHANGE_TEMPLATES.get(self.type)
         if template is None:
-            return f"{self.type}: {self.table}.{self.column if self.column else ''}"
+            return self._object_str() or (
+                f"{self.type}: {self.table}.{self.column if self.column else ''}"
+            )
         details = self.details or {}
         return template.format(
             table=self.table,

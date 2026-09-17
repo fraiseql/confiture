@@ -5,10 +5,9 @@ change it cannot render. That is honest, but a view is one of the few objects
 whose whole definition the differ holds, so it can write the real statement.
 """
 
-from typing import ClassVar
-
 import pytest
 
+from confiture.core.ddl_objects import REPLACE_IS_AUTHORS_WORK
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.exceptions import UnsafeOperationError
@@ -128,17 +127,8 @@ class TestTheMigrationIsNotShort:
                 sql = generator.generate_up(change)
                 assert "WARNING" not in sql, f"{change.type} has no DDL generator"
 
-    #: The object changes PostgreSQL has no single statement for. Each is
-    #: reported by the differ — the gate is what matters — and left to the
-    #: author by ``-- WARNING: no SQL derived``. An entry that stops matching
-    #: fails the test below, so an exemption cannot outlive its reason.
-    NO_SINGLE_STATEMENT: ClassVar[dict[str, str]] = {
-        "REPLACE_DOMAIN": "a domain's constraints are altered one at a time; "
-        "dropping it takes every column that uses it",
-        "REPLACE_TYPE": "a composite type's attributes are altered one at a time",
-    }
-
     def test_the_exempt_changes_are_still_reported_and_still_have_no_generator(self):
+        """Reported by the differ — the gate is what matters — and left to the author."""
         cases = {
             "REPLACE_DOMAIN": (
                 "CREATE DOMAIN d AS TEXT CHECK (VALUE <> '');",
@@ -148,12 +138,33 @@ class TestTheMigrationIsNotShort:
                 "CREATE TYPE t AS (x INT);",
                 "CREATE TYPE t AS (x INT, y INT);",
             ),
+            "REPLACE_TRIGGER": (
+                "CREATE TRIGGER g BEFORE UPDATE ON tb_user FOR EACH ROW EXECUTE FUNCTION f();",
+                "CREATE TRIGGER g AFTER UPDATE ON tb_user FOR EACH ROW EXECUTE FUNCTION f();",
+            ),
+            "REPLACE_POLICY": (
+                "CREATE POLICY p ON tb_user USING (true);",
+                "CREATE POLICY p ON tb_user USING (pk_user > 0);",
+            ),
         }
-        assert set(cases) == set(self.NO_SINGLE_STATEMENT), "an exemption with no case"
         for change_type, (old, new) in cases.items():
             change = change_of(old, new, change_type)
+            kind = (change.details or {})["kind"]
+            assert kind in REPLACE_IS_AUTHORS_WORK, f"{change_type} has no stated reason"
             with pytest.raises(NotImplementedError):
                 DifferSQLGenerator(True).generate_up(change)
+
+    def test_every_stated_exemption_names_a_kind_the_differ_can_emit(self):
+        """A reason cannot outlive the thing it explains (the one-lexer idiom)."""
+        from confiture.core.ddl_objects import OBJECT_KEYWORD
+
+        unknown = sorted(set(REPLACE_IS_AUTHORS_WORK) - set(OBJECT_KEYWORD))
+        assert unknown == [], f"exemptions for kinds that do not exist: {unknown}"
+
+    def test_a_kind_with_a_bespoke_replace_is_not_also_exempt(self):
+        """A view has `CREATE OR REPLACE`; claiming it has none would be false."""
+        for kind in ("view", "function", "procedure"):
+            assert kind not in REPLACE_IS_AUTHORS_WORK
 
     def test_an_exempt_change_reaches_the_migration_as_a_warning(self, tmp_path):
         """Not silence: the up file names the change the author has to write."""
@@ -221,3 +232,76 @@ class TestRoutineDDL:
             type="ADD_FUNCTION", table="myfunc", details={"source": "CREATE FUNCTION myfunc()"}
         )
         assert "CREATE FUNCTION myfunc()" in DifferSQLGenerator().generate_up(change)
+
+
+class TestGenericObjectDDL:
+    """The kinds #288 tracks that have no bespoke generator."""
+
+    TRIGGER = (
+        "CREATE TRIGGER trg_touch BEFORE UPDATE ON tb_user "
+        "FOR EACH ROW EXECUTE FUNCTION fn_touch();"
+    )
+
+    def test_add_trigger_writes_the_create(self):
+        change = change_of("", self.TRIGGER, "ADD_TRIGGER")
+        assert DifferSQLGenerator().generate_up(change).startswith("CREATE TRIGGER trg_touch")
+
+    def test_dropping_a_trigger_names_the_table_not_a_dotted_path(self):
+        """``DROP TRIGGER trg ON t`` — ``DROP TRIGGER t.trg`` is not PostgreSQL."""
+        change = change_of("", self.TRIGGER, "ADD_TRIGGER")
+        down = DifferSQLGenerator().generate_down(change)
+        assert down.strip() == "DROP TRIGGER IF EXISTS trg_touch ON tb_user;"
+
+    def test_drop_trigger_is_destructive_without_force(self):
+        change = change_of(self.TRIGGER, "", "DROP_TRIGGER")
+        with pytest.raises(UnsafeOperationError):
+            DifferSQLGenerator().generate_up(change)
+
+    def test_drop_trigger_rolls_back_by_recreating_it(self):
+        change = change_of(self.TRIGGER, "", "DROP_TRIGGER")
+        assert "CREATE TRIGGER trg_touch" in DifferSQLGenerator(True).generate_down(change)
+
+    def test_add_extension_writes_the_create_and_drops_it_back(self):
+        change = change_of("", "CREATE EXTENSION pgcrypto;", "ADD_EXTENSION")
+        assert "CREATE EXTENSION pgcrypto" in DifferSQLGenerator().generate_up(change)
+        assert (
+            DifferSQLGenerator().generate_down(change).strip()
+            == "DROP EXTENSION IF EXISTS pgcrypto;"
+        )
+
+    def test_add_schema_writes_the_create(self):
+        change = change_of("", "CREATE SCHEMA app;", "ADD_SCHEMA")
+        assert "CREATE SCHEMA app" in DifferSQLGenerator().generate_up(change)
+
+    def test_a_policy_drop_names_its_table(self):
+        change = change_of("", "CREATE POLICY p_own ON tb_user USING (true);", "ADD_POLICY")
+        assert (
+            DifferSQLGenerator().generate_down(change).strip()
+            == "DROP POLICY IF EXISTS p_own ON tb_user;"
+        )
+
+    def test_every_add_and_drop_the_differ_emits_renders(self):
+        """No ADD or DROP of a tracked object falls through to a warning."""
+        extras = [
+            self.TRIGGER,
+            "CREATE POLICY p ON tb_user USING (true);",
+            "CREATE EXTENSION pgcrypto;",
+            "CREATE SCHEMA app;",
+            "CREATE RULE r AS ON DELETE TO tb_user DO INSTEAD NOTHING;",
+            "CREATE EVENT TRIGGER et ON ddl_command_start EXECUTE FUNCTION fn_t();",
+            "CREATE TYPE tr AS RANGE (subtype = INT);",
+            "CREATE STATISTICS st ON pk_user, name FROM tb_user;",
+            "CREATE SERVER srv FOREIGN DATA WRAPPER fdw;",
+            "CREATE DOMAIN d AS TEXT;",
+            "CREATE TYPE tc AS (x INT);",
+        ]
+        generator = DifferSQLGenerator(True)
+        seen = 0
+        for extra in extras:
+            for old, new in (("", extra), (extra, "")):
+                for change in SchemaDiffer().compare(BASE + old, BASE + new).changes:
+                    sql = generator.generate_up(change)
+                    assert "WARNING" not in sql, f"{change.type} renders a warning"
+                    assert sql.strip(), f"{change.type} renders nothing"
+                    seen += 1
+        assert seen == 2 * len(extras), f"expected one change per case, saw {seen}"
