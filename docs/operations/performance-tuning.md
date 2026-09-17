@@ -15,54 +15,13 @@ This guide provides optimization strategies for PostgreSQL migrations with Confi
 
 ## Connection Pooling
 
-### Configuration
+**Confiture does not pool connections.** Each command opens one connection and
+closes it when it finishes; there is no `connection:` block in `confiture.yaml`
+and no pool to size, monitor or tune. A migration run is a handful of
+connections over its lifetime, not a workload a pool would help.
 
-```yaml
-# confiture.yaml
-connection:
-  pool:
-    min_size: 2        # Minimum connections to maintain
-    max_size: 10       # Maximum connections allowed
-    max_idle_time: 300 # Close idle connections after 5 minutes
-    max_lifetime: 3600 # Recycle connections after 1 hour
-```
-
-### Sizing Guidelines
-
-| Workload | Migrations | min_size | max_size | Notes |
-|----------|------------|----------|----------|-------|
-| Light | < 10 | 1 | 5 | Development, small projects |
-| Medium | 10-50 | 2 | 10 | Standard production |
-| Heavy | 50-100 | 5 | 20 | Large monoliths |
-| Parallel | 100+ | 10 | 50 | Microservices, parallel runs |
-
-### Pool Monitoring
-
-```bash
-# Check pool statistics
-confiture pool stats
-```
-
-**Output:**
-```
-Connection Pool Statistics
-==========================
-Active connections:  2
-Idle connections:    3
-Waiting requests:    0
-Total created:       15
-Total recycled:      5
-Max size:            10
-```
-
-**Healthy indicators:**
-- `Waiting requests` should be 0
-- `Active` should be < `max_size`
-- `Idle` should be > 0
-
-**Unhealthy indicators:**
-- `Waiting requests` > 0 (pool exhausted)
-- `Active` = `max_size` (at capacity)
+Pooling matters for the *application* sharing the database, and for that the
+answer is an external pooler.
 
 ### External Pooler (PgBouncer)
 
@@ -439,128 +398,41 @@ groups:
 
 ## Benchmarking
 
-### Running Benchmarks
+There is no `benchmark` command. Two real ones answer the two questions
+people bring to one:
+
+### Is this migration big enough to need `--batched`?
 
 ```bash
-# Benchmark all migrations
-confiture benchmark \
-    --migrations db/migrations/ \
-    --iterations 3 \
-    --output benchmark.json
-
-# Benchmark specific migration
-confiture benchmark \
-    --migration 015_add_indexes \
-    --iterations 5
+confiture migrate estimate
+confiture migrate estimate --table users --table orders
 ```
 
-**Output:**
-```
-Migration Benchmark Results
-===========================
+Reads `pg_class` statistics — fast, no `COUNT(*)` — and shows which tables are
+large enough for `migrate up --batched` to be worth it.
 
-005_add_users:
-  Mean:   1.23s
-  Median: 1.18s
-  Std:    0.15s
-  Min:    1.05s
-  Max:    1.45s
-
-006_add_indexes:
-  Mean:   45.30s
-  Median: 44.80s
-  Std:    2.10s
-  Min:    42.50s
-  Max:    48.20s
-```
-
-### Comparing Performance
+### Should these seeds load as VALUES or COPY?
 
 ```bash
-# Compare two benchmark runs
-confiture benchmark compare \
-    --baseline benchmark_v1.json \
-    --current benchmark_v2.json
+confiture seed benchmark --seeds-dir db/seeds
 ```
 
-**Output:**
-```
-Performance Comparison
-======================
+Loads the seed files both ways and reports the speedup, the time saved and the
+per-table numbers.
 
-Migration              Baseline    Current    Change
-005_add_users          1.20s       0.80s      -33% ✓
-006_add_indexes        45.30s      12.10s     -73% ✓ (CONCURRENTLY)
-007_backfill           120.50s     125.20s    +4%
-015_new_migration      -           2.30s      NEW
+### Timing a migration run
 
-Summary:
-  Improved: 2
-  Regressed: 0
-  Unchanged: 1
-  New: 1
+Nothing in the CLI times a migration for you. `migrate up --dry-run-execute`
+executes inside a SAVEPOINT that is always rolled back, so it is the safe thing
+to put a stopwatch on:
+
+```bash
+time confiture migrate up --dry-run-execute --yes
 ```
 
-### CI Integration
-
-```yaml
-# .github/workflows/benchmark.yml
-name: Migration Benchmark
-
-on:
-  pull_request:
-    paths:
-      - 'db/migrations/**'
-
-jobs:
-  benchmark:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Confiture
-        run: pip install fraiseql-confiture
-
-      - name: Download baseline
-        uses: actions/download-artifact@v4
-        with:
-          name: benchmark-baseline
-        continue-on-error: true
-
-      - name: Run benchmark
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-        run: |
-          confiture benchmark --output benchmark-current.json
-
-      - name: Compare (if baseline exists)
-        run: |
-          if [ -f benchmark-baseline.json ]; then
-            confiture benchmark compare \
-              --baseline benchmark-baseline.json \
-              --current benchmark-current.json \
-              --fail-on-regression 20  # Fail if >20% slower
-          fi
-
-      - name: Upload benchmark
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-current
-          path: benchmark-current.json
-```
+Confiture's own performance regressions are caught by `pytest -m benchmark`
+(the `migration-performance.yml` workflow), which measures confiture, not your
+migrations.
 
 ---
 

@@ -38,27 +38,30 @@ All migrations applied ✓
 
 ### Verify Database Health
 
+There is no single health command. Three real ones cover it, and each exits
+non-zero when it is unhappy, so a monitor can read the exit code rather than
+parse output:
+
 ```bash
-confiture health check
+confiture migrate status      # connectivity, tracking table, pending work
+confiture verify-checksums    # applied migrations still match their files
+confiture drift               # the live schema still matches db/schema/
 ```
 
-**Checks performed:**
-- Database connectivity
-- Migration lock status
-- Schema drift detection
-- Replication lag (if configured)
+`migrate status` answers connectivity and ledger state in one call:
 
-**Expected Output:**
-```
-Health Check Results
-====================
-✓ Database connection: OK
-✓ Migration lock: Available
-✓ Schema drift: None detected
-✓ Replication lag: 0ms
+| Exit | Meaning |
+|------|---------|
+| 0 | Everything on disk is applied |
+| 1 | Migrations are pending |
+| 2 | The tracking table was not found |
+| 3 | Fatal — connection failure, bad config, permission denied |
 
-Overall: HEALTHY
-```
+`drift` exits 0 for no drift, 1 for drift, 3 if it cannot connect, 4 on an
+unreadable schema file and 5 on invalid configuration.
+
+Replication lag is not something confiture measures. Ask PostgreSQL directly
+(`pg_stat_replication`).
 
 ### Verify Checksums
 
@@ -135,21 +138,24 @@ confiture migrate down --steps 1
 
 ```bash
 # Rollback to version 010
-confiture migrate down --target 010_add_indexes
+confiture migrate down-to 010_add_indexes
 ```
 
-#### Emergency Rollback (Skip Checksums)
+#### Rollback With Corrupted Checksums
+
+`migrate down` does not verify checksums, so a corrupted checksum never blocks a
+rollback and there is nothing to skip. It is `migrate up` that verifies, and
+`--on-checksum-mismatch` / `--no-verify-checksums` are its options.
 
 ```bash
-# Only use when checksums are corrupted
-confiture migrate down --steps 1 --skip-checksums
+confiture migrate down --steps 1
 ```
 
 ### Schema Drift Detection
 
 ```bash
 # Check for unauthorized schema changes
-confiture migrate drift-detect
+confiture drift
 ```
 
 **If drift detected:**
@@ -168,7 +174,7 @@ confiture migrate drift-detect
 
 3. **Create migration for legitimate changes:**
    ```bash
-   confiture migrate create codify_manual_change
+   confiture migrate generate codify_manual_change
    # Edit the migration to include the change
    ```
 
@@ -251,15 +257,15 @@ ChecksumError: Migration 003_add_users checksum mismatch
    # View stored checksum
    psql -c "SELECT checksum FROM tb_confiture WHERE version = '003_add_users'"
 
-   # Compute current checksum
-   confiture migrate checksum db/migrations/003_add_users.py
+   # Compare every applied migration against its file
+   confiture verify-checksums
    ```
 
 2. **If modification was intentional:**
    - Create a new migration with the changes
    - Or update the stored checksum (audit trail):
      ```bash
-     confiture migrate update-checksum 003_add_users
+     confiture verify-checksums --fix
      ```
 
 3. **If modification was accidental:**
@@ -279,7 +285,7 @@ MigrationError: Migration 010_add_indexes failed: relation "users" does not exis
 
 1. **Check logs for full error:**
    ```bash
-   confiture migrate status --verbose
+   confiture migrate status --format json
    ```
 
 2. **Check schema state:**
@@ -349,7 +355,7 @@ PoolExhaustedError: No connections available (max: 10)
 
 ```cron
 # Every Sunday at midnight
-0 0 * * 0 confiture migrate drift-detect --format json >> /var/log/confiture/drift.log 2>&1
+0 0 * * 0 confiture drift --format json >> /var/log/confiture/drift.log 2>&1
 ```
 
 ### Monthly: Full Checksum Audit
@@ -389,7 +395,7 @@ PoolExhaustedError: No connections available (max: 10)
 3. **If rollback script fails:**
    ```bash
    # Check if manual intervention needed
-   confiture migrate status --verbose
+   confiture migrate status --format json
 
    # Execute rollback SQL manually if needed
    psql -f emergency_rollback.sql
@@ -398,7 +404,7 @@ PoolExhaustedError: No connections available (max: 10)
 4. **Verify rollback:**
    ```bash
    confiture migrate status
-   confiture migrate drift-detect
+   confiture drift
    ```
 
 5. **Post-incident:**
@@ -456,20 +462,20 @@ PoolExhaustedError: No connections available (max: 10)
    SELECT * FROM tb_confiture;
    ```
 
-2. **Reinitialize tracking:**
+2. **Rebuild tracking from the files on disk:**
    ```bash
-   confiture init --force
+   confiture migrate reinit
    ```
 
-3. **Sync history with schema:**
-   ```bash
-   confiture migrate sync-history
-   ```
+   This clears `tb_confiture` and re-marks every migration file as applied.
+   `--through <version>` stops part-way; `--dry-run` previews; `--yes` skips the
+   prompt. To copy the history from another database instead of the files, use
+   `confiture migrate baseline --from-db <url>`.
 
-4. **Verify:**
+3. **Verify:**
    ```bash
    confiture migrate status
-   confiture migrate drift-detect
+   confiture drift
    ```
 
 ---
@@ -484,9 +490,10 @@ PoolExhaustedError: No connections available (max: 10)
 | Apply migrations | `confiture migrate up` |
 | Rollback one | `confiture migrate down --steps 1` |
 | Dry run | `confiture migrate up --dry-run` |
-| Check drift | `confiture migrate drift-detect` |
+| Check drift | `confiture drift` |
 | Verify checksums | `confiture verify-checksums` |
-| Health check | `confiture health check` |
+| Rollback to a version | `confiture migrate down-to <version>` |
+| Rebuild the ledger | `confiture migrate reinit` |
 
 ### Environment Variables
 
