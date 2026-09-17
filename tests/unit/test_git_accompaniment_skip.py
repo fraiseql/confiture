@@ -91,7 +91,7 @@ class TestTheReportModel:
             MigrationAccompanimentReport(
                 has_ddl_changes=False,
                 has_new_migrations=True,
-                migration_error="Schema parse check skipped: syntax error",
+                migration_error="the schema does not parse: syntax error",
             ).is_valid
             is False
         )

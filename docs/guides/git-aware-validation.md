@@ -266,8 +266,23 @@ confiture migrate validate --check-drift --base-ref origin/main
 
 **What it checks**:
 - Structural DDL differences (tables, columns, indexes, constraints)
-- Ignores whitespace and comment-only changes
-- Ignores formatting differences
+- Objects compared by their definition: views and materialized views, functions,
+  procedures and aggregates, domains and composite types, triggers, policies,
+  rules, extensions, schemas, event triggers, statistics, foreign tables,
+  servers, publications, conversions, operator classes and families, access
+  methods
+- Ignores whitespace, comment-only and formatting changes — a view reformatted
+  or given `OR REPLACE` is the same view
+
+A **routine redefined in place** (same signature, different body) is reported
+only with `--require-migration-bodies`; adding or dropping one always is. A
+redefined *view* always is, because nothing else reports it.
+
+Every statement PostgreSQL's grammar can use to create a named schema object is
+either compared or declined with a stated reason — a role, a database, a
+tablespace and a subscription are cluster-scoped, so a migrate-only environment
+is no worse off than a rebuilt one. `tests/unit/test_ddl_objects_are_exhaustive.py`
+fails on a statement kind that is neither (#288).
 
 **If it finds drift**:
 ```
@@ -307,33 +322,45 @@ The command has a 30-second timeout per git operation. If hitting timeout:
 2. Try fetching latest: `git fetch origin`
 3. Use a more recent base ref
 
-### Scenario 4: "I see a ⚠️ warning instead of ✅ or ❌"
+### Scenario 4: "The accompaniment check could not run"
 
-**Problem**: `migrate validate --require-migration` prints a yellow warning:
+**Problem**: `migrate validate --require-migration` reports:
 
 ```
-⚠️  Schema parse check skipped: Schema parse check skipped: Maximum number of tokens exceeded (10000).
-   Schema may be too large for static analysis — DDL accompaniment check was not run.
+❌ The accompaniment check could not run: the schema does not parse
+   the schema does not parse: syntax error at or near ","
+   A schema PostgreSQL rejects is a schema `confiture build` rejects. Fix the
+   statement it names; the gate cannot tell you what a migration is missing
+   until it can read the tree.
 ```
 
-**Why**: The schema SQL is too large for the sqlparse fallback parser (which has a
-10,000-token limit). This typically happens when `db/schema/` files contain bulk `INSERT`
-seed data mixed with DDL.
+**Why**: pglast — PostgreSQL's own parser, via `libpg_query` — rejected a
+statement in the schema tree. Since it is the only parser confiture has (D13),
+that means PostgreSQL itself would reject it: `confiture build` would fail on
+the same file.
 
-**Fix — install pglast** (recommended):
+**Fix**: correct the statement the error names. `confiture lint` reports the same
+file and line, and `confiture build --env local` fails on it directly.
+
+**This is exit 1, and it is not the same failure as a missing migration.**
+Both are `is_valid: false`; the JSON envelope carries `was_skipped` so CI can
+tell them apart:
 
 ```bash
-pip install "fraiseql-confiture[ast]"
-# or
-uv add "fraiseql-confiture[ast]"
+confiture migrate validate --require-migration --base-ref origin/main --format json \
+  | jq -r 'if .accompaniment.was_skipped then "schema does not parse" else "missing migration" end'
 ```
 
-pglast uses PostgreSQL's own C parser (via `libpg_query`) — no token limits, handles
-schemas of any size. Once installed, the warning disappears and full validation resumes.
+Until #288 a check that could not run returned exit `0` with a yellow warning, on
+the reasoning that "schema could not be parsed" and "DDL has no migration" are
+different conditions. They are — but a gate that could not run has not passed,
+and the sqlparse token limit the old behaviour was written for has not existed
+since pglast became the only parser. If you relied on that exit `0`, expect the
+check to start reporting.
 
-**Why the check is skipped, not failed**: "Schema couldn't be parsed" and "DDL has no
-migration" are different conditions. A skipped check does not block CI — the pipeline
-continues with exit code `0`. A genuine missing-migration failure still exits `1`.
+**Bulk `INSERT` seed data in `db/schema/`** was the usual cause of the old
+warning. It no longer is: a `COPY … FROM stdin` block is blanked before parsing,
+keeping every offset and line number (1.9.0, #274).
 
 ### Scenario 5: "I'm getting false positives for migration files"
 

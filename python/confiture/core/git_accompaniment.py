@@ -111,14 +111,16 @@ class MigrationAccompanimentChecker:
 
         try:
             diff = self.differ.compare_refs(base_ref, target_ref)
-        except Exception as exc:  # Reason: documented policy: a schema the parser cannot handle skips the check instead of failing CI
-            # Schema was too large or complex to parse (e.g. sqlparse token limit,
-            # pglast syntax error on non-PostgreSQL DDL).  Treat as "check skipped"
-            # rather than a validation failure so CI is not blocked unnecessarily.
+        except Exception as exc:  # Reason: the parse failure is reported as a failed check, naming the statement, rather than raised
+            # pglast has been the only parser since D13, so what lands here is a
+            # schema PostgreSQL rejects — one `confiture build` would refuse too.
+            # It is reported rather than raised so the error names the statement,
+            # and `is_valid` is False because a check that could not run has not
+            # passed (#288).
             return MigrationAccompanimentReport(
                 has_ddl_changes=False,
                 has_new_migrations=len(new_migrations) > 0,
-                migration_error=f"Schema parse check skipped: {exc}",
+                migration_error=f"the schema does not parse: {exc}",
                 base_ref=base_ref,
                 target_ref=target_ref,
             )

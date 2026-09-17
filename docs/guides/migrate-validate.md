@@ -720,12 +720,19 @@ standing production drift guard — the consuming repo keeps only config.
 
 ## `--require-migration-bodies` — gate un-migrated body edits at PR time
 
-`--require-migration` ensures table/column DDL changes and function *signature*
-changes have a migration, but it does **not** check function/procedure *bodies*.
+`--require-migration` ensures a schema object added, dropped or redefined has a
+migration — tables and columns, views, routines, types, triggers, policies,
+extensions (#288) — and that a function *signature* change carries its
+`DROP FUNCTION`. It does **not** check function/procedure *bodies*: a routine
+redefined in place, same signature and a different body, passes it.
+
 So a body edit in the schema DDL that ships to rebuilt-from-DDL environments
 (dev/test) without a migration silently never reaches migrate-only environments
 (staging/production) — the root cause of a whole class of prod↔source drift (in
 one audit, ~120 functions ran different bodies in prod for exactly this reason).
+
+A redefined **view** is not in that gap: `--require-migration` reports it, because
+nothing else does.
 
 `--require-migration-bodies` closes the gap. It is **static and git-based (no
 DB)**: it diffs function bodies between `--base-ref` and HEAD and requires each
