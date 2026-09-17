@@ -16,6 +16,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`tests/unit/docs/test_docs_reference_real_api.py`** (#287): every
+  `from confiture… import …` in the documentation resolves against the installed package.
+  `tests/unit/docs/` held twenty guards, two of them about fictional API surface — and
+  1940 lines documenting two Python modules that never existed passed both, because
+  `test_doc_api_symbols.py` checks a hand-listed set of documents (a document nobody adds
+  is not checked) and `test_doc_no_fictional_names.py` is a five-string blocklist (it can
+  only catch fiction someone has already found). Neither asked the general question. This
+  one extracts every import from the **code regions** of the corpus — prose is excluded,
+  because repairing a fiction often means naming it, which is how the command guard's own
+  corrective sentences became findings — and resolves the module with `importlib` and each
+  symbol with `getattr`. `CHANGELOG.md` and `docs/release-notes/` are out, as they are for
+  the command guard: they record what was announced at a version.
+
+  It found **19 sites across four files**, and ships with an **empty** allow-list.
+  Three classes, as the issue predicted: modules that do not exist
+  (`confiture.scenarios.healthcare`, `confiture.core.anonymization.factory`,
+  `confiture.core.anonymization.rules`), real modules missing a symbol
+  (`confiture.core.syncer.Syncer` — it is `ProductionSyncer`;
+  `confiture.core.hooks.MigrationHook` — it is `Hook`; `confiture.config.Config` — it is
+  `Environment`; a `Confiture` facade class that has never existed), and real symbols at
+  the wrong path (`MigrationConfig` is in `confiture.config.environment`, `SyncResult` and
+  the migrate results are in `confiture.models.results`).
+
+  `docs/guides/anonymization.md` carried a banner admitting three of its sections predated
+  the shipped API. They are gone rather than rewritten: `@register_strategy` decorates a
+  **class**, not a function, and the profile format and registry are already documented and
+  doctested in `docs/api/anonymization.md`, so the guide points there instead of becoming a
+  second source. `has_rust_extension()` was never a function; the flag is
+  `confiture.core.builder.HAS_RUST`.
+
+### Changed
+
+- **`ProductionSyncer` and `SchemaToSchemaMigrator` are importable from the top level.**
+  The four mediums are a set in the documentation and in `CLAUDE.md`, and two of them were
+  in `confiture.__all__` while two were not — which is why `docs/api/index.md` documented
+  a `from confiture import … ProductionSyncer` that did not work. Found by the new API
+  guard (#287).
+
 - **`confiture coordinate start`, `complete` and `merge`** (#286): the three status
   transitions `list-intents --status-filter` could filter for and nothing could produce.
   Of the six documented statuses, `registered` was set when an intent was created and
