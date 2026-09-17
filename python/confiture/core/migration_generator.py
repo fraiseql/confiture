@@ -462,6 +462,15 @@ class {class_name}(Migration):
             "CHANGE_ENUM_VALUES",
             "ADD_SEQUENCE",
             "DROP_SEQUENCE",
+            # Objects carried as whole definitions (#288). Without these the
+            # generator writes `-- WARNING: no SQL derived` for a view whose
+            # entire definition the differ is holding.
+            "ADD_VIEW",
+            "DROP_VIEW",
+            "REPLACE_VIEW",
+            "ADD_MATVIEW",
+            "DROP_MATVIEW",
+            "REPLACE_MATVIEW",
         }
     )
 

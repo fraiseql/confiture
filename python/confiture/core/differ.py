@@ -15,6 +15,7 @@ from pglast.enums.parsenodes import ConstrType
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.ddl_objects import objects_in
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.models.schema import (
     CheckConstraint,
@@ -151,6 +152,11 @@ def _column_details(table: Table) -> list[dict[str, Any]]:
     ]
 
 
+def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
+    """A stable order for object changes: kind, then schema, then name."""
+    return (ref.kind, ref.schema, ref.name, str(ref.signature))
+
+
 class SchemaDiffer:
     """Parses SQL and detects schema differences.
 
@@ -180,7 +186,7 @@ class SchemaDiffer:
         return self.parse_schema(sql).tables
 
     def parse_schema(self, sql: str) -> ParsedSchema:
-        """Parse SQL DDL into a ParsedSchema (tables, enums, sequences).
+        """Parse SQL DDL into a ParsedSchema (tables, enums, sequences, objects).
 
         Uses pglast (PostgreSQL's own parser) when available for accurate,
         limit-free parsing.
@@ -210,7 +216,9 @@ class SchemaDiffer:
         # One parse, one walk (ANA-04): pglast.parser.ParseError propagates —
         # what PostgreSQL rejects is not a schema to diff, and `migrate diff`
         # reports it as DIFFER_400. A commented-out statement is not a node.
-        statements = [raw.stmt for raw in pglast.parse_sql(sql) or []]
+        raws = list(pglast.parse_sql(sql) or [])
+        result.objects = objects_in(sql, raws)
+        statements = [raw.stmt for raw in raws]
         for stmt in statements:
             if type(stmt).__name__ == "CreateStmt":
                 table = self._parse_create_table_pglast(stmt)
@@ -503,7 +511,61 @@ class SchemaDiffer:
         # --- Sequence changes ---
         changes.extend(self._compare_sequences(old_schema.sequences, new_schema.sequences))
 
+        # --- Objects compared by definition: views, and #288's later kinds ---
+        changes.extend(self._compare_objects(old_schema.objects, new_schema.objects))
+
         return SchemaDiff(changes=changes)
+
+    # ------------------------------------------------------------------
+    # Objects compared by definition (#288)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _compare_objects(
+        old_objects: dict[Any, Any], new_objects: dict[Any, Any]
+    ) -> list[SchemaChange]:
+        """Added, dropped and redefined objects, in a stable order.
+
+        An object present on both sides whose canonical definition differs is a
+        ``REPLACE``: for a view or a routine that is the entire change a
+        migration has to carry, and it is invisible to a structural comparison
+        because nothing about the object's shape moved.
+        """
+        changes: list[SchemaChange] = []
+        added = sorted(new_objects.keys() - old_objects.keys(), key=_object_sort_key)
+        dropped = sorted(old_objects.keys() - new_objects.keys(), key=_object_sort_key)
+        common = sorted(old_objects.keys() & new_objects.keys(), key=_object_sort_key)
+
+        changes.extend(
+            SchemaChange(
+                type=f"ADD_{ref.kind.upper()}",
+                table=ref.qualified,
+                new_value=new_objects[ref].create_sql,
+                details={"kind": ref.kind, "name": ref.qualified},
+            )
+            for ref in added
+        )
+        changes.extend(
+            SchemaChange(
+                type=f"DROP_{ref.kind.upper()}",
+                table=ref.qualified,
+                old_value=old_objects[ref].create_sql,
+                details={"kind": ref.kind, "name": ref.qualified},
+            )
+            for ref in dropped
+        )
+        changes.extend(
+            SchemaChange(
+                type=f"REPLACE_{ref.kind.upper()}",
+                table=ref.qualified,
+                old_value=old_objects[ref].create_sql,
+                new_value=new_objects[ref].create_sql,
+                details={"kind": ref.kind, "name": ref.qualified},
+            )
+            for ref in common
+            if old_objects[ref].definition != new_objects[ref].definition
+        )
+        return changes
 
     # ------------------------------------------------------------------
     # Table column comparison
