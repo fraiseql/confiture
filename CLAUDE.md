@@ -406,6 +406,7 @@ confiture/
 │   │   ├── connection.py         # Database connection management for CLI commands
 │   │   ├── cor_extractor.py      # Extract CREATE OR REPLACE targets from pending migrations
 │   │   ├── cte_debugger.py       # CTE step-through debugger: execute each CTE in isolation to find failur…
+│   │   ├── ddl_objects.py        # The schema objects a DDL tree defines, and what makes two of them the s…
 │   │   ├── ddl_walk.py           # Helpers shared by the AST walkers that read DDL
 │   │   ├── dependent_objects.py  # Live dependent-objects checker for ``migrate preflight``
 │   │   ├── desired_state.py      # Where ``migrate diff`` reads its desired state from (issue #196)

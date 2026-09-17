@@ -93,3 +93,86 @@ class TestUnchangedSchemaIsStillQuiet:
             + "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user FROM tb_user;\n"
         )
         assert SchemaDiffer().compare(schema, schema).changes == []
+
+
+class TestRoutinesAreSchemaObjects:
+    """A routine's identity is its signature, so an overload is another object."""
+
+    FN = "CREATE FUNCTION fn_count() RETURNS BIGINT LANGUAGE sql AS $$ SELECT 1 $$;"
+
+    def test_added_function_is_reported(self):
+        assert "ADD_FUNCTION" in types_of("", self.FN)
+
+    def test_dropped_function_is_reported(self):
+        assert "DROP_FUNCTION" in types_of(self.FN, "")
+
+    def test_changed_body_is_a_replace(self):
+        assert "REPLACE_FUNCTION" in types_of(
+            "CREATE OR REPLACE FUNCTION fn_c() RETURNS BIGINT LANGUAGE sql AS $$ SELECT 1 $$;",
+            "CREATE OR REPLACE FUNCTION fn_c() RETURNS BIGINT LANGUAGE sql AS $$ SELECT 2 $$;",
+        )
+
+    def test_an_added_overload_is_an_addition_not_a_replacement(self):
+        """``fn(int)`` beside ``fn()`` is a second object, not the first one changed."""
+        types = types_of(
+            self.FN,
+            self.FN
+            + "\nCREATE FUNCTION fn_count(p INT) RETURNS BIGINT LANGUAGE sql AS $$ SELECT 1 $$;",
+        )
+        assert types == ["ADD_FUNCTION"]
+
+    def test_a_dropped_overload_is_a_drop_not_a_replacement(self):
+        types = types_of(
+            self.FN
+            + "\nCREATE FUNCTION fn_count(p INT) RETURNS BIGINT LANGUAGE sql AS $$ SELECT 1 $$;",
+            self.FN,
+        )
+        assert types == ["DROP_FUNCTION"]
+
+    def test_a_respelled_parameter_type_is_one_object_not_a_drop_and_an_add(self):
+        """``int8`` and ``bigint`` are one type, so ``fn(int8)`` is ``fn(bigint)`` (#275).
+
+        It is reported as a ``REPLACE``, not as nothing: ``RawStream`` renders a
+        type as the author spelled it, so the definitions differ textually even
+        though PostgreSQL sees no change. Over-reporting is the safe direction
+        here — the gate asks for a migration that turns out to be unnecessary.
+        Under it lies the failure this must never make: telling an operator to
+        ``DROP FUNCTION fn_c(bigint)`` and create ``fn_c(int8)``, which are the
+        same function, and whose drop takes its dependents with it.
+        """
+        assert types_of(
+            "CREATE FUNCTION fn_c(p BIGINT) RETURNS BIGINT LANGUAGE sql AS $$ SELECT 1 $$;",
+            "CREATE FUNCTION fn_c(p INT8) RETURNS BIGINT LANGUAGE sql AS $$ SELECT 1 $$;",
+        ) == ["REPLACE_FUNCTION"]
+
+    def test_a_reformatted_routine_is_not_a_change(self):
+        """What canonical rendering does buy: whitespace, case and comments."""
+        assert (
+            types_of(
+                "CREATE FUNCTION fn_c() RETURNS BIGINT LANGUAGE sql AS $$ SELECT 1 $$;",
+                "-- counts them\nCREATE   function fn_c()\n  RETURNS bigint\n  language sql\n  AS $$ SELECT 1 $$;",
+            )
+            == []
+        )
+
+    def test_added_procedure_is_reported(self):
+        assert "ADD_PROCEDURE" in types_of(
+            "", "CREATE PROCEDURE pr_do() LANGUAGE sql AS $$ SELECT 1 $$;"
+        )
+
+    def test_a_function_and_a_procedure_of_one_name_are_two_objects(self):
+        types = types_of(
+            self.FN, self.FN + "\nCREATE PROCEDURE fn_count() LANGUAGE sql AS $$ SELECT 1 $$;"
+        )
+        assert types == ["ADD_PROCEDURE"]
+
+    def test_added_aggregate_is_reported(self):
+        assert "ADD_AGGREGATE" in types_of(
+            "", "CREATE AGGREGATE ag_sum (INT) (sfunc = int4pl, stype = INT);"
+        )
+
+    def test_create_operator_is_not_an_aggregate(self):
+        """``DefineStmt`` is shared; only the aggregate spelling creates one here."""
+        assert "ADD_AGGREGATE" not in types_of(
+            "", "CREATE OPERATOR === (LEFTARG = INT, RIGHTARG = INT, FUNCTION = int4eq);"
+        )

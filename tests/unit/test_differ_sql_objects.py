@@ -109,6 +109,16 @@ class TestTheMigrationIsNotShort:
                 "CREATE MATERIALIZED VIEW mv AS SELECT pk_user FROM tb_user;",
                 "CREATE MATERIALIZED VIEW mv AS SELECT name FROM tb_user;",
             ),
+            ("", "CREATE FUNCTION fn() RETURNS INT LANGUAGE sql AS $$ SELECT 1 $$;"),
+            ("CREATE FUNCTION fn() RETURNS INT LANGUAGE sql AS $$ SELECT 1 $$;", ""),
+            (
+                "CREATE FUNCTION fn() RETURNS INT LANGUAGE sql AS $$ SELECT 1 $$;",
+                "CREATE FUNCTION fn() RETURNS INT LANGUAGE sql AS $$ SELECT 2 $$;",
+            ),
+            ("", "CREATE PROCEDURE pr() LANGUAGE sql AS $$ SELECT 1 $$;"),
+            ("CREATE PROCEDURE pr() LANGUAGE sql AS $$ SELECT 1 $$;", ""),
+            ("", "CREATE AGGREGATE ag (INT) (sfunc = int4pl, stype = INT);"),
+            ("CREATE AGGREGATE ag (INT) (sfunc = int4pl, stype = INT);", ""),
         ]
         generator = DifferSQLGenerator(True)
         for old, new in pairs:
@@ -136,3 +146,35 @@ class TestGeneratedMigrationCarriesTheView:
 
         down = up.with_name(up.name.replace(".up.sql", ".down.sql"))
         assert "DROP VIEW IF EXISTS v_user" in down.read_text()
+
+
+class TestRoutineDDL:
+    """A dropped routine must name its arguments, or PostgreSQL cannot pick it."""
+
+    FN = "CREATE FUNCTION fn_c(p BIGINT) RETURNS BIGINT LANGUAGE sql AS $$ SELECT 1 $$;"
+
+    def test_drop_function_names_the_overload(self):
+        change = change_of(self.FN, "", "DROP_FUNCTION")
+        sql = DifferSQLGenerator(True).generate_up(change)
+        assert sql.strip() == "DROP FUNCTION IF EXISTS fn_c(bigint);"
+
+    def test_add_function_rolls_back_by_dropping_that_overload(self):
+        change = change_of("", self.FN, "ADD_FUNCTION")
+        assert "DROP FUNCTION IF EXISTS fn_c(bigint)" in DifferSQLGenerator().generate_down(change)
+
+    def test_add_function_generates_a_replaceable_create(self):
+        change = change_of("", self.FN, "ADD_FUNCTION")
+        assert (
+            DifferSQLGenerator()
+            .generate_up(change)
+            .startswith("CREATE OR REPLACE FUNCTION fn_c(p bigint)")
+        )
+
+    def test_add_function_still_honours_a_hand_built_source(self):
+        """`details["source"]` predates #288 and its caller must keep working."""
+        from confiture.models.schema import SchemaChange
+
+        change = SchemaChange(
+            type="ADD_FUNCTION", table="myfunc", details={"source": "CREATE FUNCTION myfunc()"}
+        )
+        assert "CREATE FUNCTION myfunc()" in DifferSQLGenerator().generate_up(change)
