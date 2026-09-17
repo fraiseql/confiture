@@ -54,6 +54,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rebuild` section whose signature fence is pinned to the source, and loses a row that
   described the method as "Drop and recreate the tracking table" — which is `reinit`'s job.
 
+### Internal
+
+- **Lockfile refresh** (#280): `uv.lock` and `Cargo.lock` regenerated. Notable moves are
+  `ty` 0.0.43 → 0.0.81, `typer` 0.26.7 → 0.27.2, `click` 8.4.1 → 8.5.0, `pytest` 9.0.3 →
+  9.1.1, `sqlglot` 30.9.0 → 30.18.0 and `fastapi` 0.136.3 → 0.141.1. `pglast` is
+  unchanged: `uv.lock` pins the current major and the `pglast-matrix` CI leg covers the
+  range (#192).
+
+  The newer `ty` found two real things, both fixed rather than suppressed: a
+  `ty: ignore[invalid-assignment]` in `core/hooks/context.py` that the checker no longer
+  needs, and `old_status.value if old_status else None` in the pgGit coordination
+  registry, where `old_status` is `intent.status` and an `IntentStatus` is never falsy —
+  so the `else None` branch could not be taken.
+
+  `typer` 0.27 changed how it prints a positional argument (`[PATH]` → `[path]`) and names
+  the string type (`text` → `str`), which moved 281 lines of `docs/reference/cli.md`. The
+  block is regenerated rather than normalised: `confiture init --help` really does print
+  `[path]` now, and a generated reference that disagreed with the command it documents is
+  the exact untruth the command-truth campaign removed.
+
 ### Removed
 
 - **`rebuild(schema_dir=…)`**, on `Migrator` and the `baseline` implementation behind it.
