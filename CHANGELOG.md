@@ -16,6 +16,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Four commands accepted a `--config` they never read; unparseable or missing was still
+  exit 0.** `migrate status`, `migrate validate`, `migrate fix` and `migrate preflight`
+  took a path on the command line and never opened it, so a file that would not parse, or
+  that did not exist at all, produced the same green output and the same exit 0 as a valid
+  one. The report named two; a sweep of all **38** commands declaring `--config`, each run
+  against a broken config and then a missing one, found four — and the two it did not name
+  were the worse pair. **`migrate preflight` rendered its whole Pre-flight Check table**
+  against a configuration file that was not there, which is a pre-deployment gate
+  reporting on nothing. `migrate fix --idempotent --config broken.yaml` rewrote migration
+  files without opening the file it was handed, and with no fix type at all it printed a
+  usage warning and exited 0. Every other command already refused: exit 5 with a
+  `CONFIG_00x`, or exit 2 for a usage error. A path the operator *typed* is now read
+  before anything reports — `CONFIG_004` when it is absent, `CONFIG_002` when it does not
+  parse, `load_config`'s own codes, so the commands that already got this right and the
+  four that did not say the same thing. The **ambient** `confiture.yaml` is untouched:
+  #152's precedence contract says merely being present must not force a command to read
+  it, and `config_is_explicit` is what tells the two apart. Explicitness is asked of the
+  config parameter *alone*, not of that function's `("config", "env")` default — a command
+  given `--env production` and no `--config` still carries its defaulted path, which the
+  pair-wise question calls explicit, so the check would have demanded a `confiture.yaml`
+  nobody named. `migrate fix`'s `--config` now defaults to `None` rather than
+  `confiture.yaml`, which is how its body tells a typed path from the documented default
+  without a `ctx` parameter: that would have been a ninth argument, and `tests/budgets.json`
+  refuses to raise a number. The documented default is unchanged. A new guard,
+  `tests/unit/test_config_is_read.py`, runs every command declaring `--config` against a
+  missing file and an unparseable one and requires that none of them exits 0 — an
+  invariant a command with a required argument satisfies honestly by exiting 2, so it
+  needs no allow-list.
+
 - **`migrate validate --require-migration` passed green on almost everything a schema
   tree defines.** `SchemaDiffer.parse_schema` populated tables, enum types and sequences,
   so a view, a function, a trigger, an extension or a schema added to `db/schema/` and not

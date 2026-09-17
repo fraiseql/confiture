@@ -16,7 +16,7 @@ from confiture.cli.commands.validate_checks import (
     build_registry,
     validate_flag_dependencies,
 )
-from confiture.cli.dsn import param_is_explicit
+from confiture.cli.dsn import param_is_explicit, require_readable_config
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _output_json, _resolve_config, console, is_json
 from confiture.cli.options import format_option
@@ -519,6 +519,11 @@ def migrate_validate(
       confiture migrate status   - View migration history
     """
     json_mode = is_json(format_output)
+    # A --config the operator typed is read before any check reports (#284).
+    # With no check flags this command runs only the orphaned-file check, which
+    # needs no config at all — and printed the same tick for a valid config, a
+    # broken one and one that was not there.
+    require_readable_config(ctx, config)
     if not list_patterns:
         config = _resolve_config(config, env)
 

@@ -2768,7 +2768,7 @@ confiture migrate fix [OPTIONS]
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--idempotent` | - | Flag | off | Fix non-idempotent SQL statements (default: off) |
 | `--ownership` | - | Flag | off | Insert missing `ALTER … OWNER TO <expected_owner>` after each CREATE that lacks one. Requires an `ownership:` block in the config and the [ast] extra (pglast). |
-| `--config` | `-c` | path | `confiture.yaml` | Config file (needed for --ownership; defaults to confiture.yaml) |
+| `--config` | `-c` | path | - | Config file (needed for --ownership; defaults to confiture.yaml) |
 | `--force` | - | Flag | off | With --ownership --apply: rewrite migration files even when their checksum is already recorded in the local tracking table. Use with care — downstream `migrate verify` will report drift. |
 | `--dry-run` | - | Flag | off | Preview changes without modifying files (default: off) |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |

@@ -19,6 +19,7 @@ from confiture.cli.dsn import (
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
     has_intentional_dsn_source,
+    require_readable_config,
     resolve_database_url,
 )
 from confiture.cli.error_json import cli_boundary, fail
@@ -558,6 +559,12 @@ def migrate_preflight(
 
     # Reason: CLI start-up: importing confiture.core.preflight costs ~29 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.core.preflight import preflight_exit_code, run_preflight
+
+    # A --config the operator typed is read before the report renders (#284).
+    # In default mode preflight needs no config and never opened it, so an
+    # absent file still produced the whole Pre-flight Check table and exit 0 —
+    # a pre-deployment gate reporting on a configuration that was not there.
+    require_readable_config(ctx, config)
 
     if check_dependents not in {"off", "fail", "warn"}:
         error_console.print(
