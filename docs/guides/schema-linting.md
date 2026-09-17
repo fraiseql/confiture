@@ -914,11 +914,12 @@ violations.append(
 **Solution**: Check configuration:
 
 ```bash
-# List all available rules
+# List all available rules, with the configuration each one needs
 confiture lint --list-rules
 
-# Load custom rules explicitly
-confiture lint --rules db/linting/rules.py
+# Select by code or by family; an unknown selector exits 5
+confiture lint --select pk_001
+confiture lint --select pk,naming
 ```
 
 ---

@@ -130,8 +130,8 @@ confiture lint --format json --output report.json
 # Strict mode (fail on warnings too)
 confiture lint --fail-on-warning
 
-# Skip error check (warnings only)
-confiture lint --no-fail-on-error
+# Never fail the gate, whatever is found
+confiture lint --fail-on never
 ```
 
 ---
@@ -714,8 +714,8 @@ confiture lint --format json --output report.json
 # Strict mode (fail on warnings)
 confiture lint --fail-on-warning
 
-# Only warnings (ignore errors)
-confiture lint --no-fail-on-error
+# Never fail the gate, whatever is found
+confiture lint --fail-on never
 
 # View help
 confiture lint --help
@@ -962,7 +962,7 @@ Use linting with confiture's migration system:
 confiture lint --env staging
 
 # Check schema after migration
-confiture migrate up --env staging
+confiture migrate up --config db/environments/staging.yaml
 confiture lint --env staging
 
 # Validate production before deploying

@@ -547,7 +547,7 @@ After applying migrations, **update schema files**:
 
 ```bash
 # 1. Generate migration
-confiture migrate generate --name "add_user_bio"
+confiture migrate generate add_user_bio
 
 # 2. Migration created:
 db/migrations/003_add_user_bio.sql

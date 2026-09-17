@@ -554,7 +554,7 @@ confiture migrate validate \
 # 3. Test migrations on fresh database
 echo "Testing migrations on fresh database..."
 confiture build --env test
-confiture migrate up --env test
+confiture migrate up --config db/environments/test.yaml
 
 # 4. Run database tests
 echo "Running database tests..."

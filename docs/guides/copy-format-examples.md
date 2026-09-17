@@ -93,7 +93,7 @@ confiture build --sequential \
   --database-url postgresql://localhost/ecommerce_dev
 
 # Testing (add COPY for speed)
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://localhost/ecommerce_test
 
 # See performance improvement
@@ -124,8 +124,8 @@ seed:
 .PHONY: db-setup db-seed db-reset
 
 db-setup:
-	confiture build --sequential --copy-format \
-		--database-url postgresql://localhost/ecommerce_dev
+	confiture build --database-url postgresql://localhost/ecommerce_dev
+	$(MAKE) db-seed
 
 db-seed:
 	confiture seed apply --sequential --copy-format \
@@ -134,8 +134,8 @@ db-seed:
 db-reset:
 	dropdb --if-exists ecommerce_dev
 	createdb ecommerce_dev
-	confiture build --sequential --copy-format \
-		--database-url postgresql://localhost/ecommerce_dev
+	confiture build --database-url postgresql://localhost/ecommerce_dev
+	$(MAKE) db-seed
 ```
 
 ### Result
@@ -415,7 +415,7 @@ Summary:
 ### How Confiture Handles This
 ```bash
 # Graceful fallback: mix formats
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://localhost/myapp
 
 # Loading:
@@ -453,7 +453,7 @@ RUN mkdir -p /docker-entrypoint-initdb.d
 # Create initialization script
 RUN echo '#!/bin/bash' > /docker-entrypoint-initdb.d/000-init.sh && \
     echo 'cd /app' >> /docker-entrypoint-initdb.d/000-init.sh && \
-    echo 'confiture build --sequential --copy-format --database-url postgresql://postgres@localhost/postgres' >> /docker-entrypoint-initdb.d/000-init.sh && \
+    echo 'confiture seed apply --sequential --copy-format --database-url postgresql://postgres@localhost/postgres' >> /docker-entrypoint-initdb.d/000-init.sh && \
     chmod +x /docker-entrypoint-initdb.d/000-init.sh
 
 # Production image
@@ -523,7 +523,7 @@ mv db/seeds/products_ac db/seeds/03_products_c.sql
 # ... etc
 
 # Now use with COPY format
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://localhost/myapp
 
 # Output:
@@ -558,10 +558,10 @@ confiture build --sequential --copy-format \
 ### Issue: "Connection refused"
 ```bash
 # Wrong: Default localhost
-confiture build --sequential --copy-format
+confiture seed apply --sequential --copy-format
 
 # Right: Explicit connection
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://user:pass@host:5432/dbname
 ```
 
@@ -570,7 +570,7 @@ confiture build --sequential --copy-format \
 # Cause: File uses SQL functions
 # Solution: Keep that file as INSERT, convert others
 
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --database-url postgresql://localhost/myapp
 
 # File is skipped gracefully, no manual action needed
@@ -582,7 +582,7 @@ confiture build --sequential --copy-format \
 confiture seed benchmark --seeds-dir db/seeds
 
 # If not fast enough, try higher threshold
-confiture build --sequential --copy-format \
+confiture seed apply --sequential --copy-format \
   --copy-threshold 500 \
   --database-url postgresql://localhost/myapp
 ```

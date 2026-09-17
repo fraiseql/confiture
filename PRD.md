@@ -129,7 +129,7 @@ confiture sync --from production --to local
 
 #### **Medium 4: Schema-to-Schema Migration (FDW)**
 ```bash
-confiture migrate schema-to-schema --strategy fdw
+confiture migrate schema-to-schema migrate --source old --target new --strategy fdw
 ```
 - **Input**: Old production DB + new schema DDL
 - **Output**: New pristine database with migrated data
@@ -227,8 +227,8 @@ confiture build --env local
 **US-2**: As a **backend developer**, I want to add a column to production without downtime risk, so I can deploy safely.
 ```bash
 # Edit db/schema/10_tables/users.sql (add column)
-confiture migrate generate --name "add_user_bio"
-confiture migrate up --env production
+confiture migrate generate add_user_bio
+confiture migrate up --config db/environments/production.yaml
 ```
 
 **US-3**: As a **DevOps engineer**, I want to see what migrations will run before applying them, so I can verify safety.
@@ -258,7 +258,7 @@ confiture build --env test
 **US-7**: As a **developer**, I want automatic migration generation from schema changes, so I don't write migrations manually.
 ```bash
 # Edit db/schema/10_tables/users.sql
-confiture migrate generate --auto-detect
+confiture migrate diff old_schema.sql new_schema.sql --generate --name add_user_bio
 # Result: Migration file created with detected changes
 ```
 
@@ -391,13 +391,13 @@ confiture build --env local
 vim db/schema/10_tables/users.sql
 
 # 4. Generate migration
-confiture migrate generate --name "add_user_bio"
+confiture migrate generate add_user_bio
 
 # 5. Apply migration
 confiture migrate up
 
 # 6. Deploy to production
-confiture migrate up --env production
+confiture migrate up --config db/environments/production.yaml
 ```
 
 ---

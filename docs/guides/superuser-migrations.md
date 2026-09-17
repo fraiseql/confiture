@@ -106,7 +106,7 @@ apply_as:
 
 ```bash
 # 1. migrate up halts at the requires_superuser migration
-confiture migrate up --env production
+confiture migrate up --config db/environments/production.yaml
 # → exit 1, "Skipping migration 20260528160002_second"
 
 # 2. apply that one migration as postgres
@@ -114,7 +114,7 @@ confiture migrate apply-as postgres 20260528160002 --env production
 # → exit 0
 
 # 3. resume the chain
-confiture migrate up --env production
+confiture migrate up --config db/environments/production.yaml
 # → exit 0, applies remaining migrations
 ```
 

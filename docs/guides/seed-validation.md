@@ -283,7 +283,7 @@ db/seeds/common/
 Catch issues before they reach production:
 
 ```bash
-confiture seed validate --all --strict
+confiture seed validate --all
 ```
 
 ## Common Patterns

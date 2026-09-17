@@ -45,7 +45,7 @@ Uses PostgreSQL's Foreign Data Wrapper (FDW) to connect new schema to old, allow
 
 ```bash
 # 1. Create new database
-confiture build --env new_production --from-ddl
+confiture build --env new_production
 
 # 2. Setup FDW connection
 confiture migrate schema-to-schema setup \
