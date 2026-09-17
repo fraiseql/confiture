@@ -16,6 +16,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`docs/` documented two features that were never written, and 127 command lines
+  that do not parse.** The guard that examined `examples/` last week was pointed at
+  `docs/`, `README.md`, `PRD.md`, `ARCHITECTURE.md` and `CLAUDE.md`: 1282 `confiture …`
+  invocations across 136 files, of which **50 named a command or subcommand that does
+  not exist and 77 passed a flag that was never declared**.
+
+  Two of them were whole features. The **Migration Wizard** — interactive review, risk
+  classification, scheduled migrations, collaborative approval, a `confiture.wizard`
+  Python API — had 1090 lines across two documents in the published nav, and
+  `git log -S wizard -- python/` is empty across the entire history; at the `v0.5.0`
+  tag that announced it with a sample terminal transcript, "wizard" appears in five
+  files, all documentation. The **linting rule API** — `from confiture.linting import
+  Rule, RuleContext, Violation`, subclass and implement `check()`, load with
+  `lint --rules <file>` — had 850 lines; the module does not exist, `RuleContext` and
+  `Violation` exist nowhere, and `SchemaLinter` has no plug-in point at all: rules are
+  a fixed registry, exactly as `CLAUDE.md` tells contributors. Both API references are
+  deleted; `schema-linting.md` keeps the 507 lines that were accurate.
+
+  The operations runbooks carried fabricated *output* as well as fabricated commands —
+  a `Health Check Results` block ending `Overall: HEALTHY`, a `Connection Pool
+  Statistics` block under a `connection.pool` YAML key that is not a configuration
+  field (nothing imports `psycopg_pool`; confiture opens one connection per command),
+  and a `benchmark.yml` workflow with `--iterations` and `--fail-on-regression`. Three
+  fictions needed no substitute and now say so: `migrate down` does not verify
+  checksums, confiture does not pool, and blue-green has no CLI.
+
+  Most of the rest was a real command spelled at the wrong path (`admin
+  install-helpers` → `install-helpers`, `migrate drift-detect` → `drift`, `migrate
+  create` → `migrate generate`, `migrate sync-history` + `init --force` → `migrate
+  reinit`), or a real flag of a *neighbouring* command (`migrate generate --name` is
+  real on `migrate diff --generate`; `migrate up --env` is real on `build` and `lint`;
+  `build --copy-format` is real on `seed apply`, spelled both ways inside the same
+  Makefile). Where nothing real exists, the documents say so: no command sets an
+  intention's `completed` status, the coordination tables belong to the pgGit
+  extension, and there is no markdown doc generator.
+
+  `docs/release-notes/v0.5.0.md` is the origin of both large fictions and is corrected
+  with an **erratum** rather than rewritten — a release note is a record of what was
+  announced, and it announced four "New Modules" of which not one path exists.
+
+  `tests/unit/docs/test_docs_reference_real_commands.py` now asks the question on every
+  run, sharing its extractor with the examples guard
+  (`tests/unit/docs/command_truth.py`). It shipped with an allow-list of all 127 sites
+  grouped by cause; four phases emptied it and it is gone.
+
+
 - **`confiture sync` no longer empties tables it has already copied.** Each target table
   was truncated with `CASCADE` immediately before being copied, and `CASCADE` empties
   every table that references the one named. Tables are copied in the order
