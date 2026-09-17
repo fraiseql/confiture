@@ -309,6 +309,40 @@ class DifferSQLGenerator:
     def _down_drop_aggregate(self, change: SchemaChange) -> str:
         return self._statement(change.old_value, f"DROP_AGGREGATE {change.table}")
 
+    def _up_add_domain(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_DOMAIN {change.table}")
+
+    def _down_add_domain(self, change: SchemaChange) -> str:
+        return f"DROP DOMAIN IF EXISTS {change.table};\n"
+
+    def _up_drop_domain(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP DOMAIN {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return f"DROP DOMAIN IF EXISTS {change.table};\n"
+
+    def _down_drop_domain(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_DOMAIN {change.table}")
+
+    def _up_add_type(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_TYPE {change.table}")
+
+    def _down_add_type(self, change: SchemaChange) -> str:
+        return f"DROP TYPE IF EXISTS {change.table};\n"
+
+    def _up_drop_type(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP TYPE {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return f"DROP TYPE IF EXISTS {change.table};\n"
+
+    def _down_drop_type(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_TYPE {change.table}")
+
     @staticmethod
     def _drop_routine(keyword: str, change: SchemaChange) -> str:
         """``DROP <keyword> IF EXISTS name(args)``.

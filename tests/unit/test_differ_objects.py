@@ -176,3 +176,79 @@ class TestRoutinesAreSchemaObjects:
         assert "ADD_AGGREGATE" not in types_of(
             "", "CREATE OPERATOR === (LEFTARG = INT, RIGHTARG = INT, FUNCTION = int4eq);"
         )
+
+
+class TestAlterTableInTheSchemaTree:
+    """A tree may append ``ALTER TABLE`` rather than edit the ``CREATE TABLE``.
+
+    This went into the #288 sweep as a *control* — the most ordinary schema
+    change there is — and came back invisible: ``_collect_alter_table_constraints``
+    read only ``Constraint`` nodes out of ``stmt.cmds``, so a ``ColumnDef`` was
+    dropped on the floor and a project written this way had no column gate at all.
+    """
+
+    def test_a_column_added_by_alter_is_reported(self):
+        changes = changes_of("", "ALTER TABLE tb_user ADD COLUMN email TEXT;")
+        assert [(c.type, c.table, c.column) for c in changes] == [
+            ("ADD_COLUMN", "tb_user", "email")
+        ]
+
+    def test_a_column_dropped_by_alter_is_reported(self):
+        assert [
+            (c.type, c.column) for c in changes_of("", "ALTER TABLE tb_user DROP COLUMN name;")
+        ] == [("DROP_COLUMN", "name")]
+
+    def test_a_column_added_by_alter_on_both_sides_is_not_a_change(self):
+        alter = "ALTER TABLE tb_user ADD COLUMN email TEXT;"
+        assert types_of(alter, alter) == []
+
+    def test_a_column_moved_from_alter_into_the_create_is_not_a_change(self):
+        """The tree's *result* is what a database gets, not how it was written."""
+        assert (
+            SchemaDiffer()
+            .compare(
+                BASE + "ALTER TABLE tb_user ADD COLUMN email TEXT;",
+                "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT, email TEXT);\n",
+            )
+            .changes
+            == []
+        )
+
+    def test_alter_on_a_table_the_tree_never_creates_is_not_a_crash(self):
+        assert types_of("", "ALTER TABLE tb_absent ADD COLUMN email TEXT;") == []
+
+    def test_a_column_type_changed_by_alter_is_reported(self):
+        assert "CHANGE_COLUMN_TYPE" in types_of(
+            "", "ALTER TABLE tb_user ALTER COLUMN name TYPE VARCHAR(50);"
+        )
+
+
+class TestTypesAndDomains:
+    def test_added_domain_is_reported(self):
+        assert "ADD_DOMAIN" in types_of(
+            "", "CREATE DOMAIN d_email AS TEXT CHECK (VALUE LIKE '%@%');"
+        )
+
+    def test_redefined_domain_is_reported(self):
+        assert "REPLACE_DOMAIN" in types_of(
+            "CREATE DOMAIN d_email AS TEXT CHECK (VALUE LIKE '%@%');",
+            "CREATE DOMAIN d_email AS TEXT CHECK (VALUE LIKE '%@%.%');",
+        )
+
+    def test_added_composite_type_is_reported(self):
+        assert "ADD_TYPE" in types_of("", "CREATE TYPE t_point AS (x INT, y INT);")
+
+    def test_redefined_composite_type_is_reported(self):
+        assert "REPLACE_TYPE" in types_of(
+            "CREATE TYPE t_point AS (x INT, y INT);",
+            "CREATE TYPE t_point AS (x INT, y INT, z INT);",
+        )
+
+    def test_an_enum_is_reported_once_as_an_enum(self):
+        """``CreateEnumStmt`` is inventory kind ``type`` too; it must not double-report."""
+        assert types_of("", "CREATE TYPE e_status AS ENUM ('a', 'b');") == ["ADD_ENUM_TYPE"]
+
+    def test_a_changed_enum_is_still_a_changed_enum(self):
+        assert types_of(
+            "CREATE TYPE e_status AS ENUM ('a');", "CREATE TYPE e_status AS ENUM ('a', 'b');"
+        ) == ["CHANGE_ENUM_VALUES"]

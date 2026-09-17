@@ -5,6 +5,8 @@ change it cannot render. That is honest, but a view is one of the few objects
 whose whole definition the differ holds, so it can write the real statement.
 """
 
+from typing import ClassVar
+
 import pytest
 
 from confiture.core.differ import SchemaDiffer
@@ -125,6 +127,47 @@ class TestTheMigrationIsNotShort:
             for change in SchemaDiffer().compare(BASE + old, BASE + new).changes:
                 sql = generator.generate_up(change)
                 assert "WARNING" not in sql, f"{change.type} has no DDL generator"
+
+    #: The object changes PostgreSQL has no single statement for. Each is
+    #: reported by the differ — the gate is what matters — and left to the
+    #: author by ``-- WARNING: no SQL derived``. An entry that stops matching
+    #: fails the test below, so an exemption cannot outlive its reason.
+    NO_SINGLE_STATEMENT: ClassVar[dict[str, str]] = {
+        "REPLACE_DOMAIN": "a domain's constraints are altered one at a time; "
+        "dropping it takes every column that uses it",
+        "REPLACE_TYPE": "a composite type's attributes are altered one at a time",
+    }
+
+    def test_the_exempt_changes_are_still_reported_and_still_have_no_generator(self):
+        cases = {
+            "REPLACE_DOMAIN": (
+                "CREATE DOMAIN d AS TEXT CHECK (VALUE <> '');",
+                "CREATE DOMAIN d AS TEXT CHECK (VALUE <> ' ');",
+            ),
+            "REPLACE_TYPE": (
+                "CREATE TYPE t AS (x INT);",
+                "CREATE TYPE t AS (x INT, y INT);",
+            ),
+        }
+        assert set(cases) == set(self.NO_SINGLE_STATEMENT), "an exemption with no case"
+        for change_type, (old, new) in cases.items():
+            change = change_of(old, new, change_type)
+            with pytest.raises(NotImplementedError):
+                DifferSQLGenerator(True).generate_up(change)
+
+    def test_an_exempt_change_reaches_the_migration_as_a_warning(self, tmp_path):
+        """Not silence: the up file names the change the author has to write."""
+        from confiture.core.migration_generator import MigrationGenerator
+
+        diff = SchemaDiffer().compare(
+            BASE + "CREATE TYPE t AS (x INT);", BASE + "CREATE TYPE t AS (x INT, y INT);"
+        )
+        migrations = tmp_path / "db" / "migrations"
+        migrations.mkdir(parents=True)
+        up = MigrationGenerator(migrations_dir=migrations).generate_sql(diff, "retype")
+        text = up.read_text()
+        assert "no SQL derived" in text
+        assert "REPLACE TYPE t" in text
 
 
 class TestGeneratedMigrationCarriesTheView:

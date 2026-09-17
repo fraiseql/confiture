@@ -124,6 +124,9 @@ _PG_FK_DEL_ACTION: dict[str, str | None] = {
     "": None,
     "\x00": None,
 }
+_AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
+_AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
+_AT_ALTER_COLUMN_TYPE = _pg_member("AlterTableType", "AT_AlterColumnType")
 _CONSTR_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
 _CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
 _CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
@@ -265,7 +268,7 @@ class SchemaDiffer:
             elif kind == "CreateSeqStmt":
                 result.sequences.append(_sequence_from_stmt(stmt))
             elif kind == "AlterTableStmt":
-                self._collect_alter_table_constraints(stmt, result)
+                self._collect_alter_table(stmt, result)
         return result
 
     # ------------------------------------------------------------------
@@ -431,6 +434,59 @@ class SchemaDiffer:
                 where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
             )
         )
+
+    def _collect_alter_table(self, stmt: Any, result: ParsedSchema) -> None:
+        """Fold an ``ALTER TABLE`` into the table the tree already created.
+
+        A build-from-DDL tree may append ``ALTER TABLE`` rather than edit the
+        ``CREATE TABLE``; what a database ends up with is the two together, so
+        that is what the comparison has to see. Before #288 only ``Constraint``
+        nodes were read out of ``stmt.cmds``, which meant a ``ColumnDef`` — an
+        added or dropped *column* — was dropped on the floor.
+
+        An ``ALTER`` naming a table this tree never creates has nothing to fold
+        into and is ignored: it belongs to a schema built elsewhere.
+        """
+        table = self._table_named(result, stmt.relation)
+        if table is None:
+            return
+        for cmd in stmt.cmds or []:
+            self._apply_alter_column(cmd, table)
+        self._collect_alter_table_constraints(stmt, result)
+
+    def _apply_alter_column(self, cmd: Any, table: Table) -> None:
+        """Add, drop or retype one column, by ``AlterTableType`` member name.
+
+        Resolved by name through ``_pglast_enums``: PostgreSQL 18 renumbered
+        ``AlterTableType`` at index >= 13, so a literal ordinal stops matching
+        silently and the branch is simply never taken (#192).
+        """
+        subtype = _enum_value(getattr(cmd, "subtype", None))
+        definition = getattr(cmd, "def_", None)
+        is_column_def = definition is not None and type(definition).__name__ == "ColumnDef"
+
+        if subtype == _AT_ADD_COLUMN and is_column_def:
+            column = self._parse_column_pglast(definition, ConstrType)
+            if column is not None:
+                self._replace_column(table, column)
+        elif subtype == _AT_DROP_COLUMN and getattr(cmd, "name", None):
+            table.columns = [c for c in table.columns if c.name != cmd.name]
+        elif subtype == _AT_ALTER_COLUMN_TYPE and is_column_def:
+            retyped = self._parse_column_pglast(definition, ConstrType)
+            existing = table.get_column(cmd.name) if getattr(cmd, "name", None) else None
+            if retyped is not None and existing is not None:
+                existing.type = retyped.type
+                existing.raw_sql_type = retyped.raw_sql_type
+                existing.length = retyped.length
+
+    @staticmethod
+    def _replace_column(table: Table, column: Column) -> None:
+        """Append the column, or overwrite one of the same name written earlier."""
+        for index, existing in enumerate(table.columns):
+            if existing.name == column.name:
+                table.columns[index] = column
+                return
+        table.columns.append(column)
 
     def _collect_alter_table_constraints(self, stmt: Any, result: ParsedSchema) -> None:
         table = self._table_named(result, stmt.relation)
