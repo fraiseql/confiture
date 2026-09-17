@@ -127,7 +127,8 @@ def test_add_fk_constraint_uses_not_valid():
 
 
 def test_generate_down_returns_warning_for_unknown():
-    change = SchemaChange(type="ADD_FUNCTION", table="myfunc")
+    """``ADD_FUNCTION`` used to stand in for "unknown"; #288 gave it a rollback."""
+    change = SchemaChange(type="UNKNOWN_CHANGE", table="foo")
     gen = DifferSQLGenerator()
     sql = gen.generate_down(change)
     assert "WARNING" in sql or "No automatic rollback" in sql

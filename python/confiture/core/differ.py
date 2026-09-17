@@ -15,7 +15,7 @@ from pglast.enums.parsenodes import ConstrType
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.ddl_objects import objects_in
+from confiture.core.ddl_objects import objects_in, pair_definitions
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.models.schema import (
     CheckConstraint,
@@ -155,6 +155,38 @@ def _column_details(table: Table) -> list[dict[str, Any]]:
 def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
     """A stable order for object changes: kind, then schema, then name."""
     return (ref.kind, ref.schema, ref.name, str(ref.signature))
+
+
+def _object_details(ref: Any) -> dict[str, Any]:
+    return {"kind": ref.kind, "name": ref.qualified}
+
+
+def _added_change(ref: Any, obj: Any) -> SchemaChange:
+    return SchemaChange(
+        type=f"ADD_{ref.kind.upper()}",
+        table=ref.qualified,
+        new_value=obj.create_sql,
+        details=_object_details(ref),
+    )
+
+
+def _dropped_change(ref: Any, obj: Any) -> SchemaChange:
+    return SchemaChange(
+        type=f"DROP_{ref.kind.upper()}",
+        table=ref.qualified,
+        old_value=obj.create_sql,
+        details=_object_details(ref),
+    )
+
+
+def _replaced_change(ref: Any, before: Any, after: Any) -> SchemaChange:
+    return SchemaChange(
+        type=f"REPLACE_{ref.kind.upper()}",
+        table=ref.qualified,
+        old_value=before.create_sql,
+        new_value=after.create_sql,
+        details=_object_details(ref),
+    )
 
 
 class SchemaDiffer:
@@ -530,41 +562,22 @@ class SchemaDiffer:
         ``REPLACE``: for a view or a routine that is the entire change a
         migration has to carry, and it is invisible to a structural comparison
         because nothing about the object's shape moved.
+
+        The keys are buckets, not identities, so each one's definitions are
+        paired by ``pair_definitions`` rather than assumed to be one apiece.
         """
         changes: list[SchemaChange] = []
-        added = sorted(new_objects.keys() - old_objects.keys(), key=_object_sort_key)
-        dropped = sorted(old_objects.keys() - new_objects.keys(), key=_object_sort_key)
-        common = sorted(old_objects.keys() & new_objects.keys(), key=_object_sort_key)
-
-        changes.extend(
-            SchemaChange(
-                type=f"ADD_{ref.kind.upper()}",
-                table=ref.qualified,
-                new_value=new_objects[ref].create_sql,
-                details={"kind": ref.kind, "name": ref.qualified},
+        for ref in sorted(old_objects.keys() | new_objects.keys(), key=_object_sort_key):
+            pairs, dropped, added = pair_definitions(
+                old_objects.get(ref, []), new_objects.get(ref, [])
             )
-            for ref in added
-        )
-        changes.extend(
-            SchemaChange(
-                type=f"DROP_{ref.kind.upper()}",
-                table=ref.qualified,
-                old_value=old_objects[ref].create_sql,
-                details={"kind": ref.kind, "name": ref.qualified},
+            changes.extend(_added_change(ref, obj) for obj in added)
+            changes.extend(_dropped_change(ref, obj) for obj in dropped)
+            changes.extend(
+                _replaced_change(ref, before, after)
+                for before, after in pairs
+                if before.definition != after.definition
             )
-            for ref in dropped
-        )
-        changes.extend(
-            SchemaChange(
-                type=f"REPLACE_{ref.kind.upper()}",
-                table=ref.qualified,
-                old_value=old_objects[ref].create_sql,
-                new_value=new_objects[ref].create_sql,
-                details={"kind": ref.kind, "name": ref.qualified},
-            )
-            for ref in common
-            if old_objects[ref].definition != new_objects[ref].definition
-        )
         return changes
 
     # ------------------------------------------------------------------

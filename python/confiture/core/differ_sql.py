@@ -229,11 +229,96 @@ class DifferSQLGenerator:
         )
 
     def _up_add_function(self, change: SchemaChange) -> str:
-        details = change.details or {}
-        source = details.get("source", "")
-        if source:
-            return f"{source}\n"
-        return f"-- WARNING: No source provided for ADD_FUNCTION {change.table}\n"
+        """The routine's own ``CREATE OR REPLACE``.
+
+        ``details["source"]`` predates #288 and is kept: a caller that builds
+        the change by hand — the only kind there was, since ``SchemaDiffer``
+        never emitted this type until #288 — still works.
+        """
+        source = (change.details or {}).get("source") or change.new_value
+        return self._statement(source, f"ADD_FUNCTION {change.table}")
+
+    def _down_add_function(self, change: SchemaChange) -> str:
+        return self._drop_routine("FUNCTION", change)
+
+    def _up_replace_function(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"REPLACE_FUNCTION {change.table}")
+
+    def _down_replace_function(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"REPLACE_FUNCTION {change.table}")
+
+    def _up_drop_function(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP FUNCTION {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return self._drop_routine("FUNCTION", change)
+
+    def _down_drop_function(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_FUNCTION {change.table}")
+
+    def _up_add_procedure(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_PROCEDURE {change.table}")
+
+    def _down_add_procedure(self, change: SchemaChange) -> str:
+        return self._drop_routine("PROCEDURE", change)
+
+    def _up_replace_procedure(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"REPLACE_PROCEDURE {change.table}")
+
+    def _down_replace_procedure(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"REPLACE_PROCEDURE {change.table}")
+
+    def _up_drop_procedure(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP PROCEDURE {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return self._drop_routine("PROCEDURE", change)
+
+    def _down_drop_procedure(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_PROCEDURE {change.table}")
+
+    def _up_add_aggregate(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_AGGREGATE {change.table}")
+
+    def _down_add_aggregate(self, change: SchemaChange) -> str:
+        return self._drop_routine("AGGREGATE", change)
+
+    def _up_replace_aggregate(self, change: SchemaChange) -> str:
+        """An aggregate has no ``OR REPLACE`` either: drop it, then define it again."""
+        return self._drop_routine("AGGREGATE", change) + self._statement(
+            change.new_value, f"REPLACE_AGGREGATE {change.table}"
+        )
+
+    def _down_replace_aggregate(self, change: SchemaChange) -> str:
+        return self._drop_routine("AGGREGATE", change) + self._statement(
+            change.old_value, f"REPLACE_AGGREGATE {change.table}"
+        )
+
+    def _up_drop_aggregate(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP AGGREGATE {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return self._drop_routine("AGGREGATE", change)
+
+    def _down_drop_aggregate(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_AGGREGATE {change.table}")
+
+    @staticmethod
+    def _drop_routine(keyword: str, change: SchemaChange) -> str:
+        """``DROP <keyword> IF EXISTS name(args)``.
+
+        ``change.table`` carries the routine's identity — ``fn_c(bigint)`` — so
+        the argument list PostgreSQL needs to pick the overload is already
+        there. Without it the statement is ambiguous the moment a second
+        overload exists.
+        """
+        return f"DROP {keyword} IF EXISTS {change.table};\n"
 
     # ------------------------------------------------------------------
     # Objects carried as whole definitions (#288)

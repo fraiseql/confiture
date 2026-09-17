@@ -107,3 +107,71 @@ class TestObjectsWithoutAMigration:
         assert report.migration_error is None
         assert report.has_ddl_changes is False
         assert report.is_valid is True
+
+
+class TestRoutinesWithoutAMigration:
+    """Existence is unconditional; a body edit stays behind #178's flag."""
+
+    FN = "CREATE OR REPLACE FUNCTION fn_c() RETURNS BIGINT LANGUAGE sql AS $$ SELECT 1 $$;\n"
+
+    def test_a_new_function_without_a_migration_fails_the_gate(self, repo: Path):
+        (repo / "db" / "schema" / "30_fn.sql").write_text(self.FN)
+        _commit(repo, "a function, no migration")
+
+        report = _check(repo)
+        assert report.migration_error is None
+        assert report.has_ddl_changes is True
+        assert report.is_valid is False
+
+    def test_a_deleted_function_without_a_migration_fails_the_gate(self, repo: Path):
+        fn = repo / "db" / "schema" / "30_fn.sql"
+        fn.write_text(self.FN)
+        _commit(repo, "a function")
+        fn.unlink()
+        _commit(repo, "the function goes, no migration")
+
+        report = _check(repo)
+        assert report.has_ddl_changes is True
+        assert report.is_valid is False
+
+    def test_a_body_edit_alone_still_passes_by_default(self, repo: Path):
+        """#178 made body edits opt-in. This must not turn that into always-on."""
+        fn = repo / "db" / "schema" / "30_fn.sql"
+        fn.write_text(self.FN)
+        _commit(repo, "a function")
+        fn.write_text(self.FN.replace("SELECT 1", "SELECT 2"))
+        _commit(repo, "a body edit, no migration")
+
+        report = _check(repo)
+        assert report.has_ddl_changes is False
+        assert report.is_valid is True
+
+    def test_a_body_edit_fails_the_gate_with_require_migration_bodies(self, repo: Path):
+        fn = repo / "db" / "schema" / "30_fn.sql"
+        fn.write_text(self.FN)
+        _commit(repo, "a function")
+        fn.write_text(self.FN.replace("SELECT 1", "SELECT 2"))
+        _commit(repo, "a body edit, no migration")
+
+        report = MigrationAccompanimentChecker("local", repo).check_accompaniment(
+            "HEAD~1", "HEAD", check_bodies=True
+        )
+        assert report.is_valid is False
+
+    def test_a_new_function_fails_even_though_its_body_is_new_too(self, repo: Path):
+        """The existence signal is not suppressed along with the body signal."""
+        (repo / "db" / "schema" / "30_fn.sql").write_text(self.FN)
+        _commit(repo, "a function, no migration")
+
+        report = MigrationAccompanimentChecker("local", repo).check_accompaniment("HEAD~1", "HEAD")
+        assert [c.type for c in report.ddl_changes] == ["ADD_FUNCTION"]
+
+    def test_a_view_redefined_is_not_suppressed_by_the_body_default(self, repo: Path):
+        """Only routines are behind the flag; nothing else reports a redefined view."""
+        view = repo / "db" / "schema" / "20_v.sql"
+        view.write_text("CREATE OR REPLACE VIEW v_user AS SELECT pk_user FROM tb_user;\n")
+        _commit(repo, "a view")
+        view.write_text("CREATE OR REPLACE VIEW v_user AS SELECT name FROM tb_user;\n")
+        _commit(repo, "the view changes, no migration")
+
+        assert _check(repo).is_valid is False

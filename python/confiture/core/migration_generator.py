@@ -471,6 +471,15 @@ class {class_name}(Migration):
             "ADD_MATVIEW",
             "DROP_MATVIEW",
             "REPLACE_MATVIEW",
+            "ADD_FUNCTION",
+            "DROP_FUNCTION",
+            "REPLACE_FUNCTION",
+            "ADD_PROCEDURE",
+            "DROP_PROCEDURE",
+            "REPLACE_PROCEDURE",
+            "ADD_AGGREGATE",
+            "DROP_AGGREGATE",
+            "REPLACE_AGGREGATE",
         }
     )
 

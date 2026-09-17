@@ -7,6 +7,7 @@ Useful for pre-commit hooks and CI/CD pipelines.
 import re
 from pathlib import Path
 
+from confiture.core.ddl_objects import BODY_KINDS
 from confiture.core.function_signature_checker import FunctionSignatureChecker
 from confiture.core.git import GitRepository
 from confiture.core.git_schema import GitSchemaDiffer
@@ -17,6 +18,19 @@ _FUNC_CONTENT_RE = re.compile(
     r"\bCREATE\b.*?\bFUNCTION\b|\bCREATE\b.*?\bPROCEDURE\b",
     re.IGNORECASE | re.DOTALL,
 )
+
+#: The change types that are a routine redefined in place — a *body* edit by
+#: another name. ``--require-migration-bodies`` (#178) reports these and is off
+#: by default, so the gate drops them unless that flag is on: reporting them
+#: unconditionally would turn a deliberate opt-in into an always-on check.
+#: Adding and dropping a routine are not here. They are the object's
+#: *existence*, which nothing else in this gate reports, and which #288 is about.
+_BODY_CHANGE_TYPES = frozenset(f"REPLACE_{kind.upper()}" for kind in BODY_KINDS)
+
+
+def _without_body_changes(changes: list) -> list:
+    """The changes the gate acts on when ``--require-migration-bodies`` is off."""
+    return [change for change in changes if change.type not in _BODY_CHANGE_TYPES]
 
 
 class MigrationAccompanimentChecker:
@@ -97,7 +111,6 @@ class MigrationAccompanimentChecker:
 
         try:
             diff = self.differ.compare_refs(base_ref, target_ref)
-            has_ddl_changes = self.differ.has_ddl_changes(diff)
         except Exception as exc:  # Reason: documented policy: a schema the parser cannot handle skips the check instead of failing CI
             # Schema was too large or complex to parse (e.g. sqlparse token limit,
             # pglast syntax error on non-PostgreSQL DDL).  Treat as "check skipped"
@@ -122,10 +135,12 @@ class MigrationAccompanimentChecker:
             else []
         )
 
+        ddl_changes = diff.changes if check_bodies else _without_body_changes(diff.changes)
+
         return MigrationAccompanimentReport(
-            has_ddl_changes=has_ddl_changes,
+            has_ddl_changes=bool(ddl_changes),
             has_new_migrations=len(new_migrations) > 0,
-            ddl_changes=diff.changes,
+            ddl_changes=ddl_changes,
             new_migration_files=new_migrations,
             base_ref=base_ref,
             target_ref=target_ref,
