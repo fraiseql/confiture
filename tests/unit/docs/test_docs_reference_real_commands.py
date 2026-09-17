@@ -55,22 +55,6 @@ NOT_INSTRUCTIONS: dict[tuple[str, str], str] = {
 # Every disagreement this guard found on the day it was written (2026-09-17),
 # grouped by what is actually wrong. Each group is one phase of the repair.
 KNOWN_ROT: dict[str, tuple[tuple[str, str], ...]] = {
-    "the Migration Wizard was never built (no `wizard` in python/ at any commit)": (
-        ("docs/api/wizard.md", "confiture migrate --dry-run"),
-        ("docs/api/wizard.md", "confiture migrate --schedule"),
-        ("docs/api/wizard.md", "confiture migrate --target"),
-        ("docs/api/wizard.md", "confiture migrate --wizard"),
-        ("docs/api/wizard.md", "confiture migrate cancel"),
-        ("docs/api/wizard.md", "confiture migrate list-scheduled"),
-        ("docs/api/wizard.md", "confiture migrate run-scheduled"),
-        ("docs/guides/interactive-migration-wizard.md", "confiture migrate up --env"),
-        ("docs/guides/interactive-migration-wizard.md", "confiture migrate up --non-interactive"),
-        (
-            "docs/guides/interactive-migration-wizard.md",
-            "confiture migrate up --require-confirmation",
-        ),
-        ("docs/guides/interactive-migration-wizard.md", "confiture migrate wizard"),
-    ),
     "the operations runbooks were written against an imagined CLI": (
         ("docs/operations/disaster-recovery.md", "confiture init --force"),
         ("docs/operations/disaster-recovery.md", "confiture migrate down --force"),

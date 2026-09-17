@@ -106,7 +106,6 @@ nav:
       - 'Git-Aware Schema Validation': guides/git-aware-validation.md
       - 'Migration Hooks': guides/hooks.md
       - 'Integrations Guide': guides/integrations.md
-      - 'Interactive Migration Wizard': guides/interactive-migration-wizard.md
       - 'Adopting Confiture on a database that already has migrations applied': guides/legacy-bootstrap.md
       - 'migrate validate': guides/migrate-validate.md
       - 'Migration Decision Tree': guides/migration-decision-tree.md
@@ -156,7 +155,6 @@ nav:
       - 'Rollback Generation API Reference': api/rollback-generator.md
       - 'SchemaToSchemaMigrator API': api/schema-to-schema.md
       - 'ProductionSyncer API': api/syncer.md
-      - 'Migration Wizard API Reference': api/wizard.md
   - 'Features':
       - 'Feature Overview': features/overview.md
       - 'Dynamic Discovery': features/dynamic-discovery.md
