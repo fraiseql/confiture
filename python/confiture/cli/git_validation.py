@@ -126,13 +126,16 @@ def validate_migration_accompaniment(
         )
 
         if format_output == "text":
-            if report.migration_error:
+            if report.was_skipped:
                 console.print(
-                    f"[yellow]⚠️  Schema parse check skipped: {report.migration_error}[/yellow]"
+                    "[red]❌ The accompaniment check could not run: the schema does not parse[/red]"
                 )
+                console.print(f"   {report.migration_error}")
                 console.print(
-                    "[yellow]   Schema may be too large for static analysis "
-                    "— DDL accompaniment check was not run.[/yellow]"
+                    "   [yellow]A schema PostgreSQL rejects is a schema "
+                    "`confiture build` rejects. Fix the statement it names; the "
+                    "gate cannot tell you what a migration is missing until it "
+                    "can read the tree.[/yellow]"
                 )
             elif (
                 not report.has_ddl_changes
