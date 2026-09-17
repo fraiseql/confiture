@@ -565,20 +565,24 @@ confiture coordinate status --format json > status.json
 **Completing Work:**
 
 ```bash
-# Step 3: when the work is done
-#
-# There is no `coordinate complete`. `completed` is one of the statuses
-# `list-intents --status-filter` accepts, but no command sets it. That is a
-# gap in the tool, not a spelling mistake in this document.
-# What exists is abandoning an intention that will not land:
-confiture coordinate abandon \
-    --intent-id int_abc123def456 \
-    --reason "Superseded by the profiles work in PR #412"
+# Step 2: say you have started (optional, but it is what `in_progress` means)
+confiture coordinate start --intent-id int_abc123def456
 
-# Output:
-# ✅ Intent int_abc123def456 marked as ABANDONED
-# No longer blocking other agents from 'users' table
+# Step 3: when the changes are finished
+confiture coordinate complete \
+    --intent-id int_abc123def456 \
+    --notes "Migration 004 applied and verified"
+
+# Step 4: when they reach the main line. `merged` is a separate status from
+# `completed` — work can be finished for days before it lands.
+confiture coordinate merge \
+    --intent-id int_abc123def456 \
+    --notes "Merged in PR #412"
 ```
+
+`--notes` is optional on all three; each has a sensible default. `abandon` is
+the one transition that *requires* a reason, because a cancellation that does
+not say why is not worth recording.
 
 **Abandoning Work:**
 

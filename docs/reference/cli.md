@@ -3492,6 +3492,75 @@ confiture coordinate status [OPTIONS]
 
 <!-- END GENERATED: cli confiture coordinate status -->
 
+### `confiture coordinate complete`
+
+Record that an intention's changes are finished.
+
+<!-- BEGIN GENERATED: cli confiture coordinate complete -->
+
+**Usage**
+
+```bash
+confiture coordinate complete [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--intent-id` | - | text | - | Intention ID |
+| `--notes` | - | text | `Changes completed` | Why the status changed |
+| `--database-url` | - | text | - | Database URL |
+| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture coordinate complete -->
+
+### `confiture coordinate merge`
+
+Record that an intention's changes have reached the main line.
+
+<!-- BEGIN GENERATED: cli confiture coordinate merge -->
+
+**Usage**
+
+```bash
+confiture coordinate merge [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--intent-id` | - | text | - | Intention ID |
+| `--notes` | - | text | `Changes merged to main` | Why the status changed |
+| `--database-url` | - | text | - | Database URL |
+| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture coordinate merge -->
+
+### `confiture coordinate start`
+
+Record that work on an intention has begun.
+
+<!-- BEGIN GENERATED: cli confiture coordinate start -->
+
+**Usage**
+
+```bash
+confiture coordinate start [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--intent-id` | - | text | - | Intention ID |
+| `--notes` | - | text | `Agent started work` | Why the status changed |
+| `--database-url` | - | text | - | Database URL |
+| `--format` | `-f` | text | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture coordinate start -->
+
 ## `confiture debug`
 
 Debug SQL queries step by step.
