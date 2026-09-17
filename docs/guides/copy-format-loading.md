@@ -105,14 +105,12 @@ confiture seed benchmark --seeds-dir db/seeds
 Use COPY format when building fresh databases:
 
 ```bash
-# Build schema and apply seeds with COPY format
-confiture build --sequential --copy-format
-
-# With performance metrics
-confiture build --sequential --copy-format
+# Build the schema, then load the seeds as COPY
+confiture build --schema-only
+confiture seed apply --sequential --copy-format
 
 # Custom threshold
-confiture build --sequential --copy-format --copy-threshold 500
+confiture seed apply --sequential --copy-format --copy-threshold 500
 ```
 
 ## Decision Tree: When to Use COPY

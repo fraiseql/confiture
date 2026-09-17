@@ -82,7 +82,7 @@ $ confiture migrate status -c db/environments/production.yaml --format json | jq
 ### 5. Make a new migration the normal way
 
 ```bash
-confiture migrate generate --name "add_user_phone"
+confiture migrate generate add_user_phone
 ```
 
 Confiture allocates the next version (`20260520143015` or `005` depending on your configured naming). Edit the new file, commit, deploy.

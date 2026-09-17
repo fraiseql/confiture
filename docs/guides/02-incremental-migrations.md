@@ -338,7 +338,7 @@ Pending:        1 migration
 `migrate down --target` runs each `down.sql` in reverse order until the target version is the newest applied row:
 
 ```bash
-$ confiture migrate down --target 20260518090000
+$ confiture migrate down-to 20260518090000
 
 Will roll back 3 migrations:
   ◂ 20260520143015_add_user_bio

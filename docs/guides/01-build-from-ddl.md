@@ -38,8 +38,8 @@ confiture build
 # Build specific environment
 confiture build --env production
 
-# Dry run (show SQL, don't execute)
-confiture build --env test --dry-run
+# Show the files this build would read, and build nothing
+confiture build --env test --list-files
 ```
 
 ---

@@ -249,7 +249,7 @@ confiture migrate up --verify-checksums
 **Post-Recovery:**
 ```bash
 # Verify schema state
-confiture migrate drift-detect
+confiture drift
 
 # Restart application
 kubectl scale deployment app --replicas=3
@@ -266,12 +266,12 @@ kubectl logs -f deployment/app
 - Health checks failing
 
 **Immediate Actions (< 1 minute):**
-```bash
-# Immediate rollback to blue (original) schema
-confiture migrate rollback-blue-green --force
-```
 
-**If automatic rollback fails:**
+There is no blue-green rollback command. `confiture.core.blue_green` is a
+library API driven from your own code (see
+[Blue-Green API](../api/blue-green.md)); nothing in the CLI swaps schemas. In an
+incident, swap them yourself:
+
 ```sql
 -- Manual schema swap back
 BEGIN;
@@ -301,7 +301,7 @@ curl -f https://app.example.com/health
 # DO NOT drop until root cause identified
 
 # Document the failure
-confiture migrate status --verbose > incident_report.txt
+confiture migrate status --format json > incident_report.json
 
 # Investigate
 psql << 'EOF'
@@ -344,32 +344,34 @@ CREATE TABLE tb_confiture_backup AS
 SELECT * FROM tb_confiture;
 ```
 
-**Step 2: Reinitialize**
+**Step 2: Rebuild the ledger from the migration files**
 ```bash
-# Recreate tracking table
-confiture init --force
+# Clear tb_confiture and re-mark every migration file as applied
+confiture migrate reinit
+
+# Or stop part-way, if only some of them are really applied
+confiture migrate reinit --through 003
 ```
 
-**Step 3: Sync with current schema**
+Preview with `--dry-run`; `--yes` skips the confirmation prompt.
+
+**Step 3: Or copy the ledger from another database**
 ```bash
-# Analyze schema and mark migrations as applied
-confiture migrate sync-history
+# Preserves version, name, applied_at, execution_time_ms and checksum
+confiture migrate baseline --from-db postgresql://prod-host/myapp
 ```
 
-This command:
-- Analyzes current database schema
-- Compares with migration files
-- Marks migrations as applied if their changes exist
-- Reports any discrepancies
+Use this after a `pg_restore` from another environment that still has its
+`tb_confiture`.
 
 **Step 4: Verify**
 ```bash
 confiture migrate status
-confiture migrate drift-detect
+confiture drift
 confiture verify-checksums
 ```
 
-**If sync-history is not available:**
+**If neither applies — reconstructing by hand:**
 ```sql
 -- Manual reconstruction
 -- Mark migrations as applied based on schema analysis
@@ -452,7 +454,7 @@ pg_waldump /var/lib/postgresql/data/pg_wal/0000000100000001000000AB
 ```bash
 # Schema verification
 confiture migrate status
-confiture migrate drift-detect
+confiture drift
 confiture verify-checksums
 
 # Database integrity
@@ -574,7 +576,7 @@ After any recovery:
 
 ```bash
 # Emergency rollback
-confiture migrate down --steps 1 --force
+confiture migrate down --steps 1
 
 # Force unlock
 psql -c "SELECT pg_advisory_unlock_all()"
@@ -583,7 +585,7 @@ psql -c "SELECT pg_advisory_unlock_all()"
 kubectl delete job -l app=confiture
 
 # Check database status
-pg_isready && confiture health check
+pg_isready && confiture migrate status
 ```
 
 ### Backup Locations

@@ -244,7 +244,7 @@ diff old.sql new.sql  # Should show no differences
 vim db/schema/10_tables/users.sql  # Add new column
 
 # Generate migration
-confiture migrate generate --name "add_user_status"
+confiture migrate generate add_user_status
 
 # Apply it
 confiture migrate up

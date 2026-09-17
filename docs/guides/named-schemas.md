@@ -45,7 +45,7 @@ The builder concatenates `00_common/000_schemas.sql` first, then the table defin
 ### Step 3 — Generate and apply a migration
 
 ```bash
-confiture migrate generate --name "add_metrics_correlation_id"
+confiture migrate generate add_metrics_correlation_id
 ```
 
 Edit the generated `*.up.sql` file:

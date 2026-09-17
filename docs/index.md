@@ -90,7 +90,7 @@ confiture sync --from production --to staging --anonymize
 
 **4. Schema-to-Schema** - Zero-downtime via FDW
 ```bash
-confiture migrate schema-to-schema --source old --target new
+confiture migrate schema-to-schema setup --source old --target new
 ```
 [Learn more →](guides/04-schema-to-schema.md)
 
@@ -109,7 +109,7 @@ confiture init
 confiture build --env local
 
 # Create and apply migration
-confiture migrate generate --name "add_user_bio"
+confiture migrate generate add_user_bio
 confiture migrate up
 ```
 

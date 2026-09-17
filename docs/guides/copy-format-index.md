@@ -151,12 +151,14 @@ confiture seed benchmark --seeds-dir db/seeds
 - Performance analysis: [Seed Loading Decision Tree](seed-loading-decision-tree.md#performance-expectations)
 - Example output: [Practical Examples → Scenario 2](copy-format-examples.md)
 
-### `confiture build --copy-format`
+### `confiture build` then `confiture seed apply --copy-format`
 
-**What it does:** Build schema and apply seeds with COPY format
+**What it does:** Build the schema, then load its seeds as COPY. `build` applies
+seeds during `--sequential` but exposes no format control, so the COPY load is a
+second command.
 
 ```bash
-confiture build --sequential --copy-format --database-url postgresql://localhost/myapp
+confiture seed apply --sequential --copy-format --database-url postgresql://localhost/myapp
 ```
 
 **Documentation:**

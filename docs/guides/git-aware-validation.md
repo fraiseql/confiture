@@ -516,8 +516,10 @@ jobs:
       - name: Validate schema
         run: confiture migrate validate --check-drift --base-ref main
 
-      - name: Generate schema docs
-        run: confiture doc generate --output docs/schema.md
+      # There is no markdown doc generator. `introspect` exports the
+      # schema as structured JSON; render it yourself if you publish docs.
+      - name: Export schema facts
+        run: confiture introspect --output docs/schema.json
 
       - name: Deploy docs
         if: github.ref == 'refs/heads/main'
@@ -552,7 +554,7 @@ confiture migrate validate \
 # 3. Test migrations on fresh database
 echo "Testing migrations on fresh database..."
 confiture build --env test
-confiture migrate up --env test
+confiture migrate up --config db/environments/test.yaml
 
 # 4. Run database tests
 echo "Running database tests..."
