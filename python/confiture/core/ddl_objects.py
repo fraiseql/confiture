@@ -49,6 +49,8 @@ TRACKED_NODES: frozenset[str] = frozenset(
         "CreateTableAsStmt",  # only when it spells CREATE MATERIALIZED VIEW
         "CreateFunctionStmt",  # functions and procedures both
         "DefineStmt",  # only when it spells CREATE AGGREGATE
+        "CreateDomainStmt",
+        "CompositeTypeStmt",
     }
 )
 
@@ -62,7 +64,12 @@ BODY_KINDS: frozenset[str] = frozenset({"function", "procedure", "aggregate"})
 #: them here would report every table twice.
 MODELLED_ELSEWHERE: dict[str, str] = {
     "CreateStmt": "ParsedSchema.tables, compared column by column",
-    "CreateEnumStmt": "ParsedSchema.enum_types, compared value by value",
+    "CreateEnumStmt": (
+        "ParsedSchema.enum_types, compared value by value. The inventory calls "
+        "an enum a 'type', the same kind it gives a composite, so tracking it "
+        "here would report every enum twice — once as ADD_TYPE and once as "
+        "ADD_ENUM_TYPE."
+    ),
     "CreateSeqStmt": "ParsedSchema.sequences",
     "IndexStmt": "Table.indexes",
 }

@@ -480,6 +480,16 @@ class {class_name}(Migration):
             "ADD_AGGREGATE",
             "DROP_AGGREGATE",
             "REPLACE_AGGREGATE",
+            "ADD_DOMAIN",
+            "DROP_DOMAIN",
+            "ADD_TYPE",
+            "DROP_TYPE",
+            # REPLACE_DOMAIN and REPLACE_TYPE are deliberately absent. Neither
+            # has a single statement in PostgreSQL — a domain's constraints and
+            # a composite's attributes are altered one at a time, and dropping
+            # either takes every column that uses it. `_up_statements` writes
+            # `-- WARNING: no SQL derived for: …` for them, which is the
+            # generator's existing way of saying "this changed, you write it".
         }
     )
 
