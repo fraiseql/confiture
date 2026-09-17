@@ -87,6 +87,7 @@ def test_add_column_if_not_exists_is_the_same_edit() -> None:
     assert edit is not None
     assert edit.kind == "add"
 
+
 def test_set_not_null_and_drop_not_null() -> None:
     assert column_edit(cmd_of("ALTER TABLE t ALTER COLUMN c SET NOT NULL")) == ColumnEdit(
         "set_not_null", column="c"

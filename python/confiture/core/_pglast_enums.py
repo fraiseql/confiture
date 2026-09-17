@@ -79,6 +79,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_EXTENSION",
         "OBJECT_DOMAIN",
         "OBJECT_RULE",
+        "OBJECT_FOREIGN_TABLE",
     ),
 }
 
