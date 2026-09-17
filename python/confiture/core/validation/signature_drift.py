@@ -19,7 +19,10 @@ from confiture.config.environment import SshTunnelConfig
 from confiture.core import builder as _core_builder
 from confiture.core.connection import load_config, open_connection
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
-from confiture.core.function_signature_drift import FunctionSignatureDriftDetector
+from confiture.core.function_signature_drift import (
+    FunctionSignatureDriftDetector,
+    schemas_to_scan,
+)
 from confiture.core.function_signature_parser import FunctionSignatureParser
 from confiture.core.live_function_catalog import LiveFunctionCatalog
 from confiture.exceptions import ConfigurationError
@@ -110,10 +113,11 @@ def check_signature_drift(
     *,
     config_path: Path,
     schema_file: Path | None,
-    schemas: str,
+    schemas: str | None,
     check_body: bool,
     ssh_via: str | None,
     ctx: ValidationContext | None = None,
+    missing_is_drift: bool = False,
 ) -> SignatureDriftResult:
     """Detect signature (and optional body) drift against the live database.
 
@@ -121,7 +125,11 @@ def check_signature_drift(
         config_path: Config file resolving the database connection.
         schema_file: Explicit source schema SQL; auto-built from DDL if ``None``.
         schemas: Comma-separated DB schema names to scan (e.g. ``"public,auth"``).
+            ``None`` means the schemas the **source** declares, which is the
+            answer ``--check-live-drift`` derives from the same tree (#303).
         check_body: Also compare function bodies (heavier).
+        missing_is_drift: Whether a routine the source declares and the database
+            has not got makes the verdict critical (#303).
         ssh_via: Optional ``user@host`` SSH tunnel target overriding the config.
         ctx: Shared per-run resources. When given, the config and the live
             connection come from there, so several checks in one
@@ -136,10 +144,10 @@ def check_signature_drift(
         raise ConfigurationError(f"Config file not found: {config_path}", error_code="CONFIG_004")
 
     config_data = ctx.config_data if ctx is not None else load_config(config_path)
-    schema_list = [s.strip() for s in schemas.split(",") if s.strip()]
 
     source_sql, auto_built = _resolve_source_sql(config_data, schema_file)
     source_sigs = FunctionSignatureParser().parse(source_sql)
+    schema_list = schemas_to_scan(schemas, source_sigs)
 
     effective_config: Any = config_data
     if ssh_via:
@@ -152,7 +160,10 @@ def check_signature_drift(
         live_catalog = LiveFunctionCatalog(conn)
         live_sigs = live_catalog.get_signatures(schemas=schema_list)
         drift_report = FunctionSignatureDriftDetector().compare(
-            source_sigs, live_sigs, schemas_checked=schema_list
+            source_sigs,
+            live_sigs,
+            schemas_checked=schema_list,
+            missing_is_drift=missing_is_drift,
         )
 
         body_report = None

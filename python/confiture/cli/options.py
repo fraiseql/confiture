@@ -1,13 +1,18 @@
-"""Shared CLI option factories.
+"""Shared CLI option factories and the option aliases more than one command takes.
 
 ``format_option`` is the one ``--format`` validator: an invalid value exits 5
 with the error on stderr — the same way on every command — before the command
 body runs, so nothing is printed to stdout and no database is touched.
+
+An option two commands take is declared **once**, here. ``--schemas`` was
+declared twice — in ``migrate validate`` and in ``migrate fix-signatures`` — and
+the two help strings had already drifted apart before one of them changed its
+default (#303). The second of those commands executes ``DROP FUNCTION``.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 
@@ -46,3 +51,18 @@ def format_option(*allowed: str, default: str | None = None, help: str | None = 
         callback=_validate,
         help=help or f"Output format: {' or '.join(allowed)} (default: {chosen_default})",
     )
+
+
+#: ``--schemas`` for the signature checks. ``None`` means "each reader's own
+#: default": the schemas the parsed source declares for ``--check-signatures``
+#: and ``migrate fix-signatures``, and ``public`` for the three other checks that
+#: read this option (#303).
+CheckSignatureSchemasOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--schemas",
+        help="Comma-separated list of schemas to inspect. Defaults to the schemas "
+        "the source declares, which is what --check-live-drift derives from the "
+        "same DDL.",
+    ),
+]

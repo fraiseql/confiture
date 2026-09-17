@@ -316,6 +316,7 @@ def canonical_type(raw: str | None) -> str | None:
         return f"{parsed.name}({parsed.precision}){suffix}"
     return f"{parsed.name}({parsed.precision},{parsed.scale}){suffix}"
 
+
 def same_type(written: str | None, other: str | None) -> bool:
     """Whether two spellings name one type — the drift comparison's predicate.
 
