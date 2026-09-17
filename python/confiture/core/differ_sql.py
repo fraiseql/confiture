@@ -235,6 +235,73 @@ class DifferSQLGenerator:
             return f"{source}\n"
         return f"-- WARNING: No source provided for ADD_FUNCTION {change.table}\n"
 
+    # ------------------------------------------------------------------
+    # Objects carried as whole definitions (#288)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _statement(sql: str | None, missing: str) -> str:
+        """A definition the differ captured, terminated; a warning when it has none."""
+        if not sql:
+            return f"-- WARNING: no definition captured for {missing}\n"
+        return f"{sql.rstrip().rstrip(';')};\n"
+
+    def _up_add_view(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_VIEW {change.table}")
+
+    def _down_add_view(self, change: SchemaChange) -> str:
+        return f"DROP VIEW IF EXISTS {change.table};\n"
+
+    def _up_replace_view(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"REPLACE_VIEW {change.table}")
+
+    def _down_replace_view(self, change: SchemaChange) -> str:
+        """Back to the definition that was there — a replace is not undone by a drop."""
+        return self._statement(change.old_value, f"REPLACE_VIEW {change.table}")
+
+    def _up_drop_view(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP VIEW {change.table!r} is destructive. Re-run with --force to generate this DDL."
+            )
+        return f"DROP VIEW IF EXISTS {change.table};\n"
+
+    def _down_drop_view(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_VIEW {change.table}")
+
+    def _up_add_matview(self, change: SchemaChange) -> str:
+        return self._statement(change.new_value, f"ADD_MATVIEW {change.table}")
+
+    def _down_add_matview(self, change: SchemaChange) -> str:
+        return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n"
+
+    def _up_replace_matview(self, change: SchemaChange) -> str:
+        """PostgreSQL has no ``CREATE OR REPLACE MATERIALIZED VIEW``: drop, then create.
+
+        The rows are lost and rebuilt, which is what a matview is for; what a
+        reader has to know is that dependent objects are dropped with it, so the
+        statement says ``CASCADE`` nowhere and will fail loudly if any exist.
+        """
+        return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n" + self._statement(
+            change.new_value, f"REPLACE_MATVIEW {change.table}"
+        )
+
+    def _down_replace_matview(self, change: SchemaChange) -> str:
+        return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n" + self._statement(
+            change.old_value, f"REPLACE_MATVIEW {change.table}"
+        )
+
+    def _up_drop_matview(self, change: SchemaChange) -> str:
+        if not self._force:
+            raise UnsafeOperationError(
+                f"DROP MATERIALIZED VIEW {change.table!r} is destructive. "
+                "Re-run with --force to generate this DDL."
+            )
+        return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n"
+
+    def _down_drop_matview(self, change: SchemaChange) -> str:
+        return self._statement(change.old_value, f"DROP_MATVIEW {change.table}")
+
     def _up_add_enum_type(self, change: SchemaChange) -> str:
         details = change.details or {}
         values = details.get("values", [])

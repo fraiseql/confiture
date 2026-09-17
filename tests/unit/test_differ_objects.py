@@ -1,0 +1,95 @@
+"""The schema objects the differ must not be silent about (issue #288).
+
+``migrate validate --require-migration`` asks whether the schema tree changed in
+a way a migrate-only environment will not receive. Until #288 it read tables,
+enum types and sequences and nothing else, so a view added, dropped or redefined
+— and a function, a trigger, an extension — passed the gate with a green tick.
+
+These tests are written against ``SchemaDiffer.compare``, the public seam the
+gate reaches through, rather than against the object collection underneath it:
+what matters is that the change is *reported*, not which walker found it.
+"""
+
+from confiture.core.differ import SchemaDiffer
+
+BASE = "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT);\n"
+
+
+def changes_of(old_extra: str, new_extra: str) -> list:
+    """The changes between two schemas that share :data:`BASE`."""
+    return SchemaDiffer().compare(BASE + old_extra, BASE + new_extra).changes
+
+
+def types_of(old_extra: str, new_extra: str) -> list[str]:
+    return [c.type for c in changes_of(old_extra, new_extra)]
+
+
+class TestViewsAreSchemaObjects:
+    """A view is an object a migrate-only environment has to be given."""
+
+    def test_added_view_is_reported(self):
+        assert "ADD_VIEW" in types_of("", "CREATE VIEW v_user AS SELECT pk_user FROM tb_user;")
+
+    def test_dropped_view_is_reported(self):
+        assert "DROP_VIEW" in types_of("CREATE VIEW v_user AS SELECT pk_user FROM tb_user;", "")
+
+    def test_redefined_view_is_reported(self):
+        """``CREATE OR REPLACE VIEW`` with a changed body is a change."""
+        assert "REPLACE_VIEW" in types_of(
+            "CREATE OR REPLACE VIEW v_user AS SELECT pk_user FROM tb_user;",
+            "CREATE OR REPLACE VIEW v_user AS SELECT pk_user, name FROM tb_user;",
+        )
+
+    def test_reformatted_view_is_not_a_change(self):
+        """Whitespace, case and comments are not a redefinition."""
+        assert (
+            types_of(
+                "CREATE VIEW v_user AS SELECT pk_user FROM tb_user;",
+                "-- the users, by key\nCREATE   VIEW v_user\n  AS\n  select pk_user\n  from tb_user;",
+            )
+            == []
+        )
+
+    def test_or_replace_alone_is_not_a_change(self):
+        """A view gaining ``OR REPLACE`` defines the same view."""
+        assert (
+            types_of(
+                "CREATE VIEW v_user AS SELECT pk_user FROM tb_user;",
+                "CREATE OR REPLACE VIEW v_user AS SELECT pk_user FROM tb_user;",
+            )
+            == []
+        )
+
+    def test_added_materialized_view_is_reported(self):
+        assert "ADD_MATVIEW" in types_of(
+            "", "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user FROM tb_user;"
+        )
+
+    def test_dropped_materialized_view_is_reported(self):
+        assert "DROP_MATVIEW" in types_of(
+            "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user FROM tb_user;", ""
+        )
+
+    def test_create_table_as_is_not_a_materialized_view(self):
+        """``CREATE TABLE AS`` shares a parse node with the matview; only one counts."""
+        assert "ADD_MATVIEW" not in types_of(
+            "", "CREATE TABLE tb_copy AS SELECT pk_user FROM tb_user;"
+        )
+
+    def test_a_view_and_a_table_of_the_same_name_are_two_objects(self):
+        """The key is the kind as well as the name."""
+        types = types_of("", "CREATE VIEW tb_user_x AS SELECT pk_user FROM tb_user;")
+        assert "ADD_VIEW" in types
+        assert "ADD_TABLE" not in types
+
+
+class TestUnchangedSchemaIsStillQuiet:
+    """The gate's value depends on it staying silent when nothing changed."""
+
+    def test_identical_schema_with_views_reports_nothing(self):
+        schema = (
+            BASE
+            + "CREATE VIEW v_user AS SELECT pk_user FROM tb_user;\n"
+            + "CREATE MATERIALIZED VIEW mv_user AS SELECT pk_user FROM tb_user;\n"
+        )
+        assert SchemaDiffer().compare(schema, schema).changes == []

@@ -193,6 +193,12 @@ class ParsedSchema:
     tables: list["Table"] = field(default_factory=list)
     enum_types: list[EnumType] = field(default_factory=list)
     sequences: list[Sequence] = field(default_factory=list)
+    #: The objects compared by definition rather than by structure (#288) —
+    #: views, and in later phases everything else a schema tree defines. Keyed
+    #: by what makes two ``CREATE`` statements the same object; the value
+    #: carries the definition, so a redefinition in place is visible. Typed
+    #: loosely here because ``core.ddl_objects`` imports this module.
+    objects: dict[Any, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -279,6 +285,15 @@ _CHANGE_TEMPLATES: dict[str, str] = {
     "CHANGE_ENUM_VALUES": "CHANGE ENUM VALUES {table}",
     "ADD_SEQUENCE": "ADD SEQUENCE {table}",
     "DROP_SEQUENCE": "DROP SEQUENCE {table}",
+    # Objects the differ tracks by definition rather than by structure (#288).
+    # ``REPLACE`` is a definition that changed in place, which for a view or a
+    # routine is the whole of what a migration has to carry.
+    "ADD_VIEW": "ADD VIEW {table}",
+    "DROP_VIEW": "DROP VIEW {table}",
+    "REPLACE_VIEW": "REPLACE VIEW {table}",
+    "ADD_MATVIEW": "ADD MATERIALIZED VIEW {table}",
+    "DROP_MATVIEW": "DROP MATERIALIZED VIEW {table}",
+    "REPLACE_MATVIEW": "REPLACE MATERIALIZED VIEW {table}",
 }
 
 
