@@ -430,7 +430,8 @@ CONSTRAINT_PATTERN = r"(?:ADD|DROP)\s+(?:PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHEC
 - Regex-based (not full SQL parser)
 - Case-insensitive matching
 - Handles common DDL patterns, not exotic syntax
-- Future: Could use full SQL parser (e.g., sqlparse, pg_query)
+- Future: could read the parse tree confiture already has — `pglast` is a
+  dependency and `core/ddl_objects.py` answers "what does this statement define"
 
 ### 5.3 Conflict Severity Rules
 
@@ -956,7 +957,7 @@ class ExtendedIntentStatus(Enum):
 - ❌ Not 100% accurate for complex DDL
 - ❌ Requires manual pattern updates
 
-**Future**: Could migrate to sqlparse or pg_query for 100% accuracy
+**Future**: could migrate to the pglast parse tree confiture already depends on
 
 ---
 

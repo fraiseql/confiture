@@ -6,8 +6,8 @@ version 1). Two properties matter more than any individual mapping:
 
 * a statement is **never silently dropped** — one confiture cannot classify
   still produces an entry, with no ``tier``, so the consumer denies;
-* the two parser backends agree, so an install without the ``[ast]`` extra
-  classifies the same way.
+* every classification comes from the one parser — the second backend this
+  line once promised parity with was removed in 0.50.0 (D13).
 """
 
 from __future__ import annotations

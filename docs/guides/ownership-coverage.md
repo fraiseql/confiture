@@ -75,17 +75,12 @@ Output looks like:
 
 ### AST-only by design
 
-`own_001` is AST-only — pairwise `CREATE` ↔ `ALTER … OWNER TO` matching across realistic PostgreSQL SQL (dollar-quoted strings, CHECK-constraint literals, multi-statement `DO $$ … $$` blocks) is too brittle to ship as a regex. When pglast is not installed, the rule emits a single skip notice and returns no violations rather than ship a half-working detector:
-
-```
-own_001 requires the [ast] extra: pip install "fraiseql-confiture[ast]"
-```
-
-Install the extra to enable the rule:
-
-```bash
-pip install "fraiseql-confiture[ast]"
-```
+`own_001` is AST-only — pairwise `CREATE` ↔ `ALTER … OWNER TO` matching across realistic
+PostgreSQL SQL (dollar-quoted strings, CHECK-constraint literals, multi-statement
+`DO $$ … $$` blocks) is too brittle to ship as a regex. pglast is a **dependency** since
+0.50.0 (D13), so the rule always runs — there is no parser-absent path and no skip notice.
+The `[ast]` extra survives as an empty alias, purely so an older command line still
+resolves; it adds nothing.
 
 ### Sibling rule — `own_002` bare `ALTER OWNER`
 

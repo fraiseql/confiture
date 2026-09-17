@@ -290,7 +290,7 @@ CheckOwnershipCoverageOpt = Annotated[
         "the migration didn't create (`own_002` — three severity tiers: silent when "
         "guarded + companion `requires_superuser=True`, WARNING when only guarded, "
         "ERROR when bare).  No-op when the config has no `ownership:` block, or when "
-        "`ownership.lint_enabled` is false.  Requires the [ast] extra (pglast).",
+        "`ownership.lint_enabled` is false.",
     ),
 ]
 CheckFunctionUniquenessOpt = Annotated[
@@ -303,7 +303,7 @@ CheckFunctionUniquenessOpt = Annotated[
         "are silently shadowed by `confiture build` — this rule "
         "(`func_001`) catches the duplicate first. No-op when the "
         "config has no `function_coverage:` block, or when "
-        "`function_coverage.enabled` is false. Requires the [ast] extra (pglast).",
+        "`function_coverage.enabled` is false.",
     ),
 ]
 CheckSecurityDefinerOpt = Annotated[
@@ -312,7 +312,7 @@ CheckSecurityDefinerOpt = Annotated[
         "--check-security-definer",
         help="Flag `SECURITY DEFINER` functions/procedures that do not pin "
         "`search_path` (CVE-2018-1058). Rule `sec_002`. "
-        "Without `--against-db`: static DDL scan (no DB, requires [ast]/pglast). "
+        "Without `--against-db`: static DDL scan (no DB). "
         "With `--against-db`: live `pg_proc` query (authoritative; works even when "
         "ALTER FUNCTION patched the search_path separately from the CREATE). "
         "No-op when config has no `security_lint:` block or "

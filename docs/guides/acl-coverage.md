@@ -123,7 +123,7 @@ A table created and dropped within the same migration doesn't trigger the rule (
 
 ### Parser tiers
 
-The static extractor uses pglast (PostgreSQL's own C parser via `libpg_query`) when available and falls back to sqlparse + regex. Both code paths are exercised by parameterized unit tests against identical fixtures. Install the optional extra to get pglast: `pip install "fraiseql-confiture[ast]"`.
+The static extractor uses pglast, PostgreSQL's own C parser via `libpg_query`. There is no second code path: the sqlparse + regex fallback this guide used to describe was removed in 0.50.0 (D13), when pglast became a dependency. Nothing needs installing.
 
 ---
 

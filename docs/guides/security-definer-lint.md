@@ -2,7 +2,7 @@
 
 **Rule ID:** `sec_002`
 **Severity:** warning (configurable to error)
-**Requires:** `[ast]` extra for static scan (`pip install "fraiseql-confiture[ast]"`)
+**Parser:** pglast, a dependency — the static scan needs nothing installed
 
 ---
 
@@ -42,8 +42,8 @@ confiture migrate validate \
   --config db/environments/local.yaml
 ```
 
-Requires pglast (`pip install "fraiseql-confiture[ast]"`).  Without pglast the
-scan emits a notice and exits 0.
+Uses pglast, which is a dependency (D13) — nothing to install, and no
+parser-absent path for the scan to skip through.
 
 ### Live catalog scan
 

@@ -10,9 +10,9 @@ ownership axis.
 AST-only by design — pairwise ``CREATE`` ↔ ``ALTER … OWNER TO``
 matching across realistic PostgreSQL SQL (dollar-quoted strings,
 CHECK-constraint literals, multi-statement DO blocks) is too brittle to
-ship as a regex.  When pglast is not installed the rule emits a single
-skip notice and returns no violations rather than risk a false-negative
-green check.
+ship as a regex.  pglast is a dependency (D13), so there is no
+parser-absent path and no skip notice: a file pglast rejects is reported
+as unparseable rather than passed over as a green check.
 
 Trust boundary: ``-- confiture:run-as <role>`` is **declarative only**.
 The lint rule trusts the comment; nothing at lint time verifies the

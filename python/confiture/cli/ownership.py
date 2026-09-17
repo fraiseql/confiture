@@ -96,7 +96,6 @@ def _fix_ownership(
     No-op when:
     - ``ownership:`` block is absent from *config_path*
     - ``ownership.lint_enabled`` is False
-    - pglast (the [ast] extra) is not installed
     """
 
     if not config_path.exists():
