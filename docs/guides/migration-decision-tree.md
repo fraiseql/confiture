@@ -177,10 +177,11 @@ def up(self):
 **Choose**: Medium 4 (Schema-to-Schema)
 
 ```bash
-confiture schema-to-schema \
-    --source production \
-    --target production_new \
-    --strategy fdw
+confiture migrate schema-to-schema setup --source production --target production_new
+confiture migrate schema-to-schema analyze --source production --target production_new
+confiture migrate schema-to-schema migrate --source production --target production_new --strategy fdw
+confiture migrate schema-to-schema verify --source production --target production_new
+confiture migrate schema-to-schema cleanup --source production --target production_new
 ```
 
 **Tradeoff**:
@@ -374,13 +375,13 @@ confiture build --env local
 **Wrong**:
 ```bash
 # Overkill for adding a column
-confiture schema-to-schema --add-column bio
+confiture migrate schema-to-schema migrate --source app --target app_new
 ```
 
 **Right**:
 ```bash
 # Simple migration
-confiture migrate generate --name add_bio
+confiture migrate generate add_bio
 confiture migrate up
 ```
 
@@ -434,8 +435,8 @@ confiture sync \
 | Create index | 2 | `confiture migrate up` |
 | Get production data | 3 | `confiture sync` |
 | Change column type (small) | 2 | `confiture migrate up` |
-| Change column type (large) | 4 | `confiture schema-to-schema` |
-| Major refactoring | 4 | `confiture schema-to-schema` |
+| Change column type (large) | 4 | `confiture migrate schema-to-schema` |
+| Major refactoring | 4 | `confiture migrate schema-to-schema` |
 | CI/CD test database | 1 | `confiture build --env ci` |
 | Debug production locally | 3 | `confiture sync --anonymize` |
 

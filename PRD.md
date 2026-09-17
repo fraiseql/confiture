@@ -166,7 +166,7 @@ confiture migrate schema-to-schema --strategy fdw
 - `confiture build` - Build schema from DDL
 - `confiture migrate` - Migration commands
 - `confiture sync` - Production data sync
-- `confiture status` - Show current state
+- `confiture migrate status` - Show current state
 
 #### **1.5 Configuration**
 - YAML-based environment configs
