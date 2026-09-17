@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.9.1
-**Last Updated**: September 14, 2026
+**Version**: 1.10.0
+**Last Updated**: September 17, 2026
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -259,6 +259,43 @@ are `fnmatch` globs over a bare filename, on purpose — seed discovery is a fla
 listing where a path never appears and `**` has nothing to span. `recursive`
 bounds the walk and the patterns filter what it found; nothing rewrites a
 pattern between what the YAML says and what the matcher sees.
+
+**One object list too** (since 1.10.0, #288). `core/ddl_objects.py` decides what
+a DDL statement *defines*, for everything `migrate validate --require-migration`
+has to notice. Before it, `SchemaDiffer` modelled tables, enum types and
+sequences, so a view, a routine, a trigger, an extension or a schema added to the
+tree and not to a migration passed the gate with a green tick — **sixteen**
+statement kinds, `ALTER TABLE … ADD COLUMN` among them.
+
+Identity is **the lint inventory's answer**, not a second one:
+`inventory.object_from_statement` already decides what a statement defines, how a
+schema qualifier is read, and which overload a routine is. What `ddl_objects`
+adds is the half the inventory does not hold — the definition — in **two**
+renderings, both `RawStream`'s and neither string surgery on its output:
+`definition` neutralises `OR REPLACE` / `IF NOT EXISTS`, so a view that gains one
+is the same view; `create_sql` re-renders *with* the clause each kind supports,
+because a migration generated from the neutralised form carries a bare
+`CREATE VIEW` that fails on its second apply.
+
+`ObjectRef` is a **bucket**, as `object_key` is: a dict key cannot express "a type
+schema written on one side and left off the other still matches", so the key
+carries `signature_bucket` and `pair_definitions` matches inside it. Keying on the
+full signature reported `DROP fn(bigint)` + `ADD fn(int8)` for one routine
+respelled — an instruction to drop a function and take its dependents with it —
+and `display`, which carries the signature *as written*, re-made the same mistake
+one field along until it became `field(compare=False)`.
+
+Every `Create…Stmt` in pglast's grammar must be in exactly one of `TRACKED_NODES`,
+`MODELLED_ELSEWHERE` or `NOT_A_SCHEMA_OBJECT` — the last a table of **reasons** —
+or `tests/unit/test_ddl_objects_are_exhaustive.py` fails; so does a node claimed
+twice, and so does a declined node pglast no longer defines. That guard is the
+point of the module. The sixteen invisible kinds were not sixteen oversights but
+one: nothing said which statements the differ answered for, so a kind never
+considered looked exactly like a kind deliberately skipped.
+
+A schema pglast rejects now **fails** that gate rather than skipping it
+(`is_valid: false`, `was_skipped` in the envelope). The old exit 0 was justified
+by the sqlparse token limit, which D13 made unreachable.
 
 #### Python migrations: the static evaluator (since 0.46.0, #213)
 
@@ -1255,8 +1292,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: September 14, 2026
-**Version**: 1.9.1
+**Last Updated**: September 17, 2026
+**Version**: 1.10.0
 
 ---
 

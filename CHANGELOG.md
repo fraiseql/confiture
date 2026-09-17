@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
-## [Unreleased]
+## [1.10.0] - 2026-09-17
 
 ### Added
 
@@ -45,6 +45,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   doctested in `docs/api/anonymization.md`, so the guide points there instead of becoming a
   second source. `has_rust_extension()` was never a function; the flag is
   `confiture.core.builder.HAS_RUST`.
+
+
+- **`tests/unit/test_ddl_objects_are_exhaustive.py`** — every `Create…Stmt` in pglast's
+  grammar, plus the five creating statements PostgreSQL does not spell with that prefix,
+  must be tracked, modelled elsewhere in `SchemaDiffer`, or declined in
+  `NOT_A_SCHEMA_OBJECT` **with the reason**. A node in none fails; a node in two fails; a
+  declined node pglast no longer defines fails, so a reason cannot outlive the thing it
+  explains — the allow-list idiom of `test_one_sql_lexer.py`. The sixteen invisible kinds
+  were not sixteen oversights but one: nothing said which statements the differ answered
+  for, so a kind never considered looked exactly like a kind deliberately skipped. The
+  guard bit on its first run, on `CreateOpClassItem` — a sub-node, not a statement.
+
+- **Sixteen more object kinds compared**: triggers, policies and rules (named *per table*,
+  so `tb_user.trg_audit` and `tb_other.trg_audit` are two objects — and the DDL spells that
+  back out as `DROP TRIGGER trg ON t`), extensions, schemas, event triggers, range types,
+  statistics, foreign tables, foreign-data wrappers, servers, publications, conversions,
+  operator classes and families, access methods. Nine statements are declined with a
+  reason: a role, a database, a tablespace and a subscription are cluster-scoped, so a
+  migrate-only environment is no worse off than a rebuilt one; a cast, a transform and a
+  user mapping have no name of their own to key on.
+
+- **`REPLACE_IS_AUTHORS_WORK`** records, per kind, why a redefinition has no one statement
+  that is plainly right — a dropped policy leaves rows unprotected for the length of the
+  transaction; a dropped event trigger stops firing during the migration that replaces it,
+  which is when it matters most. Those reach the generated migration as the generator's own
+  `-- WARNING: no SQL derived`: the change is still *reported*, which is what the gate
+  needs, and only the DDL is left to the author.
+
+- **Guards that make an example's claims checkable.** `tests/e2e/test_examples_apply.py`
+  builds every example environment and applies it under `ON_ERROR_STOP=1` — the *apply*
+  is the assertion, because `confiture build` is a concatenation and does not parse — and
+  requires the SQL it builds from to be **tracked**, since a build over gitignored files
+  passes on the author's laptop and is empty in CI.
+  `tests/unit/docs/test_examples_reference_real_commands.py` resolves every
+  `confiture …` invocation in `examples/` against the live Typer app, to any depth,
+  including its flags. `tests/unit/docs/test_examples_are_executed.py` requires each
+  example directory to ship an executable `run.sh` or hold an allow-list entry saying why
+  it cannot be run, with a stale entry failing as in the one-lexer guard.
+  `tests/unit/docs/test_example_configs.py` gains two checks for the hole that let an
+  invented configuration format ship: a `confiture.yaml` the model cannot read is not an
+  error the CLI reports, it is silently no config at all.
+
+- **`MigratorSession.rebuild(seeds_dir=…)`.** `baseline.rebuild` has always read
+  `seeds_dir` — it is what the `SeedApplier` is built from — but the session never passed
+  it, so through `Migrator.from_config`, the only supported library entry point, the seed
+  directory was fixed at `db/seeds` with no way to say otherwise, and `Environment` carries
+  no seed directory either. The default is unchanged. `docs/api/migrator.md` gains a
+  `rebuild` section whose signature fence is pinned to the source, and loses a row that
+  described the method as "Drop and recreate the tracking table" — which is `reinit`'s job.
 
 ### Changed
 
@@ -318,55 +367,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`test_every_seed_file_is_applied_by_the_run_script_of_its_example`) fails when an
   example ships a seed file that no run applies.
 
-### Added
+### Removed
 
-- **`tests/unit/test_ddl_objects_are_exhaustive.py`** — every `Create…Stmt` in pglast's
-  grammar, plus the five creating statements PostgreSQL does not spell with that prefix,
-  must be tracked, modelled elsewhere in `SchemaDiffer`, or declined in
-  `NOT_A_SCHEMA_OBJECT` **with the reason**. A node in none fails; a node in two fails; a
-  declined node pglast no longer defines fails, so a reason cannot outlive the thing it
-  explains — the allow-list idiom of `test_one_sql_lexer.py`. The sixteen invisible kinds
-  were not sixteen oversights but one: nothing said which statements the differ answered
-  for, so a kind never considered looked exactly like a kind deliberately skipped. The
-  guard bit on its first run, on `CreateOpClassItem` — a sub-node, not a statement.
+- **`examples/11-consistency-validation` and `examples/workflows`.** Neither could execute
+  a line. The first imported `confiture.core.seed.validation.consistency_cli`,
+  `…consistency_validator` and `…environment_comparator`, named five validator classes,
+  and called `seed validate --consistency-check`; none of them exist, and the real
+  prep-seed validation it shadowed is `examples/06-prep-seed-validation`. The second
+  imported `confiture.workflows.orchestrator`; there is no `confiture.workflows` package.
 
-- **Sixteen more object kinds compared**: triggers, policies and rules (named *per table*,
-  so `tb_user.trg_audit` and `tb_other.trg_audit` are two objects — and the DDL spells that
-  back out as `DROP TRIGGER trg ON t`), extensions, schemas, event triggers, range types,
-  statistics, foreign tables, foreign-data wrappers, servers, publications, conversions,
-  operator classes and families, access methods. Nine statements are declined with a
-  reason: a role, a database, a tablespace and a subscription are cluster-scoped, so a
-  migrate-only environment is no worse off than a rebuilt one; a cast, a transform and a
-  user mapping have no name of their own to key on.
-
-- **`REPLACE_IS_AUTHORS_WORK`** records, per kind, why a redefinition has no one statement
-  that is plainly right — a dropped policy leaves rows unprotected for the length of the
-  transaction; a dropped event trigger stops firing during the migration that replaces it,
-  which is when it matters most. Those reach the generated migration as the generator's own
-  `-- WARNING: no SQL derived`: the change is still *reported*, which is what the gate
-  needs, and only the DDL is left to the author.
-
-- **Guards that make an example's claims checkable.** `tests/e2e/test_examples_apply.py`
-  builds every example environment and applies it under `ON_ERROR_STOP=1` — the *apply*
-  is the assertion, because `confiture build` is a concatenation and does not parse — and
-  requires the SQL it builds from to be **tracked**, since a build over gitignored files
-  passes on the author's laptop and is empty in CI.
-  `tests/unit/docs/test_examples_reference_real_commands.py` resolves every
-  `confiture …` invocation in `examples/` against the live Typer app, to any depth,
-  including its flags. `tests/unit/docs/test_examples_are_executed.py` requires each
-  example directory to ship an executable `run.sh` or hold an allow-list entry saying why
-  it cannot be run, with a stale entry failing as in the one-lexer guard.
-  `tests/unit/docs/test_example_configs.py` gains two checks for the hole that let an
-  invented configuration format ship: a `confiture.yaml` the model cannot read is not an
-  error the CLI reports, it is silently no config at all.
-
-- **`MigratorSession.rebuild(seeds_dir=…)`.** `baseline.rebuild` has always read
-  `seeds_dir` — it is what the `SeedApplier` is built from — but the session never passed
-  it, so through `Migrator.from_config`, the only supported library entry point, the seed
-  directory was fixed at `db/seeds` with no way to say otherwise, and `Environment` carries
-  no seed directory either. The default is unchanged. `docs/api/migrator.md` gains a
-  `rebuild` section whose signature fence is pinned to the source, and loses a row that
-  described the method as "Drop and recreate the tracking table" — which is `reinit`'s job.
+- **`rebuild(schema_dir=…)`**, on `Migrator` and the `baseline` implementation behind it.
+  It was declared, defaulted to `db/schema`, and never read: the DDL source is the
+  environment's `include_dirs` and there is no schema-directory input to that path at all,
+  so a caller who passed one got no effect and no error while the docstring advertised
+  "Path to schema directory (default: db/schema)". Redirect the schema source with
+  `include_dirs`. A new guard fails on any `baseline.rebuild` parameter that is never read —
+  a shape Ruff's ARG family cannot see, because `if schema_dir is None:` is itself a read.
 
 ### Internal
 
@@ -388,22 +404,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[path]` now, and a generated reference that disagreed with the command it documents is
   the exact untruth the command-truth campaign removed.
 
-### Removed
-
-- **`examples/11-consistency-validation` and `examples/workflows`.** Neither could execute
-  a line. The first imported `confiture.core.seed.validation.consistency_cli`,
-  `…consistency_validator` and `…environment_comparator`, named five validator classes,
-  and called `seed validate --consistency-check`; none of them exist, and the real
-  prep-seed validation it shadowed is `examples/06-prep-seed-validation`. The second
-  imported `confiture.workflows.orchestrator`; there is no `confiture.workflows` package.
-
-- **`rebuild(schema_dir=…)`**, on `Migrator` and the `baseline` implementation behind it.
-  It was declared, defaulted to `db/schema`, and never read: the DDL source is the
-  environment's `include_dirs` and there is no schema-directory input to that path at all,
-  so a caller who passed one got no effect and no error while the docstring advertised
-  "Path to schema directory (default: db/schema)". Redirect the schema source with
-  `include_dirs`. A new guard fails on any `baseline.rebuild` parameter that is never read —
-  a shape Ruff's ARG family cannot see, because `if schema_dir is None:` is itself a read.
 
 ## [1.9.1] - 2026-09-14
 
