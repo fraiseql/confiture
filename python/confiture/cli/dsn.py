@@ -228,6 +228,43 @@ def config_is_explicit(ctx: Any, *params: str) -> bool:
     return param_is_explicit(ctx, *(params or ("config", "env")))
 
 
+def require_readable_config(ctx: Any, config: Path | None, *params: str) -> None:
+    """A ``--config`` the operator typed must be readable (#284).
+
+    Whatever the command goes on to do with the file — and several commands
+    legitimately do nothing with it — a path named on the command line and never
+    opened is the shape of a gate that cannot fail. ``migrate status``,
+    ``migrate validate``, ``migrate fix`` and ``migrate preflight`` each printed
+    a tick and exited 0 for a config that did not parse, and for one that did not
+    exist; ``migrate preflight`` rendered its whole Pre-flight Check table.
+
+    Only an *explicit* path is checked. The ambient ``confiture.yaml`` keeps the
+    behaviour #152's precedence contract gives it: merely being present must not
+    force a command to read it, let alone connect.
+
+    Explicitness is asked of the **config parameter alone**, not of
+    :func:`config_is_explicit`'s ``("config", "env")`` default. ``--env`` is a
+    different flag with its own resolution, and a command given
+    ``--env production`` and no ``--config`` still carries its *defaulted*
+    config path — which the pair-wise question calls explicit, so the helper
+    would demand a ``confiture.yaml`` nobody named. *params* overrides the name
+    for a command that spells the parameter differently (``migrate fix`` calls
+    it ``config_path``).
+
+    Raises:
+        ConfigurationError: ``CONFIG_004`` when the file is absent, ``CONFIG_002``
+            when it does not parse — ``load_config``'s own codes, so the two
+            commands that already got this right and the four that did not now
+            say the same thing.
+    """
+    if config is None or not param_is_explicit(ctx, *(params or ("config",))):
+        return
+    # Reason: imported here — core.connection imports the CLI helpers at module scope
+    from confiture.core.connection import load_config
+
+    load_config(config)
+
+
 def has_intentional_dsn_source(ctx: Any, flag: str | None, no_config: bool) -> bool:
     """Whether an *intentional* DSN source is present (#152, for ``status``).
 

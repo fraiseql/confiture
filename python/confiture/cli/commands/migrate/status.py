@@ -18,6 +18,7 @@ from confiture.cli.dsn import (
     NO_CONFIG_OPTION_HELP,
     config_is_explicit,
     has_intentional_dsn_source,
+    require_readable_config,
     resolve_database_url,
 )
 from confiture.cli.error_json import cli_boundary, fail
@@ -135,6 +136,11 @@ def migrate_status(
       confiture migrate down     - Rollback applied migrations
       confiture migrate generate - Create new migration
     """
+    # A --config the operator typed is read before anything else reports (#284):
+    # every early return below prints a result, and "No migrations found." is
+    # the same output for a valid config, a broken one and one that is not there.
+    require_readable_config(ctx, config)
+
     if not migrations_dir.exists():
         _report_missing_migrations_dir(migrations_dir, output_format, output_file)
         return
