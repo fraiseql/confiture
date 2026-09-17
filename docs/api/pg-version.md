@@ -56,4 +56,4 @@ check.
 ## See Also
 
 - [Migrator](migrator.md) — applies migrations against a live server
-- [Linting](linting.md) — static schema validation
+- [Schema linting](../guides/schema-linting.md) — static schema validation
