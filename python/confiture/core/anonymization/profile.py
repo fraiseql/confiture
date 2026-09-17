@@ -19,12 +19,13 @@ Example:
     ['email_mask', 'phone_mask']
 """
 
+from difflib import get_close_matches
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class StrategyType(str, Enum):
@@ -177,6 +178,38 @@ class AnonymizationProfile(BaseModel):
 
     tables: dict[str, TableDefinition]
     """Dictionary of table rules by table name."""
+
+    @model_validator(mode="after")
+    def validate_rules_name_defined_strategies(self) -> "AnonymizationProfile":
+        """Every rule must name a strategy this profile defines (#285).
+
+        ``StrategyDefinition.type`` has been whitelisted since the model was
+        written, but a *rule* refers to a strategy by the key it was given in
+        ``strategies:``, and nothing checked that the key existed. So a profile
+        whose only rule said ``strategy: emial_mask`` beside a definition called
+        ``email_mask`` passed `confiture validate-profile`, which printed
+        ``✅ Valid profile!`` and exited 0 — a validation command calling a
+        dangling reference valid.
+
+        The message names the profile's own strategies rather than a fixed
+        vocabulary, because the names here are the author's, not PostgreSQL's.
+
+        Raises:
+            ValueError: A rule names a strategy the profile does not define.
+        """
+        defined = sorted(self.strategies)
+        for table, definition in self.tables.items():
+            for rule in definition.rules:
+                if rule.strategy in self.strategies:
+                    continue
+                near = get_close_matches(rule.strategy, defined, n=1, cutoff=0.6)
+                suggestion = f" Did you mean {near[0]!r}?" if near else ""
+                raise ValueError(
+                    f"Table '{table}' column '{rule.column}' uses strategy "
+                    f"'{rule.strategy}', which this profile does not define. "
+                    f"Defined strategies: {', '.join(defined) or '(none)'}.{suggestion}"
+                )
+        return self
 
     @classmethod
     def load(cls, path: Path | str) -> "AnonymizationProfile":
