@@ -16,6 +16,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`migrate validate --require-migration` passed green on almost everything a schema
+  tree defines.** `SchemaDiffer.parse_schema` populated tables, enum types and sequences,
+  so a view, a function, a trigger, an extension or a schema added to `db/schema/` and not
+  to a migration reported `has_ddl_changes: False` with `migration_error: None` — not a
+  skipped check but a check that looked and saw nothing — and the CLI printed
+  `✅ No DDL changes detected`, exit 0. For a project whose staging and production are
+  migrate-only, that is the gate's whole purpose failing silently. The report named views
+  and `CREATE OR REPLACE FUNCTION`; a sweep of every object kind against
+  `SchemaDiffer.compare` found **sixteen** statement kinds producing zero changes,
+  including **`ALTER TABLE … ADD COLUMN`**, which went into the sweep as a *control* —
+  `_collect_alter_table_constraints` read only `Constraint` nodes out of `stmt.cmds`, so a
+  `ColumnDef` was dropped on the floor and a tree written with `ALTER` statements rather
+  than edited `CREATE TABLE`s had no column gate at all.
+
+  `core/ddl_objects.py` now compares every object a tree defines by `(kind, identity) →
+  definition`. Identity is the lint inventory's answer, not a second one:
+  `inventory.object_from_statement` already decides what a statement defines, how a schema
+  qualifier is read and which overload a routine is, over canonical argument types (#275).
+  What the module adds is the **definition** — `RawStream`'s canonical rendering, so a view
+  reformatted, recommented or given `OR REPLACE` is the same view, and one whose body
+  changed is a `REPLACE`. A second rendering with each kind's existence clause (`OR REPLACE`
+  for a view, `IF NOT EXISTS` for a materialized view, which PostgreSQL gives no replace at
+  all) is what a generated migration carries, so `migrate diff --generate` writes the real
+  DDL rather than `-- WARNING: no SQL derived` for an object whose whole definition the
+  differ is holding.
+
+  Adding or dropping a **routine** always reports. Redefining one in place stays behind
+  `--require-migration-bodies` (#178), measured rather than assumed: that flag already
+  reports exactly those edits and is off by default, and an added overload was already
+  caught by `FunctionSignatureChecker`. Reporting them unconditionally would have turned a
+  deliberate opt-in into an always-on check. A redefined **view** is unconditional, because
+  nothing else in that gate reports one.
+
+- **A schema `migrate validate --require-migration` could not parse exited 0 with a yellow
+  warning.** A skipped gate and a passed gate differed by a line of console output and
+  nothing else. The reason recorded in the code was the sqlparse token limit, which has not
+  been reachable since pglast became the only parser (D13, 0.50.0); what reaches that branch
+  today is a schema **PostgreSQL itself rejects**, which `confiture build` would refuse too,
+  and which confiture already calls a finding everywhere else it appears (`IDEM_UNPARSEABLE`,
+  `PFLIGHT_UNPARSEABLE` forcing `window_safe: false`, lint's `UNPARSEABLE`, `DIFFER_400`).
+  A check that could not run is now `is_valid: false`, exit 1. The report and the JSON
+  envelope gain `was_skipped`, because "the schema does not parse" and "you forgot a
+  migration" are both exit 1 and are not the same problem.
+
 - **Prep-seed level 5 counted catalogue entries and reported them as data violations.**
   Four of its five detectors never read a row. Each selected from `information_schema`
   and took `COUNT(*)` of *that*, unfiltered by schema — which is **2** for every column
@@ -85,7 +129,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tests/unit/docs/command_truth.py`). It shipped with an allow-list of all 127 sites
   grouped by cause; four phases emptied it and it is gone.
 
-
 - **`confiture sync` no longer empties tables it has already copied.** Each target table
   was truncated with `CASCADE` immediately before being copied, and `CASCADE` empties
   every table that references the one named. Tables are copied in the order
@@ -151,6 +194,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   example ships a seed file that no run applies.
 
 ### Added
+
+- **`tests/unit/test_ddl_objects_are_exhaustive.py`** — every `Create…Stmt` in pglast's
+  grammar, plus the five creating statements PostgreSQL does not spell with that prefix,
+  must be tracked, modelled elsewhere in `SchemaDiffer`, or declined in
+  `NOT_A_SCHEMA_OBJECT` **with the reason**. A node in none fails; a node in two fails; a
+  declined node pglast no longer defines fails, so a reason cannot outlive the thing it
+  explains — the allow-list idiom of `test_one_sql_lexer.py`. The sixteen invisible kinds
+  were not sixteen oversights but one: nothing said which statements the differ answered
+  for, so a kind never considered looked exactly like a kind deliberately skipped. The
+  guard bit on its first run, on `CreateOpClassItem` — a sub-node, not a statement.
+
+- **Sixteen more object kinds compared**: triggers, policies and rules (named *per table*,
+  so `tb_user.trg_audit` and `tb_other.trg_audit` are two objects — and the DDL spells that
+  back out as `DROP TRIGGER trg ON t`), extensions, schemas, event triggers, range types,
+  statistics, foreign tables, foreign-data wrappers, servers, publications, conversions,
+  operator classes and families, access methods. Nine statements are declined with a
+  reason: a role, a database, a tablespace and a subscription are cluster-scoped, so a
+  migrate-only environment is no worse off than a rebuilt one; a cast, a transform and a
+  user mapping have no name of their own to key on.
+
+- **`REPLACE_IS_AUTHORS_WORK`** records, per kind, why a redefinition has no one statement
+  that is plainly right — a dropped policy leaves rows unprotected for the length of the
+  transaction; a dropped event trigger stops firing during the migration that replaces it,
+  which is when it matters most. Those reach the generated migration as the generator's own
+  `-- WARNING: no SQL derived`: the change is still *reported*, which is what the gate
+  needs, and only the DDL is left to the author.
 
 - **Guards that make an example's claims checkable.** `tests/e2e/test_examples_apply.py`
   builds every example environment and applies it under `ON_ERROR_STOP=1` — the *apply*
