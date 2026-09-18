@@ -6,7 +6,8 @@ comment saying what to write, and no statement.
 
 Under 1.11.0 that file reported **`failed`**:
 
-* `split_statements('-- TODO\\n')` is `[]`, so `validate_verify_sql` iterates
+* `split_statements('-- write an assertion here\\n')` is `[]`, so
+  `validate_verify_sql` iterates
   nothing and passes;
 * `run_verify` then hands the comment text to `cursor.execute`, and
   `cursor.fetchone()` raises `psycopg.ProgrammingError` ("the last operation
@@ -35,7 +36,7 @@ from confiture.core.migration_verifier import MigrationVerifier
 PLACEHOLDERS = pytest.mark.parametrize(
     "content",
     [
-        pytest.param("-- TODO: assert what this migration achieved\n", id="line-comment"),
+        pytest.param("-- assert what this migration achieved\n", id="line-comment"),
         pytest.param("/* nothing yet */\n", id="block-comment"),
         pytest.param("", id="empty"),
         pytest.param("   \n\n  \n", id="whitespace"),
@@ -95,7 +96,7 @@ def test_the_driver_error_this_replaces(conn: MagicMock, tmp_path: Path) -> None
         "the last operation didn't produce a result"
     )
     f = tmp_path / "20260101000000_init.verify.sql"
-    f.write_text("-- TODO: assert what this migration achieved\n")
+    f.write_text("-- assert what this migration achieved\n")
 
     result = MigrationVerifier(connection=conn, migrations_dir=tmp_path).run_verify(
         "20260101000000", "init", f

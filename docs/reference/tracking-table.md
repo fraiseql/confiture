@@ -234,4 +234,4 @@ In most cases the right answer is neither: revert the file change. Applied migra
 - [Legacy bootstrap guide](../guides/legacy-bootstrap.md) — adopting Confiture on a database that already has migrations applied.
 - [Incremental migrations guide](../guides/02-incremental-migrations.md) — the day-to-day `migrate up` / `migrate down` workflow.
 - [`migrate status` reference](cli.md) — semantic exit codes for CI.
-- [`verify-checksums` reference](cli.md#confiture-verify-checksums--file-integrity) — the read-only ledger-vs-files check, and `--fix`.
+- [`verify-checksums` reference](cli.md#confiture-verify-checksums-file-integrity) — the read-only ledger-vs-files check, and `--fix`.

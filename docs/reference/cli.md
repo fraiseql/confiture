@@ -1903,7 +1903,7 @@ confiture migrate preflight [OPTIONS]
 Runs each applied migration's `.verify.sql` sidecar (a `SELECT` returning a
 truthy value) inside a read-only `SAVEPOINT`. This checks *runtime state*; for
 *file integrity* — have applied migration files been modified since? — use
-[`confiture verify-checksums`](#confiture-verify-checksums).
+[`confiture verify-checksums`](#confiture-verify-checksums-file-integrity).
 
 #### Exit codes
 
@@ -2037,7 +2037,7 @@ confiture verify-checksums [OPTIONS]
 
 ### `confiture migrate verify-checksums` — the same command, under `migrate`
 
-An alias for [`confiture verify-checksums`](#confiture-verify-checksums), added
+An alias for [`confiture verify-checksums`](#confiture-verify-checksums-file-integrity), added
 in 1.12.0 (#311). Same callable, same options, same exit codes — registered
 twice rather than wrapped, so the two cannot drift.
 

@@ -121,10 +121,11 @@ class TestItDoesNotClobber:
 
 
 class TestTheGeneratedSidecarVerifiesCleanly:
-    """The trap this cycle depends on Phase 04 Cycle 1 having closed.
+    """A generated sidecar must not itself be a verification failure.
 
-    Under 1.11.0 a comment-only sidecar reported `failed`, so emitting one from
-    `generate` would have turned every newly created migration red.
+    Under 1.11.0 a comment-only sidecar reported `failed` — the driver produces
+    no result for comment text, so `fetchone()` raised — which means emitting
+    placeholders would have turned every newly created migration red.
     """
 
     def test_migrate_verify_reports_it_skipped(self, tmp_path: Path) -> None:
