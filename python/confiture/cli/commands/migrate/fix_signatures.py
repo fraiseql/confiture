@@ -20,12 +20,15 @@ from confiture.cli.helpers import (
     error_console,
     open_connection,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import CheckSignatureSchemasOpt, format_option
 from confiture.config.environment import SshTunnelConfig
 from confiture.core import builder as _core_builder
 from confiture.core.connection import load_config
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
-from confiture.core.function_signature_drift import FunctionSignatureDriftDetector
+from confiture.core.function_signature_drift import (
+    FunctionSignatureDriftDetector,
+    schemas_to_scan,
+)
 from confiture.core.function_signature_parser import FunctionSignatureParser
 from confiture.core.live_function_catalog import LiveFunctionCatalog
 from confiture.core.sql_lexer import split_statements
@@ -72,10 +75,6 @@ SchemaFileOpt = Annotated[
         "If omitted, schema is auto-built from DDL files.",
     ),
 ]
-CheckSignatureSchemasOpt = Annotated[
-    str,
-    typer.Option("--schemas", help="Comma-separated list of schemas to inspect (default: public)."),
-]
 SshViaOpt = Annotated[
     str | None,
     typer.Option(
@@ -110,7 +109,7 @@ def migrate_fix_signatures(
     config: ConfigOpt = Path("confiture.yaml"),
     env: EnvOpt = None,
     schema_file: SchemaFileOpt = None,
-    check_signature_schemas: CheckSignatureSchemasOpt = "public",
+    check_signature_schemas: CheckSignatureSchemasOpt = None,
     ssh_via: SshViaOpt = None,
     apply: ApplyOpt = False,
     format_output: str = format_option("text", "json"),
@@ -143,10 +142,13 @@ def migrate_fix_signatures(
             error_console.print(f"[red]❌ Config file not found: {config}[/red]")
             raise typer.Exit(2)
         config_data = load_config(config)
-        schemas = [s.strip() for s in check_signature_schemas.split(",") if s.strip()]
         source_sql = _resolve_source_sql(schema_file, config_data, format_output)
 
         source_sigs = FunctionSignatureParser().parse(source_sql)
+        # The same scope the reporter uses. This command executes `DROP FUNCTION`,
+        # so the two disagreeing about which schemas are in play would be worse
+        # than both being wrong the same way (#303).
+        schemas = schemas_to_scan(check_signature_schemas, source_sigs)
         effective_config = _ssh_override(config_data, ssh_via, format_output)
 
         body_report_after: Any = None

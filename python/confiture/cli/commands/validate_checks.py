@@ -65,6 +65,7 @@ from confiture.core.validation.signature_drift import check_signature_drift
 # evaluated, so an illegal combination could pass silently.
 _FLAG_DEPENDENCIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("--check-body", ("--check-signatures",)),
+    ("--missing-is-drift", ("--check-signatures",)),
     ("--show-diff", ("--check-body", "--check-body-views", "--check-body-replay")),
     ("--fail-on-unanalyzable", ("--idempotent",)),
 )
@@ -89,7 +90,10 @@ class ValidateOptions:
     git_env: str
     schema_file: Path | None
     scratch_url: str | None
-    schemas: str
+    #: ``--schemas`` as given, or ``None`` for "each check's own default":
+    #: the schemas the source declares for ``--check-signatures``,
+    #: :data:`DEFAULT_SIGNATURE_SCHEMAS` for the three other readers (#303).
+    schemas: str | None
     ssh_via: str | None
     ddl_dir: list[Path] = field(default_factory=list)
     # Enabling flags, in dispatch order
@@ -114,6 +118,7 @@ class ValidateOptions:
     allow_grant_only: bool = False
     staged: bool = False
     check_body: bool = False
+    missing_is_drift: bool = False
     show_diff: bool = False
     strict_cor: bool = False
     fail_on_unanalyzable: bool = False
@@ -153,6 +158,7 @@ def validate_flag_dependencies(opts: ValidateOptions) -> None:
     """
     on = {
         "--check-body": opts.check_body,
+        "--missing-is-drift": opts.missing_is_drift,
         "--check-signatures": opts.check_signatures,
         "--check-body-views": opts.check_body_views,
         "--check-body-replay": opts.check_body_replay,
@@ -372,7 +378,7 @@ def _run_security_definer(opts: ValidateOptions, ctx: ValidationContext) -> Chec
     if opts.secdef_against_db:
         report = check_security_definer_live(
             config_path=opts.config,
-            schemas=opts.schemas,
+            schemas=opts.schemas or DEFAULT_SIGNATURE_SCHEMAS,
             ssh_via=opts.ssh_via,
             ctx=ctx,
         )
@@ -397,6 +403,13 @@ def _run_imports(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome
 
 
 # ---------------------------------------------------------------------------
+#: What the checks that read ``--schemas`` scan when it is not given. Only
+#: ``--check-signatures`` derives its own answer from the source it parsed; the
+#: other three readers of this option keep the historical ``public``, and
+#: ``--check-body-replay`` has no parsed source to derive from at all (#303).
+DEFAULT_SIGNATURE_SCHEMAS = "public"
+
+
 # Database-backed checks
 # ---------------------------------------------------------------------------
 
@@ -419,6 +432,7 @@ def _run_signatures(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
         check_body=opts.check_body,
         ssh_via=opts.ssh_via,
         ctx=ctx,
+        missing_is_drift=opts.missing_is_drift,
     )
     if not opts.json_mode:
         if result.auto_built:
@@ -441,7 +455,7 @@ def _run_body_views(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
     result = _core_validation_view_drift.check_view_drift(
         config_path=opts.config,
         schema_file=opts.schema_file,
-        schemas=opts.schemas,
+        schemas=opts.schemas or DEFAULT_SIGNATURE_SCHEMAS,
         ssh_via=opts.ssh_via,
         scratch_url=opts.scratch_url,
         ctx=ctx,
@@ -462,7 +476,7 @@ def _run_body_replay(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutc
     result = _core_validation_replay_drift.check_replay_drift(
         config_path=opts.config,
         migrations_dir=opts.migrations_dir,
-        schemas=opts.schemas,
+        schemas=opts.schemas or DEFAULT_SIGNATURE_SCHEMAS,
         ssh_via=opts.ssh_via,
         scratch_url=opts.scratch_url,
         ctx=ctx,

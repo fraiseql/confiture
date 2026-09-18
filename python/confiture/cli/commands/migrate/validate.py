@@ -19,7 +19,7 @@ from confiture.cli.commands.validate_checks import (
 from confiture.cli.dsn import param_is_explicit, require_readable_config
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _output_json, _resolve_config, console, is_json
-from confiture.cli.options import format_option
+from confiture.cli.options import CheckSignatureSchemasOpt, format_option
 from confiture.core.idempotency.patterns import list_patterns
 from confiture.core.validation.context import ValidationContext
 from confiture.core.validation.registry import (
@@ -223,6 +223,16 @@ CheckBodyOpt = Annotated[
         "signature-only comparison.",
     ),
 ]
+MissingIsDriftOpt = Annotated[
+    bool,
+    typer.Option(
+        "--missing-is-drift",
+        help="Treat a routine the source declares and the database has not got as "
+        "critical drift (exit 1). Requires --check-signatures. Off by default: "
+        "before a deploy an undeployed routine is what is about to be applied, and "
+        "only the caller knows which question it is asking.",
+    ),
+]
 ShowDiffOpt = Annotated[
     bool,
     typer.Option(
@@ -351,14 +361,6 @@ DdlDirOpt = Annotated[
         "Defaults to `db/schema` if not provided.",
     ),
 ]
-CheckSignatureSchemasOpt = Annotated[
-    str,
-    typer.Option(
-        "--schemas",
-        help="Comma-separated list of schemas to inspect for stale overloads "
-        "(default: public). Used with --check-signatures.",
-    ),
-]
 ConfigOpt = Annotated[
     Path,
     typer.Option(
@@ -421,6 +423,7 @@ def migrate_validate(
     check_signatures: CheckSignaturesOpt = False,
     check_imports: CheckImportsOpt = False,
     check_body: CheckBodyOpt = False,
+    missing_is_drift: MissingIsDriftOpt = False,
     show_diff: ShowDiffOpt = False,
     check_body_views: CheckBodyViewsOpt = False,
     check_body_replay: CheckBodyReplayOpt = False,
@@ -432,7 +435,7 @@ def migrate_validate(
     secdef_against_db: SecdefAgainstDbOpt = False,
     emit_remediation: EmitRemediationOpt = None,
     ddl_dir: DdlDirOpt = None,
-    check_signature_schemas: CheckSignatureSchemasOpt = "public",
+    check_signature_schemas: CheckSignatureSchemasOpt = None,
     config: ConfigOpt = Path("confiture.yaml"),
     env: EnvOpt = None,
     ssh_via: SshViaOpt = None,
@@ -563,6 +566,7 @@ def migrate_validate(
         allow_grant_only=allow_grant_only,
         staged=staged,
         check_body=check_body,
+        missing_is_drift=missing_is_drift,
         show_diff=show_diff,
         strict_cor=strict_cor,
         fail_on_unanalyzable=fail_on_unanalyzable,

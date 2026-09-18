@@ -89,7 +89,15 @@ class FunctionSignatureDriftReport:
 
     Attributes:
         stale_overloads: Overloads present in DB but not in source (for known functions)
-        missing_from_db: Source signatures not yet deployed to DB (informational)
+        missing_from_db: Source signatures the live database has not got. Which of
+            the two readings applies is the caller's to decide, and both are
+            legitimate: **before** a deploy it says what is about to be applied;
+            **after** one it is the failure a deploy gate is looking for. It was
+            labelled "informational" when it could not be trusted either way — a
+            trigger function was permanently in it, and so was every routine
+            outside ``public`` (#303). ``--missing-is-drift`` is how a caller says
+            which reading it means; :attr:`has_undeployed` is the answer either
+            way.
         schemas_checked: List of schemas that were compared
         functions_checked: Total number of distinct functions checked
         has_drift: True when stale_overloads is non-empty
@@ -102,11 +110,31 @@ class FunctionSignatureDriftReport:
     functions_checked: int
     has_drift: bool
     detection_time_ms: float
+    #: Whether an undeployed routine counts as a failure for this run. A field
+    #: rather than a branch in the CLI: a verdict computed in a formatter is a
+    #: verdict a library consumer cannot get.
+    missing_is_drift: bool = False
+
+    @property
+    def has_undeployed(self) -> bool:
+        """Whether the source declares a routine the live database has not got.
+
+        Always computed and always in :meth:`to_dict`, whatever flag the caller
+        passed, so a consumer never has to reconstruct a verdict from an array
+        (README D3). ``missing_is_drift`` decides whether it *fails* a run.
+        """
+        return len(self.missing_from_db) > 0
 
     @property
     def has_critical_drift(self) -> bool:
-        """Alias for has_drift — used by CLI for consistent exit-code pattern."""
-        return self.has_drift
+        """The verdict a gate reads: a stale overload, or — when the caller asked
+        for it with ``--missing-is-drift`` — a routine that is not deployed.
+
+        Computed here rather than in a CLI formatter so that
+        ``FunctionSignatureDriftDetector.compare`` gives a library consumer the
+        same answer the command gives.
+        """
+        return self.has_drift or (self.missing_is_drift and self.has_undeployed)
 
     def summary(self) -> str:
         if not self.has_drift:
@@ -125,10 +153,32 @@ class FunctionSignatureDriftReport:
             "remediation_sql": [o.drop_sql for o in self.stale_overloads],
             "stale_overloads": [o.to_dict() for o in self.stale_overloads],
             "missing_from_db": self.missing_from_db,
+            "has_undeployed": self.has_undeployed,
+            "missing_is_drift": self.missing_is_drift,
             "schemas_checked": self.schemas_checked,
             "functions_checked": self.functions_checked,
             "detection_time_ms": self.detection_time_ms,
         }
+
+
+def schemas_to_scan(requested: str | None, source_sigs: list[FunctionSignature]) -> list[str]:
+    """Which schemas a signature comparison covers.
+
+    ``requested`` is a comma-separated ``--schemas`` value, or ``None`` when the
+    caller did not name any. In that case the answer is **the schemas the source
+    declares** — the same answer ``--check-live-drift`` derives from the DDL.
+    The two halves of one gate disagreed before: this one defaulted to ``public``
+    while the other read the tree, so every routine outside ``public`` was
+    reported as not deployed on a database that had it (#303).
+
+    A source that declares no routine at all has no schema to name, and
+    ``public`` is the historical answer; there is nothing to compare either way.
+    """
+    named = [part.strip() for part in (requested or "").split(",") if part.strip()]
+    if named:
+        return named
+    declared = sorted({sig.schema for sig in source_sigs if sig.schema})
+    return declared or ["public"]
 
 
 class FunctionSignatureDriftDetector:
@@ -144,6 +194,8 @@ class FunctionSignatureDriftDetector:
         source_sigs: list[FunctionSignature],
         live_sigs: list[FunctionSignature],
         schemas_checked: list[str] | None = None,
+        *,
+        missing_is_drift: bool = False,
     ) -> FunctionSignatureDriftReport:
         """Detect stale overloads and missing functions.
 
@@ -158,6 +210,8 @@ class FunctionSignatureDriftDetector:
             source_sigs: Signatures parsed from DDL source files
             live_sigs: Signatures introspected from the live database
             schemas_checked: Which schemas were included (for reporting)
+            missing_is_drift: Whether a routine the source declares and the
+                database has not got makes ``has_critical_drift`` true
 
         Returns:
             FunctionSignatureDriftReport
@@ -211,4 +265,5 @@ class FunctionSignatureDriftDetector:
             functions_checked=functions_checked,
             has_drift=len(stale_overloads) > 0,
             detection_time_ms=detection_time_ms,
+            missing_is_drift=missing_is_drift,
         )

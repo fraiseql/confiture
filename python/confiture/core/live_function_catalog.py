@@ -51,11 +51,18 @@ class LiveFunctionCatalog:
         Subsequent calls return the cached list regardless of *schemas*.
         The cache lifetime is the ``LiveFunctionCatalog`` instance, which is
         typically created once per ``migrate validate`` invocation.
+
+        ``include_triggers=True`` is not an option here. ``FunctionIntrospector``
+        filters ``pg_get_function_result(p.oid) IS DISTINCT FROM 'trigger'`` by
+        default, and the *source* parser has no such filter — so every
+        ``RETURNS TRIGGER`` function in a schema tree was permanently in
+        ``missing_from_db`` on a database that has it (#303). A comparison whose
+        two sides do not contain the same kinds of thing is not a comparison.
         """
         if self._fn_infos is None:
             infos: list[FunctionInfo] = []
             for schema in schemas:
-                catalog = self._introspector.introspect(schema=schema)
+                catalog = self._introspector.introspect(schema=schema, include_triggers=True)
                 infos.extend(catalog.functions)
             self._fn_infos = infos
         return self._fn_infos

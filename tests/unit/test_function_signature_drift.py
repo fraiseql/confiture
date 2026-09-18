@@ -169,3 +169,41 @@ class TestStaleOverload:
         assert d["name"] == "f"
         assert d["stale_signature"] == "public.f(integer)"
         assert d["drop_sql"] == "DROP FUNCTION public.f(integer);"
+
+
+class TestTriggerFunctionsOnTheLiveSide:
+    """What widening the live side to trigger functions can and cannot suggest.
+
+    `LiveFunctionCatalog` now asks for them (#303), because the source parser has
+    no such filter and a comparison whose sides hold different kinds of thing is
+    not a comparison. `stale_overloads` drives `remediation_sql`, which is
+    **destructive**, so what the widening makes newly reportable is pinned here
+    rather than discovered in a deploy.
+    """
+
+    def test_a_trigger_function_the_source_declares_is_not_stale(self):
+        source = [FunctionSignature(schema="core", name="fn_touch", param_types=())]
+        live = [FunctionSignature(schema="core", name="fn_touch", param_types=())]
+        report = FunctionSignatureDriftDetector().compare(source, live)
+        assert report.stale_overloads == []
+        assert report.missing_from_db == []
+
+    def test_a_trigger_function_no_source_function_of_that_name_matches_is_left_alone(self):
+        """The existing rule, and the one that keeps this safe: an overload is only
+        stale when source defines *some* signature for that name."""
+        live = [FunctionSignature(schema="core", name="fn_only_live", param_types=())]
+        report = FunctionSignatureDriftDetector().compare([], live)
+        assert report.stale_overloads == []
+
+    def test_a_live_trigger_overload_of_a_declared_name_is_newly_stale(self):
+        """A behaviour change, stated: the source declares `fn_touch(integer)` and
+        the database also has a zero-argument `fn_touch()` returning trigger. That
+        really is an overload source does not declare, and it was invisible before
+        the live side included trigger functions."""
+        source = [FunctionSignature(schema="core", name="fn_touch", param_types=("integer",))]
+        live = [
+            FunctionSignature(schema="core", name="fn_touch", param_types=("integer",)),
+            FunctionSignature(schema="core", name="fn_touch", param_types=()),
+        ]
+        report = FunctionSignatureDriftDetector().compare(source, live)
+        assert [o.stale_signature for o in report.stale_overloads] == ["core.fn_touch()"]

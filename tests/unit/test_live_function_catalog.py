@@ -103,11 +103,17 @@ class TestLiveFunctionCatalog:
 
         with patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector:
             mock_introspector = MockIntrospector.return_value
-            mock_introspector.introspect.side_effect = lambda schema: catalogs[schema]
+            mock_introspector.introspect.side_effect = lambda schema, **_kwargs: catalogs[schema]
             catalog = LiveFunctionCatalog(mock_conn)
             catalog._introspector = mock_introspector
             sigs = catalog.get_signatures(schemas=["public", "auth"])
 
         assert mock_introspector.introspect.call_count == 2
+        # The live side must contain the same kinds of routine the source parser
+        # produces, trigger functions included (#303).
+        assert all(
+            call.kwargs.get("include_triggers") is True
+            for call in mock_introspector.introspect.call_args_list
+        )
         names = {s.name for s in sigs}
         assert names == {"f", "g"}
