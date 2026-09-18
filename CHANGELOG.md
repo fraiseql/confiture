@@ -63,6 +63,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   source parser has no such filter; and `--check-signatures` defaulted to
   `--schemas public` while `--check-live-drift` read the schemas out of the DDL. A flag
   that fails a deploy on that channel was unshippable until both were fixed. (#303)
+- **A low-privilege deploy role was told a table it cannot read is missing.**
+  `information_schema` shows only the objects the current role has privileges on, so a
+  role with `USAGE` on a schema and `SELECT` on some of its tables got a CRITICAL
+  `missing_table` for every table it could not see — a false critical in the direction
+  that fails a correct deploy. The live read is `pg_class` / `pg_attribute` now, which
+  shows the role what is there. The other half of the same change: a table the role can
+  now see and the DDL does not declare is an `extra_table` warning it did not get before.
+  (#302)
 - **`confiture lint` could report a column at the wrong line.** `attribute_files`
   copied column line numbers by position, which is exact only while the sole fold is
   `ADD COLUMN`; with a `DROP COLUMN` in a *second* file, every column after the dropped
