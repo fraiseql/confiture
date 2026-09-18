@@ -18,6 +18,7 @@ import psycopg
 from confiture.core.desired_state import load_desired_state
 from confiture.core.locking import LOCK_HOLDER_TABLE
 from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
+from confiture.core.type_lattice import same_type
 from confiture.exceptions import ConfigurationError, SchemaError
 
 if TYPE_CHECKING:
@@ -421,16 +422,13 @@ class SchemaDriftDetector:
             exp = expected_cols[col]
             act = actual_cols[col]
 
-            # Type mismatch
-            exp_type = exp.get("type", "").lower()
-            act_type = act.get("type", "").lower()
-            # Check for compatible types (e.g., integer vs int4)
-            if (
-                exp_type
-                and act_type
-                and exp_type != act_type
-                and not self._types_compatible(exp_type, act_type)
-            ):
+            # Type mismatch. One canonicaliser answers for both sides: the DDL's
+            # own spelling and `format_type`'s are two vocabularies for one type,
+            # and eight columns of a schema applied verbatim from its own DDL
+            # reported a mismatch before they met in the middle (#302).
+            exp_type = exp.get("type", "")
+            act_type = act.get("type", "")
+            if exp_type and act_type and not same_type(exp_type, act_type):
                 report.drift_items.append(
                     DriftItem(
                         drift_type=DriftType.TYPE_MISMATCH,
@@ -498,28 +496,6 @@ class SchemaDriftDetector:
                 details={"expected_order": expected_order, "actual_order": actual_order},
             )
         )
-
-    def _types_compatible(self, type1: str, type2: str) -> bool:
-        """Check if two PostgreSQL types are compatible/equivalent."""
-        # Normalize type names
-        type_aliases = {
-            "integer": "int4",
-            "int": "int4",
-            "bigint": "int8",
-            "smallint": "int2",
-            "boolean": "bool",
-            "character varying": "varchar",
-            "character": "char",
-            "double precision": "float8",
-            "real": "float4",
-            "timestamp without time zone": "timestamp",
-            "timestamp with time zone": "timestamptz",
-        }
-
-        t1 = type_aliases.get(type1.lower(), type1.lower())
-        t2 = type_aliases.get(type2.lower(), type2.lower())
-
-        return t1 == t2
 
     def _compare_indexes(
         self,

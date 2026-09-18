@@ -313,8 +313,34 @@ def _statement_offset(sql: str, raw: Any) -> int:
 
 
 def _sql_type(type_node: Any) -> str | None:
-    """The column type spelled as SQL (``bigint``, ``varchar(255)``), not pglast's ``int8``."""
-    return RawStream()(type_node) if type_node is not None else None
+    """The type PostgreSQL will store for this column, spelled as SQL.
+
+    ``RawStream`` gives the author's own spelling (``bigint``, ``varchar(255)``),
+    not pglast's ``int8`` — which is what a finding should print. Two things it
+    also gives are normalised away, both because PostgreSQL itself normalises
+    them at DDL time and the live side therefore never reports them:
+
+    * the ``pg_catalog.`` qualifier the parser attaches to ``json`` and ``bit``.
+      It is the parser's, never the author's: no user schema can be called
+      ``pg_catalog``, since the ``pg_`` prefix is reserved (#275).
+    * array **dimensionality**. PostgreSQL records that a column is an array and
+      never how many ``[]`` the DDL wrote, so ``INTEGER[][]`` *is* ``_int4`` and
+      ``format_type`` returns ``integer[]``.
+
+    The dimension collapse belongs here rather than in
+    :func:`~confiture.core.type_lattice.canonical_type`: ``SqlType.dimensions``
+    is part of a type's identity there, because ``text`` and ``text[]`` are two
+    types, and a lattice that dropped the suffix answered IDENTICAL for a change
+    that rewrites every page. Here the question is different — what will the
+    database hold — and the answer is one array.
+
+    A *user* schema qualifier stays: ``app.custom_t`` and ``other.custom_t`` are
+    two types (D9).
+    """
+    if type_node is None:
+        return None
+    written = RawStream()(type_node).removeprefix(f"{_CATALOG_SCHEMA}.")
+    return written[: -2 * (written.count("[]") - 1)] if written.count("[]") > 1 else written
 
 
 def _default_text(node: Any) -> str | None:

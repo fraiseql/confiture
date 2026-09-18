@@ -5,9 +5,9 @@ corpus that is red *for the right reasons today*, an item going away is
 indistinguishable from a comparison quietly switching itself off. So this module
 holds two things and nothing else:
 
-* :func:`test_a_database_built_from_its_ddl_has_no_drift` — the identity run,
-  ``xfail(strict=True)`` until the campaign closes. Strict is the point: the
-  xfail is the completion signal, and flipping green without removing it fails.
+* :func:`test_a_database_built_from_its_ddl_has_no_drift` — the identity run.
+  It reported **28** items on 1.10.1, listed in :data:`WAS_ON_1_10_1`, and
+  reports none now.
 * the mutation table — one real change per row, each asserting that it adds
   **exactly one** drift item of a stated type and severity. The first rows pass
   today and must keep passing through every change; the rest are red because
@@ -33,24 +33,22 @@ from confiture.core.psql_applier import apply_sql_via_psql
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "live_drift_corpus"
 
-#: The item list the identity run produces, measured against a live PostgreSQL
-#: 18.4 / pglast 8.4. Written out so that a number moving is visible in the diff
-#: of this file.
-MEASURED_TODAY = """26 items on a database applied verbatim from this corpus:
+#: What the identity run produced on 1.10.1, kept because the numbers are the
+#: measurement this module exists to have made. Every one of them was on a
+#: database applied verbatim from the corpus below.
+WAS_ON_1_10_1 = """28 items:
   3 missing_table  + 2 extra_table   DROP TABLE / RENAME TO / SET SCHEMA unfolded
   1 missing_column + 1 extra_column  RENAME COLUMN unfolded
+  1 missing_column (legacy_drop)     ALTER TABLE DROP COLUMN unfolded
   1 nullable_mismatch (maybe_null)   ALTER COLUMN SET NOT NULL unfolded
+  1 type_mismatch (ratio)            ALTER COLUMN TYPE unfolded
  18 type_mismatch on core.tb_types   two type vocabularies
 
-It was 28 before the `ALTER TABLE` fold moved into one place: the critical
-`missing_column` for `legacy_drop`, a column the tree itself drops, and the
-`type_mismatch` on `ratio`, a column the tree itself retypes.
-
-`core.tb_types.c1` (`CHAR`) is *not* among them, and is the corpus' trap for
-the comparator: `_types_compatible` folds `char` and `character` today, while
-`canonical_type` renders the live `character(1)` as `char(1)` and the DDL's bare
-`char` as `char`. A comparator switched over without handling an implicit
-typmod makes this column report where it never did.
+`core.tb_types.c1` (`CHAR`) was *not* among them, and is the corpus' trap for a
+comparator: `_types_compatible` folded `char` and `character`, while
+`canonical_type` renders the live `character(1)` as `char(1)`. A switch that did
+not give a bare `char` its implicit length would have traded eighteen false
+positives for one new one.
 """
 
 
@@ -91,9 +89,6 @@ def _keys(report: DriftReport) -> list[tuple[str, str, str]]:
     )
 
 
-@pytest.mark.xfail(
-    strict=True, reason=f"the ALTER folds and the type vocabulary close this.\n{MEASURED_TODAY}"
-)
 def test_a_database_built_from_its_ddl_has_no_drift(built_from_corpus: Built) -> None:
     report = built_from_corpus.drift()
     assert report.drift_items == [], "\n".join(

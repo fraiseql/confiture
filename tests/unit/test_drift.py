@@ -12,6 +12,7 @@ from confiture.core.drift import (
     SchemaDriftDetector,
 )
 from confiture.core.schema_analyzer import SchemaInfo
+from confiture.core.type_lattice import same_type
 from confiture.exceptions import SchemaError
 
 # Exact block-comment file separator emitted by SchemaBuilder (block_comment is
@@ -397,21 +398,22 @@ class TestSchemaDriftDetector:
         assert columns["name"]["nullable"] is True
         assert columns["created_at"]["default"] == "now()"
 
-    def test_types_compatible(self, mock_connection):
-        """Test type compatibility checking."""
-        conn, _ = mock_connection
-        detector = SchemaDriftDetector(conn)
+    def test_types_compatible(self):
+        """The pairs the deleted ``_types_compatible`` dict answered for, still answered.
 
-        # Compatible pairs
-        assert detector._types_compatible("integer", "int4")
-        assert detector._types_compatible("bigint", "int8")
-        assert detector._types_compatible("boolean", "bool")
-        assert detector._types_compatible("character varying", "varchar")
-        assert detector._types_compatible("timestamp with time zone", "timestamptz")
+        Its eleven aliases are now the one canonicaliser's, reached through
+        ``type_lattice.same_type`` (#302). The wider table — typmods, arrays,
+        domains, the parser's qualifier, the schema wildcard — is
+        ``tests/unit/test_drift_type_comparison.py``.
+        """
+        assert same_type("integer", "int4")
+        assert same_type("bigint", "int8")
+        assert same_type("boolean", "bool")
+        assert same_type("character varying", "varchar")
+        assert same_type("timestamp with time zone", "timestamptz")
 
-        # Incompatible pairs
-        assert not detector._types_compatible("integer", "text")
-        assert not detector._types_compatible("boolean", "integer")
+        assert not same_type("integer", "text")
+        assert not same_type("boolean", "integer")
 
     # ------------------------------------------------------------------ #
     # Issue #175 — comment handling + silent-failure guard                #
