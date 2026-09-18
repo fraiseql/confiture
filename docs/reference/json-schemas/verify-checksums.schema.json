@@ -28,7 +28,7 @@
     "fixed": {
       "type": "integer",
       "minimum": 0,
-      "description": "Number of stored checksums rewritten to match the current files. Present only when --fix was passed."
+      "description": "Number of stored checksums rewritten to match the current files. Present only when --fix was passed, and always equal to summary.mismatched: --fix re-stamps the migrations this run reported, in one transaction. Before 1.12.0 it re-stamped every recorded migration, one transaction each, so this could greatly exceed summary.mismatched and a failure partway left the ledger half rewritten (#311)."
     },
     "summary": {
       "type": "object",

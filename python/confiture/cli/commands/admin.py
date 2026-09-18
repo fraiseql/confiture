@@ -272,6 +272,90 @@ def validate_profile(
         )
 
 
+def _report_absent_ledger(
+    conn: object,
+    tracking_table: str,
+    *,
+    allow_uninitialized: bool,
+    json_mode: bool,
+) -> None:
+    """Emit (or raise) the no-ledger outcome. Returns only when it is survivable.
+
+    Split out of ``verify_checksums`` because it is the branch with the most
+    going on — four outcomes across two output modes — and none of it is about
+    checksums.
+
+    Raises:
+        DatabaseNotInitializedError: unless ``--allow-uninitialized`` was given.
+    """
+    # Since 0.41.0 a bare name is resolved through search_path, so "absent" can
+    # mean "present, but not where this session looks". Saying which is the
+    # difference between an actionable message and a puzzle (#188).
+    elsewhere = _core_ledger.find_ledger_relations(conn, tracking_table)
+    note = (
+        f" A relation of that name does exist in {', '.join(elsewhere)}, but this "
+        "connection's search_path does not reach it."
+        if elsewhere
+        else ""
+    )
+
+    if not allow_uninitialized:
+        raise DatabaseNotInitializedError(
+            f"No migration ledger found: `{tracking_table}` is not present in this database.{note}",
+            resolution_hint=_NO_LEDGER_HINT,
+        )
+
+    if json_mode:
+        # 0.37.0 turned this crash into a graceful exit but left it returning
+        # after a Rich print, so --format json produced no JSON at all on the
+        # one path most likely to be scripted.
+        _output_json(
+            _checksum_payload(
+                ledger_present=False,
+                checked=0,
+                mismatches=[],
+                tracking_table=tracking_table,
+                resolved_table=None,
+            ),
+            None,
+            console,
+        )
+        return
+
+    console.print(
+        f"[yellow]⏭️  Skipped: no migration ledger found (`{tracking_table}` is "
+        f"not present in this database){note} — 0 migrations recorded, so "
+        "nothing was verified.[/yellow]"
+    )
+    console.print(
+        "[dim]   Exit 0 comes from --allow-uninitialized, not from a comparison. "
+        "Point this at a database that has a ledger to actually check file "
+        "integrity.[/dim]"
+    )
+
+
+def _print_mismatches(mismatches: list, *, fixed: int | None) -> None:
+    """Render the mismatch report in text mode.
+
+    ``fixed`` is ``None`` when ``--fix`` was not passed, and otherwise the
+    number of rows re-stamped — which equals ``len(mismatches)``, because
+    ``--fix`` re-stamps what this run reported and nothing else (#311).
+    """
+    console.print(f"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
+    for m in mismatches:
+        console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
+        console.print(f"    File: {m.file_path}")
+        expected_preview = m.expected[:16] if m.expected else "(none)"
+        console.print(f"    Expected: {expected_preview}...")
+        console.print(f"    Actual:   {m.actual[:16]}...")
+        console.print()
+    if fixed is None:
+        console.print("[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]")
+        return
+    console.print("[yellow]⚠️  Updating stored checksums...[/yellow]")
+    console.print(f"[green]✅ Updated {fixed} checksum(s)[/green]")
+
+
 @cli_boundary
 def verify_checksums(
     migrations_dir: Path = typer.Option(
@@ -344,50 +428,13 @@ def verify_checksums(
         tracking_table = _get_tracking_table(config_data)
         ledger = _core_ledger.probe_ledger(conn, tracking_table)
         if not ledger.exists:
-            # Since 0.41.0 a bare name is resolved through search_path, so
-            # "absent" can mean "present, but not where this session looks".
-            # Saying which is the difference between an actionable message and
-            # a puzzle (#188).
-            _elsewhere = _core_ledger.find_ledger_relations(conn, tracking_table)
-            _note = (
-                f" A relation of that name does exist in {', '.join(_elsewhere)}, but this "
-                "connection's search_path does not reach it."
-                if _elsewhere
-                else ""
+            _report_absent_ledger(
+                conn,
+                tracking_table,
+                allow_uninitialized=allow_uninitialized,
+                json_mode=json_mode,
             )
-            if allow_uninitialized:
-                if json_mode:
-                    # 0.37.0 turned this crash into a graceful exit but left it
-                    # returning after a Rich print, so --format json produced
-                    # no JSON at all on the one path most likely to be scripted.
-                    _output_json(
-                        _checksum_payload(
-                            ledger_present=False,
-                            checked=0,
-                            mismatches=[],
-                            tracking_table=tracking_table,
-                            resolved_table=None,
-                        ),
-                        None,
-                        console,
-                    )
-                    return
-                console.print(
-                    f"[yellow]⏭️  Skipped: no migration ledger found (`{tracking_table}` is "
-                    f"not present in this database){_note} — 0 migrations recorded, so "
-                    "nothing was verified.[/yellow]"
-                )
-                console.print(
-                    "[dim]   Exit 0 comes from --allow-uninitialized, not from a "
-                    "comparison. Point this at a database that has a ledger to actually "
-                    "check file integrity.[/dim]"
-                )
-                return
-            raise DatabaseNotInitializedError(
-                f"No migration ledger found: `{tracking_table}` is not present in "
-                f"this database.{_note}",
-                resolution_hint=_NO_LEDGER_HINT,
-            )
+            return
 
         # Run verification (warn mode - we'll handle display)
         verifier = _core_checksum.MigrationChecksumVerifier(
@@ -422,7 +469,12 @@ def verify_checksums(
 
         updated: int | None = None
         if fix:
-            updated = verifier.update_all_checksums(migrations_dir)
+            # Scoped to what was just reported, and atomic (#311). Not
+            # `update_all_checksums`, which re-stamps every recorded row one
+            # transaction at a time — so `--fix` for one bad checksum rewrote
+            # all 268 of the reporter's, and said so in the line after the one
+            # that said "Found 1".
+            updated = verifier.update_checksums_for(mismatches)
 
         if json_mode:
             _output_json(
@@ -438,21 +490,7 @@ def verify_checksums(
                 console,
             )
         else:
-            console.print(f"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
-            for m in mismatches:
-                console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
-                console.print(f"    File: {m.file_path}")
-                expected_preview = m.expected[:16] if m.expected else "(none)"
-                console.print(f"    Expected: {expected_preview}...")
-                console.print(f"    Actual:   {m.actual[:16]}...")
-                console.print()
-            if fix:
-                console.print("[yellow]⚠️  Updating stored checksums...[/yellow]")
-                console.print(f"[green]✅ Updated {updated} checksum(s)[/green]")
-            else:
-                console.print(
-                    "[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]"
-                )
+            _print_mismatches(mismatches, fixed=updated)
 
     if not fix:
         # success-signal: verification ran and found mismatches (the CI gate
