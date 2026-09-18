@@ -152,7 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   agree as text between the DDL and `pg_get_expr` (PostgreSQL rewrites `'x'` to
   `'x'::text`, `1 + 2` to `(1 + 2)`, `serial` to `nextval(…)`), so a text comparison would
   fire on nearly every literal default; constraints need an expected-side reader that does
-  not exist. (#303)
+  not exist. Filed as #309 and #308. (#303)
 
 ## [1.10.1] - 2026-09-17
 

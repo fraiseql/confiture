@@ -43,7 +43,7 @@ UNEMITTED: dict[str, str] = {
         "becomes `nextval(...)`. A comparison that fires on every array column is "
         "worse than none. The decidable route is to materialise the DDL with "
         "`ExpectedSchemaDB.from_source()` and read `pg_get_expr` on both sides, "
-        "which is a throwaway database per run and its own phase"
+        "which is a throwaway database per run and its own phase (#309)"
     ),
     "missing_constraint": (
         "the expected side has no constraint reader at all — "
@@ -52,9 +52,9 @@ UNEMITTED: dict[str, str] = {
         "CHECK row **per NOT NULL column** on PostgreSQL 18, so a naive pass "
         "reports an extra constraint for every NOT NULL column in the schema. It "
         "needs `pg_constraint` with a `contype` filter, an expected-side reader, "
-        "and a rule for the constraints PostgreSQL names itself"
+        "and a rule for the constraints PostgreSQL names itself (#308)"
     ),
-    "extra_constraint": "the same reader, the same live source, the same contype filter",
+    "extra_constraint": "the same reader, the same live source, the same contype filter (#308)",
 }
 
 
