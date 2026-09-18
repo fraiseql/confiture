@@ -132,6 +132,16 @@ SELECT count(*) = 2 AS ok
 The preflight now passes because `up()` makes no claim about rows. The claim is
 still checked — on the database where those rows actually are.
 
+### Catching the mistake before it aborts a deploy
+
+```bash
+confiture migrate validate --check-data-assertions
+```
+
+Warns when a migration asserts on data inside `up()` — the shape described
+above. Heuristic, so it never fails the gate; see
+[`migrate validate`](migrate-validate.md#-check-data-assertions-an-assertion-migrate-preflight-cannot-survive).
+
 ### Running it
 
 ```bash

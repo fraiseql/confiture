@@ -112,6 +112,66 @@ def render_function_uniqueness(report: Any, *, json_mode: bool) -> dict[str, Any
     return None
 
 
+def render_data_assertions(report: Any, *, json_mode: bool) -> dict[str, Any] | None:
+    """Render the ``--check-data-assertions`` result.
+
+    Warnings, not violations. The construct is legal SQL that works against a
+    populated database; what makes it a problem is *where* it runs, and only
+    the author can decide whether their preflight topology is the schema-only
+    one confiture recommends.
+    """
+    if json_mode:
+        return {
+            "check": "data_assertions",
+            "severity": "warning",
+            "scanned": report.scanned,
+            "warnings": [
+                {
+                    "file": str(a.file),
+                    "line": a.line,
+                    "variable": a.variable,
+                    "relation": a.relation,
+                    "condition": a.condition,
+                    "message": a.message,
+                    "remedy": (
+                        f"Move this assertion to a .verify.sql sidecar beside the "
+                        f"migration; `migrate preflight` replays up() against a "
+                        f"schema-only database where {a.relation} is empty."
+                    ),
+                }
+                for a in report.assertions
+            ],
+            "unanalysed": [str(p) for p in report.unanalysed],
+        }
+
+    if not report.has_findings:
+        console.print(
+            f"[green]✅ No data assertions inside up() ({report.scanned} migration(s) "
+            "scanned)[/green]"
+        )
+        return None
+
+    if report.assertions:
+        console.print(
+            f"[yellow]⚠️  {len(report.assertions)} data assertion(s) inside up() — "
+            "`migrate preflight` runs up() against a schema-only database[/yellow]"
+        )
+        for a in report.assertions:
+            console.print(f"  [yellow]![/yellow] {a.file}:{a.line}")
+            console.print(
+                f"      RAISE guarded on `{a.condition}`, where `{a.variable}` counts "
+                f"{a.relation} — 0 rows there"
+            )
+        console.print(
+            "\n  [dim]Move the assertion to a .verify.sql sidecar: `migrate verify` runs "
+            "it separately,\n  after apply, against the database that has the rows. See "
+            "docs/guides/migration-verification.md[/dim]"
+        )
+    for path in report.unanalysed:
+        console.print(f"  [dim]?[/dim] {path} — not analysed (unreadable body or dynamic SQL)")
+    return None
+
+
 def render_security_definer(report: Any, *, json_mode: bool) -> dict[str, Any] | None:
     """Render the ``--check-security-definer`` result."""
 

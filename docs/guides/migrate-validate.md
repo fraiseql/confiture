@@ -25,6 +25,10 @@ confiture migrate fix --idempotent
 # Verify changed grants are carried by an accompanying migration
 confiture migrate validate --require-grant-migration --staged
 
+# Warn when a migration asserts on DATA inside up() — the one thing a
+# schema-only `migrate preflight` cannot survive
+confiture migrate validate --check-data-assertions
+
 # Compose: every check you pass runs, and all of them report
 confiture migrate validate --check-acls --check-imports --check-ownership-coverage
 ```
@@ -822,6 +826,66 @@ deploy through migrations.
 ```bash
 confiture migrate validate --require-grant-migration --allow-grant-only --staged
 ```
+
+## `--check-data-assertions` — an assertion `migrate preflight` cannot survive
+
+`migrate preflight --against <dsn>` replays every pending `up()` against what
+its own help twice recommends be a **schema-only** database, seeded from
+`pg_dump --schema-only`. Every table there is empty. So this:
+
+```sql
+SELECT count(*) INTO v_ok FROM catalog.tb_field
+ WHERE identifier IN ('meter_a4_color', 'volume_a4_color');
+IF v_ok <> 2 THEN RAISE EXCEPTION 'expected 2 fields, got %', v_ok; END IF;
+```
+
+raises on the preflight every time, however correct the migration's actual
+work — and a deploy gated on the preflight aborts with it.
+
+`--check-data-assertions` finds that shape and names the file, the line, the
+variable and the relation it counted:
+
+```
+⚠️  1 data assertion(s) inside up() — `migrate preflight` runs up() against a schema-only database
+  ! db/migrations/20260520143015_add_bio.up.sql:9
+      RAISE guarded on `v_ok <> 2`, where `v_ok` counts catalog.tb_field — 0 rows there
+```
+
+The fix is to move the assertion into a `.verify.sql` sidecar, which
+`migrate verify` runs separately, after apply, against the database that has
+the rows. See [Verifying migrations](migration-verification.md).
+
+**It warns; it never fails the gate.** The construct is legal SQL that works
+against a populated database, and confiture *recommends* the schema-only
+topology rather than enforcing it — `--against` accepts any DSN. So the check
+reports the contract and leaves the verdict with you. Exit code stays 0.
+
+### What it will not flag
+
+A `RAISE EXCEPTION` guarded on a **catalog** lookup:
+
+```sql
+SELECT count(*) > 0 INTO has_col FROM information_schema.columns
+ WHERE table_name = 'tb_widget' AND column_name = 'bio';
+IF NOT has_col THEN RAISE EXCEPTION 'expected tb_widget.bio'; END IF;
+```
+
+That is *correct* under a schema-only preflight: the schema is present, so the
+query answers truthfully and the guard does its job. Flagging it would be
+advising you to break a working check. Likewise `RAISE NOTICE` (it logs and
+carries on) and a guard on a parameter rather than on rows.
+
+### Scope and honesty
+
+It is static — it never connects. `.py` migrations resolve through the same
+static evaluator `--idempotent` uses, so `self.execute(SOME_CONSTANT)` is read
+and a genuinely dynamic call is *refused* rather than guessed. A refused call,
+or a PL/pgSQL body the compiler cannot read, is reported under `unanalysed`
+rather than counted as clean — "no assertions here" and "no idea" are
+different answers.
+
+Findings in a `.py` migration point at the `self.execute(...)` call, because a
+line inside a string literal is not a line in the file.
 
 ## `--check-imports`
 
