@@ -87,6 +87,19 @@ LiveSnapshotOpt = Annotated[
 ]
 
 
+VerifySidecarOpt = Annotated[
+    bool,
+    typer.Option(
+        "--verify-sidecar/--no-verify-sidecar",
+        help=(
+            "Write an empty <version>_<name>.verify.sql beside the migration, where "
+            "assertions on data belong (default: on). `migrate preflight` runs up() "
+            "against a schema-only database, so assertions inside up() fail there."
+        ),
+    ),
+]
+
+
 @cli_boundary
 def migrate_generate(
     name: str = typer.Argument(..., help="Migration name (snake_case)"),
@@ -102,6 +115,7 @@ def migrate_generate(
     snapshot: SnapshotOpt = None,
     snapshots_dir: SnapshotsDirOpt = None,
     live_snapshot: LiveSnapshotOpt = None,
+    verify_sidecar: VerifySidecarOpt = True,
 ) -> None:
     """Generate a new migration file with timestamp-based version.
 
@@ -197,6 +211,9 @@ def migrate_generate(
     lock_fd = generator_instance.acquire_migration_lock()
     try:
         filepath.write_text(template)
+        verify_path = _write_verify_sidecar(
+            migrations_dir, version=version, name=name, enabled=verify_sidecar
+        )
     finally:
         generator_instance.release_migration_lock(lock_fd)
 
@@ -219,12 +236,73 @@ def migrate_generate(
         snapshot_mode=snapshot_mode,
         warnings=warnings,
         format_output=format_output,
+        verify_path=verify_path,
     )
+
+
+def _write_verify_sidecar(
+    migrations_dir: Path, *, version: str, name: str, enabled: bool
+) -> Path | None:
+    """Write the empty `.verify.sql` placeholder; return its path, or None.
+
+    Written by default, opted out with ``--no-verify-sidecar`` (#311). An
+    opt-in flag would reproduce the defect this fixes: the mechanism was
+    already correct and already shipped, and a reporter with 268 migrations had
+    never heard of it.
+
+    An existing sidecar is **never** overwritten, ``--force`` included. That
+    flag is about the migration file; a sidecar with content in it is somebody's
+    assertions, and this command has nothing to replace them with.
+    """
+    if not enabled:
+        return None
+    path = migrations_dir / f"{version}_{name}.verify.sql"
+    if path.exists():
+        return path
+    path.write_text(_VERIFY_TEMPLATE.format(name=name, version=version))
+    return path
+
+
+_VERIFY_TEMPLATE = """-- Verification for {version}_{name}
+--
+-- Assertions about DATA belong here, not in the migration's up().
+--
+-- `confiture migrate preflight` replays pending migrations against a
+-- schema-only database, where every table is empty. An `up()` that asserts on
+-- row counts fails there, and in a gated deploy that failure aborts the
+-- deploy — for a migration whose actual work was correct.
+--
+-- This file is run by `confiture migrate verify`, separately and afterwards,
+-- inside a SAVEPOINT that is rolled back. It never runs during `migrate up` or
+-- `migrate preflight`.
+--
+-- The contract: exactly one SELECT (or WITH ... SELECT), no DDL, no DML. It
+-- must return at least one row, and the first column of the first row must be
+-- truthy. Zero rows, or false/0/NULL, is a failure.
+--
+-- Until you write one, this file is reported as `skipped` — never as a
+-- failure. Delete it if this migration has nothing to assert.
+--
+-- Example:
+--   SELECT count(*) = 2 AS ok
+--     FROM catalog.tb_field
+--    WHERE identifier IN ('meter_a4_color', 'volume_a4_color');
+"""
 
 
 _MIGRATION_TEMPLATE = '''"""Migration: {name}
 
 Version: {version}
+
+up() must survive empty tables. `confiture migrate preflight` replays pending
+migrations against a schema-only database, so every table it sees has no rows
+in it — an assertion on data raises there, and a deploy gated on the preflight
+aborts for a migration whose work was correct.
+
+Assertions about data belong in the sidecar beside this file:
+    {version}_{name}.verify.sql
+`confiture migrate verify` runs it separately, in a SAVEPOINT, after the
+migration has been applied.
 """
 
 from confiture.models.migration import Migration
@@ -237,7 +315,12 @@ class {class_name}(Migration):
     name = "{name}"
 
     def up(self) -> None:
-        """Apply migration."""
+        """Apply migration.
+
+        Schema and data changes only — no assertions on data (see the module
+        docstring). Runs against a schema-only database during
+        `migrate preflight`.
+        """
         # Add your forward migration SQL here
         # Example:
         # self.execute("CREATE TABLE users (id SERIAL PRIMARY KEY)")
@@ -414,6 +497,7 @@ def _render_generated(
     snapshot_mode: str,
     warnings: list[str],
     format_output: str,
+    verify_path: Path | None = None,
 ) -> None:
     if format_output == "json":
         print(
@@ -423,6 +507,7 @@ def _render_generated(
                     "version": version,
                     "name": name,
                     "filepath": str(filepath.absolute()),
+                    "verify_file": str(verify_path.absolute()) if verify_path else None,
                     "class_name": class_name,
                     "migrations_dir": str(migrations_dir.absolute()),
                     "next_available_version": version,
@@ -436,10 +521,20 @@ def _render_generated(
         return
     console.print("[green]✅ Migration generated successfully![/green]")
     print(f"\n📄 File: {filepath.absolute()}")
+    if verify_path:
+        console.print(f"🔍 Verify: {verify_path.absolute()}")
+        console.print(
+            "[dim]   Assertions about data go in the .verify.sql, not in up() — "
+            "`migrate preflight` replays up() against a schema-only database.[/dim]"
+        )
     if snapshot_path:
         console.print(f"📸 Snapshot: {snapshot_path.absolute()}")
     console.print("\n✏️  Edit the migration file to add your SQL statements.")
     console.print("\n💡 Next steps:")
     console.print("  • Edit file and add SQL")
+    if verify_path:
+        console.print(f"  • Add an assertion to {verify_path.name} (or delete it)")
     console.print("  • Apply: confiture migrate up")
     console.print("  • Or verify first: confiture migrate up --dry-run")
+    if verify_path:
+        console.print("  • Then: confiture migrate verify")

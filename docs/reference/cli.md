@@ -913,6 +913,7 @@ confiture migrate generate [OPTIONS] {name}
 | `--snapshot` / `--no-snapshot` | - | Flag | - | Write schema history snapshot (default: from config, True) |
 | `--snapshots-dir` | - | path | - | Override snapshot output directory (default: db/schema_history) |
 | `--live-snapshot` / `--no-live-snapshot` | - | Flag | - | Snapshot via temp database + pg_dump (captures DO-block objects) |
+| `--verify-sidecar` / `--no-verify-sidecar` | - | Flag | on | Write an empty <version>_<name>.verify.sql beside the migration, where assertions on data belong (default: on). `migrate preflight` runs up() against a schema-only database, so assertions inside up() fail there. |
 
 <!-- END GENERATED: cli confiture migrate generate -->
 

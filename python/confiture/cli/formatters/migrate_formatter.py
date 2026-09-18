@@ -466,6 +466,10 @@ def format_verify_results(result: VerifyAllResult, console: Console) -> None:
                 console.print(f"       File: {r.verify_file}")
         elif r.status == "no_file":
             console.print(f"  [dim]SKIP[/dim] {r.version} — no verify file")
+        elif r.status == "skipped":
+            # Distinct from "no file": the sidecar is there and waiting to be
+            # filled in, which is a different nudge to the reader.
+            console.print(f"  [dim]SKIP[/dim] {r.version} — verify file has no assertion yet")
 
     console.print(
         f"\nSummary: {result.verified_count} verified, {result.failed_count} failed, "

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-verify.schema.json",
   "title": "confiture migrate verify --format json",
-  "description": "Runtime-correctness verification of applied migrations via .verify.sql sidecars (VerifyAllResult.to_dict). The fraisier migration adapter reads failed_count (ok \u21d4 failed_count == 0) and each results[].{version,name,status,error}. A migration with no .verify.sql is reported with status \"no_file\" and counted in skipped_count, not failed_count. A crash (config/DB error) emits the error envelope (error-envelope.schema.json) instead of this shape.",
+  "description": "Runtime-correctness verification of applied migrations via .verify.sql sidecars (VerifyAllResult.to_dict). The fraisier migration adapter reads failed_count (ok \u21d4 failed_count == 0) and each results[].{version,name,status,error}. A migration with no .verify.sql is reported with status \"no_file\", and one whose sidecar holds no statement yet with status \"skipped\"; both count in skipped_count, never failed_count. A crash (config/DB error) emits the error envelope (error-envelope.schema.json) instead of this shape.",
   "type": "object",
   "required": [
     "verified_count",
@@ -23,7 +23,7 @@
     },
     "skipped_count": {
       "type": "integer",
-      "description": "Number of applied migrations with no .verify.sql sidecar (status \"no_file\")."
+      "description": "Number of applied migrations that were not verified: no .verify.sql sidecar (status \"no_file\"), or a sidecar holding no statement yet (status \"skipped\", 1.12.0). Neither is a failure and neither is a verification."
     },
     "total_applied": {
       "type": "integer",
@@ -58,7 +58,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Outcome: \"verified\", \"failed\", or \"no_file\" (no sidecar). The adapter treats anything other than \"failed\" as ok."
+            "description": "Outcome: \"verified\", \"failed\", \"no_file\" (no sidecar), or \"skipped\" (a sidecar with no statement in it \u2014 what `migrate generate` writes beside a new migration, so it is the state most sidecars are in on the day they are created; 1.12.0, #311). The adapter treats anything other than \"failed\" as ok."
           },
           "actual_value": {
             "type": [

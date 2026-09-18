@@ -166,7 +166,10 @@ def migrate_verify(
             results=results,
             verified_count=sum(1 for r in results if r.status == "verified"),
             failed_count=sum(1 for r in results if r.status == "failed"),
-            skipped_count=sum(1 for r in results if r.status == "no_file"),
+            # Both non-outcomes: no sidecar at all, and a sidecar holding no
+            # statement yet (#311). Neither is a failure and neither is a
+            # verification, so neither may be counted as one.
+            skipped_count=sum(1 for r in results if r.status in ("no_file", "skipped")),
             total_applied=len(applied_versions),
         )
 

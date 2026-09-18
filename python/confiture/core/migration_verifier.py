@@ -10,6 +10,9 @@ File format contract:
 - No DDL, no DML
 - Return at least one row; first column must be truthy (true/t/1/non-null/non-zero)
 - Zero rows = FAILED; false/f/0/NULL in first column = FAILED
+- No statement at all (a comment-only placeholder) = SKIPPED, never FAILED —
+  `migrate generate` writes one of these beside every new migration, so it is
+  the state most sidecars are in on the day they are created (#311)
 """
 
 from __future__ import annotations
@@ -34,7 +37,8 @@ class VerifyResult:
         version: Migration version string (e.g., "001" or "20260228120530")
         name: Human-readable migration name
         verify_file: Path to the .verify.sql file, or None if not found
-        status: "verified", "failed", "skipped", or "no_file"
+        status: "verified", "failed", "skipped" (a sidecar with no statement in
+            it), or "no_file" (no sidecar at all)
         actual_value: The first column of the first row returned, or None
         error: Error message if status is "failed", or None
     """
@@ -128,6 +132,24 @@ class MigrationVerifier:
         """
         content = verify_file.read_text().strip()
         self.validate_verify_sql(content)
+
+        if not split_statements(content):
+            # A sidecar that holds only comments — which is what `migrate
+            # generate` writes, and therefore the state most sidecars are in
+            # the day they are created. Executing it reports `failed` with a
+            # driver message: `cursor.execute` on comment text produces no
+            # result, so `fetchone()` raises psycopg.ProgrammingError, which is
+            # a psycopg.Error and lands in the handler below (#311).
+            #
+            # Nothing in the file warrants a failure. Return before touching
+            # the connection at all — no statement, no round-trip, not even a
+            # SAVEPOINT.
+            return VerifyResult(
+                version=version,
+                name=name,
+                verify_file=verify_file,
+                status="skipped",
+            )
 
         failed = {"version": version, "name": name, "verify_file": verify_file, "status": "failed"}
         with self.connection.cursor() as cursor:
