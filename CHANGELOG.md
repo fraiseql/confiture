@@ -12,6 +12,156 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [1.11.0] - 2026-09-18
+
+### Fixed
+
+- **A database applied verbatim from its own DDL reported CRITICAL drift.**
+  `migrate validate --check-live-drift` — the gate fraisier's
+  `database.post_migrate_check` fails a deploy on — read the lint inventory for its
+  expected schema, and that inventory folded `ALTER TABLE … ADD COLUMN` and a
+  primary-key flag and nothing else. So a column the DDL tree itself **dropped** was
+  a critical `missing_column`, and a column it retyped was a `type_mismatch`, against
+  a database built from that tree. `SchemaDiffer` folded three of the 66
+  `AlterTableType` members; the inventory folded two; neither folded `SET NOT NULL`,
+  `DROP NOT NULL` or `SET`/`DROP DEFAULT`, so the issue's claim that the fix already
+  existed in the other reader was wrong for a third of it. What one `AlterTableCmd`
+  means is now `ddl_walk.column_edit`, decided once and applied by each reader to its
+  own object model. #301's reproduction: **3 items and exit 1 → 0 items and exit 0**.
+  (#301)
+- **`DROP TABLE`, `RENAME COLUMN`, `RENAME TO` and `SET SCHEMA` in a DDL tree were
+  invisible.** They are a `DropStmt`, two `RenameStmt` and an
+  `AlterObjectSchemaStmt` — not `AlterTableStmt` — so folding the subcommands reached
+  none of them: a tree that created and then dropped a table still expected it, and a
+  tree that renamed a column expected the old name *and* reported the new one as
+  extra. `ddl_walk.object_edits` answers for all of them, in both readers and in
+  `ddl_objects.objects_in`. The fold is order-aware, because
+  `DROP TABLE IF EXISTS x; CREATE TABLE x (…);` is everyday DDL and both readers
+  collect every `CREATE` before folding anything. (#301)
+- **Expected and live column types were spelled in three vocabularies.** The expected
+  side rendered `pg_catalog.json` and `integer[][]`; the live side read
+  `information_schema.columns.data_type`, which spells an array `ARRAY`, a
+  user-defined type `USER-DEFINED`, a domain by its *base* type, and drops every
+  typmod; the comparator was an 11-entry alias dict with no notion of typmods,
+  arrays, domains or the parser's qualifier. Eighteen columns of a corpus applied
+  verbatim from its own DDL reported a `type_mismatch`; #302's own reproduction
+  reported eight. The live read is now `format_type(a.atttypid, a.atttypmod)` from
+  `pg_attribute`, the expected side renders what PostgreSQL will store, and both meet
+  in `type_lattice.same_type` — **0 items**, with a real change still reported.
+  (#302)
+- **A dropped view, materialized view, trigger or routine was exit 0.** `compare_schemas`
+  ran three passes — tables, columns, indexes — and the three body-drift checks compare
+  only the *intersection* of source and live keys by design, so an object that exists on
+  one side only was invisible in every check confiture had. The expected side already
+  existed (`ddl_objects.objects_in`, #288); the live half is new
+  (`core/live_objects.py`). #303's reproduction: **`drift_items: []` and exit 0 → four
+  critical items and exit 1**. (#303)
+- **`missing_from_db` listed functions the database has.** On a *pristine* database
+  whose three routines all existed, all three were reported as not deployed.
+  `FunctionIntrospector` filters `pg_get_function_result(p.oid) IS DISTINCT FROM
+  'trigger'` unless asked otherwise and `LiveFunctionCatalog` never asked, while the
+  source parser has no such filter; and `--check-signatures` defaulted to
+  `--schemas public` while `--check-live-drift` read the schemas out of the DDL. A flag
+  that fails a deploy on that channel was unshippable until both were fixed. (#303)
+- **A low-privilege deploy role was told a table it cannot read is missing.**
+  `information_schema` shows only the objects the current role has privileges on, so a
+  role with `USAGE` on a schema and `SELECT` on some of its tables got a CRITICAL
+  `missing_table` for every table it could not see — a false critical in the direction
+  that fails a correct deploy. The live read is `pg_class` / `pg_attribute` now, which
+  shows the role what is there. The other half of the same change: a table the role can
+  now see and the DDL does not declare is an `extra_table` warning it did not get before.
+  (#302)
+- **`confiture lint` could report a column at the wrong line.** `attribute_files`
+  copied column line numbers by position, which is exact only while the sole fold is
+  `ADD COLUMN`; with a `DROP COLUMN` in a *second* file, every column after the dropped
+  one reported at its predecessor's line. Matched by name now. (#301)
+
+### Added
+
+- **`--missing-is-drift`** on `migrate validate`: a routine the source declares and the
+  database has not got makes `has_critical_drift` true and exits 1. Off by default,
+  because before a deploy an undeployed routine is what is *about to* be applied and
+  only the caller knows which question it is asking. Requires `--check-signatures`. The
+  verdict is a field on the report, not a branch in a formatter, so
+  `FunctionSignatureDriftDetector.compare` gives a library consumer the same answer.
+  (#303)
+- `has_undeployed` and `missing_is_drift` in the `--check-signatures` payload, always
+  present whatever flag was passed, so a consumer never reconstructs a verdict from an
+  array. (#303)
+- `missing_view` / `extra_view`, `missing_matview` / `extra_matview`,
+  `missing_trigger` / `extra_trigger` and `missing_routine` / `extra_routine` in
+  `DriftItem.type`. A function, a procedure and an aggregate share one pair: the
+  object's own name says which it is. (#303)
+- `objects_checked` in the drift payload — the objects whose existence was compared.
+  (#303)
+- **Two exhaustiveness guards over pglast's own grammar.** All 66 `AlterTableType`
+  members and all 41 `Alter…`/`Drop…`/`Rename…Stmt` nodes are in exactly one of
+  *folded*, *modelled elsewhere* or *declined with a reason*; a member pglast adds is a
+  decision rather than a silent hole. (#301)
+- `tests/unit/test_one_alter_folder.py` — nothing outside `core/ddl_walk.py` may name an
+  `AlterTableType` member or compare a `subtype` against a bare ordinal. Four
+  allow-listed modules each state the different question they ask. (#301)
+- `tests/unit/test_drift_types_are_emitted.py` and
+  `tests/unit/json_schemas/test_drift_types_are_published.py` — a published drift type
+  that nothing constructs needs a written reason saying what it would take, and
+  `DriftType` and the published enum must agree in both directions. (#303)
+
+### Changed
+
+- **BEHAVIOUR: `--check-signatures` defaults to the schemas the source declares**, not
+  `public` — the answer `--check-live-drift` already derived from the same DDL. A project
+  relying on the implicit scoping now checks more schemas and may see stale overloads it
+  did not see before. Pass `--schemas public` to restore the old behaviour. The same
+  default now applies to `migrate fix-signatures`, whose copy of the option had already
+  drifted from `migrate validate`'s; the option is declared once, in `cli/options.py`.
+  (#303)
+- **BEHAVIOUR: a missing view, materialized view, trigger or routine is CRITICAL**, so
+  `has_critical_drift` — and any deploy gate reading it — now fails on a schema that has
+  quietly lost one. An *extra* object is `info`, and only for a kind the DDL declares at
+  least one of, in a schema it declares, never for an extension-owned object. Note that
+  `confiture drift --fail-on-warning` exits 1 on any item including an `info` one, so a
+  hand-made view in a managed schema trips it — as a hand-made index always has. (#303)
+- **BEHAVIOUR: the live side of `--check-signatures` and `--check-body` now includes
+  trigger functions**, so their bodies are compared too. That is the same blindness #272
+  closed on the parse side. It can also make a genuine stale overload visible for the
+  first time — a source declaring `fn_touch(integer)` against a database that also has a
+  zero-argument `fn_touch()` — which is a `DROP FUNCTION` suggestion that did not appear
+  before. (#303)
+- `confiture drift` and `migrate validate --check-live-drift` share the detector, so the
+  `expected` / `actual` strings in both payloads move to the `format_type` vocabulary
+  (`character varying(50)` where it said `character varying`). `drift.schema.json` does
+  not constrain them. (#302)
+- `--check-live-drift`'s help and the `confiture drift` prose now state what is compared
+  **and what is not**: constraints, sequences and column defaults are not, and grants,
+  ownership and bodies are separate checks. (#303)
+
+### Removed
+
+- `SchemaInfo.constraints`, `.sequences`, `.extensions` and `.foreign_keys`, and the two
+  reader methods behind them. All four were queried from the live database on every drift
+  run and read by **nothing** — four queries for an answer nobody asked, and the sequence
+  read was hardcoded to `sequence_schema = 'public'` however many schemas the caller
+  requested. The published drift payload is unchanged. A constraint comparison will want
+  `pg_constraint` with a `contype` filter rather than
+  `information_schema.table_constraints`, which emits a CHECK row per NOT NULL column.
+  (#303)
+- `max_length`, `precision` and `scale` from the live column read: written by the query
+  and read nowhere, and the typmod is in the type string now. (#302)
+- `SchemaDriftDetector._types_compatible` and its alias dict — the thirteenth type-alias
+  table in the package, and the last one the one-canonicaliser guard allow-listed with a
+  reason. (#302)
+
+### Kept, with a reason
+
+- `default_mismatch`, `missing_constraint` and `extra_constraint` stay in `DriftType` and
+  in the published enum although nothing emits them. Shrinking a published enum breaks a
+  consumer with an exhaustive `match`, and each now carries a written reason saying what
+  emitting it would take: measured on PostgreSQL 18.4, only **5 of 12** column defaults
+  agree as text between the DDL and `pg_get_expr` (PostgreSQL rewrites `'x'` to
+  `'x'::text`, `1 + 2` to `(1 + 2)`, `serial` to `nextval(…)`), so a text comparison would
+  fire on nearly every literal default; constraints need an expected-side reader that does
+  not exist. Filed as #309 and #308. (#303)
+
 ## [1.10.1] - 2026-09-17
 
 ### Fixed

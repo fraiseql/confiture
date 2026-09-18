@@ -241,12 +241,16 @@ type, and `core/ddl_walk.type_name` is its reader for a pglast `TypeName` — it
 drops the `pg_catalog` qualifier the parser adds, keeps the array suffix, and
 leaves the internal spelling for the lattice to alias. There were **six** such
 tables resolving in **three** directions; `tests/unit/test_one_type_canonicaliser.py`
-deleted the two under `core/linting/` and allow-lists the other three with the
-reason each is a different question (`core/differ.py` writes upper-case column
+deleted the two under `core/linting/` and allow-lists the remaining **two** with
+the reason each is a different question (`core/differ.py` writes upper-case column
 types into a migration, `core/function_signature_parser.py` resolves the
-*opposite* way for what `--check-signatures` prints, `core/drift.py` compares a
-live column type against a DDL one). An allow-list entry that no longer matches
-anything fails, as in the one-lexer guard.
+*opposite* way for what `--check-signatures` prints). The third,
+`core/drift.py`'s `_types_compatible`, is gone since 1.11.0: `same_type` in the
+lattice answers it, carrying the schema wildcard `inventory.types_match` applies
+to a routine's arguments, because `format_type` omits a schema that
+`search_path` makes visible (#302). An allow-list entry that no longer matches
+anything fails, as in the one-lexer guard — which is what forced that second
+edit.
 
 A type's *identity* and its *spelling* are two fields, deliberately:
 `SchemaObject.signature` is the arguments as the author wrote them, because it is
@@ -272,6 +276,38 @@ are `fnmatch` globs over a bare filename, on purpose — seed discovery is a fla
 listing where a path never appears and `**` has nothing to span. `recursive`
 bounds the walk and the patterns filter what it found; nothing rewrites a
 pattern between what the YAML says and what the matcher sees.
+
+**One ALTER folder too** (since 1.11.0, #301). `core/ddl_walk.py` decides what a
+DDL statement does to the schema a tree declares, and two readers apply the
+verdict to object models that share nothing — the lint inventory (`confiture
+drift`'s expected side) and `SchemaDiffer` (`migrate diff`'s). `column_edit`
+answers for one `AlterTableCmd`, `adds_primary_key` for the table-level flag, and
+`object_edits` for the statement kinds that are not `AlterTableStmt` at all:
+`DROP TABLE`, `ALTER TABLE … RENAME COLUMN`, `… RENAME TO` and `… SET SCHEMA` are
+a `DropStmt`, two `RenameStmt` and an `AlterObjectSchemaStmt`, and no reader saw
+any of them. Before it, the differ folded 3 of 66 `AlterTableType` members and
+the inventory 2, so a column the tree itself dropped was reported as **critical**
+drift against a database applied verbatim from that tree.
+
+Two guards, both enumerating pglast's own grammar rather than a hand list: every
+`AlterTableType` member (66) is in `FOLDED`, `MODELLED_ELSEWHERE` or
+`NOT_AN_EXPECTED_SCHEMA_FACT`, and every `Alter…`/`Drop…`/`Rename…Stmt` node (41)
+in `FOLDED_STATEMENTS`, `MODELLED_STATEMENTS` or
+`NOT_AN_EXPECTED_SCHEMA_STATEMENT` — the declining tables being tables of
+**reasons**. `tests/unit/test_one_alter_folder.py` fails on any module outside
+`ddl_walk` that names an `AlterTableType` member or compares a `subtype` against
+a bare ordinal; its four allow-list entries each state the different question that
+module asks (replica observability, risk tier, an `IF NOT EXISTS` guard, the
+object a finding names).
+
+The fold is **order-aware**, and that is not a detail:
+`DROP TABLE IF EXISTS x; CREATE TABLE x (…);` is everyday DDL and both readers
+collect every `CREATE` before folding anything, so an order-blind fold deletes a
+table the tree really declares. Each compares the statement's offset against the
+object's. One reader folds less than the other on purpose: `objects_in` applies a
+`DROP` and **not** a rename, because its two renderings are of the creating
+statement and rewriting `CREATE VIEW v` as `CREATE VIEW v2` is SQL generation, not
+parsing.
 
 **One object list too** (since 1.10.0, #288). `core/ddl_objects.py` decides what
 a DDL statement *defines*, for everything `migrate validate --require-migration`
@@ -487,6 +523,7 @@ confiture/
 │   │   ├── large_tables.py       # Large table migration patterns
 │   │   ├── ledger.py             # Migration ledger existence probe
 │   │   ├── live_function_catalog.py # Adapter that converts FunctionIntrospector results to FunctionSignature…
+│   │   ├── live_objects.py       # The views, matviews, triggers and routines a live database holds (issue…
 │   │   ├── live_view_catalog.py  # Query live view (and materialized-view) definitions from a database
 │   │   ├── lock_profile.py       # What lock a DDL operation takes, and whether it rewrites the heap (issu…
 │   │   ├── locking.py            # Distributed locking for migration coordination

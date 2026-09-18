@@ -51,10 +51,22 @@ class TestSchemaInfo:
         info = SchemaInfo()
         assert info.tables == {}
         assert info.indexes == {}
-        assert info.constraints == {}
-        assert info.sequences == []
-        assert info.extensions == []
-        assert info.foreign_keys == {}
+        assert info.constraint_indexes == {}
+
+    def test_it_carries_only_what_something_compares(self):
+        """`constraints`, `sequences`, `extensions` and `foreign_keys` are gone.
+
+        All four were queried from the live database on every drift run and read
+        by nothing — four queries for an answer nobody asked, and the sequence
+        read was hardcoded to `public` however many schemas the caller requested.
+        Reading a fact nothing compares is what published three drift types
+        confiture cannot emit (#303).
+        """
+        assert set(SchemaInfo().__dataclass_fields__) == {
+            "tables",
+            "indexes",
+            "constraint_indexes",
+        }
 
     def test_schema_info_with_data(self):
         """Test schema info with data."""

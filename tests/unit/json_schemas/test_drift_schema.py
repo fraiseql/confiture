@@ -137,3 +137,81 @@ def test_drift_check_acls_includes_missing_grant_item(schemas_dir):
     registry = _build_registry(schemas_dir)
     validator = Draft202012Validator(_load(schemas_dir, ACL_SCHEMA), registry=registry)
     assert validator.validate(payload) is None  # jsonschema raises on any mismatch
+
+
+def test_a_report_carrying_the_object_existence_items_validates(schemas_dir):
+    """The eight members 1.11.0 added, and ``objects_checked`` (#303).
+
+    ``drift.schema.json`` is ``additionalProperties: false`` and lists
+    ``objects_checked`` as required, so a payload missing the key or carrying an
+    unpublished ``type`` fails here rather than in a consumer.
+    """
+    report = DriftReport(
+        database_name="confiture_test",
+        expected_schema_source="file:db/schema",
+        drift_items=[
+            DriftItem(
+                drift_type=DriftType.MISSING_VIEW,
+                severity=DriftSeverity.CRITICAL,
+                object_name="core.v_widget",
+                expected="core.v_widget",
+                actual=None,
+                message="View 'core.v_widget' is missing from database",
+            ),
+            DriftItem(
+                drift_type=DriftType.MISSING_MATVIEW,
+                severity=DriftSeverity.CRITICAL,
+                object_name="core.mv_widget",
+                message="Matview 'core.mv_widget' is missing from database",
+            ),
+            DriftItem(
+                drift_type=DriftType.MISSING_TRIGGER,
+                severity=DriftSeverity.CRITICAL,
+                object_name="core.tb_widget.trg_touch",
+                message="Trigger 'core.tb_widget.trg_touch' is missing from database",
+            ),
+            DriftItem(
+                drift_type=DriftType.MISSING_ROUTINE,
+                severity=DriftSeverity.CRITICAL,
+                object_name="core.fn_gone(bigint)",
+                message="Function 'core.fn_gone(bigint)' is missing from database",
+            ),
+            DriftItem(
+                drift_type=DriftType.EXTRA_VIEW,
+                severity=DriftSeverity.INFO,
+                object_name="core.v_handmade",
+                actual="core.v_handmade",
+                message="View 'core.v_handmade' exists but is not in expected schema",
+            ),
+            DriftItem(
+                drift_type=DriftType.EXTRA_MATVIEW,
+                severity=DriftSeverity.INFO,
+                object_name="core.mv_handmade",
+                message="Matview 'core.mv_handmade' exists but is not in expected schema",
+            ),
+            DriftItem(
+                drift_type=DriftType.EXTRA_TRIGGER,
+                severity=DriftSeverity.INFO,
+                object_name="core.tb_widget.trg_handmade",
+                message="Trigger 'core.tb_widget.trg_handmade' exists but is not expected",
+            ),
+            DriftItem(
+                drift_type=DriftType.EXTRA_ROUTINE,
+                severity=DriftSeverity.INFO,
+                object_name="core.fn_handmade()",
+                message="Function 'core.fn_handmade()' exists but is not expected",
+            ),
+        ],
+        tables_checked=3,
+        columns_checked=12,
+        indexes_checked=2,
+        objects_checked=7,
+        detection_time_ms=7,
+    )
+    payload = _emit_payload(report)
+
+    registry = _build_registry(schemas_dir)
+    Draft202012Validator(_load(schemas_dir, DRIFT_SCHEMA), registry=registry).validate(payload)
+    assert payload["objects_checked"] == 7
+    assert payload["critical_count"] == 4
+    assert payload["info_count"] == 4

@@ -56,15 +56,22 @@ class SchemaInfo:
     PostgreSQL created to back a ``PRIMARY KEY``, ``UNIQUE`` or ``EXCLUDE``
     constraint — the DDL never declares those, so drift must not count them
     against it.
+
+    It carried four more fields until 1.11.0 — ``constraints``, ``sequences``,
+    ``extensions`` and ``foreign_keys`` — read from the live database on every
+    run and compared by **nothing**. Four queries for an answer nobody asked, and
+    one of them wrong: the sequence read was hardcoded to
+    ``sequence_schema = 'public'`` however many schemas the caller requested,
+    which is a wrong answer waiting for its first reader. The constraint read was
+    the wrong source too: ``information_schema.table_constraints`` emits a CHECK
+    row per NOT NULL column, so a comparison built on it would report an extra
+    constraint for every NOT NULL column in the schema. A constraint comparison
+    will want ``pg_constraint`` and a ``contype`` filter (#303).
     """
 
     tables: dict[str, dict[str, Any]] = field(default_factory=dict)
     indexes: dict[str, list[str]] = field(default_factory=dict)
     constraint_indexes: dict[str, set[str]] = field(default_factory=dict)
-    constraints: dict[str, list[str]] = field(default_factory=dict)
-    sequences: list[str] = field(default_factory=list)
-    extensions: list[str] = field(default_factory=list)
-    foreign_keys: dict[str, list[dict[str, str]]] = field(default_factory=dict)
 
 
 @dataclass
@@ -167,18 +174,6 @@ class SchemaAnalyzer:
 
         self._read_columns(info, wanted, key)
         self._read_indexes(info, wanted, key)
-        self._read_constraints(info, wanted, key)
-        self._read_foreign_keys(info, wanted, key)
-        with self.connection.cursor() as cur:
-            cur.execute("SELECT extname FROM pg_extension")
-            info.extensions = [row[0] for row in cur.fetchall()]
-        with self.connection.cursor() as cur:
-            cur.execute("""
-                SELECT sequence_name
-                FROM information_schema.sequences
-                WHERE sequence_schema = 'public'
-            """)
-            info.sequences = [row[0] for row in cur.fetchall()]
 
         self._schema_info = info
         return info
@@ -274,65 +269,6 @@ class SchemaAnalyzer:
             )
             for row in cur.fetchall():
                 info.constraint_indexes.setdefault(key(row[0], row[1]), set()).add(row[2])
-
-    def _read_constraints(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:
-        """Constraint names per table."""
-        with self.connection.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    tc.table_schema,
-                    tc.table_name,
-                    tc.constraint_name,
-                    tc.constraint_type
-                FROM information_schema.table_constraints tc
-                WHERE tc.table_schema = ANY(%s)
-            """,
-                (wanted,),
-            )
-            for row in cur.fetchall():
-                table_name = key(row[0], row[1])
-                if table_name not in info.constraints:
-                    info.constraints[table_name] = []
-                info.constraints[table_name].append(row[2])
-
-    def _read_foreign_keys(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:
-        """Foreign keys per table: column, referenced table and column, constraint name."""
-        with self.connection.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    tc.table_schema,
-                    tc.table_name,
-                    kcu.column_name,
-                    ccu.table_name AS foreign_table_name,
-                    ccu.column_name AS foreign_column_name,
-                    tc.constraint_name
-                FROM information_schema.table_constraints AS tc
-                JOIN information_schema.key_column_usage AS kcu
-                    ON tc.constraint_name = kcu.constraint_name
-                    AND tc.table_schema = kcu.table_schema
-                JOIN information_schema.constraint_column_usage AS ccu
-                    ON ccu.constraint_name = tc.constraint_name
-                    AND ccu.table_schema = tc.table_schema
-                WHERE tc.constraint_type = 'FOREIGN KEY'
-                AND tc.table_schema = ANY(%s)
-            """,
-                (wanted,),
-            )
-            for full_row in cur.fetchall():
-                table_name = key(full_row[0], full_row[1])
-                row = full_row[1:]
-                if table_name not in info.foreign_keys:
-                    info.foreign_keys[table_name] = []
-                info.foreign_keys[table_name].append(
-                    {
-                        "column": row[1],
-                        "foreign_table": row[2],
-                        "foreign_column": row[3],
-                        "constraint_name": row[4],
-                    }
-                )
 
     def validate_sql(self, sql: str) -> list[ValidationIssue]:
         """Validate a SQL string against current schema.
