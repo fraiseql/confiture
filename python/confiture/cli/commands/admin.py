@@ -70,9 +70,29 @@ def _checksum_payload(
     what that name resolved to for this session (#188). They differ whenever a
     bare name is involved, so both are always emitted rather than one
     conditionally — a consumer should not have to guess which it is holding.
+
+    ``ok`` and the exit code answer different questions, and #311 is what
+    happens when one is computed as though it answered the other:
+
+    * the **exit code** answers "should this gate trip?" — and
+      ``--allow-uninitialized`` is the operator declaring, in advance, that a
+      ledger-less database must not trip it (the fraisier adapter branches on
+      that integer; see ``docs/reference/fraisier-adapter-contract.md``);
+    * **``ok``** answers "did verification succeed?" — and it did not, because
+      it did not happen.
+
+    So an absent ledger is ``ok: false`` at exit ``0``. Computed as
+    ``not mismatches`` it was ``true``: no ledger yields no mismatches, and the
+    published schema tells consumers to read ``ok`` and nothing else, so a run
+    that compared zero files reported green to a conforming consumer. It ran
+    that way in a reporter's CI, on every ship, for months.
+
+    ``was_skipped`` is always present, never absent-on-success: a key that
+    appears on one path only makes every consumer branch before it can read it.
     """
     payload: dict = {
-        "ok": not mismatches,
+        "ok": ledger_present and not mismatches,
+        "was_skipped": not ledger_present,
         "ledger_present": ledger_present,
         "summary": {
             "checked": checked,
@@ -305,10 +325,16 @@ def verify_checksums(
         # Structured output for a CI gate
         confiture verify-checksums --format json
 
-    JSON output: {ok, ledger_present, summary{checked,mismatched,tracking_table},
-    issues[]} — see docs/reference/json-schemas/verify-checksums.schema.json.
+    JSON output: {ok, was_skipped, ledger_present,
+    summary{checked,mismatched,tracking_table}, issues[]} — see
+    docs/reference/json-schemas/verify-checksums.schema.json.
     Exit 1 on mismatches is a success-signal (the gate tripped), so it still
     carries this shape; a real error emits the error envelope instead.
+
+    `ok` is true only when a comparison actually happened and found nothing.
+    A ledger-less run under --allow-uninitialized exits 0 but reports
+    `ok: false` with `was_skipped: true` — the exit code answers "should this
+    gate trip", `ok` answers "did verification succeed" (#311).
     """
 
     json_mode = is_json(output_format)
@@ -347,9 +373,14 @@ def verify_checksums(
                     )
                     return
                 console.print(
-                    f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
-                    f"present in this database){_note} — 0 migrations recorded, nothing to "
-                    "verify.[/yellow]"
+                    f"[yellow]⏭️  Skipped: no migration ledger found (`{tracking_table}` is "
+                    f"not present in this database){_note} — 0 migrations recorded, so "
+                    "nothing was verified.[/yellow]"
+                )
+                console.print(
+                    "[dim]   Exit 0 comes from --allow-uninitialized, not from a "
+                    "comparison. Point this at a database that has a ledger to actually "
+                    "check file integrity.[/dim]"
                 )
                 return
             raise DatabaseNotInitializedError(

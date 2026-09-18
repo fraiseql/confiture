@@ -11,6 +11,7 @@ output substrings only — never on stream identity.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -179,3 +180,72 @@ class TestAbsentButPresentElsewhere:
         result = _invoke(cfg, migrations_dir, ledger=False, elsewhere=[])
 
         assert "search_path" not in result.output
+
+
+class TestSkippedIsNotSuccess:
+    """A run that compared nothing must not read as a pass (#311).
+
+    `--allow-uninitialized` is the operator saying "a ledger-less database must
+    not trip this gate". It is not a claim that verification happened. Until
+    1.12.0 the JSON payload conflated the two: `ok` was computed as
+    `not mismatches`, and an absent ledger yields no mismatches, so a run that
+    compared **zero** files emitted `{"ok": true, "ledger_present": false,
+    "summary": {"checked": 0, "mismatched": 0}}` at exit 0.
+
+    The published schema tells consumers to read `ok` and nothing else, so that
+    was not a consumer misreading the payload — it was a consumer honouring the
+    documented contract and being told green by a run that did no work. The
+    reporter's CI ran exactly this, on every ship, for months.
+
+    The exit code stays 0: `docs/reference/fraisier-adapter-contract.md` pins
+    `--allow-uninitialized` as the way to turn PRECON_1001's exit 2 into exit 0,
+    and the adapter branches on that integer. The correction goes in the
+    payload, which that same contract declares it does not read.
+    """
+
+    @staticmethod
+    def _payload(result) -> dict:
+        return json.loads(result.output)
+
+    def test_skipped_run_is_not_ok(self, cfg: Path, migrations_dir: Path) -> None:
+        result = _invoke(
+            cfg, migrations_dir, "--allow-uninitialized", "--format", "json", ledger=False
+        )
+
+        assert result.exit_code == 0
+        assert self._payload(result)["ok"] is False
+
+    def test_skipped_run_says_it_was_skipped(self, cfg: Path, migrations_dir: Path) -> None:
+        result = _invoke(
+            cfg, migrations_dir, "--allow-uninitialized", "--format", "json", ledger=False
+        )
+
+        assert self._payload(result)["was_skipped"] is True
+
+    def test_a_clean_run_is_ok_and_not_skipped(self, cfg: Path, migrations_dir: Path) -> None:
+        """The other half of the invariant: a real comparison still reads green.
+
+        Without this, `ok: false` everywhere would pass the two tests above.
+        """
+        with patch(
+            "confiture.core.checksum.MigrationChecksumVerifier._get_stored_checksums",
+            return_value={},
+        ):
+            result = _invoke(cfg, migrations_dir, "--format", "json", ledger=True)
+
+        payload = self._payload(result)
+        assert result.exit_code == 0
+        assert payload["ok"] is True
+        assert payload["was_skipped"] is False
+
+    def test_text_mode_does_not_imply_a_pass(self, cfg: Path, migrations_dir: Path) -> None:
+        """Text mode was closer to honest than JSON, but still reads as "fine"."""
+        result = _invoke(cfg, migrations_dir, "--allow-uninitialized", ledger=False)
+
+        assert result.exit_code == 0
+        assert "nothing was verified" in result.output.lower()
+        # The success line and its glyph, neither of which this run earned.
+        assert "all migration checksums verified" not in result.output.lower()
+        assert "✅" not in result.output
+        # ...and where the exit 0 actually came from.
+        assert "--allow-uninitialized" in result.output
