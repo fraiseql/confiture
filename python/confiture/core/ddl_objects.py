@@ -30,12 +30,14 @@ from typing import Any
 
 from pglast.stream import RawStream
 
+from confiture.core.ddl_walk import ObjectEdit, object_edits, object_kinds
 from confiture.core.linting.inventory import (
     DEFAULT_SCHEMA,
     KIND_KEYWORD,
     Signature,
     object_from_statement,
     signature_bucket,
+    signature_from_type_names,
     signatures_match,
     split_names,
 )
@@ -421,8 +423,42 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
     )
 
 
+def _matches(ref: ObjectRef, edit: ObjectEdit) -> bool:
+    """Whether ``edit`` names ``ref``, by the inventory's identity rules.
+
+    A schema the statement left off matches any: PostgreSQL resolves the bare
+    spelling through ``search_path``, and a tree that wrote ``DROP VIEW v`` did
+    not say which schema it meant. The same wildcard ``find_all`` applies to an
+    object's own schema.
+    """
+    if ref.kind not in object_kinds(edit.object_kind) or ref.name != edit.name.lower():
+        return False
+    return edit.schema is None or ref.schema == edit.schema.lower()
+
+
+def _apply_drop(objects: dict[ObjectRef, list[DDLObject]], edit: ObjectEdit) -> None:
+    """Forget the objects a ``DROP`` names, overload by overload.
+
+    An ``ObjectRef`` is a bucket, so a dropped overload is matched inside it by
+    its full signature — ``DROP FUNCTION f(bigint)`` and a tree's ``f(int8)`` are
+    one routine (#275). A drop that named no argument list takes every overload,
+    which is what PostgreSQL does with the one it finds.
+    """
+    wanted = signature_from_type_names(edit.arg_types) if edit.arg_types is not None else None
+    for ref in [ref for ref in objects if _matches(ref, edit)]:
+        remaining = (
+            []
+            if wanted is None
+            else [obj for obj in objects[ref] if not signatures_match(obj.signature, wanted)]
+        )
+        if remaining:
+            objects[ref] = remaining
+        else:
+            del objects[ref]
+
+
 def objects_in(sql: str, raws: list[Any]) -> dict[ObjectRef, list[DDLObject]]:
-    """Every tracked object in an already-parsed schema, bucketed by reference.
+    """Every tracked object an already-parsed schema still declares, bucketed by reference.
 
     *raws* are the statements :func:`pglast.parse_sql` returned for *sql*; the
     caller passes its own parse rather than this module taking a second one, so
@@ -432,12 +468,28 @@ def objects_in(sql: str, raws: list[Any]) -> dict[ObjectRef, list[DDLObject]]:
     whose argument types differ only in the schema they name — ``app.f(app.t)``
     and ``app.f(other.t)`` — share one, and are two objects. They are kept in
     source order and separated by :func:`pair_definitions`.
+
+    A ``DROP`` is folded as the walk reaches it, so an object a tree creates and
+    later drops is not declared, and the everyday
+    ``DROP TABLE IF EXISTS x; CREATE TABLE x (…);`` still declares ``x``.
+
+    A **rename** and a ``SET SCHEMA`` are deliberately *not* folded here, and
+    this is the one reader where that is true. Both of this module's renderings
+    are of the statement that created the object: rewriting ``CREATE VIEW v`` as
+    ``CREATE VIEW v2`` is SQL generation, not parsing, and a ``create_sql`` that
+    still said ``v`` would put the wrong name in a generated migration. So a tree
+    that renames a tracked object declares it under its old name here, while the
+    lint inventory — which holds no definition to go stale — folds the rename.
     """
     objects: dict[ObjectRef, list[DDLObject]] = {}
     for raw in raws:
         found = object_of(sql, raw)
         if found is not None:
             objects.setdefault(found.ref, []).append(found)
+            continue
+        for edit in object_edits(raw.stmt):
+            if edit.kind == "drop":
+                _apply_drop(objects, edit)
     return objects
 
 

@@ -28,9 +28,17 @@ import pglast
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.ddl_walk import column_is_not_null
+from confiture.core.ddl_walk import (
+    ColumnEdit,
+    ObjectEdit,
+    adds_primary_key,
+    column_edit,
+    column_is_not_null,
+    object_edits,
+    object_kinds,
+)
 from confiture.core.ddl_walk import type_name as ddl_type_name
-from confiture.core.type_lattice import canonical_type
+from confiture.core.type_lattice import canonical_type, parse_type
 
 _T = TypeVar("_T")
 
@@ -45,8 +53,6 @@ _OBJECT_MATVIEW = _pg_member("ObjectType", "OBJECT_MATVIEW")
 _OBJECT_TYPE = _pg_member("ObjectType", "OBJECT_TYPE")
 _OBJECT_DOMAIN = _pg_member("ObjectType", "OBJECT_DOMAIN")
 _OBJECT_AGGREGATE = _pg_member("ObjectType", "OBJECT_AGGREGATE")
-_AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
-_AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
 
 _PLAIN_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 
@@ -385,6 +391,31 @@ def type_key(type_name: Any) -> tuple[str | None, str]:
     return (schema or None), (canonical_type(name) or name)
 
 
+def signature_from_type_names(written: Iterable[str]) -> Signature:
+    """A routine's signature from argument types spelled as *text*.
+
+    :func:`type_key` answers this for a parse node, and this is the only other
+    way in. A ``DROP FUNCTION f(bigint)`` names its arguments as text, and so
+    does a live catalogue; canonicalising them anywhere else would be a second
+    idea of what makes two routines the same routine, which is exactly what
+    ``signature`` and ``signature_key`` exist to keep apart (#275).
+
+    Typmods are dropped for :func:`type_key`'s reason: PostgreSQL ignores them
+    in a signature, and ``char`` carries an implicit one that ``bpchar`` does not.
+    """
+    return tuple(_type_key_from_text(name) for name in written)
+
+
+def _type_key_from_text(written: str) -> tuple[str | None, str]:
+    schema, _, name = written.rpartition(".")
+    parsed = parse_type(name)
+    bare = parsed.name + "[]" * parsed.dimensions if parsed is not None else name
+    return (
+        None if not schema or schema == _CATALOG_SCHEMA else schema,
+        canonical_type(bare) or bare,
+    )
+
+
 def types_match(a: tuple[str | None, str], b: tuple[str | None, str]) -> bool:
     """Whether two argument types, as each side spelled them, are one type.
 
@@ -608,25 +639,160 @@ def _schema_declaration(sql: str, raw: Any) -> SchemaObject | None:
     return declared
 
 
+def _added(sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    table.columns.append(_column(sql, edit.coldef))
+    if _has_primary_constraint(getattr(edit.coldef, "constraints", None)):
+        table.has_primary_key = True
+
+
+def _dropped(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    table.columns = [column for column in table.columns if column.folded != edit.column]
+
+
+def _retyped(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    """The type as the ``ALTER`` wrote it, on the column the ``CREATE`` declared.
+
+    A retype never invents a column: naming one the tree has not created is an
+    ``ALTER`` against a schema built elsewhere, which both readers ignore.
+    """
+    _edited(table, edit.column, type_text=_sql_type(getattr(edit.coldef, "typeName", None)))
+
+
+def _edited(table: SchemaObject, column_name: str | None, **changes: Any) -> None:
+    """Replace one column with a copy carrying *changes*; a name not there is ignored."""
+    table.columns = [
+        replace(column, **changes) if column.folded == column_name else column
+        for column in table.columns
+    ]
+
+
+def _set_not_null(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    _edited(table, edit.column, not_null=True)
+
+
+def _drop_not_null(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    _edited(table, edit.column, not_null=False)
+
+
+def _set_default(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    _edited(table, edit.column, default=RawStream()(edit.default))
+
+
+def _drop_default(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+    _edited(table, edit.column, default=None)
+
+
+#: ``ColumnEdit.kind`` -> how the inventory applies it to its own model. The
+#: decision itself is ``ddl_walk.column_edit``, shared with the differ, which
+#: applies the same edits to a model that shares none of these types (#301).
+_COLUMN_APPLIERS: dict[str, Callable[[str, SchemaObject, ColumnEdit], None]] = {
+    "add": _added,
+    "drop": _dropped,
+    "retype": _retyped,
+    "set_not_null": _set_not_null,
+    "drop_not_null": _drop_not_null,
+    "set_default": _set_default,
+    "drop_default": _drop_default,
+}
+
+
 def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
+    """Fold one ``ALTER TABLE`` into the table the tree already created.
+
+    An ``ALTER`` naming a table this tree never creates has nothing to fold into
+    and is ignored: it belongs to a schema built elsewhere.
+    """
     rv = stmt.relation
     table = inventory.find(rv.schemaname, rv.relname)
     if table is None:
         return
     for cmd in stmt.cmds or []:
-        subtype = _enum_value(getattr(cmd, "subtype", None))
-        definition = getattr(cmd, "def_", None)
-        if subtype == _AT_ADD_CONSTRAINT and definition is not None:
-            if _enum_value(getattr(definition, "contype", None)) == _CONSTR_PRIMARY:
-                table.has_primary_key = True
-        elif (
-            subtype == _AT_ADD_COLUMN
-            and definition is not None
-            and type(definition).__name__ == "ColumnDef"
-        ):
-            table.columns.append(_column(sql, definition))
-            if _has_primary_constraint(definition.constraints):
-                table.has_primary_key = True
+        if adds_primary_key(cmd):
+            # A table-level constraint, so the flag it sets is the table's —
+            # which is why it is not a `ColumnEdit`.
+            table.has_primary_key = True
+            continue
+        edit = column_edit(cmd)
+        apply = _COLUMN_APPLIERS.get(edit.kind) if edit is not None else None
+        if apply is not None and edit is not None:
+            apply(sql, table, edit)
+
+
+def _renamed_object(obj: SchemaObject, edit: ObjectEdit) -> None:
+    obj.name = edit.new_name or obj.name
+    obj.folded_name = (edit.new_name or obj.folded_name).lower()
+
+
+def _moved_object(obj: SchemaObject, edit: ObjectEdit) -> None:
+    obj.schema = edit.new_schema or obj.schema
+    obj.folded_schema = (edit.new_schema or obj.folded_schema or "").lower() or None
+
+
+def _renamed_column(obj: SchemaObject, edit: ObjectEdit) -> None:
+    obj.columns = [
+        replace(column, name=edit.new_name or column.name, folded=(edit.new_name or "").lower())
+        if column.folded == edit.column
+        else column
+        for column in obj.columns
+    ]
+
+
+#: ``ObjectEdit.kind`` -> how the inventory applies it to one object it holds.
+#: ``drop`` is not here: it removes the object from the inventory rather than
+#: editing it, so it is the one case that needs the list.
+_OBJECT_APPLIERS: dict[str, Callable[[SchemaObject, ObjectEdit], None]] = {
+    "rename": _renamed_object,
+    "rename_column": _renamed_column,
+    "set_schema": _moved_object,
+}
+
+
+def _targets(inventory: Inventory, edit: ObjectEdit, offset: int) -> list[SchemaObject]:
+    """Every object the edit names that the tree had already declared *at* ``offset``.
+
+    ``find_all`` decides what "the same object" means — a missing schema on
+    either side matches any, and a routine is narrowed to one overload by its
+    canonical argument types. A statement naming a kind the inventory does not
+    model (a trigger, a policy, an extension) matches nothing here, and is
+    ``ddl_objects``' to answer for.
+
+    The offset is what makes ``DROP TABLE IF EXISTS x; CREATE TABLE x (…);`` —
+    an everyday idiom — declare ``x``. :func:`build_inventory` collects every
+    ``CREATE`` before it folds anything, so without it a drop would reach a table
+    written after it and delete something the tree really does declare.
+    """
+    if edit.object_kind == "schema":
+        candidates = [obj for obj in inventory.schemas if obj.folded_name == edit.name.lower()]
+    else:
+        signature_key = (
+            signature_from_type_names(edit.arg_types) if edit.arg_types is not None else None
+        )
+        candidates = inventory.find_all(
+            object_kinds(edit.object_kind), edit.schema, edit.name, signature_key
+        )
+    return [obj for obj in candidates if obj.offset < offset]
+
+
+def _apply_object_edit(inventory: Inventory, edit: ObjectEdit, offset: int) -> None:
+    """Fold one statement's edit into the objects the tree has declared so far.
+
+    A statement naming something the tree never created changes nothing — the
+    rule ``_apply_alter`` follows for the same reason: it belongs to a schema
+    built elsewhere.
+    """
+    targets = _targets(inventory, edit, offset)
+    if not targets:
+        return
+    if edit.kind == "drop":
+        dropped = {id(obj) for obj in targets}
+        inventory.objects = [obj for obj in inventory.objects if id(obj) not in dropped]
+        inventory.schemas = [obj for obj in inventory.schemas if id(obj) not in dropped]
+        return
+    apply = _OBJECT_APPLIERS.get(edit.kind)
+    if apply is None:
+        return
+    for obj in targets:
+        apply(obj, edit)
 
 
 def _comment_target(
@@ -682,6 +848,13 @@ def build_inventory(sql: str) -> Inventory:
             _apply_alter(sql, stmt, inventory)
         elif kind == "CommentStmt":
             _apply_comment(stmt, inventory)
+        else:
+            # A drop, a rename or a schema move: not `ALTER TABLE` at all, and
+            # invisible to every reader of a DDL tree before #301.
+            edits = object_edits(stmt)
+            offset = _statement_offset(sql, raw) if edits else 0
+            for edit in edits:
+                _apply_object_edit(inventory, edit, offset)
     return inventory
 
 
@@ -821,6 +994,15 @@ def attribute_files(inventory: Inventory, located: Sequence[SchemaObject]) -> No
     the file and the in-file line across, and stops at the first pair that
     disagrees rather than guessing: a finding with no location is honest, a
     finding pointing at the wrong file is not.
+
+    The columns are matched **by name**, not by position. The two inventories
+    walk the same statements but do not hold the same columns: an
+    ``ALTER TABLE … DROP COLUMN`` in a *second* file is folded into the
+    whole-build table and not into that file's own, so the whole-build table is
+    a column shorter and a positional copy hands every column after the dropped
+    one its predecessor's line. A column the creating file has not got — one an
+    ``ALTER`` elsewhere added — keeps the line it already has, which is a line
+    in a generated artefact and the most this can honestly say about it.
     """
     for obj, source in zip(inventory.objects, located, strict=False):
         if _statement_key(obj) != _statement_key(source):
@@ -828,7 +1010,10 @@ def attribute_files(inventory: Inventory, located: Sequence[SchemaObject]) -> No
         obj.file = source.file
         obj.line = source.line
         obj.statement_line = source.statement_line
+        source_lines = {column.folded: column.line for column in source.columns}
         obj.columns = [
-            replace(column, line=source_column.line)
-            for column, source_column in zip(obj.columns, source.columns, strict=False)
-        ] + obj.columns[len(source.columns) :]
+            replace(column, line=source_lines[column.folded])
+            if column.folded in source_lines
+            else column
+            for column in obj.columns
+        ]

@@ -673,7 +673,14 @@ def _routines_in(text: str, raws: object, path: Path) -> Iterator[tuple[str, str
 
 
 def _returns_a_trigger(statement: str) -> bool:
-    names = pglast.parse_sql(statement)[0].stmt.returnType.names or ()
+    """Whether the routine returns ``trigger`` / ``event_trigger``.
+
+    ``returnType`` is ``None`` for a ``CREATE PROCEDURE`` — pglast parses one to
+    the same ``CreateFunctionStmt`` with ``is_procedure`` set — and a procedure
+    returns nothing, let alone a trigger.
+    """
+    return_type = pglast.parse_sql(statement)[0].stmt.returnType
+    names = getattr(return_type, "names", None) or ()
     return bool(names) and names[-1].sval in {"trigger", "event_trigger"}
 
 
