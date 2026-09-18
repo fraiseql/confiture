@@ -200,18 +200,38 @@ That walks `db/migrations/`, marks every file up through the given version as ap
 
 `migrate validate` and `migrate preflight` re-hash each on-disk migration file and compare against the `checksum` column. A mismatch means the file changed after it was applied — usually accidental, occasionally tampering.
 
-If the change was deliberate (e.g. you reformatted whitespace and you're sure the SQL semantics are identical), update the stored checksum explicitly:
+### Asking the question on its own
 
-```sql
-UPDATE tb_confiture
-SET checksum = encode(sha256(pg_read_binary_file('db/migrations/20260520143015_add_bio.up.sql')), 'hex')
-WHERE version = '20260520143015';
+You do not need a deployment command to find out. `verify-checksums` is the read-only comparison — no ledger writes, no migrations applied, no deployment semantics:
+
+```bash
+confiture verify-checksums -c db/environments/production.yaml
+
+# Same command, if you looked for it under `migrate` (both names are permanent)
+confiture migrate verify-checksums -c db/environments/production.yaml
 ```
 
-In most cases the right answer is to revert the file change instead — applied migrations are immutable history.
+Exit `0` means every file still matches; exit `1` means at least one does not — the CI gate this command exists to trip. `--format json` emits `{ok, was_skipped, ledger_present, summary{checked,mismatched}, issues[]}`; see the [JSON schema](json-schemas.md).
+
+One caveat worth knowing before you gate on it: `--allow-uninitialized` makes a *ledger-less* database exit `0`, and such a run compares nothing at all. It reports `ok: false` with `was_skipped: true` to say so. If your gate reads `ok` and has never once failed, check that it is pointed at a database that actually has a ledger.
+
+### Re-recording a deliberate change
+
+If the change was deliberate (e.g. you reformatted whitespace and you're sure the SQL semantics are identical), re-record that migration's checksum:
+
+```bash
+confiture verify-checksums --fix
+```
+
+`--fix` re-stamps **only** the migrations the same run reported as mismatched, in a single transaction, preserving `applied_at`, `execution_time_ms`, `applied_by` and the slug. It accepts whatever is on disk now, which is why the help text calls it dangerous — read the diff first.
+
+Do not hand-write an `UPDATE` against the `checksum` column. Earlier revisions of this page suggested one built on `pg_read_binary_file`, which was a poor answer twice over: it is a *server-side* read, so it needs superuser and the migration file sitting on the database host — impossible against a managed or remote database — and it re-implements, without the transaction, what `--fix` already does.
+
+In most cases the right answer is neither: revert the file change. Applied migrations are immutable history.
 
 ## See also
 
 - [Legacy bootstrap guide](../guides/legacy-bootstrap.md) — adopting Confiture on a database that already has migrations applied.
 - [Incremental migrations guide](../guides/02-incremental-migrations.md) — the day-to-day `migrate up` / `migrate down` workflow.
 - [`migrate status` reference](cli.md) — semantic exit codes for CI.
+- [`verify-checksums` reference](cli.md#confiture-verify-checksums--file-integrity) — the read-only ledger-vs-files check, and `--fix`.

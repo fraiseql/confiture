@@ -1958,7 +1958,17 @@ confiture migrate verify [OPTIONS]
 
 Compares SHA-256 checksums of migration files against the checksums stored when
 they were applied, detecting files modified after application (tampering /
-schema drift). Top-level, **not** a `migrate` subcommand.
+schema drift).
+
+This is the read-only answer to *"does my ledger still match my files?"*, and
+`--fix` is the targeted re-stamp when a change was deliberate. Reach for it
+before hand-writing UPDATEs against the ledger — see
+[the tracking table reference](tracking-table.md#checksum-mismatches).
+
+**Two names, both permanent** (1.12.0): `confiture verify-checksums` and
+`confiture migrate verify-checksums` are the same command. The top-level name
+is on the [fraisier adapter's exit-code table](fraisier-adapter-contract.md),
+and the `migrate` name is where a user looking for a migration concern looks.
 
 `confiture verify` (a deprecated alias since 0.19.0) was removed in 0.51.0; use `verify-checksums`.
 
@@ -1966,7 +1976,7 @@ schema drift). Top-level, **not** a `migrate` subcommand.
 
 | Exit | Meaning |
 |------|---------|
-| `0` | All checksums verified (or no ledger, under `--allow-uninitialized`) |
+| `0` | Checksums verified, **or** no ledger under `--allow-uninitialized` (see below) |
 | `1` | Checksum mismatches found — the CI gate this command exists to trip |
 | `2` | `PRECON_1001` — the database has no migration ledger |
 
@@ -1975,11 +1985,30 @@ Before 0.37.0 an absent ledger crashed to exit 1 with a raw psycopg
 "checksums are wrong". See [exit codes](exit-codes.md) for why exit 2 rather
 than 0 was chosen.
 
+#### `--allow-uninitialized` is not a pass
+
+A ledger-less run under that flag exits `0` but reports `ok: false` with
+`was_skipped: true`. The exit code answers *"should this gate trip?"* — and the
+flag is you declaring in advance that a ledger-less database must not trip it.
+`ok` answers *"did verification succeed?"*, and it did not, because it did not
+happen.
+
+Through 1.11.0 that payload said `ok: true`, so a CI gate reading `ok` — which
+is what this command's [JSON schema](json-schemas.md) tells consumers to
+read — went green on a run that compared **zero** files. If you gate on
+`verify-checksums --allow-uninitialized` and it has always passed, check that
+it is pointed at a database that actually has a ledger (#311).
+
 ```bash
 confiture verify-checksums --config db/environments/production.yaml
+confiture migrate verify-checksums -c db/environments/production.yaml   # same command
 
-# Post-restore, where the ledger may legitimately be absent
+# Post-restore, where the ledger may legitimately be absent.
+# Exits 0, reports ok: false + was_skipped: true — it verified nothing.
 confiture verify-checksums --allow-uninitialized
+
+# One checksum changed on purpose: re-stamp just that migration, atomically.
+confiture verify-checksums --fix
 ```
 
 ---
@@ -2004,6 +2033,42 @@ confiture verify-checksums [OPTIONS]
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture verify-checksums -->
+
+### `confiture migrate verify-checksums` — the same command, under `migrate`
+
+An alias for [`confiture verify-checksums`](#confiture-verify-checksums), added
+in 1.12.0 (#311). Same callable, same options, same exit codes — registered
+twice rather than wrapped, so the two cannot drift.
+
+It exists because the command was unfindable where it was needed: a user
+searched `migrate --help` for a ledger-vs-files check, did not find one, and
+filed an issue asking for it — while their own CI had been invoking
+`confiture verify-checksums` on every ship for months.
+
+Note the neighbour it now sits beside: `confiture migrate verify` (documented
+just above) checks **runtime state** through `.verify.sql` sidecars, while
+`migrate verify-checksums` checks **file integrity**. Different questions, and
+the similar names are the reason this page spells out which is which.
+
+<!-- BEGIN GENERATED: cli confiture migrate verify-checksums -->
+
+**Usage**
+
+```bash
+confiture migrate verify-checksums [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
+| `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
+| `--fix` | - | Flag | off | Update stored checksums to match current files (dangerous) |
+| `--allow-uninitialized` | - | Flag | off | Treat a database with no migration ledger as success (exit 0) instead of exit 2. For gates that legitimately run against schema-built databases. |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture migrate verify-checksums -->
 
 ### `confiture migrate validate` - Git-Aware Schema Validation
 
