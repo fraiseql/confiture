@@ -917,26 +917,68 @@ confiture migrate generate [OPTIONS] {name}
 
 <!-- END GENERATED: cli confiture migrate generate -->
 
+#### What it writes
+
+Two files, named after the same version:
+
+```
+db/migrations/
+├── 20260520143015_add_user_bio.py
+└── 20260520143015_add_user_bio.verify.sql
+```
+
+The migration:
+
+```python
+"""Migration: add_user_bio
+
+Version: 20260520143015
+
+up() must survive empty tables. `confiture migrate preflight` replays pending
+migrations against a schema-only database, so every table it sees has no rows
+in it — an assertion on data raises there, and a deploy gated on the preflight
+aborts for a migration whose work was correct.
+
+Assertions about data belong in the sidecar beside this file:
+    20260520143015_add_user_bio.verify.sql
+`confiture migrate verify` runs it separately, in a SAVEPOINT, after the
+migration has been applied.
+"""
+
+from confiture.models.migration import Migration
+
+
 class AddUserBio(Migration):
     """Migration: add_user_bio."""
 
-    version = "003"
+    version = "20260520143015"
     name = "add_user_bio"
 
     def up(self) -> None:
-        """Apply migration."""
-        # TODO: Add your SQL statements here
+        """Apply migration.
+
+        Schema and data changes only — no assertions on data (see the module
+        docstring). Runs against a schema-only database during
+        `migrate preflight`.
+        """
+        # Add your forward migration SQL here
         # Example:
         # self.execute("ALTER TABLE users ADD COLUMN bio TEXT")
         pass
 
     def down(self) -> None:
         """Rollback migration."""
-        # TODO: Add your rollback SQL statements here
+        # Add your rollback SQL here
         # Example:
         # self.execute("ALTER TABLE users DROP COLUMN bio")
         pass
 ```
+
+The sidecar arrives empty — a comment stating the contract and a worked
+example. `migrate verify` reports a sidecar with no statement in it as
+`skipped`, never as a failure, so adding them gradually never turns a gate red.
+Pass `--no-verify-sidecar` to skip it, or delete the file if the migration has
+nothing to assert. See [Verifying migrations](../guides/migration-verification.md).
 
 #### Naming Conventions
 

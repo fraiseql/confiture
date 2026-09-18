@@ -12,6 +12,144 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [1.12.0] - 2026-09-19
+
+The preflight's contract on `up()`, stated — and two gates that were reporting
+green without having checked anything. Closes [#311].
+
+`confiture migrate preflight --against <dsn>` executes real `up()` bodies, and
+confiture's own help recommends a schema-only database for it **twice**
+(`preflight.py:405`, `:523`). `--against` accepts any DSN, so the topology is
+recommended and not enforced — which makes *"`up()` must survive empty tables"*
+an obligation the user inherits. Nothing stated it: not the generated template,
+not `migrate validate`'s ~35 check flags, not a single guide. Recommending a
+topology while leaving its obligation unwritten is the defect this release
+fixes, in both directions: the obligation is now written down where the author
+reads it, and the mechanism that satisfies it is now findable.
+
+Reported after a 268-migration backend lost two nightly staging restores
+(2026-09-15 and 2026-09-18) to one `RAISE EXCEPTION` guarded on a row count
+inside `up()` — 0 rows on a schema-only database. Both migrations' work was
+correct; only their verification blocks were in the wrong file.
+
+### ⚠️ Behaviour changes
+
+- **`verify-checksums` no longer reports `ok: true` for a run that verified
+  nothing.** A ledger-less run under `--allow-uninitialized` now emits
+  `ok: false` with a new `was_skipped: true`, at exit **0**. Exit codes are
+  unchanged — `docs/reference/fraisier-adapter-contract.md` pins
+  `--allow-uninitialized` as the way to turn `PRECON_1001`'s exit 2 into exit
+  0, and the adapter branches on that integer; the correction is in the
+  payload, which that same contract declares it does not read.
+
+  **If you gate CI on `ok` from a ledger-less run, that gate starts failing.**
+  That is the intended outcome: it was reporting green having compared zero
+  files. The remedy is to point the check at a database that *has* a ledger, or
+  to branch on `was_skipped` if a skip is genuinely acceptable there.
+
+- **`verify-checksums --fix` re-stamps only the mismatched migrations**, in one
+  transaction, instead of every recorded row in one transaction each. The
+  reported count changes accordingly: `--fix` for one bad checksum in a
+  268-migration ledger used to print "Found 1 checksum mismatch(es)" and then
+  "Updated 268 checksum(s)".
+
+### Added
+
+- **`migrate generate` writes a `.verify.sql` sidecar** beside every new
+  migration, carrying the contract (one `SELECT`, truthy first column, run in a
+  `SAVEPOINT` by `migrate verify`, never during `migrate up` or
+  `migrate preflight`) and a worked example. `--no-verify-sidecar` opts out. An
+  existing sidecar is never overwritten, `--force` included — that flag is
+  about the migration file, and a sidecar with content in it is somebody's
+  assertions.
+
+  Opt-out rather than opt-in on purpose: an opt-in flag reproduces the defect
+  being fixed. The reporter had **zero** sidecars across 268 migrations, "not
+  by choice; we never knew the mechanism existed".
+
+- **The generated migration's docstring states the empty-table obligation** and
+  names its sidecar. The sidecar can be deleted; the docstring cannot.
+
+- **`confiture migrate verify-checksums`** — an alias for the top-level
+  `verify-checksums`, registered twice rather than wrapped so the two cannot
+  drift. Both names are permanent. It was unfindable where it was needed: the
+  reporter searched `migrate --help` and `cli/commands/migrate/`, "because
+  every other migration concern lives there", concluded no read-only
+  ledger-vs-files check existed, and filed an issue asking for one — while
+  their CI had been invoking it on every ship for months.
+
+- **`migrate validate --check-data-assertions`** — warns when a migration
+  asserts on data inside `up()`, naming the file, line, variable and the
+  relation counted. Heuristic, so it warns and never fails the gate: the
+  construct is legal SQL that works against a populated database, and
+  confiture recommends the schema-only topology rather than enforcing it.
+
+  Narrow by construction — a `RAISE` at ERROR level, reached from an `IF`
+  reading a variable, that variable assigned by a `SELECT … INTO` over a
+  **user relation**. A guard on a `pg_catalog` or `information_schema` lookup
+  is *correct* under a schema-only preflight and is not flagged; neither is
+  `RAISE NOTICE`, nor a guard on a parameter. `.py` migrations resolve through
+  the static evaluator (#213), so a genuinely dynamic call is refused and
+  reported as `unanalysed` rather than counted as clean.
+
+- **`docs/guides/migration-verification.md`** — the three questions and their
+  three commands (`preflight` runs your `up()`; `verify` runs your
+  `.verify.sql`; `verify-checksums` compares files to the ledger), the
+  recommended topology, a before/after moving an assertion out of `up()`, what
+  does *not* belong in a sidecar, and why the failure is hard to learn from:
+  seeded from the previous day's dump, a migration shipped on day D is pending
+  in D's dump, replayed by D+1's preflight and applied in D+2's — so it fails
+  for exactly one night, under a different migration's name each time.
+
+  Neither `.verify.sql` nor `verify-checksums` appeared in **any** guide before
+  this. Reference is where you look something up once you know its name, and
+  not knowing the name was the whole problem.
+
+### Fixed
+
+- **A `.verify.sql` holding no statement reported `failed`.**
+  `split_statements('-- x')` is `[]`, so `validate_verify_sql` passed over
+  nothing, `run_verify` handed the comment text to `cursor.execute`, and
+  `fetchone()` raised `psycopg.ProgrammingError` — a `psycopg.Error`, caught
+  and returned as a failure with the driver's message attached. Such a sidecar
+  now returns `skipped` before the connection is touched at all.
+
+  This had to be fixed before `migrate generate` could emit placeholders, or
+  every newly created migration would have gone red — which also means "just
+  add a `.verify.sql`" was not actually available to the reporter either.
+  `VerifyResult.status` had declared a fourth literal, `"skipped"`, that
+  nothing emitted; this is what it was for. `skipped_count` now counts both it
+  and `no_file`.
+
+- **`docs/reference/tracking-table.md` routed past the command it discusses.**
+  Its "Checksum mismatches" section told the reader to hand-write
+  `UPDATE tb_confiture SET checksum = encode(sha256(pg_read_binary_file(…)), 'hex')`
+  and never named `verify-checksums`. That snippet is a *server-side* read, so
+  it needs superuser and the migration file present on the database host —
+  impossible against a managed or remote database. It is gone, with the reason
+  stated rather than silently dropped.
+
+- Three broken cross-page documentation anchors, and a stale hand-written
+  example of a generated migration in `docs/reference/cli.md` that still showed
+  `# TODO: Add your SQL statements here`.
+
+### Notes
+
+- `migrate amend` was requested and **withdrawn by the reporter**: the ledger's
+  value rests on "checksum matches" meaning "this is what ran", and a feature
+  recording *why* history was rewritten still normalises rewriting it. A
+  per-migration `ChecksumConfig.on_mismatch` is the same thing under another
+  name and was also declined. `verify-checksums --fix` is the targeted
+  re-stamp, and this release makes it scoped and atomic rather than inventing a
+  replacement.
+
+- Two claims in the original report were checked against the tree and retracted
+  by the reporter before any work started: `migrate baseline` does **not**
+  re-stamp checksums (`core/_migrator/apply.py:466-470` returns early on an
+  already-applied version), and a read-only ledger-vs-files check *does* exist.
+
+[#311]: https://github.com/fraiseql/confiture/issues/311
+
 ## [1.11.0] - 2026-09-18
 
 ### Fixed
