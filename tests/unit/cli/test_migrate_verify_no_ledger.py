@@ -219,7 +219,7 @@ class TestSkippedIsNotSuccess:
         assert payload["was_skipped"] is False
 
     def test_a_present_but_empty_ledger_is_ok(self, cfg: Path, migrations_dir: Path) -> None:
-        """"Nothing applied yet" is a real answer about a real ledger."""
+        """ "Nothing applied yet" is a real answer about a real ledger."""
         with patch(
             "confiture.core.migration_verifier.MigrationVerifier.verify_all",
             return_value=[],
