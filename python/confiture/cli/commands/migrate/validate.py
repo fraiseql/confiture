@@ -307,6 +307,19 @@ CheckOwnershipCoverageOpt = Annotated[
         "`ownership.lint_enabled` is false.",
     ),
 ]
+CheckDataAssertionsOpt = Annotated[
+    bool,
+    typer.Option(
+        "--check-data-assertions",
+        help="Static: warn when a migration asserts on DATA inside up() — a "
+        "`RAISE EXCEPTION` guarded on a row count. `migrate preflight` "
+        "replays up() against a schema-only database where every table is "
+        "empty, so such a guard aborts it however correct the migration is. "
+        "Assertions belong in a .verify.sql sidecar. Heuristic, so findings "
+        "are warnings and never fail the gate.",
+    ),
+]
+
 CheckFunctionUniquenessOpt = Annotated[
     bool,
     typer.Option(
@@ -435,6 +448,7 @@ def migrate_validate(
     check_acls: CheckAclsOpt = False,
     check_ownership_coverage: CheckOwnershipCoverageOpt = False,
     check_function_uniqueness: CheckFunctionUniquenessOpt = False,
+    check_data_assertions: CheckDataAssertionsOpt = False,
     check_security_definer: CheckSecurityDefinerOpt = False,
     secdef_against_db: SecdefAgainstDbOpt = False,
     emit_remediation: EmitRemediationOpt = None,
@@ -559,6 +573,7 @@ def migrate_validate(
         check_acls=check_acls,
         check_ownership_coverage=check_ownership_coverage,
         check_function_uniqueness=check_function_uniqueness,
+        check_data_assertions=check_data_assertions,
         check_security_definer=check_security_definer,
         check_imports=check_imports,
         check_live_drift=check_live_drift,

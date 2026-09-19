@@ -93,15 +93,38 @@ The adapter-consumed fields per command:
 - **current** — `revision` (the head, `null` when none applied).
 - **up** — `applied[].version` (the new head).
 - **down-to** — `from`, `to`, `rolled_back[]`.
-- **verify** — `failed_count` (ok ⇔ `0`) and each `results[].{version, name, status, error}`.
-  The `ok ⇔ failed_count == 0` rule is **unchanged** in 0.37.0. That release
-  added an optional `ledger_present` boolean: `false` means the database has no
-  migration ledger at all — typically built from schema files rather than
-  migrated — and is only emitted under `--allow-uninitialized`, since without
-  that flag the same state raises `PRECON_1001` (exit 2). It is declared in the
-  schema but **not required**, so payloads from earlier versions stay valid.
-  Note that the schema sets `additionalProperties: false`, so consumers pinned
-  to the pre-0.37.0 schema must update to accept the new field.
+- **verify** — `ok` and each `results[].{version, name, status, error}`.
+
+  ⚠️ **Changed in 1.12.0 (#311): read `ok`, not `failed_count`.** Through
+  1.11.0 this payload carried no `ok` field and the rule here was
+  *ok ⇔ `failed_count == 0`*. That inference is wrong for one state: a
+  ledger-less database under `--allow-uninitialized` reports
+  `failed_count: 0` because **nothing ran**, so an adapter applying the rule
+  reported a successful verification of zero migrations. `failed_count` was
+  never wrong — the inference drawn from it was.
+
+  1.12.0 adds two required booleans, matching `verify-checksums`:
+
+  | Field | Meaning |
+  |---|---|
+  | `ok` | `ledger_present && failed_count == 0` — verification happened *and* nothing failed |
+  | `was_skipped` | the run verified nothing because the ledger was absent |
+
+  **Adapter migration.** Switch the success test from `failed_count == 0` to
+  `ok`. An adapter left on the old rule keeps compiling and keeps reporting
+  success for a ledger-less run; nothing else about the payload moved.
+  `verified_count`, `failed_count`, `skipped_count`, `total_applied` and
+  `results[]` are unchanged, and **exit codes are unchanged** — see the table
+  below, where `--allow-uninitialized` still turns `PRECON_1001`'s exit 2 into
+  exit 0.
+
+  `ledger_present` (0.37.0) stays: `false` means the database has no migration
+  ledger at all, typically built from schema files rather than migrated, and is
+  only emitted under `--allow-uninitialized`. It is now accompanied by
+  `was_skipped`, which states the *outcome* rather than leaving it to be
+  inferred from the table's existence. Note that the schema sets
+  `additionalProperties: false`, so a consumer pinned to a pre-1.12.0 schema
+  must update to accept the two new fields.
 - **preflight** — `ok`, the top-level `window_safe` verdict (the typed blue-green
   window-safety contract — see [below](#replica-forward-compatibility-namespace-window-safety-seam)),
   `summary`, each `issues[].{severity, code, message, migration}`, and — since

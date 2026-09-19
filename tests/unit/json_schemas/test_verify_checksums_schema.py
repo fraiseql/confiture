@@ -120,6 +120,7 @@ def test_clean_run_matches_schema(
     payload = json.loads(result.stdout)
     _validator("verify-checksums.schema.json").validate(payload)
     assert payload["ok"] is True
+    assert payload["was_skipped"] is False
     assert payload["ledger_present"] is True
     assert payload["issues"] == []
     assert payload["summary"]["mismatched"] == 0
@@ -148,6 +149,8 @@ def test_mismatch_run_matches_schema(
     payload = json.loads(result.stdout)
     _validator("verify-checksums.schema.json").validate(payload)
     assert payload["ok"] is False
+    # Mismatches are a *result*, not a skip — the two false-ok paths differ here.
+    assert payload["was_skipped"] is False
     assert payload["summary"]["mismatched"] == 2
     assert len(payload["issues"]) == 2
     assert payload["issues"][0]["code"] == "CHECKSUM_MISMATCH"
@@ -161,14 +164,28 @@ def test_mismatch_run_matches_schema(
 def test_no_ledger_with_allow_uninitialized_matches_schema(
     probe, _elsewhere, _conn, cfg: Path, migrations_dir: Path
 ) -> None:
-    """The degraded path must emit JSON, not `return` after a Rich print."""
+    """The degraded path must emit JSON, not `return` after a Rich print.
+
+    It must also not emit *green* JSON. Through 1.11.0 this asserted
+    ``ok is True`` — the shape the command really produced, and the whole of
+    #311: `ok` was `not mismatches`, an absent ledger yields no mismatches, and
+    the schema tells consumers to read `ok`. A run that compared zero files
+    reported success to a conforming consumer, and did so in a reporter's CI on
+    every ship for months.
+
+    The exit code stays 0 — ``--allow-uninitialized`` is pinned by
+    ``docs/reference/fraisier-adapter-contract.md`` as the way to turn
+    PRECON_1001's exit 2 into exit 0, and the adapter branches on that integer.
+    The correction is in the payload, which that contract does not read.
+    """
     result = _invoke(cfg, migrations_dir, "--allow-uninitialized")
 
     assert probe.called, "ledger probe double unused — patch target is stale"
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     _validator("verify-checksums.schema.json").validate(payload)
-    assert payload["ok"] is True
+    assert payload["ok"] is False
+    assert payload["was_skipped"] is True
     assert payload["ledger_present"] is False
     assert payload["summary"]["checked"] == 0
     # Nothing resolved, so nothing to name — the key is declared, not omitted.

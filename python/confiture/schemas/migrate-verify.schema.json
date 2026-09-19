@@ -2,9 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-verify.schema.json",
   "title": "confiture migrate verify --format json",
-  "description": "Runtime-correctness verification of applied migrations via .verify.sql sidecars (VerifyAllResult.to_dict). The fraisier migration adapter reads failed_count (ok \u21d4 failed_count == 0) and each results[].{version,name,status,error}. A migration with no .verify.sql is reported with status \"no_file\" and counted in skipped_count, not failed_count. A crash (config/DB error) emits the error envelope (error-envelope.schema.json) instead of this shape.",
+  "description": "Runtime-correctness verification of applied migrations via .verify.sql sidecars (VerifyAllResult.to_dict). The fraisier migration adapter reads ok and each results[].{version,name,status,error}. Through 1.11.0 there was no ok field and the rule was ok \u21d4 failed_count == 0; that inference is wrong for a ledger-less run under --allow-uninitialized, where failed_count is 0 because nothing ran. 1.12.0 adds ok (ledger_present && failed_count == 0) and was_skipped, matching verify-checksums (#311). A migration with no .verify.sql is reported with status \"no_file\", and one whose sidecar holds no statement yet with status \"skipped\"; both count in skipped_count, never failed_count. A crash (config/DB error) emits the error envelope (error-envelope.schema.json) instead of this shape.",
   "type": "object",
   "required": [
+    "ok",
+    "was_skipped",
     "verified_count",
     "failed_count",
     "skipped_count",
@@ -13,17 +15,25 @@
   ],
   "additionalProperties": false,
   "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "True when verification actually happened and nothing failed: ledger_present && failed_count == 0. Read THIS, not failed_count alone (1.12.0, #311). Until 1.12.0 this payload carried no ok at all and the contract said ok \u21d4 failed_count == 0 \u2014 which is 0 on a ledger-less run under --allow-uninitialized for the trivial reason that nothing ran, so a conforming consumer read success from a run that verified nothing. failed_count itself was never wrong; the inference drawn from it was. Same field, same meaning, as verify-checksums' ok: two neighbouring commands answering \"I could not verify anything\" differently is a trap of its own."
+    },
+    "was_skipped": {
+      "type": "boolean",
+      "description": "True when the run verified nothing because the ledger was absent \u2014 only reachable under --allow-uninitialized, since otherwise the same state raises PRECON_1001 (exit 2). Always present, never absent-on-success, so a consumer never has to branch before it can read it (1.12.0, #311)."
+    },
     "verified_count": {
       "type": "integer",
       "description": "Number of applied migrations whose .verify.sql passed."
     },
     "failed_count": {
       "type": "integer",
-      "description": "Number of applied migrations whose .verify.sql failed. The adapter treats the run as ok when this is 0."
+      "description": "Number of applied migrations whose .verify.sql assertion failed. 0 is NOT by itself a success signal: a ledger-less run under --allow-uninitialized has 0 because nothing ran. Read ok, which is ledger_present && failed_count == 0 (1.12.0, #311)."
     },
     "skipped_count": {
       "type": "integer",
-      "description": "Number of applied migrations with no .verify.sql sidecar (status \"no_file\")."
+      "description": "Number of applied migrations that were not verified: no .verify.sql sidecar (status \"no_file\"), or a sidecar holding no statement yet (status \"skipped\", 1.12.0). Neither is a failure and neither is a verification."
     },
     "total_applied": {
       "type": "integer",
@@ -58,7 +68,7 @@
           },
           "status": {
             "type": "string",
-            "description": "Outcome: \"verified\", \"failed\", or \"no_file\" (no sidecar). The adapter treats anything other than \"failed\" as ok."
+            "description": "Outcome: \"verified\", \"failed\", \"no_file\" (no sidecar), or \"skipped\" (a sidecar with no statement in it \u2014 what `migrate generate` writes beside a new migration, so it is the state most sidecars are in on the day they are created; 1.12.0, #311). The adapter treats anything other than \"failed\" as ok."
           },
           "actual_value": {
             "type": [

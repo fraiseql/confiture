@@ -25,6 +25,10 @@ confiture migrate fix --idempotent
 # Verify changed grants are carried by an accompanying migration
 confiture migrate validate --require-grant-migration --staged
 
+# Warn when a migration asserts on DATA inside up() — the one thing a
+# schema-only `migrate preflight` cannot survive
+confiture migrate validate --check-data-assertions
+
 # Compose: every check you pass runs, and all of them report
 confiture migrate validate --check-acls --check-imports --check-ownership-coverage
 ```
@@ -822,6 +826,118 @@ deploy through migrations.
 ```bash
 confiture migrate validate --require-grant-migration --allow-grant-only --staged
 ```
+
+## `--check-data-assertions` — an assertion `migrate preflight` cannot survive
+
+`migrate preflight --against <dsn>` replays every pending `up()` against what
+its own help twice recommends be a **schema-only** database, seeded from
+`pg_dump --schema-only`. Every table there is empty. So this:
+
+```sql
+SELECT count(*) INTO v_ok FROM catalog.tb_field
+ WHERE identifier IN ('meter_a4_color', 'volume_a4_color');
+IF v_ok <> 2 THEN RAISE EXCEPTION 'expected 2 fields, got %', v_ok; END IF;
+```
+
+raises on the preflight every time, however correct the migration's actual
+work — and a deploy gated on the preflight aborts with it.
+
+`--check-data-assertions` finds that shape and names the file, the line, the
+variable and the relation it counted:
+
+```
+⚠️  1 data assertion(s) inside up() — `migrate preflight` runs up() against a schema-only database
+  ! db/migrations/20260520143015_add_bio.up.sql:9
+      RAISE guarded on `v_ok <> 2`, where `v_ok` counts catalog.tb_field — 0 rows there
+```
+
+The fix is to move the assertion into a `.verify.sql` sidecar, which
+`migrate verify` runs separately, after apply, against the database that has
+the rows. See [Verifying migrations](migration-verification.md).
+
+**It warns; it never fails the gate.** The construct is legal SQL that works
+against a populated database, and confiture *recommends* the schema-only
+topology rather than enforcing it — `--against` accepts any DSN. So the check
+reports the contract and leaves the verdict with you. Exit code stays 0.
+
+### What it will not flag
+
+A `RAISE EXCEPTION` guarded on a **catalog** lookup:
+
+```sql
+SELECT count(*) > 0 INTO has_col FROM information_schema.columns
+ WHERE table_name = 'tb_widget' AND column_name = 'bio';
+IF NOT has_col THEN RAISE EXCEPTION 'expected tb_widget.bio'; END IF;
+```
+
+That is *correct* under a schema-only preflight: the schema is present, so the
+query answers truthfully and the guard does its job. Flagging it would be
+advising you to break a working check. Likewise `RAISE NOTICE` (it logs and
+carries on) and a guard on a parameter rather than on rows.
+
+Nor a relation **the migration itself builds from the catalogue** — a temp
+table or a view, transitively, whether the rows arrive via `CREATE … AS SELECT`
+or a later `INSERT … SELECT`:
+
+```sql
+CREATE TEMP TABLE _v_statistics_privileges AS
+  SELECT relname, relacl FROM pg_class WHERE relkind = 'r';
+
+DO $$
+DECLARE v int;
+BEGIN
+  SELECT count(*) INTO v FROM _v_statistics_privileges;
+  IF v <> 7 THEN RAISE EXCEPTION 'expected 7, got %', v; END IF;  -- fine
+END $$;
+```
+
+The unqualified form counts as the catalogue too: PostgreSQL puts `pg_catalog`
+on the implicit `search_path`, so `FROM pg_class` is a catalogue read, and the
+`pg_` prefix is reserved for exactly that. (`app.pg_thing` — qualified into
+your own schema — is your table.)
+
+### Known blind spot
+
+!!! warning "A schema-only copy is not an *empty* database"
+
+    `pg_dump --schema-only | psql` leaves every **user** table empty, but the
+    catalogue is fully populated — it describes the schema that was just
+    created. Anything derived from `pg_class`, `pg_namespace` or their kin has
+    rows at preflight time.
+
+    This check resolves that derivation **only within the migration it is
+    reading**. If the relation you count is built from the catalogue somewhere
+    else — a persistent view in `db/schema/`, or a table a previous migration
+    created — nothing in the file under analysis says so, and you will get a
+    warning for a guard that is in fact correct.
+
+    That is the main source of false positives, and it is why these are
+    warnings rather than gate failures. If you see one, check where the
+    relation's rows come from before moving anything.
+
+This limit was measured rather than guessed: the shape above came from a
+downstream 295-migration corpus where an earlier detector without these
+exclusions produced 76 findings whose checked samples were all false. If you
+run this over a large existing corpus, the finding rate is worth reporting
+back — the exclusions above are the ones we know about, not a proof there are
+no others.
+
+A complementary approach with no blind spot at all is to replay the migration
+against a genuinely empty database and see what happens. That cannot be wrong,
+but it costs a database and a full apply; this check costs a parse. They are
+worth running at different moments, not instead of one another.
+
+### Scope and honesty
+
+It is static — it never connects. `.py` migrations resolve through the same
+static evaluator `--idempotent` uses, so `self.execute(SOME_CONSTANT)` is read
+and a genuinely dynamic call is *refused* rather than guessed. A refused call,
+or a PL/pgSQL body the compiler cannot read, is reported under `unanalysed`
+rather than counted as clean — "no assertions here" and "no idea" are
+different answers.
+
+Findings in a `.py` migration point at the `self.execute(...)` call, because a
+line inside a string literal is not a line in the file.
 
 ## `--check-imports`
 

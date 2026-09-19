@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.11.0
-**Last Updated**: September 18, 2026
+**Version**: 1.12.0
+**Last Updated**: September 19, 2026
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -495,6 +495,7 @@ confiture/
 │   │   ├── connection.py         # Database connection management for CLI commands
 │   │   ├── cor_extractor.py      # Extract CREATE OR REPLACE targets from pending migrations
 │   │   ├── cte_debugger.py       # CTE step-through debugger: execute each CTE in isolation to find failur…
+│   │   ├── data_assertions.py    # A `RAISE EXCEPTION` guarded on data inside a migration, which `migrate…
 │   │   ├── ddl_objects.py        # The schema objects a DDL tree defines, and what makes two of them the s…
 │   │   ├── ddl_walk.py           # Helpers shared by the AST walkers that read DDL, and what a statement m…
 │   │   ├── dependent_objects.py  # Live dependent-objects checker for ``migrate preflight``
@@ -580,7 +581,7 @@ confiture/
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (3 modules)
 │   │   ├── seed/                 # Seed data management and optimization (24 modules)
-│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (14 modules)
+│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (15 modules)
 │   ├── integrations/
 │   │   ├── __init__.py
 │   │   └── pggit/                # pgGit integration module for Confiture (9 modules)
@@ -1345,8 +1346,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: September 18, 2026
-**Version**: 1.11.0
+**Last Updated**: September 19, 2026
+**Version**: 1.12.0
 
 ---
 

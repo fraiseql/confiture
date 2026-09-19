@@ -110,6 +110,7 @@ nav:
       - 'migrate validate': guides/migrate-validate.md
       - 'Migration Decision Tree': guides/migration-decision-tree.md
       - 'Migration Naming Best Practices': guides/migration-naming-best-practices.md
+      - 'Verifying migrations: what runs where, and where assertions belong': guides/migration-verification.md
       - 'Migration Versioning Strategies: Confiture vs Industry Standards': guides/migration-versioning-strategies.md
       - 'Multi-Agent Coordination Guide': guides/multi-agent-coordination.md
       - 'Named Schemas': guides/named-schemas.md

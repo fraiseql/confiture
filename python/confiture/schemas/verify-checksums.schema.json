@@ -2,10 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/verify-checksums.schema.json",
   "title": "confiture verify-checksums --format json",
-  "description": "File-integrity verification of applied migrations: SHA-256 of each migration file compared against the checksum stored when it was applied. Detects files modified after application. Distinct from `migrate verify`, which checks runtime state via .verify.sql sidecars. Added in 0.39.0 (#189). Consumers read ok (\u21d4 summary.mismatched == 0) and issues[]. Exit code is 1 when mismatches are found \u2014 a success-signal, not an error \u2014 so a crash (config/DB error, or an absent ledger without --allow-uninitialized) emits the error envelope (error-envelope.schema.json) instead of this shape. NOT part of the fraisier adapter contract.",
+  "description": "File-integrity verification of applied migrations: SHA-256 of each migration file compared against the checksum stored when it was applied. Detects files modified after application. Distinct from `migrate verify`, which checks runtime state via .verify.sql sidecars. Added in 0.39.0 (#189). Consumers read ok and issues[]. ok is true only when a comparison actually happened and found nothing (ledger_present && summary.mismatched == 0); see ok and was_skipped for why those are two conditions rather than one (#311). Exit code is 1 when mismatches are found \u2014 a success-signal, not an error \u2014 so a crash (config/DB error, or an absent ledger without --allow-uninitialized) emits the error envelope (error-envelope.schema.json) instead of this shape. NOT part of the fraisier adapter contract.",
   "type": "object",
   "required": [
     "ok",
+    "was_skipped",
     "ledger_present",
     "summary",
     "issues"
@@ -14,16 +15,20 @@
   "properties": {
     "ok": {
       "type": "boolean",
-      "description": "True when no checksum mismatch was found. Equivalent to summary.mismatched == 0."
+      "description": "True when a comparison happened and found no mismatch: ledger_present && summary.mismatched == 0. Until 1.12.0 this was computed as summary.mismatched == 0 alone, and an absent ledger produces no mismatches \u2014 so a run under --allow-uninitialized that compared zero files reported ok true, and a consumer following this schema read green from a run that did no work (#311). ok and the exit code answer different questions: the exit code answers \"should this gate trip\" (and --allow-uninitialized is the operator declaring in advance that a ledger-less database must not trip it), while ok answers \"did verification succeed\" \u2014 which it did not, because it did not happen. So ok false at exit 0 is the coherent pairing, not a contradiction."
+    },
+    "was_skipped": {
+      "type": "boolean",
+      "description": "True when the run verified nothing because the ledger was absent \u2014 only reachable under --allow-uninitialized, since otherwise an absent ledger raises PRECON_1001. Always present, never absent-on-success: a key that appears on one path only makes every consumer branch before it can read it. A consumer that wants \"clean\" and \"skipped\" to read differently branches on this; one that only wants \"is it safe to ship\" needs ok alone (1.12.0, #311)."
     },
     "ledger_present": {
       "type": "boolean",
-      "description": "Whether the migration ledger table (tracking_table, default tb_confiture) exists. False is only emitted under --allow-uninitialized; without that flag an absent ledger raises PRECON_1001 (exit 2) with the error envelope. Distinct from a present-but-empty ledger, which reports true with summary.checked 0. Spelled ledger_present, not tb_confiture_present, because the table name is configurable (#190)."
+      "description": "Whether the migration ledger table (tracking_table, default tb_confiture) exists. False is only emitted under --allow-uninitialized; without that flag an absent ledger raises PRECON_1001 (exit 2) with the error envelope. Distinct from a present-but-empty ledger, which reports true with summary.checked 0. Spelled ledger_present, not tb_confiture_present, because the table name is configurable (#190). When false, was_skipped is true and ok is false \u2014 read was_skipped for the outcome rather than inferring it from this field."
     },
     "fixed": {
       "type": "integer",
       "minimum": 0,
-      "description": "Number of stored checksums rewritten to match the current files. Present only when --fix was passed."
+      "description": "Number of stored checksums rewritten to match the current files. Present only when --fix was passed, and always equal to summary.mismatched: --fix re-stamps the migrations this run reported, in one transaction. Before 1.12.0 it re-stamped every recorded migration, one transaction each, so this could greatly exceed summary.mismatched and a failure partway left the ledger half rewritten (#311)."
     },
     "summary": {
       "type": "object",

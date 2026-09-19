@@ -354,11 +354,64 @@ class MigrationChecksumVerifier:
         self.connection.commit()
         logger.info(f"Updated checksum for migration {version}")
 
+    def update_checksums_for(self, mismatches: list[ChecksumMismatch]) -> int:
+        """Re-stamp exactly the migrations that mismatched, in one transaction.
+
+        This is what ``verify-checksums --fix`` calls. It exists because
+        :meth:`update_all_checksums` answers a different question — "re-stamp
+        everything" — and ``--fix`` was calling it: a single bad checksum in a
+        268-migration ledger reported "Found 1 checksum mismatch(es)" and then
+        rewrote all 268 rows, one transaction each (#311).
+
+        Both halves matter. The scope is the caller's own
+        :meth:`verify_all` result, so ``--fix`` cannot touch a row it never
+        reported. The atomicity is one ``commit`` after the loop, so a failure
+        partway leaves the ledger exactly as it was rather than half re-stamped
+        with nothing recording which half — in an operation the CLI help calls
+        "dangerous".
+
+        ``m.actual`` is reused rather than re-hashing the file: ``verify_all``
+        computed it to find the mismatch in the first place, and re-reading here
+        would open a window in which the digest written differs from the digest
+        reported.
+
+        :meth:`update_checksum`'s single-row, commit-now contract is deliberately
+        untouched — it is a library method, and this method is not a reason to
+        change it underneath a caller.
+
+        Args:
+            mismatches: The mismatches to re-stamp, as returned by
+                :meth:`verify_all`.
+
+        Returns:
+            Number of stored checksums rewritten.
+        """
+        if not mismatches:
+            return 0
+
+        with self.connection.cursor() as cur:
+            for m in mismatches:
+                cur.execute(
+                    pgsql.SQL("UPDATE {} SET checksum = %s WHERE version = %s").format(
+                        self._table_ident
+                    ),
+                    (m.actual, m.version),
+                )
+        self.connection.commit()
+        logger.info(f"Re-stamped {len(mismatches)} checksum(s) in one transaction")
+        return len(mismatches)
+
     def update_all_checksums(self, migrations_dir: Path) -> int:
         """Update all stored checksums from current files.
 
         WARNING: This should only be used when you're certain all
         file modifications were intentional.
+
+        This re-stamps *every* recorded migration, mismatched or not, one
+        transaction per row. ``verify-checksums --fix`` deliberately does not
+        call it — see :meth:`update_checksums_for`, which is scoped to the
+        reported mismatches and atomic. Reach for this one only when
+        "re-stamp the whole ledger" is genuinely what you mean.
 
         Args:
             migrations_dir: Directory containing migration files

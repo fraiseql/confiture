@@ -32,6 +32,7 @@ from unittest.mock import Mock
 
 from confiture.cli.formatters.validate_formatter import (
     render_acl_coverage,
+    render_data_assertions,
     render_function_uniqueness,
     render_import_check,
     render_live_drift,
@@ -49,6 +50,7 @@ from confiture.core.validation import replay_drift as _core_validation_replay_dr
 from confiture.core.validation import security_definer as _security_definer
 from confiture.core.validation import view_drift as _core_validation_view_drift
 from confiture.core.validation.acl_coverage import check_acl_coverage
+from confiture.core.validation.data_assertions import check_data_assertions
 from confiture.core.validation.function_uniqueness import check_function_uniqueness
 from confiture.core.validation.live_drift import check_live_drift
 from confiture.core.validation.ownership_coverage import check_ownership_coverage
@@ -106,6 +108,7 @@ class ValidateOptions:
     check_acls: bool = False
     check_ownership_coverage: bool = False
     check_function_uniqueness: bool = False
+    check_data_assertions: bool = False
     check_security_definer: bool = False
     check_imports: bool = False
     check_live_drift: bool = False
@@ -395,6 +398,20 @@ def _run_security_definer(opts: ValidateOptions, ctx: ValidationContext) -> Chec
     return CheckOutcome("security_definer", passed=not report.has_errors, payload=payload)
 
 
+def _run_data_assertions(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
+    """Warnings only: `passed` stays True however many findings there are.
+
+    The construct is legal SQL that works against a populated database. What
+    makes it a problem is where `migrate preflight` runs it, and confiture
+    recommends that topology rather than enforcing it — so this reports the
+    contract and leaves the verdict with the author. Precedent: an unpinned
+    SECURITY DEFINER at warning severity.
+    """
+    report = check_data_assertions(opts.migrations_dir)
+    payload = render_data_assertions(report, json_mode=opts.json_mode)
+    return CheckOutcome("data_assertions", passed=True, payload=payload)
+
+
 def _run_imports(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
 
     result = ImportChecker(opts.migrations_dir).check()
@@ -605,6 +622,12 @@ def build_registry(opts: ValidateOptions) -> list[ValidationCheck]:
             enabled=opts.check_security_definer,
             run=lambda ctx: _run_security_definer(opts, ctx),
             needs_db=opts.secdef_against_db,
+        ),
+        ValidationCheck(
+            flag="--check-data-assertions",
+            name="data_assertions",
+            enabled=opts.check_data_assertions,
+            run=lambda ctx: _run_data_assertions(opts, ctx),
         ),
         ValidationCheck(
             flag="--check-imports",

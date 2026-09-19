@@ -913,29 +913,72 @@ confiture migrate generate [OPTIONS] {name}
 | `--snapshot` / `--no-snapshot` | - | Flag | - | Write schema history snapshot (default: from config, True) |
 | `--snapshots-dir` | - | path | - | Override snapshot output directory (default: db/schema_history) |
 | `--live-snapshot` / `--no-live-snapshot` | - | Flag | - | Snapshot via temp database + pg_dump (captures DO-block objects) |
+| `--verify-sidecar` / `--no-verify-sidecar` | - | Flag | on | Write an empty <version>_<name>.verify.sql beside the migration, where assertions on data belong (default: on). `migrate preflight` runs up() against a schema-only database, so assertions inside up() fail there. |
 
 <!-- END GENERATED: cli confiture migrate generate -->
+
+#### What it writes
+
+Two files, named after the same version:
+
+```
+db/migrations/
+├── 20260520143015_add_user_bio.py
+└── 20260520143015_add_user_bio.verify.sql
+```
+
+The migration:
+
+```python
+"""Migration: add_user_bio
+
+Version: 20260520143015
+
+up() must survive empty tables. `confiture migrate preflight` replays pending
+migrations against a schema-only database, so every table it sees has no rows
+in it — an assertion on data raises there, and a deploy gated on the preflight
+aborts for a migration whose work was correct.
+
+Assertions about data belong in the sidecar beside this file:
+    20260520143015_add_user_bio.verify.sql
+`confiture migrate verify` runs it separately, in a SAVEPOINT, after the
+migration has been applied.
+"""
+
+from confiture.models.migration import Migration
+
 
 class AddUserBio(Migration):
     """Migration: add_user_bio."""
 
-    version = "003"
+    version = "20260520143015"
     name = "add_user_bio"
 
     def up(self) -> None:
-        """Apply migration."""
-        # TODO: Add your SQL statements here
+        """Apply migration.
+
+        Schema and data changes only — no assertions on data (see the module
+        docstring). Runs against a schema-only database during
+        `migrate preflight`.
+        """
+        # Add your forward migration SQL here
         # Example:
         # self.execute("ALTER TABLE users ADD COLUMN bio TEXT")
         pass
 
     def down(self) -> None:
         """Rollback migration."""
-        # TODO: Add your rollback SQL statements here
+        # Add your rollback SQL here
         # Example:
         # self.execute("ALTER TABLE users DROP COLUMN bio")
         pass
 ```
+
+The sidecar arrives empty — a comment stating the contract and a worked
+example. `migrate verify` reports a sidecar with no statement in it as
+`skipped`, never as a failure, so adding them gradually never turns a gate red.
+Pass `--no-verify-sidecar` to skip it, or delete the file if the migration has
+nothing to assert. See [Verifying migrations](../guides/migration-verification.md).
 
 #### Naming Conventions
 
@@ -1720,6 +1763,7 @@ confiture migrate validate [OPTIONS]
 | `--check-acls` / `--check-acl-coverage` | - | Flag | off | Static: verify every `CREATE TABLE` in db/migrations/ has a matching `GRANT` either in the same migration or in the configured global grant sweep directory (defaults to db/7_grant). No-op when the config has no `acls:` block. No database connection required. Use --check-acls; --check-acl-coverage is a deprecated alias. |
 | `--check-ownership-coverage` | - | Flag | off | Static: verify every `CREATE { TABLE \| VIEW \| MATERIALIZED VIEW \| SEQUENCE }` in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` in the same file (`own_001`). Also flags bare `ALTER … OWNER TO` on objects the migration didn't create (`own_002` — three severity tiers: silent when guarded + companion `requires_superuser=True`, WARNING when only guarded, ERROR when bare). No-op when the config has no `ownership:` block, or when `ownership.lint_enabled` is false. |
 | `--check-function-uniqueness` | - | Flag | off | Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` in the configured DDL directories has a unique fully-qualified signature. Two files defining the same `schema.name(args)` are silently shadowed by `confiture build` — this rule (`func_001`) catches the duplicate first. No-op when the config has no `function_coverage:` block, or when `function_coverage.enabled` is false. |
+| `--check-data-assertions` | - | Flag | off | Static: warn when a migration asserts on DATA inside up() — a `RAISE EXCEPTION` guarded on a row count. `migrate preflight` replays up() against a schema-only database where every table is empty, so such a guard aborts it however correct the migration is. Assertions belong in a .verify.sql sidecar. Heuristic, so findings are warnings and never fail the gate. |
 | `--check-security-definer` | - | Flag | off | Flag `SECURITY DEFINER` functions/procedures that do not pin `search_path` (CVE-2018-1058). Rule `sec_002`. Without `--against-db`: static DDL scan (no DB). With `--against-db`: live `pg_proc` query (authoritative; works even when ALTER FUNCTION patched the search_path separately from the CREATE). No-op when config has no `security_lint:` block or `security_lint.enabled` is false. Default severity advisory (warning, exit 0); set `security_lint.severity: error` for exit 1. See docs/guides/security-definer-lint.md. |
 | `--against-db` | - | Flag | off | Used with `--check-security-definer`: query the live database (`pg_proc.proconfig`) instead of scanning DDL source files. Authoritative for migrate-strategy databases where `ALTER FUNCTION … SET search_path` may have been applied after the original CREATE. |
 | `--emit-remediation` | - | path | - | Used with `--check-security-definer`: write a SQL remediation script containing one `ALTER FUNCTION … SET search_path = …` statement per flagged callable to the given file path. Does nothing when no violations are found. |
@@ -1902,7 +1946,7 @@ confiture migrate preflight [OPTIONS]
 Runs each applied migration's `.verify.sql` sidecar (a `SELECT` returning a
 truthy value) inside a read-only `SAVEPOINT`. This checks *runtime state*; for
 *file integrity* — have applied migration files been modified since? — use
-[`confiture verify-checksums`](#confiture-verify-checksums).
+[`confiture verify-checksums`](#confiture-verify-checksums-file-integrity).
 
 #### Exit codes
 
@@ -1958,7 +2002,17 @@ confiture migrate verify [OPTIONS]
 
 Compares SHA-256 checksums of migration files against the checksums stored when
 they were applied, detecting files modified after application (tampering /
-schema drift). Top-level, **not** a `migrate` subcommand.
+schema drift).
+
+This is the read-only answer to *"does my ledger still match my files?"*, and
+`--fix` is the targeted re-stamp when a change was deliberate. Reach for it
+before hand-writing UPDATEs against the ledger — see
+[the tracking table reference](tracking-table.md#checksum-mismatches).
+
+**Two names, both permanent** (1.12.0): `confiture verify-checksums` and
+`confiture migrate verify-checksums` are the same command. The top-level name
+is on the [fraisier adapter's exit-code table](fraisier-adapter-contract.md),
+and the `migrate` name is where a user looking for a migration concern looks.
 
 `confiture verify` (a deprecated alias since 0.19.0) was removed in 0.51.0; use `verify-checksums`.
 
@@ -1966,7 +2020,7 @@ schema drift). Top-level, **not** a `migrate` subcommand.
 
 | Exit | Meaning |
 |------|---------|
-| `0` | All checksums verified (or no ledger, under `--allow-uninitialized`) |
+| `0` | Checksums verified, **or** no ledger under `--allow-uninitialized` (see below) |
 | `1` | Checksum mismatches found — the CI gate this command exists to trip |
 | `2` | `PRECON_1001` — the database has no migration ledger |
 
@@ -1975,11 +2029,30 @@ Before 0.37.0 an absent ledger crashed to exit 1 with a raw psycopg
 "checksums are wrong". See [exit codes](exit-codes.md) for why exit 2 rather
 than 0 was chosen.
 
+#### `--allow-uninitialized` is not a pass
+
+A ledger-less run under that flag exits `0` but reports `ok: false` with
+`was_skipped: true`. The exit code answers *"should this gate trip?"* — and the
+flag is you declaring in advance that a ledger-less database must not trip it.
+`ok` answers *"did verification succeed?"*, and it did not, because it did not
+happen.
+
+Through 1.11.0 that payload said `ok: true`, so a CI gate reading `ok` — which
+is what this command's [JSON schema](json-schemas.md) tells consumers to
+read — went green on a run that compared **zero** files. If you gate on
+`verify-checksums --allow-uninitialized` and it has always passed, check that
+it is pointed at a database that actually has a ledger (#311).
+
 ```bash
 confiture verify-checksums --config db/environments/production.yaml
+confiture migrate verify-checksums -c db/environments/production.yaml   # same command
 
-# Post-restore, where the ledger may legitimately be absent
+# Post-restore, where the ledger may legitimately be absent.
+# Exits 0, reports ok: false + was_skipped: true — it verified nothing.
 confiture verify-checksums --allow-uninitialized
+
+# One checksum changed on purpose: re-stamp just that migration, atomically.
+confiture verify-checksums --fix
 ```
 
 ---
@@ -2004,6 +2077,42 @@ confiture verify-checksums [OPTIONS]
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture verify-checksums -->
+
+### `confiture migrate verify-checksums` — the same command, under `migrate`
+
+An alias for [`confiture verify-checksums`](#confiture-verify-checksums-file-integrity), added
+in 1.12.0 (#311). Same callable, same options, same exit codes — registered
+twice rather than wrapped, so the two cannot drift.
+
+It exists because the command was unfindable where it was needed: a user
+searched `migrate --help` for a ledger-vs-files check, did not find one, and
+filed an issue asking for it — while their own CI had been invoking
+`confiture verify-checksums` on every ship for months.
+
+Note the neighbour it now sits beside: `confiture migrate verify` (documented
+just above) checks **runtime state** through `.verify.sql` sidecars, while
+`migrate verify-checksums` checks **file integrity**. Different questions, and
+the similar names are the reason this page spells out which is which.
+
+<!-- BEGIN GENERATED: cli confiture migrate verify-checksums -->
+
+**Usage**
+
+```bash
+confiture migrate verify-checksums [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--migrations-dir` | - | path | `db/migrations` | Migrations directory |
+| `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file |
+| `--fix` | - | Flag | off | Update stored checksums to match current files (dangerous) |
+| `--allow-uninitialized` | - | Flag | off | Treat a database with no migration ledger as success (exit 0) instead of exit 2. For gates that legitimately run against schema-built databases. |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture migrate verify-checksums -->
 
 ### `confiture migrate validate` - Git-Aware Schema Validation
 
@@ -2413,6 +2522,7 @@ confiture migrate validate [OPTIONS]
 | `--check-acls` / `--check-acl-coverage` | - | Flag | off | Static: verify every `CREATE TABLE` in db/migrations/ has a matching `GRANT` either in the same migration or in the configured global grant sweep directory (defaults to db/7_grant). No-op when the config has no `acls:` block. No database connection required. Use --check-acls; --check-acl-coverage is a deprecated alias. |
 | `--check-ownership-coverage` | - | Flag | off | Static: verify every `CREATE { TABLE \| VIEW \| MATERIALIZED VIEW \| SEQUENCE }` in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` in the same file (`own_001`). Also flags bare `ALTER … OWNER TO` on objects the migration didn't create (`own_002` — three severity tiers: silent when guarded + companion `requires_superuser=True`, WARNING when only guarded, ERROR when bare). No-op when the config has no `ownership:` block, or when `ownership.lint_enabled` is false. |
 | `--check-function-uniqueness` | - | Flag | off | Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` in the configured DDL directories has a unique fully-qualified signature. Two files defining the same `schema.name(args)` are silently shadowed by `confiture build` — this rule (`func_001`) catches the duplicate first. No-op when the config has no `function_coverage:` block, or when `function_coverage.enabled` is false. |
+| `--check-data-assertions` | - | Flag | off | Static: warn when a migration asserts on DATA inside up() — a `RAISE EXCEPTION` guarded on a row count. `migrate preflight` replays up() against a schema-only database where every table is empty, so such a guard aborts it however correct the migration is. Assertions belong in a .verify.sql sidecar. Heuristic, so findings are warnings and never fail the gate. |
 | `--check-security-definer` | - | Flag | off | Flag `SECURITY DEFINER` functions/procedures that do not pin `search_path` (CVE-2018-1058). Rule `sec_002`. Without `--against-db`: static DDL scan (no DB). With `--against-db`: live `pg_proc` query (authoritative; works even when ALTER FUNCTION patched the search_path separately from the CREATE). No-op when config has no `security_lint:` block or `security_lint.enabled` is false. Default severity advisory (warning, exit 0); set `security_lint.severity: error` for exit 1. See docs/guides/security-definer-lint.md. |
 | `--against-db` | - | Flag | off | Used with `--check-security-definer`: query the live database (`pg_proc.proconfig`) instead of scanning DDL source files. Authoritative for migrate-strategy databases where `ALTER FUNCTION … SET search_path` may have been applied after the original CREATE. |
 | `--emit-remediation` | - | path | - | Used with `--check-security-definer`: write a SQL remediation script containing one `ALTER FUNCTION … SET search_path = …` statement per flagged callable to the given file path. Does nothing when no violations are found. |
