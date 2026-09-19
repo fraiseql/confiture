@@ -15,11 +15,26 @@ alias, not a move and not a deprecation.
 
 from __future__ import annotations
 
+from tests._helpers import strip_ansi
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
 
 runner = CliRunner()
+
+
+def _command(*path: str):
+    """The click command registered at ``path``, through Typer's own conversion.
+
+    Typer vendors click, so the command tree is reached via
+    ``typer.main.get_command`` rather than by importing click directly.
+    """
+    import typer.main
+
+    node = typer.main.get_command(app)
+    for name in path:
+        node = node.commands[name]
+    return node
 
 
 class TestBothNamesWork:
@@ -39,19 +54,52 @@ class TestBothNamesWork:
         result = runner.invoke(app, ["migrate", "--help"])
 
         assert result.exit_code == 0
-        assert "verify-checksums" in result.output
+        assert "verify-checksums" in strip_ansi(result.output)
 
 
 class TestTheTwoCannotDrift:
     """One callable, two registrations — so there is no second option list."""
 
     def test_the_same_flags_are_offered_under_both_names(self) -> None:
-        top = runner.invoke(app, ["verify-checksums", "--help"]).output
-        under_migrate = runner.invoke(app, ["migrate", "verify-checksums", "--help"]).output
+        """Compared on the command objects, not on rendered help.
 
-        for flag in ("--migrations-dir", "--config", "--fix", "--allow-uninitialized", "--format"):
-            assert flag in top, f"{flag} missing from `verify-checksums --help`"
-            assert flag in under_migrate, f"{flag} missing from `migrate verify-checksums --help`"
+        Rendered help was the first shape of this test and it was wrong twice
+        over. Rich forces colour when `GITHUB_ACTIONS` is set and styles each
+        flag *in pieces* — `--format` arrives as
+        `\x1b[1;36m-\x1b[0m\x1b[1;36m-format\x1b[0m` — so a substring check
+        passed locally and failed in CI. `tests/_helpers.strip_ansi` exists for
+        that and would have fixed the symptom.
+
+        The parameters are the better subject anyway: they are what "the two
+        cannot drift" actually claims, and they would catch a divergence that
+        help rendering happened to hide.
+        """
+        top = _command("verify-checksums")
+        under_migrate = _command("migrate", "verify-checksums")
+
+        assert [p.opts for p in top.params] == [p.opts for p in under_migrate.params]
+        # Named explicitly, so deleting a flag from *both* still fails here.
+        offered = {opt for p in top.params for opt in p.opts}
+        assert {
+            "--migrations-dir",
+            "--config",
+            "--fix",
+            "--allow-uninitialized",
+            "--format",
+        } <= offered
+
+    def test_it_is_literally_the_same_callable(self) -> None:
+        """One function, two registrations — the property the rest relies on.
+
+        Asserted through ``__wrapped__``: Typer builds a *fresh* wrapper per
+        registration, so the two ``callback`` objects are never identical even
+        when they wrap one function. Comparing the callbacks directly fails on
+        a correct alias, which is a false alarm rather than a guard.
+        """
+        top = _command("verify-checksums").callback
+        alias = _command("migrate", "verify-checksums").callback
+
+        assert top.__wrapped__ is alias.__wrapped__
 
     def test_the_alias_behaves_identically_on_a_real_invocation(self, tmp_path) -> None:
         """Not just help text: a missing config must fail the same way under both."""

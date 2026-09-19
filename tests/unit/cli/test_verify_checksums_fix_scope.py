@@ -21,6 +21,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+from tests._helpers import strip_ansi
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -98,9 +99,10 @@ class TestFixIsScoped:
 
     def test_text_reports_the_count_it_found(self, cfg: Path, migrations_dir: Path) -> None:
         result, _ = _invoke(cfg, migrations_dir, "--fix")
+        output = strip_ansi(result.output)
 
-        assert "Found 1 checksum mismatch(es)" in result.output
-        assert "Updated 1 checksum(s)" in result.output
+        assert "Found 1 checksum mismatch(es)" in output
+        assert "Updated 1 checksum(s)" in output
 
     def test_the_wide_restamp_is_not_called(self, cfg: Path, migrations_dir: Path) -> None:
         """`update_all_checksums` still exists; `--fix` must not be its caller."""

@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+from tests._helpers import strip_ansi
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -96,7 +97,7 @@ class TestAbsentLedgerText:
 
         assert "migrate up" in result.output
         assert "baseline" in result.output
-        assert "--allow-uninitialized" in result.output
+        assert "--allow-uninitialized" in strip_ansi(result.output)
 
 
 class TestAllowUninitialized:
@@ -245,5 +246,5 @@ class TestSkippedIsNotSuccess:
         result = _invoke(cfg, migrations_dir, "--allow-uninitialized", ledger=False)
 
         assert result.exit_code == 0
-        assert "nothing was verified" in result.output.lower()
-        assert "--allow-uninitialized" in result.output
+        assert "nothing was verified" in strip_ansi(result.output).lower()
+        assert "--allow-uninitialized" in strip_ansi(result.output)

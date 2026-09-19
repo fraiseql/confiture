@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+from tests._helpers import strip_ansi
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -104,7 +105,7 @@ class TestAbsentLedger:
         # The three ways forward, per _NO_LEDGER_HINT.
         assert "migrate up" in result.output
         assert "baseline" in result.output
-        assert "--allow-uninitialized" in result.output
+        assert "--allow-uninitialized" in strip_ansi(result.output)
 
 
 class TestAllowUninitialized:
@@ -121,7 +122,9 @@ class TestAllowUninitialized:
     ) -> None:
         result = _invoke(cfg, migrations_dir, "--allow-uninitialized", ledger=False)
 
-        assert "0 migrations recorded" in result.output
+        # strip_ansi: Rich highlights bare numbers, so `0` arrives wrapped in
+        # escapes and a raw substring check is a latent flake (tests/README.md).
+        assert "0 migrations recorded" in strip_ansi(result.output)
 
 
 class TestAbsentIsNotEmpty:
@@ -243,9 +246,9 @@ class TestSkippedIsNotSuccess:
         result = _invoke(cfg, migrations_dir, "--allow-uninitialized", ledger=False)
 
         assert result.exit_code == 0
-        assert "nothing was verified" in result.output.lower()
+        assert "nothing was verified" in strip_ansi(result.output).lower()
         # The success line and its glyph, neither of which this run earned.
-        assert "all migration checksums verified" not in result.output.lower()
+        assert "all migration checksums verified" not in strip_ansi(result.output).lower()
         assert "✅" not in result.output
         # ...and where the exit 0 actually came from.
-        assert "--allow-uninitialized" in result.output
+        assert "--allow-uninitialized" in strip_ansi(result.output)
