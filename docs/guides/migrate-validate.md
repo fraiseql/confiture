@@ -875,6 +875,58 @@ query answers truthfully and the guard does its job. Flagging it would be
 advising you to break a working check. Likewise `RAISE NOTICE` (it logs and
 carries on) and a guard on a parameter rather than on rows.
 
+Nor a relation **the migration itself builds from the catalogue** — a temp
+table or a view, transitively, whether the rows arrive via `CREATE … AS SELECT`
+or a later `INSERT … SELECT`:
+
+```sql
+CREATE TEMP TABLE _v_statistics_privileges AS
+  SELECT relname, relacl FROM pg_class WHERE relkind = 'r';
+
+DO $$
+DECLARE v int;
+BEGIN
+  SELECT count(*) INTO v FROM _v_statistics_privileges;
+  IF v <> 7 THEN RAISE EXCEPTION 'expected 7, got %', v; END IF;  -- fine
+END $$;
+```
+
+The unqualified form counts as the catalogue too: PostgreSQL puts `pg_catalog`
+on the implicit `search_path`, so `FROM pg_class` is a catalogue read, and the
+`pg_` prefix is reserved for exactly that. (`app.pg_thing` — qualified into
+your own schema — is your table.)
+
+### Known blind spot
+
+!!! warning "A schema-only copy is not an *empty* database"
+
+    `pg_dump --schema-only | psql` leaves every **user** table empty, but the
+    catalogue is fully populated — it describes the schema that was just
+    created. Anything derived from `pg_class`, `pg_namespace` or their kin has
+    rows at preflight time.
+
+    This check resolves that derivation **only within the migration it is
+    reading**. If the relation you count is built from the catalogue somewhere
+    else — a persistent view in `db/schema/`, or a table a previous migration
+    created — nothing in the file under analysis says so, and you will get a
+    warning for a guard that is in fact correct.
+
+    That is the main source of false positives, and it is why these are
+    warnings rather than gate failures. If you see one, check where the
+    relation's rows come from before moving anything.
+
+This limit was measured rather than guessed: the shape above came from a
+downstream 295-migration corpus where an earlier detector without these
+exclusions produced 76 findings whose checked samples were all false. If you
+run this over a large existing corpus, the finding rate is worth reporting
+back — the exclusions above are the ones we know about, not a proof there are
+no others.
+
+A complementary approach with no blind spot at all is to replay the migration
+against a genuinely empty database and see what happens. That cannot be wrong,
+but it costs a database and a full apply; this check costs a parse. They are
+worth running at different moments, not instead of one another.
+
 ### Scope and honesty
 
 It is static — it never connects. `.py` migrations resolve through the same

@@ -149,9 +149,14 @@ def migrate_verify(
                 _output_json(empty.to_dict(), output_file, console)
             else:
                 console.print(
-                    f"[yellow]ℹ️  No migration ledger found (`{tracking_table}` is not "
-                    "present in this database) — 0 migrations recorded, nothing to "
-                    "verify.[/yellow]"
+                    f"[yellow]⏭️  Skipped: no migration ledger found (`{tracking_table}` "
+                    "is not present in this database) — 0 migrations recorded, so "
+                    "nothing was verified.[/yellow]"
+                )
+                console.print(
+                    "[dim]   Exit 0 comes from --allow-uninitialized, not from a "
+                    "verification. Point this at a migrated database to actually run "
+                    "the .verify.sql sidecars.[/dim]"
                 )
             return
 

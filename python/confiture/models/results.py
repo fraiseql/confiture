@@ -756,9 +756,37 @@ class VerifyAllResult:
     total_applied: int
     ledger_present: bool = True
 
+    @property
+    def was_skipped(self) -> bool:
+        """Whether this run verified nothing because there was no ledger.
+
+        Only reachable under ``--allow-uninitialized``; without it the same
+        state raises ``PRECON_1001``.
+        """
+        return not self.ledger_present
+
+    @property
+    def ok(self) -> bool:
+        """Whether verification happened and nothing failed.
+
+        Both conjuncts, because either alone is a lie somewhere (#311). The
+        published adapter contract said *ok ⇔ ``failed_count == 0``*, and a
+        ledger-less run has ``failed_count == 0`` for the trivial reason that
+        nothing ran — so a conforming consumer read success from a run that
+        verified nothing. ``failed_count`` itself stays honest at 0; what was
+        wrong was the inference drawn from it.
+
+        This mirrors ``verify-checksums``' ``ok`` exactly. Two neighbouring
+        commands answering "I could not verify anything" differently is a trap
+        in its own right.
+        """
+        return self.ledger_present and self.failed_count == 0
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
+            "ok": self.ok,
+            "was_skipped": self.was_skipped,
             "verified_count": self.verified_count,
             "failed_count": self.failed_count,
             "skipped_count": self.skipped_count,

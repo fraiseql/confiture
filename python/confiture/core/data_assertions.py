@@ -26,6 +26,16 @@ a ``pg_catalog`` or ``information_schema`` lookup is *correct* under a
 schema-only preflight: the schema is present, so the query answers truthfully
 and the guard does its job. Reporting it would be advising the author to break
 a working check.
+
+**A schema-only copy is not an empty database**, and that is where the residual
+blind spot is. ``pg_dump --schema-only | psql`` leaves every *user* table empty
+but populates the catalogue, so anything derived from it has rows. Relations
+this migration builds from the catalogue are resolved (see
+:func:`_derivations`) — but only within the text being read. A view in
+``db/schema/`` or a table a previous migration created carries no derivation
+here, so a correct guard over it is reported. That is the main false-positive
+source, it is documented in ``docs/guides/migrate-validate.md``, and it is why
+findings are warnings rather than gate failures.
 """
 
 from __future__ import annotations
@@ -127,30 +137,147 @@ def _walk(node: Any):
             yield from _walk(item)
 
 
-def _user_relations(query: str) -> list[str]:
-    """Relations in a query that are empty on a schema-only database.
+def _is_catalogue(schema: str | None, relname: str) -> bool:
+    """Whether this relation has rows on a schema-only copy.
 
-    The catalog schemas are excluded, and a bare name is *included*: an
-    unqualified ``tb_widget`` resolves through ``search_path`` to a user table,
-    not to a catalog.
+    ``pg_dump --schema-only | psql`` leaves every *user* table empty, but the
+    catalogue is fully populated — it describes the schema that was just
+    created. So a guard counting catalogue rows is correct at preflight time.
+
+    The bare form matters as much as the qualified one: PostgreSQL puts
+    ``pg_catalog`` on the implicit ``search_path``, so ``FROM pg_class`` — no
+    qualifier — is a catalogue read, and the ``pg_`` prefix is reserved for
+    exactly this.
     """
+    if schema in _SCHEMA_ONLY_SAFE:
+        return True
+    return schema is None and relname.startswith("pg_")
+
+
+def _relations_in(query: str) -> list[tuple[str | None, str]]:
+    """Every relation a query reads, as ``(schema, relname)``."""
     # Reason: a PLpgSQL_expr query is a fragment the compiler produced; pglast may still reject it
     try:
         tree = pglast.parser.parse_sql(query)
     except pglast.parser.ParseError:
         return []
+    return _range_vars(tree)
 
-    names: list[str] = []
+
+def _range_vars(tree: Any) -> list[tuple[str | None, str]]:
+    """Every ``RangeVar`` reachable from ``tree``, as ``(schema, relname)``."""
+    out: list[tuple[str | None, str]] = []
     for node in _iter_nodes(tree):
         if type(node).__name__ != "RangeVar":
             continue
-        schema = getattr(node, "schemaname", None)
-        if schema in _SCHEMA_ONLY_SAFE:
-            continue
         rel = getattr(node, "relname", None)
         if rel:
-            names.append(f"{schema}.{rel}" if schema else rel)
+            out.append((getattr(node, "schemaname", None), rel))
+    return out
+
+
+def _user_relations(query: str, derivations: dict[str, set[str]] | None = None) -> list[str]:
+    """Relations in a query that are **empty** on a schema-only database.
+
+    Excluded: the catalogue (see :func:`_is_catalogue`), and any relation this
+    migration builds from the catalogue (see :func:`_catalogue_derived`). A
+    bare user name is included — unqualified ``tb_widget`` resolves through
+    ``search_path`` to a user table.
+    """
+    names: list[str] = []
+    for schema, rel in _relations_in(query):
+        if _is_catalogue(schema, rel):
+            continue
+        qualified = f"{schema}.{rel}" if schema else rel
+        if derivations and _catalogue_derived(qualified, rel, derivations):
+            continue
+        names.append(qualified)
     return names
+
+
+def _catalogue_derived(
+    qualified: str, bare: str, derivations: dict[str, set[str]], _seen: frozenset[str] = frozenset()
+) -> bool:
+    """Whether this migration fills ``qualified`` from the catalogue, transitively.
+
+    The blind spot this closes was measured downstream, not reasoned about: the
+    same detector, built independently, reported **76 findings across 295
+    migrations** and the checked samples were false — a temp table or view
+    populated from ``pg_class`` has rows at preflight time, and its *name* says
+    nothing about that.
+
+    A relation created here with **no** sources is not derived: an empty table
+    is precisely the case worth flagging, so "created in this file" must not
+    become a blanket excuse.
+    """
+    for key in (qualified, bare):
+        if key in _seen:
+            continue
+        sources = derivations.get(key)
+        if not sources:
+            continue
+        seen = _seen | {qualified, bare}
+        if all(
+            source in _CATALOGUE_SENTINEL
+            or _catalogue_derived(source, source.rpartition(".")[2], derivations, seen)
+            for source in sources
+        ):
+            return True
+    return False
+
+
+#: Marks a source already known to be a catalogue relation.
+_CATALOGUE_SENTINEL = frozenset({"<catalogue>"})
+
+
+def _derivations(sql: str) -> dict[str, set[str]]:
+    """What each relation this migration creates or fills is populated *from*.
+
+    Keyed under both the qualified and the bare name, because a migration
+    writes ``CREATE TEMP TABLE _x`` and then ``FROM _x``, or
+    ``CREATE VIEW app.v`` and then ``FROM app.v``, and either spelling has to
+    find the entry.
+
+    Sources are collected from ``CREATE TABLE … AS SELECT``,
+    ``CREATE VIEW … AS``, ``CREATE MATERIALIZED VIEW … AS`` and
+    ``INSERT INTO … SELECT`` — the last because the rows can arrive after the
+    ``CREATE``.
+    """
+    # Reason: a file the parser rejects contributes no derivations; each statement still scans
+    try:
+        statements = pglast.parser.parse_sql(sql)
+    except pglast.parser.ParseError:
+        return {}
+
+    found: dict[str, set[str]] = {}
+    for raw in statements or []:
+        stmt = raw.stmt
+        target_attr = _TARGET_ATTR.get(type(stmt).__name__)
+        if target_attr is None:
+            continue
+        target = getattr(stmt, target_attr, None)
+        # CreateTableAsStmt's target is an IntoClause wrapping the RangeVar.
+        target = getattr(target, "rel", target)
+        relname = getattr(target, "relname", None)
+        if not relname:
+            continue
+        schema = getattr(target, "schemaname", None)
+        query = getattr(stmt, "query", None) or getattr(stmt, "selectStmt", None)
+        sources = {
+            "<catalogue>" if _is_catalogue(s, r) else (f"{s}.{r}" if s else r)
+            for s, r in _range_vars(query)
+        }
+        for key in {relname, f"{schema}.{relname}" if schema else relname}:
+            found.setdefault(key, set()).update(sources)
+    return found
+
+
+#: Statement kind -> the attribute naming the relation it populates.
+_TARGET_ATTR = {
+    "CreateTableAsStmt": "into",
+    "ViewStmt": "view",
+    "InsertStmt": "relation",
+}
 
 
 def _iter_nodes(node: Any):
@@ -166,7 +293,7 @@ def _iter_nodes(node: Any):
         yield from _iter_nodes(getattr(node, slot, None))
 
 
-def _counted_variables(block: Any) -> dict[str, str]:
+def _counted_variables(block: Any, derivations: dict[str, set[str]]) -> dict[str, str]:
     """Variables assigned by a ``SELECT ... INTO`` over a user relation.
 
     Maps the variable's name to the relation it counted, which is what a
@@ -178,7 +305,7 @@ def _counted_variables(block: Any) -> dict[str, str]:
         if not stmt or not stmt.get("into"):
             continue
         query = stmt.get("sqlstmt", {}).get("PLpgSQL_expr", {}).get("query", "")
-        relations = _user_relations(query)
+        relations = _user_relations(query, derivations)
         if not relations:
             continue
         for target in _into_targets(stmt.get("target")):
@@ -214,9 +341,14 @@ def _raises_at_error(body: Any, error_level: int) -> dict | None:
 
 
 def _assertions_in(
-    tree: Any, file: Path, error_level: int, line_base: int, lines: list[str]
+    tree: Any,
+    file: Path,
+    error_level: int,
+    line_base: int,
+    lines: list[str],
+    derivations: dict[str, set[str]],
 ) -> list[DataAssertion]:
-    counted = _counted_variables(tree)
+    counted = _counted_variables(tree, derivations)
     if not counted:
         return []
 
@@ -357,6 +489,7 @@ def scan_sql(sql: str, file: Path) -> AssertionScan:
         return AssertionScan(file=file, assertions=[])
 
     lines = sql.splitlines()
+    derivations = _derivations(sql)
     found: list[DataAssertion] = []
     unparseable = False
     for text, line in _located_statements(sql):
@@ -366,7 +499,7 @@ def scan_sql(sql: str, file: Path) -> AssertionScan:
         except (pglast.parser.ParseError, json.JSONDecodeError):
             unparseable = unparseable or _defines_plpgsql(text)
             continue
-        found.extend(_assertions_in(compiled.tree, file, error_level, line, lines))
+        found.extend(_assertions_in(compiled.tree, file, error_level, line, lines, derivations))
     return AssertionScan(file=file, assertions=found, unparseable=unparseable)
 
 

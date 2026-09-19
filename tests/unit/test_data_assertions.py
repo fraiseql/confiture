@@ -444,3 +444,150 @@ class AddThing(Migration):
 
         assert scan.assertions == []
         assert scan.unparseable is True, "a refused call must not read as clean"
+
+
+class TestSchemaOnlyIsNotEmpty:
+    """A schema-only copy is not an *empty* database (#311, downstream report).
+
+    `pg_dump --schema-only | psql` leaves every **user** table empty, but the
+    catalogue is fully populated — it describes the schema that was just
+    created. So anything derived from `pg_class`, `pg_namespace` or their kin
+    has rows at preflight time, and a `RAISE EXCEPTION` guarded on a count over
+    it is *correct*.
+
+    The downstream reporter built this same detector independently, measured
+    **76 findings across 295 migrations**, checked samples, found them false,
+    and threw it away — for exactly this reason. Their case:
+
+        SELECT count(*) INTO v FROM _v_statistics_privileges;  -- from pg_class
+        IF v <> 7 THEN RAISE EXCEPTION ...                     -- fine at preflight
+
+    A direct `FROM pg_catalog.…` was already excluded. What was not is a
+    relation the migration itself builds *from* the catalogue, whose name says
+    nothing about where its rows come from.
+    """
+
+    def test_a_temp_table_built_from_the_catalogue_is_not_flagged(self) -> None:
+        sql = """
+        CREATE TEMP TABLE _v_statistics_privileges AS
+          SELECT relname, relacl FROM pg_catalog.pg_class WHERE relkind = 'r';
+
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM _v_statistics_privileges;
+          IF v <> 7 THEN RAISE EXCEPTION 'expected 7 privileges, got %', v; END IF;
+        END $$;
+        """
+        assert find_data_assertions(sql, HERE) == []
+
+    def test_a_view_over_the_catalogue_is_not_flagged(self) -> None:
+        sql = """
+        CREATE VIEW app.v_tables AS SELECT relname FROM pg_class WHERE relkind = 'r';
+
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM app.v_tables;
+          IF v = 0 THEN RAISE EXCEPTION 'no tables'; END IF;
+        END $$;
+        """
+        assert find_data_assertions(sql, HERE) == []
+
+    def test_derivation_is_transitive(self) -> None:
+        """Two hops from the catalogue is still the catalogue."""
+        sql = """
+        CREATE TEMP TABLE _a AS SELECT relname FROM pg_class;
+        CREATE TEMP TABLE _b AS SELECT relname FROM _a;
+
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM _b;
+          IF v = 0 THEN RAISE EXCEPTION 'empty'; END IF;
+        END $$;
+        """
+        assert find_data_assertions(sql, HERE) == []
+
+    def test_a_table_filled_from_the_catalogue_by_insert_is_not_flagged(self) -> None:
+        """The sources can arrive after the CREATE."""
+        sql = """
+        CREATE TEMP TABLE _c (relname text);
+        INSERT INTO _c SELECT relname FROM pg_catalog.pg_class;
+
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM _c;
+          IF v = 0 THEN RAISE EXCEPTION 'empty'; END IF;
+        END $$;
+        """
+        assert find_data_assertions(sql, HERE) == []
+
+    def test_a_temp_table_built_from_a_user_table_IS_flagged(self) -> None:
+        """The other half. A copy of an empty table is empty.
+
+        Without this, "created in this file" would become a blanket excuse and
+        the check would stop detecting the incident it exists for.
+        """
+        sql = """
+        CREATE TEMP TABLE _d AS SELECT id FROM app.tb_widget;
+
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM _d;
+          IF v = 0 THEN RAISE EXCEPTION 'empty'; END IF;
+        END $$;
+        """
+        found = find_data_assertions(sql, HERE)
+
+        assert [f.variable for f in found] == ["v"]
+
+    def test_a_mixed_source_is_flagged(self) -> None:
+        """One user relation among the sources is enough to empty the result."""
+        sql = """
+        CREATE TEMP TABLE _e AS
+          SELECT c.relname FROM pg_class c JOIN app.tb_widget w ON w.id = c.oid;
+
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM _e;
+          IF v = 0 THEN RAISE EXCEPTION 'empty'; END IF;
+        END $$;
+        """
+        assert len(find_data_assertions(sql, HERE)) == 1
+
+    def test_an_unqualified_catalogue_read_is_not_flagged(self) -> None:
+        """`FROM pg_class` — no qualifier — is a catalogue read.
+
+        PostgreSQL puts `pg_catalog` on the implicit `search_path`, and the
+        `pg_` prefix is reserved for exactly that. Only the *qualified* form
+        was excluded before, so this shape was a false positive too.
+        """
+        sql = """
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM pg_class WHERE relkind = 'r';
+          IF v = 0 THEN RAISE EXCEPTION 'no tables'; END IF;
+        END $$;
+        """
+        assert find_data_assertions(sql, HERE) == []
+
+    def test_a_user_table_named_like_a_catalogue_one_is_still_a_user_table(self) -> None:
+        """The `pg_` shortcut applies only unqualified: `app.pg_thing` is yours."""
+        sql = """
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM app.pg_thing;
+          IF v = 0 THEN RAISE EXCEPTION 'empty'; END IF;
+        END $$;
+        """
+        assert len(find_data_assertions(sql, HERE)) == 1
+
+    def test_the_incident_still_reports(self) -> None:
+        """The regression guard for all of the above."""
+        assert len(find_data_assertions(INCIDENT, HERE)) == 1

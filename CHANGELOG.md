@@ -53,6 +53,32 @@ correct; only their verification blocks were in the wrong file.
   268-migration ledger used to print "Found 1 checksum mismatch(es)" and then
   "Updated 268 checksum(s)".
 
+- **`migrate verify` gained `ok` and `was_skipped`, and the documented success
+  test moved from `failed_count` to `ok`.** This is a change to the
+  [fraisier adapter contract](docs/reference/fraisier-adapter-contract.md).
+
+  `migrate verify` carried no `ok` field, and the contract said
+  *ok ⇔ `failed_count == 0`*. A ledger-less database under
+  `--allow-uninitialized` reports `failed_count: 0` because **nothing ran** —
+  so an adapter applying the rule reported a successful verification of zero
+  migrations. That is the same defect as the `verify-checksums` one above, in a
+  different shape, and it was reported by the same downstream user who asked
+  for it to be fixed rather than preserved: they are adopting `.verify.sql`
+  sidecars now, so they would be adopting a verifier that lies exactly where
+  the ledger is most likely to be absent.
+
+  `ok` is `ledger_present && failed_count == 0`; `was_skipped` is true when the
+  ledger was absent. `failed_count` itself is unchanged and still honest — it
+  was the *inference* drawn from it that was wrong. Both fields are required,
+  and the schema sets `additionalProperties: false`, so a consumer pinned to a
+  pre-1.12.0 schema must update.
+
+  **Adapter migration:** switch the success test from `failed_count == 0` to
+  `ok`. An adapter left on the old rule keeps working and keeps reporting
+  success for a ledger-less run. Exit codes are unchanged. The two commands now
+  answer "I could not verify anything" in the same shape, which they did not
+  before — a trap in its own right.
+
 ### Added
 
 - **`migrate generate` writes a `.verify.sql` sidecar** beside every new
@@ -91,6 +117,25 @@ correct; only their verification blocks were in the wrong file.
   `RAISE NOTICE`, nor a guard on a parameter. `.py` migrations resolve through
   the static evaluator (#213), so a genuinely dynamic call is refused and
   reported as `unanalysed` rather than counted as clean.
+
+  **A schema-only copy is not an empty database**, and that is where the
+  exclusions had to go furthest. `pg_dump --schema-only | psql` leaves user
+  tables empty but populates the *catalogue*, so anything derived from
+  `pg_class` and friends has rows at preflight time. A relation this migration
+  builds from the catalogue — a temp table or view, transitively, whether the
+  rows arrive via `CREATE … AS SELECT` or a later `INSERT … SELECT` — is not
+  flagged. Nor is an unqualified `FROM pg_class`: PostgreSQL puts `pg_catalog`
+  on the implicit `search_path`, and the `pg_` prefix is reserved for it.
+
+  That shape came from a downstream 295-migration corpus where an earlier
+  detector without these exclusions produced 76 findings whose checked samples
+  were all false. The **residual blind spot is documented**: derivation is
+  resolved only within the migration being read, so a relation built from the
+  catalogue in `db/schema/` or by a previous migration carries no derivation
+  here and a correct guard over it is still reported. That is why these are
+  warnings and not gate failures. See
+  [the guide](docs/guides/migrate-validate.md) for what to check before moving
+  anything.
 
 - **`docs/guides/migration-verification.md`** — the three questions and their
   three commands (`preflight` runs your `up()`; `verify` runs your
