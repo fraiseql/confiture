@@ -37,6 +37,53 @@ def _unnamed(change: SchemaChange, what: str) -> str:
     return f"-- WARNING: Cannot generate {change.type} on {change.table} without a {what} name\n"
 
 
+def _incomplete(change: SchemaChange, what: str) -> str:
+    """:func:`_unnamed`'s sibling, for a change that has a name but not a statement.
+
+    A CHECK with no expression, a foreign key with no referenced table. Writing
+    ``CHECK ()`` produces a migration that fails at apply; inventing the missing
+    half produces one that succeeds and is wrong. Saying so is the third option.
+    """
+    return f"-- WARNING: Cannot generate {change.type} on {change.table} without {what}\n"
+
+
+def _named(name: str, body: str) -> str:
+    """``CONSTRAINT n <body>``, or the body alone when the schema named nothing.
+
+    PostgreSQL lets a constraint go unnamed and generates the name at apply time
+    — the same name for the DDL confiture writes as for the DDL the author wrote.
+    Writing ``child_pid_fkey`` here would be inventing an identifier; omitting it
+    is what the author did.
+    """
+    return f"CONSTRAINT {name} {body}" if name else body
+
+
+def _columns(names: list[str]) -> str:
+    return ", ".join(names)
+
+
+def _references(details: dict[str, Any]) -> str | None:
+    """``REFERENCES b.parent (id) ON DELETE CASCADE``, as the schema wrote it.
+
+    ``REFERENCES b.parent`` names the parent's primary key, and an empty column
+    list is not how PostgreSQL spells that: ``REFERENCES b.parent ()`` is a
+    syntax error. The referential actions are rendered because a generated
+    foreign key that silently stops cascading applies cleanly and is wrong.
+    """
+    ref_table = details.get("ref_table") or ""
+    if not ref_table:
+        return None
+    ref_columns = details.get("ref_columns") or []
+    clause = f"{ref_table} ({_columns(ref_columns)})" if ref_columns else ref_table
+    for keyword, action in (
+        ("ON DELETE", details.get("on_delete")),
+        ("ON UPDATE", details.get("on_update")),
+    ):
+        if action:
+            clause += f" {keyword} {action}"
+    return clause
+
+
 class DifferSQLGenerator:
     """Generates safe, idempotent DDL SQL from SchemaChange objects."""
 
@@ -196,25 +243,34 @@ class DifferSQLGenerator:
         return f"DROP INDEX CONCURRENTLY IF EXISTS {index_name};\n"
 
     def _up_add_constraint(self, change: SchemaChange) -> str:
-        details = change.details or {}
-        constraint_name = details.get("name", "")
-        if not constraint_name:
-            return _unnamed(change, "constraint")
-        constraint_type = details.get("type", "")
-        columns = details.get("columns", [])
-        references = details.get("references", "")
-        cols_str = ", ".join(columns) if columns else ""
+        """A constraint from a hand-built ``ADD_CONSTRAINT`` change.
 
-        if constraint_type == "FOREIGN KEY":
+        The differ emits ``ADD_FOREIGN_KEY`` / ``ADD_CHECK_CONSTRAINT`` /
+        ``ADD_UNIQUE_CONSTRAINT``, each rendered by its own method below from the
+        fields the change carries. This one answers for a change written by hand,
+        whose ``type`` is the keyword and whose ``references`` is already spelled.
+
+        It used to append ``({columns})`` to whatever that keyword was, so a
+        keyword that takes no column list — ``CHECK (id > 0)`` — came out as
+        ``CHECK (id > 0) ()`` and the migration failed at apply (#316).
+        """
+        details = change.details or {}
+        name = details.get("name", "")
+        if not name:
+            return _unnamed(change, "constraint")
+        keyword = details.get("type", "")
+        columns = details.get("columns") or []
+        body = f"{keyword} ({_columns(columns)})" if columns else keyword
+        references = details.get("references") or ""
+        if references:
+            body += f" REFERENCES {references}"
+        clause = _named(name, body)
+        if keyword == "FOREIGN KEY":
             return (
-                f"ALTER TABLE {change.table} ADD CONSTRAINT {constraint_name}"
-                f" FOREIGN KEY ({cols_str}) REFERENCES {references} NOT VALID;\n"
-                f"ALTER TABLE {change.table} VALIDATE CONSTRAINT {constraint_name};\n"
+                f"ALTER TABLE {change.table} ADD {clause} NOT VALID;\n"
+                f"ALTER TABLE {change.table} VALIDATE CONSTRAINT {name};\n"
             )
-        return (
-            f"ALTER TABLE {change.table} ADD CONSTRAINT {constraint_name}"
-            f" {constraint_type} ({cols_str});\n"
-        )
+        return f"ALTER TABLE {change.table} ADD {clause};\n"
 
     def _up_drop_constraint(self, change: SchemaChange) -> str:
         details = change.details or {}
@@ -224,79 +280,57 @@ class DifferSQLGenerator:
         return f"ALTER TABLE {change.table} DROP CONSTRAINT IF EXISTS {constraint_name};\n"
 
     def _up_add_foreign_key(self, change: SchemaChange) -> str:
+        """``NOT VALID`` then ``VALIDATE``, which needs a name — or one statement.
+
+        The two-step takes a brief ``SHARE ROW EXCLUSIVE`` lock and scans the
+        table outside it, and the second step names the constraint. An unnamed
+        foreign key cannot be validated separately, so it is added in one
+        statement and the statement says so rather than carrying a name
+        confiture made up.
+        """
         details = change.details or {}
-        return self._up_add_constraint(
-            SchemaChange(
-                type=change.type,
-                table=change.table,
-                details={
-                    "name": details.get("name", ""),
-                    "type": "FOREIGN KEY",
-                    "columns": details.get("columns", []),
-                    "references": (
-                        f"{details.get('ref_table', '')}({', '.join(details.get('ref_columns', []))})"
-                    ),
-                },
+        columns = details.get("columns") or []
+        reference = _references(details)
+        if not columns or reference is None:
+            return _incomplete(change, "a column list and a referenced table")
+        name = details.get("name") or ""
+        clause = _named(name, f"FOREIGN KEY ({_columns(columns)}) REFERENCES {reference}")
+        if not name:
+            return (
+                f"ALTER TABLE {change.table} ADD {clause};"
+                " -- review: unnamed in the schema, so it cannot be added NOT VALID and"
+                " validated separately; this scans the table under a lock\n"
             )
+        return (
+            f"ALTER TABLE {change.table} ADD {clause} NOT VALID;\n"
+            f"ALTER TABLE {change.table} VALIDATE CONSTRAINT {name};\n"
         )
 
     def _up_drop_foreign_key(self, change: SchemaChange) -> str:
-        details = change.details or {}
-        return self._up_drop_constraint(
-            SchemaChange(
-                type=change.type,
-                table=change.table,
-                details={"name": details.get("name", "")},
-            )
-        )
+        return self._up_drop_constraint(change)
 
     def _up_add_check_constraint(self, change: SchemaChange) -> str:
+        """A CHECK constraint is its expression, and has no column list (#316)."""
         details = change.details or {}
-        return self._up_add_constraint(
-            SchemaChange(
-                type=change.type,
-                table=change.table,
-                details={
-                    "name": details.get("name", ""),
-                    "type": f"CHECK ({details.get('expression', '')})",
-                    "columns": [],
-                },
-            )
-        )
+        expression = details.get("expression") or ""
+        if not expression:
+            return _incomplete(change, "a CHECK expression")
+        clause = _named(details.get("name") or "", f"CHECK ({expression})")
+        return f"ALTER TABLE {change.table} ADD {clause};\n"
 
     def _up_drop_check_constraint(self, change: SchemaChange) -> str:
-        details = change.details or {}
-        return self._up_drop_constraint(
-            SchemaChange(
-                type=change.type,
-                table=change.table,
-                details={"name": details.get("name", "")},
-            )
-        )
+        return self._up_drop_constraint(change)
 
     def _up_add_unique_constraint(self, change: SchemaChange) -> str:
         details = change.details or {}
-        return self._up_add_constraint(
-            SchemaChange(
-                type=change.type,
-                table=change.table,
-                details={
-                    "name": details.get("name", ""),
-                    "type": "UNIQUE",
-                    "columns": details.get("columns", []),
-                },
-            )
-        )
+        columns = details.get("columns") or []
+        if not columns:
+            return _incomplete(change, "a column list")
+        clause = _named(details.get("name") or "", f"UNIQUE ({_columns(columns)})")
+        return f"ALTER TABLE {change.table} ADD {clause};\n"
 
     def _up_drop_unique_constraint(self, change: SchemaChange) -> str:
-        details = change.details or {}
-        return self._up_drop_constraint(
-            SchemaChange(
-                type=change.type,
-                table=change.table,
-                details={"name": details.get("name", "")},
-            )
-        )
+        return self._up_drop_constraint(change)
 
     def _up_add_function(self, change: SchemaChange) -> str:
         """The routine's own ``CREATE OR REPLACE``.
