@@ -1056,7 +1056,13 @@ class SchemaDiffer:
             SchemaChange(
                 type="DROP_TABLE",
                 table=old_map[key].qualified,
-                details={"columns": _column_details(old_map[key])},
+                # The constraints travel too: a ``DROP_TABLE`` down recreates the
+                # table from exactly these details, so a table that came back
+                # without its foreign keys was a table that came back wrong.
+                details={
+                    "columns": _column_details(old_map[key]),
+                    "constraints": _constraint_details(old_map[key]),
+                },
             )
             for key in sorted(old_only)
         )
