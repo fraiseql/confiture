@@ -362,7 +362,46 @@ check to start reporting.
 warning. It no longer is: a `COPY … FROM stdin` block is blanked before parsing,
 keeping every offset and line number (1.9.0, #274).
 
-### Scenario 5: "I'm getting false positives for migration files"
+### Scenario 5: "Two schemas hold a table of the same name"
+
+Nothing to do — but worth knowing what changed in 1.13.0, because the first run
+after upgrading may report a backlog.
+
+Until 1.12.0 the accompaniment gate keyed tables, enum types and sequences by a
+**bare name**, so `tenant.tb_meter` and `etl_ingest.tb_meter` were one table. A
+column added to the first of them was reported as no change at all. On a schema
+with four such pairs, four tables were permanently invisible to the gate.
+
+It was wrong in the other direction too: because the differ compared whichever
+of the two the concatenation happened to read last, renaming or renumbering a
+schema file — changing the build order without changing a byte of schema —
+produced a spurious `DROP COLUMN`, and `migrate diff --generate` would write it
+into a migration.
+
+From 1.13.0 the identity is `(schema, name)`, with an unqualified name folding to
+`public` — the same rule `confiture lint` and `confiture drift` already used.
+**So the first `--require-migration` run after the upgrade may fail on changes
+made months ago**: real changes, genuinely never carried by a migration, that the
+gate could not see when they were made. Write the missing migrations, or baseline.
+
+The prep-seed pattern is exactly this shape — `prep_seed.tb_x` beside
+`catalog.tb_x` — and is now distinguished. See
+[Prep-Seed Validation](prep-seed-validation.md).
+
+#### Warnings
+
+An object defined **twice in one tree** is reported rather than silently
+collapsed (`DIFFER_402`, `warnings[]` in the JSON envelope). It does not fail the
+gate — that is `confiture lint`'s `build_001` and `build --fail-on-duplicates`,
+both of which already exist and are opt-in — but it tells you the comparison may
+be reading a tree `confiture build` does not produce:
+
+```bash
+confiture migrate diff --from db/schema --to db/generated/schema_local.sql --format json \
+  | jq -r '.warnings[] | "\(.code) \(.message)"'
+```
+
+### Scenario 6: "I'm getting false positives for migration files"
 
 **Problem**: Migration files in non-standard locations are being detected.
 

@@ -283,28 +283,6 @@ class Table:
         )
 
 
-@dataclass
-class Schema:
-    """Represents a complete database schema."""
-
-    tables: list[Table] = field(default_factory=list)
-
-    def get_table(self, name: str) -> Table | None:
-        """Get table by name."""
-        for table in self.tables:
-            if table.name == name:
-                return table
-        return None
-
-    def has_table(self, name: str) -> bool:
-        """Check if schema has table."""
-        return self.get_table(name) is not None
-
-    def table_names(self) -> list[str]:
-        """Get list of all table names."""
-        return [table.name for table in self.tables]
-
-
 # ``str(SchemaChange)`` per change type; ``name`` comes from ``details``, under the
 # one key every kind's ``detail_fn`` writes it to.
 _CHANGE_TEMPLATES: dict[str, str] = {

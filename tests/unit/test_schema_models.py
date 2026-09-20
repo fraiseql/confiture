@@ -7,7 +7,6 @@ from confiture.models.schema import (
     ForeignKey,
     Index,
     ParsedSchema,
-    Schema,
     SchemaChange,
     SchemaDiff,
     Sequence,
@@ -166,62 +165,6 @@ class TestTable:
         assert table != "not a table"
         assert table != 123
         assert table is not None
-
-
-class TestSchema:
-    """Tests for Schema model."""
-
-    def test_schema_creation(self):
-        """Test basic schema creation."""
-        schema = Schema()
-        assert schema.tables == []
-
-    def test_schema_with_tables(self):
-        """Test schema with tables."""
-        tables = [Table(name="users"), Table(name="posts")]
-        schema = Schema(tables=tables)
-        assert len(schema.tables) == 2
-        assert schema.tables[0].name == "users"
-
-    def test_get_table_exists(self):
-        """Test getting existing table."""
-        tables = [Table(name="users"), Table(name="posts")]
-        schema = Schema(tables=tables)
-
-        users_table = schema.get_table("users")
-        assert users_table is not None
-        assert users_table.name == "users"
-
-    def test_get_table_not_exists(self):
-        """Test getting non-existent table."""
-        schema = Schema(tables=[])
-        table = schema.get_table("nonexistent")
-        assert table is None
-
-    def test_has_table_exists(self):
-        """Test checking if table exists."""
-        tables = [Table(name="users")]
-        schema = Schema(tables=tables)
-        assert schema.has_table("users") is True
-
-    def test_has_table_not_exists(self):
-        """Test checking if table doesn't exist."""
-        schema = Schema(tables=[])
-        assert schema.has_table("nonexistent") is False
-
-    def test_table_names(self):
-        """Test getting all table names."""
-        tables = [Table(name="users"), Table(name="posts"), Table(name="comments")]
-        schema = Schema(tables=tables)
-
-        names = schema.table_names()
-        assert names == ["users", "posts", "comments"]
-
-    def test_table_names_empty(self):
-        """Test getting table names from empty schema."""
-        schema = Schema()
-        names = schema.table_names()
-        assert names == []
 
 
 class TestSchemaChange:

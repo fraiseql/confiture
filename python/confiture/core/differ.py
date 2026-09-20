@@ -102,10 +102,6 @@ _COLUMN_TYPE_MAP: dict[str, ColumnType] = {
 }
 
 
-# DDL statement prefixes — used to filter out non-DDL (INSERT, COPY, GRANT, etc.)
-# before passing individual statements to sqlparse (avoids MAX_GROUPING_TOKENS crash).
-_DDL_PREFIXES = ("CREATE", "ALTER", "DROP", "TRUNCATE", "COMMENT")
-
 logger = logging.getLogger(__name__)
 
 # pglast reports internal type aliases rather than the SQL keyword the user wrote.
@@ -635,10 +631,6 @@ class SchemaDiffer:
         # A call, a cast, a column reference: the expression as PostgreSQL would
         # print it, arguments included, so a down file can write the default back.
         return RawStream()(raw_expr)
-
-    # ------------------------------------------------------------------
-    # sqlparse-based CREATE TABLE parser (fallback when pglast not installed)
-    # ------------------------------------------------------------------
 
     # ------------------------------------------------------------------
     # AST collectors for indexes and ALTER TABLE constraints (ANA-04)
@@ -1321,10 +1313,6 @@ class SchemaDiffer:
             return len(common_chars) / len(name1_chars | name2_chars)
 
         return 0.0
-
-    # ------------------------------------------------------------------
-    # SQL parsing helpers
-    # ------------------------------------------------------------------
 
 
 def _enum_value(value: Any) -> int | None:

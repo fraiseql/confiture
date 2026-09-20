@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.12.0
-**Last Updated**: September 19, 2026
+**Version**: 1.13.0
+**Last Updated**: September 20, 2026
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -149,8 +149,9 @@ The consumers, all on `pglast.parser.parse_sql`:
   **`build_change_set`** (`core/change_set.py`) — replica forward-compatibility
   and risk tiers, sharing `core/ddl_walk.py` for what "nullable", "has a default"
   and "the type as written" mean.
-- **`SchemaDiffer`** (`core/differ.py`) — `CREATE TABLE` through pglast; index /
-  enum / sequence / constraint passes are the Cycle 6 target.
+- **`SchemaDiffer`** (`core/differ.py`) — `CREATE TABLE`, index, enum, sequence
+  and constraint passes, all through pglast, all keyed by `(schema, name)` with
+  an unqualified name folded to `schema_identity.DEFAULT_SCHEMA` (#313).
 - **`SchemaLinter`** (`core/linting/schema_linter.py`) — the default rules read
   `core/linting/inventory.py`, a pglast-built object inventory, so a schema
   qualifier changes nothing (#216).
@@ -1400,8 +1401,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: September 19, 2026
-**Version**: 1.12.0
+**Last Updated**: September 20, 2026
+**Version**: 1.13.0
 
 ---
 
