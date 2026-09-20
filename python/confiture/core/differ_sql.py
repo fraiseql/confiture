@@ -62,6 +62,32 @@ def _columns(names: list[str]) -> str:
     return ", ".join(names)
 
 
+def _column_body(change: SchemaChange, declared: str | None) -> str | None:
+    """The text after a column's name: ``INTEGER NOT NULL DEFAULT 5``.
+
+    A column change already carries its declaration — ``new_value`` for an added
+    column, ``old_value`` for a dropped one — because ``differ._column_definition``
+    writes the type, the nullability and the default into one string, and that is
+    what ``MigrationGenerator`` has always read. This module read
+    ``details["type"]``, which the differ never sets for a column, so it
+    substituted ``text`` for every added column and lost every default.
+
+    ``details`` still wins where a hand-built change carries the fields
+    separately: that is the older shape and the one this module was written for.
+    ``None`` when the change carries neither, which is :func:`_incomplete`'s case —
+    a column of the wrong type is a worse artefact than one that does not parse.
+    """
+    details = change.details or {}
+    if details.get("type"):
+        parts = [str(details["type"])]
+        if not details.get("nullable", True):
+            parts.append("NOT NULL")
+        if details.get("default") is not None:
+            parts.append(f"DEFAULT {details['default']}")
+        return " ".join(parts)
+    return declared or None
+
+
 def _constraint_body(details: dict[str, Any]) -> str | None:
     """The text after ``ADD`` in an ``ALTER``, and the element in a ``CREATE TABLE``.
 
@@ -213,19 +239,24 @@ class DifferSQLGenerator:
         return f"DROP TABLE IF EXISTS {change.table} CASCADE;\n"
 
     def _down_drop_table(self, change: SchemaChange) -> str:
-        return f"-- WARNING: Cannot automatically recreate dropped table {change.table}\n"
+        """Recreate the table from the columns and constraints the change carries.
+
+        The same statement ``_up_add_table`` writes, which is how
+        ``MigrationGenerator._recreate_table`` has always produced it — by
+        delegating here. Only this generator's own ``down`` refused.
+        """
+        if not (change.details or {}).get("columns"):
+            return f"-- WARNING: Cannot automatically recreate dropped table {change.table}\n"
+        return (
+            f"{self._up_add_table(change)}"
+            "-- review: the table is recreated, the rows it held are not\n"
+        )
 
     def _up_add_column(self, change: SchemaChange) -> str:
-        details = change.details or {}
-        col_type = details.get("type", "text")
-        nullable = details.get("nullable", True)
-        default = details.get("default")
-        col_def = f"{change.column} {col_type}"
-        if not nullable:
-            col_def += " NOT NULL"
-        if default is not None:
-            col_def += f" DEFAULT {default}"
-        return f"ALTER TABLE {change.table} ADD COLUMN IF NOT EXISTS {col_def};\n"
+        body = _column_body(change, change.new_value)
+        if not change.column or body is None:
+            return _incomplete(change, "a column name and a type")
+        return f"ALTER TABLE {change.table} ADD COLUMN IF NOT EXISTS {change.column} {body};\n"
 
     def _down_add_column(self, change: SchemaChange) -> str:
         if not self._force:
@@ -242,7 +273,24 @@ class DifferSQLGenerator:
         return f"ALTER TABLE {change.table} DROP COLUMN IF EXISTS {change.column};\n"
 
     def _down_drop_column(self, change: SchemaChange) -> str:
-        return f"-- WARNING: Cannot automatically restore dropped column {change.table}.{change.column}\n"
+        """Recreate the column, and say what a down file cannot bring back.
+
+        ``destructive.DATA_LOSS_TYPES`` already states the contract for a
+        ``DROP_COLUMN`` down — *the down file recreates the column, never its
+        rows* — and ``MigrationGenerator`` has honoured it from ``old_value`` all
+        along. This said it could not recreate the column at all, while holding
+        its declaration.
+        """
+        body = _column_body(change, change.old_value)
+        if not change.column or body is None:
+            return (
+                "-- WARNING: Cannot automatically restore dropped column "
+                f"{change.table}.{change.column}\n"
+            )
+        return (
+            f"ALTER TABLE {change.table} ADD COLUMN IF NOT EXISTS {change.column} {body};"
+            " -- review: the column is restored, the rows it held are not\n"
+        )
 
     def _up_alter_column_type(self, change: SchemaChange) -> str:
         return (

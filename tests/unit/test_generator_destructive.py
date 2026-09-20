@@ -176,7 +176,11 @@ class TestDown:
             "columns": [
                 {"name": "id", "type": "INTEGER", "nullable": False, "default": None},
                 {"name": "label", "type": "TEXT", "nullable": True, "default": None},
-            ]
+            ],
+            # Empty for this table, present for every table: the down file
+            # recreates a dropped table from exactly these details, so one that
+            # came back without its foreign keys came back wrong.
+            "constraints": [],
         }
 
     def test_a_dropped_column_comes_back_with_type_default_and_nullability(

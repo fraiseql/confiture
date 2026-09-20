@@ -111,13 +111,43 @@ invisible to `migrate diff`, to `migrate diff --generate`, and therefore to
   the columns and nothing else — true for the table-level spellings too, so this
   pre-dates [#315] and would have outlived its parse fix.
 
+- **The generator writes the column the schema declared.** `DifferSQLGenerator`
+  read a column's type, nullability and default out of `change.details`; the
+  differ puts the whole declaration in `new_value` (added) or `old_value`
+  (dropped), which is what `MigrationGenerator` has always read. So the SQL
+  generator substituted `text` for **every** added column and lost every
+  `NOT NULL` and `DEFAULT`. `_column_body` reads the declaration, `details` still
+  wins where a hand-built change carries the fields separately, and a change
+  carrying neither reaches the `-- WARNING:` idiom rather than inventing a type —
+  a column of the wrong type is a worse artefact than one that does not parse.
+- **A down file undoes what it is holding.** `_down_drop_column` and
+  `_down_drop_table` announced they could not restore a column or recreate a
+  table while carrying the definition needed for both.
+  `destructive.DATA_LOSS_TYPES` already states the contract — *the down file
+  recreates the table or column, never its rows* — and `MigrationGenerator` had
+  honoured it all along, so only this generator disagreed. Both now emit the
+  statement plus a `-- review:` line saying the rows do not come back.
+- **A `DROP_TABLE` change carries its constraints**, not only its columns. The
+  down file recreates a dropped table from exactly those details, so a table that
+  came back without its foreign keys came back wrong.
+
 ### Known, not fixed
 
-- `DifferSQLGenerator._up_add_column` falls back to `text` when a change carries
-  no `details["type"]`, which is every `ADD_COLUMN` the differ emits — it carries
-  the type in `new_value`. Unreachable in production: the only caller,
-  `MigrationGenerator`, renders `ADD_COLUMN` itself from `new_value`. Reported
-  rather than folded in, because it is not a constraint.
+- **A column's length and precision are dropped from generated DDL, and a change
+  to them is not reported at all.** `VARCHAR(50)` generates `VARCHAR`,
+  `NUMERIC(10,2)` generates `NUMERIC`, and `VARCHAR(50)` → `VARCHAR(100)` and
+  `NUMERIC(10,2)` → `NUMERIC(10,4)` produce **no change**. `Column.raw_sql_type`
+  holds the written spelling only when the canonical type map misses, and
+  `Column.length` holds one typmod, so a scale has nowhere to live. This is
+  reachable in production — it affects `MigrationGenerator` too — and fixing it
+  means giving `Column` the spelling for every type (`ddl_walk.type_name` already
+  renders one), which changes both the comparison and the text of every generated
+  column. Filed rather than folded into this release.
+- **Four drops have a derivable down that is not derived.**
+  `DROP_FOREIGN_KEY`, `DROP_CHECK_CONSTRAINT`, `DROP_UNIQUE_CONSTRAINT` and
+  `DROP_INDEX` each carry everything their `ADD` needs and emit
+  `-- WARNING: No automatic rollback`. A consequence shows up in the fix above: a
+  restored column comes back without the foreign key that hung off it.
 - `CONSTR_EXCLUSION` is declined with its reason: the schema models have no
   exclusion-constraint type, so an `EXCLUDE` clause is skipped deliberately.
   Giving it one is a new model, a change type and a generator.
