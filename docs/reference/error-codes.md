@@ -58,6 +58,7 @@ resolution hint surfaced in the envelope.
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |
 | `DIFFER_401` | 5 | error | Destructive change forbidden by policy | Re-run with --allow-destructive, or set migration.destructive to gated or allow |
+| `DIFFER_402` | 0 | warning | {kind} '{identity}' is defined {count} times in one schema tree: {outcome}; the comparison used the {used} definition | Keep one definition, or make the later file an explicit ALTER; `confiture lint` reports it as build_001 with every file and line |
 | `GEN_001` | 3 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |

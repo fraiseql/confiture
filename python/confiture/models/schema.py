@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from confiture.models.results import BuildWarning
+
 
 def qualified_name(schema: str | None, name: str) -> str:
     """The object's name as the schema file spells it.
@@ -224,6 +226,10 @@ class ParsedSchema:
     #: carries the definition, so a redefinition in place is visible. Typed
     #: loosely here because ``core.ddl_objects`` imports this module.
     objects: dict[Any, Any] = field(default_factory=dict)
+    #: What the parse has to say that is not a change: two definitions of one
+    #: object in one tree, resolved the way ``confiture build`` resolves it
+    #: (#313). Always present, empty when there is nothing to report.
+    warnings: list[BuildWarning] = field(default_factory=list)
 
 
 @dataclass
@@ -374,6 +380,11 @@ class SchemaDiff:
     """Represents the difference between two schemas."""
 
     changes: list[SchemaChange] = field(default_factory=list)
+    #: Why the diff may not be the whole story: a duplicate definition on
+    #: either side, which is not a change but is a reason the comparison read a
+    #: tree the build may not produce. Empty when there is nothing to report —
+    #: present either way, never absent-on-success.
+    warnings: list[BuildWarning] = field(default_factory=list)
 
     def has_changes(self) -> bool:
         """Check if there are any changes."""

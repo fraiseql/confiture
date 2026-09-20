@@ -17,8 +17,10 @@ from pglast.stream import RawStream
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_objects import OBJECT_KEYWORD, objects_in, pair_definitions
 from confiture.core.ddl_walk import ColumnEdit, ObjectEdit, column_edit, object_edits
+from confiture.core.linting.duplicates import WINS_TEXT, CreateFlags, wins
 from confiture.core.linting.inventory import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import blank_copy_blocks
+from confiture.models.results import BuildWarning
 from confiture.models.schema import (
     CheckConstraint,
     Column,
@@ -152,6 +154,86 @@ def _identity(schema: str | None, name: str) -> tuple[str, str]:
     statements are about one relation.
     """
     return (schema or DEFAULT_SCHEMA).lower(), name
+
+
+def _written_as(stmt: Any) -> CreateFlags:
+    """How a ``CREATE`` node spelled itself, as :func:`wins` reads it.
+
+    ``CREATE TABLE`` and ``CREATE SEQUENCE`` carry ``if_not_exists``;
+    ``CREATE TYPE … AS ENUM`` carries neither flag, and none of the three kinds
+    this module models has an ``OR REPLACE`` form — so ``wins`` never answers
+    ``last`` for them. A view or a routine does, and is compared by definition
+    through ``ddl_objects.pair_definitions`` instead.
+    """
+    return CreateFlags(
+        replace=bool(getattr(stmt, "replace", False)),
+        if_not_exists=bool(getattr(stmt, "if_not_exists", False)),
+    )
+
+
+_DUPLICATE_KINDS: dict[str, str] = {"Table": "Table", "EnumType": "Type", "Sequence": "Sequence"}
+
+
+def _resolve_duplicates(result: ParsedSchema, written_as: dict[int, CreateFlags]) -> None:
+    """Keep the definition the build keeps, and say that there was more than one.
+
+    Two definitions of one ``(schema, name)`` in one tree is #313's defect with
+    the schema taken out of it: an identity two objects share, resolved by "last
+    one wins" rather than by asking which one ``confiture build`` ends up with.
+    A later ``IF NOT EXISTS`` is a no-op, so the *first* is what the database
+    has; a later plain ``CREATE`` fails the build at that statement, so the
+    first is what exists when it does.
+
+    The verdict is ``duplicates.wins`` — ``build_001``'s own rule, not a second
+    one — and the collapse is reported either way. It is a warning, not a
+    failure: a duplicate definition is real but it is ``confiture lint``'s
+    problem and ``build --fail-on-duplicates``' problem, both of which already
+    exist and are opt-in. Failing ``--require-migration`` for it would fail the
+    gate for a reason the gate is not about.
+    """
+    for attribute in ("tables", "enum_types", "sequences"):
+        models: list[Any] = getattr(result, attribute)
+        groups: dict[tuple[str, str], list[Any]] = {}
+        for model in models:
+            groups.setdefault(_identity(model.schema, model.name), []).append(model)
+        if all(len(group) == 1 for group in groups.values()):
+            continue
+        kept: list[Any] = []
+        for group in groups.values():
+            if len(group) == 1:
+                kept.extend(group)
+                continue
+            verdict = wins([written_as.get(id(model), CreateFlags()) for model in group])
+            used = "last" if verdict == "last" else "first"
+            kept.append(group[-1] if verdict == "last" else group[0])
+            result.warnings.append(
+                BuildWarning.of(
+                    "DIFFER_402",
+                    kind=_DUPLICATE_KINDS[type(group[0]).__name__],
+                    identity=group[0].qualified,
+                    count=len(group),
+                    outcome=WINS_TEXT[verdict],
+                    used=used,
+                )
+            )
+        # Filtered by object identity, not by ``==``: two duplicate definitions
+        # of one table may well be structurally equal.
+        keep = {id(model) for model in kept}
+        setattr(result, attribute, [model for model in models if id(model) in keep])
+
+
+def _merged_warnings(old_schema: ParsedSchema, new_schema: ParsedSchema) -> list[BuildWarning]:
+    """Both sides' parse warnings, each said once.
+
+    A duplicate present on both sides of a diff is one duplicate, not two: it is
+    not a change, but it is a reason the comparison may be reading a tree the
+    build does not produce, and saying so twice helps nobody.
+    """
+    merged: list[BuildWarning] = []
+    for warning in (*old_schema.warnings, *new_schema.warnings):
+        if warning not in merged:
+            merged.append(warning)
+    return merged
 
 
 def _relation_spelling(relation: Any) -> str:
@@ -310,18 +392,27 @@ class SchemaDiffer:
         # tree had written *before* it and not what it writes after: the everyday
         # `DROP TABLE IF EXISTS x; CREATE TABLE x (…);` declares `x` (#301).
         declared_at: dict[int, int] = {}
+        # How each `CREATE` was written, so `duplicates.wins` can say which of
+        # several definitions of one object the build actually keeps.
+        written_as: dict[int, CreateFlags] = {}
         for raw in raws:
             if type(raw.stmt).__name__ == "CreateStmt":
                 table = self._parse_create_table_pglast(raw.stmt)
                 if table:
                     result.tables.append(table)
                     declared_at[id(table)] = raw.stmt_location or 0
+                    written_as[id(table)] = _written_as(raw.stmt)
         for raw in raws:
-            self._collect_statement(raw, result, declared_at)
+            self._collect_statement(raw, result, declared_at, written_as)
+        _resolve_duplicates(result, written_as)
         return result
 
     def _collect_statement(
-        self, raw: Any, result: ParsedSchema, declared_at: dict[int, int]
+        self,
+        raw: Any,
+        result: ParsedSchema,
+        declared_at: dict[int, int],
+        written_as: dict[int, CreateFlags],
     ) -> None:
         stmt = raw.stmt
         kind = type(stmt).__name__
@@ -332,10 +423,12 @@ class SchemaDiffer:
             enum_type = _enum_type_from_stmt(stmt)
             result.enum_types.append(enum_type)
             declared_at[id(enum_type)] = offset
+            written_as[id(enum_type)] = _written_as(stmt)
         elif kind == "CreateSeqStmt":
             sequence = _sequence_from_stmt(stmt)
             result.sequences.append(sequence)
             declared_at[id(sequence)] = offset
+            written_as[id(sequence)] = _written_as(stmt)
         elif kind == "AlterTableStmt":
             self._collect_alter_table(stmt, result)
         else:
@@ -738,7 +831,7 @@ class SchemaDiffer:
         changes.extend(self._compare_sequences(old_schema.sequences, new_schema.sequences))
         # Objects compared by definition: views, and #288's later kinds.
         changes.extend(self._compare_objects(old_schema.objects, new_schema.objects))
-        return SchemaDiff(changes=changes)
+        return SchemaDiff(changes=changes, warnings=_merged_warnings(old_schema, new_schema))
 
     # ------------------------------------------------------------------
     # Table comparison
