@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from confiture.models.results import BuildWarning
 from confiture.models.schema import SchemaChange
 
 if TYPE_CHECKING:
@@ -53,6 +54,11 @@ class MigrationAccompanimentReport:
     target_ref: str | None = None
     signature_violations: list[FunctionSignatureViolation] = field(default_factory=list)
     body_violations: list[FunctionBodyViolation] = field(default_factory=list)
+    #: What the comparison has to say that is not a violation — an object
+    #: defined twice in one tree, which the gate does not fail on but which is a
+    #: reason it may be reading a tree `confiture build` does not produce
+    #: (#313). Present and empty when there is nothing to report.
+    warnings: list[BuildWarning] = field(default_factory=list)
 
     @property
     def has_signature_violations(self) -> bool:
@@ -138,6 +144,7 @@ class MigrationAccompanimentReport:
             "target_ref": self.target_ref,
             "signature_violations": [v.to_dict() for v in self.signature_violations],
             "body_violations": [v.to_dict() for v in self.body_violations],
+            "warnings": [warning.to_dict() for warning in self.warnings],
         }
 
 

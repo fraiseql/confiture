@@ -35,7 +35,7 @@ reference from the CLI with `confiture --exit-codes`.
 ### Symbolic codes per exit code
 
 - **0** — Success (including success-with-signal: already applied, nothing pending, advisories)
-  - MIGR_101, SCHEMA_206, SEED_002, SEED_003
+  - DIFFER_402, MIGR_101, SCHEMA_206, SEED_002, SEED_003
 - **1** — Generic failure (SQL/hook execution, status: pending)
   - SQL_001
 - **2** — Tracking table absent — confiture not initialized on this database yet

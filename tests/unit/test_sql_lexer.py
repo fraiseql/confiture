@@ -117,10 +117,13 @@ ALTER TABLE s.t ADD CONSTRAINT uq_t UNIQUE (a, b);
         "a > 1",
     )
     (fk,) = table.foreign_keys
+    # `ref_table` carries the schema the statement wrote: `REFERENCES t(id)` and
+    # `REFERENCES s.t(id)` generate different DDL, and a migration that drops the
+    # qualifier resolves through `search_path` wherever it is applied (#313).
     assert (fk.name, fk.columns, fk.ref_table, fk.ref_columns, fk.on_delete) == (
         "fk_t",
         ["a"],
-        "t",
+        "s.t",
         ["id"],
         "CASCADE",
     )

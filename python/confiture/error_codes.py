@@ -224,6 +224,7 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     # DIFFER family → 5.
     "DIFFER_400": 5,
     "DIFFER_401": 5,
+    "DIFFER_402": 0,  # carve-out: a diff warning in the envelope, never fatal (#313)
     "DIFF_001": 5,
     # VALID family → 5.
     "VALID_001": 5,

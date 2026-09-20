@@ -182,6 +182,7 @@ def migrate_diff(
             migration_file=migration_file_name,
             source=desired.describe(),
             destructive_gate=policy,
+            warnings=diff.warnings,
         )
 
         format_migrate_diff_result(result, format_type, report_file, console)

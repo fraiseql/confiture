@@ -22,6 +22,21 @@ def _format_column(col: dict[str, Any]) -> str:
     return " ".join(parts)
 
 
+def _unnamed(change: SchemaChange, what: str) -> str:
+    """The generator's "this changed, you write it" for a change with no object name.
+
+    Never a fabricated ``idx_{table}`` / ``fk_{table}``: a name confiture made up
+    is indistinguishable from one the author chose, which is how the
+    ``index_name`` / ``name`` key mismatch survived unseen — the rebuild path
+    created ``ix``, the migrate path created ``idx_t``, and ``confiture drift``
+    then reported the divergence forever. Qualify the table and the invention
+    stops even being a legal identifier (``idx_tenant.t``).
+
+    ``-- WARNING:`` is this module's existing way of saying so.
+    """
+    return f"-- WARNING: Cannot generate {change.type} on {change.table} without a {what} name\n"
+
+
 class DifferSQLGenerator:
     """Generates safe, idempotent DDL SQL from SchemaChange objects."""
 
@@ -154,7 +169,9 @@ class DifferSQLGenerator:
 
     def _up_add_index(self, change: SchemaChange) -> str:
         details = change.details or {}
-        index_name = details.get("name", f"idx_{change.table}")
+        index_name = details.get("name", "")
+        if not index_name:
+            return _unnamed(change, "index")
         columns = details.get("columns", [])
         unique = details.get("unique", False)
         cols_str = ", ".join(columns) if columns else change.column or ""
@@ -168,17 +185,21 @@ class DifferSQLGenerator:
         details = change.details or {}
         index_name = details.get("name", "")
         if not index_name:
-            return "-- WARNING: Cannot drop index without name\n"
+            return _unnamed(change, "index")
         return f"DROP INDEX CONCURRENTLY IF EXISTS {index_name};\n"
 
     def _down_add_index(self, change: SchemaChange) -> str:
         details = change.details or {}
-        index_name = details.get("name", f"idx_{change.table}")
+        index_name = details.get("name", "")
+        if not index_name:
+            return _unnamed(change, "index")
         return f"DROP INDEX CONCURRENTLY IF EXISTS {index_name};\n"
 
     def _up_add_constraint(self, change: SchemaChange) -> str:
         details = change.details or {}
-        constraint_name = details.get("name", f"fk_{change.table}")
+        constraint_name = details.get("name", "")
+        if not constraint_name:
+            return _unnamed(change, "constraint")
         constraint_type = details.get("type", "")
         columns = details.get("columns", [])
         references = details.get("references", "")
@@ -199,7 +220,7 @@ class DifferSQLGenerator:
         details = change.details or {}
         constraint_name = details.get("name", "")
         if not constraint_name:
-            return "-- WARNING: Cannot drop constraint without name\n"
+            return _unnamed(change, "constraint")
         return f"ALTER TABLE {change.table} DROP CONSTRAINT IF EXISTS {constraint_name};\n"
 
     def _up_add_foreign_key(self, change: SchemaChange) -> str:
@@ -209,7 +230,7 @@ class DifferSQLGenerator:
                 type=change.type,
                 table=change.table,
                 details={
-                    "name": details.get("name", f"fk_{change.table}"),
+                    "name": details.get("name", ""),
                     "type": "FOREIGN KEY",
                     "columns": details.get("columns", []),
                     "references": (
@@ -236,7 +257,7 @@ class DifferSQLGenerator:
                 type=change.type,
                 table=change.table,
                 details={
-                    "name": details.get("name", f"chk_{change.table}"),
+                    "name": details.get("name", ""),
                     "type": f"CHECK ({details.get('expression', '')})",
                     "columns": [],
                 },
@@ -260,7 +281,7 @@ class DifferSQLGenerator:
                 type=change.type,
                 table=change.table,
                 details={
-                    "name": details.get("name", f"uq_{change.table}"),
+                    "name": details.get("name", ""),
                     "type": "UNIQUE",
                     "columns": details.get("columns", []),
                 },

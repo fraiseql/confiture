@@ -13,7 +13,8 @@
     "migration_generated",
     "migration_file",
     "error",
-    "source"
+    "source",
+    "warnings"
   ],
   "properties": {
     "success": {
@@ -38,12 +39,15 @@
             "description": "The change kind (`ADD_TABLE`, `DROP_COLUMN`, `CHANGE_COLUMN_TYPE`, ...)."
           },
           "irreversible_reason": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "`data` when the change drops a table or a column: the generated down file recreates the object, never its rows. Null otherwise."
           },
           "details": {
             "type": "string",
-            "description": "The change as one line (`ADD TABLE tb_post`)."
+            "description": "The change as one line (`ADD TABLE tb_post`), naming the table the way the schema file names it — `ADD COLUMN tenant.tb_meter.x` for a qualified declaration, `ADD TABLE tb_post` for an unqualified one. Confiture never invents a `public.` qualifier the file did not write."
           }
         }
       }
@@ -69,8 +73,16 @@
       ]
     },
     "destructive_gate": {
-      "type": ["string", "null"],
-      "enum": ["gated", "allow", "forbid", null],
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "gated",
+        "allow",
+        "forbid",
+        null
+      ],
       "description": "The destructive-gate policy the generated migration was written under (migration.destructive, overridden by --allow-destructive / --forbid-destructive): `gated` marks a data-losing file with `-- confiture:destructive` so `migrate up` needs `--allow-destructive`, `allow` leaves it unmarked, `forbid` would have refused. Null when nothing was generated."
     },
     "source": {
@@ -101,6 +113,45 @@
           }
         }
       ]
+    },
+    "warnings": {
+      "type": "array",
+      "description": "What the comparison has to say that is not a change: an object defined more than once in one schema tree, which is not a difference between the two sides but is a reason the diff may be reading a tree `confiture build` does not produce (#313). Warned, never failed — a duplicate definition is `confiture lint`'s problem (`build_001`) and `build --fail-on-duplicates`' problem, both of which already exist and are opt-in. Present and empty when there is nothing to report, never absent-on-success. Defined inline rather than in _common.schema.json because this schema's $id is on a different host, which a relative $ref out of it cannot resolve — as build.schema.json does.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "severity",
+          "message",
+          "file"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The error-code registry entry that names the situation (`DIFFER_402` for a duplicate definition), so a consumer matches a code rather than a sentence."
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "warning",
+              "info"
+            ],
+            "description": "The severity the registry publishes for `code`; never `error` here — an error is not a warning, it is the envelope's `error` field."
+          },
+          "message": {
+            "type": "string",
+            "description": "What happened, in one line: the object, how many definitions it has, which one the build keeps and which one the comparison used."
+          },
+          "file": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file it is about, relative to the project root; null when the diff read its sides as concatenated text rather than per file, which is every `migrate diff` today."
+          }
+        }
+      }
     }
   }
 }

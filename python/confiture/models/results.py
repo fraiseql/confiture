@@ -612,6 +612,11 @@ class MigrateDiffResult:
     error: str | None = None
     source: dict[str, str] | None = None
     destructive_gate: str | None = None
+    #: What the comparison has to say that is not a change — an object defined
+    #: twice in one tree, which is not a difference between the two sides but is
+    #: a reason the diff may be reading a tree `confiture build` does not
+    #: produce (#313). Present and empty when there is nothing to report.
+    warnings: list[BuildWarning] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.
@@ -629,6 +634,7 @@ class MigrateDiffResult:
             "error": self.error,
             "source": self.source,
             "destructive_gate": self.destructive_gate,
+            "warnings": [warning.to_dict() for warning in self.warnings],
         }
 
 

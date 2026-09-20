@@ -83,3 +83,33 @@ def test_failure_payload_validates(tmp_path, schemas_dir, schema_registry):
     payload = json.loads(result.output)
     _validator(schemas_dir, schema_registry).validate(payload)
     assert payload["success"] is False and payload["source"] is None
+
+
+def test_a_duplicate_definition_is_published_as_a_warning(tmp_path, schemas_dir, schema_registry):
+    """#313: an object defined twice in one tree is warned, never silently collapsed."""
+    current = tmp_path / "current.sql"
+    current.write_text("CREATE TABLE t (id INT);\n")
+    desired = tmp_path / "desired.sql"
+    desired.write_text("CREATE TABLE t (id INT);\nCREATE TABLE IF NOT EXISTS t (id INT, b TEXT);\n")
+    result = CliRunner().invoke(
+        app,
+        ["migrate", "diff", "--from", str(current), "--to", str(desired), "--format", "json"],
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _validator(schemas_dir, schema_registry).validate(payload)
+    assert [w["code"] for w in payload["warnings"]] == ["DIFFER_402"]
+    assert payload["warnings"][0]["severity"] == "warning"
+
+
+def test_a_clean_diff_publishes_an_empty_warnings_array(tmp_path, schemas_dir, schema_registry):
+    """Present and empty, never absent-on-success (the `was_skipped` precedent, #311)."""
+    current = tmp_path / "current.sql"
+    current.write_text((FIXTURE / "user.sql").read_text())
+    result = CliRunner().invoke(
+        app, ["migrate", "diff", "--from", str(current), "--to", str(FIXTURE), "--format", "json"]
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    _validator(schemas_dir, schema_registry).validate(payload)
+    assert payload["warnings"] == []

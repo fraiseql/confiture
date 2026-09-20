@@ -113,16 +113,29 @@ BODY_KINDS: frozenset[str] = frozenset({"function", "procedure", "aggregate"})
 
 #: Parse nodes that define something the differ models elsewhere, so tracking
 #: them here would report every table twice.
+#:
+#: Each reason names the identity that model is keyed by, because for as long as
+#: both modules existed these four were delegated to a reader that identified
+#: them differently — by a bare name — while this module's docstring said
+#: identity was the inventory's answer and not a second one (#313). A reason
+#: that says only *where* a kind is modelled cannot catch that.
 MODELLED_ELSEWHERE: dict[str, str] = {
-    "CreateStmt": "ParsedSchema.tables, compared column by column",
-    "CreateEnumStmt": (
-        "ParsedSchema.enum_types, compared value by value. The inventory calls "
-        "an enum a 'type', the same kind it gives a composite, so tracking it "
-        "here would report every enum twice — once as ADD_TYPE and once as "
-        "ADD_ENUM_TYPE."
+    "CreateStmt": (
+        "ParsedSchema.tables, compared column by column and keyed by "
+        "(schema, name) with DEFAULT_SCHEMA folded in — differ._identity, which "
+        "is object_key's middle term"
     ),
-    "CreateSeqStmt": "ParsedSchema.sequences",
-    "IndexStmt": "Table.indexes",
+    "CreateEnumStmt": (
+        "ParsedSchema.enum_types, compared value by value and keyed by "
+        "differ._identity. The inventory calls an enum a 'type', the same kind "
+        "it gives a composite, so tracking it here would report every enum "
+        "twice — once as ADD_TYPE and once as ADD_ENUM_TYPE."
+    ),
+    "CreateSeqStmt": "ParsedSchema.sequences, keyed by differ._identity",
+    "IndexStmt": (
+        "Table.indexes, keyed by bare name — correctly, because the comparison "
+        "is already scoped to one table, which is itself keyed by identity"
+    ),
 }
 
 

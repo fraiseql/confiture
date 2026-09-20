@@ -1,8 +1,8 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.12.0
-**Last Updated**: September 19, 2026
+**Version**: 1.13.0
+**Last Updated**: September 20, 2026
 **Current Status**: Production-Ready
 
 > **Status**: Production-ready. Actively used in production since March 2026.
@@ -149,8 +149,9 @@ The consumers, all on `pglast.parser.parse_sql`:
   **`build_change_set`** (`core/change_set.py`) — replica forward-compatibility
   and risk tiers, sharing `core/ddl_walk.py` for what "nullable", "has a default"
   and "the type as written" mean.
-- **`SchemaDiffer`** (`core/differ.py`) — `CREATE TABLE` through pglast; index /
-  enum / sequence / constraint passes are the Cycle 6 target.
+- **`SchemaDiffer`** (`core/differ.py`) — `CREATE TABLE`, index, enum, sequence
+  and constraint passes, all through pglast, all keyed by `(schema, name)` with
+  an unqualified name folded to `schema_identity.DEFAULT_SCHEMA` (#313).
 - **`SchemaLinter`** (`core/linting/schema_linter.py`) — the default rules read
   `core/linting/inventory.py`, a pglast-built object inventory, so a schema
   qualifier changes nothing (#216).
@@ -345,6 +346,59 @@ considered looked exactly like a kind deliberately skipped.
 A schema pglast rejects now **fails** that gate rather than skipping it
 (`is_valid: false`, `was_skipped` in the envelope). The old exit 0 was justified
 by the sqlparse token limit, which D13 made unreachable.
+
+**One object identity too** (since 1.13.0, #313). What makes two relations the
+same relation is `(schema, name)` with a missing qualifier folded to
+`core/schema_identity.py`'s `DEFAULT_SCHEMA` — the middle term of
+`inventory.object_key`, which `ddl_objects.ObjectRef` and `drift.py` already
+applied. `SchemaDiffer` was the **last reader of a DDL tree here with no schema
+in its identity**: `Table(name=stmt.relation.relname)` threw `schemaname` away at
+parse time, so inside one `compare()` call `a.v` and `b.v` were two views —
+`ParsedSchema.objects` is #288's `ObjectRef` — and `a.t` and `b.t` were one
+table. The same run answered the same question two ways.
+
+It was silent *and* destructive. Silent: on a 707-file schema with `tenant.` /
+`etl_ingest.` twins, **4 of 433 tables** were permanently invisible to
+`migrate validate --require-migration`. Destructive: swapping two files' build
+order — a rename, a renumber, **no schema change at all** — made the differ
+compare `tenant.t` against `etl.t` and `migrate diff --generate` write
+`ALTER TABLE t DROP COLUMN IF EXISTS b`. It also corrupted the parse itself:
+`ALTER TABLE etl.t ADD COLUMN` and `CREATE INDEX … ON etl.t` landed on
+`tenant.t`; `DROP TABLE etl.t` and `ALTER TABLE etl.t RENAME TO` hit **both**
+tables. And it shipped in this repository's own `examples/06-prep-seed-validation`
+— the prep-seed pattern *is* two schemas holding the same table names.
+
+Identity folds; **spelling never does**. `Table.qualified` /
+`EnumType.qualified` / `Sequence.qualified` print what the author wrote and
+never invent a `public.`, because a project whose `search_path` is not `public`
+would have its generated DDL rewritten into another schema. That is
+`ObjectRef`'s own split between the key and `display`, and `SchemaObject`'s
+between `signature` and `signature_key` (#275).
+
+Renames are matched **within one schema**, and that is grammar rather than a
+threshold: `ALTER TABLE a.t RENAME TO a.t2` is a syntax error (moving a table
+between schemas is `SET SCHEMA`), and `_similarity_score` scores
+`tenant.tb_meter`/`etl.tb_meter` at 0.6 — exactly what it scores the real rename
+`tenant.tb_a`/`tenant.tb_b`. No threshold separates those.
+
+A **collapse is a finding**: two definitions of one `(schema, name)` in one tree
+are resolved by `duplicates.wins` — `build_001`'s own rule — so the diff reads
+the tree the build produces (a later `IF NOT EXISTS` is a no-op, so the *first*
+definition is what the database has), and `DIFFER_402` says so in
+`migrate diff --format json`'s `warnings[]` and in the accompaniment report.
+Warned, not failed: a duplicate is `confiture lint`'s problem and
+`build --fail-on-duplicates`' problem, both of which already exist and are
+opt-in.
+
+`tests/unit/test_one_object_identity.py` fails on a module that spells its own
+`or "public"` beside a schema (nine sites in four modules did) or that keys one
+of the schema-object models by a bare `.name` in a comprehension; both
+allow-lists are empty, and an entry matching nothing fails as in the one-lexer
+guard. The check is pinned against `3b12dcce`'s three maps verbatim — a guard
+never seen red is a guard that does not run. `DEFAULT_SCHEMA` moved out of
+`core/linting/inventory.py` into its own import-safe module for a measured
+reason: two of those four sites needed the fold and not a parser, so they wrote
+the word instead.
 
 #### Python migrations: the static evaluator (since 0.46.0, #213)
 
@@ -552,6 +606,7 @@ confiture/
 │   │   ├── schema_artifact.py    # Cacheable schema-artifact dumper (Medium 1, CI provisioning)
 │   │   ├── schema_exporter.py    # The JSON schemas confiture publishes, and the one place they come from
 │   │   ├── schema_facts.py       # What a live database can tell preflight that migration files cannot (is…
+│   │   ├── schema_identity.py    # Where an unqualified schema object lands: the one default schema
 │   │   ├── schema_snapshot.py    # Schema history snapshot writer
 │   │   ├── schema_to_schema.py   # Schema-to-Schema Migration using Foreign Data Wrapper (FDW)
 │   │   ├── sql_lexer.py          # The one SQL lexer: libpg_query's scanner and parser, nothing hand-writt…
@@ -1346,8 +1401,8 @@ When stuck, ask:
 
 ---
 
-**Last Updated**: September 19, 2026
-**Version**: 1.12.0
+**Last Updated**: September 20, 2026
+**Version**: 1.13.0
 
 ---
 

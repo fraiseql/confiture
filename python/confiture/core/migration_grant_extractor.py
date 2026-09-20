@@ -29,6 +29,7 @@ import pglast
 import pglast.parser
 from pglast.enums.parsenodes import GrantTargetType, ObjectType, RoleSpecType
 
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import strip_comments
 
 # Every privilege a table can hold.  ``GRANT ALL`` expands to this set.
@@ -456,14 +457,14 @@ class MigrationGrantExtractor:
                 # is set on children, None on parents and plain tables.
                 if stmt.partbound is not None:
                     continue
-                schema = stmt.relation.schemaname or "public"
+                schema = stmt.relation.schemaname or DEFAULT_SCHEMA
                 out.append((schema, stmt.relation.relname))
             elif kind == "CreateTableAsStmt":
                 # CREATE TABLE … AS SELECT — same shape for ACL purposes.
                 rel = stmt.into.rel
                 if rel.relpersistence == "t":
                     continue
-                schema = rel.schemaname or "public"
+                schema = rel.schemaname or DEFAULT_SCHEMA
                 out.append((schema, rel.relname))
         return out
 
@@ -518,7 +519,7 @@ class MigrationGrantExtractor:
                     roles.append(g.rolename)
             for obj in stmt.objects or []:
                 # obj is a RangeVar for table grants.
-                schema = obj.schemaname or "public"
+                schema = obj.schemaname or DEFAULT_SCHEMA
                 table = obj.relname
                 out.extend((schema, table, role, privs) for role in roles)
         return out
@@ -668,7 +669,7 @@ class MigrationGrantExtractor:
             return (schema, f"{fn}({','.join(argtypes)})", None)
 
         # TABLE / SEQUENCE → RangeVar.
-        schema = getattr(obj, "schemaname", None) or "public"
+        schema = getattr(obj, "schemaname", None) or DEFAULT_SCHEMA
         relname = getattr(obj, "relname", None)
         if not relname:
             return ("", None, "unmodeled_objtype")

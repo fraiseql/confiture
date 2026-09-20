@@ -22,7 +22,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import pglast
 
@@ -143,13 +143,50 @@ def _definition(obj: SchemaObject) -> Definition:
     return Definition(file=obj.file, offset=obj.offset, line=obj.line)
 
 
-def _wins(group: Sequence[SchemaObject]) -> str:
+class Created(Protocol):
+    """A definition, as far as :func:`wins` needs to know it.
+
+    ``SchemaObject`` satisfies this structurally; :class:`CreateFlags` exists
+    for a caller whose own model does not carry the two flags.
+    """
+
+    replace: bool
+    if_not_exists: bool
+
+
+@dataclass(frozen=True)
+class CreateFlags:
+    """How a ``CREATE`` was written, for a reader that keeps its own model.
+
+    ``SchemaDiffer`` builds ``Table`` / ``EnumType`` / ``Sequence`` rather than
+    ``SchemaObject``, and needs the same answer about the same tree.
+    """
+
+    replace: bool = False
+    if_not_exists: bool = False
+
+
+def wins(group: Sequence[Created]) -> str:
+    """Which definition of one object a build keeps, given them in source order.
+
+    ``last`` when every later definition is ``CREATE OR REPLACE``, ``first``
+    when every later one is ``IF NOT EXISTS`` (a no-op), ``conflict`` when a
+    later plain ``CREATE`` would fail the build at that statement.
+
+    The one answer to that question. ``build_001`` reports it and
+    ``SchemaDiffer`` chooses which definition to compare by it, so the diff
+    reads the tree the build produces rather than the last statement in the
+    file.
+    """
     later = group[1:]
     if all(obj.replace for obj in later):
         return "last"
     if all(obj.if_not_exists for obj in later):
         return "first"
     return "conflict"
+
+
+_wins = wins
 
 
 def find_duplicates(objects: Sequence[SchemaObject]) -> list[Duplicate]:
@@ -195,11 +232,14 @@ def _where(definition: Definition) -> str:
     return f"{definition.file} ({place})" if definition.file else place
 
 
-_WINS_TEXT = {
+#: What each :func:`wins` verdict means, in the words every reporter uses.
+WINS_TEXT = {
     "last": "the last definition wins (CREATE OR REPLACE)",
     "first": "the first definition wins (later ones are IF NOT EXISTS no-ops)",
     "conflict": "a later plain CREATE fails the build at that statement",
 }
+
+_WINS_TEXT = WINS_TEXT
 
 
 def duplicate_violations(duplicates: Iterable[Duplicate]) -> list[LintViolation]:

@@ -71,6 +71,21 @@ The seam is guarded by `tests/unit/test_uuid_convention_seam.py`, which fails if
 confiture's check stops being generic or if a parallel structured-pattern copy
 reappears in confiture's source.
 
+### The pattern is two schemas holding the same table names
+
+`prep_seed.tb_manufacturer` and `catalog.tb_manufacturer` are two tables, and
+until 1.13.0 `migrate diff` and `migrate validate --require-migration` could not
+tell them apart: both keyed a table by its bare name, so a column added to either
+one reported no change at all. The shipped example
+(`examples/06-prep-seed-validation`) collided in exactly this way.
+
+From 1.13.0 the identity is `(schema, name)` — the same rule `confiture lint` and
+`confiture drift` already applied — so each is compared against itself and
+generated DDL carries the qualifier the schema file wrote. Expect the first
+`--require-migration` run after upgrading to report changes the gate could not see
+when they were made; see
+[Git-Aware Validation, Scenario 5](git-aware-validation.md#scenario-5-two-schemas-hold-a-table-of-the-same-name).
+
 ---
 
 ## Five Validation Levels

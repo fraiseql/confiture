@@ -203,6 +203,19 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "exit_code": 5,
         "resolution_hint": "Re-run with --allow-destructive, or set migration.destructive to gated or allow",
     },
+    {
+        "code": "DIFFER_402",
+        "message_template": (
+            "{kind} '{identity}' is defined {count} times in one schema tree: {outcome}; "
+            "the comparison used the {used} definition"
+        ),
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Keep one definition, or make the later file an explicit ALTER; "
+            "`confiture lint` reports it as build_001 with every file and line"
+        ),
+    },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
     {
         "code": "ROLLBACK_600",

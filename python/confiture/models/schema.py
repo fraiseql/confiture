@@ -8,6 +8,23 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from confiture.models.results import BuildWarning
+
+
+def qualified_name(schema: str | None, name: str) -> str:
+    """The object's name as the schema file spells it.
+
+    ``tenant.t`` when the author wrote a schema, ``t`` when they did not — never
+    an invented ``public.``. This is the *spelling*, which is what a finding
+    prints and what generated DDL says; the *identity* that decides whether two
+    statements are one object folds the missing schema to
+    :data:`~confiture.core.linting.inventory.DEFAULT_SCHEMA` and lives in
+    ``core.differ._identity``. The two are deliberately different: a project
+    whose ``search_path`` is not ``public`` would have its DDL rewritten into
+    another schema by a qualifier confiture invented.
+    """
+    return f"{schema}.{name}" if schema else name
+
 
 class ColumnType(str, Enum):
     """PostgreSQL column types."""
@@ -173,6 +190,11 @@ class EnumType:
     schema: str | None = None
     values: list[str] = field(default_factory=list)
 
+    @property
+    def qualified(self) -> str:
+        """The type as the schema file names it — see :func:`qualified_name`."""
+        return qualified_name(self.schema, self.name)
+
 
 @dataclass
 class Sequence:
@@ -184,6 +206,11 @@ class Sequence:
     increment: int = 1
     min_value: int | None = None
     max_value: int | None = None
+
+    @property
+    def qualified(self) -> str:
+        """The sequence as the schema file names it — see :func:`qualified_name`."""
+        return qualified_name(self.schema, self.name)
 
 
 @dataclass
@@ -199,13 +226,24 @@ class ParsedSchema:
     #: carries the definition, so a redefinition in place is visible. Typed
     #: loosely here because ``core.ddl_objects`` imports this module.
     objects: dict[Any, Any] = field(default_factory=dict)
+    #: What the parse has to say that is not a change: two definitions of one
+    #: object in one tree, resolved the way ``confiture build`` resolves it
+    #: (#313). Always present, empty when there is nothing to report.
+    warnings: list[BuildWarning] = field(default_factory=list)
 
 
 @dataclass
 class Table:
-    """Represents a database table."""
+    """Represents a database table.
+
+    ``name`` is the relation's own name as pglast folded it; ``schema`` is the
+    qualifier the statement wrote, and ``None`` when it wrote none. The pair is
+    the identity — ``tenant.t`` and ``etl.t`` are two tables (#313) — while
+    :attr:`qualified` is the spelling a finding prints.
+    """
 
     name: str
+    schema: str | None = None
     columns: list[Column] = field(default_factory=list)
     indexes: list[Index] = field(default_factory=list)
     foreign_keys: list[ForeignKey] = field(default_factory=list)
@@ -223,6 +261,11 @@ class Table:
         """Check if table has column."""
         return self.get_column(name) is not None
 
+    @property
+    def qualified(self) -> str:
+        """The table as the schema file names it — see :func:`qualified_name`."""
+        return qualified_name(self.schema, self.name)
+
     __hash__ = None  # mutable; equality is structural
 
     def __eq__(self, other: object) -> bool:
@@ -231,6 +274,7 @@ class Table:
             return NotImplemented
         return (
             self.name == other.name
+            and self.schema == other.schema
             and self.columns == other.columns
             and self.indexes == other.indexes
             and self.foreign_keys == other.foreign_keys
@@ -239,29 +283,8 @@ class Table:
         )
 
 
-@dataclass
-class Schema:
-    """Represents a complete database schema."""
-
-    tables: list[Table] = field(default_factory=list)
-
-    def get_table(self, name: str) -> Table | None:
-        """Get table by name."""
-        for table in self.tables:
-            if table.name == name:
-                return table
-        return None
-
-    def has_table(self, name: str) -> bool:
-        """Check if schema has table."""
-        return self.get_table(name) is not None
-
-    def table_names(self) -> list[str]:
-        """Get list of all table names."""
-        return [table.name for table in self.tables]
-
-
-# ``str(SchemaChange)`` per change type; ``name`` / ``index_name`` come from ``details``.
+# ``str(SchemaChange)`` per change type; ``name`` comes from ``details``, under the
+# one key every kind's ``detail_fn`` writes it to.
 _CHANGE_TEMPLATES: dict[str, str] = {
     "ADD_TABLE": "ADD TABLE {table}",
     "DROP_TABLE": "DROP TABLE {table}",
@@ -272,8 +295,8 @@ _CHANGE_TEMPLATES: dict[str, str] = {
     "CHANGE_COLUMN_TYPE": "CHANGE COLUMN TYPE {table}.{column} FROM {old} TO {new}",
     "CHANGE_COLUMN_NULLABLE": "CHANGE COLUMN NULLABLE {table}.{column} FROM {old} TO {new}",
     "CHANGE_COLUMN_DEFAULT": "CHANGE COLUMN DEFAULT {table}.{column}",
-    "ADD_INDEX": "ADD INDEX {index_name} ON {table}",
-    "DROP_INDEX": "DROP INDEX {index_name}",
+    "ADD_INDEX": "ADD INDEX {name} ON {table}",
+    "DROP_INDEX": "DROP INDEX {name}",
     "ADD_FOREIGN_KEY": "ADD FOREIGN KEY {name} ON {table}",
     "DROP_FOREIGN_KEY": "DROP FOREIGN KEY {name}",
     "ADD_CHECK_CONSTRAINT": "ADD CHECK CONSTRAINT {name} ON {table}",
@@ -326,7 +349,6 @@ class SchemaChange:
             column=self.column,
             old=self.old_value,
             new=self.new_value,
-            index_name=details.get("index_name", ""),
             name=details.get("name", ""),
         )
 
@@ -336,6 +358,11 @@ class SchemaDiff:
     """Represents the difference between two schemas."""
 
     changes: list[SchemaChange] = field(default_factory=list)
+    #: Why the diff may not be the whole story: a duplicate definition on
+    #: either side, which is not a change but is a reason the comparison read a
+    #: tree the build may not produce. Empty when there is nothing to report —
+    #: present either way, never absent-on-success.
+    warnings: list[BuildWarning] = field(default_factory=list)
 
     def has_changes(self) -> bool:
         """Check if there are any changes."""

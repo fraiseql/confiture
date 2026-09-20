@@ -75,9 +75,18 @@ class TestDifferSQLBridgeMethods:
         assert "amount > 0" in sql
 
     def test_up_add_check_constraint_no_details(self):
+        """A change with no constraint name is a warning, not an invented name.
+
+        This asserted a substring of what the fabricated fallback produced —
+        ``ALTER TABLE orders ADD CONSTRAINT chk_orders CHECK () ()``, which
+        PostgreSQL does not parse. A name confiture makes up is
+        indistinguishable from one the author chose, and with a qualified table
+        it is not even a legal identifier (``chk_tenant.t``).
+        """
         change = SchemaChange(type="ADD_CHECK_CONSTRAINT", table="orders")
         sql = self._gen().generate_up(change)
-        assert "ADD CONSTRAINT" in sql
+        assert sql.startswith("-- WARNING:")
+        assert "chk_orders" not in sql
 
     # --- DROP_CHECK_CONSTRAINT ---
 

@@ -16,6 +16,7 @@ import psycopg
 from psycopg import sql as pgsql
 
 from confiture.core.ledger import split_qualified_table
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 
 logger = logging.getLogger(__name__)
 
@@ -501,7 +502,7 @@ class BatchedMigration:
                     WHERE table_name = %s AND table_schema = %s
                     ORDER BY ordinal_position
                 """,
-                    (bare, schema or "public"),
+                    (bare, schema or DEFAULT_SCHEMA),
                 )
                 columns = [row[0] for row in cur.fetchall()]
 

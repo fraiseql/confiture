@@ -38,6 +38,10 @@ from confiture.core.ddl_walk import (
     object_kinds,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
+
+# The fold lives in its own module so a reader that needs it but not a parser
+# can have it; imported here because this is where object identity is decided.
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.type_lattice import canonical_type, parse_type
 
 _T = TypeVar("_T")
@@ -89,10 +93,6 @@ KIND_KEYWORD: dict[str, str] = {
 _INPUT_MODES = frozenset({"d", "i", "b", "v"})
 #: The schema pglast attaches to a type written in SQL-standard keyword form.
 _CATALOG_SCHEMA = "pg_catalog"
-
-#: Where an unqualified ``CREATE`` lands, for the purpose of deciding whether
-#: two statements define the same object: ``f()`` and ``public.f()`` are one.
-DEFAULT_SCHEMA = "public"
 
 
 @dataclass(frozen=True)

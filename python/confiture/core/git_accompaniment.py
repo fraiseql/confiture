@@ -148,6 +148,7 @@ class MigrationAccompanimentChecker:
             target_ref=target_ref,
             signature_violations=signature_violations,
             body_violations=body_violations,
+            warnings=diff.warnings,
         )
 
     def _check_signature_violations(
