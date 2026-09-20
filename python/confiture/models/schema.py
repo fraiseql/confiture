@@ -299,7 +299,8 @@ class Schema:
         return [table.name for table in self.tables]
 
 
-# ``str(SchemaChange)`` per change type; ``name`` / ``index_name`` come from ``details``.
+# ``str(SchemaChange)`` per change type; ``name`` comes from ``details``, under the
+# one key every kind's ``detail_fn`` writes it to.
 _CHANGE_TEMPLATES: dict[str, str] = {
     "ADD_TABLE": "ADD TABLE {table}",
     "DROP_TABLE": "DROP TABLE {table}",
@@ -310,8 +311,8 @@ _CHANGE_TEMPLATES: dict[str, str] = {
     "CHANGE_COLUMN_TYPE": "CHANGE COLUMN TYPE {table}.{column} FROM {old} TO {new}",
     "CHANGE_COLUMN_NULLABLE": "CHANGE COLUMN NULLABLE {table}.{column} FROM {old} TO {new}",
     "CHANGE_COLUMN_DEFAULT": "CHANGE COLUMN DEFAULT {table}.{column}",
-    "ADD_INDEX": "ADD INDEX {index_name} ON {table}",
-    "DROP_INDEX": "DROP INDEX {index_name}",
+    "ADD_INDEX": "ADD INDEX {name} ON {table}",
+    "DROP_INDEX": "DROP INDEX {name}",
     "ADD_FOREIGN_KEY": "ADD FOREIGN KEY {name} ON {table}",
     "DROP_FOREIGN_KEY": "DROP FOREIGN KEY {name}",
     "ADD_CHECK_CONSTRAINT": "ADD CHECK CONSTRAINT {name} ON {table}",
@@ -364,7 +365,6 @@ class SchemaChange:
             column=self.column,
             old=self.old_value,
             new=self.new_value,
-            index_name=details.get("index_name", ""),
             name=details.get("name", ""),
         )
 

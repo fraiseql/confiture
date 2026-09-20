@@ -43,7 +43,7 @@
           },
           "details": {
             "type": "string",
-            "description": "The change as one line (`ADD TABLE tb_post`)."
+            "description": "The change as one line (`ADD TABLE tb_post`), naming the table the way the schema file names it \u2014 `ADD COLUMN tenant.tb_meter.x` for a qualified declaration, `ADD TABLE tb_post` for an unqualified one. Confiture never invents a `public.` qualifier the file did not write."
           }
         }
       }

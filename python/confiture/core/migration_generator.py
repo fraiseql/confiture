@@ -56,6 +56,24 @@ def _with_tier(statement: str, *, floor: RiskTier | None = None) -> str:
     return f"-- {DIRECTIVE_PREFIX}tier {tier.value}\n{statement}"
 
 
+def _rename_target(change: SchemaChange, key: str) -> str:
+    """The bare half of a ``RENAME_TABLE`` — what ``RENAME TO`` will accept.
+
+    ``ALTER TABLE a.t RENAME TO a.t2`` is a syntax error: PostgreSQL's
+    ``RENAME TO`` takes a bare name, and the operation that moves a table
+    between schemas is ``SET SCHEMA``. The differ pairs renames within one
+    schema (there is no other kind) and carries both bare names in ``details``
+    beside the qualified spellings, so neither direction has to take a
+    qualifier apart.
+
+    *key* is ``new_name`` going up and ``old_name`` coming down. A change built
+    by hand carries no ``details`` and falls back to the value itself, which for
+    an unqualified schema is the same string.
+    """
+    fallback = change.new_value if key == "new_name" else change.old_value
+    return (change.details or {}).get(key) or fallback or ""
+
+
 def _terminated(sql: str) -> str:
     """End a statement with a semicolon; leave a trailing comment line alone."""
     sql = sql.rstrip()
@@ -506,7 +524,7 @@ class {class_name}(Migration):
             return f"DROP TABLE {change.table}"
 
         elif change.type == "RENAME_TABLE":
-            return f"ALTER TABLE {change.old_value} RENAME TO {change.new_value}"
+            return f"ALTER TABLE {change.old_value} RENAME TO {_rename_target(change, 'new_name')}"
 
         elif change.type == "ADD_COLUMN":
             col_def = change.new_value if change.new_value else "TEXT"
@@ -650,7 +668,7 @@ class {class_name}(Migration):
             return self._recreate_table(change)
 
         elif change.type == "RENAME_TABLE":
-            return f"ALTER TABLE {change.new_value} RENAME TO {change.old_value}"
+            return f"ALTER TABLE {change.new_value} RENAME TO {_rename_target(change, 'old_name')}"
 
         elif change.type == "ADD_COLUMN":
             return f"ALTER TABLE {change.table} DROP COLUMN {change.column}"

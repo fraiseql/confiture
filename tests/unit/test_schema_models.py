@@ -360,10 +360,17 @@ class TestSchemaChangeStrNewTypes:
     """Gap A — SchemaChange.__str__ for new DDL object types."""
 
     def test_str_add_index_with_details(self):
+        """The index's name lives under ``name``, the key every kind uses.
+
+        This test read ``index_name`` — which ``_compare_indexes`` wrote and no
+        generator ever read, so ``migrate diff`` printed ``ADD INDEX ix`` while
+        generating ``idx_{table}``. The report and the artefact disagreed, and
+        only the artefact is applied.
+        """
         change = SchemaChange(
             type="ADD_INDEX",
             table="users",
-            details={"index_name": "idx_email", "columns": ["email"]},
+            details={"name": "idx_email", "columns": ["email"]},
         )
         s = str(change)
         assert "idx_email" in s

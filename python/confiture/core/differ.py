@@ -32,6 +32,7 @@ from confiture.models.schema import (
     Sequence,
     Table,
     UniqueConstraint,
+    qualified_name,
 )
 
 # ---------------------------------------------------------------------------
@@ -151,6 +152,16 @@ def _identity(schema: str | None, name: str) -> tuple[str, str]:
     statements are about one relation.
     """
     return (schema or DEFAULT_SCHEMA).lower(), name
+
+
+def _relation_spelling(relation: Any) -> str:
+    """A ``RangeVar`` as the statement wrote it: ``tenant.t``, or ``t`` unqualified.
+
+    What the constraint and index models carry, because it is what a finding
+    prints and what generated DDL alters. Never an invented ``public.`` — see
+    :func:`~confiture.models.schema.qualified_name`.
+    """
+    return qualified_name(getattr(relation, "schemaname", None), relation.relname)
 
 
 def _schema_matches(model_schema: str | None, edit_schema: str | None) -> bool:
@@ -481,12 +492,12 @@ class SchemaDiffer:
             if ctype == ConstrType.CONSTR_FOREIGN:
                 fk_cols = [s.sval for s in (constraint.fk_attrs or [])]
                 pk_cols = [s.sval for s in (constraint.pk_attrs or [])]
-                ref_table = constraint.pktable.relname if constraint.pktable else ""
+                ref_table = _relation_spelling(constraint.pktable) if constraint.pktable else ""
                 on_delete = _PG_FK_DEL_ACTION.get(str(constraint.fk_del_action or ""))
                 table.foreign_keys.append(
                     ForeignKey(
                         name=name,
-                        table=table.name,
+                        table=table.qualified,
                         columns=fk_cols,
                         ref_table=ref_table,
                         ref_columns=pk_cols,
@@ -498,12 +509,12 @@ class SchemaDiffer:
                 # (detecting that a CHECK constraint was added/removed) is what matters.
                 expr = type(constraint.raw_expr).__name__ if constraint.raw_expr else ""
                 table.check_constraints.append(
-                    CheckConstraint(name=name, table=table.name, expression=expr)
+                    CheckConstraint(name=name, table=table.qualified, expression=expr)
                 )
             elif ctype == ConstrType.CONSTR_UNIQUE:
                 cols = [s.sval for s in (constraint.keys or [])]
                 table.unique_constraints.append(
-                    UniqueConstraint(name=name, table=table.name, columns=cols)
+                    UniqueConstraint(name=name, table=table.qualified, columns=cols)
                 )
         except (AttributeError, KeyError, TypeError, ValueError):
             pass
@@ -579,7 +590,7 @@ class SchemaDiffer:
         ]
         index = Index(
             name=stmt.idxname,
-            table=table.name,
+            table=table.qualified,
             columns=columns,
             unique=bool(stmt.unique),
             where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
@@ -677,9 +688,9 @@ class SchemaDiffer:
                 table.foreign_keys.append(
                     ForeignKey(
                         name=constraint.conname,
-                        table=table.name,
+                        table=table.qualified,
                         columns=[k.sval for k in constraint.fk_attrs or []],
-                        ref_table=constraint.pktable.relname,
+                        ref_table=_relation_spelling(constraint.pktable),
                         ref_columns=[k.sval for k in constraint.pk_attrs or []],
                         on_delete=_PG_FK_DEL_ACTION.get(constraint.fk_del_action or ""),
                     )
@@ -688,7 +699,7 @@ class SchemaDiffer:
                 table.check_constraints.append(
                     CheckConstraint(
                         name=constraint.conname,
-                        table=table.name,
+                        table=table.qualified,
                         expression=RawStream()(constraint.raw_expr),
                     )
                 )
@@ -696,7 +707,7 @@ class SchemaDiffer:
                 table.unique_constraints.append(
                     UniqueConstraint(
                         name=constraint.conname,
-                        table=table.name,
+                        table=table.qualified,
                         columns=[k.sval for k in constraint.keys or []],
                     )
                 )
@@ -1006,14 +1017,25 @@ class SchemaDiffer:
     # ------------------------------------------------------------------
 
     def _compare_indexes(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
-        """Detect added / dropped indexes."""
+        """Detect added / dropped indexes.
+
+        Every ``detail_fn`` below emits the object's own name under ``name``,
+        which is the key ``differ_sql`` and ``_CHANGE_TEMPLATES`` read. Indexes
+        were the one kind spelled ``index_name`` on this side of the seam, so
+        every generator read took its fallback and created ``idx_{table}``
+        instead of the index the author declared.
+        """
         return self._compare_named_objects(
             old_map={idx.name: idx for idx in old_table.indexes},
             new_map={idx.name: idx for idx in new_table.indexes},
             add_type="ADD_INDEX",
             drop_type="DROP_INDEX",
-            table=old_table.name,
-            detail_fn=lambda obj: {"index_name": obj.name, "columns": obj.columns},
+            table=old_table.qualified,
+            detail_fn=lambda obj: {
+                "name": obj.name,
+                "columns": obj.columns,
+                "unique": obj.unique,
+            },
         )
 
     def _compare_foreign_keys(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
@@ -1023,7 +1045,7 @@ class SchemaDiffer:
             new_map={fk.name: fk for fk in new_table.foreign_keys},
             add_type="ADD_FOREIGN_KEY",
             drop_type="DROP_FOREIGN_KEY",
-            table=old_table.name,
+            table=old_table.qualified,
             detail_fn=lambda obj: {
                 "name": obj.name,
                 "columns": obj.columns,
@@ -1040,7 +1062,7 @@ class SchemaDiffer:
             new_map={cc.name: cc for cc in new_table.check_constraints},
             add_type="ADD_CHECK_CONSTRAINT",
             drop_type="DROP_CHECK_CONSTRAINT",
-            table=old_table.name,
+            table=old_table.qualified,
             detail_fn=lambda obj: {"name": obj.name, "expression": obj.expression},
         )
 
@@ -1051,7 +1073,7 @@ class SchemaDiffer:
             new_map={uc.name: uc for uc in new_table.unique_constraints},
             add_type="ADD_UNIQUE_CONSTRAINT",
             drop_type="DROP_UNIQUE_CONSTRAINT",
-            table=old_table.name,
+            table=old_table.qualified,
             detail_fn=lambda obj: {"name": obj.name, "columns": obj.columns},
         )
 
