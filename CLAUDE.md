@@ -435,6 +435,30 @@ key is added in one statement carrying the module's `-- review:` idiom.
 and the element in a `CREATE TABLE` are the same text. Writing it twice is how
 the reader came to disagree with itself.
 
+**A column's type has a spelling too** (since 1.14.0). `Column.type` is the
+canonical `ColumnType` — the identity — and `Column.raw_sql_type` is **the type
+as generated DDL should write it, recorded for every column**. It used to be
+filled only when `_COLUMN_TYPE_MAP` missed, which is what dropped
+`VARCHAR(50)`'s length on the floor: the length lives in the spelling, and a
+modelled type had no spelling to keep it in. A schema saying `VARCHAR(50)`
+generated an unbounded `VARCHAR`, and `VARCHAR(50)` → `VARCHAR(100)` reported
+**nothing at all**.
+
+The name comes from the canonical type and the typmod from the parser, and that
+split is deliberate: pglast has already folded the author's keywords into
+PostgreSQL's internal spellings — `INT` arrives as `int4`, `DOUBLE PRECISION` as
+`float8` — so "as the author wrote it" is not recoverable here and writing the
+parser's string back is valid DDL nobody wants to read. A type the map does not
+know is left exactly as the parser holds it, case included, because `"MyType"`
+is not `mytype`. A type with no typmod therefore generates the text it always
+generated.
+
+Whether two columns declare the same type is `type_lattice.same_type`, never a
+comparison of the spellings: that is the one canonicaliser (#275), and its own
+docstring states this case — *a signature drops typmods, because PostgreSQL
+ignores them there, and a **column** type must keep them or `varchar(50)` and
+`varchar(100)` compare equal*. One rule, two questions.
+
 Prep-seed level 2 reads the qualifier too (1.14.0, #317): `SchemaTables` keys
 `(schema, name)` and routes on `Table.schema`, not on
 `"prep_seed" in str(sql_file)`. A tree declaring nothing in the configured
