@@ -24,6 +24,11 @@ BASE = "CREATE SCHEMA b;\nCREATE SCHEMA a;\nCREATE TABLE b.parent (id INT PRIMAR
 #: Columns declared on both sides, so what the migration carries is constraints.
 OLD = BASE + "CREATE TABLE a.child (id INT, pid INT, noref INT, u INT, c INT);\n"
 
+#: A typmod on every shape that carries one, to be asked back from the catalogue.
+TYPED = BASE + (
+    "CREATE TABLE a.typed (code VARCHAR(50), amount NUMERIC(10,2), flag CHAR(2), n INT);\n"
+)
+
 NEW = (
     BASE + "CREATE TABLE a.child (\n"
     "  id INT,\n"
@@ -119,3 +124,30 @@ def test_the_check_constraints_carry_their_predicates(migrated: psycopg.Connecti
     found = _constraints(migrated, "a.child")
     assert "(id > 0)" in found["ck_named"][1]
     assert "(c > 0)" in found["child_c_check"][1]
+
+
+def test_a_generated_column_keeps_its_length_and_precision(fresh_database: str) -> None:
+    """``VARCHAR(50)`` generated ``VARCHAR`` — an unbounded column where the
+    schema said fifty characters. Asked back from ``format_type``, which is
+    PostgreSQL's own answer rather than confiture's."""
+    generator = DifferSQLGenerator(force_destructive=True)
+    sql = "\n".join(
+        generator.generate_up(change) for change in SchemaDiffer().compare(BASE, TYPED).changes
+    )
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute(BASE)
+        conn.execute(sql)
+        rows = conn.execute(
+            """
+            SELECT attname, format_type(atttypid, atttypmod)
+            FROM pg_attribute
+            WHERE attrelid = 'a.typed'::regclass AND attnum > 0 AND NOT attisdropped
+            ORDER BY attnum
+            """
+        ).fetchall()
+    assert rows == [
+        ("code", "character varying(50)"),
+        ("amount", "numeric(10,2)"),
+        ("flag", "character(2)"),
+        ("n", "integer"),
+    ]

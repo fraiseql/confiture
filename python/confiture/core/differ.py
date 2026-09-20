@@ -15,10 +15,11 @@ from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_objects import OBJECT_KEYWORD, objects_in, pair_definitions
-from confiture.core.ddl_walk import ColumnEdit, ObjectEdit, column_edit, object_edits
+from confiture.core.ddl_walk import ColumnEdit, ObjectEdit, column_edit, object_edits, type_name
 from confiture.core.linting.duplicates import WINS_TEXT, CreateFlags, wins
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import blank_copy_blocks
+from confiture.core.type_lattice import parse_type, same_type
 from confiture.models.results import BuildWarning
 from confiture.models.schema import (
     CheckConstraint,
@@ -486,6 +487,53 @@ def _object_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
     )
 
 
+def _written_type(type_node: Any, col_type: ColumnType) -> str | None:
+    """The column's type as generated DDL should write it — **with its typmod**.
+
+    ``Column.raw_sql_type`` used to be filled only when ``_COLUMN_TYPE_MAP``
+    missed, so every recognised type arrived stripped of its length and
+    precision: a schema saying ``VARCHAR(50)`` generated an unbounded
+    ``VARCHAR``, and ``VARCHAR(50)`` -> ``VARCHAR(100)`` was not a change at all.
+
+    The typmod and the array bounds come from ``ddl_walk.type_name``, the one
+    reader of a pglast ``TypeName``. The *name* does not: pglast has already
+    folded the author's keywords into PostgreSQL's internal spellings — ``INT``
+    arrives as ``int4``, ``DOUBLE PRECISION`` as ``float8`` — and writing those
+    back is valid DDL nobody wants to read. A type the map recognises is
+    therefore rendered by its readable name; one it does not is left exactly as
+    the parser holds it, case included, because ``"MyType"`` is not ``mytype``.
+    """
+    written = type_name(type_node)
+    if written is None or col_type is ColumnType.UNKNOWN:
+        return written
+    parsed = parse_type(written)
+    if parsed is None:
+        return written
+    suffix = "[]" * parsed.dimensions
+    if parsed.precision is None:
+        return col_type.value + suffix
+    if parsed.scale is None:
+        return f"{col_type.value}({parsed.precision}){suffix}"
+    return f"{col_type.value}({parsed.precision},{parsed.scale}){suffix}"
+
+
+def _types_differ(old: Column, new: Column) -> bool:
+    """Whether two columns declare different types, typmod included.
+
+    ``type_lattice.same_type`` is the predicate, and says so itself: *a column
+    type must keep [typmods] or ``varchar(50)`` and ``varchar(100)`` compare
+    equal*. Deciding that ``int4`` and ``integer`` are one type is the lattice's
+    job too, which is why this compares the written spellings rather than adding
+    a second alias table beside ``_COLUMN_TYPE_MAP``.
+
+    A column built by hand may carry no spelling; then the canonical
+    :class:`ColumnType` is all there is to compare.
+    """
+    if old.raw_sql_type and new.raw_sql_type:
+        return not same_type(old.raw_sql_type, new.raw_sql_type)
+    return old.type != new.type or old.raw_sql_type != new.raw_sql_type
+
+
 def _column_definition(column: Column) -> str:
     """The column's definition without its name — what ``ADD COLUMN`` takes after the name."""
     parts = [column.raw_sql_type or column.type.value]
@@ -807,7 +855,6 @@ class SchemaDiffer:
             raw_type_str = names[-1].upper()
             lookup_str = _PGLAST_TYPE_ALIASES.get(raw_type_str, raw_type_str)
             col_type = _COLUMN_TYPE_MAP.get(lookup_str, ColumnType.UNKNOWN)
-            raw_sql_type = raw_type_str.lower() if col_type == ColumnType.UNKNOWN else None
 
             # Extract length from first typmod (VARCHAR(N), NUMERIC(P,S), etc.)
             length: int | None = None
@@ -822,7 +869,10 @@ class SchemaDiffer:
             # Array column (INT[], TEXT[], etc.) → UNKNOWN with raw type preserved
             if col_def.typeName.arrayBounds:
                 col_type = ColumnType.UNKNOWN
-                raw_sql_type = raw_type_str.lower() + "[]"
+
+            # The spelling is recorded for every column, not only for a type the
+            # map missed: it is what carries the length and the precision.
+            raw_sql_type = _written_type(col_def.typeName, col_type)
 
             return Column(
                 name=col_def.colname,
@@ -1244,26 +1294,16 @@ class SchemaDiffer:
         """
         changes: list[SchemaChange] = []
 
-        # Type change — handle UNKNOWN types using raw_sql_type
-        if old_col.type == new_col.type == ColumnType.UNKNOWN:
-            if old_col.raw_sql_type != new_col.raw_sql_type:
-                changes.append(
-                    SchemaChange(
-                        type="CHANGE_COLUMN_TYPE",
-                        table=table,
-                        column=old_col.name,
-                        old_value=old_col.raw_sql_type,
-                        new_value=new_col.raw_sql_type,
-                    )
-                )
-        elif old_col.type != new_col.type:
+        # Type change, typmod included: a `varchar(50)` widened to `varchar(100)`
+        # is a change, and was reported as nothing at all.
+        if _types_differ(old_col, new_col):
             changes.append(
                 SchemaChange(
                     type="CHANGE_COLUMN_TYPE",
                     table=table,
                     column=old_col.name,
-                    old_value=old_col.type.value,
-                    new_value=new_col.type.value,
+                    old_value=old_col.raw_sql_type or old_col.type.value,
+                    new_value=new_col.raw_sql_type or new_col.type.value,
                 )
             )
 
