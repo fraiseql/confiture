@@ -21,6 +21,7 @@ from typing import TypeAlias
 from confiture.core.idempotency._captures import Captures
 from confiture.core.idempotency._naming import qualify
 from confiture.core.idempotency.models import IdempotencyPattern
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 
 NO_TEMPLATE_AVAILABLE_MARKER = "no auto-template available — manual fix required"
 
@@ -178,7 +179,7 @@ def _t_alter_table_owner(cap: Captures) -> str | None:
     qname = qualify(cap.schema, cap.table)
     if qname is None:
         return None
-    schema = cap.schema or "public"
+    schema = cap.schema or DEFAULT_SCHEMA
     return (
         "DO $$ BEGIN\n"
         "    IF EXISTS (\n"
@@ -195,7 +196,7 @@ def _t_alter_view_owner(cap: Captures) -> str | None:
     qname = qualify(cap.schema, cap.view)
     if qname is None:
         return None
-    schema = cap.schema or "public"
+    schema = cap.schema or DEFAULT_SCHEMA
     return (
         "DO $$ BEGIN\n"
         "    IF EXISTS (\n"
@@ -212,7 +213,7 @@ def _t_alter_matview_owner(cap: Captures) -> str | None:
     qname = qualify(cap.schema, cap.view)
     if qname is None:
         return None
-    schema = cap.schema or "public"
+    schema = cap.schema or DEFAULT_SCHEMA
     return (
         "DO $$ BEGIN\n"
         "    IF EXISTS (\n"

@@ -25,12 +25,13 @@ from pglast import ast as pglast_ast
 from pglast import parse_sql
 
 from confiture.core.idempotency.python_migration_extractor import extract_sql_from_python_migration
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.models.preflight import CorTarget
 
 
 def _rangevar_to_qualified(rangevar: object) -> tuple[str, str]:
     """Extract (schema, name) from a pglast RangeVar."""
-    schema = getattr(rangevar, "schemaname", None) or "public"
+    schema = getattr(rangevar, "schemaname", None) or DEFAULT_SCHEMA
     name = getattr(rangevar, "relname", None) or ""
     return schema, name
 
