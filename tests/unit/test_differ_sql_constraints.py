@@ -190,3 +190,63 @@ class TestAnUnnamedConstraintIsGeneratedUnnamed:
         )
         assert sql.startswith("-- WARNING:")
         assert _without_comments(sql).strip() == ""
+
+
+class TestANewTableIsGeneratedWhole:
+    """``_up_add_table`` rendered the columns and nothing else.
+
+    A new table's foreign keys, CHECKs, UNIQUEs and primary key were dropped
+    from the generated ``CREATE TABLE`` — measured true for the table-level
+    spellings too, so it pre-dates #315 and would have outlived it: a
+    column-level foreign key on a *new* table would still have vanished.
+
+    The assertion is a round trip. Generate, parse the result back through
+    ``SchemaDiffer``, and compare the models: anything the generator drops or
+    invents shows up as a difference.
+    """
+
+    DECLARED = (
+        PARENT + "CREATE TABLE a.child (\n"
+        "  pk INT PRIMARY KEY,\n"
+        "  pid INT REFERENCES b.parent(id) ON DELETE CASCADE,\n"
+        "  named INT,\n"
+        "  u INT UNIQUE,\n"
+        "  c INT CHECK (c > 0),\n"
+        "  CONSTRAINT fk_named FOREIGN KEY (named) REFERENCES b.parent(id),\n"
+        "  CONSTRAINT uq_named UNIQUE (named),\n"
+        "  CONSTRAINT ck_named CHECK (named > 0)\n"
+        ");"
+    )
+
+    def _regenerated(self) -> tuple[object, object]:
+        differ = SchemaDiffer()
+        declared = differ.parse_schema(self.DECLARED).tables[1]
+        sql = _up(PARENT, self.DECLARED, "ADD_TABLE")
+        assert _parses(sql)
+        return declared, SchemaDiffer().parse_schema(PARENT + sql).tables[1]
+
+    def test_the_columns_round_trip(self) -> None:
+        declared, regenerated = self._regenerated()
+        assert regenerated.columns == declared.columns  # ty: ignore[unresolved-attribute]
+
+    def test_the_foreign_keys_round_trip(self) -> None:
+        declared, regenerated = self._regenerated()
+        assert regenerated.foreign_keys == declared.foreign_keys  # ty: ignore[unresolved-attribute]
+
+    def test_the_check_constraints_round_trip(self) -> None:
+        declared, regenerated = self._regenerated()
+        assert (
+            regenerated.check_constraints  # ty: ignore[unresolved-attribute]
+            == declared.check_constraints  # ty: ignore[unresolved-attribute]
+        )
+
+    def test_the_unique_constraints_round_trip(self) -> None:
+        declared, regenerated = self._regenerated()
+        assert (
+            regenerated.unique_constraints  # ty: ignore[unresolved-attribute]
+            == declared.unique_constraints  # ty: ignore[unresolved-attribute]
+        )
+
+    def test_a_table_with_no_constraints_is_unchanged(self) -> None:
+        sql = _up("", "CREATE TABLE tenant.t (id INT);", "ADD_TABLE")
+        assert sql.strip() == "CREATE TABLE IF NOT EXISTS tenant.t (\n    id INTEGER\n);"

@@ -62,6 +62,28 @@ def _columns(names: list[str]) -> str:
     return ", ".join(names)
 
 
+def _constraint_body(details: dict[str, Any]) -> str | None:
+    """The text after ``ADD`` in an ``ALTER``, and the element in a ``CREATE TABLE``.
+
+    One clause, both places: the same constraint written two ways is how the
+    reader that produced it came to disagree with itself (#316). ``None`` when the
+    change does not carry what the clause needs — see :func:`_incomplete`.
+    """
+    kind = details.get("kind") or ""
+    columns = details.get("columns") or []
+    if kind == "FOREIGN KEY":
+        reference = _references(details)
+        if not columns or reference is None:
+            return None
+        return f"FOREIGN KEY ({_columns(columns)}) REFERENCES {reference}"
+    if kind == "CHECK":
+        expression = details.get("expression") or ""
+        return f"CHECK ({expression})" if expression else None
+    if kind in ("UNIQUE", "PRIMARY KEY"):
+        return f"{kind} ({_columns(columns)})" if columns else None
+    return None
+
+
 def _references(details: dict[str, Any]) -> str | None:
     """``REFERENCES b.parent (id) ON DELETE CASCADE``, as the schema wrote it.
 
@@ -155,12 +177,26 @@ class DifferSQLGenerator:
         return f"DROP {keyword} IF EXISTS {name};\n"
 
     def _up_add_table(self, change: SchemaChange) -> str:
+        """The table the schema declared: its columns **and** its constraints.
+
+        A constraint the schema left unnamed is written unnamed, exactly as the
+        author wrote it; PostgreSQL generates the name either way.
+        """
         details = change.details or {}
         cols = details.get("columns", [])
-        if cols:
-            col_defs = ",\n    ".join(_format_column(c) for c in cols)
-            return f"CREATE TABLE IF NOT EXISTS {change.table} (\n    {col_defs}\n);\n"
-        return f"CREATE TABLE IF NOT EXISTS {change.table} ();\n"
+        constraints = details.get("constraints") or []
+        elements = [_format_column(c) for c in cols]
+        bodies = [(c, _constraint_body(c)) for c in constraints]
+        elements.extend(_named(c.get("name") or "", body) for c, body in bodies if body is not None)
+        warnings = "".join(
+            _incomplete(change, f"a complete {c.get('kind') or 'constraint'} clause")
+            for c, body in bodies
+            if body is None
+        )
+        if elements:
+            joined = ",\n    ".join(elements)
+            return f"{warnings}CREATE TABLE IF NOT EXISTS {change.table} (\n    {joined}\n);\n"
+        return f"{warnings}CREATE TABLE IF NOT EXISTS {change.table} ();\n"
 
     def _down_add_table(self, change: SchemaChange) -> str:
         if not self._force:
@@ -289,12 +325,11 @@ class DifferSQLGenerator:
         confiture made up.
         """
         details = change.details or {}
-        columns = details.get("columns") or []
-        reference = _references(details)
-        if not columns or reference is None:
+        body = _constraint_body({**details, "kind": "FOREIGN KEY"})
+        if body is None:
             return _incomplete(change, "a column list and a referenced table")
         name = details.get("name") or ""
-        clause = _named(name, f"FOREIGN KEY ({_columns(columns)}) REFERENCES {reference}")
+        clause = _named(name, body)
         if not name:
             return (
                 f"ALTER TABLE {change.table} ADD {clause};"
@@ -312,22 +347,20 @@ class DifferSQLGenerator:
     def _up_add_check_constraint(self, change: SchemaChange) -> str:
         """A CHECK constraint is its expression, and has no column list (#316)."""
         details = change.details or {}
-        expression = details.get("expression") or ""
-        if not expression:
+        body = _constraint_body({**details, "kind": "CHECK"})
+        if body is None:
             return _incomplete(change, "a CHECK expression")
-        clause = _named(details.get("name") or "", f"CHECK ({expression})")
-        return f"ALTER TABLE {change.table} ADD {clause};\n"
+        return f"ALTER TABLE {change.table} ADD {_named(details.get('name') or '', body)};\n"
 
     def _up_drop_check_constraint(self, change: SchemaChange) -> str:
         return self._up_drop_constraint(change)
 
     def _up_add_unique_constraint(self, change: SchemaChange) -> str:
         details = change.details or {}
-        columns = details.get("columns") or []
-        if not columns:
+        body = _constraint_body({**details, "kind": "UNIQUE"})
+        if body is None:
             return _incomplete(change, "a column list")
-        clause = _named(details.get("name") or "", f"UNIQUE ({_columns(columns)})")
-        return f"ALTER TABLE {change.table} ADD {clause};\n"
+        return f"ALTER TABLE {change.table} ADD {_named(details.get('name') or '', body)};\n"
 
     def _up_drop_unique_constraint(self, change: SchemaChange) -> str:
         return self._up_drop_constraint(change)

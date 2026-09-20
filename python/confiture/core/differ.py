@@ -509,6 +509,47 @@ def _column_details(table: Table) -> list[dict[str, Any]]:
     ]
 
 
+def _constraint_details(table: Table) -> list[dict[str, Any]]:
+    """The table's own constraints, in the shape the generator renders a clause from.
+
+    :func:`_column_details`' sibling. ``_up_add_table`` rendered the columns and
+    nothing else, so a new table's foreign keys, CHECKs, UNIQUEs and primary key
+    were dropped from the generated ``CREATE TABLE`` — for every spelling, which
+    is why this outlived #315's parse fix rather than being caused by it.
+
+    The primary key is emitted at table level rather than on the column so that a
+    composite one has somewhere to go.
+    """
+    details: list[dict[str, Any]] = [
+        {
+            "kind": "PRIMARY KEY",
+            "name": "",
+            "columns": [column.name for column in table.columns if column.primary_key],
+        }
+    ]
+    details.extend(
+        {
+            "kind": "FOREIGN KEY",
+            "name": fk.name,
+            "columns": fk.columns,
+            "ref_table": fk.ref_table,
+            "ref_columns": fk.ref_columns,
+            "on_delete": fk.on_delete,
+            "on_update": fk.on_update,
+        }
+        for fk in table.foreign_keys
+    )
+    details.extend(
+        {"kind": "UNIQUE", "name": uc.name, "columns": uc.columns}
+        for uc in table.unique_constraints
+    )
+    details.extend(
+        {"kind": "CHECK", "name": cc.name, "expression": cc.expression}
+        for cc in table.check_constraints
+    )
+    return [detail for detail in details if detail.get("columns") or detail.get("expression")]
+
+
 def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
     """A stable order for object changes: kind, then schema, then name."""
     return (ref.kind, ref.schema, ref.name, str(ref.signature))
@@ -1024,7 +1065,10 @@ class SchemaDiffer:
             SchemaChange(
                 type="ADD_TABLE",
                 table=new_map[key].qualified,
-                details={"columns": _column_details(new_map[key])},
+                details={
+                    "columns": _column_details(new_map[key]),
+                    "constraints": _constraint_details(new_map[key]),
+                },
             )
             for key in sorted(new_only)
         )
