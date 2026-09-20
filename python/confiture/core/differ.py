@@ -722,63 +722,113 @@ class SchemaDiffer:
         old_schema = self.parse_schema(old_sql)
         new_schema = self.parse_schema(new_sql)
 
+        changes = self._compare_tables(old_schema, new_schema)
+        changes.extend(self._compare_enum_types(old_schema.enum_types, new_schema.enum_types))
+        changes.extend(self._compare_sequences(old_schema.sequences, new_schema.sequences))
+        # Objects compared by definition: views, and #288's later kinds.
+        changes.extend(self._compare_objects(old_schema.objects, new_schema.objects))
+        return SchemaDiff(changes=changes)
+
+    # ------------------------------------------------------------------
+    # Table comparison
+    # ------------------------------------------------------------------
+
+    def _compare_tables(
+        self, old_schema: ParsedSchema, new_schema: ParsedSchema
+    ) -> list[SchemaChange]:
+        """Added, dropped, renamed and edited tables, paired by identity.
+
+        The maps key on :func:`_identity`, never on a bare name: ``tenant.t`` and
+        ``etl.t`` are two tables, and pairing one against the other reported a
+        ``DROP COLUMN`` on a schema where nothing had changed — a migration
+        generated from a file rename (#313).
+
+        What a change *prints* is ``Table.qualified``, the spelling the author
+        wrote. Identity folds a missing schema; spelling never invents one.
+        """
         changes: list[SchemaChange] = []
+        old_map = {_identity(t.schema, t.name): t for t in old_schema.tables}
+        new_map = {_identity(t.schema, t.name): t for t in new_schema.tables}
 
-        # --- Table-level changes ---
-        old_table_map = {t.name: t for t in old_schema.tables}
-        new_table_map = {t.name: t for t in new_schema.tables}
+        old_only = set(old_map) - set(new_map)
+        new_only = set(new_map) - set(old_map)
 
-        old_table_names = set(old_table_map.keys())
-        new_table_names = set(new_table_map.keys())
-
-        renamed_tables = self._detect_table_renames(
-            sorted(old_table_names - new_table_names), sorted(new_table_names - old_table_names)
-        )
-
-        for old_name, new_name in renamed_tables.items():
+        for old_key, new_key in self._renamed_tables(old_only, new_only).items():
+            old_table, new_table = old_map[old_key], new_map[new_key]
             changes.append(
-                SchemaChange(type="RENAME_TABLE", old_value=old_name, new_value=new_name)
+                SchemaChange(
+                    type="RENAME_TABLE",
+                    table=old_table.qualified,
+                    old_value=old_table.qualified,
+                    new_value=new_table.qualified,
+                    # `ALTER TABLE a.t RENAME TO a.t2` is a syntax error — the
+                    # target of a RENAME is a bare name. Both spellings travel so
+                    # the up and the down each have the two they need without
+                    # taking a qualifier apart.
+                    details={"old_name": old_table.name, "new_name": new_table.name},
+                )
             )
-            old_table_names.discard(old_name)
-            new_table_names.discard(new_name)
+            old_only.discard(old_key)
+            new_only.discard(new_key)
 
         changes.extend(
             SchemaChange(
                 type="DROP_TABLE",
-                table=table_name,
-                details={"columns": _column_details(old_table_map[table_name])},
+                table=old_map[key].qualified,
+                details={"columns": _column_details(old_map[key])},
             )
-            for table_name in sorted(old_table_names - new_table_names)
+            for key in sorted(old_only)
         )
 
         changes.extend(
             SchemaChange(
                 type="ADD_TABLE",
-                table=table_name,
-                details={"columns": _column_details(new_table_map[table_name])},
+                table=new_map[key].qualified,
+                details={"columns": _column_details(new_map[key])},
             )
-            for table_name in sorted(new_table_names - old_table_names)
+            for key in sorted(new_only)
         )
 
-        for table_name in sorted(old_table_names & new_table_names):
-            old_table = old_table_map[table_name]
-            new_table = new_table_map[table_name]
+        for key in sorted(set(old_map) & set(new_map)):
+            old_table = old_map[key]
+            new_table = new_map[key]
             changes.extend(self._compare_table_columns(old_table, new_table))
             changes.extend(self._compare_indexes(old_table, new_table))
             changes.extend(self._compare_foreign_keys(old_table, new_table))
             changes.extend(self._compare_check_constraints(old_table, new_table))
             changes.extend(self._compare_unique_constraints(old_table, new_table))
 
-        # --- Enum type changes ---
-        changes.extend(self._compare_enum_types(old_schema.enum_types, new_schema.enum_types))
+        return changes
 
-        # --- Sequence changes ---
-        changes.extend(self._compare_sequences(old_schema.sequences, new_schema.sequences))
+    def _renamed_tables(
+        self, old_keys: set[tuple[str, str]], new_keys: set[tuple[str, str]]
+    ) -> dict[tuple[str, str], tuple[str, str]]:
+        """Pair a vanished table with an appeared one — **within one schema**.
 
-        # --- Objects compared by definition: views, and #288's later kinds ---
-        changes.extend(self._compare_objects(old_schema.objects, new_schema.objects))
+        PostgreSQL's ``ALTER TABLE … RENAME TO`` takes a bare name and cannot
+        move a table between schemas (``ALTER TABLE a.t RENAME TO a.t2`` is a
+        syntax error; the operation that moves a table is ``SET SCHEMA``). A
+        cross-schema pairing is therefore not a rename by construction.
 
-        return SchemaDiff(changes=changes)
+        That is a grammatical separation, not a threshold: ``_similarity_score``
+        scores ``tenant.tb_meter`` against ``etl.tb_meter`` at 0.6, which is
+        exactly what it scores the real rename ``tenant.tb_a`` →
+        ``tenant.tb_b``. No threshold tells those apart, so feeding qualified
+        names to the fuzzy matcher invents a destructive ``RENAME_TABLE``.
+
+        ``_detect_column_renames`` needs no equivalent: a column comparison is
+        already scoped to one table.
+        """
+        renames: dict[tuple[str, str], tuple[str, str]] = {}
+        old_schemas = {schema for schema, _ in old_keys}
+        for schema in sorted(old_schemas & {schema for schema, _ in new_keys}):
+            paired = self._detect_table_renames(
+                sorted(name for s, name in old_keys if s == schema),
+                sorted(name for s, name in new_keys if s == schema),
+            )
+            for old_name, new_name in paired.items():
+                renames[schema, old_name] = (schema, new_name)
+        return renames
 
     # ------------------------------------------------------------------
     # Objects compared by definition (#288)
@@ -831,6 +881,7 @@ class SchemaDiffer:
         """Compare columns between two versions of the same table."""
         changes: list[SchemaChange] = []
 
+        table = old_table.qualified
         old_col_map = {c.name: c for c in old_table.columns}
         new_col_map = {c.name: c for c in new_table.columns}
 
@@ -845,7 +896,7 @@ class SchemaDiffer:
             changes.append(
                 SchemaChange(
                     type="RENAME_COLUMN",
-                    table=old_table.name,
+                    table=table,
                     old_value=old_name,
                     new_value=new_name,
                 )
@@ -856,7 +907,7 @@ class SchemaDiffer:
         changes.extend(
             SchemaChange(
                 type="DROP_COLUMN",
-                table=old_table.name,
+                table=table,
                 column=col_name,
                 old_value=_column_definition(old_col_map[col_name]),
             )
@@ -866,7 +917,7 @@ class SchemaDiffer:
         changes.extend(
             SchemaChange(
                 type="ADD_COLUMN",
-                table=old_table.name,
+                table=table,
                 column=col_name,
                 new_value=_column_definition(new_col_map[col_name]),
             )
@@ -876,7 +927,7 @@ class SchemaDiffer:
         for col_name in sorted(old_col_names & new_col_names):
             old_col = old_col_map[col_name]
             new_col = new_col_map[col_name]
-            changes.extend(self._compare_column_properties(old_table.name, old_col, new_col))
+            changes.extend(self._compare_column_properties(table, old_col, new_col))
 
         return changes
 
@@ -892,9 +943,15 @@ class SchemaDiffer:
         return renames
 
     def _compare_column_properties(
-        self, table_name: str, old_col: Column, new_col: Column
+        self, table: str, old_col: Column, new_col: Column
     ) -> list[SchemaChange]:
-        """Compare properties of a column."""
+        """Compare properties of a column.
+
+        *table* is the table's **spelling**, what a finding prints and what
+        generated DDL alters — never an identity. The two are separate fields on
+        the model for the same reason ``SchemaObject.signature`` and
+        ``signature_key`` are (#275).
+        """
         changes: list[SchemaChange] = []
 
         # Type change — handle UNKNOWN types using raw_sql_type
@@ -903,7 +960,7 @@ class SchemaDiffer:
                 changes.append(
                     SchemaChange(
                         type="CHANGE_COLUMN_TYPE",
-                        table=table_name,
+                        table=table,
                         column=old_col.name,
                         old_value=old_col.raw_sql_type,
                         new_value=new_col.raw_sql_type,
@@ -913,7 +970,7 @@ class SchemaDiffer:
             changes.append(
                 SchemaChange(
                     type="CHANGE_COLUMN_TYPE",
-                    table=table_name,
+                    table=table,
                     column=old_col.name,
                     old_value=old_col.type.value,
                     new_value=new_col.type.value,
@@ -924,7 +981,7 @@ class SchemaDiffer:
             changes.append(
                 SchemaChange(
                     type="CHANGE_COLUMN_NULLABLE",
-                    table=table_name,
+                    table=table,
                     column=old_col.name,
                     old_value="true" if old_col.nullable else "false",
                     new_value="true" if new_col.nullable else "false",
@@ -935,7 +992,7 @@ class SchemaDiffer:
             changes.append(
                 SchemaChange(
                     type="CHANGE_COLUMN_DEFAULT",
-                    table=table_name,
+                    table=table,
                     column=old_col.name,
                     old_value=str(old_col.default) if old_col.default else None,
                     new_value=str(new_col.default) if new_col.default else None,
@@ -1001,27 +1058,29 @@ class SchemaDiffer:
     def _compare_enum_types(
         self, old_enums: list[EnumType], new_enums: list[EnumType]
     ) -> list[SchemaChange]:
-        """Detect added / dropped / changed enum types."""
+        """Detect added / dropped / changed enum types, paired by identity."""
         changes: list[SchemaChange] = []
-        old_map = {e.name: e for e in old_enums}
-        new_map = {e.name: e for e in new_enums}
+        old_map = {_identity(e.schema, e.name): e for e in old_enums}
+        new_map = {_identity(e.schema, e.name): e for e in new_enums}
 
         changes.extend(
-            SchemaChange(type="ADD_ENUM_TYPE", table=name) for name in set(new_map) - set(old_map)
+            SchemaChange(type="ADD_ENUM_TYPE", table=new_map[key].qualified)
+            for key in set(new_map) - set(old_map)
         )
 
         changes.extend(
-            SchemaChange(type="DROP_ENUM_TYPE", table=name) for name in set(old_map) - set(new_map)
+            SchemaChange(type="DROP_ENUM_TYPE", table=old_map[key].qualified)
+            for key in set(old_map) - set(new_map)
         )
 
-        for name in set(old_map) & set(new_map):
-            old_vals = set(old_map[name].values)
-            new_vals = set(new_map[name].values)
+        for key in set(old_map) & set(new_map):
+            old_vals = set(old_map[key].values)
+            new_vals = set(new_map[key].values)
             if old_vals != new_vals:
                 changes.append(
                     SchemaChange(
                         type="CHANGE_ENUM_VALUES",
-                        table=name,
+                        table=old_map[key].qualified,
                         details={
                             "added_values": sorted(new_vals - old_vals),
                             "removed_values": sorted(old_vals - new_vals),
@@ -1034,17 +1093,19 @@ class SchemaDiffer:
     def _compare_sequences(
         self, old_seqs: list[Sequence], new_seqs: list[Sequence]
     ) -> list[SchemaChange]:
-        """Detect added / dropped sequences."""
+        """Detect added / dropped sequences, paired by identity."""
         changes: list[SchemaChange] = []
-        old_map = {s.name: s for s in old_seqs}
-        new_map = {s.name: s for s in new_seqs}
+        old_map = {_identity(s.schema, s.name): s for s in old_seqs}
+        new_map = {_identity(s.schema, s.name): s for s in new_seqs}
 
         changes.extend(
-            SchemaChange(type="ADD_SEQUENCE", table=name) for name in set(new_map) - set(old_map)
+            SchemaChange(type="ADD_SEQUENCE", table=new_map[key].qualified)
+            for key in set(new_map) - set(old_map)
         )
 
         changes.extend(
-            SchemaChange(type="DROP_SEQUENCE", table=name) for name in set(old_map) - set(new_map)
+            SchemaChange(type="DROP_SEQUENCE", table=old_map[key].qualified)
+            for key in set(old_map) - set(new_map)
         )
 
         return changes

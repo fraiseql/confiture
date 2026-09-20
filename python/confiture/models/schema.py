@@ -188,6 +188,11 @@ class EnumType:
     schema: str | None = None
     values: list[str] = field(default_factory=list)
 
+    @property
+    def qualified(self) -> str:
+        """The type as the schema file names it — see :func:`qualified_name`."""
+        return qualified_name(self.schema, self.name)
+
 
 @dataclass
 class Sequence:
@@ -199,6 +204,11 @@ class Sequence:
     increment: int = 1
     min_value: int | None = None
     max_value: int | None = None
+
+    @property
+    def qualified(self) -> str:
+        """The sequence as the schema file names it — see :func:`qualified_name`."""
+        return qualified_name(self.schema, self.name)
 
 
 @dataclass
