@@ -17,6 +17,7 @@ from pglast.stream import RawStream
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_objects import OBJECT_KEYWORD, objects_in, pair_definitions
 from confiture.core.ddl_walk import ColumnEdit, ObjectEdit, column_edit, object_edits
+from confiture.core.linting.inventory import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.models.schema import (
     CheckConstraint,
@@ -134,6 +135,39 @@ _MODEL_KINDS: dict[str, str] = {"Table": "table", "EnumType": "type", "Sequence"
 _CONSTR_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
 _CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
 _CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
+
+
+def _identity(schema: str | None, name: str) -> tuple[str, str]:
+    """What makes two statements the same relation, by the inventory's rule.
+
+    :data:`~confiture.core.linting.inventory.DEFAULT_SCHEMA` for a statement that
+    names none, so ``CREATE TABLE t`` and ``CREATE TABLE public.t`` are one table
+    and ``tenant.t`` another — the same fold ``inventory.object_key`` and
+    ``ddl_objects.ObjectRef`` apply. The default is imported rather than spelled
+    ``"public"`` here: one default, one module.
+
+    The identity is not the spelling. ``Table.qualified`` prints what the author
+    wrote and never invents a qualifier; this decides only whether two
+    statements are about one relation.
+    """
+    return (schema or DEFAULT_SCHEMA).lower(), name
+
+
+def _schema_matches(model_schema: str | None, edit_schema: str | None) -> bool:
+    """Whether a statement qualified *edit_schema* reaches an object in *model_schema*.
+
+    Either side naming no schema matches any: PostgreSQL resolves a bare
+    spelling through ``search_path``, and a statement that wrote no qualifier did
+    not say which schema it meant. That is ``ddl_objects._matches``' wildcard,
+    and the reason ``DROP TABLE t`` still drops ``tenant.t`` in a tree that
+    declares only that one.
+
+    :func:`_identity` folds a missing schema to a default instead, because a
+    dict key cannot express a wildcard. Same rule, two constraints.
+    """
+    if model_schema is None or edit_schema is None:
+        return True
+    return model_schema.lower() == edit_schema.lower()
 
 
 def _column_definition(column: Column) -> str:
@@ -299,12 +333,13 @@ class SchemaDiffer:
     def _fold_object_edits(
         self, stmt: Any, result: ParsedSchema, declared_at: dict[int, int], offset: int
     ) -> None:
-        """Apply a ``DROP`` / ``RENAME`` to the models this tree has declared so far.
+        """Apply a ``DROP`` / ``RENAME`` / ``SET SCHEMA`` to what this tree declared.
 
-        ``SET SCHEMA`` is not among them, and not by omission: a ``Table`` here is
-        keyed by its bare name and carries no schema at all, so a move between
-        schemas is not expressible in this model *and* changes nothing it
-        compares. The lint inventory, which does key on the schema, folds it.
+        Every model here carries the schema its statement wrote (#313), so an
+        edit reaches the object it names and no same-named object in another
+        schema. ``SET SCHEMA`` folds for the same reason: a move between schemas
+        became expressible in this model the moment a ``Table`` had one. The
+        lint inventory folds all four; only the application differs.
         """
         for edit in object_edits(stmt):
             declared = [
@@ -318,30 +353,41 @@ class SchemaDiffer:
                 self._rename_declared(edit, declared)
             elif edit.kind == "rename_column":
                 self._rename_column(edit, declared)
+            elif edit.kind == "set_schema":
+                self._move_declared(edit, declared)
 
     @staticmethod
     def _named(edit: ObjectEdit, model: Any) -> bool:
-        """Whether *edit* names *model*, which the differ keys by bare name."""
-        return getattr(model, "name", None) == edit.name
+        """Whether *edit* names *model*: the same kind, the same name, a matching schema."""
+        return (
+            getattr(model, "name", None) == edit.name
+            and _MODEL_KINDS.get(type(model).__name__) == edit.object_kind
+            and _schema_matches(getattr(model, "schema", None), edit.schema)
+        )
 
     def _drop_declared(self, edit: ObjectEdit, result: ParsedSchema, declared: list[Any]) -> None:
-        gone = {
-            id(model)
-            for model in declared
-            if self._named(edit, model)
-            and _MODEL_KINDS.get(type(model).__name__) == edit.object_kind
-        }
+        gone = {id(model) for model in declared if self._named(edit, model)}
         result.tables = [t for t in result.tables if id(t) not in gone]
         result.enum_types = [e for e in result.enum_types if id(e) not in gone]
         result.sequences = [s for s in result.sequences if id(s) not in gone]
         if edit.object_kind == "index":
+            # An index name is unique per schema, not per table, and `DROP INDEX`
+            # names no table — so the drop is scoped to the schema and then
+            # applied to every table in it.
             for table in result.tables:
-                table.indexes = [ix for ix in table.indexes if ix.name != edit.name]
+                if _schema_matches(table.schema, edit.schema):
+                    table.indexes = [ix for ix in table.indexes if ix.name != edit.name]
 
     def _rename_declared(self, edit: ObjectEdit, declared: list[Any]) -> None:
         for model in declared:
             if self._named(edit, model) and edit.new_name:
                 model.name = edit.new_name
+
+    def _move_declared(self, edit: ObjectEdit, declared: list[Any]) -> None:
+        """``ALTER … SET SCHEMA`` — the object keeps its name and changes schema."""
+        for model in declared:
+            if self._named(edit, model) and edit.new_schema:
+                model.schema = edit.new_schema
 
     def _rename_column(self, edit: ObjectEdit, declared: list[Any]) -> None:
         for model in declared:
@@ -358,7 +404,7 @@ class SchemaDiffer:
     def _parse_create_table_pglast(self, stmt: Any) -> Table | None:
         """Build a Table model from a pglast CreateStmt node."""
         try:
-            table = Table(name=stmt.relation.relname)
+            table = Table(name=stmt.relation.relname, schema=stmt.relation.schemaname)
 
             for elt in stmt.tableElts or []:
                 if type(elt).__name__ == "ColumnDef":
@@ -495,8 +541,28 @@ class SchemaDiffer:
     # ------------------------------------------------------------------
 
     def _table_named(self, result: ParsedSchema, relation: Any) -> Table | None:
+        """The declared table a ``RangeVar`` names, by identity rather than by name.
+
+        A relation that wrote no schema matches any — the wildcard
+        ``ddl_objects._matches`` and ``inventory.find_all`` already apply, and
+        the reason a tree writing ``ALTER TABLE t`` after ``CREATE TABLE
+        public.t`` still folds. First match is still the answer: with the
+        wildcard it is the only one an unambiguous tree has, and a genuine
+        ambiguity is a duplicate definition, reported as such rather than
+        resolved here.
+        """
         relname = getattr(relation, "relname", None)
-        return next((t for t in result.tables if t.name == relname), None)
+        schema = getattr(relation, "schemaname", None)
+        wanted = _identity(schema, relname)
+        return next(
+            (
+                t
+                for t in result.tables
+                if t.name == relname
+                and (schema is None or t.schema is None or _identity(t.schema, t.name) == wanted)
+            ),
+            None,
+        )
 
     def _collect_index(
         self,

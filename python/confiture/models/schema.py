@@ -9,6 +9,21 @@ from enum import Enum
 from typing import Any
 
 
+def qualified_name(schema: str | None, name: str) -> str:
+    """The object's name as the schema file spells it.
+
+    ``tenant.t`` when the author wrote a schema, ``t`` when they did not — never
+    an invented ``public.``. This is the *spelling*, which is what a finding
+    prints and what generated DDL says; the *identity* that decides whether two
+    statements are one object folds the missing schema to
+    :data:`~confiture.core.linting.inventory.DEFAULT_SCHEMA` and lives in
+    ``core.differ._identity``. The two are deliberately different: a project
+    whose ``search_path`` is not ``public`` would have its DDL rewritten into
+    another schema by a qualifier confiture invented.
+    """
+    return f"{schema}.{name}" if schema else name
+
+
 class ColumnType(str, Enum):
     """PostgreSQL column types."""
 
@@ -203,9 +218,16 @@ class ParsedSchema:
 
 @dataclass
 class Table:
-    """Represents a database table."""
+    """Represents a database table.
+
+    ``name`` is the relation's own name as pglast folded it; ``schema`` is the
+    qualifier the statement wrote, and ``None`` when it wrote none. The pair is
+    the identity — ``tenant.t`` and ``etl.t`` are two tables (#313) — while
+    :attr:`qualified` is the spelling a finding prints.
+    """
 
     name: str
+    schema: str | None = None
     columns: list[Column] = field(default_factory=list)
     indexes: list[Index] = field(default_factory=list)
     foreign_keys: list[ForeignKey] = field(default_factory=list)
@@ -223,6 +245,11 @@ class Table:
         """Check if table has column."""
         return self.get_column(name) is not None
 
+    @property
+    def qualified(self) -> str:
+        """The table as the schema file names it — see :func:`qualified_name`."""
+        return qualified_name(self.schema, self.name)
+
     __hash__ = None  # mutable; equality is structural
 
     def __eq__(self, other: object) -> bool:
@@ -231,6 +258,7 @@ class Table:
             return NotImplemented
         return (
             self.name == other.name
+            and self.schema == other.schema
             and self.columns == other.columns
             and self.indexes == other.indexes
             and self.foreign_keys == other.foreign_keys
