@@ -55,6 +55,13 @@ invisible to `migrate diff`, to `migrate diff --generate`, and therefore to
   dropped; and a new table's `CREATE TABLE` carries its constraints and its
   primary key instead of its columns alone.
 
+- **A column's length or precision changing is now a change.** `VARCHAR(50)` →
+  `VARCHAR(100)` and `NUMERIC(10,2)` → `NUMERIC(10,4)` reported nothing and now
+  report `CHANGE_COLUMN_TYPE`, so `migrate validate --require-migration` asks for
+  a migration where it used to pass. Two spellings of one type — `INT` and
+  `INTEGER`, `DECIMAL(5,2)` and `NUMERIC(5,2)` — are still not a change; that is
+  `type_lattice`'s answer, not a new one.
+
 - **Respelling a primary key is no longer a change.**
   `CREATE TABLE t (id INT, PRIMARY KEY (id))` left `Column.primary_key` False, so
   against `id INT PRIMARY KEY` — the same table — the differ reported
@@ -131,23 +138,38 @@ invisible to `migrate diff`, to `migrate diff --generate`, and therefore to
   down file recreates a dropped table from exactly those details, so a table that
   came back without its foreign keys came back wrong.
 
+- **A column's length and precision reach the comparison and the DDL.**
+  `Column.raw_sql_type` held the written spelling only when the canonical type
+  map *missed*, so every recognised type arrived stripped of its typmod:
+  `VARCHAR(50)` generated an unbounded `VARCHAR`, `NUMERIC(10,2)` generated
+  `NUMERIC`, and `VARCHAR(50)` → `VARCHAR(100)` reported **no change at all**.
+  The spelling is now recorded for every column, so a column change is decided by
+  `type_lattice.same_type` — the predicate whose own docstring says *a column type
+  must keep [typmods] or `varchar(50)` and `varchar(100)` compare equal* — rather
+  than by a second alias table.
+
+  The *name* still comes from the canonical type, not from the parser: pglast has
+  already folded the author's keywords into PostgreSQL's internal spellings
+  (`INT` arrives as `int4`, `DOUBLE PRECISION` as `float8`), and writing those
+  back is valid DDL nobody wants to read. Only the typmod and the array bounds
+  come from the parser, so a type with no typmod generates exactly the text it
+  generated in 1.13.0. A type the map does not know is left as the parser holds
+  it, case included — `"MyType"` is not `mytype`.
+
+- **Every drop the generator can undo has a down file.** `DROP_FOREIGN_KEY`,
+  `DROP_CHECK_CONSTRAINT`, `DROP_UNIQUE_CONSTRAINT` and `DROP_INDEX` each carry
+  the name, columns, expression and referential actions their `ADD` needs, and
+  answered `-- WARNING: No automatic rollback`. The consequence was visible one
+  kind over: a restored column came back without the foreign key that hung off it.
+
+- **`CHANGE_COLUMN_TYPE` has a generator.** `generate_up` dispatches on
+  `_up_{change.type.lower()}` and the method was called `_up_alter_column_type`,
+  so the one spelling the differ emits raised `NotImplementedError` while a
+  spelling nothing produces was answered — the `index_name` / `name` mismatch
+  1.13.0 fixed, one seam over. Both spellings now reach the same statement.
+
 ### Known, not fixed
 
-- **A column's length and precision are dropped from generated DDL, and a change
-  to them is not reported at all.** `VARCHAR(50)` generates `VARCHAR`,
-  `NUMERIC(10,2)` generates `NUMERIC`, and `VARCHAR(50)` → `VARCHAR(100)` and
-  `NUMERIC(10,2)` → `NUMERIC(10,4)` produce **no change**. `Column.raw_sql_type`
-  holds the written spelling only when the canonical type map misses, and
-  `Column.length` holds one typmod, so a scale has nowhere to live. This is
-  reachable in production — it affects `MigrationGenerator` too — and fixing it
-  means giving `Column` the spelling for every type (`ddl_walk.type_name` already
-  renders one), which changes both the comparison and the text of every generated
-  column. Filed rather than folded into this release.
-- **Four drops have a derivable down that is not derived.**
-  `DROP_FOREIGN_KEY`, `DROP_CHECK_CONSTRAINT`, `DROP_UNIQUE_CONSTRAINT` and
-  `DROP_INDEX` each carry everything their `ADD` needs and emit
-  `-- WARNING: No automatic rollback`. A consequence shows up in the fix above: a
-  restored column comes back without the foreign key that hung off it.
 - `CONSTR_EXCLUSION` is declined with its reason: the schema models have no
   exclusion-constraint type, so an `EXCLUDE` clause is skipped deliberately.
   Giving it one is a new model, a change type and a generator.

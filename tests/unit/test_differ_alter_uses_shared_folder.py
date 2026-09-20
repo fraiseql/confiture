@@ -54,10 +54,12 @@ def test_a_retyped_column_carries_the_new_type(widget: Table) -> None:
     ratio = widget.get_column("ratio")
     assert ratio is not None
     assert ratio.type is ColumnType.BIGINT
-    # `raw_sql_type` is the differ's escape hatch for a type `_COLUMN_TYPE_MAP`
-    # does not model, so a modelled one carries `None` — deliberately, and both
-    # before and after the dispatch moved.
-    assert ratio.raw_sql_type is None
+    # `raw_sql_type` is the type as generated DDL should write it, recorded for
+    # every column. It used to be filled only for a type `_COLUMN_TYPE_MAP` does
+    # not model, which is what dropped `VARCHAR(50)`'s length on the floor: the
+    # length lives in the spelling, and a modelled type had no spelling to keep
+    # it in. `ColumnType` is still the canonical identity.
+    assert ratio.raw_sql_type == "BIGINT"
 
 
 def test_an_added_column_lands_where_the_alter_put_it(widget: Table) -> None:

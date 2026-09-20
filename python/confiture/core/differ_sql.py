@@ -292,11 +292,22 @@ class DifferSQLGenerator:
             " -- review: the column is restored, the rows it held are not\n"
         )
 
-    def _up_alter_column_type(self, change: SchemaChange) -> str:
+    def _up_change_column_type(self, change: SchemaChange) -> str:
+        """The differ's own spelling of the change, which this module could not write.
+
+        ``generate_up`` dispatches on ``_up_{change.type.lower()}``. The differ
+        emits ``CHANGE_COLUMN_TYPE`` and the method was called
+        ``_up_alter_column_type``, so the one change type that reaches this
+        module raised ``NotImplementedError`` while a spelling nothing produces
+        was answered — the ``index_name`` / ``name`` mismatch 1.13.0 fixed, one
+        seam over. Both spellings now reach the same statement.
+        """
         return (
             f"ALTER TABLE {change.table} ALTER COLUMN {change.column} TYPE {change.new_value}"
             f" USING {change.column}::{change.new_value}; -- review: verify the USING cast against existing data\n"
         )
+
+    _up_alter_column_type = _up_change_column_type
 
     def _up_add_index(self, change: SchemaChange) -> str:
         details = change.details or {}
@@ -412,6 +423,24 @@ class DifferSQLGenerator:
 
     def _up_drop_unique_constraint(self, change: SchemaChange) -> str:
         return self._up_drop_constraint(change)
+
+    # A drop whose ``ADD`` this module can already write has a down file: the
+    # change carries the constraint's name, columns, expression and referential
+    # actions, so "no automatic rollback" was the generator declining to read
+    # what it was holding. The consequence showed one kind over — a restored
+    # column came back without the foreign key that hung off it.
+
+    def _down_drop_foreign_key(self, change: SchemaChange) -> str:
+        return self._up_add_foreign_key(change)
+
+    def _down_drop_check_constraint(self, change: SchemaChange) -> str:
+        return self._up_add_check_constraint(change)
+
+    def _down_drop_unique_constraint(self, change: SchemaChange) -> str:
+        return self._up_add_unique_constraint(change)
+
+    def _down_drop_index(self, change: SchemaChange) -> str:
+        return self._up_add_index(change)
 
     def _up_add_function(self, change: SchemaChange) -> str:
         """The routine's own ``CREATE OR REPLACE``.
