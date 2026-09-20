@@ -191,9 +191,12 @@ class TestPrepSeedOrchestrator:
 
             report = orchestrator.run()
 
-        # Should have critical violation and stop there
-        assert len(report.violations) == 1
-        assert report.violations[0].severity == ViolationSeverity.CRITICAL
+        # Should have critical violation and stop there. Level 2 also reports
+        # that this fixture declares `public.tb_x` and nothing in the configured
+        # prep-seed schema, so the CRITICAL is asserted by severity rather than
+        # by being the only violation (#317).
+        critical = [v for v in report.violations if v.severity == ViolationSeverity.CRITICAL]
+        assert [v.message for v in critical] == ["Schema drift detected"]
 
     def test_continue_on_critical_when_disabled(self, tmp_path: Path) -> None:
         """Test that orchestrator continues past CRITICAL if stop_on_critical=False."""
@@ -243,8 +246,8 @@ class TestPrepSeedOrchestrator:
             report = orchestrator.run()
 
         # Should have critical violation and continue to next level
-        assert len(report.violations) >= 1
-        assert report.violations[0].severity == ViolationSeverity.CRITICAL
+        critical = [v for v in report.violations if v.severity == ViolationSeverity.CRITICAL]
+        assert [v.message for v in critical] == ["Schema drift detected"]
 
     def test_accumulate_violations_across_levels(self, tmp_path: Path) -> None:
         """Test that violations are accumulated from all levels."""
@@ -299,11 +302,15 @@ class TestPrepSeedOrchestrator:
 
             report = orchestrator.run()
 
-        # Should accumulate from Level 1 and Level 3
-        assert len(report.violations) == 2
-        violations_by_pattern = {v.pattern: v for v in report.violations}
-        assert PrepSeedPattern.PREP_SEED_TARGET_MISMATCH in violations_by_pattern
-        assert PrepSeedPattern.SCHEMA_DRIFT_IN_RESOLVER in violations_by_pattern
+        # Should accumulate from Level 1 and Level 3 — and from Level 2, which
+        # reports that this fixture declares `public.tb_x` and nothing in the
+        # configured prep-seed schema (#317).
+        assert [v.message for v in report.violations] == [
+            "Level 1 violation",
+            "No table is declared in the configured prep-seed schema 'prep_seed'; "
+            "the schema files declare tables in public. Level 2 compared nothing.",
+            "Level 3 violation",
+        ]
 
     def test_database_url_required_for_level_4(self) -> None:
         """Test that database_url is required for level 4+."""

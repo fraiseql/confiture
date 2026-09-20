@@ -114,10 +114,11 @@ class TestParseSchemaFiles:
 
         orchestrator = PrepSeedOrchestrator(config)
 
-        prep_seed_tables, catalog_tables = orchestrator._parse_schema_files()
+        tables = orchestrator._parse_schema_files()
 
-        assert prep_seed_tables == {}
-        assert catalog_tables == {}
+        assert tables.prep == {}
+        assert tables.catalog == {}
+        assert tables.schemas_seen == set()
 
     def test_parse_schema_files_discovers_tables_from_sql_files(
         self,
@@ -139,10 +140,12 @@ class TestParseSchemaFiles:
 
         orchestrator = PrepSeedOrchestrator(config)
 
-        prep_seed_tables, catalog_tables = orchestrator._parse_schema_files()
+        tables = orchestrator._parse_schema_files()
 
-        # Should have parsed the table
-        assert "tb_manufacturer" in catalog_tables or prep_seed_tables or len(catalog_tables) >= 0
+        # Keyed by (schema, name): the qualifier the statement wrote decides the
+        # side, and a bare name is not an identity (#317).
+        assert list(tables.catalog) == [("catalog", "tb_manufacturer")]
+        assert tables.prep == {}
 
 
 class TestDiscoverResolutionFunctions:

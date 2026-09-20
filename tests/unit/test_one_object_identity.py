@@ -88,17 +88,11 @@ ALLOWED_KEYS: dict[str, str] = {}
 #: An instance of the same defect that this guard's shape cannot reach, named
 #: rather than silently absent. ``_shape`` is asserted to still be present, so
 #: the note fails rather than going stale if the code is fixed or rewritten.
-KNOWN_LATENT: dict[str, tuple[str, str]] = {
-    "core/seed/validation/prep_seed/orchestrator.py": (
-        '"prep_seed" in str(sql_file)',
-        "keys `TableDefinition` by bare `table.name` and separates prep from catalog by a "
-        "**path heuristic** rather than by the qualifier `Table.schema` now carries. That "
-        "is why the shipped `examples/06` collision does not break level 2, and it is a "
-        "latent #313 for any project whose prep and catalog tables share a directory. It "
-        "is a subscript assignment inside a loop, not a comprehension, so check 2 does "
-        "not see it; filed separately rather than folded into this campaign.",
-    ),
-}
+#:
+#: Empty since #317 fixed the one entry that lived here — prep-seed level 2's
+#: ``"prep_seed" in str(sql_file)``. The table stays, because the next defect
+#: this guard's shape cannot see has to be written down rather than implied.
+KNOWN_LATENT: dict[str, tuple[str, str]] = {}
 
 
 def _folds_public(path: Path) -> list[int]:

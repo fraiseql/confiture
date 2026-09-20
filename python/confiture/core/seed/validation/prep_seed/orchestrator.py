@@ -7,7 +7,7 @@ accumulating violations, and optionally stopping early on CRITICAL violations.
 from __future__ import annotations
 
 import contextlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pglast.parser
@@ -15,6 +15,7 @@ import psycopg
 
 from confiture.core.connection import create_connection
 from confiture.core.differ import SchemaDiffer
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )
@@ -37,6 +38,23 @@ from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedViolation,
     ViolationSeverity,
 )
+from confiture.models.schema import Table
+
+
+@dataclass
+class SchemaTables:
+    """What the schema files declare, sorted onto the two sides level 2 compares.
+
+    Keyed by ``(schema, name)``: a bare table name is not an identity, which is
+    how ``tenant.tb_x`` and ``etl.tb_x`` used to become one entry. ``schemas_seen``
+    is every schema the files actually declare into, so a tree with nothing in
+    either configured schema can say so rather than pass empty.
+    """
+
+    prep: dict[tuple[str, str], TableDefinition] = field(default_factory=dict)
+    catalog: dict[tuple[str, str], TableDefinition] = field(default_factory=dict)
+    violations: list[PrepSeedViolation] = field(default_factory=list)
+    schemas_seen: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -182,28 +200,28 @@ class PrepSeedOrchestrator:
         Returns:
             List of violations found
         """
-        violations: list[PrepSeedViolation] = []
+        tables = self._parse_schema_files()
+        violations: list[PrepSeedViolation] = list(tables.violations)
 
-        # Parse schema files to get table definitions
-        prep_seed_tables, catalog_tables = self._parse_schema_files()
-
-        if not prep_seed_tables:
-            # No prep_seed tables to validate
+        if not tables.prep:
+            violations.extend(self._nothing_to_compare(tables))
             return violations
 
-        # Create validator with callback to look up final tables
+        # The catalog counterpart of a prep-seed table is the same name in the
+        # configured catalog schema — the pairing is across schemas, by name,
+        # which is what makes the *side* a table is on the thing that had to be
+        # read from its qualifier.
+        catalog_schema = self.config.catalog_schema.lower()
+
         def get_final_table(table_name: str) -> TableDefinition | None:
-            return catalog_tables.get(table_name)
+            return tables.catalog.get((catalog_schema, table_name))
 
         validator = Level2SchemaValidator(get_final_table=get_final_table)
 
-        # Validate each prep_seed table
-        for table_name, prep_table in prep_seed_tables.items():
+        for (_schema, table_name), prep_table in tables.prep.items():
             try:
-                table_violations = validator.validate_schema_mapping(prep_table)
-                violations.extend(table_violations)
+                violations.extend(validator.validate_schema_mapping(prep_table))
             except Exception as e:  # Reason: level-2 validation parses arbitrary seed SQL; any parser failure is a reported violation
-                # Handle parsing errors gracefully
                 violations.append(
                     PrepSeedViolation(
                         pattern=PrepSeedPattern.MISSING_FK_MAPPING,
@@ -474,65 +492,108 @@ class PrepSeedOrchestrator:
         for file_path in sql_files:
             report.add_file_scanned(str(file_path))
 
-    def _parse_schema_files(
-        self,
-    ) -> tuple[dict[str, TableDefinition], dict[str, TableDefinition]]:
-        """Parse schema files and return prep_seed and catalog tables.
+    def _parse_schema_files(self) -> SchemaTables:
+        """The tables the schema files declare, on the side their qualifier puts them.
 
-        Uses SchemaDiffer to parse SQL DDL files and separate tables by
-        schema (prep_seed vs catalog) based on file path heuristic.
+        Which side a table is on is a fact the statement carries:
+        ``CREATE TABLE catalog.tb_manufacturer`` is in ``catalog``, and
+        ``Table.schema`` has held that since 1.13.0. This read it from
+        ``"prep_seed" in str(sql_file)`` instead and keyed the result on
+        ``table.name`` — #313's defect one module over, and latent only because
+        the shipped ``examples/06`` happens to put its two ``tb_manufacturer``
+        declarations in directories the heuristic separates (#317).
 
-        Returns:
-            Tuple of (prep_seed_tables, catalog_tables) dicts.
-            Keys are table names, values are TableDefinition objects.
+        Identity is ``(schema, name)`` with a missing qualifier folded to
+        :data:`~confiture.core.schema_identity.DEFAULT_SCHEMA`, so a table in
+        neither configured schema is on neither side rather than colliding with
+        one that is.
         """
+        tables = SchemaTables()
         if not self.config.schema_dir.exists():
-            return {}, {}
-
-        prep_seed_tables: dict[str, TableDefinition] = {}
-        catalog_tables: dict[str, TableDefinition] = {}
+            return tables
 
         differ = SchemaDiffer()
+        sides = {
+            self.config.prep_seed_schema.lower(): tables.prep,
+            self.config.catalog_schema.lower(): tables.catalog,
+        }
 
-        # Find all SQL files in schema directory
-        sql_files = sorted(self.config.schema_dir.rglob("*.sql"))
-
-        for sql_file in sql_files:
+        for sql_file in sorted(self.config.schema_dir.rglob("*.sql")):
+            # Resolution functions are level 3's subject, not level 2's.
+            if sql_file.name.startswith("fn_resolve"):
+                continue
             try:
-                # Skip function files (fn_resolve_*.sql)
-                if sql_file.name.startswith("fn_resolve"):
-                    continue
-
-                # Read and parse SQL
-                sql_content = sql_file.read_text()
-                tables = differ.parse_sql(sql_content)
-
-                # Separate tables by path heuristic
-                is_prep_seed = "prep_seed" in str(sql_file)
-                target_dict = prep_seed_tables if is_prep_seed else catalog_tables
-
-                # Convert Table to TableDefinition
-                for table in tables:
-                    schema = (
-                        self.config.prep_seed_schema if is_prep_seed else self.config.catalog_schema
-                    )
-
-                    # Build column type dictionary
-                    columns = {col.name: str(col.type) for col in table.columns}
-
-                    table_def = TableDefinition(
-                        name=table.name,
-                        schema=schema,
-                        columns=columns,
-                    )
-
-                    target_dict[table.name] = table_def
-
+                parsed = differ.parse_sql(sql_file.read_text())
             except (OSError, UnicodeDecodeError, pglast.parser.ParseError):
-                # Silently skip unparseable files
-                pass
+                continue
+            for table in parsed:
+                self._place(table, sides, tables)
 
-        return prep_seed_tables, catalog_tables
+        return tables
+
+    def _place(
+        self,
+        table: Table,
+        sides: dict[str, dict[tuple[str, str], TableDefinition]],
+        tables: SchemaTables,
+    ) -> None:
+        """Put one parsed table on its side, or report that it is already there."""
+        schema = (table.schema or DEFAULT_SCHEMA).lower()
+        tables.schemas_seen.add(schema)
+        side = sides.get(schema)
+        if side is None:
+            return
+        key = (schema, table.name)
+        if key in side:
+            # ``confiture build`` concatenates in order and a table has no
+            # ``OR REPLACE`` form, so the first definition is the one the
+            # database ends up with — ``duplicates.wins``' answer for a table.
+            # Last-one-wins is the silence #313 removed from the differ.
+            tables.violations.append(
+                PrepSeedViolation(
+                    pattern=PrepSeedPattern.MISSING_FK_MAPPING,
+                    severity=ViolationSeverity.WARNING,
+                    message=(
+                        f"Table {schema}.{table.name} is defined more than once in the "
+                        "schema files; the first definition is the one the build keeps"
+                    ),
+                    file_path=str(self.config.schema_dir),
+                    line_number=1,
+                    impact="Level 2 validates the first definition",
+                )
+            )
+            return
+        side[key] = TableDefinition(
+            name=table.name,
+            schema=schema,
+            columns={col.name: str(col.type) for col in table.columns},
+        )
+
+    def _nothing_to_compare(self, tables: SchemaTables) -> list[PrepSeedViolation]:
+        """Level 2 looked at a schema tree and found no prep-seed table in it.
+
+        Returning no violations for a tree it never compared is the silent pass
+        this reader used to hide behind the path heuristic: the heuristic routed
+        unqualified DDL somewhere, and a qualifier cannot. Saying which schemas
+        the files actually declare is the difference between "nothing is wrong"
+        and "nothing was checked".
+        """
+        if not tables.schemas_seen:
+            return []
+        return [
+            PrepSeedViolation(
+                pattern=PrepSeedPattern.PREP_SEED_TARGET_MISMATCH,
+                severity=ViolationSeverity.WARNING,
+                message=(
+                    f"No table is declared in the configured prep-seed schema "
+                    f"'{self.config.prep_seed_schema}'; the schema files declare tables in "
+                    f"{', '.join(sorted(tables.schemas_seen))}. Level 2 compared nothing."
+                ),
+                file_path=str(self.config.schema_dir),
+                line_number=1,
+                impact="Schema mapping between prep-seed and final tables was not validated",
+            )
+        ]
 
     def _discover_resolution_functions(self) -> list[str]:
         """Discover resolution function names from schema directory.
