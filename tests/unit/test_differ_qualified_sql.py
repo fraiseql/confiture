@@ -122,28 +122,32 @@ class TestBothGeneratorsEmitWhatParses:
         "CREATE TABLE tenant.gone (id INT);\n"
         "CREATE TABLE tenant.tb_a (id INT);\n"
     )
+    #: Every constraint shape the generator has to write. The unnamed ones and
+    #: the ``REFERENCES`` with no column list are here because the fixture that
+    #: named and fully spelled every constraint could not reach the statements
+    #: that did not parse — ``REFERENCES b.parent()`` among them (#315, #316).
     NEW = (
         "CREATE TABLE b.parent (id INT PRIMARY KEY);\n"
         "CREATE TABLE tenant.t (id INT, old_col TEXT NOT NULL, pid INT,"
+        " unnamed_fk INT REFERENCES b.parent(id),"
+        " no_ref_list INT REFERENCES b.parent,"
+        " cascading INT REFERENCES b.parent(id) ON DELETE CASCADE ON UPDATE RESTRICT,"
+        " unnamed_uq INT UNIQUE,"
+        " unnamed_ck INT CHECK (unnamed_ck > 0),"
         " CONSTRAINT fk_c FOREIGN KEY (pid) REFERENCES b.parent(id),"
         " CONSTRAINT ck CHECK (id > 0), CONSTRAINT uq UNIQUE (id));\n"
         "CREATE INDEX ix ON tenant.t (old_col);\n"
         "CREATE TABLE tenant.tb_b (id INT);\n"
-        "CREATE TABLE etl.fresh (id INT);\n"
+        "CREATE TABLE etl.fresh (id INT,"
+        " pid INT REFERENCES b.parent(id), CONSTRAINT fresh_ck CHECK (id > 0));\n"
     )
 
-    #: Change kinds whose generated DDL does **not** parse, and why. A defect
-    #: that pre-dates #313 and is orthogonal to it; the entry is a reason, and a
-    #: kind that starts parsing fails the test below, so the table cannot
-    #: outlive what it excuses.
-    NOT_YET_PARSEABLE: ClassVar[dict[str, str]] = {
-        "ADD_CHECK_CONSTRAINT": (
-            "`_parse_table_constraint_pglast` stores the expression's *node type "
-            "name* as a placeholder (`A_Expr`) because the comparison only ever "
-            "needed identity, and `_up_add_constraint` then appends an empty "
-            "column list: `ALTER TABLE t ADD CONSTRAINT ck CHECK (A_Expr) ()`."
-        ),
-    }
+    #: Change kinds whose generated DDL does **not** parse, and why. Empty since
+    #: #315 and #316: the entry that lived here excused
+    #: ``ALTER TABLE t ADD CONSTRAINT ck CHECK (A_Expr) ()``. The table stays so
+    #: that a future excuse has to be written down, and the assertion below is
+    #: an equality, so an entry cannot outlive what it excuses.
+    NOT_YET_PARSEABLE: ClassVar[dict[str, str]] = {}
 
     def _statements(self, tmp_path) -> list[tuple[str, str]]:
         """Every (change type, statement) both generators write for this diff."""
@@ -189,6 +193,7 @@ class TestBothGeneratorsEmitWhatParses:
             "ADD_INDEX",
             "ADD_FOREIGN_KEY",
             "ADD_UNIQUE_CONSTRAINT",
+            "ADD_CHECK_CONSTRAINT",
         }
 
     def test_rename_table_generates_a_qualified_source_and_a_bare_target(self, tmp_path) -> None:

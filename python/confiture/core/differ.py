@@ -11,7 +11,6 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 import pglast
-from pglast.enums.parsenodes import ConstrType
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
@@ -116,7 +115,9 @@ _PGLAST_TYPE_ALIASES: dict[str, str] = {
 }
 
 # pglast FK on-delete action code → human-readable string
-_PG_FK_DEL_ACTION: dict[str, str | None] = {
+#: PostgreSQL's referential-action codes. ``ON DELETE`` and ``ON UPDATE`` are
+#: spelled with the same letters, so one map answers for both.
+_PG_FK_ACTION: dict[str, str | None] = {
     "a": None,  # NO ACTION — PostgreSQL's default, reported as no clause
     "r": "RESTRICT",
     "c": "CASCADE",
@@ -130,10 +131,6 @@ _PG_FK_DEL_ACTION: dict[str, str | None] = {
 #: has only the one; a view and a routine live in ``ParsedSchema.objects``, and
 #: ``ddl_objects`` folds their drops.
 _MODEL_KINDS: dict[str, str] = {"Table": "table", "EnumType": "type", "Sequence": "sequence"}
-
-_CONSTR_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
-_CONSTR_CHECK = _pg_member("ConstrType", "CONSTR_CHECK")
-_CONSTR_UNIQUE = _pg_member("ConstrType", "CONSTR_UNIQUE")
 
 
 def _identity(schema: str | None, name: str) -> tuple[str, str]:
@@ -259,6 +256,236 @@ def _schema_matches(model_schema: str | None, edit_schema: str | None) -> bool:
     return model_schema.lower() == edit_schema.lower()
 
 
+# ---------------------------------------------------------------------------
+# The one constraint reader (#315, #316)
+# ---------------------------------------------------------------------------
+#
+# PostgreSQL's grammar puts a ``Constraint`` node in three places: on a column,
+# at table level inside ``CREATE TABLE``, and in ``ALTER TABLE … ADD CONSTRAINT``.
+# This module read them with three different pieces of code, and every
+# divergence reached an artefact: the column loop read no constraint at all, so a
+# foreign key written ``pid INT REFERENCES b.parent(id)`` parsed to nothing
+# (#315), and the two readers that did run disagreed about what a CHECK
+# expression is — one rendered it, the other stored the AST class name, which
+# generated ``CHECK (A_Expr)`` (#316).
+#
+# One node, one reader. Where it was written decides only which columns it
+# covers: a constraint on a column covers that column, and one written at table
+# level names its own.
+
+
+def _render_default(raw_expr: Any) -> str | None:
+    """Render a pglast default expression as a comparable string."""
+    if raw_expr is None:
+        return None
+    if type(raw_expr).__name__ == "A_Const":
+        if getattr(raw_expr, "isnull", False):
+            return "NULL"
+        val = getattr(raw_expr, "val", None)
+        if val is None:
+            return None
+        vtype = type(val).__name__
+        if vtype == "Integer":
+            return str(val.ival)
+        if vtype == "Float":
+            return str(val.fval)
+        if vtype == "String":
+            return f"'{val.sval}'"
+        if vtype == "Boolean":
+            return "true" if val.boolval else "false"
+    # A call, a cast, a column reference: the expression as PostgreSQL would
+    # print it, arguments included, so a down file can write the default back.
+    return RawStream()(raw_expr)
+
+
+def _fk_action(code: Any) -> str | None:
+    """``ON DELETE`` / ``ON UPDATE`` as PostgreSQL's one-letter code spells it."""
+    return _PG_FK_ACTION.get(str(code or ""))
+
+
+def _covered(nodes: Any, column: Column | None) -> list[str]:
+    """The columns a constraint covers: the ones it names, or the one it sits on."""
+    if column is not None:
+        return [column.name]
+    return [node.sval for node in (nodes or [])]
+
+
+def _read_foreign_key(constraint: Any, table: Table, column: Column | None) -> None:
+    table.foreign_keys.append(
+        ForeignKey(
+            name=constraint.conname or "",
+            table=table.qualified,
+            columns=_covered(constraint.fk_attrs, column),
+            ref_table=(
+                _relation_spelling(constraint.pktable) if constraint.pktable is not None else ""
+            ),
+            # ``REFERENCES b.parent`` names no column: it means the parent's
+            # primary key, and generated DDL has to write it that way rather
+            # than as an empty list.
+            ref_columns=[node.sval for node in (constraint.pk_attrs or [])],
+            on_delete=_fk_action(constraint.fk_del_action),
+            on_update=_fk_action(constraint.fk_upd_action),
+        )
+    )
+
+
+def _read_check(constraint: Any, table: Table, _column: Column | None) -> None:
+    """The expression, rendered — not ``type(raw_expr).__name__`` (#316).
+
+    Read by the constraint's *kind*, never by the presence of ``raw_expr``:
+    ``CONSTR_GENERATED`` carries one too, and a generated column's expression is
+    not a CHECK.
+    """
+    if constraint.raw_expr is None:
+        return
+    table.check_constraints.append(
+        CheckConstraint(
+            name=constraint.conname or "",
+            table=table.qualified,
+            expression=RawStream()(constraint.raw_expr),
+        )
+    )
+
+
+def _read_unique(constraint: Any, table: Table, column: Column | None) -> None:
+    """A UNIQUE constraint, in one model.
+
+    ``Column.unique`` stays untouched deliberately. ``u INT UNIQUE`` and
+    ``UNIQUE (u)`` are one declaration, and putting the column form on the
+    column and the table form on the table would make the two spellings compare
+    unequal — the defect this reader exists to remove.
+    """
+    table.unique_constraints.append(
+        UniqueConstraint(
+            name=constraint.conname or "",
+            table=table.qualified,
+            columns=_covered(constraint.keys, column),
+        )
+    )
+
+
+def _read_primary_key(constraint: Any, table: Table, column: Column | None) -> None:
+    """A primary key travels on its columns, whichever spelling declared it.
+
+    ``PRIMARY KEY (id)`` left ``Column.primary_key`` False and ``nullable`` True,
+    so against ``id INT PRIMARY KEY`` — the same table — the comparison reported
+    ``CHANGE_COLUMN_NULLABLE`` and generated ``ALTER COLUMN id DROP NOT NULL``,
+    which PostgreSQL refuses on a primary-key column.
+    """
+    for name in _covered(constraint.keys, column):
+        target = table.get_column(name)
+        if target is not None:
+            target.primary_key = True
+            target.nullable = False
+
+
+def _read_not_null(_constraint: Any, _table: Table, column: Column | None) -> None:
+    if column is not None:
+        column.nullable = False
+
+
+def _read_default(constraint: Any, _table: Table, column: Column | None) -> None:
+    if column is not None:
+        column.default = _render_default(constraint.raw_expr)
+
+
+#: What each ``ConstrType`` member becomes in the schema models, by member name
+#: so nothing here compares against a literal ordinal (#192).
+_MODELLED_CONSTRAINTS: dict[str, Callable[[Any, Table, Column | None], None]] = {
+    "CONSTR_FOREIGN": _read_foreign_key,
+    "CONSTR_CHECK": _read_check,
+    "CONSTR_UNIQUE": _read_unique,
+    "CONSTR_PRIMARY": _read_primary_key,
+    "CONSTR_NOTNULL": _read_not_null,
+    "CONSTR_DEFAULT": _read_default,
+}
+
+#: Sibling nodes rather than constraints of their own, and shared by several
+#: members, so the reason is written once.
+_DEFERRABILITY_REASON = (
+    "deferrability arrives as separate sibling Constraint nodes (DEFERRABLE INITIALLY "
+    "DEFERRED is two of them) and none of the constraint models carries it"
+)
+_ENFORCEMENT_REASON = (
+    "NOT ENFORCED arrives as a sibling node like deferrability and the constraint "
+    "models do not carry it; PostgreSQL 18 added the pair"
+)
+
+#: The kinds the schema models do not carry, and why — a table of **reasons**,
+#: so a kind nobody considered cannot look like a kind deliberately skipped.
+#: ``tests/unit/test_constraint_reader_is_exhaustive.py`` fails on a member in
+#: neither table or in both. A declined name the installed pglast does not define
+#: is tolerated only for the members that arrived with a later PostgreSQL, since
+#: confiture supports pglast 6 through 8.
+_NOT_MODELLED_CONSTRAINTS: dict[str, str] = {
+    "CONSTR_NULL": (
+        "an explicit NULL restates the default; Column.nullable is already True, and "
+        "writing it again would make `c INT NULL` and `c INT` compare unequal"
+    ),
+    "CONSTR_IDENTITY": (
+        "GENERATED … AS IDENTITY is a column property the models do not carry; reading "
+        "it would change what a column comparison means, which is not this campaign"
+    ),
+    "CONSTR_GENERATED": (
+        "a generated column's expression is not a CHECK — it carries a raw_expr, which "
+        "is exactly why this reader dispatches on the kind and never on that field"
+    ),
+    "CONSTR_EXCLUSION": (
+        "the schema models have no exclusion-constraint type, so an EXCLUDE clause is "
+        "skipped deliberately; giving it one is a new model, a change type and a "
+        "generator, not a branch here"
+    ),
+    "CONSTR_ATTR_DEFERRABLE": _DEFERRABILITY_REASON,
+    "CONSTR_ATTR_NOT_DEFERRABLE": _DEFERRABILITY_REASON,
+    "CONSTR_ATTR_DEFERRED": _DEFERRABILITY_REASON,
+    "CONSTR_ATTR_IMMEDIATE": _DEFERRABILITY_REASON,
+    "CONSTR_ATTR_ENFORCED": _ENFORCEMENT_REASON,
+    "CONSTR_ATTR_NOT_ENFORCED": _ENFORCEMENT_REASON,
+}
+
+#: The dispatch table, resolved once against the installed pglast.
+_CONSTRAINT_READERS: dict[int, Callable[[Any, Table, Column | None], None]] = {
+    _pg_member("ConstrType", name): read for name, read in _MODELLED_CONSTRAINTS.items()
+}
+
+
+def _read_constraint(constraint: Any, table: Table, column: Column | None = None) -> None:
+    """Attach one ``Constraint`` node to *table*, wherever the grammar put it.
+
+    *column* is the column the constraint was written on, and is what supplies
+    the covered columns for a form that names none. ``None`` for a constraint
+    written at table level or added by ``ALTER TABLE``.
+    """
+    read = _CONSTRAINT_READERS.get(_enum_value(constraint.contype))
+    if read is not None:
+        read(constraint, table, column)
+
+
+def _object_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
+    """What makes two of a table's own objects the same object.
+
+    Its name, when the schema wrote one. PostgreSQL lets a constraint and an
+    index go unnamed — ``pid INT REFERENCES b.parent(id)``, ``CREATE INDEX ON t
+    (x)`` — and generates the name at apply time; two unnamed ones on a table are
+    two objects, and a map keyed on ``""`` keeps one of them. That is #313's
+    defect one field along, and #315 makes the unnamed form the common case.
+
+    An unnamed object is therefore identified by what it *says*. Nothing here
+    invents a name: the identity is internal to the comparison, and the DDL
+    generated from it still writes no ``CONSTRAINT`` clause — PostgreSQL names it
+    the same way it would have.
+    """
+    if obj.name:
+        return (obj.name,)
+    return (
+        "",
+        *(
+            tuple(value) if isinstance(value, list) else value
+            for value in (getattr(obj, field) for field in fields)
+        ),
+    )
+
+
 def _column_definition(column: Column) -> str:
     """The column's definition without its name — what ``ADD COLUMN`` takes after the name."""
     parts = [column.raw_sql_type or column.type.value]
@@ -280,6 +507,47 @@ def _column_details(table: Table) -> list[dict[str, Any]]:
         }
         for column in table.columns
     ]
+
+
+def _constraint_details(table: Table) -> list[dict[str, Any]]:
+    """The table's own constraints, in the shape the generator renders a clause from.
+
+    :func:`_column_details`' sibling. ``_up_add_table`` rendered the columns and
+    nothing else, so a new table's foreign keys, CHECKs, UNIQUEs and primary key
+    were dropped from the generated ``CREATE TABLE`` — for every spelling, which
+    is why this outlived #315's parse fix rather than being caused by it.
+
+    The primary key is emitted at table level rather than on the column so that a
+    composite one has somewhere to go.
+    """
+    details: list[dict[str, Any]] = [
+        {
+            "kind": "PRIMARY KEY",
+            "name": "",
+            "columns": [column.name for column in table.columns if column.primary_key],
+        }
+    ]
+    details.extend(
+        {
+            "kind": "FOREIGN KEY",
+            "name": fk.name,
+            "columns": fk.columns,
+            "ref_table": fk.ref_table,
+            "ref_columns": fk.ref_columns,
+            "on_delete": fk.on_delete,
+            "on_update": fk.on_update,
+        }
+        for fk in table.foreign_keys
+    )
+    details.extend(
+        {"kind": "UNIQUE", "name": uc.name, "columns": uc.columns}
+        for uc in table.unique_constraints
+    )
+    details.extend(
+        {"kind": "CHECK", "name": cc.name, "expression": cc.expression}
+        for cc in table.check_constraints
+    )
+    return [detail for detail in details if detail.get("columns") or detail.get("expression")]
 
 
 def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
@@ -502,23 +770,36 @@ class SchemaDiffer:
     # ------------------------------------------------------------------
 
     def _parse_create_table_pglast(self, stmt: Any) -> Table | None:
-        """Build a Table model from a pglast CreateStmt node."""
+        """Build a Table model from a pglast CreateStmt node.
+
+        A column is appended before its own constraints are read, because a
+        constraint reads back the column it covers — ``PRIMARY KEY`` marks it
+        ``NOT NULL`` whichever of the two spellings declared it.
+        """
         try:
             table = Table(name=stmt.relation.relname, schema=stmt.relation.schemaname)
 
             for elt in stmt.tableElts or []:
                 if type(elt).__name__ == "ColumnDef":
-                    col = self._parse_column_pglast(elt, ConstrType)
-                    if col:
-                        table.columns.append(col)
+                    self._add_column_pglast(elt, table)
                 elif type(elt).__name__ == "Constraint":
-                    self._parse_table_constraint_pglast(elt, table, ConstrType)
+                    _read_constraint(elt, table)
 
             return table
         except (AttributeError, KeyError, TypeError, ValueError):
             return None
 
-    def _parse_column_pglast(self, col_def: Any, ConstrType: Any) -> Column | None:
+    def _add_column_pglast(self, col_def: Any, table: Table) -> Column | None:
+        """Append the column *col_def* declares, then read what it declares about it."""
+        column = self._parse_column_pglast(col_def)
+        if column is None:
+            return None
+        self._replace_column(table, column)
+        for constraint in col_def.constraints or []:
+            _read_constraint(constraint, table, column)
+        return column
+
+    def _parse_column_pglast(self, col_def: Any) -> Column | None:
         """Build a Column model from a pglast ColumnDef node."""
         try:
             # Extract type name: last entry in typeName.names (skip 'pg_catalog' prefix)
@@ -543,94 +824,18 @@ class SchemaDiffer:
                 col_type = ColumnType.UNKNOWN
                 raw_sql_type = raw_type_str.lower() + "[]"
 
-            nullable = True
-            primary_key = False
-            default: str | None = None
-
-            for constraint in col_def.constraints or []:
-                ctype = constraint.contype
-                if ctype == ConstrType.CONSTR_NOTNULL:
-                    nullable = False
-                elif ctype == ConstrType.CONSTR_PRIMARY:
-                    primary_key = True
-                    nullable = False
-                elif ctype == ConstrType.CONSTR_DEFAULT:
-                    default = self._render_default_pglast(constraint.raw_expr)
-
             return Column(
                 name=col_def.colname,
                 type=col_type,
-                nullable=nullable,
-                default=default,
-                primary_key=primary_key,
+                nullable=True,
+                default=None,
+                primary_key=False,
                 unique=False,
                 length=length,
                 raw_sql_type=raw_sql_type,
             )
         except (AttributeError, KeyError, TypeError, ValueError):
             return None
-
-    def _parse_table_constraint_pglast(
-        self, constraint: Any, table: Table, ConstrType: Any
-    ) -> None:
-        """Attach a table-level inline constraint (FK / CHECK / UNIQUE) to the table."""
-        try:
-            ctype = constraint.contype
-            name = constraint.conname or ""
-
-            if ctype == ConstrType.CONSTR_FOREIGN:
-                fk_cols = [s.sval for s in (constraint.fk_attrs or [])]
-                pk_cols = [s.sval for s in (constraint.pk_attrs or [])]
-                ref_table = _relation_spelling(constraint.pktable) if constraint.pktable else ""
-                on_delete = _PG_FK_DEL_ACTION.get(str(constraint.fk_del_action or ""))
-                table.foreign_keys.append(
-                    ForeignKey(
-                        name=name,
-                        table=table.qualified,
-                        columns=fk_cols,
-                        ref_table=ref_table,
-                        ref_columns=pk_cols,
-                        on_delete=on_delete,
-                    )
-                )
-            elif ctype == ConstrType.CONSTR_CHECK:
-                # Store the AST node type as a placeholder — identity-level comparison
-                # (detecting that a CHECK constraint was added/removed) is what matters.
-                expr = type(constraint.raw_expr).__name__ if constraint.raw_expr else ""
-                table.check_constraints.append(
-                    CheckConstraint(name=name, table=table.qualified, expression=expr)
-                )
-            elif ctype == ConstrType.CONSTR_UNIQUE:
-                cols = [s.sval for s in (constraint.keys or [])]
-                table.unique_constraints.append(
-                    UniqueConstraint(name=name, table=table.qualified, columns=cols)
-                )
-        except (AttributeError, KeyError, TypeError, ValueError):
-            pass
-
-    def _render_default_pglast(self, raw_expr: Any) -> str | None:
-        """Render a pglast default expression as a comparable string."""
-        if raw_expr is None:
-            return None
-        ntype = type(raw_expr).__name__
-        if ntype == "A_Const":
-            if getattr(raw_expr, "isnull", False):
-                return "NULL"
-            val = getattr(raw_expr, "val", None)
-            if val is None:
-                return None
-            vtype = type(val).__name__
-            if vtype == "Integer":
-                return str(val.ival)
-            if vtype == "Float":
-                return str(val.fval)
-            if vtype == "String":
-                return f"'{val.sval}'"
-            if vtype == "Boolean":
-                return "true" if val.boolval else "false"
-        # A call, a cast, a column reference: the expression as PostgreSQL would
-        # print it, arguments included, so a down file can write the default back.
-        return RawStream()(raw_expr)
 
     # ------------------------------------------------------------------
     # AST collectors for indexes and ALTER TABLE constraints (ANA-04)
@@ -719,9 +924,10 @@ class SchemaDiffer:
         if edit is None:
             return
         if edit.kind == "add":
-            column = self._parse_column_pglast(edit.coldef, ConstrType)
-            if column is not None:
-                self._replace_column(table, column)
+            # Through the same reader a CREATE TABLE column goes through: an
+            # added column carries the same clauses, NOT NULL and a column-level
+            # REFERENCES included.
+            self._add_column_pglast(edit.coldef, table)
         elif edit.kind == "drop":
             table.columns = [c for c in table.columns if c.name != edit.column]
         elif edit.kind == "retype":
@@ -739,12 +945,12 @@ class SchemaDiffer:
         elif edit.kind == "drop_not_null":
             existing.nullable = True
         elif edit.kind == "set_default":
-            existing.default = self._render_default_pglast(edit.default)
+            existing.default = _render_default(edit.default)
         elif edit.kind == "drop_default":
             existing.default = None
 
     def _retype_column(self, table: Table, edit: ColumnEdit) -> None:
-        retyped = self._parse_column_pglast(edit.coldef, ConstrType)
+        retyped = self._parse_column_pglast(edit.coldef)
         existing = table.get_column(edit.column) if edit.column else None
         if retyped is not None and existing is not None:
             existing.type = retyped.type
@@ -761,41 +967,20 @@ class SchemaDiffer:
         table.columns.append(column)
 
     def _collect_alter_table_constraints(self, stmt: Any, result: ParsedSchema) -> None:
+        """``ALTER TABLE … ADD CONSTRAINT``, through the reader the CREATE path uses.
+
+        This was the third reader of a ``Constraint`` node, and the only one that
+        rendered a CHECK expression rather than storing the AST class name — so
+        the two ways of writing one constraint produced two different models
+        (#316).
+        """
         table = self._table_named(result, stmt.relation)
         if table is None:
             return
         for cmd in stmt.cmds or []:
             constraint = getattr(cmd, "def_", None)
-            if constraint is None or type(constraint).__name__ != "Constraint":
-                continue
-            contype = _enum_value(constraint.contype)
-            if contype == _CONSTR_FOREIGN:
-                table.foreign_keys.append(
-                    ForeignKey(
-                        name=constraint.conname,
-                        table=table.qualified,
-                        columns=[k.sval for k in constraint.fk_attrs or []],
-                        ref_table=_relation_spelling(constraint.pktable),
-                        ref_columns=[k.sval for k in constraint.pk_attrs or []],
-                        on_delete=_PG_FK_DEL_ACTION.get(constraint.fk_del_action or ""),
-                    )
-                )
-            elif contype == _CONSTR_CHECK and constraint.raw_expr is not None:
-                table.check_constraints.append(
-                    CheckConstraint(
-                        name=constraint.conname,
-                        table=table.qualified,
-                        expression=RawStream()(constraint.raw_expr),
-                    )
-                )
-            elif contype == _CONSTR_UNIQUE:
-                table.unique_constraints.append(
-                    UniqueConstraint(
-                        name=constraint.conname,
-                        table=table.qualified,
-                        columns=[k.sval for k in constraint.keys or []],
-                    )
-                )
+            if constraint is not None and type(constraint).__name__ == "Constraint":
+                _read_constraint(constraint, table)
 
     def compare(self, old_sql: str, new_sql: str) -> SchemaDiff:
         """Compare two schemas and detect changes.
@@ -880,7 +1065,10 @@ class SchemaDiffer:
             SchemaChange(
                 type="ADD_TABLE",
                 table=new_map[key].qualified,
-                details={"columns": _column_details(new_map[key])},
+                details={
+                    "columns": _column_details(new_map[key]),
+                    "constraints": _constraint_details(new_map[key]),
+                },
             )
             for key in sorted(new_only)
         )
@@ -1111,8 +1299,8 @@ class SchemaDiffer:
         instead of the index the author declared.
         """
         return self._compare_named_objects(
-            old_map={idx.name: idx for idx in old_table.indexes},
-            new_map={idx.name: idx for idx in new_table.indexes},
+            old=old_table.indexes,
+            new=new_table.indexes,
             add_type="ADD_INDEX",
             drop_type="DROP_INDEX",
             table=old_table.qualified,
@@ -1121,13 +1309,14 @@ class SchemaDiffer:
                 "columns": obj.columns,
                 "unique": obj.unique,
             },
+            identity=("columns", "unique"),
         )
 
     def _compare_foreign_keys(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped foreign keys."""
         return self._compare_named_objects(
-            old_map={fk.name: fk for fk in old_table.foreign_keys},
-            new_map={fk.name: fk for fk in new_table.foreign_keys},
+            old=old_table.foreign_keys,
+            new=new_table.foreign_keys,
             add_type="ADD_FOREIGN_KEY",
             drop_type="DROP_FOREIGN_KEY",
             table=old_table.qualified,
@@ -1137,29 +1326,41 @@ class SchemaDiffer:
                 "ref_table": obj.ref_table,
                 "ref_columns": obj.ref_columns,
                 "on_delete": obj.on_delete,
+                "on_update": obj.on_update,
             },
+            identity=("columns", "ref_table", "ref_columns"),
         )
 
     def _compare_check_constraints(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped check constraints."""
         return self._compare_named_objects(
-            old_map={cc.name: cc for cc in old_table.check_constraints},
-            new_map={cc.name: cc for cc in new_table.check_constraints},
+            old=old_table.check_constraints,
+            new=new_table.check_constraints,
             add_type="ADD_CHECK_CONSTRAINT",
             drop_type="DROP_CHECK_CONSTRAINT",
             table=old_table.qualified,
             detail_fn=lambda obj: {"name": obj.name, "expression": obj.expression},
+            identity=("expression",),
+            # The one kind whose body is compared, and the only one that can be:
+            # the expression is `RawStream`'s rendering of the parsed predicate, so
+            # two spellings of one predicate are one string. A foreign key's
+            # referenced column list written on one side and left implicit on the
+            # other is the same constraint spelled twice, and telling that apart
+            # means resolving the parent's primary key — so reporting it would
+            # generate a DROP CONSTRAINT for a constraint that did not change.
+            compared=("expression",),
         )
 
     def _compare_unique_constraints(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped unique constraints."""
         return self._compare_named_objects(
-            old_map={uc.name: uc for uc in old_table.unique_constraints},
-            new_map={uc.name: uc for uc in new_table.unique_constraints},
+            old=old_table.unique_constraints,
+            new=new_table.unique_constraints,
             add_type="ADD_UNIQUE_CONSTRAINT",
             drop_type="DROP_UNIQUE_CONSTRAINT",
             table=old_table.qualified,
             detail_fn=lambda obj: {"name": obj.name, "columns": obj.columns},
+            identity=("columns",),
         )
 
     def _compare_enum_types(
@@ -1219,39 +1420,50 @@ class SchemaDiffer:
 
     def _compare_named_objects(
         self,
-        old_map: dict,
-        new_map: dict,
+        *,
+        old: list[Any],
+        new: list[Any],
         add_type: str,
         drop_type: str,
         table: str,
         detail_fn: object,
+        identity: tuple[str, ...],
+        compared: tuple[str, ...] = (),
     ) -> list[SchemaChange]:
-        """Generic name-based add/drop comparison for indexes/constraints."""
+        """Add/drop (and, where asked, replace) comparison for a table's own objects.
 
+        *identity* names the fields that tell two **unnamed** objects apart —
+        see :func:`_object_identity`. *compared* names the fields that, differing
+        under one name, make the object a change rather than a constant; a kind
+        that passes none keeps the add/drop-only comparison it always had.
+
+        Emitted in a stable order, and a changed object's drop immediately
+        precedes its add: PostgreSQL has no ``ALTER CONSTRAINT``, so replacing one
+        *is* the pair, and the pair is only valid in that order.
+        """
         detail_fn_typed: Callable = detail_fn  # ty: ignore[invalid-assignment]
         changes: list[SchemaChange] = []
-        old_names = set(old_map.keys())
-        new_names = set(new_map.keys())
+        old_map = {_object_identity(obj, identity): obj for obj in old}
+        new_map = {_object_identity(obj, identity): obj for obj in new}
 
-        for name in new_names - old_names:
-            obj = new_map[name]
-            changes.append(
-                SchemaChange(
-                    type=add_type,
-                    table=table,
-                    details=detail_fn_typed(obj),
-                )
-            )
+        changes.extend(
+            SchemaChange(type=add_type, table=table, details=detail_fn_typed(new_map[key]))
+            for key in sorted(set(new_map) - set(old_map), key=str)
+        )
+        changes.extend(
+            SchemaChange(type=drop_type, table=table, details=detail_fn_typed(old_map[key]))
+            for key in sorted(set(old_map) - set(new_map), key=str)
+        )
 
-        for name in old_names - new_names:
-            obj = old_map[name]
-            changes.append(
-                SchemaChange(
-                    type=drop_type,
-                    table=table,
-                    details=detail_fn_typed(obj),
+        for key in sorted(set(old_map) & set(new_map), key=str):
+            before, after = old_map[key], new_map[key]
+            if any(getattr(before, field) != getattr(after, field) for field in compared):
+                changes.append(
+                    SchemaChange(type=drop_type, table=table, details=detail_fn_typed(before))
                 )
-            )
+                changes.append(
+                    SchemaChange(type=add_type, table=table, details=detail_fn_typed(after))
+                )
 
         return changes
 

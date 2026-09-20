@@ -1,7 +1,7 @@
 # Confiture Development Guide
 
 **Project**: Confiture - PostgreSQL Migrations, Sweetly Done 🍓
-**Version**: 1.13.0
+**Version**: 1.14.0
 **Last Updated**: September 20, 2026
 **Current Status**: Production-Ready
 
@@ -399,6 +399,47 @@ never seen red is a guard that does not run. `DEFAULT_SCHEMA` moved out of
 `core/linting/inventory.py` into its own import-safe module for a measured
 reason: two of those four sites needed the fold and not a parser, so they wrote
 the word instead.
+
+**One constraint reader too** (since 1.14.0, #315 and #316). PostgreSQL's
+grammar puts a `Constraint` node in three places — on a column, at table level
+inside `CREATE TABLE`, and in `ALTER TABLE … ADD CONSTRAINT` — and
+`core/differ.py` had three readers of it. The column loop read **none**, so
+`pid INT REFERENCES b.parent(id)` parsed to zero foreign keys; the other two
+disagreed about what a CHECK expression is, one rendering it and one storing
+`type(raw_expr).__name__`, which generated
+`ALTER TABLE t ADD CONSTRAINT ck CHECK (A_Expr) ()`. Across this repository's own
+schema and its eight example schemas, **13 of 17 foreign keys** and 16 of 23
+unique constraints were invisible.
+
+`_read_constraint(constraint, table, column=None)` is the one reader; where the
+constraint was written decides only which columns it covers. Every `ConstrType`
+member is in `_MODELLED_CONSTRAINTS` or `_NOT_MODELLED_CONSTRAINTS`, the second a
+table of **reasons** — `CONSTR_GENERATED` is declined because a generated
+column's `raw_expr` is not a CHECK, which is exactly why the reader dispatches on
+the kind and never on that field.
+`tests/unit/test_constraint_reader_is_exhaustive.py` enumerates pglast's own enum
+and fails on a member in neither table, in both, or on a modelled kind missing
+from `_pglast_enums.REQUIRED_MEMBERS`. A *declined* member the installed pglast
+lacks is tolerated and named: confiture supports pglast 6 through 8 and
+PostgreSQL 18 added the `ENFORCED` pair.
+
+An **unnamed** constraint is identified by what it says, never by `""` — two
+unnamed foreign keys on one table were one — and generated DDL omits the
+`CONSTRAINT` clause rather than inventing `child_pid_fkey`. PostgreSQL then
+generates the same name it would have generated for the author's own DDL, which
+an integration test pins, because that is what makes omitting it safe rather than
+lossy. `NOT VALID` + `VALIDATE CONSTRAINT` needs the name, so an unnamed foreign
+key is added in one statement carrying the module's `-- review:` idiom.
+
+`_constraint_body` is the one clause builder: the text after `ADD` in an `ALTER`
+and the element in a `CREATE TABLE` are the same text. Writing it twice is how
+the reader came to disagree with itself.
+
+Prep-seed level 2 reads the qualifier too (1.14.0, #317): `SchemaTables` keys
+`(schema, name)` and routes on `Table.schema`, not on
+`"prep_seed" in str(sql_file)`. A tree declaring nothing in the configured
+prep-seed schema is a **finding**, not a silent empty pass — the heuristic routed
+unqualified DDL somewhere and a qualifier cannot.
 
 #### Python migrations: the static evaluator (since 0.46.0, #213)
 
@@ -1402,7 +1443,7 @@ When stuck, ask:
 ---
 
 **Last Updated**: September 20, 2026
-**Version**: 1.13.0
+**Version**: 1.14.0
 
 ---
 

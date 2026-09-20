@@ -12,6 +12,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [1.14.0] - 2026-09-20
+
+A constraint reaches the diff, and the DDL, whole. Closes [#315], [#316], [#317].
+
+PostgreSQL's grammar puts a `Constraint` node in three places — on a column, at
+table level inside `CREATE TABLE`, and in `ALTER TABLE … ADD CONSTRAINT`.
+`core/differ.py` had **three** readers of that node and they answered
+differently. The column loop read no constraint at all, so
+`pid INT REFERENCES b.parent(id)` — ordinary hand-written DDL — parsed to zero
+foreign keys ([#315]). The two readers that did run disagreed about what a CHECK
+expression is: one rendered it, the other stored the AST class name, which
+generated `ALTER TABLE t ADD CONSTRAINT ck CHECK (A_Expr) ()` — a migration that
+fails at apply ([#316]).
+
+Measured across this repository's own schema and the eight schemas its shipped
+examples build, 27 tables in all:
+
+| | 1.13.0 | 1.14.0 |
+|---|---|---|
+| foreign keys parsed | 4 | **17** |
+| unique constraints parsed | 7 | **23** |
+| check constraints parsed | 17 | **21** |
+| primary-key columns parsed | 24 | **27** |
+
+**Thirteen of seventeen foreign keys** in confiture's own example schemas were
+invisible to `migrate diff`, to `migrate diff --generate`, and therefore to
+`migrate validate --require-migration`.
+
+### ⚠️ Behaviour changes
+
+- **A schema that has lived with an unread constraint starts reporting it.** A
+  column-level `REFERENCES`, `UNIQUE` or `CHECK`, and a CHECK whose *expression*
+  changed under one name, were all silent. As in 1.13.0, the first
+  `migrate validate --require-migration` run after upgrading may fail on changes
+  made long ago — real changes that the gate could not see when they were made.
+  The remedy is to write the missing migrations, or to baseline.
+
+- **Generated DDL for a constraint changes textually.** `CHECK (A_Expr) ()`
+  becomes `CHECK (id > 0)`; `REFERENCES b.parent()` becomes `REFERENCES b.parent`;
+  a foreign key's `ON DELETE` / `ON UPDATE` is now written, where it was silently
+  dropped; and a new table's `CREATE TABLE` carries its constraints and its
+  primary key instead of its columns alone.
+
+- **Respelling a primary key is no longer a change.**
+  `CREATE TABLE t (id INT, PRIMARY KEY (id))` left `Column.primary_key` False, so
+  against `id INT PRIMARY KEY` — the same table — the differ reported
+  `CHANGE_COLUMN_NULLABLE` and generated `ALTER COLUMN id DROP NOT NULL`, which
+  PostgreSQL refuses on a primary-key column.
+
+- **Prep-seed level 2 reports a schema tree it did not compare.** Level 2 used to
+  route tables by `"prep_seed" in str(sql_file)`; it now routes by the qualifier.
+  A project whose DDL is unqualified therefore has no table in the configured
+  prep-seed schema, and rather than passing empty, level 2 says so and names the
+  schemas the files actually declare.
+
+### Added
+
+- `core/differ._read_constraint` — the one constraint reader. Every `ConstrType`
+  member is in `_MODELLED_CONSTRAINTS` or in `_NOT_MODELLED_CONSTRAINTS`, a table
+  of **reasons**, and `tests/unit/test_constraint_reader_is_exhaustive.py` fails
+  on a member in neither, in both, or on a modelled kind that is not declared in
+  `_pglast_enums.REQUIRED_MEMBERS`. Enumerated from pglast's own grammar, so a
+  member PostgreSQL adds is a decision rather than a silent hole.
+- `tests/integration/test_generated_constraints_apply.py` — the generated
+  migration is applied to a real PostgreSQL and the catalogue is asked what
+  landed. Parsing cannot tell you a statement is accepted, nor that the
+  constraint that arrived is the one declared.
+- `ForeignKey.on_update` is read and rendered; `on_delete` is rendered.
+
+### Fixed
+
+- **[#315]** A column-level `REFERENCES` is a foreign key. So is a column-level
+  `UNIQUE` and a column-level `CHECK`, which were equally unread, and a
+  table-level `PRIMARY KEY (…)`, which left its columns unmarked.
+  `ALTER TABLE … ADD COLUMN` goes through the same reader, so an added column
+  brings its `NOT NULL`, its `DEFAULT` and its `REFERENCES`.
+- **[#316]** A CHECK constraint carries `RawStream()(raw_expr)`, not
+  `type(raw_expr).__name__`, and `ADD CONSTRAINT` no longer appends an empty
+  column list. `TestBothGeneratorsEmitWhatParses.NOT_YET_PARSEABLE` is empty, and
+  its fixture now reaches the unnamed and no-referenced-column shapes that a
+  fixture whose constraints were all named and fully spelled could not.
+- **[#317]** Prep-seed level 2 keys `TableDefinition` by `(schema, name)` with a
+  missing qualifier folded to `core/schema_identity.DEFAULT_SCHEMA`, and reads
+  the side a table is on from `Table.schema`. `tenant.tb_x` and `etl.tb_x` no
+  longer collapse into one entry, and a second definition of one `(schema, name)`
+  is a finding — the first is kept, which is `duplicates.wins`' answer for a
+  table.
+- An **unnamed** constraint or index is identified by what it says rather than by
+  `""`, so two unnamed foreign keys on one table are two foreign keys. Nothing
+  invents a name: generated DDL omits the `CONSTRAINT` clause and PostgreSQL
+  generates the same name it would have generated for the author's own DDL —
+  pinned by an integration test, because that is what makes omitting it safe
+  rather than lossy. An unnamed foreign key is added in one statement instead of
+  `NOT VALID` + `VALIDATE CONSTRAINT`, which needs the name, and the statement
+  says so with the module's `-- review:` idiom.
+- A new table's `CREATE TABLE` carries its constraints. `_up_add_table` rendered
+  the columns and nothing else — true for the table-level spellings too, so this
+  pre-dates [#315] and would have outlived its parse fix.
+
+### Known, not fixed
+
+- `DifferSQLGenerator._up_add_column` falls back to `text` when a change carries
+  no `details["type"]`, which is every `ADD_COLUMN` the differ emits — it carries
+  the type in `new_value`. Unreachable in production: the only caller,
+  `MigrationGenerator`, renders `ADD_COLUMN` itself from `new_value`. Reported
+  rather than folded in, because it is not a constraint.
+- `CONSTR_EXCLUSION` is declined with its reason: the schema models have no
+  exclusion-constraint type, so an `EXCLUDE` clause is skipped deliberately.
+  Giving it one is a new model, a change type and a generator.
+
+[#315]: https://github.com/fraiseql/confiture/issues/315
+[#316]: https://github.com/fraiseql/confiture/issues/316
+[#317]: https://github.com/fraiseql/confiture/issues/317
+
 ## [1.13.0] - 2026-09-20
 
 The differ knows which schema. Closes [#313].

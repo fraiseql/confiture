@@ -94,6 +94,12 @@ class TestNoConstraintNameIsInventedEither:
     Reachable only from a hand-built change — every ``detail_fn`` in the differ
     emits ``name`` — but the fallbacks were written for a bare table and a
     qualified one turns them into illegal identifiers.
+
+    Since #315 a constraint the schema left unnamed is *rendered* unnamed, which
+    invents nothing either: PostgreSQL generates the name at apply time. So what
+    warns here is a change with nothing to render — no columns, no expression —
+    which is what a change carrying no details is. ``tests/unit/
+    test_differ_sql_constraints.py`` holds the unnamed-but-complete cases.
     """
 
     @pytest.mark.parametrize(
