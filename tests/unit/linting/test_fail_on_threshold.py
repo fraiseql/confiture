@@ -122,13 +122,13 @@ class TestNever:
             ]
         )
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_never_passes_even_when_errors_exist(self, linter_class: MagicMock) -> None:
         linter_class.return_value.lint.return_value = self._report_with_an_error()
 
         assert _lint("--select", "acl", "--fail-on", "never").exit_code == 0
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_and_the_same_run_fails_at_error(self, linter_class: MagicMock) -> None:
         """So it is `never` that suppressed it, not the absence of a finding."""
         linter_class.return_value.lint.return_value = self._report_with_an_error()

@@ -31,14 +31,14 @@ def _make_result(**kwargs) -> IntrospectionResult:
 class TestIntrospectCommand:
     """Tests for the introspect CLI command."""
 
-    @patch("confiture.cli.commands.schema.SchemaIntrospector")
+    @patch("confiture.cli.commands.introspect.SchemaIntrospector")
     @patch("confiture.cli.helpers.create_connection")
     def test_requires_db_option(self, mock_conn, mock_introspector):
         """Missing --db should exit with non-zero code."""
         result = runner.invoke(app, ["introspect"])
         assert result.exit_code != 0
 
-    @patch("confiture.cli.commands.schema.SchemaIntrospector")
+    @patch("confiture.cli.commands.introspect.SchemaIntrospector")
     @patch("confiture.cli.helpers.create_connection")
     def test_json_output_is_valid(self, mock_create_conn, mock_introspector_class):
         """Default format produces valid, parseable JSON on stdout."""
@@ -57,7 +57,7 @@ class TestIntrospectCommand:
         assert parsed["schema"] == "public"
         assert "tables" in parsed
 
-    @patch("confiture.cli.commands.schema.SchemaIntrospector")
+    @patch("confiture.cli.commands.introspect.SchemaIntrospector")
     @patch("confiture.cli.helpers.create_connection")
     def test_yaml_output_is_valid(self, mock_create_conn, mock_introspector_class):
         """--format yaml produces valid, parseable YAML on stdout."""
@@ -76,7 +76,7 @@ class TestIntrospectCommand:
         parsed = yaml.safe_load(result.stdout)
         assert parsed["database"] == "testdb"
 
-    @patch("confiture.cli.commands.schema.SchemaIntrospector")
+    @patch("confiture.cli.commands.introspect.SchemaIntrospector")
     @patch("confiture.cli.helpers.create_connection")
     def test_invalid_format_exits_with_error(self, mock_create_conn, mock_introspector_class):
         """Unsupported --format value is a config error → exit 5."""
@@ -85,7 +85,7 @@ class TestIntrospectCommand:
         )
         assert result.exit_code == 5
 
-    @patch("confiture.cli.commands.schema.SchemaIntrospector")
+    @patch("confiture.cli.commands.introspect.SchemaIntrospector")
     @patch("confiture.cli.helpers.create_connection")
     def test_connection_failure_exits_with_error(self, mock_create_conn, mock_introspector_class):
         """Connection failure → CONFIG_006 → exit 3."""
@@ -95,7 +95,7 @@ class TestIntrospectCommand:
 
         assert result.exit_code == 3
 
-    @patch("confiture.cli.commands.schema.SchemaIntrospector")
+    @patch("confiture.cli.commands.introspect.SchemaIntrospector")
     @patch("confiture.cli.helpers.create_connection")
     def test_all_tables_flag_passed_through(self, mock_create_conn, mock_introspector_class):
         """--all-tables is forwarded to SchemaIntrospector.introspect()."""
@@ -114,7 +114,7 @@ class TestIntrospectCommand:
             include_hints=True,
         )
 
-    @patch("confiture.cli.commands.schema.SchemaIntrospector")
+    @patch("confiture.cli.commands.introspect.SchemaIntrospector")
     @patch("confiture.cli.helpers.create_connection")
     def test_no_hints_flag_passed_through(self, mock_create_conn, mock_introspector_class):
         """--no-hints sets include_hints=False in SchemaIntrospector.introspect()."""
@@ -133,7 +133,7 @@ class TestIntrospectCommand:
             include_hints=False,
         )
 
-    @patch("confiture.cli.commands.schema.SchemaIntrospector")
+    @patch("confiture.cli.commands.introspect.SchemaIntrospector")
     @patch("confiture.cli.helpers.create_connection")
     def test_schema_option_passed_through(self, mock_create_conn, mock_introspector_class):
         """--schema is forwarded to SchemaIntrospector.introspect()."""
@@ -155,7 +155,7 @@ class TestIntrospectCommand:
             include_hints=True,
         )
 
-    @patch("confiture.cli.commands.schema.SchemaIntrospector")
+    @patch("confiture.cli.commands.introspect.SchemaIntrospector")
     @patch("confiture.cli.helpers.create_connection")
     def test_output_file_written(self, mock_create_conn, mock_introspector_class, tmp_path):
         """--output writes JSON to file instead of stdout."""

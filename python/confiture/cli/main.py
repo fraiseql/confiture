@@ -20,10 +20,15 @@ from confiture.cli.commands.admin import (
 )
 from confiture.cli.commands.apply_as import migrate_apply_as
 from confiture.cli.commands.bootstrap import bootstrap
+from confiture.cli.commands.build import build
 from confiture.cli.commands.debug import debug_app
 from confiture.cli.commands.diff import schema_diff
 from confiture.cli.commands.drift import drift
 from confiture.cli.commands.hooks import hooks_app
+from confiture.cli.commands.init import init
+from confiture.cli.commands.introspect import introspect
+from confiture.cli.commands.lint import lint
+from confiture.cli.commands.lint_unified import lint_unified
 from confiture.cli.commands.mcp import mcp_app
 from confiture.cli.commands.migrate.baseline import migrate_baseline
 from confiture.cli.commands.migrate.current import migrate_current
@@ -42,7 +47,6 @@ from confiture.cli.commands.migrate.steps import migrate_steps
 from confiture.cli.commands.migrate.up import migrate_up
 from confiture.cli.commands.migrate.validate import migrate_validate
 from confiture.cli.commands.migrate.verify import migrate_verify
-from confiture.cli.commands.schema import build, init, introspect, lint, lint_unified
 from confiture.cli.coordinate import coordinate_app
 from confiture.cli.generate import generate_app
 from confiture.cli.helpers import console

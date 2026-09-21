@@ -92,6 +92,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **One module per command.** `cli/commands/schema.py` (1,848 lines at the start of
+  this release) held `init`, `build`, `lint`, `lint-unified` and `introspect`; each is
+  now its own module, the largest `build.py` at 651 lines. `--project-dir`, which
+  that module declared twice, is `options.ProjectDirOpt`, once. `seed convert` and
+  `seed benchmark` move to `cli/seed_copy.py`, and `cli/seed.py` is 622 lines. The
+  budget entries travel with the code they count: no total moved. A test that
+  patched `confiture.cli.commands.schema.<name>` patches the command's module now.
 - **What the commands decided, `core` decides.** Five pieces of logic lived in
   `cli/`: git scoping for `--idempotent` (`core/validation/scope.py`), the
   idempotency verdict — status, pass, exit — and the report collector
