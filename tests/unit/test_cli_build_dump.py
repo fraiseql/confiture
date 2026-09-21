@@ -34,7 +34,7 @@ include_dirs:
 
 
 class TestBuildDump:
-    @patch("confiture.cli.commands.schema.build_schema_artifact")
+    @patch("confiture.cli.commands.build.build_schema_artifact")
     def test_dump_invokes_orchestrator_and_reports_artifact(self, mock_build, tmp_path):
         _project(tmp_path)
         out = tmp_path / "art" / "test.pgdump"
@@ -65,7 +65,7 @@ class TestBuildDump:
         assert "abcdef0123456789" in result.stdout
         assert "test.pgdump" in result.stdout
 
-    @patch("confiture.cli.commands.schema.build_schema_artifact")
+    @patch("confiture.cli.commands.build.build_schema_artifact")
     def test_dump_format_directory_passed_through(self, mock_build, tmp_path):
         _project(tmp_path)
         out = tmp_path / "art" / "test.pgdir"
@@ -92,7 +92,7 @@ class TestBuildDump:
         _, kwargs = mock_build.call_args
         assert kwargs["dump_format"] == "directory"
 
-    @patch("confiture.cli.commands.schema.build_schema_artifact")
+    @patch("confiture.cli.commands.build.build_schema_artifact")
     def test_invalid_dump_format_exits_5(self, mock_build, tmp_path):
         _project(tmp_path)
         result = runner.invoke(
@@ -112,7 +112,7 @@ class TestBuildDump:
         assert result.exit_code == 5
         mock_build.assert_not_called()
 
-    @patch("confiture.cli.commands.schema.build_schema_artifact")
+    @patch("confiture.cli.commands.build.build_schema_artifact")
     def test_no_dump_leaves_behaviour_unchanged(self, mock_build, tmp_path):
         _project(tmp_path)
         result = runner.invoke(

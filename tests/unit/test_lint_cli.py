@@ -23,7 +23,7 @@ runner = CliRunner()
 class TestLintCommand:
     """Tests for the lint CLI command."""
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_lint_command_basic(self, mock_linter_class):
         """Should execute lint command and display results."""
         # Mock the linter
@@ -41,7 +41,7 @@ class TestLintCommand:
         assert result.exit_code == 0
         assert "No violations found" in result.stdout
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_lint_command_with_env(self, mock_linter_class):
         """Should respect --env option."""
         mock_linter = MagicMock()
@@ -56,7 +56,7 @@ class TestLintCommand:
         assert result.exit_code == 0
         mock_linter_class.assert_called_with(env="production", project_dir=Path(), config=ANY)
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_lint_command_with_errors_fail_on_error(self, mock_linter_class):
         """Should fail with exit code 1 when errors found and fail_on_error=True."""
         mock_linter = MagicMock()
@@ -80,7 +80,7 @@ class TestLintCommand:
         # Should fail
         assert result.exit_code == 1
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_lint_command_with_warnings_fail_on_warning(self, mock_linter_class):
         """Should fail with exit code 1 when warnings found and fail_on_warning=True."""
         mock_linter = MagicMock()
@@ -104,7 +104,7 @@ class TestLintCommand:
         # Should fail
         assert result.exit_code == 1
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_lint_command_with_warnings_no_fail(self, mock_linter_class):
         """Should succeed when warnings found but fail_on_warning=False."""
         mock_linter = MagicMock()
@@ -128,7 +128,7 @@ class TestLintCommand:
         # Should succeed
         assert result.exit_code == 0
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_lint_command_json_format(self, mock_linter_class):
         """Should output JSON format when --format json specified."""
         mock_linter = MagicMock()
@@ -144,7 +144,7 @@ class TestLintCommand:
         assert '"schema_name": "local"' in result.stdout
         assert '"violations"' in result.stdout
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_lint_command_csv_format(self, mock_linter_class):
         """Should output CSV format when --format csv specified."""
         mock_linter = MagicMock()
@@ -168,7 +168,7 @@ class TestLintCommand:
         assert "rule_name,severity,location,file,line,message" in result.stdout
         assert "TestRule" in result.stdout
 
-    @patch("confiture.cli.commands.schema.SchemaLinter")
+    @patch("confiture.cli.commands.lint.SchemaLinter")
     def test_lint_command_save_json_output(self, mock_linter_class, tmp_path):
         """Should save JSON output to file when --output specified."""
         mock_linter = MagicMock()

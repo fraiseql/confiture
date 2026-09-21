@@ -10,7 +10,9 @@
   "complexity": {},
   "too_many_args": {
     "python/confiture/cli/commands/admin.py": 1,
+    "python/confiture/cli/commands/build.py": 3,
     "python/confiture/cli/commands/drift.py": 1,
+    "python/confiture/cli/commands/lint.py": 1,
     "python/confiture/cli/commands/migrate/diff.py": 1,
     "python/confiture/cli/commands/migrate/down.py": 2,
     "python/confiture/cli/commands/migrate/fix_signatures.py": 2,
@@ -21,7 +23,6 @@
     "python/confiture/cli/commands/migrate/up.py": 1,
     "python/confiture/cli/commands/migrate/validate.py": 1,
     "python/confiture/cli/commands/migrate/verify.py": 1,
-    "python/confiture/cli/commands/schema.py": 4,
     "python/confiture/cli/coordinate.py": 1,
     "python/confiture/cli/seed.py": 2,
     "python/confiture/cli/sync.py": 1,
@@ -34,7 +35,7 @@
     "python/confiture/cli/commands/migrate/introspect.py": 1
   },
   "too_many_statements": {
-    "python/confiture/cli/seed.py": 1
+    "python/confiture/cli/seed_copy.py": 1
   },
   "too_many_returns": {
     "python/confiture/core/error_handler.py": 1,
@@ -45,11 +46,11 @@
     "python/confiture/core/seed/insert_validator.py": 1
   },
   "magic_values": {
+    "python/confiture/cli/commands/build.py": 1,
     "python/confiture/cli/commands/migrate/baseline.py": 1,
     "python/confiture/cli/commands/migrate/fix_signatures.py": 2,
     "python/confiture/cli/commands/migrate/reinit.py": 1,
     "python/confiture/cli/commands/migrate/validate.py": 1,
-    "python/confiture/cli/commands/schema.py": 1,
     "python/confiture/cli/dry_run.py": 1,
     "python/confiture/cli/formatters/migrate_formatter.py": 1,
     "python/confiture/cli/generate.py": 1,
@@ -99,6 +100,8 @@
     "python/confiture/cli/commands/admin.py": 1,
     "python/confiture/cli/commands/diff.py": 1,
     "python/confiture/cli/commands/drift.py": 1,
+    "python/confiture/cli/commands/lint.py": 1,
+    "python/confiture/cli/commands/lint_unified.py": 2,
     "python/confiture/cli/commands/migrate/_settings.py": 1,
     "python/confiture/cli/commands/migrate/diff.py": 1,
     "python/confiture/cli/commands/migrate/estimate.py": 1,
@@ -107,12 +110,12 @@
     "python/confiture/cli/commands/migrate/preflight.py": 4,
     "python/confiture/cli/commands/migrate/rebuild.py": 1,
     "python/confiture/cli/commands/migrate/status.py": 2,
-    "python/confiture/cli/commands/schema.py": 3,
     "python/confiture/cli/commands/validate_checks.py": 3,
     "python/confiture/cli/dsn.py": 1,
     "python/confiture/cli/error_json.py": 1,
     "python/confiture/cli/generate.py": 3,
-    "python/confiture/cli/seed.py": 6,
+    "python/confiture/cli/seed.py": 4,
+    "python/confiture/cli/seed_copy.py": 2,
     "python/confiture/core/_migrator/apply.py": 1,
     "python/confiture/core/_migrator/apply_loop.py": 3,
     "python/confiture/core/_migrator/baseline.py": 1,

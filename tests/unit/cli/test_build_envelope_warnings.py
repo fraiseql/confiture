@@ -91,7 +91,7 @@ class TestSeedWarnings:
         """`success: true`, three files applied — and two that did not, said out loud."""
         project = _project(tmp_path, seeds={"01_widgets.sql": "SELECT 1;\n"})
 
-        with patch("confiture.cli.commands.schema.apply_seed_files") as applier:
+        with patch("confiture.cli.commands.build.apply_seed_files") as applier:
             applier.return_value = ApplyResult(total=5, succeeded=3, failed=2)
             payload = _payload(project, "--sequential", "--continue-on-error")
 
@@ -120,7 +120,7 @@ class TestSeedWarnings:
         """The channel carries diagnostics, not chatter."""
         project = _project(tmp_path, seeds={"01_widgets.sql": "SELECT 1;\n"})
 
-        with patch("confiture.cli.commands.schema.apply_seed_files") as applier:
+        with patch("confiture.cli.commands.build.apply_seed_files") as applier:
             applier.return_value = ApplyResult(total=3, succeeded=3, failed=0)
             payload = _payload(project, "--sequential")
 
@@ -130,7 +130,7 @@ class TestSeedWarnings:
         """One renderer: a warning is not printed by its producer *and* by the result."""
         project = _project(tmp_path, seeds={"01_widgets.sql": "SELECT 1;\n"})
 
-        with patch("confiture.cli.commands.schema.apply_seed_files") as applier:
+        with patch("confiture.cli.commands.build.apply_seed_files") as applier:
             applier.return_value = ApplyResult(total=5, succeeded=3, failed=2)
             result = _build(project, "--sequential", "--continue-on-error")
 
@@ -241,7 +241,7 @@ def test_a_real_build_payload_validates_against_the_published_schema(tmp_path: P
 
 def _seed_failure_payload(tmp_path: Path) -> dict:
     project = _project(tmp_path / "seeds", seeds={"01_widgets.sql": "SELECT 1;\n"})
-    with patch("confiture.cli.commands.schema.apply_seed_files") as applier:
+    with patch("confiture.cli.commands.build.apply_seed_files") as applier:
         applier.return_value = ApplyResult(total=5, succeeded=3, failed=2)
         return _payload(project, "--sequential", "--continue-on-error")
 

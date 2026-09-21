@@ -110,7 +110,7 @@ class TestBuildSeedProfile:
         assert result.exit_code == 5
         assert "Unknown seed profile" in result.output
 
-    @patch("confiture.cli.commands.schema.build_schema_artifact")
+    @patch("confiture.cli.commands.build.build_schema_artifact")
     def test_seed_profile_in_artifact_name(self, mock_build, tmp_path):
         from confiture.core.schema_artifact import ArtifactResult
 

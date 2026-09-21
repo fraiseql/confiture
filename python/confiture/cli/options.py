@@ -173,6 +173,12 @@ def mode_option(*modes: str, help: str) -> Any:
     )
 
 
+#: ``--project-dir`` for the commands that read a project tree (``build``, ``lint``).
+ProjectDirOpt = Annotated[
+    Path, typer.Option("--project-dir", help="Project directory (default: current directory)")
+]
+
+
 #: ``--schemas`` for the signature checks. ``None`` means "each reader's own
 #: default": the schemas the parsed source declares for ``--check-signatures``
 #: and ``migrate fix-signatures``, and ``public`` for the three other checks that
