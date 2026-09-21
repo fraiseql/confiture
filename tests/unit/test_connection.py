@@ -7,12 +7,8 @@ import pytest
 import yaml
 from psycopg.conninfo import conninfo_to_dict
 
-from confiture.core.connection import (
-    create_connection,
-    get_migration_class,
-    load_config,
-    load_migration_module,
-)
+from confiture.core._migrator.loader import get_migration_class, load_migration_module
+from confiture.core.connection import create_connection, load_config
 from confiture.exceptions import ConfigurationError, MigrationError
 
 

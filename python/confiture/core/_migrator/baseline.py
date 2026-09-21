@@ -25,8 +25,8 @@ if TYPE_CHECKING:
     from confiture.core._migrator.engine import MigrationEngine
 
 from confiture.core import builder as _core_builder
-from confiture.core import connection as _core_connection
 from confiture.core._migrator.baseline_copy import _select_rows_to_copy
+from confiture.core._migrator.loader import load_migration_class
 from confiture.core.checksum import compute_checksum
 from confiture.core.seed import applier as _core_seed_applier
 from confiture.core.sql_lexer import split_statements
@@ -198,7 +198,7 @@ def reinit(
 
         marked: list[MigrationApplied] = []
         for migration_file in migrations_to_mark:
-            migration_class = _core_connection.load_migration_class(migration_file)
+            migration_class = load_migration_class(migration_file)
             migration = migration_class(connection=migrator.connection)
 
             record_migration(

@@ -254,3 +254,28 @@ class TestDryRunExecute:
         # SAVEPOINT should NOT have been called
         execute_calls = [str(c) for c in session._conn.execute.call_args_list]
         assert not any("SAVEPOINT" in c for c in execute_calls)
+
+
+class TestARehearsalStopsWhereUpStops:
+    """``--dry-run-execute`` runs the apply loop ``up`` runs, so it halts where ``up`` halts.
+
+    It had a loop of its own, which never looked at ``requires_superuser``: the
+    rehearsal ran a migration the real run would stop before, and said nothing of the
+    ``apply-as`` the real run would ask for.
+    """
+
+    def test_it_halts_at_a_superuser_migration_and_names_it(self, tmp_path):
+        session = _make_entered_session(tmp_path / "migrations")
+        _setup_pending(session, tmp_path, count=2)
+        first, second = MagicMock(), MagicMock()
+        first.version, first.name, first.requires_superuser = "001", "migration_1", True
+        second.version, second.name, second.requires_superuser = "002", "migration_2", False
+
+        with injected_lock(MagicMock()), injected_loader() as mock_load:
+            mock_load.side_effect = [MagicMock(return_value=first), MagicMock(return_value=second)]
+            result = session.up(dry_run_execute=True)
+
+        assert (result.dry_run_execute, result.success) == (True, False)
+        assert [s.version for s in result.skipped_superuser] == ["001"]
+        assert result.pending == ["002"]
+        session._migrator.apply.assert_not_called()

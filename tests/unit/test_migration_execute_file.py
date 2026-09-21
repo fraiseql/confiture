@@ -207,7 +207,7 @@ class TestExecuteFileResolvesFromTheProjectRoot:
     def test_root_relative_path_is_found_from_a_foreign_cwd(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from confiture.core.connection import load_migration_class
+        from confiture.core._migrator.loader import load_migration_class
 
         root = self._project(tmp_path)
         elsewhere = tmp_path / "elsewhere"

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from confiture.core import connection as _core_connection
+from confiture.core._migrator.loader import get_migration_class, load_migration_module
 from confiture.core.idempotency.static_eval import ModuleModel, PathV, Str, Unknown
 from confiture.core.sql_path import find_project_root, resolve_sql_file
 from confiture.exceptions import MigrationError
@@ -148,7 +148,7 @@ class ImportChecker:
         """Try to import the module. Returns module or None on failure."""
 
         try:
-            return _core_connection.load_migration_module(py_file)
+            return load_migration_module(py_file)
         except MigrationError as e:
             violations.append(
                 ImportCheckViolation(
@@ -169,7 +169,7 @@ class ImportChecker:
         """Extract Migration subclass from module. Returns class or None."""
 
         try:
-            return _core_connection.get_migration_class(module)
+            return get_migration_class(module)
         except MigrationError:
             violations.append(
                 ImportCheckViolation(
