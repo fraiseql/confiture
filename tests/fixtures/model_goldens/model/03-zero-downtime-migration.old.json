@@ -155,5 +155,21 @@
     }
   ],
   "enum_types": [],
-  "sequences": []
+  "sequences": [],
+  "routines": [
+    {
+      "name": "update_updated_at_column",
+      "schema": null,
+      "kind": "function",
+      "signature": "",
+      "signature_key": [],
+      "returns": "trigger",
+      "language": "plpgsql",
+      "body": "\nBEGIN\n    NEW.updated_at = NOW();\n    RETURN NEW;\nEND;\n",
+      "security_definer": false,
+      "search_path_pinned": false,
+      "volatility": "volatile"
+    }
+  ],
+  "views": []
 }

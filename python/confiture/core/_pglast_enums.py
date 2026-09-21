@@ -87,6 +87,10 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_RULE",
         "OBJECT_FOREIGN_TABLE",
     ),
+    "VariableSetKind": (
+        "VAR_SET_VALUE",
+        "VAR_SET_CURRENT",
+    ),
 }
 
 # Members that could not be resolved *while pglast was importable* — i.e. an

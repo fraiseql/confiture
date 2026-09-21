@@ -84,6 +84,17 @@ comparisons say today, are now tests in its own suite.
   10 and the parse tree on all 23 — so no throwaway database is built on the server
   drift inspects.
 
+- **Routines and views join the schema model.** `schema_model.Routine` (a function,
+  procedure or aggregate: `signature` as written, `signature_key` as identity,
+  `returns`, `language`, `body`, `security_definer`, `search_path_pinned`,
+  `volatility`) and `schema_model.View` (`materialized`, `definition`, a matview's
+  `indexes`), held by `SchemaModel.routines` — every overload in an `ObjectRef` bucket
+  — and `SchemaModel.views`. `inventory.build_model()` reads them from DDL; a routine
+  redefined with `CREATE OR REPLACE` is its last definition, as a build leaves it. The
+  model goldens gain a `routines` and a `views` section; that edit is this change.
+  `tests/unit/test_one_schema_model.py` now also fails on a class that carries a
+  routine's or a view's fields.
+
 ### Changed
 
 - **One live reader, enforced.** Every schema fact confiture reads from a live database
@@ -167,6 +178,12 @@ comparisons say today, are now tests in its own suite.
 
 ### Fixed
 
+- **A routine's signature is one identity on both sides.** The argument types a DDL
+  file writes and the ones `format_type` writes now canonicalise alike where they used
+  to split: `character` (a live `char(n)` argument) keyed as `char(1)` against the
+  DDL's `char`; `text[][]` against a live `text[]`, though PostgreSQL does not record
+  an array's dimensions; and a quoted type (`"MyType"`) kept its quotes live only.
+  Each made a deployed routine read as missing from the database and as an extra one.
 - **An index the DDL left unnamed is no longer reported missing and extra at once.**
   Drift keyed it `None` and reported PostgreSQL's generated name as an extra index; it
   now matches by keys, uniqueness and method.

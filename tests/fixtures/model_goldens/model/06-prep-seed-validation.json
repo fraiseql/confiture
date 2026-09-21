@@ -192,5 +192,21 @@
     }
   ],
   "enum_types": [],
-  "sequences": []
+  "sequences": [],
+  "routines": [
+    {
+      "name": "fn_resolve_tb_manufacturer",
+      "schema": null,
+      "kind": "function",
+      "signature": "",
+      "signature_key": [],
+      "returns": "void",
+      "language": "plpgsql",
+      "body": "\nBEGIN\n    -- Insert from prep_seed to catalog\n    -- Note: GENERATED ALWAYS AS IDENTITY handles pk_manufacturer\n    INSERT INTO catalog.tb_manufacturer (id, name, country_code)\n    SELECT\n        prep.id,\n        prep.name,\n        prep.country_code\n    FROM prep_seed.tb_manufacturer prep\n    ON CONFLICT (id) DO NOTHING;  -- Handle duplicates gracefully\n\n    -- Clear prep_seed table after resolution\n    TRUNCATE TABLE prep_seed.tb_manufacturer;\nEND;\n",
+      "security_definer": false,
+      "search_path_pinned": false,
+      "volatility": "volatile"
+    }
+  ],
+  "views": []
 }

@@ -49,6 +49,14 @@ FIELD_SIGNATURES: dict[str, tuple[frozenset[str], ...]] = {
     "Index": (frozenset({"columns", "unique"}), frozenset({"columns", "is_unique"})),
     "EnumType": (frozenset({"name", "schema", "values"}),),
     "Sequence": (frozenset({"start", "increment"}),),
+    "Routine": (
+        frozenset({"param_types"}),
+        frozenset({"arg_types", "input_types"}),
+        frozenset({"params", "return_type"}),
+        frozenset({"name", "signature"}),
+        frozenset({"name", "is_security_definer"}),
+    ),
+    "View": (frozenset({"relkind", "definition"}), frozenset({"name", "definition", "indexes"})),
 }
 
 _SNAPSHOT = (
@@ -56,8 +64,35 @@ _SNAPSHOT = (
     "entry point's surface and shaped for its users' assertions"
 )
 
+_RETIRING = (
+    "a routine or view as a reader held it before the model had routines and views; "
+    "it retires as its readers move onto the model"
+)
+
 #: ``module:Class`` -> the different question that class answers.
 ALLOWED: dict[str, str] = {
+    "core/function_signature_parser.py:FunctionSignature": _RETIRING,
+    "core/live_catalog.py:ViewRow": _RETIRING,
+    "core/live_objects.py:LiveObject": _RETIRING,
+    "core/view_body_drift.py:ViewDefinition": _RETIRING,
+    "core/live_catalog.py:RoutineRow": (
+        "a pg_proc row with what the introspector's FunctionInfo needs and the model "
+        "does not hold — every argument's name and mode, the cost, the comment, the oid"
+    ),
+    "models/function_info.py:FunctionInfo": (
+        "the input shape of stub_generator, pgtap_generator and the MCP server, a public "
+        "surface whose shape the platform seam decides; built from a RoutineRow"
+    ),
+    "core/linting/libraries/functions.py:_CallableDefinition": (
+        "one CREATE FUNCTION as func_001 reports it, with the file and line a finding needs"
+    ),
+    "core/linting/libraries/security_definer.py:_FunctionDefRecord": (
+        "one CREATE FUNCTION as sec_001 reports it, with the file and line a finding needs"
+    ),
+    "core/view_manager.py:SavedView": (
+        "a dependent view ViewManager drops and re-creates around an ALTER COLUMN TYPE: "
+        "its dependency depth, oid, comment and index DDL — fraisier imports ViewManager"
+    ),
     "core/linting/inventory.py:SchemaObject": (
         "one CREATE statement as the lint rules read it — any kind, with the file, "
         "line, offset and existence clauses a finding needs; `schema_model()` turns "
@@ -121,7 +156,16 @@ def _sweep() -> dict[str, str]:
 def test_the_model_module_defines_the_models() -> None:
     """The guard is worth nothing if the thing it protects is not where it looks."""
     defined = {name for name, _ in second_models(MODEL_MODULE.read_text(encoding="utf-8"))}
-    assert {"Table", "Column", "Constraint", "Index", "EnumType", "Sequence"} <= defined
+    assert {
+        "Table",
+        "Column",
+        "Constraint",
+        "Index",
+        "EnumType",
+        "Sequence",
+        "Routine",
+        "View",
+    } <= (defined)
 
 
 def test_the_check_sees_both_shapes() -> None:

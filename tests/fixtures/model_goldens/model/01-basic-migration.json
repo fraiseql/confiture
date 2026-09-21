@@ -155,5 +155,7 @@
     }
   ],
   "enum_types": [],
-  "sequences": []
+  "sequences": [],
+  "routines": [],
+  "views": []
 }
