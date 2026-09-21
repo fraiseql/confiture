@@ -9,7 +9,6 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
-import psycopg
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
@@ -32,7 +31,7 @@ from confiture.cli.options import (
 )
 from confiture.config.environment import SshTunnelConfig
 from confiture.core import builder as _core_builder
-from confiture.core.connection import load_config
+from confiture.core.connection import DatabaseError, load_config
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
 from confiture.core.function_signature_drift import (
     FunctionSignatureDriftDetector,
@@ -417,7 +416,7 @@ def _apply_fix_blocks(
             for block in body_fix_blocks:
                 cur.execute(block["create_sql"])
         conn.commit()
-    except psycopg.Error as apply_exc:
+    except DatabaseError as apply_exc:
         conn.rollback()
         error_console.print(f"[red]❌ Fix failed (rolled back): {apply_exc}[/red]")
         raise typer.Exit(exit_code_of("SQL_001")) from apply_exc

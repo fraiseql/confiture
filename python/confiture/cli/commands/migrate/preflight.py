@@ -10,9 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
 
-import psycopg
 import typer
-from psycopg import sql as pgsql
 from rich.table import Table
 
 from confiture.cli.dsn import (
@@ -45,10 +43,9 @@ from confiture.cli.options import (
 from confiture.config.environment import Environment
 from confiture.core import connection as _core_connection
 from confiture.core import ledger as _core_ledger
-from confiture.core.connection import load_config
+from confiture.core.connection import DatabaseError, connect_url, load_config
 from confiture.core.cor_extractor import find_cor_targets_in_file
 from confiture.core.dependent_objects import DependentObjectsChecker
-from confiture.core.ledger import table_identifier
 from confiture.core.migrator import Migrator, MigratorSession, parse_migration_filename
 from confiture.core.schema_facts import SchemaFacts, collect_schema_facts
 from confiture.error_codes import FINDINGS, USAGE
@@ -115,14 +112,12 @@ def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[
                 conn.rollback()
             return (False, True)
 
-        with conn.cursor() as cur:
-            cur.execute(pgsql.SQL("SELECT 1 FROM {} LIMIT 1").format(table_identifier(table)))
-            row = cur.fetchone()
+        empty = _core_ledger.ledger_is_empty(conn, table)
         # Roll back any aborted transaction state so run_against starts clean.
         with contextlib.suppress(Exception):
             conn.rollback()
-        return (True, row is None)
-    except psycopg.Error:
+        return (True, empty)
+    except DatabaseError:
         with contextlib.suppress(Exception):
             conn.rollback()
         return (False, True)
@@ -351,9 +346,9 @@ def _run_dependent_check(
 
     severity = "info" if mode == "warn" else "error"
     try:
-        with psycopg.connect(against_url) as conn:
+        with connect_url(against_url) as conn:
             return DependentObjectsChecker(severity=severity).check(targets, conn)
-    except psycopg.Error as e:
+    except DatabaseError as e:
         error_console.print(f"[red]❌ Dependent check connection failed: {e}[/red]")
         return DependentAnalysisReport(
             entries=[], status="skipped", skip_reason="connection_failed"

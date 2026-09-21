@@ -5,7 +5,6 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Annotated, Any
 
-import psycopg
 import typer
 from rich.console import Console
 from rich.console import Console as _Console
@@ -37,6 +36,7 @@ from confiture.config.environment import DEFAULT_STATUS_WORDS, Environment
 from confiture.core import builder as _core_builder
 from confiture.core import linting as _core_linting
 from confiture.core.builder import SchemaBuilder
+from confiture.core.connection import DatabaseError
 from confiture.core.connection import load_config as _lc
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.introspection.tables import SchemaIntrospector
@@ -1800,7 +1800,7 @@ def introspect(
 
     try:
         conn = connect(db)
-    except (ConfiturError, psycopg.Error) as e:
+    except (ConfiturError, DatabaseError) as e:
         fail(
             ConfigurationError(
                 f"Connection failed: {e}",

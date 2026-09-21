@@ -13,6 +13,21 @@ from confiture.config.environment import DatabaseConfig, SshTunnelConfig
 from confiture.core import ssh_tunnel as _core_ssh_tunnel
 from confiture.exceptions import ConfigurationError
 
+#: The driver's error base class. ``cli/`` reaches the database only through
+#: ``core``, so a command that must tell a database failure from any other catches
+#: this name rather than importing the driver.
+DatabaseError = psycopg.Error
+
+
+def connect_url(url: str, **kwargs: Any) -> psycopg.Connection:
+    """A connection to *url* that the caller owns and closes.
+
+    For the commands that take a DSN on the command line rather than an
+    environment config (``debug cte``, ``mcp``, ``generate pgtap``, ``bootstrap``'s
+    superuser URL). Keyword arguments go to ``psycopg.connect``.
+    """
+    return psycopg.connect(url, **kwargs)
+
 
 def load_config(config_file: Path) -> dict[str, Any]:
     """Load configuration from YAML file.

@@ -29,7 +29,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import psycopg
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
@@ -43,7 +42,7 @@ from confiture.cli.options import (
 )
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
-from confiture.core.connection import load_config
+from confiture.core.connection import DatabaseError, connect_url, load_config
 from confiture.core.validation.config_loaders import load_ownership_expectation
 from confiture.error_codes import FINDINGS, SUCCESS
 from confiture.exceptions import BootstrapError, BootstrapScopeError, ConfigurationError
@@ -145,8 +144,8 @@ def bootstrap(
     # Build and (optionally) execute the plan.
 
     try:
-        conn = psycopg.connect(bootstrap_url, autocommit=False)
-    except psycopg.OperationalError as exc:
+        conn = connect_url(bootstrap_url, autocommit=False)
+    except DatabaseError as exc:
         fail(
             ConfigurationError(
                 f"Could not connect with bootstrap_connection_url: {exc}",

@@ -1,9 +1,16 @@
-"""The CLI has no apply loop of its own.
+"""The CLI has no apply loop of its own, and no driver.
 
 ``MigratorSession`` is the one engine: it takes the lock, plans, verifies
 checksums and applies. A CLI module that imports the lock or the migration
 loaders, or calls the engine's ``apply``/``rollback`` directly, is a second
 loop — the one that ran ``--dry-run-execute`` without a SAVEPOINT.
+
+The same holds one layer down: a command that imports ``psycopg`` or ``pglast``
+is doing ``core``'s work. Twelve ``cli/`` modules imported the driver — to open
+a connection from a DSN, to catch its error class, and three to run SQL of their
+own (a ledger read, a ledger probe, the dry-run row estimates). ``core.connection``
+has ``connect_url`` and ``DatabaseError`` for the first two; the SQL moved to
+``core``.
 """
 
 from __future__ import annotations
@@ -68,3 +75,47 @@ def test_cli_module_has_no_apply_loop(path: Path) -> None:
 
 def test_guard_sees_the_cli_package() -> None:
     assert any(p.name == "up.py" for p in CLI_FILES)
+
+
+#: Drivers and parsers ``cli/`` reaches only through ``core``: a module under ``cli/``
+#: that imports one is doing core's work in a command.
+DRIVERS = {"psycopg", "pglast"}
+
+#: Modules that keep their own driver import, and why.
+DRIVER_EXEMPT = {
+    "coordinate.py": "pgGit: leaves the package for its plugin, which owns its connections",
+}
+
+
+def _driver_imports(path: Path) -> list[str]:
+    tree = ast.parse(path.read_text(), filename=str(path))
+    found: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names = [node.module]
+        else:
+            continue
+        found.extend(
+            f"{path.relative_to(CLI_ROOT).as_posix()}:{node.lineno} imports {name}"
+            for name in names
+            if name.split(".")[0] in DRIVERS
+        )
+    return found
+
+
+def test_cli_imports_no_driver_and_no_parser() -> None:
+    """``psycopg`` and ``pglast`` are ``core``'s: at module level, in a function, or for types."""
+    found = [
+        hit
+        for path in CLI_FILES
+        if path.relative_to(CLI_ROOT).as_posix() not in DRIVER_EXEMPT
+        for hit in _driver_imports(path)
+    ]
+    assert found == [], "\n".join(found)
+
+
+def test_every_driver_exemption_still_imports_one() -> None:
+    for module in DRIVER_EXEMPT:
+        assert _driver_imports(CLI_ROOT / module), f"{module} is exempt but imports none"

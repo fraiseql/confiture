@@ -92,6 +92,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`cli/` imports no database driver and no parser.** Twelve modules imported
+  `psycopg`: to open a connection from a DSN, to catch its error class, and — in
+  three — to run SQL of their own. `core.connection.connect_url(url)` and
+  `core.connection.DatabaseError` serve the first two; the ledger read and probe
+  are `core.ledger.recorded_versions` / `ledger_is_empty`; the `--dry-run` summary
+  of pending migrations moves to `core/dry_run_summary.py` (it was
+  `cli/dry_run_summary.py`). `tests/unit/test_cli_has_no_apply_loop.py` fails on a
+  `psycopg` or `pglast` import anywhere under `cli/`; pgGit's `coordinate` is exempt
+  by reason until it leaves for its plugin.
 - **A JSON report is written once, not wrapped by Rich.** `seed validate`,
   `seed generate`, `seed validate --prep-seed`'s formatter, `migrate up --dry-run`
   and `debug cte` printed their JSON through the Rich console, which wraps a long
