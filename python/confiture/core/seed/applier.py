@@ -133,6 +133,7 @@ class SeedApplier:
         console: Console | None = None,
         copy_format: bool = False,
         copy_threshold: int = 1000,
+        files: list[Path] | None = None,
     ) -> None:
         """Initialize SeedApplier.
 
@@ -140,23 +141,32 @@ class SeedApplier:
             seeds_dir: Path to seeds directory
             env: Environment name (optional, for context)
             connection: Database connection (optional, for sequential execution)
-            console: Rich console for output (optional)
+            console: Where progress is printed. Standard error when omitted:
+                the progress is not the caller's output, and a caller that
+                prints JSON owns standard output.
+            files: The seed files to apply, in the order given, when the caller
+                has already selected them — ``build --sequential`` applies the
+                files the build selected, through its include directories, not
+                a second discovery of its own. ``seeds_dir``'s top-level
+                ``*.sql`` when omitted.
         """
         self.seeds_dir = Path(seeds_dir)
         self.env = env or "local"
         self.connection = connection
-        self.console = console or Console()
+        self.console = console or Console(stderr=True)
         # ``seed apply --copy-format --copy-threshold N``: INSERT files with at
         # least N rows are converted to COPY before execution.
         self.copy_format = copy_format
         self.copy_threshold = copy_threshold
+        self.files = files
 
     def find_seed_files(self, profile: SeedProfile | None = None) -> list[Path]:
         """Discover and return sorted seed files, optionally filtered by *profile*.
 
-        Returns SQL files in sorted order from the (top-level, non-recursive)
-        seeds directory. Non-SQL files are ignored. When *profile* is None the
-        result is byte-identical to the historical apply-all behaviour.
+        Returns the files the caller selected, in its order, or else the SQL
+        files in sorted order from the (top-level, non-recursive) seeds
+        directory. Non-SQL files are ignored. When *profile* is None the result
+        is byte-identical to the historical apply-all behaviour.
 
         Args:
             profile: Optional seed profile selecting an include/exclude subset by
@@ -165,11 +175,13 @@ class SeedApplier:
         Returns:
             List of Path objects for SQL files in sorted order.
         """
-        if not self.seeds_dir.exists():
+        if self.files is not None:
+            sql_files = list(self.files)
+        elif not self.seeds_dir.exists():
             return []
-
-        # Find all .sql files (top-level only — globs match filenames)
-        sql_files = sorted(self.seeds_dir.glob("*.sql"))
+        else:
+            # Find all .sql files (top-level only — globs match filenames)
+            sql_files = sorted(self.seeds_dir.glob("*.sql"))
         if profile is None:
             return sql_files
         return apply_profile_filter(sql_files, profile)
@@ -192,7 +204,9 @@ class SeedApplier:
             profile: Optional seed profile selecting a subset of files
             transaction_mode: ``"savepoint"`` runs every file inside the caller's
                 transaction with a savepoint each (a failure rolls back that file
-                only); ``"transaction"`` commits after each file, so the files
+                only) and leaves the transaction open — committing it is the
+                caller's, as is rolling it back after a failure that stopped the
+                run; ``"transaction"`` commits after each file, so the files
                 before a failure stay applied (``seed.transaction_mode`` in the
                 environment YAML)
 

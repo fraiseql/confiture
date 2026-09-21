@@ -420,6 +420,7 @@ def rebuild(
             connection=migrator.connection,
         )
         seed_result = applier.apply_sequential()
+        migrator.connection.commit()
         seeds_applied = seed_result.succeeded
 
     elapsed_ms = int((time.time() - start_time) * 1000)

@@ -1,12 +1,13 @@
 """Sequential seed application for ``confiture build --sequential``.
 
 Owns the connection for the seed pass — open, apply every seed file in order
-through :class:`~confiture.core.seed.applier.SeedApplier`, close — and reports
+through :class:`~confiture.core.seed.applier.SeedApplier`, commit, close — and reports
 the result; the CLI renders it.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import psycopg
@@ -15,15 +16,13 @@ from confiture.core.seed import applier as _core_seed_applier
 from confiture.exceptions import ConfigurationError, SeedError
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from confiture.config.environment import SeedProfile
     from confiture.core.seed.applier import ApplyResult
 
 
 def apply_seed_files(
     database_url: str | None,
-    seeds_dir: Path,
+    seed_files: list[Path],
     *,
     env: str,
     profile: SeedProfile | None = None,
@@ -31,7 +30,7 @@ def apply_seed_files(
     transaction_mode: str = "savepoint",
     console: Any = None,
 ) -> ApplyResult:
-    """Apply the seed files under *seeds_dir* sequentially against *database_url*.
+    """Apply *seed_files*, in order, sequentially against *database_url*, and commit.
 
     Raises:
         ConfigurationError: ``CONFIG_010`` without a URL, ``CONFIG_006`` when the
@@ -54,11 +53,16 @@ def apply_seed_files(
         ) from e
     try:
         applier = _core_seed_applier.SeedApplier(
-            seeds_dir=seeds_dir, env=env, connection=connection, console=console
+            seeds_dir=seed_files[0].parent if seed_files else Path(),
+            env=env,
+            connection=connection,
+            console=console,
+            files=seed_files,
         )
         result = applier.apply_sequential(
             continue_on_error=continue_on_error, profile=profile, transaction_mode=transaction_mode
         )
+        connection.commit()
     except (ConfigurationError, SeedError):
         raise
     # Reason: seed application runs user SQL; any failure is a SeedError

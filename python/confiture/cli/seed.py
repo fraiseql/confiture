@@ -14,7 +14,7 @@ from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.seed_formatter import format_apply_result
-from confiture.cli.helpers import connect, emit, is_json
+from confiture.cli.helpers import connect, emit, error_console, is_json
 from confiture.cli.options import database_url_option, env_option, format_option, output_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.cli.seed_copy import DEFAULT_SEEDS_DIR, benchmark, convert
@@ -447,7 +447,7 @@ def apply(
     """
     if not sequential:
         console.print("[yellow]ℹ Use --sequential for files with 500+ rows[/yellow]")
-        console.print("[yellow]  confiture seed apply --sequential --env {env}[/yellow]")
+        console.print(f"[yellow]  confiture seed apply --sequential --env {env}[/yellow]")
         raise typer.Exit(SUCCESS)  # success-signal: advisory, nothing applied
 
     # Verify seeds directory exists
@@ -507,7 +507,7 @@ def apply(
             seeds_dir=seeds_dir,
             env=env,
             connection=connection,
-            console=console,
+            console=error_console if is_json(format_type) else console,
             copy_format=copy_format,
             copy_threshold=copy_threshold,
         )
@@ -523,6 +523,9 @@ def apply(
                 profile=seed_profile,
                 transaction_mode=seed_settings.transaction_mode if seed_settings else "savepoint",
             )
+        # Savepoint mode leaves the transaction to its owner, and this command
+        # opened it; transaction mode has already committed file by file.
+        connection.commit()
         result.seed_profile = profile
 
         # Format output

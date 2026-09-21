@@ -184,11 +184,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`seed apply --sequential`, `build --sequential` and `migrate rebuild --seed` leave
+  their rows in the database.** None did. The applier runs every file in its caller's
+  transaction (`seed.transaction_mode: savepoint`, the default) and none of the three
+  callers committed it, so each reported its files applied and closed a connection
+  that rolled them back — while a failed file *did* commit every file before it,
+  because rolling back to its savepoint also committed. Now the savepoint rollback
+  leaves the transaction open and whoever opened the connection commits it: a clean
+  run keeps every file, a failure keeps none, and `--continue-on-error` keeps the
+  files that applied. The library tests each committed for themselves, which is how
+  all three passed; `tests/integration/test_seed_commands_persist.py` and
+  `test_rebuild.py` read the rows back on a connection of their own.
+- **`build --sequential` applies the seed files the build selected.** It pointed the
+  applier at the first seed file's *grandparent* (`db/` for `db/seeds/x.sql`), whose
+  top-level `*.sql` is usually nothing, so it printed "No seed files found" and
+  "Applied 0 seed files". The applier now takes the build's own selection, in the
+  build's order.
+- **A seed pass prints its progress on standard error under `--format json`.**
+  `seed apply --sequential --format json`, `build --sequential --format json` and
+  `migrate rebuild --seed --format json` each printed the applier's per-file lines
+  and summary ahead of the payload on standard output. The applier's own console is
+  standard error unless a caller gives it one.
 - **`migrate fix-signatures` finds a routine by its identity.** It matched
   `CREATE … FUNCTION [schema.]name(` with a regex, so an unqualified definition
   matched a stale overload in any schema; it now asks the inventory, where an
   unqualified name lives in the default schema (#313). The statement it executes is
   still the author's text.
+- **`seed apply` without `--sequential` names the environment in its hint.** It
+  printed `--env {env}`.
 - **`confiture init`'s `local.yaml` names `confiture install-helpers`.** It said
   `confiture admin install-helpers`, a command that does not exist.
 - ⚠️ **`seed generate --env` is `--seed-env`.** It never named an environment: it

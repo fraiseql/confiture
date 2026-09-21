@@ -566,12 +566,12 @@ def _apply_seeds_sequentially(
     try:
         result = apply_seed_files(
             database_url or builder.env_config.database_url,
-            seed_files[0].parent.parent,
+            seed_files,
             env=env,
             profile=profile,
             continue_on_error=continue_on_error,
             transaction_mode=transaction_mode,
-            console=console,
+            console=out,
         )
     except ConfiturError as e:
         fail(e, json_mode=json_mode, output_file=report_output)
