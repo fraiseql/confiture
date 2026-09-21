@@ -3,6 +3,7 @@ validate-config."""
 
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -129,6 +130,40 @@ def _checksum_payload(
     return payload
 
 
+_VIEW_HELPERS = (
+    "confiture.save_and_drop_dependent_views(schemas TEXT[])",
+    "confiture.recreate_saved_views()",
+)
+
+
+def _install_view_helpers(conn: Any, *, dry_run: bool, force: bool) -> dict[str, Any]:
+    """Install the view helpers on *conn* (or not), and say which of three things happened."""
+    payload: dict[str, Any] = {"schema": "confiture", "functions": list(_VIEW_HELPERS)}
+    if dry_run:
+        sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
+        return {"status": "dry_run", **payload, "sql": sql}
+    vm = ViewManager(conn)
+    if not force and vm.helpers_installed():
+        return {"status": "already_installed", **payload}
+    vm.install_helpers()
+    return {"status": "installed", **payload}
+
+
+def _print_install_outcome(outcome: dict[str, Any]) -> None:
+    if outcome["status"] == "dry_run":
+        console.print("[bold]SQL that would be executed:[/bold]\n")
+        console.print(outcome["sql"])
+    elif outcome["status"] == "already_installed":
+        console.print("[green]✓[/green] View helpers already installed — nothing to do")
+        console.print("  Use [bold]--force[/bold] to reinstall")
+    else:
+        console.print("[green]✓[/green] Installed confiture view helper functions")
+        console.print("  Schema: [bold]confiture[/bold]")
+        console.print("  Functions:")
+        for function in outcome["functions"]:
+            console.print(f"    • {function}")
+
+
 @cli_boundary
 def install_helpers(
     config: Path = typer.Option(
@@ -153,6 +188,7 @@ def install_helpers(
         "--force",
         help="Reinstall even if already installed",
     ),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Install confiture SQL helper functions in the target database.
 
@@ -165,6 +201,7 @@ def install_helpers(
     public for that role — so unqualified CREATE statements start landing in it.
     Schema-qualify your DDL, or pin `search_path` on that role.
     """
+    json_mode = is_json(format_output)
     try:
         if config:
             cfg = _core_connection.load_config(config)
@@ -173,30 +210,76 @@ def install_helpers(
             cfg = {"database": {"url": environment.database_url}}
 
         with open_connection(cfg) as conn:
-            if dry_run:
-                sql = resources.files("confiture.sql").joinpath("view_helpers.sql").read_text()
-                console.print("[bold]SQL that would be executed:[/bold]\n")
-                console.print(sql)
-                return
-
-            vm = ViewManager(conn)
-
-            if not force and vm.helpers_installed():
-                console.print("[green]✓[/green] View helpers already installed — nothing to do")
-                console.print("  Use [bold]--force[/bold] to reinstall")
-                return
-
-            vm.install_helpers()
-
-        console.print("[green]✓[/green] Installed confiture view helper functions")
-        console.print("  Schema: [bold]confiture[/bold]")
-        console.print("  Functions:")
-        console.print("    • confiture.save_and_drop_dependent_views(schemas TEXT[])")
-        console.print("    • confiture.recreate_saved_views()")
-
+            outcome = _install_view_helpers(conn, dry_run=dry_run, force=force)
     # Reason: legacy text command: any failure maps to its exit code; the boundary has already printed it
     except Exception as e:
+        if json_mode:
+            fail(e, json_mode=True)
         raise typer.Exit(handle_cli_error(e)) from e
+
+    if json_mode:
+        emit(outcome)
+    else:
+        _print_install_outcome(outcome)
+
+
+def _profile_summary(path: Path, profile: Any) -> dict[str, Any]:
+    """What ``validate-profile --format json`` reports: the profile's shape, never a seed.
+
+    A seed is the key to an anonymization's pseudonyms, so the payload says
+    whether one is set and not what it is; a strategy's ``seed_env_var`` names a
+    variable, not its value.
+    """
+    return {
+        "valid": True,
+        "path": str(path),
+        "name": profile.name,
+        "version": profile.version,
+        "has_global_seed": profile.global_seed is not None,
+        "strategies": {
+            name: {"type": strategy.type, "seed_env_var": strategy.seed_env_var}
+            for name, strategy in profile.strategies.items()
+        },
+        "tables": {
+            name: [
+                {
+                    "column": rule.column,
+                    "strategy": rule.strategy,
+                    "has_seed": rule.seed is not None,
+                }
+                for rule in table.rules
+            ]
+            for name, table in profile.tables.items()
+        },
+    }
+
+
+def _print_profile(profile: Any) -> None:
+    console.print("[green]✅ Valid profile![/green]")
+    console.print(f"   Name: {profile.name}")
+    console.print(f"   Version: {profile.version}")
+    if profile.global_seed:
+        console.print(f"   Global Seed: {profile.global_seed}")
+
+    console.print(f"\n[cyan]Strategies ({len(profile.strategies)})[/cyan]:")
+    for strategy_name, strategy_def in profile.strategies.items():
+        console.print(f"   • {strategy_name}: {strategy_def.type}", end="")
+        if strategy_def.seed_env_var:
+            console.print(f" [env: {strategy_def.seed_env_var}]")
+        else:
+            console.print()
+
+    console.print(f"\n[cyan]Tables ({len(profile.tables)})[/cyan]:")
+    for table_name, table_def in profile.tables.items():
+        console.print(f"   • {table_name}: {len(table_def.rules)} rules")
+        for rule in table_def.rules:
+            console.print(f"      - {rule.column} → {rule.strategy}", end="")
+            if rule.seed:
+                console.print(f" [seed: {rule.seed}]")
+            else:
+                console.print()
+
+    console.print("[green]\n✅ Profile validation passed![/green]")
 
 
 @cli_boundary
@@ -205,6 +288,7 @@ def validate_profile(
         ...,
         help="Path to anonymization profile YAML file",
     ),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Validate anonymization profile YAML structure and schema.
 
@@ -217,45 +301,14 @@ def validate_profile(
     Example:
         confiture validate-profile db/profiles/production.yaml
     """
+    json_mode = is_json(format_output)
     try:
         # Reason: CLI start-up: importing confiture.core.anonymization.profile costs ~14 ms at start (importtime, 2026-09-07); deferred until the command runs
         from confiture.core.anonymization.profile import AnonymizationProfile
 
-        console.print(f"[cyan]📋 Validating profile: {path}[/cyan]")
+        if not json_mode:
+            console.print(f"[cyan]📋 Validating profile: {path}[/cyan]")
         profile = AnonymizationProfile.load(path)
-
-        # Print profile summary
-        console.print("[green]✅ Valid profile![/green]")
-        console.print(f"   Name: {profile.name}")
-        console.print(f"   Version: {profile.version}")
-        if profile.global_seed:
-            console.print(f"   Global Seed: {profile.global_seed}")
-
-        # List strategies
-        console.print(f"\n[cyan]Strategies ({len(profile.strategies)})[/cyan]:")
-        for strategy_name, strategy_def in profile.strategies.items():
-            console.print(
-                f"   • {strategy_name}: {strategy_def.type}",
-                end="",
-            )
-            if strategy_def.seed_env_var:
-                console.print(f" [env: {strategy_def.seed_env_var}]")
-            else:
-                console.print()
-
-        # List tables
-        console.print(f"\n[cyan]Tables ({len(profile.tables)})[/cyan]:")
-        for table_name, table_def in profile.tables.items():
-            console.print(f"   • {table_name}: {len(table_def.rules)} rules")
-            for rule in table_def.rules:
-                console.print(f"      - {rule.column} → {rule.strategy}", end="")
-                if rule.seed:
-                    console.print(f" [seed: {rule.seed}]")
-                else:
-                    console.print()
-
-        console.print("[green]\n✅ Profile validation passed![/green]")
-
     except FileNotFoundError as e:
         fail(
             ConfigurationError(
@@ -263,13 +316,17 @@ def validate_profile(
                 error_code="CONFIG_004",
                 resolution_hint="Check the path to the anonymization profile YAML.",
             ),
-            json_mode=False,
+            json_mode=json_mode,
         )
     except ValueError as e:
         fail(
             ConfiturError(f"Invalid profile: {e}", error_code="ANON_1400"),
-            json_mode=False,
+            json_mode=json_mode,
         )
+    if json_mode:
+        emit(_profile_summary(path, profile))
+    else:
+        _print_profile(profile)
 
 
 def _report_absent_ledger(

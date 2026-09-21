@@ -2836,6 +2836,7 @@ confiture migrate baseline [OPTIONS]
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
 | `--dry-run` | - | Flag | off | Show what would be marked without making changes (default: off) |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate baseline -->
 
@@ -2959,6 +2960,7 @@ confiture migrate reinit [OPTIONS]
 | `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
 | `--dry-run` | - | Flag | off | Show what would happen without making changes (default: off) |
 | `--yes` | `-y` | Flag | off | Skip confirmation prompt |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate reinit -->
 
@@ -4008,6 +4010,7 @@ confiture install-helpers [OPTIONS]
 | `--env` | `-e` | str | `local` | Environment name (default: local) |
 | `--dry-run` | - | Flag | off | Show SQL without executing |
 | `--force` | - | Flag | off | Reinstall even if already installed |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture install-helpers -->
 
@@ -4309,6 +4312,12 @@ confiture validate-profile [OPTIONS] {path}
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `path` | path | yes | Path to anonymization profile YAML file |
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture validate-profile -->
 

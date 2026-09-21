@@ -6,12 +6,20 @@ Split out of the monolithic migrate command modules.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import _get_tracking_table, console, open_connection
+from confiture.cli.helpers import (
+    _get_tracking_table,
+    console,
+    emit,
+    is_json,
+    open_connection,
+    redact_url,
+)
+from confiture.cli.options import format_option
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.migrator import (
@@ -31,12 +39,11 @@ def _baseline_from_db_flow(
     migrations_dir: Path,
     config: Path,
     dry_run: bool,
-) -> None:
-    """Drive the ``--from-db`` copy path.
+) -> dict[str, Any]:
+    """Drive the ``--from-db`` copy path and return what it copied (#119).
 
-    Connects to the target database via the standard config flow,
-    delegates to :meth:`Migrator.baseline_from_db`, and renders the
-    resulting report to the operator.  Issue #119.
+    Connects to the target database via the standard config flow and
+    delegates to :meth:`Migrator.baseline_from_db`.
     """
 
     config_data = _core_connection.load_config(config)
@@ -46,14 +53,6 @@ def _baseline_from_db_flow(
             migration_table=_get_tracking_table(config_data),
         )
         migrator.initialize()
-
-        if through is not None:
-            console.print(
-                "[yellow]⚠️  --through with --from-db caps the copy at "
-                f"version {through!r}; source rows above the cap will be "
-                "skipped.[/yellow]"
-            )
-
         report = migrator.baseline_from_db(
             source_dsn=from_db,
             migrations_dir=migrations_dir,
@@ -61,36 +60,44 @@ def _baseline_from_db_flow(
             dry_run=dry_run,
             source_table=source_table,
         )
+    # The source DSN is printed and emitted, so never with its password.
+    return {"mode": "from_db", "source": redact_url(from_db), "through": through, **report}
 
-        for warning in report["warnings"]:
-            console.print(f"[yellow]⚠️  {warning}[/yellow]")
 
-        if dry_run:
-            console.print("\n[yellow]🔍 DRY RUN - no changes will be made[/yellow]")
+def _print_from_db(report: dict[str, Any]) -> None:
+    dry_run = report["dry_run"]
+    if report["through"] is not None:
+        console.print(
+            "[yellow]⚠️  --through with --from-db caps the copy at "
+            f"version {report['through']!r}; source rows above the cap will be "
+            "skipped.[/yellow]"
+        )
+    for warning in report["warnings"]:
+        console.print(f"[yellow]⚠️  {warning}[/yellow]")
+    if dry_run:
+        console.print("\n[yellow]🔍 DRY RUN - no changes will be made[/yellow]")
 
-        copied = report["copied"]
-        skipped = report["skipped"]
+    copied = report["copied"]
+    skipped = report["skipped"]
+    if not copied and not skipped:
+        console.print("\n[yellow]No rows to copy.[/yellow]")
+    else:
+        console.print(f"\n[cyan]📋 Baseline from {report['source']}[/cyan]\n")
+        for row in copied:
+            marker = "would copy" if dry_run else "copied"
+            console.print(f"  [green]✅ {row['version']} {row['name']} ({marker})[/green]")
+        for version in skipped:
+            console.print(f"  [dim]⏭️  {version} (already applied on target)[/dim]")
 
-        if not copied and not skipped:
-            console.print("\n[yellow]No rows to copy.[/yellow]")
-        else:
-            console.print(f"\n[cyan]📋 Baseline from {from_db}[/cyan]\n")
-            for row in copied:
-                marker = "would copy" if dry_run else "copied"
-                console.print(f"  [green]✅ {row['version']} {row['name']} ({marker})[/green]")
-            for version in skipped:
-                console.print(f"  [dim]⏭️  {version} (already applied on target)[/dim]")
-
-        if dry_run:
-            console.print(
-                f"\n[cyan]📊 Would copy {len(copied)} row(s); "
-                f"{len(skipped)} already applied.[/cyan]"
-            )
-            console.print("[yellow]Run without --dry-run to apply changes.[/yellow]")
-        else:
-            console.print(
-                f"\n[green]✅ Copied {len(copied)} row(s); {len(skipped)} already applied.[/green]"
-            )
+    if dry_run:
+        console.print(
+            f"\n[cyan]📊 Would copy {len(copied)} row(s); {len(skipped)} already applied.[/cyan]"
+        )
+        console.print("[yellow]Run without --dry-run to apply changes.[/yellow]")
+    else:
+        console.print(
+            f"\n[green]✅ Copied {len(copied)} row(s); {len(skipped)} already applied.[/green]"
+        )
 
 
 ThroughOpt = Annotated[
@@ -142,6 +149,7 @@ def migrate_baseline(
     migrations_dir: MigrationsDirOpt = Path("db/migrations"),
     config: ConfigOpt = Path("db/environments/local.yaml"),
     dry_run: DryRunOpt = False,
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Mark migrations as applied without running them.
 
@@ -174,35 +182,11 @@ def migrate_baseline(
       confiture migrate diff     - Compare schema versions
     """
 
-    if through is None and from_db is None:
-        fail(
-            ConfigurationError(
-                "Missing required option. Pass either --through <version> or --from-db <DSN>.",
-            ),
-            json_mode=False,
-        )
-
-    if not config.exists():
-        fail(
-            ConfigurationError(
-                f"Config file not found: {config}",
-                error_code="CONFIG_004",
-                resolution_hint="Specify config with --config path/to/config.yaml.",
-            ),
-            json_mode=False,
-        )
-
-    if not migrations_dir.exists():
-        fail(
-            ConfigurationError(
-                f"Migrations directory not found: {migrations_dir}",
-                error_code="CONFIG_004",
-            ),
-            json_mode=False,
-        )
+    json_mode = is_json(format_output)
+    _baseline_preconditions(through, from_db, config, migrations_dir, json_mode=json_mode)
 
     if from_db is not None:
-        _baseline_from_db_flow(
+        report = _baseline_from_db_flow(
             from_db=from_db,
             through=through,
             source_table=source_table,
@@ -210,110 +194,161 @@ def migrate_baseline(
             config=config,
             dry_run=dry_run,
         )
+        if json_mode:
+            emit(report)
+        else:
+            _print_from_db(report)
         return
 
-    _refuse_duplicate_baseline(migrations_dir)
+    _refuse_duplicate_baseline(migrations_dir, json_mode=json_mode)
+    assert through is not None  # _baseline_preconditions: --through or --from-db
+    report = _mark_through(through, migrations_dir, config, dry_run=dry_run, json_mode=json_mode)
+    if json_mode:
+        emit(report)
+    else:
+        _print_marked(report)
 
-    # Load config and create connection
+
+def _baseline_preconditions(
+    through: str | None, from_db: str | None, config: Path, migrations_dir: Path, *, json_mode: bool
+) -> None:
+    """One of --through / --from-db, a config file and a migrations directory — before any DB work."""
+    if through is None and from_db is None:
+        fail(
+            ConfigurationError(
+                "Missing required option. Pass either --through <version> or --from-db <DSN>.",
+            ),
+            json_mode=json_mode,
+        )
+    if not config.exists():
+        fail(
+            ConfigurationError(
+                f"Config file not found: {config}",
+                error_code="CONFIG_004",
+                resolution_hint="Specify config with --config path/to/config.yaml.",
+            ),
+            json_mode=json_mode,
+        )
+    if not migrations_dir.exists():
+        fail(
+            ConfigurationError(
+                f"Migrations directory not found: {migrations_dir}",
+                error_code="CONFIG_004",
+            ),
+            json_mode=json_mode,
+        )
+
+
+def _mark_through(
+    through: str, migrations_dir: Path, config: Path, *, dry_run: bool, json_mode: bool
+) -> dict[str, Any]:
+    """Mark every migration up to and including *through* as applied; say what each became."""
     config_data = _core_connection.load_config(config)
     with open_connection(config_data) as conn:
         migrator = _core_migrator.Migrator(
             connection=conn, migration_table=_get_tracking_table(config_data)
         )
         migrator.initialize()
-
-        # Find all migration files
         all_migrations = migrator.find_migration_files(migrations_dir)
-
-        if not all_migrations:
-            console.print("[yellow]No migrations found.[/yellow]")
-            return
-
-        # Filter migrations up to and including the target version
-        migrations_to_mark: list[Path] = []
-        for migration_file in all_migrations:
-            version = parse_migration_filename(migration_file.name)[0]
-            migrations_to_mark.append(migration_file)
-            if version == through:
-                break
-        else:
-            # Target version not found
-            console.print("[yellow]Available versions:[/yellow]")
-            for mf in all_migrations[:10]:
-                v = parse_migration_filename(mf.name)[0]
-                console.print(f"  • {v}")
-            if len(all_migrations) > 10:
-                console.print(f"  ... and {len(all_migrations) - 10} more")
-            fail(
-                MigrationError(
-                    f"Migration version '{through}' not found",
-                    version=through,
-                    error_code="MIGR_100",
-                ),
-                json_mode=False,
-            )
-
-        # Get already applied versions
+        to_mark = _migrations_through(all_migrations, through, json_mode=json_mode)
         applied_versions = set(migrator.get_applied_versions())
 
-        # Show what will be done
-        console.print(f"\n[cyan]📋 Baseline: marking migrations through {through}[/cyan]\n")
-
-        if dry_run:
-            console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
-
-        marked_count = 0
-        skipped_count = 0
-
-        for migration_file in migrations_to_mark:
-            version = parse_migration_filename(migration_file.name)[0]
-            # Extract name
-            _, name = parse_migration_filename(migration_file.name)
-
+        migrations: list[dict[str, str]] = []
+        for migration_file in to_mark:
+            version, name = parse_migration_filename(migration_file.name)
             if version in applied_versions:
-                console.print(f"  [dim]⏭️  {version} {name} (already applied)[/dim]")
-                skipped_count += 1
+                status = "already_applied"
+            elif dry_run:
+                status = "would_mark"
             else:
-                if dry_run:
-                    console.print(f"  [cyan]📝 {version} {name} (would mark as applied)[/cyan]")
-                else:
-                    migrator.mark_applied(migration_file, reason="baseline")
-                    console.print(f"  [green]✅ {version} {name} (marked as applied)[/green]")
-                marked_count += 1
+                migrator.mark_applied(migration_file, reason="baseline")
+                status = "marked"
+            migrations.append({"version": version, "name": name, "status": status})
 
-        # Summary
-        console.print()
-        if dry_run:
-            console.print(
-                f"[cyan]📊 Would mark {marked_count} migration(s), "
-                f"skip {skipped_count} already applied[/cyan]"
-            )
-            console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
-        else:
-            console.print(
-                f"[green]✅ Marked {marked_count} migration(s) as applied, "
-                f"skipped {skipped_count} already applied[/green]"
-            )
+    skipped = sum(1 for m in migrations if m["status"] == "already_applied")
+    return {
+        "mode": "through",
+        "through": through,
+        "dry_run": dry_run,
+        "migrations": migrations,
+        "marked_count": len(migrations) - skipped,
+        "skipped_count": skipped,
+    }
 
 
-def _refuse_duplicate_baseline(migrations_dir: Path) -> None:
+def _migrations_through(all_migrations: list[Path], through: str, *, json_mode: bool) -> list[Path]:
+    """The files up to and including *through*; none when there are none; else MIGR_100."""
+    if not all_migrations:
+        return []
+    for index, migration_file in enumerate(all_migrations):
+        if parse_migration_filename(migration_file.name)[0] == through:
+            return all_migrations[: index + 1]
+    if not json_mode:
+        console.print("[yellow]Available versions:[/yellow]")
+        for mf in all_migrations[:10]:
+            console.print(f"  • {parse_migration_filename(mf.name)[0]}")
+        if len(all_migrations) > 10:
+            console.print(f"  ... and {len(all_migrations) - 10} more")
+    fail(
+        MigrationError(
+            f"Migration version '{through}' not found",
+            version=through,
+            error_code="MIGR_100",
+        ),
+        json_mode=json_mode,
+    )
+
+
+_MARKS = {
+    "already_applied": "[dim]⏭️  {version} {name} (already applied)[/dim]",
+    "would_mark": "[cyan]📝 {version} {name} (would mark as applied)[/cyan]",
+    "marked": "[green]✅ {version} {name} (marked as applied)[/green]",
+}
+
+
+def _print_marked(report: dict[str, Any]) -> None:
+    if not report["migrations"]:
+        console.print("[yellow]No migrations found.[/yellow]")
+        return
+    console.print(f"\n[cyan]📋 Baseline: marking migrations through {report['through']}[/cyan]\n")
+    if report["dry_run"]:
+        console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
+    for migration in report["migrations"]:
+        console.print(f"  {_MARKS[migration['status']].format(**migration)}")
+
+    console.print()
+    marked, skipped = report["marked_count"], report["skipped_count"]
+    if report["dry_run"]:
+        console.print(
+            f"[cyan]📊 Would mark {marked} migration(s), skip {skipped} already applied[/cyan]"
+        )
+        console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
+    else:
+        console.print(
+            f"[green]✅ Marked {marked} migration(s) as applied, "
+            f"skipped {skipped} already applied[/green]"
+        )
+
+
+def _refuse_duplicate_baseline(migrations_dir: Path, *, json_mode: bool) -> None:
     """Duplicate migration versions are a hard block (no DB needed)."""
 
     duplicates = _baseline_find(migrations_dir)
     if not duplicates:
         return
-    console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
-    console.print("[red]Multiple migration files share the same version number:[/red]\n")
-    for version, files in sorted(duplicates.items()):
-        console.print(f"  Version {version}:")
-        for f in files:
-            console.print(f"    • {f.name}")
-    console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
-    console.print("[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]")
+    if not json_mode:
+        console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
+        console.print("[red]Multiple migration files share the same version number:[/red]\n")
+        for version, files in sorted(duplicates.items()):
+            console.print(f"  Version {version}:")
+            for f in files:
+                console.print(f"    • {f.name}")
+        console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+        console.print("[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]")
     fail(
         MigrationError(
             "Duplicate migration versions detected — refusing to proceed.",
             error_code="MIGR_106",
         ),
-        json_mode=False,
+        json_mode=json_mode,
     )

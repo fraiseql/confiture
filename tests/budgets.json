@@ -31,7 +31,6 @@
   },
   "too_many_branches": {
     "python/confiture/cli/commands/debug.py": 1,
-    "python/confiture/cli/commands/migrate/baseline.py": 1,
     "python/confiture/cli/commands/migrate/introspect.py": 1
   },
   "too_many_statements": {

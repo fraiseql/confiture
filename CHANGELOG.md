@@ -17,9 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Every command's JSON carries one envelope: `ok`, `command` and `parser`.** The
-  error path has been one writer since #145; the success path was 33 `json.dumps(`
-  sites in 18 modules, each choosing its indentation, its stream and whether to name
-  the parser. `cli/helpers.emit` is the one writer now. It adds `ok: true` (the command
+  error path has been one writer since #145; the success path was 33 writers in 16
+  modules, each choosing its indentation, its stream and whether to name the parser. `cli/helpers.emit` is the one writer now. It adds `ok: true` (the command
   produced its report — what the report *found* stays in its own fields, and a payload
   that already carries an `ok`, as `migrate preflight`, `migrate verify` and
   `verify-checksums` do, keeps its own), `command` (`migrate up`, `lint`) and
@@ -37,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/unit/json_schemas/test_envelope_is_declared.py` holds that. The model goldens
   (`diff`, `drift`, `routines`) are refreshed for the three added keys and nothing
   else.
+- **Every command answers in JSON, or says why it cannot.** `install-helpers`,
+  `validate-profile`, `migrate baseline` and `migrate reinit` gain `--format json`.
+  `validate-profile` reports a profile's shape and whether a seed is set, never the
+  seed. `migrate reinit --format json` asks nothing, so it needs `--yes` or
+  `--dry-run` and refuses (exit 5) without one. `tests/unit/test_every_command_speaks_json.py`
+  walks the live command tree and fails on a command with neither `--json` nor a
+  `--format` that offers `json`. The exceptions each state their reason: `init`,
+  `mcp` and `restore` are interactive or long-running; `seed convert`,
+  `generate pgtap`, `generate stubs` and `hooks test` write their artifact to stdout;
+  pgGit's commands leave for their plugin. `seed benchmark` is exempt too because its
+  figures are a fixed 10:1 ratio over line counts, not measurements (tracked in #346).
 
 ### Changed
 
@@ -108,6 +118,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`migrate baseline --from-db` no longer prints the source DSN's password.** The
+  "Baseline from …" line printed the DSN as given; it is redacted now, as every other
+  printed URL is.
 - **`--dry-run-execute` stops where `up` stops.** The copied loop never looked at
   `requires_superuser`, so the rehearsal ran a migration the real run halts before, and
   never named the `migrate apply-as` the real run asks for. It halts at it, reports it
