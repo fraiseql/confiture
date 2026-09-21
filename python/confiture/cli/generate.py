@@ -372,7 +372,9 @@ def generate_pgtap(
     sql = pgtap_file.render()
 
     if output is None:
-        console.print(sql)
+        # The artifact itself, raw: Rich wraps at the terminal width and reads
+        # `[…]` as markup, which broke the SQL a pipe received.
+        typer.echo(sql, nl=False)
     else:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(sql)
@@ -412,7 +414,7 @@ def generate_stubs(
     code = stub_file.render(output_format=output_format)
 
     if output is None:
-        console.print(code)
+        typer.echo(code, nl=False)
     else:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(code)

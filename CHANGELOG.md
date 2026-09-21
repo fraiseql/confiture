@@ -252,6 +252,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`migrate schema-to-schema setup` points the foreign server where `--source`
+  points.** It always created it at `localhost:5432` with an empty password, so a
+  source on another host was silently read from whatever database of that name the
+  *target's* host held. Host, port, database, user and password are now the source
+  connection's. Four further schema-to-schema defects found alongside are #359.
+- **`generate pgtap` and `generate stubs` print their artifact raw.** Without `-o` they
+  printed through Rich, which wrapped the header at the terminal width and read
+  `[str]` as markup, so a pipe got SQL that did not parse and Python that did not
+  compile. Six further defects in these and neighbouring commands are #360; five in
+  `lint-unified` are #358.
+- **Every command confiture ships is run by its command line against a database.**
+  `tests/unit/test_every_command_has_an_integration_test.py` (82 → 58 leaves as pgGit
+  left and three commands went) and `tests/unit/test_no_orphan_modules.py` are guards
+  now, not maps: the last 20 commands gained argv tests — schema-to-schema's six,
+  `test-db`'s five, `generate pgtap`/`stubs`, `introspect`, `seed generate`/`convert`,
+  `validate-profile`, `migrate verify-checksums`, `hooks test`, `lint-unified` — and the
+  defects they found that are not fixed here are strict `xfail`s naming their issue.
 - **`seed apply`, `build --sequential` and `migrate rebuild --seed` leave their rows in
   the database.** None did. The applier runs every file in its caller's
   transaction (`seed.transaction_mode: savepoint`, the default) and none of the three

@@ -18,8 +18,6 @@ from confiture.exceptions import MigrationError
 # Constants for FDW configuration
 DEFAULT_FOREIGN_SCHEMA_NAME = "old_schema"
 DEFAULT_SERVER_NAME = "confiture_source_server"
-DEFAULT_HOST = "localhost"
-DEFAULT_PORT = "5432"
 
 # Constants for migration strategy
 LARGE_TABLE_THRESHOLD = 10_000_000  # 10M rows
@@ -59,17 +57,26 @@ class SchemaToSchemaMigrator:
         self.foreign_schema_name = foreign_schema_name
         self.server_name = server_name
 
-    def _get_connection_params(self) -> tuple[str, str]:
-        """Extract database connection parameters from source connection.
+    def _get_connection_params(self) -> dict[str, str]:
+        """Where the source database is, as the source connection reached it.
+
+        Host, port and password are the connection's, not defaults: the foreign
+        server was always ``localhost:5432`` with an empty password, so a source
+        anywhere else was silently read from whatever database of that name the
+        *target's* host held.
 
         Returns:
-            Tuple of (dbname, user)
+            ``host``, ``port``, ``dbname``, ``user`` and ``password`` (empty when
+            the connection used none)
         """
-        source_info = self.source_connection.info
-        source_params = source_info.get_parameters()
-        dbname = source_params.get("dbname", "postgres")
-        user = source_params.get("user", "postgres")
-        return dbname, user
+        info = self.source_connection.info
+        return {
+            "host": info.host,
+            "port": str(info.port),
+            "dbname": info.dbname,
+            "user": info.user,
+            "password": info.password or "",
+        }
 
     def _create_fdw_extension(self, cursor: psycopg.Cursor) -> None:
         """Create postgres_fdw extension if not exists.
@@ -79,12 +86,12 @@ class SchemaToSchemaMigrator:
         """
         cursor.execute("CREATE EXTENSION IF NOT EXISTS postgres_fdw")
 
-    def _create_foreign_server(self, cursor: psycopg.Cursor, dbname: str) -> None:
+    def _create_foreign_server(self, cursor: psycopg.Cursor, params: dict[str, str]) -> None:
         """Create foreign server pointing to source database.
 
         Args:
             cursor: Database cursor
-            dbname: Source database name
+            params: The source's connection parameters (:meth:`_get_connection_params`)
         """
         cursor.execute(
             sql.SQL("""
@@ -97,18 +104,18 @@ class SchemaToSchemaMigrator:
                 )
             """).format(
                 server=sql.Identifier(self.server_name),
-                host=sql.Literal(DEFAULT_HOST),
-                dbname=sql.Literal(dbname),
-                port=sql.Literal(DEFAULT_PORT),
+                host=sql.Literal(params["host"]),
+                dbname=sql.Literal(params["dbname"]),
+                port=sql.Literal(params["port"]),
             )
         )
 
-    def _create_user_mapping(self, cursor: psycopg.Cursor, user: str) -> None:
+    def _create_user_mapping(self, cursor: psycopg.Cursor, params: dict[str, str]) -> None:
         """Create user mapping for foreign server authentication.
 
         Args:
             cursor: Database cursor
-            user: Source database user
+            params: The source's connection parameters (:meth:`_get_connection_params`)
         """
         cursor.execute(
             sql.SQL("""
@@ -116,9 +123,13 @@ class SchemaToSchemaMigrator:
                 SERVER {server}
                 OPTIONS (
                     user {user},
-                    password ''
+                    password {password}
                 )
-            """).format(server=sql.Identifier(self.server_name), user=sql.Literal(user))
+            """).format(
+                server=sql.Identifier(self.server_name),
+                user=sql.Literal(params["user"]),
+                password=sql.Literal(params["password"]),
+            )
         )
 
     def _create_foreign_schema(self, cursor: psycopg.Cursor) -> None:
@@ -168,13 +179,12 @@ class SchemaToSchemaMigrator:
         """
         try:
             with self.target_connection.cursor() as cursor:
-                # Get connection parameters
-                dbname, user = self._get_connection_params()
+                params = self._get_connection_params()
 
                 # Setup FDW infrastructure
                 self._create_fdw_extension(cursor)
-                self._create_foreign_server(cursor, dbname)
-                self._create_user_mapping(cursor, user)
+                self._create_foreign_server(cursor, params)
+                self._create_user_mapping(cursor, params)
                 self._create_foreign_schema(cursor)
 
                 # Import schema if requested

@@ -67,42 +67,35 @@ class TestMigratorInitialization:
 
 
 class TestConnectionParams:
-    """Test connection parameter extraction."""
+    """The foreign server is where the source connection went."""
 
-    def test_get_connection_params_extracts_dbname_and_user(self):
-        """Test extracting dbname and user from connection."""
+    def test_the_source_connections_own_parameters(self):
         source_conn = Mock()
-        target_conn = Mock()
+        source_conn.info = Mock(
+            host="db.example.internal",
+            port=6543,
+            dbname="production_db",
+            user="postgres_user",
+            password="s3cret",
+        )
 
-        # Mock connection info
-        mock_info = Mock()
-        mock_info.get_parameters.return_value = {
+        migrator = SchemaToSchemaMigrator(source_conn, Mock())
+
+        assert migrator._get_connection_params() == {
+            "host": "db.example.internal",
+            "port": "6543",
             "dbname": "production_db",
             "user": "postgres_user",
+            "password": "s3cret",
         }
-        source_conn.info = mock_info
 
-        migrator = SchemaToSchemaMigrator(source_conn, target_conn)
-        dbname, user = migrator._get_connection_params()
-
-        assert dbname == "production_db"
-        assert user == "postgres_user"
-
-    def test_get_connection_params_defaults(self):
-        """Test default values when params not available."""
+    def test_no_password_is_an_empty_one(self):
         source_conn = Mock()
-        target_conn = Mock()
+        source_conn.info = Mock(host="h", port=5432, dbname="d", user="u", password=None)
 
-        # Mock connection info with missing params
-        mock_info = Mock()
-        mock_info.get_parameters.return_value = {}
-        source_conn.info = mock_info
-
-        migrator = SchemaToSchemaMigrator(source_conn, target_conn)
-        dbname, user = migrator._get_connection_params()
-
-        assert dbname == "postgres"
-        assert user == "postgres"
+        assert (
+            SchemaToSchemaMigrator(source_conn, Mock())._get_connection_params()["password"] == ""
+        )
 
 
 class TestMigrateTableValidation:
