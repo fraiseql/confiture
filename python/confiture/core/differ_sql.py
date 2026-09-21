@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from confiture.core.ddl_objects import TABLE_SCOPED_KINDS
@@ -9,17 +10,31 @@ from confiture.exceptions import UnsafeOperationError
 from confiture.models.schema import SchemaChange
 
 
-def _format_column(col: dict[str, Any]) -> str:
-    name = col["name"]
-    col_type = col.get("type", "text")
-    nullable = col.get("nullable", True)
-    default = col.get("default")
-    parts = [f"{name} {col_type}"]
-    if not nullable:
+def column_body(col: Mapping[str, Any]) -> str:
+    """The text after a column's name: ``BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY``.
+
+    One clause, every place a column is written — a ``CREATE TABLE`` element, an
+    ``ADD COLUMN``, the declaration a dropped column's change carries. Three
+    renderings of it drifted apart once already: the generator substituted
+    ``text`` for every added column's type. An identity column and a generated
+    one are written as the schema declared them; without that the generated
+    table held a plain column where the schema held a sequence or an expression.
+    """
+    parts = [str(col.get("type") or "text")]
+    if not col.get("nullable", True):
         parts.append("NOT NULL")
-    if default is not None:
-        parts.append(f"DEFAULT {default}")
+    if col.get("default") is not None:
+        parts.append(f"DEFAULT {col['default']}")
+    if col.get("generated") is not None:
+        held = "VIRTUAL" if col.get("generated_kind") == "virtual" else "STORED"
+        parts.append(f"GENERATED ALWAYS AS ({col['generated']}) {held}")
+    if col.get("identity"):
+        parts.append(f"GENERATED {str(col['identity']).upper()} AS IDENTITY")
     return " ".join(parts)
+
+
+def _format_column(col: Mapping[str, Any]) -> str:
+    return f"{col['name']} {column_body(col)}"
 
 
 def _unnamed(change: SchemaChange, what: str) -> str:
@@ -79,12 +94,7 @@ def _column_body(change: SchemaChange, declared: str | None) -> str | None:
     """
     details = change.details or {}
     if details.get("type"):
-        parts = [str(details["type"])]
-        if not details.get("nullable", True):
-            parts.append("NOT NULL")
-        if details.get("default") is not None:
-            parts.append(f"DEFAULT {details['default']}")
-        return " ".join(parts)
+        return column_body(details)
     return declared or None
 
 

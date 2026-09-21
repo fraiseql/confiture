@@ -1,0 +1,156 @@
+{
+  "tables": [
+    {
+      "name": "users",
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 40,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": "uuid_generate_v4()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "email",
+          "folded": "email",
+          "line": 41,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "display_name",
+          "folded": "display_name",
+          "line": 42,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "bio",
+          "folded": "bio",
+          "line": 43,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "folded": "created_at",
+          "line": 44,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "folded": "updated_at",
+          "line": 45,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "email"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_users_email",
+          "table": "users",
+          "columns": [
+            "email"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_users_created_at",
+          "table": "users",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_users_display_name",
+          "table": "users",
+          "columns": [
+            "display_name"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        }
+      ]
+    }
+  ],
+  "enum_types": [],
+  "sequences": []
+}

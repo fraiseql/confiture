@@ -1,0 +1,220 @@
+{
+  "tables": [
+    {
+      "name": "tb_confiture",
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 36,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": "gen_random_uuid()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "pk_confiture",
+          "folded": "pk_confiture",
+          "line": 37,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": "always",
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "slug",
+          "folded": "slug",
+          "line": 38,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "version",
+          "folded": "version",
+          "line": 39,
+          "type_text": "varchar(255)",
+          "type_key": "varchar(255)",
+          "raw_sql_type": "VARCHAR(255)",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "name",
+          "folded": "name",
+          "line": 40,
+          "type_text": "varchar(255)",
+          "type_key": "varchar(255)",
+          "raw_sql_type": "VARCHAR(255)",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "applied_at",
+          "folded": "applied_at",
+          "line": 41,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "execution_time_ms",
+          "folded": "execution_time_ms",
+          "line": 42,
+          "type_text": "integer",
+          "type_key": "integer",
+          "raw_sql_type": "INTEGER",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "checksum",
+          "folded": "checksum",
+          "line": 43,
+          "type_text": "varchar(64)",
+          "type_key": "varchar(64)",
+          "raw_sql_type": "VARCHAR(64)",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "pk_confiture"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "slug"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "version"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_tb_confiture_pk_confiture",
+          "table": "tb_confiture",
+          "columns": [
+            "pk_confiture"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_tb_confiture_slug",
+          "table": "tb_confiture",
+          "columns": [
+            "slug"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_tb_confiture_version",
+          "table": "tb_confiture",
+          "columns": [
+            "version"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_tb_confiture_applied_at",
+          "table": "tb_confiture",
+          "columns": [
+            "applied_at"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        }
+      ]
+    }
+  ],
+  "enum_types": [],
+  "sequences": []
+}

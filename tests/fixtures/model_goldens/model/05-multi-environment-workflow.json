@@ -1,0 +1,739 @@
+{
+  "tables": [
+    {
+      "name": "projects",
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 81,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": "uuid_generate_v4()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "owner_id",
+          "folded": "owner_id",
+          "line": 82,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "name",
+          "folded": "name",
+          "line": 83,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "description",
+          "folded": "description",
+          "line": 84,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "status",
+          "folded": "status",
+          "line": 85,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": "'active'",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "folded": "created_at",
+          "line": 86,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "folded": "updated_at",
+          "line": 87,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "foreign_key",
+          "name": "",
+          "columns": [
+            "owner_id"
+          ],
+          "ref_table": "users",
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE",
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "projects_name_length",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "char_length(name) >= 3 AND char_length(name) <= 100",
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "projects_status_valid",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "status IN ('active', 'archived', 'deleted')",
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "projects_owner_name_unique",
+          "columns": [
+            "owner_id",
+            "name"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_projects_owner_id",
+          "table": "projects",
+          "columns": [
+            "owner_id"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_projects_status",
+          "table": "projects",
+          "columns": [
+            "status"
+          ],
+          "unique": false,
+          "where": "status <> 'deleted'",
+          "method": "btree"
+        },
+        {
+          "name": "idx_projects_owner_status",
+          "table": "projects",
+          "columns": [
+            "owner_id",
+            "status"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_projects_created_at",
+          "table": "projects",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        }
+      ]
+    },
+    {
+      "name": "tasks",
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 113,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": "uuid_generate_v4()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "project_id",
+          "folded": "project_id",
+          "line": 114,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "assigned_to",
+          "folded": "assigned_to",
+          "line": 115,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "title",
+          "folded": "title",
+          "line": 116,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "description",
+          "folded": "description",
+          "line": 117,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "priority",
+          "folded": "priority",
+          "line": 118,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": "'medium'",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "status",
+          "folded": "status",
+          "line": 119,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": "'todo'",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "due_date",
+          "folded": "due_date",
+          "line": 120,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "completed_at",
+          "folded": "completed_at",
+          "line": 121,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "folded": "created_at",
+          "line": 122,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "folded": "updated_at",
+          "line": 123,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "foreign_key",
+          "name": "",
+          "columns": [
+            "project_id"
+          ],
+          "ref_table": "projects",
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE",
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "foreign_key",
+          "name": "",
+          "columns": [
+            "assigned_to"
+          ],
+          "ref_table": "users",
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "SET NULL",
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "tasks_title_length",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "char_length(title) >= 3 AND char_length(title) <= 200",
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "tasks_priority_valid",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "priority IN ('low', 'medium', 'high', 'urgent')",
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "tasks_status_valid",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "status IN ('todo', 'in_progress', 'done', 'cancelled')",
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "tasks_completed_when_done",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "(status = 'done' AND completed_at IS NOT NULL) OR (status <> 'done' AND completed_at IS NULL)",
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_tasks_project_id",
+          "table": "tasks",
+          "columns": [
+            "project_id"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_tasks_assigned_to",
+          "table": "tasks",
+          "columns": [
+            "assigned_to"
+          ],
+          "unique": false,
+          "where": "assigned_to IS NOT NULL",
+          "method": "btree"
+        },
+        {
+          "name": "idx_tasks_status",
+          "table": "tasks",
+          "columns": [
+            "status"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_tasks_priority",
+          "table": "tasks",
+          "columns": [
+            "priority"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_tasks_due_date",
+          "table": "tasks",
+          "columns": [
+            "due_date"
+          ],
+          "unique": false,
+          "where": "due_date IS NOT NULL",
+          "method": "btree"
+        },
+        {
+          "name": "idx_tasks_project_status",
+          "table": "tasks",
+          "columns": [
+            "project_id",
+            "status"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_tasks_assignee_status",
+          "table": "tasks",
+          "columns": [
+            "assigned_to",
+            "status"
+          ],
+          "unique": false,
+          "where": "assigned_to IS NOT NULL",
+          "method": "btree"
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 47,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": "uuid_generate_v4()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "email",
+          "folded": "email",
+          "line": 48,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "display_name",
+          "folded": "display_name",
+          "line": 49,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "bio",
+          "folded": "bio",
+          "line": 50,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "avatar_url",
+          "folded": "avatar_url",
+          "line": 51,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "folded": "created_at",
+          "line": 52,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "folded": "updated_at",
+          "line": 53,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "email"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "users_email_format",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'",
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "users_display_name_length",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "char_length(display_name) >= 2",
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "users_bio_length",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "char_length(bio) <= 1000",
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_users_email",
+          "table": "users",
+          "columns": [
+            "email"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_users_created_at",
+          "table": "users",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_users_display_name_trgm",
+          "table": "users",
+          "columns": [
+            "display_name"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "gin"
+        }
+      ]
+    }
+  ],
+  "enum_types": [],
+  "sequences": []
+}

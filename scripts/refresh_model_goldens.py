@@ -14,7 +14,9 @@ Each tree is built the way its example builds it (``confiture build --env …
   from the tree, and the DDL it renders for each;
 - ``diff/<pair>.*`` — the same for a before/after pair an example ships;
 - ``drift/<tree>.json`` — ``confiture drift --format json`` against a database
-  built from the tree (needs PostgreSQL).
+  built from the tree (needs PostgreSQL);
+- ``model/<tree>.json`` — the schema model the tree declares
+  (``inventory.build_model``), the one representation every comparison reads.
 
 A deliberate change to either output is refreshed with ``--write`` and named, with
 its reason, in ``CHANGELOG.md`` under ``## [Unreleased]``.
@@ -22,7 +24,7 @@ its reason, in ``CHANGELOG.md`` under ``## [Unreleased]``.
 Usage::
 
     uv run python scripts/refresh_model_goldens.py --check
-    uv run python scripts/refresh_model_goldens.py --write [--only diff|drift]
+    uv run python scripts/refresh_model_goldens.py --write [--only diff|drift|model]
     uv run python scripts/refresh_model_goldens.py --write --server-url postgresql://…/postgres
 """
 
@@ -195,6 +197,21 @@ def diff_goldens() -> dict[str, str]:
     return goldens
 
 
+def model_goldens() -> dict[str, str]:
+    """Every model golden: the schema model each tree builds, as JSON."""
+    from confiture.core.linting.inventory import build_model
+
+    with tempfile.TemporaryDirectory(prefix="confiture-goldens-") as tmp:
+        root = Path(tmp)
+        with ThreadPoolExecutor() as pool:
+            paths = list(pool.map(lambda tree: build(tree, root / f"{tree.name}.sql"), TREES))
+        return {
+            f"model/{tree.name}.json": json.dumps(build_model(path.read_text()).to_dict(), indent=2)
+            + "\n"
+            for tree, path in zip(TREES, paths, strict=True)
+        }
+
+
 @contextmanager
 def scratch_database(server_url: str) -> Iterator[str]:
     """A database created on *server_url*'s server for one recording, then dropped."""
@@ -248,7 +265,7 @@ def drift_goldens(make_database: Callable[[], AbstractContextManager[str]]) -> d
 
 
 def recorded(kind: str) -> dict[str, str]:
-    """The goldens on disk for *kind* (``diff`` or ``drift``)."""
+    """The goldens on disk for *kind* (``diff``, ``drift`` or ``model``)."""
     return {
         str(path.relative_to(GOLDENS)): path.read_text()
         for path in sorted((GOLDENS / kind).glob("*"))
@@ -262,6 +279,8 @@ def _collect(only: str | None, server_url: str) -> dict[str, dict[str, str]]:
         kinds["diff"] = diff_goldens()
     if only in (None, "drift"):
         kinds["drift"] = drift_goldens(lambda: scratch_database(server_url))
+    if only in (None, "model"):
+        kinds["model"] = model_goldens()
     return kinds
 
 
@@ -270,7 +289,7 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true")
     mode.add_argument("--check", action="store_true")
-    parser.add_argument("--only", choices=("diff", "drift"))
+    parser.add_argument("--only", choices=("diff", "drift", "model"))
     parser.add_argument(
         "--server-url",
         default=os.environ.get("CONFITURE_TEST_DB_URL", "postgresql://localhost/postgres"),

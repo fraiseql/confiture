@@ -243,7 +243,7 @@ drops the `pg_catalog` qualifier the parser adds, keeps the array suffix, and
 leaves the internal spelling for the lattice to alias. There were **six** such
 tables resolving in **three** directions; `tests/unit/test_one_type_canonicaliser.py`
 deleted the two under `core/linting/` and allow-lists the remaining **two** with
-the reason each is a different question (`core/differ.py` writes upper-case column
+the reason each is a different question (`core/ddl_walk.py` writes upper-case column
 types into a migration, `core/function_signature_parser.py` resolves the
 *opposite* way for what `--check-signatures` prints). The third,
 `core/drift.py`'s `_types_compatible`, is gone since 1.11.0: `same_type` in the
@@ -411,17 +411,24 @@ disagreed about what a CHECK expression is, one rendering it and one storing
 schema and its eight example schemas, **13 of 17 foreign keys** and 16 of 23
 unique constraints were invisible.
 
-`_read_constraint(constraint, table, column=None)` is the one reader; where the
-constraint was written decides only which columns it covers. Every `ConstrType`
-member is in `_MODELLED_CONSTRAINTS` or `_NOT_MODELLED_CONSTRAINTS`, the second a
-table of **reasons** — `CONSTR_GENERATED` is declined because a generated
-column's `raw_expr` is not a CHECK, which is exactly why the reader dispatches on
-the kind and never on that field.
-`tests/unit/test_constraint_reader_is_exhaustive.py` enumerates pglast's own enum
-and fails on a member in neither table, in both, or on a modelled kind missing
-from `_pglast_enums.REQUIRED_MEMBERS`. A *declined* member the installed pglast
-lacks is tolerated and named: confiture supports pglast 6 through 8 and
-PostgreSQL 18 added the `ENFORCED` pair.
+The one reader lives in `core/ddl_walk.py` and **returns** what a node declares:
+`read_constraint(node, column=None)` gives a `schema_model.Constraint` (primary
+key, UNIQUE, CHECK, foreign key — with its deferrability) or a `ColumnFact`
+(`NOT NULL`, default, identity, generated expression), and
+`read_column_constraints(coldef)` folds a column's clauses in order, because on a
+column `DEFERRABLE INITIALLY DEFERRED` arrives as sibling nodes after the
+constraint it qualifies. Where the constraint was written decides only which
+columns it covers; whoever assembles the table applies a primary key to the
+columns it covers. The differ and the lint inventory both read through it. Every
+`ConstrType` member is in `MODELLED_CONSTRAINTS` or `NOT_MODELLED_CONSTRAINTS`,
+the second a table of **reasons**; a generated column's `raw_expr` is not a
+CHECK, which is exactly why the reader dispatches on the kind and never on that
+field. `tests/unit/test_constraint_reader_is_exhaustive.py` enumerates pglast's
+own enum and fails on a member in neither table, in both, or on a modelled kind
+missing from `_pglast_enums.REQUIRED_MEMBERS`. A *declined* member the installed
+pglast lacks is tolerated and named: confiture supports pglast 6 through 8 and
+PostgreSQL 18 added the `ENFORCED` pair — which is also why that pair stays
+declined, since `REQUIRED_MEMBERS` is version-fatal.
 
 An **unnamed** constraint is identified by what it says, never by `""` — two
 unnamed foreign keys on one table were one — and generated DDL omits the
@@ -433,12 +440,15 @@ key is added in one statement carrying the module's `-- review:` idiom.
 
 `_constraint_body` is the one clause builder: the text after `ADD` in an `ALTER`
 and the element in a `CREATE TABLE` are the same text. Writing it twice is how
-the reader came to disagree with itself.
+the reader came to disagree with itself. `differ_sql.column_body` is its sibling
+for a column — `CREATE TABLE`, `ADD COLUMN` and a dropped column's declaration —
+and writes an identity and a generated expression as the schema declared them.
 
 **A column's type has a spelling too** (since 1.14.0). `Column.type` is the
 canonical `ColumnType` — the identity — and `Column.raw_sql_type` is **the type
-as generated DDL should write it, recorded for every column**. It used to be
-filled only when `_COLUMN_TYPE_MAP` missed, which is what dropped
+as generated DDL should write it, recorded for every column**
+(`ddl_walk.written_type`, one rule for every model of a column). It used to be
+filled only when the type map missed, which is what dropped
 `VARCHAR(50)`'s length on the floor: the length lives in the spelling, and a
 modelled type had no spelling to keep it in. A schema saying `VARCHAR(50)`
 generated an unbounded `VARCHAR`, and `VARCHAR(50)` → `VARCHAR(100)` reported
@@ -458,6 +468,19 @@ comparison of the spellings: that is the one canonicaliser (#275), and its own
 docstring states this case — *a signature drops typmods, because PostgreSQL
 ignores them there, and a **column** type must keep them or `varchar(50)` and
 `varchar(100)` compare equal*. One rule, two questions.
+
+**One schema model too.** `core/schema_model.py` defines `Table`, `Column`,
+`Constraint`, `Index`, `EnumType`, `Sequence` and the `SchemaModel` that keys them
+by `ObjectRef`; it imports no parser and no driver (a subprocess test pins that,
+which is why `confiture/core/__init__.py` resolves its names lazily).
+`inventory.build_model(sql)` reads a DDL tree into it — the lint inventory is the
+one DDL reader that answers in it — and its output for every example tree is
+pinned in `tests/fixtures/model_goldens/model/`. A column carries its type twice
+(`type_key` the identity, typmod kept; `raw_sql_type` the spelling) plus
+`type_text`, the author's spelling a finding prints.
+`tests/unit/test_one_schema_model.py` fails on a class elsewhere that is named
+like a model type or carries the fields of one; its allow-list names the question
+each existing one answers, and an entry that matches nothing fails.
 
 Prep-seed level 2 reads the qualifier too (1.14.0, #317): `SchemaTables` keys
 `(schema, name)` and routes on `Table.schema`, not on
@@ -672,6 +695,7 @@ confiture/
 │   │   ├── schema_exporter.py    # The JSON schemas confiture publishes, and the one place they come from
 │   │   ├── schema_facts.py       # What a live database can tell preflight that migration files cannot (is…
 │   │   ├── schema_identity.py    # Where an unqualified schema object lands: the one default schema
+│   │   ├── schema_model.py       # The one model of what a schema declares: tables, columns, constraints,…
 │   │   ├── schema_snapshot.py    # Schema history snapshot writer
 │   │   ├── schema_to_schema.py   # Schema-to-Schema Migration using Foreign Data Wrapper (FDW)
 │   │   ├── sql_lexer.py          # The one SQL lexer: libpg_query's scanner and parser, nothing hand-writt…

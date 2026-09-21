@@ -110,6 +110,11 @@ class Column:
     unique: bool = False
     length: int | None = None  # For VARCHAR(n), etc.
     raw_sql_type: str | None = field(default=None, compare=False, hash=False)
+    #: ``GENERATED {ALWAYS|BY DEFAULT} AS IDENTITY`` — ``"always"`` / ``"by default"``.
+    identity: str | None = None
+    #: The expression of a generated column, and whether it is stored or virtual.
+    generated: str | None = None
+    generated_kind: str | None = None
 
     def __eq__(self, other: object) -> bool:
         """Compare columns for equality."""

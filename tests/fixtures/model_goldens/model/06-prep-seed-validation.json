@@ -1,0 +1,193 @@
+{
+  "tables": [
+    {
+      "name": "tb_manufacturer",
+      "schema": "catalog",
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 18,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "pk_manufacturer",
+          "folded": "pk_manufacturer",
+          "line": 19,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": "always",
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "folded": "name",
+          "line": 20,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "country_code",
+          "folded": "country_code",
+          "line": 21,
+          "type_text": "varchar(2)",
+          "type_key": "varchar(2)",
+          "raw_sql_type": "VARCHAR(2)",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "pk_manufacturer"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_catalog_tb_manufacturer_name",
+          "table": "catalog.tb_manufacturer",
+          "columns": [
+            "name"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_catalog_tb_manufacturer_id",
+          "table": "catalog.tb_manufacturer",
+          "columns": [
+            "id"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        }
+      ]
+    },
+    {
+      "name": "tb_manufacturer",
+      "schema": "prep_seed",
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 7,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "folded": "name",
+          "line": 8,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "country_code",
+          "folded": "country_code",
+          "line": 9,
+          "type_text": "varchar(2)",
+          "type_key": "varchar(2)",
+          "raw_sql_type": "VARCHAR(2)",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_prep_tb_manufacturer_name",
+          "table": "prep_seed.tb_manufacturer",
+          "columns": [
+            "name"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        }
+      ]
+    }
+  ],
+  "enum_types": [],
+  "sequences": []
+}

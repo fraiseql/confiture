@@ -44,6 +44,15 @@ TABLES = (
     ("NOT_AN_EXPECTED_SCHEMA_FACT", NOT_AN_EXPECTED_SCHEMA_FACT),
 )
 
+#: Members only part of the supported pglast range defines, and why. confiture
+#: supports pglast 6 through 8, and ``AlterTableType`` changed across them; the
+#: forward direction — a member pglast defines that nobody decided — still fires
+#: on every version. Anything else listed-but-undefined is a stale reason.
+ONLY_ON_SOME_PGLAST = {
+    "AT_SetExpression": "PostgreSQL 17 / pglast 7 — absent from 6",
+    "AT_CheckNotNull": "PostgreSQL 16 and 17 / pglast 6 and 7 — removed in 18",
+}
+
 
 def test_the_enum_has_not_moved_under_us() -> None:
     """A floor: if this is tiny, the enumeration above stopped working."""
@@ -64,7 +73,7 @@ def test_every_subtype_is_accounted_for(member: str) -> None:
 def test_no_listed_subtype_has_gone_away() -> None:
     """An entry pglast no longer defines is a reason with nothing to explain."""
     listed = {member for _name, table in TABLES for member in table}
-    assert sorted(listed - set(MEMBERS)) == []
+    assert sorted(listed - set(MEMBERS) - set(ONLY_ON_SOME_PGLAST)) == []
 
 
 def test_every_declined_subtype_states_a_reason() -> None:

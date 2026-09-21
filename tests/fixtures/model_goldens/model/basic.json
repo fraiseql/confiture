@@ -1,0 +1,687 @@
+{
+  "tables": [
+    {
+      "name": "comments",
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 104,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": "always",
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "pk_comment",
+          "folded": "pk_comment",
+          "line": 107,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": "uuid_generate_v4()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "post_id",
+          "folded": "post_id",
+          "line": 110,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "user_id",
+          "folded": "user_id",
+          "line": 111,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "content",
+          "folded": "content",
+          "line": 114,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "folded": "created_at",
+          "line": 117,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "folded": "updated_at",
+          "line": 118,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "pk_comment"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "foreign_key",
+          "name": "",
+          "columns": [
+            "post_id"
+          ],
+          "ref_table": "posts",
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE",
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "foreign_key",
+          "name": "",
+          "columns": [
+            "user_id"
+          ],
+          "ref_table": "users",
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE",
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_comments_pk_comment",
+          "table": "comments",
+          "columns": [
+            "pk_comment"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_comments_post_id",
+          "table": "comments",
+          "columns": [
+            "post_id"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_comments_user_id",
+          "table": "comments",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_comments_created_at",
+          "table": "comments",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        }
+      ]
+    },
+    {
+      "name": "posts",
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 69,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": "always",
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "pk_post",
+          "folded": "pk_post",
+          "line": 72,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": "uuid_generate_v4()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "slug",
+          "folded": "slug",
+          "line": 75,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "user_id",
+          "folded": "user_id",
+          "line": 78,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "title",
+          "folded": "title",
+          "line": 81,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "content",
+          "folded": "content",
+          "line": 82,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "published_at",
+          "folded": "published_at",
+          "line": 85,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "folded": "created_at",
+          "line": 86,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "folded": "updated_at",
+          "line": 87,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "pk_post"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "slug"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "foreign_key",
+          "name": "",
+          "columns": [
+            "user_id"
+          ],
+          "ref_table": "users",
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE",
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_posts_pk_post",
+          "table": "posts",
+          "columns": [
+            "pk_post"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_posts_slug",
+          "table": "posts",
+          "columns": [
+            "slug"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_posts_user_id",
+          "table": "posts",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_posts_published_at",
+          "table": "posts",
+          "columns": [
+            "published_at"
+          ],
+          "unique": false,
+          "where": "published_at IS NOT NULL",
+          "method": "btree"
+        },
+        {
+          "name": "idx_posts_created_at",
+          "table": "posts",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        }
+      ]
+    },
+    {
+      "name": "users",
+      "schema": null,
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 37,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": "always",
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "pk_user",
+          "folded": "pk_user",
+          "line": 40,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": "uuid_generate_v4()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "slug",
+          "folded": "slug",
+          "line": 43,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "username",
+          "folded": "username",
+          "line": 46,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "email",
+          "folded": "email",
+          "line": 47,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "bio",
+          "folded": "bio",
+          "line": 48,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": false,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "created_at",
+          "folded": "created_at",
+          "line": 51,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "updated_at",
+          "folded": "updated_at",
+          "line": 52,
+          "type_text": "timestamptz",
+          "type_key": "timestamptz",
+          "raw_sql_type": "TIMESTAMPTZ",
+          "not_null": true,
+          "default": "now()",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "pk_user"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "slug"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "username"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "email"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_users_pk_user",
+          "table": "users",
+          "columns": [
+            "pk_user"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_users_slug",
+          "table": "users",
+          "columns": [
+            "slug"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_users_username",
+          "table": "users",
+          "columns": [
+            "username"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_users_email",
+          "table": "users",
+          "columns": [
+            "email"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        },
+        {
+          "name": "idx_users_created_at",
+          "table": "users",
+          "columns": [
+            "created_at"
+          ],
+          "unique": false,
+          "where": null,
+          "method": "btree"
+        }
+      ]
+    }
+  ],
+  "enum_types": [],
+  "sequences": []
+}

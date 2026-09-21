@@ -66,12 +66,19 @@ MODELS = frozenset(
         "ObjectRef",
         "LiveObject",
         "DDLObject",
+        # The schema model's routine and view, named here before they exist so
+        # the guard covers them the day they do.
+        "Routine",
+        "View",
     }
 )
 
 #: Attributes holding a schema-level collection of those models. A ``Table``'s
 #: own ``indexes`` / ``foreign_keys`` are deliberately absent: they *are* keyed
 #: by bare name, correctly, because the comparison is already scoped to one table.
+#: ``SchemaModel`` names its collections the same way, and holds them as mappings
+#: keyed by ``ObjectRef`` — so iterating one goes through ``.values()``, which
+#: :func:`_collection` sees through.
 COLLECTION_ATTRS = frozenset({"tables", "enum_types", "sequences"})
 
 NAME_ATTRS = frozenset({"name", "relname"})
@@ -140,6 +147,18 @@ def _scopes(tree: ast.Module):
             yield node, params
 
 
+def _collection(iterated: ast.expr) -> ast.expr:
+    """What a comprehension iterates, seen through a mapping's ``.values()``."""
+    if (
+        isinstance(iterated, ast.Call)
+        and isinstance(iterated.func, ast.Attribute)
+        and iterated.func.attr == "values"
+        and not iterated.args
+    ):
+        return iterated.func.value
+    return iterated
+
+
 def _keyed_by_bare_name(source: str) -> list[int]:
     """Lines of every ``{x.name: x for x in <schema objects>}`` in one module."""
     tree = ast.parse(source)
@@ -156,7 +175,7 @@ def _keyed_by_bare_name(source: str) -> list[int]:
             for gen in node.generators:
                 if not isinstance(gen.target, ast.Name) or key.value.id != gen.target.id:
                     continue
-                iterated = gen.iter
+                iterated = _collection(gen.iter)
                 names_a_collection = (
                     isinstance(iterated, ast.Attribute) and iterated.attr in COLLECTION_ATTRS
                 ) or (isinstance(iterated, ast.Name) and iterated.id in params)
@@ -244,6 +263,15 @@ class SchemaDiffer:
         old_map = {s.name: s for s in old_seqs}
 """
     assert _keyed_by_bare_name(source) == [4, 5, 8, 11]
+
+
+def test_the_check_sees_through_a_mapping_of_the_model() -> None:
+    """``SchemaModel`` holds its objects in mappings; iterating one is still a sweep."""
+    source = """
+def f(model):
+    return {t.name: t for t in model.tables.values()}
+"""
+    assert _keyed_by_bare_name(source) == [3]
 
 
 def test_an_index_keyed_by_bare_name_within_one_table_is_not_flagged() -> None:
