@@ -2,8 +2,6 @@
 
 from dataclasses import replace
 
-import pytest
-
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import (
     CheckConstraintAdded,
@@ -15,7 +13,6 @@ from confiture.core.schema_change import (
     UniqueConstraintDropped,
 )
 from confiture.core.schema_model import Constraint
-from confiture.exceptions import UnsafeOperationError
 from tests.unit._schema_models import table
 
 FK_U = Constraint(
@@ -103,12 +100,11 @@ class TestDifferSQLBridgeMethods:
         assert "DROP CONSTRAINT" in sql
         assert "uq_email" in sql
 
-    # --- Safety: drop_table without force raises ---
+    # --- DROP_TABLE: the destructive gate decides, not force ---
 
-    def test_up_drop_table_without_force_raises(self):
+    def test_up_drop_table_without_force_generates_sql(self):
         change = TableDropped(table("t"))
-        with pytest.raises(UnsafeOperationError):
-            self._gen().generate_up(change)
+        assert self._gen().generate_up(change) == "DROP TABLE t;\n"
 
     def test_up_drop_table_with_force_generates_sql(self):
         change = TableDropped(table("t"))

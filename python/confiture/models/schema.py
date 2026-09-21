@@ -67,8 +67,11 @@ class WireChange:
 
 
 class WireDiff(Protocol):
-    """What a result model reads from a diff without naming ``core``: its changes, serialised."""
+    """What a result model reads from a diff without naming ``core``: its changes, serialised,
+    and what they add up to."""
 
     def has_changes(self) -> bool: ...
 
     def wire(self) -> list[WireChange]: ...
+
+    def summary(self) -> dict[str, int]: ...

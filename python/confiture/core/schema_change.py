@@ -28,8 +28,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, ClassVar, get_args
 
+from confiture.core.ddl_clauses import column_body, column_type
 from confiture.core.ddl_objects import OBJECT_KEYWORD
-from confiture.core.differ_sql import column_body
 from confiture.core.schema_model import (
     Column,
     Constraint,
@@ -50,11 +50,14 @@ __all__ = [
     "CheckConstraintAdded",
     "CheckConstraintDropped",
     "ColumnAdded",
+    "ColumnChange",
     "ColumnDefaultChanged",
     "ColumnDropped",
     "ColumnNullabilityChanged",
     "ColumnRenamed",
     "ColumnTypeChanged",
+    "DefinitionChange",
+    "EnumOrSequenceChange",
     "EnumTypeAdded",
     "EnumTypeDropped",
     "EnumValuesChanged",
@@ -70,26 +73,19 @@ __all__ = [
     "SequenceAdded",
     "SequenceDropped",
     "TableAdded",
+    "TableChange",
     "TableDropped",
+    "TableObjectChange",
     "TableRenamed",
     "UniqueConstraintAdded",
     "UniqueConstraintDropped",
     "column_definition",
-    "written_type",
 ]
 
 
 # ---------------------------------------------------------------------------
 # The serialisation of a model object, as the wire has always carried it
 # ---------------------------------------------------------------------------
-
-#: What a column with no written type is called in a change — none from a parse.
-_UNKNOWN_TYPE = "UNKNOWN"
-
-
-def written_type(column: Column) -> str:
-    """The column's type as generated DDL writes it."""
-    return column.raw_sql_type or column.type_key or _UNKNOWN_TYPE
 
 
 def _column_detail(column: Column) -> dict[str, Any]:
@@ -100,7 +96,7 @@ def _column_detail(column: Column) -> dict[str, Any]:
     """
     detail: dict[str, Any] = {
         "name": column.folded,
-        "type": written_type(column),
+        "type": column_type(column),
         "nullable": not column.not_null,
         "default": column.default,
     }
@@ -114,7 +110,7 @@ def _column_detail(column: Column) -> dict[str, Any]:
 
 def column_definition(column: Column) -> str:
     """The column's definition without its name — what ``ADD COLUMN`` takes after the name."""
-    return column_body(_column_detail(column))
+    return column_body(column)
 
 
 def _foreign_key_detail(fk: Constraint) -> dict[str, Any]:
@@ -329,8 +325,8 @@ class ColumnTypeChanged(_Change):
         return {
             "table": self.table,
             "column": self.old.folded,
-            "old_value": written_type(self.old),
-            "new_value": written_type(self.new),
+            "old_value": column_type(self.old),
+            "new_value": column_type(self.new),
         }
 
 
@@ -695,8 +691,56 @@ SchemaChange = (
 )
 """One difference between two schema trees. Closed: a new kind is a new variant here."""
 
+#: The union in the five groups a renderer answers for, each a function of its own:
+#: a 25-arm ``match`` is past the complexity a function here may have.
+TableChange = TableAdded | TableDropped | TableRenamed
+ColumnChange = (
+    ColumnAdded
+    | ColumnDropped
+    | ColumnRenamed
+    | ColumnTypeChanged
+    | ColumnNullabilityChanged
+    | ColumnDefaultChanged
+)
+TableObjectChange = (
+    IndexAdded
+    | IndexDropped
+    | ForeignKeyAdded
+    | ForeignKeyDropped
+    | CheckConstraintAdded
+    | CheckConstraintDropped
+    | UniqueConstraintAdded
+    | UniqueConstraintDropped
+)
+EnumOrSequenceChange = (
+    EnumTypeAdded | EnumTypeDropped | EnumValuesChanged | SequenceAdded | SequenceDropped
+)
+DefinitionChange = ObjectAdded | ObjectDropped | ObjectReplaced
+
 #: Every variant, for the guards that must answer for each.
 KINDS: frozenset[type[SchemaChange]] = frozenset(get_args(SchemaChange))
+
+
+#: ``confiture diff --format json``'s ``summary``, in its key order. A rename, a
+#: column's type, nullability or default, an enum's labels and every object compared
+#: by definition are not counted there, and never were.
+_SUMMARY: tuple[tuple[str, tuple[type[SchemaChange], ...]], ...] = (
+    ("tables_added", (TableAdded,)),
+    ("tables_dropped", (TableDropped,)),
+    ("tables_renamed", (TableRenamed,)),
+    ("columns_added", (ColumnAdded,)),
+    ("columns_dropped", (ColumnDropped,)),
+    ("indexes_added", (IndexAdded,)),
+    ("indexes_dropped", (IndexDropped,)),
+    ("foreign_keys_added", (ForeignKeyAdded,)),
+    ("foreign_keys_dropped", (ForeignKeyDropped,)),
+    ("constraints_added", (CheckConstraintAdded, UniqueConstraintAdded)),
+    ("constraints_dropped", (CheckConstraintDropped, UniqueConstraintDropped)),
+    ("enum_types_added", (EnumTypeAdded,)),
+    ("enum_types_dropped", (EnumTypeDropped,)),
+    ("sequences_added", (SequenceAdded,)),
+    ("sequences_dropped", (SequenceDropped,)),
+)
 
 
 @dataclass
@@ -717,6 +761,13 @@ class SchemaDiff:
     def wire(self) -> list[WireChange]:
         """Every change as the wire carries it."""
         return [change.to_wire() for change in self.changes]
+
+    def summary(self) -> dict[str, int]:
+        """How many changes of each counted kind — ``confiture diff``'s ``summary``."""
+        return {
+            key: sum(isinstance(change, kinds) for change in self.changes)
+            for key, kinds in _SUMMARY
+        }
 
     def __str__(self) -> str:
         """String representation of diff."""

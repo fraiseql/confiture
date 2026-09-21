@@ -4,30 +4,8 @@ from rich.console import Console
 
 from confiture.models.results import DiffResult
 
-_ADD_TYPES = frozenset(
-    {
-        "ADD_TABLE",
-        "ADD_COLUMN",
-        "ADD_INDEX",
-        "ADD_FOREIGN_KEY",
-        "ADD_CHECK_CONSTRAINT",
-        "ADD_UNIQUE_CONSTRAINT",
-        "ADD_ENUM_TYPE",
-        "ADD_SEQUENCE",
-    }
-)
-_DROP_TYPES = frozenset(
-    {
-        "DROP_TABLE",
-        "DROP_COLUMN",
-        "DROP_INDEX",
-        "DROP_FOREIGN_KEY",
-        "DROP_CHECK_CONSTRAINT",
-        "DROP_UNIQUE_CONSTRAINT",
-        "DROP_ENUM_TYPE",
-        "DROP_SEQUENCE",
-    }
-)
+#: The colour of a change's line, by the verb its wire type starts with.
+_COLOURS: dict[str, str] = {"ADD": "green", "DROP": "red"}
 
 
 def print_diff_text(result: DiffResult, console: Console) -> None:
@@ -40,11 +18,6 @@ def print_diff_text(result: DiffResult, console: Console) -> None:
     console.print(f"[cyan]{n} change{'s' if n != 1 else ''} detected:[/cyan]\n")
 
     for change in result.changes:
-        change_type = change.type
-        if change_type in _ADD_TYPES:
-            colour = "green"
-        elif change_type in _DROP_TYPES:
-            colour = "red"
-        else:
-            colour = "yellow"
+        verb, _, _ = change.type.partition("_")
+        colour = _COLOURS.get(verb, "yellow")
         console.print(f"  [{colour}]{change}[/{colour}]")

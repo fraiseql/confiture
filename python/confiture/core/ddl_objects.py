@@ -202,12 +202,6 @@ OBJECT_KEYWORD: dict[str, str] = {
     "access_method": "ACCESS METHOD",
 }
 
-#: Kinds whose object is named *inside* a table: ``DROP TRIGGER trg ON t``, not
-#: ``DROP TRIGGER t.trg``. The reference spells the identity with a dot because
-#: that is what makes two same-named triggers on two tables two objects; the
-#: DDL has to spell it back out.
-TABLE_SCOPED_KINDS: frozenset[str] = frozenset({"trigger", "policy", "rule"})
-
 #: Kinds whose redefinition has no one statement that is plainly right, with the
 #: reason. ``migrate diff --generate`` writes ``-- WARNING: no SQL derived`` for
 #: these — the change is still *reported*, which is what the gate needs; what is

@@ -189,6 +189,21 @@ _TIER_BY_DIRECTION: Final[dict[TypeChange, RiskTier]] = {
 }
 
 
+def tier_for_type_change(direction: TypeChange, *, rewrites_table: bool) -> RiskTier:
+    """`ALTER COLUMN … TYPE` once its direction is known.
+
+    A narrowing or a lateral move is irreversible; a widening is reversible for
+    the data, but an ``ACCESS EXCLUSIVE`` heap rewrite all the same when it
+    rewrites the table. Only a caller that knows the *source* type has a
+    direction: a statement states the target and never the source, so the change
+    set asks this only when a live database (or a differ) has said.
+    """
+    tier = _TIER_BY_DIRECTION[direction]
+    if tier is RiskTier.REVERSIBLE and rewrites_table:
+        return RiskTier.LOCK_RISKY
+    return tier
+
+
 def tier_for_add_column(
     *, nullable: bool, has_default: bool, server_version: int | None = None
 ) -> RiskTier:

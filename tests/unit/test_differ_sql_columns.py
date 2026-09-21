@@ -47,7 +47,7 @@ class TestAnAddedColumnKeepsItsDeclaration:
     def test_the_declared_type_is_written(self) -> None:
         sql = DifferSQLGenerator().generate_up(_change(*ONE_COLUMN, ColumnAdded))
         assert _parses(sql)
-        assert sql.strip() == "ALTER TABLE tenant.t ADD COLUMN IF NOT EXISTS x INTEGER NOT NULL;"
+        assert sql.strip() == "ALTER TABLE tenant.t ADD COLUMN x INTEGER NOT NULL;"
 
     def test_no_column_is_invented_as_text(self) -> None:
         """``text`` was the fallback for a change with no ``details``, which is
@@ -87,11 +87,7 @@ class TestADroppedColumnIsRestoredByItsDown:
     def test_the_down_restores_the_column(self) -> None:
         sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, ColumnDropped))
         assert _parses(sql)
-        assert "ADD COLUMN IF NOT EXISTS x INTEGER NOT NULL" in sql
-
-    def test_the_down_says_the_rows_do_not_come_back(self) -> None:
-        sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, ColumnDropped))
-        assert "-- review:" in sql
+        assert sql == "ALTER TABLE tenant.t ADD COLUMN x INTEGER NOT NULL;\n"
 
 
 class TestADroppedTableIsRecreatedByItsDown:
@@ -121,9 +117,9 @@ class TestADroppedTableIsRecreatedByItsDown:
         ]
         assert [c.name for c in restored.columns if c.primary_key] == ["id"]
 
-    def test_a_change_carrying_no_columns_still_warns(self) -> None:
-        sql = DifferSQLGenerator().generate_down(TableDropped(table("tenant.t")))
-        assert sql.startswith("-- WARNING:")
+    def test_a_change_carrying_no_columns_derives_no_rollback(self) -> None:
+        """Nothing to recreate from: the generator writes the down as irreversible."""
+        assert DifferSQLGenerator().generate_down(TableDropped(table("tenant.t"))) is None
 
 
 class TestBothGeneratorsWriteTheSameColumn:

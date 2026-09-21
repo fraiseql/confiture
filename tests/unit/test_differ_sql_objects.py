@@ -7,12 +7,28 @@ whose whole definition the differ holds, so it can write the real statement.
 
 import pytest
 
-from confiture.core.ddl_objects import REPLACE_IS_AUTHORS_WORK
+from confiture.core.ddl_objects import OBJECT_KEYWORD, REPLACE_IS_AUTHORS_WORK
 from confiture.core.differ import SchemaDiffer
-from confiture.core.differ_sql import DifferSQLGenerator
+from confiture.core.differ_sql import DERIVED_KINDS, DifferSQLGenerator
 from confiture.exceptions import UnsafeOperationError
+from tests.unit._schema_changes import added, dropped
 
 BASE = "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT);\n"
+
+#: One definition of each kind a migration is derived for.
+DERIVED = {
+    "view": "CREATE VIEW v AS SELECT pk_user FROM tb_user;",
+    "matview": "CREATE MATERIALIZED VIEW mv AS SELECT pk_user FROM tb_user;",
+    "function": "CREATE FUNCTION fn() RETURNS INT LANGUAGE sql AS $$ SELECT 1 $$;",
+    "procedure": "CREATE PROCEDURE pr() LANGUAGE sql AS $$ SELECT 1 $$;",
+    "aggregate": "CREATE AGGREGATE ag (INT) (sfunc = int4pl, stype = INT);",
+    "domain": "CREATE DOMAIN d AS TEXT;",
+    "type": "CREATE TYPE tc AS (x INT);",
+}
+
+TRIGGER = (
+    "CREATE TRIGGER trg_touch BEFORE UPDATE ON tb_user FOR EACH ROW EXECUTE FUNCTION fn_touch();"
+)
 
 
 def change_of(old_extra: str, new_extra: str, change_type: str):
@@ -151,8 +167,8 @@ class TestTheMigrationIsNotShort:
             change = change_of(old, new, change_type)
             kind = change.ref.kind
             assert kind in REPLACE_IS_AUTHORS_WORK, f"{change_type} has no stated reason"
-            with pytest.raises(NotImplementedError):
-                DifferSQLGenerator(True).generate_up(change)
+            assert DifferSQLGenerator(True).generate_up(change) is None
+            assert DifferSQLGenerator(True).generate_down(change) is None
 
     def test_every_stated_exemption_names_a_kind_the_differ_can_emit(self):
         """A reason cannot outlive the thing it explains (the one-lexer idiom)."""
@@ -225,56 +241,46 @@ class TestRoutineDDL:
         )
 
 
-class TestGenericObjectDDL:
-    """The kinds #288 tracks that have no bespoke generator."""
+class TestOnlyTheDerivedKindsDeriveSQL:
+    """A migration is derived for ``DERIVED_KINDS``; every other kind is reported.
 
-    TRIGGER = (
-        "CREATE TRIGGER trg_touch BEFORE UPDATE ON tb_user "
-        "FOR EACH ROW EXECUTE FUNCTION fn_touch();"
+    A trigger, an extension, a schema, a policy, … reach the migration as the
+    generator's ``-- WARNING: no SQL derived`` and the author writes the DDL.
+    """
+
+    @pytest.mark.parametrize("factory", [added, dropped], ids=["added", "dropped"])
+    @pytest.mark.parametrize(
+        ("kind", "qualified", "create_sql"),
+        [
+            ("trigger", "tb_user.trg_touch", TRIGGER),
+            ("extension", "pgcrypto", "CREATE EXTENSION pgcrypto"),
+            ("schema", "app", "CREATE SCHEMA app"),
+            ("policy", "tb_user.p_own", "CREATE POLICY p_own ON tb_user USING (true)"),
+        ],
+        ids=["trigger", "extension", "schema", "policy"],
     )
+    def test_a_kind_outside_them_derives_no_sql_either_way(
+        self, factory, kind, qualified, create_sql
+    ):
+        """Nor is its drop refused unforced: there is no statement to refuse."""
+        assert kind not in DERIVED_KINDS
+        change = factory(kind, qualified, create_sql)
+        assert DifferSQLGenerator().generate_up(change) is None
+        assert DifferSQLGenerator().generate_down(change) is None
 
-    def test_add_trigger_writes_the_create(self):
-        change = change_of("", self.TRIGGER, "ADD_TRIGGER")
-        assert DifferSQLGenerator().generate_up(change).startswith("CREATE TRIGGER trg_touch")
-
-    def test_dropping_a_trigger_names_the_table_not_a_dotted_path(self):
-        """``DROP TRIGGER trg ON t`` — ``DROP TRIGGER t.trg`` is not PostgreSQL."""
-        change = change_of("", self.TRIGGER, "ADD_TRIGGER")
-        down = DifferSQLGenerator().generate_down(change)
-        assert down.strip() == "DROP TRIGGER IF EXISTS trg_touch ON tb_user;"
-
-    def test_drop_trigger_is_destructive_without_force(self):
-        change = change_of(self.TRIGGER, "", "DROP_TRIGGER")
-        with pytest.raises(UnsafeOperationError):
+    @pytest.mark.parametrize("kind", sorted(DERIVED_KINDS))
+    def test_dropping_a_derived_kind_is_destructive_without_force(self, kind):
+        (change,) = SchemaDiffer().compare(BASE + DERIVED[kind], BASE).changes
+        with pytest.raises(UnsafeOperationError, match="--force"):
             DifferSQLGenerator().generate_up(change)
+        forced = DifferSQLGenerator(True).generate_up(change)
+        assert forced.startswith(f"DROP {OBJECT_KEYWORD[kind]} IF EXISTS ")
 
-    def test_drop_trigger_rolls_back_by_recreating_it(self):
-        change = change_of(self.TRIGGER, "", "DROP_TRIGGER")
-        assert "CREATE TRIGGER trg_touch" in DifferSQLGenerator(True).generate_down(change)
-
-    def test_add_extension_writes_the_create_and_drops_it_back(self):
-        change = change_of("", "CREATE EXTENSION pgcrypto;", "ADD_EXTENSION")
-        assert "CREATE EXTENSION pgcrypto" in DifferSQLGenerator().generate_up(change)
-        assert (
-            DifferSQLGenerator().generate_down(change).strip()
-            == "DROP EXTENSION IF EXISTS pgcrypto;"
-        )
-
-    def test_add_schema_writes_the_create(self):
-        change = change_of("", "CREATE SCHEMA app;", "ADD_SCHEMA")
-        assert "CREATE SCHEMA app" in DifferSQLGenerator().generate_up(change)
-
-    def test_a_policy_drop_names_its_table(self):
-        change = change_of("", "CREATE POLICY p_own ON tb_user USING (true);", "ADD_POLICY")
-        assert (
-            DifferSQLGenerator().generate_down(change).strip()
-            == "DROP POLICY IF EXISTS p_own ON tb_user;"
-        )
-
-    def test_every_add_and_drop_the_differ_emits_renders(self):
-        """No ADD or DROP of a tracked object falls through to a warning."""
+    def test_every_add_and_drop_of_a_derived_kind_renders_and_no_other_does(self):
+        """A derived kind renders a statement either way; every other kind derives none."""
         extras = [
-            self.TRIGGER,
+            *DERIVED.values(),
+            TRIGGER,
             "CREATE POLICY p ON tb_user USING (true);",
             "CREATE EXTENSION pgcrypto;",
             "CREATE SCHEMA app;",
@@ -283,17 +289,23 @@ class TestGenericObjectDDL:
             "CREATE TYPE tr AS RANGE (subtype = INT);",
             "CREATE STATISTICS st ON pk_user, name FROM tb_user;",
             "CREATE SERVER srv FOREIGN DATA WRAPPER fdw;",
-            "CREATE DOMAIN d AS TEXT;",
-            "CREATE TYPE tc AS (x INT);",
         ]
         generator = DifferSQLGenerator(True)
         seen = 0
+        rendered: set[str] = set()
         for extra in extras:
             for old, new in (("", extra), (extra, "")):
                 for change in SchemaDiffer().compare(BASE + old, BASE + new).changes:
-                    sql = generator.generate_up(change)
                     wire_type = change.to_wire().type
-                    assert "WARNING" not in sql, f"{wire_type} renders a warning"
-                    assert sql.strip(), f"{wire_type} renders nothing"
+                    both = (generator.generate_up(change), generator.generate_down(change))
+                    if change.ref.kind in DERIVED_KINDS:
+                        for sql in both:
+                            assert sql is not None, f"{wire_type} derives no SQL"
+                            assert "WARNING" not in sql, f"{wire_type} renders a warning"
+                            assert sql.strip(), f"{wire_type} renders nothing"
+                        rendered.add(change.ref.kind)
+                    else:
+                        assert both == (None, None), f"{wire_type} derives SQL"
                     seen += 1
         assert seen == 2 * len(extras), f"expected one change per case, saw {seen}"
+        assert rendered == DERIVED_KINDS

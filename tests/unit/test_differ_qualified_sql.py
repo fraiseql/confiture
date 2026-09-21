@@ -174,10 +174,7 @@ class TestBothGeneratorsEmitWhatParses:
                 py_generator._change_to_up_sql,
                 py_generator._change_to_down_sql,
             ):
-                try:
-                    sql = produce(change)
-                except NotImplementedError:
-                    continue  # a kind with no generator writes nothing, and that parses
+                sql = produce(change)
                 if sql:
                     emitted.append((change.to_wire().type, sql))
         return emitted
@@ -214,8 +211,8 @@ class TestBothGeneratorsEmitWhatParses:
         generator = MigrationGenerator(tmp_path)
         up = generator._change_to_up_sql(change)
         down = generator._change_to_down_sql(change)
-        assert up == "ALTER TABLE tenant.tb_a RENAME TO tb_b"
-        assert down == "ALTER TABLE tenant.tb_b RENAME TO tb_a"
+        assert up == "ALTER TABLE tenant.tb_a RENAME TO tb_b;"
+        assert down == "ALTER TABLE tenant.tb_b RENAME TO tb_a;"
         pglast.parse_sql(up)
         pglast.parse_sql(down)
 
@@ -227,8 +224,8 @@ class TestBothGeneratorsEmitWhatParses:
             TableRenamed,
         )
         generator = MigrationGenerator(tmp_path)
-        assert generator._change_to_up_sql(change) == "ALTER TABLE tb_a RENAME TO tb_b"
-        assert generator._change_to_down_sql(change) == "ALTER TABLE tb_b RENAME TO tb_a"
+        assert generator._change_to_up_sql(change) == "ALTER TABLE tb_a RENAME TO tb_b;"
+        assert generator._change_to_down_sql(change) == "ALTER TABLE tb_b RENAME TO tb_a;"
 
 
 def _without_comments(sql: str) -> str:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import (
     EnumTypeAdded,
@@ -29,6 +30,24 @@ class TestAddEnumType:
         sql = DifferSQLGenerator().generate_down(change)
         assert "DROP TYPE" in sql
         assert "mood" in sql
+
+    def test_the_type_is_created_with_its_labels(self) -> None:
+        """An added enum type carries its labels, and the ``CREATE`` writes them.
+
+        The labels never reached the renderer: it read them from a key the differ
+        did not write, so every added enum type was generated as ``AS ENUM ()`` —
+        a statement that applies cleanly and creates a type that holds nothing.
+        """
+        change = EnumTypeAdded(EnumType("mood", values=("happy", "it's ok")))
+        sql = DifferSQLGenerator().generate_up(change)
+        assert sql == "CREATE TYPE mood AS ENUM ('happy', 'it''s ok');\n"
+
+    def test_the_differ_carries_the_labels_to_the_statement(self) -> None:
+        diff = SchemaDiffer().compare("", "CREATE TYPE mood AS ENUM ('sad', 'ok');")
+        (change,) = diff.changes
+        assert DifferSQLGenerator().generate_up(change) == (
+            "CREATE TYPE mood AS ENUM ('sad', 'ok');\n"
+        )
 
 
 class TestDropEnumType:

@@ -60,7 +60,7 @@ ALTER TABLE things ADD CONSTRAINT things_new_uq UNIQUE (code, qty);
 ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_uq;
 
 -- confiture:tier additive
-CREATE TYPE new_status AS ENUM ();
+CREATE TYPE new_status AS ENUM ('x', 'y');
 
 -- WARNING: DROP TYPE 'retired_status' is destructive. Re-run with --force to generate this DDL.
 
