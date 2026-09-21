@@ -8,19 +8,30 @@ import fnmatch
 import logging
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import pglast
 import psycopg
 
+from confiture.core import live_catalog
 from confiture.core.ddl_objects import DDLObject, ObjectRef, objects_in
+from confiture.core.ddl_walk import canonical_default
 from confiture.core.desired_state import load_desired_state
-from confiture.core.linting.inventory import signature_bucket
+from confiture.core.linting.inventory import Inventory, schema_model, signature_bucket
 from confiture.core.live_objects import LiveObject, LiveObjectCatalog, LiveObjects
 from confiture.core.locking import LOCK_HOLDER_TABLE
-from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
+from confiture.core.schema_analyzer import SchemaAnalyzer
+from confiture.core.schema_model import (
+    Column,
+    Constraint,
+    Index,
+    SchemaModel,
+    Table,
+    identity_of,
+    ref_for,
+)
 from confiture.core.type_lattice import same_type
 from confiture.exceptions import ConfigurationError, SchemaError
 
@@ -261,43 +272,66 @@ DEFAULT_SCHEMA = "public"
 
 @dataclass
 class ExpectedSchema:
-    """What a schema file declares: tables (keyed ``schema.table``), schemas, objects.
+    """What a schema file declares: the schema model, the schemas it names, its objects.
 
     ``objects`` is ``ddl_objects.objects_in``'s answer — the views, matviews,
-    triggers and routines the tree defines, which #288 already reads for the
-    accompaniment gate and which nothing compared against a live database (#303).
+    triggers and routines the tree defines, compared by existence (#303) until they
+    are model kinds of their own.
     """
 
-    info: SchemaInfo
+    model: SchemaModel
     schemas: frozenset[str]
     objects: dict[ObjectRef, list[DDLObject]] = field(default_factory=dict)
 
 
-def _qualify(schema: str | None, name: str, default_schema: str) -> str:
-    return f"{schema or default_schema}.{name}"
+def _inherit_partition_columns(inventory: Inventory) -> None:
+    """A ``PARTITION OF`` child declares no columns: it has its parent's."""
+    for table in inventory.tables:
+        if table.parent and not table.columns:
+            parent_schema, _, parent_name = table.parent.rpartition(".")
+            parent = inventory.find(parent_schema or None, parent_name)
+            if parent is not None:
+                table.columns = list(parent.columns)
+
+
+def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
+    """*model* with every unqualified object placed in *default_schema* (#227)."""
+
+    def placed(obj: Any) -> Any:
+        return replace(obj, schema=obj.schema or default_schema)
+
+    return SchemaModel(
+        tables={
+            ref_for("table", t.schema or default_schema, t.name): placed(t)
+            for t in model.tables.values()
+        },
+        enum_types={
+            ref_for("type", e.schema or default_schema, e.name): placed(e)
+            for e in model.enum_types.values()
+        },
+        sequences={
+            ref_for("sequence", q.schema or default_schema, q.name): placed(q)
+            for q in model.sequences.values()
+        },
+    )
 
 
 def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> ExpectedSchema:
-    """Read the expected schema out of DDL with pglast (#227).
+    """Read the expected schema out of DDL into the schema model (#227).
 
-    Every ``CREATE TABLE`` becomes ``schema.table`` — an unqualified name
-    belongs to ``default_schema`` — with its columns' type as written,
-    nullability (``NOT NULL`` or ``PRIMARY KEY``) and default text. A
-    ``PARTITION OF`` child inherits its parent's columns when the parent is in
-    the same DDL. ``CREATE SCHEMA`` declares a schema and no table; a
-    ``CREATE TABLE`` inside a function body is not a statement and is never
-    seen. Indexes are keyed by their qualified table.
+    The lint inventory reads the tree — every column, constraint and index, wherever
+    it was written — and an unqualified object belongs to ``default_schema``. A
+    ``PARTITION OF`` child inherits its parent's columns when the parent is in the
+    same DDL. ``CREATE SCHEMA`` declares a schema and no table.
 
     Raises:
         SchemaError: ``SCHEMA_202`` when pglast rejects the DDL — a parser
             failure surfaced loudly rather than as an empty expectation that
             would report every live table as spurious drift.
     """
-
     try:
-        inventory = build_inventory(sql)
         raws = list(pglast.parse_sql(sql) or [])
-        statements = [raw.stmt for raw in raws]
+        inventory = build_inventory(sql, raws)
         objects = objects_in(sql, raws)
     except pglast.parser.ParseError as exc:
         raise SchemaError(
@@ -307,39 +341,103 @@ def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> Exp
             resolution_hint="Fix the SQL syntax in the schema file, or regenerate it with `confiture build`.",
         ) from exc
 
-    info = SchemaInfo()
-    schemas: set[str] = {default_schema}
-    for table in inventory.tables:
-        key = _qualify(table.folded_schema, table.folded_name, default_schema)
-        schemas.add(table.folded_schema or default_schema)
-        info.tables[key] = {
-            column.folded: {
-                "type": column.type_text,
-                "nullable": not column.not_null,
-                "default": column.default,
-            }
-            for column in table.columns
-        }
-    for table in inventory.tables:
-        if table.parent and not table.columns:
-            parent_schema, _, parent_name = table.parent.rpartition(".")
-            parent_key = _qualify(parent_schema or None, parent_name, default_schema)
-            if parent_key in info.tables:
-                info.tables[_qualify(table.folded_schema, table.folded_name, default_schema)] = (
-                    dict(info.tables[parent_key])
-                )
-    for stmt in statements:
-        kind = type(stmt).__name__
-        schema_name = getattr(stmt, "schemaname", None)
-        relation = getattr(stmt, "relation", None)
-        if kind == "CreateSchemaStmt" and schema_name:
-            schemas.add(str(schema_name))
-        elif kind == "IndexStmt" and relation is not None:
-            key = _qualify(
-                getattr(relation, "schemaname", None), str(relation.relname), default_schema
-            )
-            info.indexes.setdefault(key, []).append(str(getattr(stmt, "idxname", "")))
-    return ExpectedSchema(info=info, schemas=frozenset(schemas), objects=objects)
+    _inherit_partition_columns(inventory)
+    model = _in_schema(schema_model(inventory), default_schema)
+    schemas = {default_schema} | {t.schema for t in model.tables.values() if t.schema}
+    schemas |= {declared.name for declared in inventory.schemas}
+    return ExpectedSchema(model=model, schemas=frozenset(schemas), objects=objects)
+
+
+#: The pseudo-types a column may be declared with and PostgreSQL never stores; the
+#: ``nextval`` default the catalog then holds is the column's, not a drift.
+_SERIALS = frozenset({"SMALLSERIAL", "SERIAL", "BIGSERIAL"})
+
+#: How a finding names a constraint the DDL left unnamed.
+_CONSTRAINT_KEYWORDS = {
+    "primary_key": "PRIMARY KEY",
+    "unique": "UNIQUE",
+    "check": "CHECK",
+    "foreign_key": "FOREIGN KEY",
+}
+
+
+def _named(table: Table) -> str:
+    """``schema.table``: how a finding names a table."""
+    return f"{table.schema or DEFAULT_SCHEMA}.{table.name}"
+
+
+def _column_facts(column: Column) -> dict[str, Any]:
+    """A column as a finding reports it — the shape ``expected`` / ``actual`` always had."""
+    return {"type": column.type_text, "nullable": not column.not_null, "default": column.default}
+
+
+def _comparable_defaults(exp: Column, act: Column) -> tuple[str | None, str | None]:
+    """Both defaults as they are compared, or ``(None, None)`` where no default is.
+
+    Compared as parse trees through ``ddl_walk.canonical_default``, never as text:
+    PostgreSQL stores a default analysed (``'x'`` as ``'x'::text``). An identity or a
+    generated column has no default, and a ``serial``'s ``nextval`` is its own.
+    """
+    if exp.identity or act.identity or exp.generated or act.generated:
+        return None, None
+    if (exp.raw_sql_type or "").upper() in _SERIALS:
+        return None, None
+    column_type = act.type_text or exp.type_text
+    try:
+        return (
+            canonical_default(exp.default, column_type),
+            canonical_default(act.default, column_type),
+        )
+    except pglast.parser.ParseError:
+        return exp.default, act.default
+
+
+def _index_keys(index: Index) -> tuple[str | None, ...]:
+    return tuple(
+        key if key.replace("_", "").isalnum() else canonical_default(key, None)
+        for key in index.columns
+    )
+
+
+def _same_index(expected: Index, live: Index) -> bool:
+    """Whether an index the DDL left unnamed is *live*, whatever PostgreSQL named it."""
+    return (expected.unique, expected.method, _index_keys(expected)) == (
+        live.unique,
+        live.method,
+        _index_keys(live),
+    )
+
+
+def _index_label(index: Index) -> str:
+    return f"({', '.join(index.columns)})"
+
+
+def _same_constraint(expected: Constraint, live: Constraint) -> bool:
+    """Whether *live* is the constraint *expected* declares.
+
+    By name when the DDL wrote one; otherwise by what it says — its columns and, for
+    a foreign key, what it references (``REFERENCES p`` with no column list means the
+    referenced key, which the catalog always spells out). An unnamed CHECK matches any
+    live CHECK still unclaimed: its text is stored analysed and cannot be compared.
+    """
+    if expected.kind != live.kind:
+        return False
+    if expected.name:
+        return expected.name == live.name
+    if expected.kind == "check":
+        return True
+    return (
+        expected.columns == live.columns
+        and identity_of(expected.ref_table) == identity_of(live.ref_table)
+        and (not expected.ref_columns or expected.ref_columns == live.ref_columns)
+    )
+
+
+def _constraint_label(constraint: Constraint) -> str:
+    if constraint.name:
+        return constraint.name
+    keyword = _CONSTRAINT_KEYWORDS[constraint.kind]
+    return f"{keyword} ({', '.join(constraint.columns)})" if constraint.columns else keyword
 
 
 def drift_config_from(config_data: Any) -> "DriftConfig":
@@ -429,20 +527,23 @@ class SchemaDriftDetector:
 
     def compare_schemas(
         self,
-        expected: SchemaInfo,
-        actual: SchemaInfo,
+        expected: SchemaModel,
+        actual: SchemaModel,
         expected_objects: dict[ObjectRef, list[DDLObject]] | None = None,
         live_objects: LiveObjects | None = None,
     ) -> DriftReport:
-        """Compare two schema info objects.
+        """Compare two schema models: the expected one from DDL, the actual one live.
+
+        Both are ``core/schema_model`` values — the expected side built by the lint
+        inventory, the live side by ``live_catalog`` — so what differs is the schema,
+        not two representations of it.
 
         Args:
             expected: Expected schema state
             actual: Actual (live) schema state
             expected_objects: Views, matviews, triggers and routines the tree
                 declares (``ddl_objects.objects_in``). ``None`` skips that
-                comparison, which is what a caller holding only a ``SchemaInfo``
-                can honestly ask for.
+                comparison.
             live_objects: The same kinds read from the database
                 (:class:`~confiture.core.live_objects.LiveObjectCatalog`).
 
@@ -456,12 +557,18 @@ class SchemaDriftDetector:
             expected_schema_source="provided",
         )
 
-        # Compare tables
-        expected_tables = {k for k in expected.tables if not self._ignored(k)}
-        actual_tables = {k for k in actual.tables if not self._ignored(k)}
+        expected_tables = {
+            key: table
+            for table in expected.tables.values()
+            if not self._ignored(key := _named(table))
+        }
+        actual_tables = {
+            key: table
+            for table in actual.tables.values()
+            if not self._ignored(key := _named(table))
+        }
 
-        # Missing tables (in expected but not actual)
-        for table in sorted(expected_tables - actual_tables):
+        for table in sorted(expected_tables.keys() - actual_tables.keys()):
             report.drift_items.append(
                 DriftItem(
                     drift_type=DriftType.MISSING_TABLE,
@@ -473,8 +580,7 @@ class SchemaDriftDetector:
                 )
             )
 
-        # Extra tables (in actual but not expected)
-        for table in sorted(actual_tables - expected_tables):
+        for table in sorted(actual_tables.keys() - expected_tables.keys()):
             report.drift_items.append(
                 DriftItem(
                     drift_type=DriftType.EXTRA_TABLE,
@@ -486,18 +592,11 @@ class SchemaDriftDetector:
                 )
             )
 
-        # Compare columns for tables that exist in both
-        for table in sorted(expected_tables & actual_tables):
+        for table in sorted(expected_tables.keys() & actual_tables.keys()):
             report.tables_checked += 1
-            self._compare_table_columns(
-                table,
-                expected.tables[table],
-                actual.tables[table],
-                report,
-            )
-
-        # Compare indexes
-        self._compare_indexes(expected, actual, report)
+            self._compare_table_columns(table, expected_tables[table], actual_tables[table], report)
+            self._compare_indexes(table, expected_tables[table], actual_tables[table], report)
+            self._compare_constraints(table, expected_tables[table], actual_tables[table], report)
 
         # Compare object existence: a view, matview, trigger or routine the tree
         # declares and the database has not got was exit 0 before this (#303).
@@ -513,104 +612,105 @@ class SchemaDriftDetector:
     def _compare_table_columns(
         self,
         table_name: str,
-        expected_cols: dict[str, dict],
-        actual_cols: dict[str, dict],
+        expected_table: Table,
+        actual_table: Table,
         report: DriftReport,
     ) -> None:
-        """Compare columns for a single table."""
-        expected_col_names = set(expected_cols.keys())
-        actual_col_names = set(actual_cols.keys())
+        """Compare the columns of one table present on both sides."""
+        expected_cols = {c.folded: c for c in expected_table.columns}
+        actual_cols = {c.folded: c for c in actual_table.columns}
 
-        # Missing columns
-        for col in sorted(expected_col_names - actual_col_names):
+        for col in sorted(expected_cols.keys() - actual_cols.keys()):
             report.drift_items.append(
                 DriftItem(
                     drift_type=DriftType.MISSING_COLUMN,
                     severity=DriftSeverity.CRITICAL,
                     object_name=f"{table_name}.{col}",
-                    expected=expected_cols[col],
+                    expected=_column_facts(expected_cols[col]),
                     actual=None,
                     message=f"Column '{table_name}.{col}' is missing",
                 )
             )
 
-        # Extra columns
-        for col in sorted(actual_col_names - expected_col_names):
+        for col in sorted(actual_cols.keys() - expected_cols.keys()):
             report.drift_items.append(
                 DriftItem(
                     drift_type=DriftType.EXTRA_COLUMN,
                     severity=DriftSeverity.WARNING,
                     object_name=f"{table_name}.{col}",
                     expected=None,
-                    actual=actual_cols[col],
+                    actual=_column_facts(actual_cols[col]),
                     message=f"Column '{table_name}.{col}' exists but is not expected",
                 )
             )
 
-        # Compare matching columns
-        for col in sorted(expected_col_names & actual_col_names):
+        for col in sorted(expected_cols.keys() & actual_cols.keys()):
             report.columns_checked += 1
-            exp = expected_cols[col]
-            act = actual_cols[col]
+            self._compare_column(
+                f"{table_name}.{col}", expected_cols[col], actual_cols[col], report
+            )
 
-            # Type mismatch. One canonicaliser answers for both sides: the DDL's
-            # own spelling and `format_type`'s are two vocabularies for one type,
-            # and eight columns of a schema applied verbatim from its own DDL
-            # reported a mismatch before they met in the middle (#302).
-            exp_type = exp.get("type", "")
-            act_type = act.get("type", "")
-            if exp_type and act_type and not same_type(exp_type, act_type):
-                report.drift_items.append(
-                    DriftItem(
-                        drift_type=DriftType.TYPE_MISMATCH,
-                        severity=DriftSeverity.WARNING,
-                        object_name=f"{table_name}.{col}",
-                        expected=exp_type,
-                        actual=act_type,
-                        message=f"Column '{table_name}.{col}' type mismatch: "
-                        f"expected {exp_type}, got {act_type}",
-                    )
+        self._compare_column_order(table_name, list(expected_cols), list(actual_cols), report)
+
+    def _compare_column(self, name: str, exp: Column, act: Column, report: DriftReport) -> None:
+        """Type, nullability and default of one column present on both sides."""
+        # One canonicaliser answers for both sides: the DDL's own spelling and
+        # `format_type`'s are two vocabularies for one type (#302).
+        exp_type, act_type = exp.type_text or "", act.type_text or ""
+        if exp_type and act_type and not same_type(exp_type, act_type):
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.TYPE_MISMATCH,
+                    severity=DriftSeverity.WARNING,
+                    object_name=name,
+                    expected=exp_type,
+                    actual=act_type,
+                    message=f"Column '{name}' type mismatch: expected {exp_type}, got {act_type}",
                 )
+            )
 
-            # Nullable mismatch
-            exp_nullable = exp.get("nullable")
-            act_nullable = act.get("nullable")
-            if (
-                exp_nullable is not None
-                and act_nullable is not None
-                and exp_nullable != act_nullable
-            ):
-                report.drift_items.append(
-                    DriftItem(
-                        drift_type=DriftType.NULLABLE_MISMATCH,
-                        severity=DriftSeverity.WARNING,
-                        object_name=f"{table_name}.{col}",
-                        expected=f"nullable={exp_nullable}",
-                        actual=f"nullable={act_nullable}",
-                        message=f"Column '{table_name}.{col}' nullable mismatch: "
-                        f"expected {exp_nullable}, got {act_nullable}",
-                    )
+        if exp.not_null != act.not_null:
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.NULLABLE_MISMATCH,
+                    severity=DriftSeverity.WARNING,
+                    object_name=name,
+                    expected=f"nullable={not exp.not_null}",
+                    actual=f"nullable={not act.not_null}",
+                    message=f"Column '{name}' nullable mismatch: "
+                    f"expected {not exp.not_null}, got {not act.not_null}",
                 )
+            )
 
-        self._compare_column_order(table_name, expected_cols, actual_cols, report)
+        expected_default, actual_default = _comparable_defaults(exp, act)
+        if expected_default != actual_default:
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.DEFAULT_MISMATCH,
+                    severity=DriftSeverity.WARNING,
+                    object_name=name,
+                    expected=exp.default,
+                    actual=act.default,
+                    message=f"Column '{name}' default mismatch: "
+                    f"expected {exp.default}, got {act.default}",
+                )
+            )
 
     def _compare_column_order(
         self,
         table_name: str,
-        expected_cols: dict[str, dict],
-        actual_cols: dict[str, dict],
+        expected_order: list[str],
+        actual_order: list[str],
         report: DriftReport,
     ) -> None:
         """One ``column_order_mismatch`` per table whose columns are the same set in another order (#226).
 
         Both sides keep declaration order: the expected DDL as written, the live
-        side by ``ordinal_position``. A differing set is already reported column by
-        column, so only equal sets are compared.
+        side by ``attnum``. A differing set is already reported column by column,
+        so only equal sets are compared.
         """
         if self.ignore_column_order:
             return
-        expected_order = list(expected_cols)
-        actual_order = list(actual_cols)
         if set(expected_order) != set(actual_order) or expected_order == actual_order:
             return
         report.drift_items.append(
@@ -629,74 +729,118 @@ class SchemaDriftDetector:
         )
 
     def _compare_indexes(
-        self,
-        expected: SchemaInfo,
-        actual: SchemaInfo,
-        report: DriftReport,
+        self, table: str, expected: Table, actual: Table, report: DriftReport
     ) -> None:
-        """Compare the declared indexes of every expected table with the live ones.
+        """Compare one table's declared indexes with its live ones.
 
-        A live index that backs a constraint (``actual.constraint_indexes``)
-        is PostgreSQL's, not the DDL's: it is never *extra*. It still matches
-        a declared index by name, so ``UNIQUE USING INDEX`` reports nothing.
+        A live index that backs a constraint is PostgreSQL's, not the DDL's: it is
+        never *extra*. It still matches a declared index by name, so ``UNIQUE USING
+        INDEX`` reports nothing. An index the DDL left unnamed matches a live index
+        with the same keys, uniqueness and method, whatever PostgreSQL named it.
         """
-        for table in sorted(set(expected.tables) | set(expected.indexes)):
-            if self._ignored(table):
+        act_by_name = {ix.name: ix for ix in actual.indexes if ix.name}
+        exp_named = {ix.name for ix in expected.indexes if ix.name}
+        matched = set(exp_named & act_by_name.keys())
+        unnamed_missing: list[Index] = []
+        for ix in expected.indexes:
+            if ix.name:
                 continue
+            twin = next(
+                (
+                    live
+                    for live in actual.indexes
+                    if live.name not in matched and _same_index(ix, live)
+                ),
+                None,
+            )
+            if twin is None:
+                unnamed_missing.append(ix)
+            else:
+                matched.add(twin.name)
+        backing = {ix.name for ix in actual.indexes if ix.backs_constraint}
+        extra = sorted(act_by_name.keys() - backing - matched)
+        missing = sorted(exp_named - act_by_name.keys())
+        report.indexes_checked += len(expected.indexes) + len(extra)
 
-            exp_indexes = set(expected.indexes.get(table, []))
-            act_indexes = set(actual.indexes.get(table, []))
-            backing = actual.constraint_indexes.get(table, set())
-            report.indexes_checked += len(exp_indexes | (act_indexes - backing))
-
-            # Missing indexes
-            for idx in sorted(exp_indexes - act_indexes):
-                report.drift_items.append(
-                    DriftItem(
-                        drift_type=DriftType.MISSING_INDEX,
-                        severity=DriftSeverity.WARNING,
-                        object_name=f"{table}.{idx}",
-                        expected=idx,
-                        actual=None,
-                        message=f"Index '{idx}' on '{table}' is missing",
-                    )
+        for idx in [*missing, *(_index_label(ix) for ix in unnamed_missing)]:
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.MISSING_INDEX,
+                    severity=DriftSeverity.WARNING,
+                    object_name=f"{table}.{idx}",
+                    expected=idx,
+                    actual=None,
+                    message=f"Index '{idx}' on '{table}' is missing",
                 )
-
-            # Extra indexes
-            for idx in sorted(act_indexes - backing - exp_indexes):
-                report.drift_items.append(
-                    DriftItem(
-                        drift_type=DriftType.EXTRA_INDEX,
-                        severity=DriftSeverity.INFO,
-                        object_name=f"{table}.{idx}",
-                        expected=None,
-                        actual=idx,
-                        message=f"Index '{idx}' on '{table}' exists but is not expected",
-                    )
+            )
+        for idx in extra:
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.EXTRA_INDEX,
+                    severity=DriftSeverity.INFO,
+                    object_name=f"{table}.{idx}",
+                    expected=None,
+                    actual=idx,
+                    message=f"Index '{idx}' on '{table}' exists but is not expected",
                 )
+            )
 
-    def get_live_schema(self, schemas: Iterable[str] | None = None) -> SchemaInfo:
-        """The current live schema, keyed ``schema.table`` when ``schemas`` is given.
+    def _compare_constraints(
+        self, table: str, expected: Table, actual: Table, report: DriftReport
+    ) -> None:
+        """Compare one table's constraints: a constraint the tree declares and the database lost.
 
-        Args:
-            schemas: The schemas to read (#227) — normally the ones the expected
-                DDL declares. ``None`` keeps the historical shape: ``public``
-                only, bare table names.
+        Keyed by name where the DDL wrote one, and by what the constraint says where
+        it did not — PostgreSQL names an unnamed constraint at apply time
+        (``child_pid_fkey``), and 1.14.0's rule is that two unnamed foreign keys on one
+        table are two. A CHECK's text is not compared: PostgreSQL stores it analysed.
         """
-        if schemas is None:
-            return self.analyzer.get_schema_info(refresh=True)
-        return self.analyzer.get_schema_info(refresh=True, schemas=sorted(set(schemas)))
+        unmatched = list(actual.constraints)
+        missing: list[Constraint] = []
+        for constraint in sorted(expected.constraints, key=lambda c: not c.name):
+            twin = next((live for live in unmatched if _same_constraint(constraint, live)), None)
+            if twin is None:
+                missing.append(constraint)
+            else:
+                unmatched.remove(twin)
 
-    def compare_with_expected(self, expected: SchemaInfo) -> DriftReport:
-        """Compare live database with expected schema.
+        for constraint in missing:
+            label = _constraint_label(constraint)
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.MISSING_CONSTRAINT,
+                    severity=DriftSeverity.WARNING,
+                    object_name=f"{table}.{label}",
+                    expected=label,
+                    actual=None,
+                    message=f"Constraint '{label}' on '{table}' is missing",
+                )
+            )
+        for constraint in unmatched:
+            label = _constraint_label(constraint)
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.EXTRA_CONSTRAINT,
+                    severity=DriftSeverity.INFO,
+                    object_name=f"{table}.{label}",
+                    expected=None,
+                    actual=label,
+                    message=f"Constraint '{label}' on '{table}' exists but is not expected",
+                )
+            )
 
-        Args:
-            expected: Expected schema state
+    def get_live_schema(self, schemas: Iterable[str] | None = None) -> SchemaModel:
+        """The live schema in *schemas* (``public`` when none are named), as the model."""
+        wanted = sorted(set(schemas)) if schemas is not None else [DEFAULT_SCHEMA]
+        return live_catalog.read(self.connection, schemas=wanted)
 
-        Returns:
-            DriftReport with differences
+    def compare_with_expected(self, expected: SchemaModel) -> DriftReport:
+        """Compare the live database with an expected schema model.
+
+        The live side reads the schemas *expected* places its tables in.
         """
-        actual = self.get_live_schema()
+        schemas = {t.schema or DEFAULT_SCHEMA for t in expected.tables.values()}
+        actual = self.get_live_schema(schemas or None)
         report = self.compare_schemas(expected, actual)
         report.expected_schema_source = "provided"
         return report
@@ -706,9 +850,9 @@ class SchemaDriftDetector:
     ) -> DriftReport:
         """Compare the live database with a schema SQL file.
 
-        The file is parsed with pglast (#227); tables are keyed ``schema.table``,
-        an unqualified name resolves to ``default_schema``, and the live side
-        reads exactly the schemas the file declares or qualifies with.
+        The file is read into the schema model (#227); an unqualified name resolves to
+        ``default_schema``, and the live side reads exactly the schemas the file
+        declares or qualifies with.
 
         Args:
             schema_file_path: Schema SQL file, or a directory of ``.sql`` files read in name order
@@ -717,7 +861,6 @@ class SchemaDriftDetector:
         Returns:
             DriftReport with differences
         """
-
         path = Path(schema_file_path)
         if not path.exists():
             raise FileNotFoundError(f"Schema file not found: {schema_file_path}")
@@ -726,7 +869,7 @@ class SchemaDriftDetector:
         expected = parse_expected_schema(sql, default_schema=default_schema)
         actual = self.get_live_schema(expected.schemas)
         report = self.compare_schemas(
-            expected.info,
+            expected.model,
             actual,
             expected_objects=expected.objects,
             live_objects=self.get_live_objects(expected.schemas),
@@ -741,10 +884,6 @@ class SchemaDriftDetector:
         ``--ssh`` — rather than opening a second one.
         """
         return LiveObjectCatalog(self.connection).read(sorted(set(schemas)))
-
-    def _parse_schema_from_sql(self, sql: str, default_schema: str = DEFAULT_SCHEMA) -> SchemaInfo:
-        """The expected :class:`SchemaInfo` for ``sql`` — see :func:`parse_expected_schema`."""
-        return parse_expected_schema(sql, default_schema=default_schema).info
 
     def _get_database_name(self) -> str:
         """Get current database name."""

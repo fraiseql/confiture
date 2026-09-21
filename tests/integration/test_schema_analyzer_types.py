@@ -17,8 +17,9 @@ from pathlib import Path
 import psycopg
 import pytest
 
+from confiture.core.drift import SchemaDriftDetector
 from confiture.core.psql_applier import apply_sql_via_psql
-from confiture.core.schema_analyzer import SchemaAnalyzer
+from confiture.core.schema_model import Column, Table
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "live_drift_corpus"
 
@@ -31,10 +32,15 @@ def types_database(fresh_database: str) -> str:
     return fresh_database
 
 
-def columns_of(url: str, table: str) -> dict[str, dict]:
+def live_core(conn: psycopg.Connection) -> dict[str, Table]:
+    """The live ``core`` schema as drift reads it, keyed ``schema.table``."""
+    model = SchemaDriftDetector(conn).get_live_schema(["core"])
+    return {f"{t.schema}.{t.name}": t for t in model.tables.values()}
+
+
+def columns_of(url: str, table: str) -> dict[str, Column]:
     with psycopg.connect(url) as conn:
-        info = SchemaAnalyzer(conn).get_schema_info(refresh=True, schemas=["core"])
-    return info.tables[table]
+        return {c.folded: c for c in live_core(conn)[table].columns}
 
 
 #: ``(column, the type PostgreSQL stores)`` — every row measured on 18.4.
@@ -66,14 +72,14 @@ EXPECTED_TYPES = [
 def test_the_live_type_is_what_postgres_stores(
     types_database: str, column: str, written: str
 ) -> None:
-    assert columns_of(types_database, "core.tb_types")[column]["type"] == written
+    assert columns_of(types_database, "core.tb_types")[column].type_text == written
 
 
 def test_nullability_and_defaults_survive_the_rewrite(types_database: str) -> None:
     columns = columns_of(types_database, "core.tb_types")
-    assert columns["label"]["nullable"] is False
-    assert columns["tags"]["nullable"] is True
-    assert columns["id"]["default"].startswith("nextval(")
+    assert columns["label"].not_null is True
+    assert columns["tags"].not_null is False
+    assert (columns["id"].default or "").startswith("nextval(")
 
 
 def test_a_partitioned_parent_is_still_a_table(types_database: str) -> None:
@@ -81,9 +87,9 @@ def test_a_partitioned_parent_is_still_a_table(types_database: str) -> None:
     partitioned parent a BASE TABLE and the expected side models it, so a live
     read filtered to ordinary tables would report it missing."""
     with psycopg.connect(types_database) as conn:
-        info = SchemaAnalyzer(conn).get_schema_info(refresh=True, schemas=["core"])
-    assert "core.tb_event" in info.tables
-    assert "core.tb_event_2026" in info.tables
+        tables = live_core(conn)
+    assert "core.tb_event" in tables
+    assert "core.tb_event_2026" in tables
 
 
 def test_a_dropped_column_is_not_reported(types_database: str) -> None:
@@ -91,13 +97,13 @@ def test_a_dropped_column_is_not_reported(types_database: str) -> None:
     with psycopg.connect(types_database) as conn:
         conn.execute("ALTER TABLE core.tb_types DROP COLUMN counter")
         conn.commit()
-        info = SchemaAnalyzer(conn).get_schema_info(refresh=True, schemas=["core"])
-    assert "counter" not in info.tables["core.tb_types"]
-    assert all(not name.startswith("........pg.dropped") for name in info.tables["core.tb_types"])
+        columns = [c.folded for c in live_core(conn)["core.tb_types"].columns]
+    assert "counter" not in columns
+    assert all(not name.startswith("........pg.dropped") for name in columns)
 
 
 def test_declaration_order_is_preserved(types_database: str) -> None:
-    """``_compare_column_order`` reads declaration order off this dict."""
+    """``_compare_column_order`` reads declaration order off the model's columns."""
     assert list(columns_of(types_database, "core.tb_widget")) == [
         "id",
         "serial",

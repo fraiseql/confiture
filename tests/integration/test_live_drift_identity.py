@@ -100,11 +100,13 @@ def test_a_database_built_from_its_ddl_has_no_drift(built_from_corpus: Built) ->
 #: ``(mutation SQL, drift type, severity, object)``. A kind of comparison is a
 #: row, and a row's marker names the comparison that does not exist yet.
 MUTATIONS = [
+    # Not `tb_other.id`: dropping a key column drops its PRIMARY KEY too, which is
+    # a second, real item now that constraints are compared.
     pytest.param(
-        "ALTER TABLE core.tb_other DROP COLUMN id",
+        "ALTER TABLE core.tb_widget DROP COLUMN ratio",
         "missing_column",
         "critical",
-        "core.tb_other.id",
+        "core.tb_widget.ratio",
         id="drop-column",
     ),
     pytest.param(
@@ -127,6 +129,27 @@ MUTATIONS = [
         "critical",
         "core.tb_other",
         id="drop-table",
+    ),
+    pytest.param(
+        "ALTER TABLE core.tb_widget ALTER COLUMN maybe_null SET DEFAULT 'x'",
+        "default_mismatch",
+        "warning",
+        "core.tb_widget.maybe_null",
+        id="set-default",
+    ),
+    pytest.param(
+        "ALTER TABLE core.tb_other DROP CONSTRAINT uq_other_label",
+        "missing_constraint",
+        "warning",
+        "core.tb_other.uq_other_label",
+        id="drop-constraint",
+    ),
+    pytest.param(
+        "ALTER TABLE core.tb_other ADD CONSTRAINT ck_other_id CHECK (id > 0)",
+        "extra_constraint",
+        "info",
+        "core.tb_other.ck_other_id",
+        id="extra-constraint",
     ),
     pytest.param(
         "DROP INDEX core.ix_widget_serial",

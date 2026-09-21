@@ -9,7 +9,8 @@ import psycopg.pq
 import pytest
 
 from confiture.core.drift import DriftReport, SchemaDriftDetector
-from confiture.core.schema_analyzer import SchemaAnalyzer, SchemaInfo
+from confiture.core.schema_analyzer import LiveSchema, SchemaAnalyzer
+from confiture.core.schema_model import SchemaModel
 from confiture.models.migration import Migration
 
 
@@ -32,15 +33,15 @@ class TestDriftDetectorIntegration:
         detector = SchemaDriftDetector(db_connection)
         schema = detector.get_live_schema()
 
-        assert isinstance(schema, SchemaInfo)
-        assert isinstance(schema.tables, dict)
+        assert isinstance(schema, SchemaModel)
+        assert all(table.schema == "public" for table in schema.tables.values())
 
     def test_compare_with_expected(self, db_connection):
         """Test comparing live schema with expected."""
         detector = SchemaDriftDetector(db_connection)
 
         # Empty expected schema should detect all tables as extra
-        expected = SchemaInfo(tables={})
+        expected = SchemaModel()
         report = detector.compare_with_expected(expected)
 
         assert isinstance(report, DriftReport)
@@ -51,14 +52,14 @@ class TestDriftDetectorIntegration:
 class TestSchemaAnalyzerIntegration:
     """Integration tests for SchemaAnalyzer with real database."""
 
-    def test_get_schema_info_from_database(self, db_connection):
-        """Test retrieving schema info from real database."""
+    def test_live_schema_from_database(self, db_connection):
+        """Test reading the validator's view of the live schema from a real database."""
         analyzer = SchemaAnalyzer(db_connection)
-        info = analyzer.get_schema_info()
+        live = analyzer.live_schema()
 
-        assert isinstance(info, SchemaInfo)
-        assert isinstance(info.tables, dict)
-        assert isinstance(info.indexes, dict)
+        assert isinstance(live, LiveSchema)
+        assert isinstance(live.index_names(), set)
+        assert analyzer.live_schema() is live
 
 
 class TestStrictModeIntegration:

@@ -16,13 +16,17 @@ from unittest.mock import MagicMock
 import pytest
 
 from confiture.core.drift import DriftType, SchemaDriftDetector, parse_expected_schema
-from confiture.core.schema_analyzer import SchemaInfo
+from confiture.core.schema_model import Constraint, SchemaModel, Table
 from confiture.exceptions import SchemaError
+from tests.unit._schema_models import model_of
 
 TENANT = (
     "CREATE SCHEMA tenant;\n"
     "CREATE TABLE tenant.tb_user (id bigint PRIMARY KEY, name text NOT NULL DEFAULT 'x');\n"
 )
+
+#: The primary key PostgreSQL records for ``TENANT``'s unnamed one.
+PKEY = Constraint(kind="primary_key", name="tb_user_pkey", columns=("id",))
 
 
 def _detector(ignore: list[str] | None = None) -> SchemaDriftDetector:
@@ -31,16 +35,30 @@ def _detector(ignore: list[str] | None = None) -> SchemaDriftDetector:
     return SchemaDriftDetector(conn, ignore_tables=ignore)
 
 
+def _tables(model: SchemaModel) -> dict[str, Table]:
+    """The model's tables keyed ``schema.table``, as a finding names them."""
+    return {f"{t.schema}.{t.name}": t for t in model.tables.values()}
+
+
+def _facts(table: Table) -> dict[str, dict[str, object]]:
+    """Each column as ``{type, nullable, default}`` — what a finding reports."""
+    return {
+        c.name: {"type": c.type_text, "nullable": not c.not_null, "default": c.default}
+        for c in table.columns
+    }
+
+
 def test_create_schema_alone_yields_no_table_but_declares_the_schema() -> None:
     expected = parse_expected_schema("CREATE SCHEMA tenant;")
-    assert expected.info.tables == {}
+    assert expected.model.tables == {}
     assert expected.schemas == frozenset({"public", "tenant"})
 
 
 def test_a_qualified_table_is_keyed_schema_dot_table_with_its_columns() -> None:
     expected = parse_expected_schema(TENANT)
-    assert list(expected.info.tables) == ["tenant.tb_user"]
-    assert expected.info.tables["tenant.tb_user"] == {
+    tables = _tables(expected.model)
+    assert list(tables) == ["tenant.tb_user"]
+    assert _facts(tables["tenant.tb_user"]) == {
         "id": {"type": "bigint", "nullable": False, "default": None},
         "name": {"type": "text", "nullable": False, "default": "'x'"},
     }
@@ -48,11 +66,11 @@ def test_a_qualified_table_is_keyed_schema_dot_table_with_its_columns() -> None:
 
 
 def test_an_unqualified_table_lands_in_the_default_schema() -> None:
-    assert list(parse_expected_schema("CREATE TABLE plain (id int);").info.tables) == [
+    assert list(_tables(parse_expected_schema("CREATE TABLE plain (id int);").model)) == [
         "public.plain"
     ]
     assert list(
-        parse_expected_schema("CREATE TABLE plain (id int);", default_schema="app").info.tables
+        _tables(parse_expected_schema("CREATE TABLE plain (id int);", default_schema="app").model)
     ) == ["app.plain"]
     assert parse_expected_schema(
         "CREATE TABLE plain (id int);", default_schema="app"
@@ -61,8 +79,10 @@ def test_an_unqualified_table_lands_in_the_default_schema() -> None:
 
 def test_quoted_mixed_case_identifiers_keep_their_case() -> None:
     expected = parse_expected_schema('CREATE TABLE "Tenant"."Tb" ("Id" int NOT NULL);')
-    assert expected.info.tables == {
-        "Tenant.Tb": {"Id": {"type": "integer", "nullable": False, "default": None}}
+    tables = _tables(expected.model)
+    assert list(tables) == ["Tenant.Tb"]
+    assert _facts(tables["Tenant.Tb"]) == {
+        "Id": {"type": "integer", "nullable": False, "default": None}
     }
     assert "Tenant" in expected.schemas
 
@@ -73,12 +93,16 @@ def test_a_create_table_inside_a_function_body_is_not_a_table() -> None:
         "BEGIN\n  CREATE TABLE scratch (id int);\nEND\n$$;\n"
         "CREATE TABLE real_one (id int);\n"
     )
-    assert list(parse_expected_schema(sql).info.tables) == ["public.real_one"]
+    assert list(_tables(parse_expected_schema(sql).model)) == ["public.real_one"]
 
 
 def test_indexes_are_keyed_by_the_qualified_table() -> None:
     sql = TENANT + "CREATE INDEX idx_user_name ON tenant.tb_user (name);\n"
-    assert parse_expected_schema(sql).info.indexes == {"tenant.tb_user": ["idx_user_name"]}
+    tables = _tables(parse_expected_schema(sql).model)
+    assert {name: [ix.name for ix in t.indexes] for name, t in tables.items()} == {
+        "tenant.tb_user": ["idx_user_name"]
+    }
+    assert [ix.table for ix in tables["tenant.tb_user"].indexes] == ["tenant.tb_user"]
 
 
 def test_a_partition_child_inherits_its_parents_columns() -> None:
@@ -86,8 +110,8 @@ def test_a_partition_child_inherits_its_parents_columns() -> None:
         "CREATE TABLE app.events (id bigint NOT NULL, at date NOT NULL) PARTITION BY RANGE (at);\n"
         "CREATE TABLE app.events_2026 PARTITION OF app.events FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');\n"
     )
-    tables = parse_expected_schema(sql).info.tables
-    assert list(tables["app.events_2026"]) == ["id", "at"]
+    tables = _tables(parse_expected_schema(sql).model)
+    assert [c.name for c in tables["app.events_2026"].columns] == ["id", "at"]
 
 
 def test_unparseable_ddl_is_a_schema_error_not_an_empty_expectation() -> None:
@@ -96,22 +120,25 @@ def test_unparseable_ddl_is_a_schema_error_not_an_empty_expectation() -> None:
     assert excinfo.value.error_code == "SCHEMA_202"
 
 
-def test_the_method_still_returns_the_schema_info() -> None:
-    info = _detector()._parse_schema_from_sql(TENANT)
-    assert isinstance(info, SchemaInfo)
-    assert list(info.tables) == ["tenant.tb_user"]
+def test_the_expected_side_is_the_schema_model() -> None:
+    # The detector's own `_parse_schema_from_sql` and its dict shape are gone:
+    # the expected side is the lint inventory's schema model, as the live side is.
+    expected = parse_expected_schema(TENANT)
+    assert isinstance(expected.model, SchemaModel)
+    assert list(_tables(expected.model)) == ["tenant.tb_user"]
 
 
 def test_qualified_expected_against_qualified_live_reports_no_missing_table() -> None:
-    expected = parse_expected_schema(TENANT + "CREATE TABLE plain (id int);").info
-    live = SchemaInfo(
-        tables={
+    expected = parse_expected_schema(TENANT + "CREATE TABLE plain (id int);").model
+    live = model_of(
+        {
             "tenant.tb_user": {
-                "id": {"type": "bigint", "nullable": False, "default": None},
-                "name": {"type": "text", "nullable": False, "default": "'x'"},
+                "id": {"type": "bigint", "nullable": False},
+                "name": {"type": "text", "nullable": False, "default": "'x'::text"},
             },
-            "public.plain": {"id": {"type": "integer", "nullable": True, "default": None}},
-        }
+            "public.plain": {"id": "integer"},
+        },
+        constraints={"tenant.tb_user": [PKEY]},
     )
     report = _detector().compare_schemas(expected, live)
     assert [i for i in report.drift_items if i.drift_type == DriftType.MISSING_TABLE] == []
@@ -119,8 +146,11 @@ def test_qualified_expected_against_qualified_live_reports_no_missing_table() ->
 
 
 def test_a_missing_column_names_the_qualified_table() -> None:
-    expected = parse_expected_schema(TENANT).info
-    live = SchemaInfo(tables={"tenant.tb_user": {"id": {"type": "bigint", "nullable": False}}})
+    expected = parse_expected_schema(TENANT).model
+    live = model_of(
+        {"tenant.tb_user": {"id": {"type": "bigint", "nullable": False}}},
+        constraints={"tenant.tb_user": [PKEY]},
+    )
     report = _detector().compare_schemas(expected, live)
     assert [(i.drift_type, i.object_name) for i in report.drift_items] == [
         (DriftType.MISSING_COLUMN, "tenant.tb_user.name")
@@ -128,8 +158,8 @@ def test_a_missing_column_names_the_qualified_table() -> None:
 
 
 def test_ignore_tables_accepts_bare_and_qualified_names() -> None:
-    expected = SchemaInfo(tables={"tenant.tb_x": {}, "public.tb_x": {}, "tenant.tb_y": {}})
-    live = SchemaInfo(tables={})
+    expected = model_of({"tenant.tb_x": {}, "public.tb_x": {}, "tenant.tb_y": {}})
+    live = SchemaModel()
     report = _detector(ignore=["tb_x", "tenant.tb_y"]).compare_schemas(expected, live)
     assert report.drift_items == []
     report = _detector(ignore=["tenant.tb_x"]).compare_schemas(expected, live)
@@ -137,20 +167,20 @@ def test_ignore_tables_accepts_bare_and_qualified_names() -> None:
 
 
 def test_confitures_own_ledger_is_ignored_in_any_schema() -> None:
-    live = SchemaInfo(tables={"public.tb_confiture": {}, "tenant.tb_confiture": {}})
-    report = _detector().compare_schemas(SchemaInfo(), live)
+    live = model_of({"public.tb_confiture": {}, "tenant.tb_confiture": {}})
+    report = _detector().compare_schemas(SchemaModel(), live)
     assert report.drift_items == []
 
 
 def test_confitures_checkpoint_table_is_not_drift() -> None:
     # The online runner keeps its checkpoints beside the ledger; neither is schema drift.
-    live = SchemaInfo(tables={"public.tb_confiture_steps": {}})
-    assert _detector().compare_schemas(SchemaInfo(), live).drift_items == []
+    live = model_of({"public.tb_confiture_steps": {}})
+    assert _detector().compare_schemas(SchemaModel(), live).drift_items == []
 
 
 def test_confitures_lock_table_is_not_drift() -> None:
     # ``migrate up`` creates the lock-holder table; a deployer who then runs
     # ``drift`` against the schema they just applied must see nothing.
-    live = SchemaInfo(tables={"public.confiture_lock_holder": {}})
-    report = _detector().compare_schemas(SchemaInfo(), live)
+    live = model_of({"public.confiture_lock_holder": {}})
+    report = _detector().compare_schemas(SchemaModel(), live)
     assert report.drift_items == []

@@ -6,13 +6,19 @@ import pytest
 
 from confiture.core import live_catalog
 from confiture.core.schema_analyzer import (
+    LiveSchema,
     SchemaAnalyzer,
-    SchemaInfo,
     ValidationIssue,
     ValidationResult,
     ValidationSeverity,
 )
 from confiture.core.schema_model import SchemaModel
+from tests.unit._schema_models import index, model, model_of, table
+
+
+def _live(tables: dict) -> LiveSchema:
+    """The validator's view of a live ``public`` schema holding *tables*."""
+    return LiveSchema(model_of(tables))
 
 
 class TestValidationIssue:
@@ -45,39 +51,45 @@ class TestValidationIssue:
         assert result["sql_fragment"] is None
 
 
-class TestSchemaInfo:
-    """Tests for SchemaInfo dataclass."""
+class TestLiveSchema:
+    """The validator's questions, answered from the live schema model."""
 
-    def test_empty_schema_info(self):
-        """Test creating empty schema info."""
-        info = SchemaInfo()
-        assert info.tables == {}
-        assert info.indexes == {}
-        assert info.constraint_indexes == {}
+    def test_an_empty_model_has_no_table_and_no_index(self):
+        live = LiveSchema(SchemaModel())
+        assert not live.has_table("users")
+        assert live.columns("users") == {}
+        assert live.index_names() == set()
 
-    def test_it_carries_only_what_something_compares(self):
-        """`constraints`, `sequences`, `extensions` and `foreign_keys` are gone.
+    def test_it_answers_from_the_model(self):
+        """The dict of dicts shaped for the validator is gone; the model is read."""
+        live = _live({"users": {"id": "integer"}})
+        assert live.has_table("users")
+        assert list(live.columns("users")) == ["id"]
+        assert live.columns("users")["id"].type_text == "integer"
 
-        All four were queried from the live database on every drift run and read
-        by nothing — four queries for an answer nobody asked, and the sequence
-        read was hardcoded to `public` however many schemas the caller requested.
-        Reading a fact nothing compares is what published three drift types
-        confiture cannot emit (#303).
-        """
-        assert set(SchemaInfo().__dataclass_fields__) == {
-            "tables",
-            "indexes",
-            "constraint_indexes",
-        }
-
-    def test_schema_info_with_data(self):
-        """Test schema info with data."""
-        info = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}}},
-            indexes={"users": ["users_pkey"]},
+    def test_a_table_outside_public_is_not_one_the_validator_sees(self):
+        """The validator asks about bare names, which resolve in ``public``."""
+        live = LiveSchema(
+            model_of({"public.users": {"id": "integer"}, "tenant.orders": {"id": "integer"}})
         )
-        assert "users" in info.tables
-        assert "users" in info.indexes
+        assert live.has_table("users")
+        assert not live.has_table("orders")
+
+    def test_index_names_include_constraint_backing_ones(self):
+        """``DROP INDEX users_pkey`` names an index that exists, whoever created it."""
+        live = LiveSchema(
+            model(
+                table(
+                    "users",
+                    indexes=[
+                        index("users_pkey", "users", "id", unique=True, backs_constraint=True),
+                        "idx_users_email",
+                    ],
+                ),
+                table("tenant.orders", indexes=["idx_orders_elsewhere"]),
+            )
+        )
+        assert live.index_names() == {"users_pkey", "idx_users_email"}
 
 
 class TestValidationResult:
@@ -156,7 +168,7 @@ class TestSchemaAnalyzer:
         conn.cursor.return_value.__exit__ = Mock(return_value=False)
         return conn, cursor
 
-    def test_get_schema_info_caches(self, mock_connection, monkeypatch):
+    def test_live_schema_caches(self, mock_connection, monkeypatch):
         """Test schema info is cached."""
         conn, _cursor = mock_connection
         # The live side is `live_catalog.read`'s; what is tested here is the cache.
@@ -165,13 +177,13 @@ class TestSchemaAnalyzer:
         analyzer = SchemaAnalyzer(conn)
 
         # First call
-        info1 = analyzer.get_schema_info()
+        info1 = analyzer.live_schema()
         # Second call should use cache
-        info2 = analyzer.get_schema_info()
+        info2 = analyzer.live_schema()
 
         assert info1 is info2
 
-    def test_get_schema_info_refresh(self, mock_connection, monkeypatch):
+    def test_live_schema_refresh(self, mock_connection, monkeypatch):
         """Test schema info refresh."""
         conn, _cursor = mock_connection
         # The live side is `live_catalog.read`'s; what is tested here is the cache.
@@ -179,18 +191,18 @@ class TestSchemaAnalyzer:
 
         analyzer = SchemaAnalyzer(conn)
 
-        info1 = analyzer.get_schema_info()
-        info2 = analyzer.get_schema_info(refresh=True)
+        info1 = analyzer.live_schema()
+        info2 = analyzer.live_schema(refresh=True)
 
         # Should be different objects after refresh
         assert info1 is not info2
 
     def test_validate_create_table_exists(self):
         """Test validation catches existing table without IF NOT EXISTS."""
-        schema = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
+        schema = _live({"users": {"id": {"type": "integer"}}})
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_create(
             "CREATE TABLE users (id INT)",
@@ -204,10 +216,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_create_table_if_not_exists(self):
         """Test IF NOT EXISTS doesn't trigger error."""
-        schema = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
+        schema = _live({"users": {"id": {"type": "integer"}}})
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_create(
             "CREATE TABLE IF NOT EXISTS users (id INT)",
@@ -221,10 +233,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_create_index_nonexistent_table(self):
         """Test validation catches index on missing table."""
-        schema = SchemaInfo(tables={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_create(
             "CREATE INDEX idx_users_email ON users (email)",
@@ -238,13 +250,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_create_index_column_missing(self):
         """Test validation catches index on missing column."""
-        schema = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}}},
-            indexes={"users": []},
-        )
+        schema = _live({"users": {"id": {"type": "integer"}}})
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_create(
             "CREATE INDEX idx_users_email ON users (email)",
@@ -256,10 +265,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_alter_nonexistent_table(self):
         """Test validation catches missing table."""
-        schema = SchemaInfo(tables={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_alter(
             "ALTER TABLE users ADD COLUMN email TEXT",
@@ -273,10 +282,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_alter_table_if_exists(self):
         """Test IF EXISTS doesn't trigger error."""
-        schema = SchemaInfo(tables={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_alter(
             "ALTER TABLE IF EXISTS users ADD COLUMN email TEXT",
@@ -289,12 +298,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_add_existing_column(self):
         """Test validation catches existing column."""
-        schema = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}, "email": {"type": "text"}}}
-        )
+        schema = _live({"users": {"id": {"type": "integer"}, "email": {"type": "text"}}})
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_column_operations(
             "ALTER TABLE users ADD COLUMN email TEXT",
@@ -309,10 +316,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_drop_nonexistent_column(self):
         """Test validation catches missing column."""
-        schema = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
+        schema = _live({"users": {"id": {"type": "integer"}}})
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_column_operations(
             "ALTER TABLE users DROP COLUMN email",
@@ -327,10 +334,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_drop_column_if_exists(self):
         """Test DROP COLUMN IF EXISTS doesn't trigger error."""
-        schema = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
+        schema = _live({"users": {"id": {"type": "integer"}}})
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_column_operations(
             "ALTER TABLE users DROP COLUMN IF EXISTS email",
@@ -343,10 +350,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_drop_table_nonexistent(self):
         """Test validation catches dropping missing table."""
-        schema = SchemaInfo(tables={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_drop(
             "DROP TABLE users",
@@ -360,10 +367,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_drop_table_if_exists(self):
         """Test DROP TABLE IF EXISTS doesn't trigger error."""
-        schema = SchemaInfo(tables={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_drop(
             "DROP TABLE IF EXISTS users",
@@ -375,10 +382,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_fk_missing_target_table(self):
         """Test FK validation catches missing target table."""
-        schema = SchemaInfo(tables={"orders": {"id": {"type": "integer"}}})
+        schema = _live({"orders": {"id": {"type": "integer"}}})
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issue = analyzer.validate_foreign_key(
             source_table="orders",
@@ -393,15 +400,15 @@ class TestSchemaAnalyzer:
 
     def test_validate_fk_missing_target_column(self):
         """Test FK validation catches missing target column."""
-        schema = SchemaInfo(
-            tables={
+        schema = _live(
+            {
                 "users": {"id": {"type": "integer"}},
                 "orders": {"user_id": {"type": "integer"}},
             }
         )
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issue = analyzer.validate_foreign_key(
             source_table="orders",
@@ -416,15 +423,15 @@ class TestSchemaAnalyzer:
 
     def test_validate_fk_valid(self):
         """Test FK validation passes for valid reference."""
-        schema = SchemaInfo(
-            tables={
+        schema = _live(
+            {
                 "users": {"id": {"type": "integer"}},
                 "orders": {"user_id": {"type": "integer"}},
             }
         )
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issue = analyzer.validate_foreign_key(
             source_table="orders",
@@ -437,15 +444,15 @@ class TestSchemaAnalyzer:
 
     def test_validate_fk_type_mismatch(self):
         """Test FK validation warns on type mismatch."""
-        schema = SchemaInfo(
-            tables={
+        schema = _live(
+            {
                 "users": {"id": {"type": "uuid"}},
                 "orders": {"user_id": {"type": "integer"}},
             }
         )
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issue = analyzer.validate_foreign_key(
             source_table="orders",
@@ -460,10 +467,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_insert_nonexistent_table(self):
         """Test INSERT validation catches missing table."""
-        schema = SchemaInfo(tables={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_insert(
             "INSERT INTO users (id) VALUES (1)",
@@ -477,10 +484,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_update_nonexistent_table(self):
         """Test UPDATE validation catches missing table."""
-        schema = SchemaInfo(tables={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_update(
             "UPDATE users SET email = 'test@example.com'",
@@ -493,10 +500,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_delete_nonexistent_table(self):
         """Test DELETE validation catches missing table."""
-        schema = SchemaInfo(tables={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_delete(
             "DELETE FROM users WHERE id = 1",
@@ -509,10 +516,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_sql_multiple_statements(self):
         """Test validating multiple SQL statements."""
-        schema = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
+        schema = _live({"users": {"id": {"type": "integer"}}})
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         sql = """
         CREATE TABLE orders (id INT);
@@ -530,10 +537,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_fk_in_create_table(self):
         """Test FK validation in CREATE TABLE statement."""
-        schema = SchemaInfo(tables={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_fk_references_in_create(
             "CREATE TABLE orders (id INT, user_id INT REFERENCES users(id))",
@@ -547,10 +554,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_drop_index_nonexistent(self):
         """Test validation catches dropping missing index."""
-        schema = SchemaInfo(tables={}, indexes={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_drop(
             "DROP INDEX idx_users_email",
@@ -564,10 +571,10 @@ class TestSchemaAnalyzer:
 
     def test_validate_drop_index_if_exists(self):
         """Test DROP INDEX IF EXISTS doesn't trigger error."""
-        schema = SchemaInfo(tables={}, indexes={})
+        schema = LiveSchema(SchemaModel())
 
         analyzer = SchemaAnalyzer(Mock())
-        analyzer._schema_info = schema
+        analyzer._live = schema
 
         issues = analyzer._validate_drop(
             "DROP INDEX IF EXISTS idx_users_email",

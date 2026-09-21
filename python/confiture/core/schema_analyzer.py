@@ -7,7 +7,6 @@ issues before execution.
 import logging
 import re
 import time
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -16,6 +15,7 @@ import psycopg
 
 from confiture.core import live_catalog
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_model import Column, SchemaModel, Table, ref_for
 from confiture.core.sql_lexer import split_statements, statement_type
 
 logger = logging.getLogger(__name__)
@@ -50,30 +50,36 @@ class ValidationIssue:
         }
 
 
-@dataclass
-class SchemaInfo:
-    """Current database schema information.
+class LiveSchema:
+    """The live ``public`` schema as the SQL validator asks about it — a view of the model.
 
-    ``indexes`` lists every index of a table, ``constraint_indexes`` the subset
-    PostgreSQL created to back a ``PRIMARY KEY``, ``UNIQUE`` or ``EXCLUDE``
-    constraint — the DDL never declares those, so drift must not count them
-    against it.
-
-    It carried four more fields until 1.11.0 — ``constraints``, ``sequences``,
-    ``extensions`` and ``foreign_keys`` — read from the live database on every
-    run and compared by **nothing**. Four queries for an answer nobody asked, and
-    one of them wrong: the sequence read was hardcoded to
-    ``sequence_schema = 'public'`` however many schemas the caller requested,
-    which is a wrong answer waiting for its first reader. The constraint read was
-    the wrong source too: ``information_schema.table_constraints`` emits a CHECK
-    row per NOT NULL column, so a comparison built on it would report an extra
-    constraint for every NOT NULL column in the schema. A constraint comparison
-    will want ``pg_constraint`` and a ``contype`` filter (#303).
+    The validator predates schema-qualified names and asks about bare table names in
+    ``public``; this answers those questions from ``live_catalog.read``'s model rather
+    than from a dict of dicts shaped for it.
     """
 
-    tables: dict[str, dict[str, Any]] = field(default_factory=dict)
-    indexes: dict[str, list[str]] = field(default_factory=dict)
-    constraint_indexes: dict[str, set[str]] = field(default_factory=dict)
+    def __init__(self, model: SchemaModel) -> None:
+        self._model = model
+
+    def _table(self, name: str) -> Table | None:
+        """The table *name* in ``public``, looked up by the model's own identity."""
+        return self._model.tables.get(ref_for("table", DEFAULT_SCHEMA, name))
+
+    def has_table(self, name: str) -> bool:
+        return self._table(name) is not None
+
+    def columns(self, table: str) -> dict[str, Column]:
+        found = self._table(table)
+        return {c.folded: c for c in found.columns} if found is not None else {}
+
+    def index_names(self) -> set[str]:
+        return {
+            ix.name
+            for ref, table in self._model.tables.items()
+            if ref.schema == DEFAULT_SCHEMA
+            for ix in table.indexes
+            if ix.name
+        }
 
 
 @dataclass
@@ -149,51 +155,13 @@ class SchemaAnalyzer:
             connection: Active database connection
         """
         self.connection = connection
-        self._schema_info: SchemaInfo | None = None
+        self._live: LiveSchema | None = None
 
-    def get_schema_info(
-        self, refresh: bool = False, schemas: Sequence[str] | None = None
-    ) -> SchemaInfo:
-        """Get current database schema information.
-
-        Args:
-            refresh: Force refresh of cached schema info
-            schemas: Read these schemas and key every table ``schema.table``
-                (#227). ``None`` keeps the historical shape: ``public`` only,
-                bare table names.
-
-        Returns:
-            SchemaInfo with current database state
-        """
-        if schemas is None and self._schema_info is not None and not refresh:
-            return self._schema_info
-
-        wanted = list(schemas) if schemas is not None else [DEFAULT_SCHEMA]
-
-        def key(schema: str, name: str) -> str:
-            return f"{schema}.{name}" if schemas is not None else name
-
-        info = SchemaInfo()
-        for table in live_catalog.read(self.connection, schemas=wanted).tables.values():
-            name = key(table.schema or DEFAULT_SCHEMA, table.name)
-            info.tables[name] = {
-                column.folded: {
-                    "type": column.type_text,
-                    "nullable": not column.not_null,
-                    "default": column.default,
-                }
-                for column in table.columns
-            }
-            # An index backing a PRIMARY KEY or UNIQUE constraint carries the
-            # constraint's name; the DDL declares the constraint, never the index,
-            # so drift must not count it against the tree.
-            backing = {c.name for c in table.constraints if c.kind in ("primary_key", "unique")}
-            info.indexes[name] = [index.name or "" for index in table.indexes] + sorted(backing)
-            if backing:
-                info.constraint_indexes[name] = backing
-
-        self._schema_info = info
-        return info
+    def live_schema(self, refresh: bool = False) -> LiveSchema:
+        """The live ``public`` schema the validator checks SQL against; cached until *refresh*."""
+        if self._live is None or refresh:
+            self._live = LiveSchema(live_catalog.read(self.connection, schemas=[DEFAULT_SCHEMA]))
+        return self._live
 
     def validate_sql(self, sql: str) -> list[ValidationIssue]:
         """Validate a SQL string against current schema.
@@ -205,7 +173,7 @@ class SchemaAnalyzer:
             List of validation issues found
         """
         issues: list[ValidationIssue] = []
-        schema_info = self.get_schema_info()
+        schema_info = self.live_schema()
 
         for i, stmt_str in enumerate(split_statements(sql), 1):
             stmt_issues = self._validate_statement(stmt_str, schema_info, i)
@@ -242,7 +210,7 @@ class SchemaAnalyzer:
             )
             return result
 
-        schema_info = self.get_schema_info()
+        schema_info = self.live_schema()
 
         for i, sql in enumerate(sql_statements, 1):
             result.statements_analyzed += 1
@@ -278,7 +246,7 @@ class SchemaAnalyzer:
     def _validate_statement(
         self,
         sql: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate a single SQL statement.
@@ -317,7 +285,7 @@ class SchemaAnalyzer:
     def _validate_create(
         self,
         sql: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate CREATE statements."""
@@ -331,7 +299,7 @@ class SchemaAnalyzer:
         )
         if match:
             table_name = match.group(1).lower()
-            if table_name in schema.tables and "IF NOT EXISTS" not in sql_upper:
+            if schema.has_table(table_name) and "IF NOT EXISTS" not in sql_upper:
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.ERROR,
@@ -353,7 +321,7 @@ class SchemaAnalyzer:
         )
         if match:
             table_name = match.group(1).lower()
-            if table_name not in schema.tables:
+            if not schema.has_table(table_name):
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.ERROR,
@@ -372,7 +340,7 @@ class SchemaAnalyzer:
     def _validate_fk_references_in_create(
         self,
         sql: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate foreign key references in CREATE TABLE."""
@@ -384,7 +352,7 @@ class SchemaAnalyzer:
             target_table = match.group(1).lower()
             target_column = match.group(2).lower()
 
-            if target_table not in schema.tables:
+            if not schema.has_table(target_table):
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.ERROR,
@@ -393,7 +361,7 @@ class SchemaAnalyzer:
                         line_number=line_num,
                     )
                 )
-            elif target_column not in schema.tables[target_table]:
+            elif target_column not in schema.columns(target_table):
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.ERROR,
@@ -409,7 +377,7 @@ class SchemaAnalyzer:
         self,
         sql: str,
         table_name: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate that index columns exist."""
@@ -425,7 +393,7 @@ class SchemaAnalyzer:
                 # Skip expressions
                 if "(" in col_name or col_name.upper() in ("ASC", "DESC", "NULLS"):
                     continue
-                if table_name in schema.tables and col_name not in schema.tables[table_name]:
+                if schema.has_table(table_name) and col_name not in schema.columns(table_name):
                     issues.append(
                         ValidationIssue(
                             severity=ValidationSeverity.ERROR,
@@ -440,7 +408,7 @@ class SchemaAnalyzer:
     def _validate_alter(
         self,
         sql: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate ALTER statements."""
@@ -454,7 +422,7 @@ class SchemaAnalyzer:
         )
         if match:
             table_name = match.group(1).lower()
-            if table_name not in schema.tables and "IF EXISTS" not in sql_upper:
+            if not schema.has_table(table_name) and "IF EXISTS" not in sql_upper:
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.ERROR,
@@ -464,7 +432,7 @@ class SchemaAnalyzer:
                         suggestion="Add 'IF EXISTS' or create the table first",
                     )
                 )
-            elif table_name in schema.tables:
+            elif schema.has_table(table_name):
                 # Check column operations
                 issues.extend(self._validate_column_operations(sql, schema, table_name, line_num))
 
@@ -473,14 +441,14 @@ class SchemaAnalyzer:
     def _validate_column_operations(
         self,
         sql: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         table_name: str,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate column ADD/DROP/ALTER operations."""
         issues: list[ValidationIssue] = []
         sql_upper = sql.upper()
-        table_columns = schema.tables.get(table_name, {})
+        table_columns = schema.columns(table_name)
 
         # ADD COLUMN that already exists
         match = re.search(
@@ -527,7 +495,7 @@ class SchemaAnalyzer:
     def _validate_drop(
         self,
         sql: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate DROP statements."""
@@ -541,7 +509,7 @@ class SchemaAnalyzer:
         )
         if match and "IF EXISTS" not in sql_upper:
             table_name = match.group(1).lower()
-            if table_name not in schema.tables:
+            if not schema.has_table(table_name):
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.ERROR,
@@ -560,7 +528,7 @@ class SchemaAnalyzer:
         if match and "IF EXISTS" not in sql_upper:
             index_name = match.group(1).lower()
             # Check if index exists in any table
-            index_exists = any(index_name in indexes for indexes in schema.indexes.values())
+            index_exists = index_name in schema.index_names()
             if not index_exists:
                 issues.append(
                     ValidationIssue(
@@ -577,7 +545,7 @@ class SchemaAnalyzer:
     def _validate_insert(
         self,
         sql: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate INSERT statements."""
@@ -587,7 +555,7 @@ class SchemaAnalyzer:
         match = re.search(r"INSERT\s+INTO\s+(?:\")?(\w+)(?:\")?", sql, re.IGNORECASE)
         if match:
             table_name = match.group(1).lower()
-            if table_name not in schema.tables:
+            if not schema.has_table(table_name):
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.ERROR,
@@ -602,7 +570,7 @@ class SchemaAnalyzer:
     def _validate_update(
         self,
         sql: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate UPDATE statements."""
@@ -612,7 +580,7 @@ class SchemaAnalyzer:
         match = re.search(r"UPDATE\s+(?:\")?(\w+)(?:\")?", sql, re.IGNORECASE)
         if match:
             table_name = match.group(1).lower()
-            if table_name not in schema.tables:
+            if not schema.has_table(table_name):
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.ERROR,
@@ -627,7 +595,7 @@ class SchemaAnalyzer:
     def _validate_delete(
         self,
         sql: str,
-        schema: SchemaInfo,
+        schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
         """Validate DELETE statements."""
@@ -637,7 +605,7 @@ class SchemaAnalyzer:
         match = re.search(r"DELETE\s+FROM\s+(?:\")?(\w+)(?:\")?", sql, re.IGNORECASE)
         if match:
             table_name = match.group(1).lower()
-            if table_name not in schema.tables:
+            if not schema.has_table(table_name):
                 issues.append(
                     ValidationIssue(
                         severity=ValidationSeverity.ERROR,
@@ -667,24 +635,24 @@ class SchemaAnalyzer:
         Returns:
             ValidationIssue if invalid, None if valid
         """
-        schema = self.get_schema_info()
+        schema = self.live_schema()
 
-        if target_table not in schema.tables:
+        if not schema.has_table(target_table):
             return ValidationIssue(
                 severity=ValidationSeverity.ERROR,
                 message=f"FK target table '{target_table}' does not exist",
             )
 
-        if target_column not in schema.tables[target_table]:
+        if target_column not in schema.columns(target_table):
             return ValidationIssue(
                 severity=ValidationSeverity.ERROR,
                 message=f"FK target column '{target_table}.{target_column}' does not exist",
             )
 
         # Check type compatibility
-        if source_table in schema.tables and source_column in schema.tables[source_table]:
-            source_type = schema.tables[source_table][source_column].get("type")
-            target_type = schema.tables[target_table][target_column].get("type")
+        if schema.has_table(source_table) and source_column in schema.columns(source_table):
+            source_type = schema.columns(source_table)[source_column].type_text
+            target_type = schema.columns(target_table)[target_column].type_text
             if source_type and target_type and source_type != target_type:
                 return ValidationIssue(
                     severity=ValidationSeverity.WARNING,

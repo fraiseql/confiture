@@ -10,10 +10,12 @@ from confiture.core.drift import (
     DriftSeverity,
     DriftType,
     SchemaDriftDetector,
+    parse_expected_schema,
 )
-from confiture.core.schema_analyzer import SchemaInfo
+from confiture.core.schema_model import SchemaModel, Table
 from confiture.core.type_lattice import same_type
 from confiture.exceptions import SchemaError
+from tests.unit._schema_models import index, model_of
 
 # Exact block-comment file separator emitted by SchemaBuilder (block_comment is
 # the default separator style) — reproduced here so the drift parser is proven
@@ -120,6 +122,15 @@ class TestDriftReport:
         assert result["tables_checked"] == 5
 
 
+def _tables(expected: SchemaModel) -> dict[str, Table]:
+    """The model's tables keyed ``schema.table``, as a finding names them."""
+    return {f"{t.schema}.{t.name}": t for t in expected.tables.values()}
+
+
+def _parsed(sql: str) -> dict[str, Table]:
+    return _tables(parse_expected_schema(sql).model)
+
+
 class TestSchemaDriftDetector:
     """Tests for SchemaDriftDetector."""
 
@@ -140,8 +151,8 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(tables={"users": {"id": {"type": "integer", "nullable": False}}})
-        actual = SchemaInfo(tables={"users": {"id": {"type": "integer", "nullable": False}}})
+        expected = model_of({"users": {"id": {"type": "integer", "nullable": False}}})
+        actual = model_of({"users": {"id": {"type": "integer", "nullable": False}}})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -153,13 +164,8 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(
-            tables={
-                "users": {"id": {"type": "integer"}},
-                "orders": {"id": {"type": "integer"}},
-            }
-        )
-        actual = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
+        expected = model_of({"users": {"id": "integer"}, "orders": {"id": "integer"}})
+        actual = model_of({"users": {"id": "integer"}})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -169,20 +175,16 @@ class TestSchemaDriftDetector:
 
         missing = [d for d in report.drift_items if d.drift_type == DriftType.MISSING_TABLE]
         assert len(missing) == 1
-        assert missing[0].object_name == "orders"
+        # A model table always has a schema, so a finding names it (#227).
+        assert missing[0].object_name == "public.orders"
 
     def test_extra_table_detected(self, mock_connection):
         """Test extra table is detected as warning."""
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
-        actual = SchemaInfo(
-            tables={
-                "users": {"id": {"type": "integer"}},
-                "temp_data": {"id": {"type": "integer"}},
-            }
-        )
+        expected = model_of({"users": {"id": "integer"}})
+        actual = model_of({"users": {"id": "integer"}, "temp_data": {"id": "integer"}})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -192,49 +194,46 @@ class TestSchemaDriftDetector:
 
         extra = [d for d in report.drift_items if d.drift_type == DriftType.EXTRA_TABLE]
         assert len(extra) == 1
-        assert extra[0].object_name == "temp_data"
+        # A model table always has a schema, so a finding names it (#227).
+        assert extra[0].object_name == "public.temp_data"
 
     def test_missing_column_detected(self, mock_connection):
         """Test missing column is detected as critical."""
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}, "email": {"type": "text"}}}
-        )
-        actual = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
+        expected = model_of({"users": {"id": "integer", "email": "text"}})
+        actual = model_of({"users": {"id": "integer"}})
 
         report = detector.compare_schemas(expected, actual)
 
         assert report.has_critical_drift
         missing = [d for d in report.drift_items if d.drift_type == DriftType.MISSING_COLUMN]
         assert len(missing) == 1
-        assert missing[0].object_name == "users.email"
+        assert missing[0].object_name == "public.users.email"
 
     def test_extra_column_detected(self, mock_connection):
         """Test extra column is detected as warning."""
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
-        actual = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}, "legacy_field": {"type": "text"}}}
-        )
+        expected = model_of({"users": {"id": "integer"}})
+        actual = model_of({"users": {"id": "integer", "legacy_field": "text"}})
 
         report = detector.compare_schemas(expected, actual)
 
         assert not report.has_critical_drift
         extra = [d for d in report.drift_items if d.drift_type == DriftType.EXTRA_COLUMN]
         assert len(extra) == 1
-        assert extra[0].object_name == "users.legacy_field"
+        assert extra[0].object_name == "public.users.legacy_field"
 
     def test_type_mismatch_detected(self, mock_connection):
         """Test column type mismatch is detected."""
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
-        actual = SchemaInfo(tables={"users": {"id": {"type": "bigint"}}})
+        expected = model_of({"users": {"id": "integer"}})
+        actual = model_of({"users": {"id": "bigint"}})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -247,8 +246,8 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
-        actual = SchemaInfo(tables={"users": {"id": {"type": "int4"}}})
+        expected = model_of({"users": {"id": "integer"}})
+        actual = model_of({"users": {"id": "int4"}})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -261,8 +260,8 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(tables={"users": {"id": {"type": "integer", "nullable": False}}})
-        actual = SchemaInfo(tables={"users": {"id": {"type": "integer", "nullable": True}}})
+        expected = model_of({"users": {"id": {"type": "integer", "nullable": False}}})
+        actual = model_of({"users": {"id": {"type": "integer", "nullable": True}}})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -274,14 +273,8 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}}},
-            indexes={"users": ["idx_users_email"]},
-        )
-        actual = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}}},
-            indexes={"users": []},
-        )
+        expected = model_of({"users": {"id": "integer"}}, indexes={"users": ["idx_users_email"]})
+        actual = model_of({"users": {"id": "integer"}})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -294,14 +287,8 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}}},
-            indexes={"users": []},
-        )
-        actual = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}}},
-            indexes={"users": ["idx_users_temp"]},
-        )
+        expected = model_of({"users": {"id": "integer"}})
+        actual = model_of({"users": {"id": "integer"}}, indexes={"users": ["idx_users_temp"]})
 
         report = detector.compare_schemas(expected, actual)
 
@@ -314,12 +301,12 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn, ignore_tables=["temp_data", "cache"])
 
-        expected = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
-        actual = SchemaInfo(
-            tables={
-                "users": {"id": {"type": "integer"}},
-                "temp_data": {"data": {"type": "jsonb"}},
-                "cache": {"key": {"type": "text"}},
+        expected = model_of({"users": {"id": "integer"}})
+        actual = model_of(
+            {
+                "users": {"id": "integer"},
+                "temp_data": {"data": "jsonb"},
+                "cache": {"key": "text"},
             }
         )
 
@@ -334,11 +321,11 @@ class TestSchemaDriftDetector:
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
 
-        expected = SchemaInfo(tables={})
-        actual = SchemaInfo(
-            tables={
-                "tb_confiture": {"id": {"type": "integer"}},
-                "confiture_version": {"version": {"type": "text"}},
+        expected = SchemaModel()
+        actual = model_of(
+            {
+                "tb_confiture": {"id": "integer"},
+                "confiture_version": {"version": "text"},
             }
         )
 
@@ -347,11 +334,8 @@ class TestSchemaDriftDetector:
         # System tables should be ignored
         assert not report.has_drift
 
-    def test_parse_schema_from_sql(self, mock_connection):
+    def test_parse_schema_from_sql(self):
         """Test parsing schema from SQL DDL."""
-        conn, _ = mock_connection
-        detector = SchemaDriftDetector(conn)
-
         sql = """
         CREATE TABLE users (
             id SERIAL PRIMARY KEY,
@@ -367,20 +351,16 @@ class TestSchemaDriftDetector:
         );
         """
 
-        info = detector._parse_schema_from_sql(sql)
+        tables = _parsed(sql)
 
-        assert "public.users" in info.tables
-        assert "public.orders" in info.tables
-        assert "id" in info.tables["public.users"]
-        assert "email" in info.tables["public.users"]
-        assert "public.users" in info.indexes
-        assert "idx_users_email" in info.indexes["public.users"]
+        assert "public.users" in tables
+        assert "public.orders" in tables
+        assert tables["public.users"].column("id") is not None
+        assert tables["public.users"].column("email") is not None
+        assert [ix.name for ix in tables["public.users"].indexes] == ["idx_users_email"]
 
-    def test_columns_carry_type_nullability_and_default(self, mock_connection):
+    def test_columns_carry_type_nullability_and_default(self):
         """Columns come out of the pglast walk with type, nullability and default."""
-        conn, _ = mock_connection
-        detector = SchemaDriftDetector(conn)
-
         create_stmt = """
         CREATE TABLE users (
             id SERIAL PRIMARY KEY,
@@ -390,13 +370,15 @@ class TestSchemaDriftDetector:
         );
         """
 
-        columns = detector._parse_schema_from_sql(create_stmt).tables["public.users"]
+        users = _parsed(create_stmt)["public.users"]
+        columns = {c.folded: c for c in users.columns}
 
         assert list(columns) == ["id", "email", "name", "created_at"]
-        assert columns["id"]["nullable"] is False
-        assert columns["email"] == {"type": "varchar(255)", "nullable": False, "default": None}
-        assert columns["name"]["nullable"] is True
-        assert columns["created_at"]["default"] == "now()"
+        assert columns["id"].not_null is True
+        email = columns["email"]
+        assert (email.type_text, email.not_null, email.default) == ("varchar(255)", True, None)
+        assert columns["name"].not_null is False
+        assert columns["created_at"].default == "now()"
 
     def test_types_compatible(self):
         """The pairs the deleted ``_types_compatible`` dict answered for, still answered.
@@ -419,12 +401,9 @@ class TestSchemaDriftDetector:
     # Issue #175 — comment handling + silent-failure guard                #
     # ------------------------------------------------------------------ #
 
-    def test_parse_schema_with_block_comment_separators(self, mock_connection):
+    def test_parse_schema_with_block_comment_separators(self):
         """confiture build's default block-comment file separators must not hide
         the CREATE TABLE that follows them (issue #175)."""
-        conn, _ = mock_connection
-        detector = SchemaDriftDetector(conn)
-
         sql = (
             _BUILD_BLOCK_SEP.format(rel="db/schema/10_tables/10_machine.sql")
             + "CREATE TABLE tb_machine (pk_machine UUID PRIMARY KEY, name TEXT NOT NULL);\n"
@@ -432,33 +411,25 @@ class TestSchemaDriftDetector:
             + "CREATE TABLE tb_part (pk_part UUID PRIMARY KEY, label TEXT NOT NULL);\n"
         )
 
-        info = detector._parse_schema_from_sql(sql)
+        assert set(_parsed(sql)) == {"public.tb_machine", "public.tb_part"}
 
-        assert set(info.tables) == {"public.tb_machine", "public.tb_part"}
-
-    def test_parse_schema_with_non_ascii_line_comment(self, mock_connection):
+    def test_parse_schema_with_non_ascii_line_comment(self):
         """A non-ASCII (em-dash) line comment before a table must not hide it."""
-        conn, _ = mock_connection
-        detector = SchemaDriftDetector(conn)
-
         sql = (
             "-- Machine registry — core entity\n"
             "CREATE TABLE tb_machine (pk_machine UUID PRIMARY KEY, name TEXT NOT NULL);\n"
             "COMMENT ON TABLE tb_machine IS 'Machines';\n"
         )
 
-        info = detector._parse_schema_from_sql(sql)
+        tables = _parsed(sql)
 
-        assert "public.tb_machine" in info.tables
-        assert "name" in info.tables["public.tb_machine"]
+        assert "public.tb_machine" in tables
+        assert tables["public.tb_machine"].column("name") is not None
 
-    def test_create_table_in_function_body_not_parsed_as_table(self, mock_connection):
+    def test_create_table_in_function_body_not_parsed_as_table(self):
         """A dynamic ``CREATE TABLE`` inside a function body must not be mistaken
         for a real table, and must not trip the zero-tables guard when a real
         table is present."""
-        conn, _ = mock_connection
-        detector = SchemaDriftDetector(conn)
-
         sql = (
             "CREATE OR REPLACE FUNCTION make_tmp() RETURNS void LANGUAGE plpgsql AS $$\n"
             "BEGIN\n"
@@ -468,42 +439,25 @@ class TestSchemaDriftDetector:
             "CREATE TABLE tb_real (id UUID PRIMARY KEY);\n"
         )
 
-        info = detector._parse_schema_from_sql(sql)
+        assert list(_parsed(sql)) == ["public.tb_real"]
 
-        assert "public.tb_real" in info.tables
-        assert "public.tmp_scratch" not in info.tables
-        assert "tmp_scratch" not in info.tables
-
-    def test_unparseable_schema_raises_instead_of_an_empty_expectation(self, mock_connection):
+    def test_unparseable_schema_raises_instead_of_an_empty_expectation(self):
         """A schema pglast rejects must fail loudly (SCHEMA_202) instead of
         silently reporting every live table as spurious drift."""
-        conn, _ = mock_connection
-        detector = SchemaDriftDetector(conn)
-
         with pytest.raises(SchemaError) as excinfo:
-            detector._parse_schema_from_sql(
-                "CREATE TABEL users (id INTEGER PRIMARY KEY, email TEXT);"
-            )
+            parse_expected_schema("CREATE TABEL users (id INTEGER PRIMARY KEY, email TEXT);")
         assert excinfo.value.error_code == "SCHEMA_202"
 
-    def test_index_or_type_only_schema_does_not_raise(self, mock_connection):
+    def test_index_or_type_only_schema_does_not_raise(self):
         """A schema with no CREATE TABLE (indexes/types only) is a legitimate
         empty-table expectation, not a parse failure — must NOT raise."""
-        conn, _ = mock_connection
-        detector = SchemaDriftDetector(conn)
-
         sql = "CREATE TYPE order_status AS ENUM ('pending', 'shipped');\n"
 
-        info = detector._parse_schema_from_sql(sql)  # must not raise
+        assert _parsed(sql) == {}  # must not raise
 
-        assert info.tables == {}
-
-    def test_function_body_only_create_table_does_not_raise(self, mock_connection):
+    def test_function_body_only_create_table_does_not_raise(self):
         """A schema whose only ``CREATE TABLE`` text lives inside a function body
         is table-less — the guard must not false-fire on it."""
-        conn, _ = mock_connection
-        detector = SchemaDriftDetector(conn)
-
         sql = (
             "CREATE OR REPLACE FUNCTION make_tmp() RETURNS void LANGUAGE plpgsql AS $$\n"
             "BEGIN\n"
@@ -512,9 +466,7 @@ class TestSchemaDriftDetector:
             "$$;\n"
         )
 
-        info = detector._parse_schema_from_sql(sql)  # must not raise
-
-        assert info.tables == {}
+        assert _parsed(sql) == {}  # must not raise
 
 
 class TestConstraintBackedIndexes:
@@ -533,29 +485,36 @@ class TestConstraintBackedIndexes:
     def test_constraint_backed_live_index_is_not_extra(self, mock_connection):
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
-        expected = SchemaInfo(tables={"users": {"id": {"type": "integer"}}})
-        actual = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}}},
-            indexes={"users": ["users_pkey", "users_email_key", "idx_users_tmp"]},
-            constraint_indexes={"users": {"users_pkey", "users_email_key"}},
+        expected = model_of({"users": {"id": "integer"}})
+        actual = model_of(
+            {"users": {"id": "integer"}},
+            indexes={
+                "users": [
+                    index("users_pkey", "users", "id", unique=True, backs_constraint=True),
+                    index("users_email_key", "users", "email", unique=True, backs_constraint=True),
+                    "idx_users_tmp",
+                ]
+            },
         )
 
         report = detector.compare_schemas(expected, actual)
 
         extra = [d for d in report.drift_items if d.drift_type == DriftType.EXTRA_INDEX]
-        assert [d.object_name for d in extra] == ["users.idx_users_tmp"]
+        # A model table always has a schema, so a finding names it (#227).
+        assert [d.object_name for d in extra] == ["public.users.idx_users_tmp"]
 
     def test_declared_index_that_backs_a_constraint_is_matched_by_name(self, mock_connection):
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
-        expected = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}}},
-            indexes={"users": ["users_email_uq"]},
-        )
-        actual = SchemaInfo(
-            tables={"users": {"id": {"type": "integer"}}},
-            indexes={"users": ["users_pkey", "users_email_uq"]},
-            constraint_indexes={"users": {"users_pkey", "users_email_uq"}},
+        expected = model_of({"users": {"id": "integer"}}, indexes={"users": ["users_email_uq"]})
+        actual = model_of(
+            {"users": {"id": "integer"}},
+            indexes={
+                "users": [
+                    index("users_pkey", "users", "id", unique=True, backs_constraint=True),
+                    index("users_email_uq", "users", "email", unique=True, backs_constraint=True),
+                ]
+            },
         )
 
         report = detector.compare_schemas(expected, actual)

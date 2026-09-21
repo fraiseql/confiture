@@ -155,6 +155,9 @@ class Index:
     ``columns`` holds each key as written — a column name or a rendered
     expression. ``method`` is the access method; PostgreSQL's grammar fills in
     ``btree`` when the statement writes no ``USING``, and so does the catalog.
+    ``backs_constraint`` is set on an index that exists only to back a PRIMARY KEY,
+    UNIQUE or EXCLUDE constraint — PostgreSQL's, never declared by DDL, so it is
+    never *extra* to it; only the catalog knows it.
     """
 
     name: str | None
@@ -163,6 +166,7 @@ class Index:
     unique: bool = False
     where: str | None = None
     method: str | None = None
+    backs_constraint: bool = False
 
 
 @dataclass(frozen=True)
@@ -274,6 +278,10 @@ PARITY_NORMALISATIONS: dict[str, str] = {
         "the tree spells what the author wrote. Identity is (schema, name) with "
         "DEFAULT_SCHEMA folded in, on both sides"
     ),
+    "backing_indexes": (
+        "PostgreSQL creates an index to back each PRIMARY KEY and UNIQUE constraint; "
+        "the DDL declares the constraint and never the index"
+    ),
     "declaration_order": (
         "the catalog lists a table's constraints and indexes by name, a tree by where "
         "it declared them; which exist is the fact, not their order"
@@ -293,7 +301,7 @@ _SERIALS = frozenset({"SMALLSERIAL", "SERIAL", "BIGSERIAL"})
 _DEFAULT_MAX = frozenset({2**15 - 1, 2**31 - 1, 2**63 - 1})
 
 
-def _identity_name(qualified: str | None) -> str | None:
+def identity_of(qualified: str | None) -> str | None:
     """``b.p`` → ``b.p``, ``p`` → ``public.p``: a reference as an identity."""
     if not qualified:
         return qualified
@@ -327,7 +335,7 @@ def _parity_constraint(table: str, constraint: Constraint) -> Constraint:
         constraint,
         name="" if _generated_name(table, constraint.name) else constraint.name,
         expression=None if constraint.expression is None else _EXPRESSION,
-        ref_table=_identity_name(constraint.ref_table),
+        ref_table=identity_of(constraint.ref_table),
     )
 
 
@@ -336,11 +344,12 @@ def _parity_table(table: Table) -> Table:
     indexes = [
         replace(
             ix,
-            table=_identity_name(ix.table) or ix.table,
+            table=identity_of(ix.table) or ix.table,
             columns=tuple(key if _COLUMN_KEY.fullmatch(key) else _EXPRESSION for key in ix.columns),
             where=None if ix.where is None else _EXPRESSION,
         )
         for ix in table.indexes
+        if not ix.backs_constraint
     ]
     return replace(
         table,

@@ -19,8 +19,9 @@ from typer.testing import CliRunner
 from confiture.cli.main import app
 from confiture.config.environment import DriftConfig
 from confiture.core.drift import DriftSeverity, DriftType, SchemaDriftDetector
-from confiture.core.schema_analyzer import SchemaInfo
 from confiture.core.schema_exporter import load_schema
+from confiture.core.schema_model import SchemaModel
+from tests.unit._schema_models import model_of
 
 COLS = {
     "id": {"type": "bigint", "nullable": False},
@@ -29,8 +30,8 @@ COLS = {
 }
 
 
-def _info(order: list[str], table: str = "tenant.tb_user") -> SchemaInfo:
-    return SchemaInfo(tables={table: {c: COLS[c] for c in order}})
+def _info(order: list[str], table: str = "tenant.tb_user") -> SchemaModel:
+    return model_of({table: {c: COLS[c] for c in order}})
 
 
 def _detector(**kwargs) -> SchemaDriftDetector:  # type: ignore[no-untyped-def]
