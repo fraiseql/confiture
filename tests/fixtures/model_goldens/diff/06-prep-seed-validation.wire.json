@@ -1,0 +1,151 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 2,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "catalog.tb_manufacturer",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "pk_manufacturer",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null,
+              "identity": "always"
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "country_code",
+              "type": "VARCHAR(2)",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "pk_manufacturer"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "prep_seed.tb_manufacturer",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "country_code",
+              "type": "VARCHAR(2)",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "fn_resolve_tb_manufacturer()",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE FUNCTION fn_resolve_tb_manufacturer() RETURNS void AS $$\nBEGIN\n    -- Insert from prep_seed to catalog\n    -- Note: GENERATED ALWAYS AS IDENTITY handles pk_manufacturer\n    INSERT INTO catalog.tb_manufacturer (id, name, country_code)\n    SELECT\n        prep.id,\n        prep.name,\n        prep.country_code\n    FROM prep_seed.tb_manufacturer prep\n    ON CONFLICT (id) DO NOTHING;  -- Handle duplicates gracefully\n\n    -- Clear prep_seed table after resolution\n    TRUNCATE TABLE prep_seed.tb_manufacturer;\nEND;\n$$ LANGUAGE plpgsql",
+        "details": {
+          "kind": "function",
+          "name": "fn_resolve_tb_manufacturer()",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "table": "catalog",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE SCHEMA catalog",
+        "details": {
+          "kind": "schema",
+          "name": "catalog",
+          "keyword": "SCHEMA"
+        }
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "table": "prep_seed",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE SCHEMA prep_seed",
+        "details": {
+          "kind": "schema",
+          "name": "prep_seed",
+          "keyword": "SCHEMA"
+        }
+      }
+    ]
+  }
+}

@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from confiture.models.schema import SchemaChange
+from confiture.models.schema import WireChange
 from confiture.models.warnings import BuildWarning
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ class MigrationAccompanimentReport:
         >>> report = MigrationAccompanimentReport(
         ...     has_ddl_changes=True,
         ...     has_new_migrations=True,
-        ...     ddl_changes=[SchemaChange(type="ADD_TABLE", table="users")],
+        ...     ddl_changes=[WireChange(type="ADD_TABLE", table="users")],
         ...     new_migration_files=[Path("db/migrations/001_add_users.up.sql")],
         ... )
         >>> print(f"Valid: {report.is_valid}")
@@ -47,7 +47,7 @@ class MigrationAccompanimentReport:
 
     has_ddl_changes: bool
     has_new_migrations: bool
-    ddl_changes: list[SchemaChange] = field(default_factory=list)
+    ddl_changes: list[WireChange] = field(default_factory=list)
     new_migration_files: list[Path] = field(default_factory=list)
     migration_error: str | None = None
     base_ref: str | None = None

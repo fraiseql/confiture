@@ -172,7 +172,7 @@ class TestSchemaDiffAlgorithm:
         diff = differ.compare(old_sql, new_sql)
 
         assert len(diff.changes) == 1
-        change = diff.changes[0]
+        change = diff.wire()[0]
         assert change.type == "ADD_TABLE"
         assert change.table == "posts"
 
@@ -188,7 +188,7 @@ class TestSchemaDiffAlgorithm:
         diff = differ.compare(old_sql, new_sql)
 
         assert len(diff.changes) == 1
-        change = diff.changes[0]
+        change = diff.wire()[0]
         assert change.type == "DROP_TABLE"
         assert change.table == "posts"
 
@@ -201,7 +201,7 @@ class TestSchemaDiffAlgorithm:
         diff = differ.compare(old_sql, new_sql)
 
         assert len(diff.changes) == 1
-        change = diff.changes[0]
+        change = diff.wire()[0]
         assert change.type == "ADD_COLUMN"
         assert change.table == "users"
         assert change.column == "name"
@@ -215,7 +215,7 @@ class TestSchemaDiffAlgorithm:
         diff = differ.compare(old_sql, new_sql)
 
         assert len(diff.changes) == 1
-        change = diff.changes[0]
+        change = diff.wire()[0]
         assert change.type == "DROP_COLUMN"
         assert change.table == "users"
         assert change.column == "age"
@@ -229,7 +229,7 @@ class TestSchemaDiffAlgorithm:
         diff = differ.compare(old_sql, new_sql)
 
         assert len(diff.changes) == 1
-        change = diff.changes[0]
+        change = diff.wire()[0]
         assert change.type == "CHANGE_COLUMN_TYPE"
         assert change.table == "users"
         assert change.column == "age"
@@ -246,7 +246,7 @@ class TestSchemaDiffAlgorithm:
 
         # Should detect as rename (not drop+add)
         assert len(diff.changes) == 1
-        change = diff.changes[0]
+        change = diff.wire()[0]
         assert change.type == "RENAME_COLUMN"
         assert change.table == "users"
         assert change.old_value == "full_name"
@@ -261,7 +261,7 @@ class TestSchemaDiffAlgorithm:
         diff = differ.compare(old_sql, new_sql)
 
         assert len(diff.changes) == 1
-        change = diff.changes[0]
+        change = diff.wire()[0]
         assert change.type == "CHANGE_COLUMN_NULLABLE"
         assert change.table == "users"
         assert change.column == "name"
@@ -277,7 +277,7 @@ class TestSchemaDiffAlgorithm:
         diff = differ.compare(old_sql, new_sql)
 
         assert len(diff.changes) == 1
-        change = diff.changes[0]
+        change = diff.wire()[0]
         assert change.type == "CHANGE_COLUMN_DEFAULT"
         assert change.table == "settings"
         assert change.column == "enabled"
@@ -316,7 +316,7 @@ class TestSchemaDiffAlgorithm:
         # 4. comments: table added
         assert len(diff.changes) == 4
 
-        change_types = [c.type for c in diff.changes]
+        change_types = [c.type for c in diff.wire()]
         assert "CHANGE_COLUMN_NULLABLE" in change_types
         assert "ADD_COLUMN" in change_types
         assert "DROP_TABLE" in change_types
@@ -339,7 +339,7 @@ class TestSchemaDiffAlgorithm:
 
         # Should detect as rename (not drop+add)
         assert len(diff.changes) == 1
-        change = diff.changes[0]
+        change = diff.wire()[0]
         assert change.type == "RENAME_TABLE"
         assert change.old_value == "user_accounts"
         assert change.new_value == "user_profiles"
@@ -422,7 +422,7 @@ class TestIndexDiff:
             "CREATE INDEX idx_users_email ON users(email);"
         )
         diff = differ.compare(old, new)
-        assert any(c.type == "ADD_INDEX" for c in diff.changes)
+        assert any(c.type == "ADD_INDEX" for c in diff.wire())
 
     def test_diff_detects_dropped_index(self):
         differ = SchemaDiffer()
@@ -432,7 +432,7 @@ class TestIndexDiff:
         )
         new = "CREATE TABLE users (id INT, email TEXT);"
         diff = differ.compare(old, new)
-        assert any(c.type == "DROP_INDEX" for c in diff.changes)
+        assert any(c.type == "DROP_INDEX" for c in diff.wire())
 
     def test_diff_no_change_when_indexes_identical(self):
         differ = SchemaDiffer()
@@ -454,7 +454,7 @@ class TestForeignKeyDiff:
             "FOREIGN KEY (user_id) REFERENCES users(id);"
         )
         diff = differ.compare(old, new)
-        assert any(c.type == "ADD_FOREIGN_KEY" for c in diff.changes)
+        assert any(c.type == "ADD_FOREIGN_KEY" for c in diff.wire())
 
     def test_diff_detects_dropped_fk(self):
         differ = SchemaDiffer()
@@ -464,7 +464,7 @@ class TestForeignKeyDiff:
         )
         new = self._BASE
         diff = differ.compare(old, new)
-        assert any(c.type == "DROP_FOREIGN_KEY" for c in diff.changes)
+        assert any(c.type == "DROP_FOREIGN_KEY" for c in diff.wire())
 
 
 class TestEnumDiff:
@@ -475,22 +475,22 @@ class TestEnumDiff:
         old = "CREATE TABLE t (id INT);"
         new = "CREATE TABLE t (id INT);\nCREATE TYPE status AS ENUM ('a', 'b');"
         diff = differ.compare(old, new)
-        assert any(c.type == "ADD_ENUM_TYPE" for c in diff.changes)
+        assert any(c.type == "ADD_ENUM_TYPE" for c in diff.wire())
 
     def test_diff_detects_dropped_enum(self):
         differ = SchemaDiffer()
         old = "CREATE TABLE t (id INT);\nCREATE TYPE status AS ENUM ('a', 'b');"
         new = "CREATE TABLE t (id INT);"
         diff = differ.compare(old, new)
-        assert any(c.type == "DROP_ENUM_TYPE" for c in diff.changes)
+        assert any(c.type == "DROP_ENUM_TYPE" for c in diff.wire())
 
     def test_diff_detects_changed_enum_values(self):
         differ = SchemaDiffer()
         old = "CREATE TYPE status AS ENUM ('active', 'inactive');"
         new = "CREATE TYPE status AS ENUM ('active', 'inactive', 'banned');"
         diff = differ.compare(old, new)
-        assert any(c.type == "CHANGE_ENUM_VALUES" for c in diff.changes)
-        change = next(c for c in diff.changes if c.type == "CHANGE_ENUM_VALUES")
+        assert any(c.type == "CHANGE_ENUM_VALUES" for c in diff.wire())
+        change = next(c for c in diff.wire() if c.type == "CHANGE_ENUM_VALUES")
         assert "banned" in change.details["added_values"]
 
     def test_diff_no_change_when_enum_identical(self):
@@ -508,14 +508,14 @@ class TestSequenceDiff:
         old = "CREATE TABLE t (id INT);"
         new = "CREATE TABLE t (id INT);\nCREATE SEQUENCE order_seq START 1;"
         diff = differ.compare(old, new)
-        assert any(c.type == "ADD_SEQUENCE" for c in diff.changes)
+        assert any(c.type == "ADD_SEQUENCE" for c in diff.wire())
 
     def test_diff_detects_dropped_sequence(self):
         differ = SchemaDiffer()
         old = "CREATE TABLE t (id INT);\nCREATE SEQUENCE order_seq START 1;"
         new = "CREATE TABLE t (id INT);"
         diff = differ.compare(old, new)
-        assert any(c.type == "DROP_SEQUENCE" for c in diff.changes)
+        assert any(c.type == "DROP_SEQUENCE" for c in diff.wire())
 
 
 class TestUnknownTypeChanges:
@@ -526,14 +526,14 @@ class TestUnknownTypeChanges:
         old_sql = "CREATE TABLE t (x my_domain NOT NULL);"
         new_sql = "CREATE TABLE t (x TEXT NOT NULL);"
         diff = differ.compare(old_sql, new_sql)
-        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
+        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.wire())
 
     def test_known_to_unknown_type_change_detected(self):
         differ = SchemaDiffer()
         old_sql = "CREATE TABLE t (x TEXT NOT NULL);"
         new_sql = "CREATE TABLE t (x my_domain NOT NULL);"
         diff = differ.compare(old_sql, new_sql)
-        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.changes)
+        assert any(c.type == "CHANGE_COLUMN_TYPE" for c in diff.wire())
 
     def test_unknown_to_unknown_same_raw_type_no_change(self):
         differ = SchemaDiffer()
@@ -552,14 +552,14 @@ class TestCheckConstraintDiff:
         old = self._BASE
         new = self._BASE + "ALTER TABLE orders ADD CONSTRAINT chk_positive CHECK (amount > 0);"
         diff = differ.compare(old, new)
-        assert any(c.type == "ADD_CHECK_CONSTRAINT" for c in diff.changes)
+        assert any(c.type == "ADD_CHECK_CONSTRAINT" for c in diff.wire())
 
     def test_diff_detects_dropped_check_constraint(self):
         differ = SchemaDiffer()
         old = self._BASE + "ALTER TABLE orders ADD CONSTRAINT chk_positive CHECK (amount > 0);"
         new = self._BASE
         diff = differ.compare(old, new)
-        assert any(c.type == "DROP_CHECK_CONSTRAINT" for c in diff.changes)
+        assert any(c.type == "DROP_CHECK_CONSTRAINT" for c in diff.wire())
 
     def test_no_change_when_check_constraint_identical(self):
         differ = SchemaDiffer()
@@ -578,14 +578,14 @@ class TestUniqueConstraintDiff:
         old = self._BASE
         new = self._BASE + "ALTER TABLE users ADD CONSTRAINT uq_email UNIQUE (email);"
         diff = differ.compare(old, new)
-        assert any(c.type == "ADD_UNIQUE_CONSTRAINT" for c in diff.changes)
+        assert any(c.type == "ADD_UNIQUE_CONSTRAINT" for c in diff.wire())
 
     def test_diff_detects_dropped_unique_constraint(self):
         differ = SchemaDiffer()
         old = self._BASE + "ALTER TABLE users ADD CONSTRAINT uq_email UNIQUE (email);"
         new = self._BASE
         diff = differ.compare(old, new)
-        assert any(c.type == "DROP_UNIQUE_CONSTRAINT" for c in diff.changes)
+        assert any(c.type == "DROP_UNIQUE_CONSTRAINT" for c in diff.wire())
 
     def test_no_change_when_unique_constraint_identical(self):
         differ = SchemaDiffer()

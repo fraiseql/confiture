@@ -1,13 +1,16 @@
-"""Generate DDL SQL from SchemaChange objects."""
+"""Generate DDL SQL from a schema change: the up and the down each variant renders to."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from confiture.core.ddl_objects import TABLE_SCOPED_KINDS
 from confiture.exceptions import UnsafeOperationError
-from confiture.models.schema import SchemaChange
+from confiture.models.schema import WireChange
+
+if TYPE_CHECKING:
+    from confiture.core.schema_change import SchemaChange
 
 
 def column_body(col: Mapping[str, Any]) -> str:
@@ -37,7 +40,7 @@ def _format_column(col: Mapping[str, Any]) -> str:
     return f"{col['name']} {column_body(col)}"
 
 
-def _unnamed(change: SchemaChange, what: str) -> str:
+def _unnamed(change: WireChange, what: str) -> str:
     """The generator's "this changed, you write it" for a change with no object name.
 
     Never a fabricated ``idx_{table}`` / ``fk_{table}``: a name confiture made up
@@ -52,7 +55,7 @@ def _unnamed(change: SchemaChange, what: str) -> str:
     return f"-- WARNING: Cannot generate {change.type} on {change.table} without a {what} name\n"
 
 
-def _incomplete(change: SchemaChange, what: str) -> str:
+def _incomplete(change: WireChange, what: str) -> str:
     """:func:`_unnamed`'s sibling, for a change that has a name but not a statement.
 
     A CHECK with no expression, a foreign key with no referenced table. Writing
@@ -77,7 +80,7 @@ def _columns(names: list[str]) -> str:
     return ", ".join(names)
 
 
-def _column_body(change: SchemaChange, declared: str | None) -> str | None:
+def _column_body(change: WireChange, declared: str | None) -> str | None:
     """The text after a column's name: ``INTEGER NOT NULL DEFAULT 5``.
 
     A column change already carries its declaration — ``new_value`` for an added
@@ -143,13 +146,20 @@ def _references(details: dict[str, Any]) -> str | None:
 
 
 class DifferSQLGenerator:
-    """Generates safe, idempotent DDL SQL from SchemaChange objects."""
+    """Generates safe, idempotent DDL SQL from schema changes."""
 
     def __init__(self, force_destructive: bool = False) -> None:
         self._force = force_destructive
 
     def generate_up(self, change: SchemaChange) -> str:
         """Generate the forward DDL SQL for a schema change."""
+        return self._up(change.to_wire())
+
+    def generate_down(self, change: SchemaChange) -> str:
+        """Generate the rollback DDL SQL for a schema change."""
+        return self._down(change.to_wire())
+
+    def _up(self, change: WireChange) -> str:
         method = getattr(self, f"_up_{change.type.lower()}", None)
         if method is not None:
             return method(change)
@@ -158,8 +168,7 @@ class DifferSQLGenerator:
             return generic
         raise NotImplementedError(f"No DDL generator for change type: {change.type}")
 
-    def generate_down(self, change: SchemaChange) -> str:
-        """Generate the rollback DDL SQL for a schema change."""
+    def _down(self, change: WireChange) -> str:
         method = getattr(self, f"_down_{change.type.lower()}", None)
         if method is not None:
             return method(change)
@@ -172,7 +181,7 @@ class DifferSQLGenerator:
     # The object kinds #288 tracks that have no bespoke generator
     # ------------------------------------------------------------------
 
-    def _generic_object_sql(self, change: SchemaChange, *, forward: bool) -> str | None:
+    def _generic_object_sql(self, change: WireChange, *, forward: bool) -> str | None:
         """Create-or-drop DDL for a tracked object, from what the change carries.
 
         ``None`` when the change is not one of #288's objects, or when its kind
@@ -203,7 +212,7 @@ class DifferSQLGenerator:
         return self._statement(source, f"{change.type} {change.table}")
 
     @staticmethod
-    def _drop_object(kind: str, keyword: str, change: SchemaChange) -> str:
+    def _drop_object(kind: str, keyword: str, change: WireChange) -> str:
         """``DROP <keyword> IF EXISTS <name>``, with the table a trigger hangs off."""
         name = (change.details or {}).get("name") or change.table or ""
         if kind in TABLE_SCOPED_KINDS:
@@ -212,7 +221,7 @@ class DifferSQLGenerator:
                 return f"DROP {keyword} IF EXISTS {local} ON {qualified};\n"
         return f"DROP {keyword} IF EXISTS {name};\n"
 
-    def _up_add_table(self, change: SchemaChange) -> str:
+    def _up_add_table(self, change: WireChange) -> str:
         """The table the schema declared: its columns **and** its constraints.
 
         A constraint the schema left unnamed is written unnamed, exactly as the
@@ -234,21 +243,21 @@ class DifferSQLGenerator:
             return f"{warnings}CREATE TABLE IF NOT EXISTS {change.table} (\n    {joined}\n);\n"
         return f"{warnings}CREATE TABLE IF NOT EXISTS {change.table} ();\n"
 
-    def _down_add_table(self, change: SchemaChange) -> str:
+    def _down_add_table(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP TABLE {change.table!r} is destructive. Re-run with --force to generate this DDL."
             )
         return f"DROP TABLE IF EXISTS {change.table} CASCADE;\n"
 
-    def _up_drop_table(self, change: SchemaChange) -> str:
+    def _up_drop_table(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP TABLE {change.table!r} is destructive. Re-run with --force to generate this DDL."
             )
         return f"DROP TABLE IF EXISTS {change.table} CASCADE;\n"
 
-    def _down_drop_table(self, change: SchemaChange) -> str:
+    def _down_drop_table(self, change: WireChange) -> str:
         """Recreate the table from the columns and constraints the change carries.
 
         The same statement ``_up_add_table`` writes, which is how
@@ -262,27 +271,27 @@ class DifferSQLGenerator:
             "-- review: the table is recreated, the rows it held are not\n"
         )
 
-    def _up_add_column(self, change: SchemaChange) -> str:
+    def _up_add_column(self, change: WireChange) -> str:
         body = _column_body(change, change.new_value)
         if not change.column or body is None:
             return _incomplete(change, "a column name and a type")
         return f"ALTER TABLE {change.table} ADD COLUMN IF NOT EXISTS {change.column} {body};\n"
 
-    def _down_add_column(self, change: SchemaChange) -> str:
+    def _down_add_column(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP COLUMN {change.table}.{change.column} is destructive. Re-run with --force."
             )
         return f"ALTER TABLE {change.table} DROP COLUMN IF EXISTS {change.column};\n"
 
-    def _up_drop_column(self, change: SchemaChange) -> str:
+    def _up_drop_column(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP COLUMN {change.table}.{change.column} is destructive. Re-run with --force."
             )
         return f"ALTER TABLE {change.table} DROP COLUMN IF EXISTS {change.column};\n"
 
-    def _down_drop_column(self, change: SchemaChange) -> str:
+    def _down_drop_column(self, change: WireChange) -> str:
         """Recreate the column, and say what a down file cannot bring back.
 
         ``destructive.DATA_LOSS_TYPES`` already states the contract for a
@@ -302,7 +311,7 @@ class DifferSQLGenerator:
             " -- review: the column is restored, the rows it held are not\n"
         )
 
-    def _up_change_column_type(self, change: SchemaChange) -> str:
+    def _up_change_column_type(self, change: WireChange) -> str:
         """The differ's own spelling of the change, which this module could not write.
 
         ``generate_up`` dispatches on ``_up_{change.type.lower()}``. The differ
@@ -319,7 +328,7 @@ class DifferSQLGenerator:
 
     _up_alter_column_type = _up_change_column_type
 
-    def _up_add_index(self, change: SchemaChange) -> str:
+    def _up_add_index(self, change: WireChange) -> str:
         details = change.details or {}
         index_name = details.get("name", "")
         if not index_name:
@@ -333,21 +342,21 @@ class DifferSQLGenerator:
             f" ON {change.table} ({cols_str});\n"
         )
 
-    def _up_drop_index(self, change: SchemaChange) -> str:
+    def _up_drop_index(self, change: WireChange) -> str:
         details = change.details or {}
         index_name = details.get("name", "")
         if not index_name:
             return _unnamed(change, "index")
         return f"DROP INDEX CONCURRENTLY IF EXISTS {index_name};\n"
 
-    def _down_add_index(self, change: SchemaChange) -> str:
+    def _down_add_index(self, change: WireChange) -> str:
         details = change.details or {}
         index_name = details.get("name", "")
         if not index_name:
             return _unnamed(change, "index")
         return f"DROP INDEX CONCURRENTLY IF EXISTS {index_name};\n"
 
-    def _up_add_constraint(self, change: SchemaChange) -> str:
+    def _up_add_constraint(self, change: WireChange) -> str:
         """A constraint from a hand-built ``ADD_CONSTRAINT`` change.
 
         The differ emits ``ADD_FOREIGN_KEY`` / ``ADD_CHECK_CONSTRAINT`` /
@@ -377,14 +386,14 @@ class DifferSQLGenerator:
             )
         return f"ALTER TABLE {change.table} ADD {clause};\n"
 
-    def _up_drop_constraint(self, change: SchemaChange) -> str:
+    def _up_drop_constraint(self, change: WireChange) -> str:
         details = change.details or {}
         constraint_name = details.get("name", "")
         if not constraint_name:
             return _unnamed(change, "constraint")
         return f"ALTER TABLE {change.table} DROP CONSTRAINT IF EXISTS {constraint_name};\n"
 
-    def _up_add_foreign_key(self, change: SchemaChange) -> str:
+    def _up_add_foreign_key(self, change: WireChange) -> str:
         """``NOT VALID`` then ``VALIDATE``, which needs a name — or one statement.
 
         The two-step takes a brief ``SHARE ROW EXCLUSIVE`` lock and scans the
@@ -410,10 +419,10 @@ class DifferSQLGenerator:
             f"ALTER TABLE {change.table} VALIDATE CONSTRAINT {name};\n"
         )
 
-    def _up_drop_foreign_key(self, change: SchemaChange) -> str:
+    def _up_drop_foreign_key(self, change: WireChange) -> str:
         return self._up_drop_constraint(change)
 
-    def _up_add_check_constraint(self, change: SchemaChange) -> str:
+    def _up_add_check_constraint(self, change: WireChange) -> str:
         """A CHECK constraint is its expression, and has no column list (#316)."""
         details = change.details or {}
         body = _constraint_body({**details, "kind": "CHECK"})
@@ -421,17 +430,17 @@ class DifferSQLGenerator:
             return _incomplete(change, "a CHECK expression")
         return f"ALTER TABLE {change.table} ADD {_named(details.get('name') or '', body)};\n"
 
-    def _up_drop_check_constraint(self, change: SchemaChange) -> str:
+    def _up_drop_check_constraint(self, change: WireChange) -> str:
         return self._up_drop_constraint(change)
 
-    def _up_add_unique_constraint(self, change: SchemaChange) -> str:
+    def _up_add_unique_constraint(self, change: WireChange) -> str:
         details = change.details or {}
         body = _constraint_body({**details, "kind": "UNIQUE"})
         if body is None:
             return _incomplete(change, "a column list")
         return f"ALTER TABLE {change.table} ADD {_named(details.get('name') or '', body)};\n"
 
-    def _up_drop_unique_constraint(self, change: SchemaChange) -> str:
+    def _up_drop_unique_constraint(self, change: WireChange) -> str:
         return self._up_drop_constraint(change)
 
     # A drop whose ``ADD`` this module can already write has a down file: the
@@ -440,19 +449,19 @@ class DifferSQLGenerator:
     # what it was holding. The consequence showed one kind over — a restored
     # column came back without the foreign key that hung off it.
 
-    def _down_drop_foreign_key(self, change: SchemaChange) -> str:
+    def _down_drop_foreign_key(self, change: WireChange) -> str:
         return self._up_add_foreign_key(change)
 
-    def _down_drop_check_constraint(self, change: SchemaChange) -> str:
+    def _down_drop_check_constraint(self, change: WireChange) -> str:
         return self._up_add_check_constraint(change)
 
-    def _down_drop_unique_constraint(self, change: SchemaChange) -> str:
+    def _down_drop_unique_constraint(self, change: WireChange) -> str:
         return self._up_add_unique_constraint(change)
 
-    def _down_drop_index(self, change: SchemaChange) -> str:
+    def _down_drop_index(self, change: WireChange) -> str:
         return self._up_add_index(change)
 
-    def _up_add_function(self, change: SchemaChange) -> str:
+    def _up_add_function(self, change: WireChange) -> str:
         """The routine's own ``CREATE OR REPLACE``.
 
         ``details["source"]`` predates #288 and is kept: a caller that builds
@@ -462,16 +471,16 @@ class DifferSQLGenerator:
         source = (change.details or {}).get("source") or change.new_value
         return self._statement(source, f"ADD_FUNCTION {change.table}")
 
-    def _down_add_function(self, change: SchemaChange) -> str:
+    def _down_add_function(self, change: WireChange) -> str:
         return self._drop_routine("FUNCTION", change)
 
-    def _up_replace_function(self, change: SchemaChange) -> str:
+    def _up_replace_function(self, change: WireChange) -> str:
         return self._statement(change.new_value, f"REPLACE_FUNCTION {change.table}")
 
-    def _down_replace_function(self, change: SchemaChange) -> str:
+    def _down_replace_function(self, change: WireChange) -> str:
         return self._statement(change.old_value, f"REPLACE_FUNCTION {change.table}")
 
-    def _up_drop_function(self, change: SchemaChange) -> str:
+    def _up_drop_function(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP FUNCTION {change.table!r} is destructive. "
@@ -479,22 +488,22 @@ class DifferSQLGenerator:
             )
         return self._drop_routine("FUNCTION", change)
 
-    def _down_drop_function(self, change: SchemaChange) -> str:
+    def _down_drop_function(self, change: WireChange) -> str:
         return self._statement(change.old_value, f"DROP_FUNCTION {change.table}")
 
-    def _up_add_procedure(self, change: SchemaChange) -> str:
+    def _up_add_procedure(self, change: WireChange) -> str:
         return self._statement(change.new_value, f"ADD_PROCEDURE {change.table}")
 
-    def _down_add_procedure(self, change: SchemaChange) -> str:
+    def _down_add_procedure(self, change: WireChange) -> str:
         return self._drop_routine("PROCEDURE", change)
 
-    def _up_replace_procedure(self, change: SchemaChange) -> str:
+    def _up_replace_procedure(self, change: WireChange) -> str:
         return self._statement(change.new_value, f"REPLACE_PROCEDURE {change.table}")
 
-    def _down_replace_procedure(self, change: SchemaChange) -> str:
+    def _down_replace_procedure(self, change: WireChange) -> str:
         return self._statement(change.old_value, f"REPLACE_PROCEDURE {change.table}")
 
-    def _up_drop_procedure(self, change: SchemaChange) -> str:
+    def _up_drop_procedure(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP PROCEDURE {change.table!r} is destructive. "
@@ -502,27 +511,27 @@ class DifferSQLGenerator:
             )
         return self._drop_routine("PROCEDURE", change)
 
-    def _down_drop_procedure(self, change: SchemaChange) -> str:
+    def _down_drop_procedure(self, change: WireChange) -> str:
         return self._statement(change.old_value, f"DROP_PROCEDURE {change.table}")
 
-    def _up_add_aggregate(self, change: SchemaChange) -> str:
+    def _up_add_aggregate(self, change: WireChange) -> str:
         return self._statement(change.new_value, f"ADD_AGGREGATE {change.table}")
 
-    def _down_add_aggregate(self, change: SchemaChange) -> str:
+    def _down_add_aggregate(self, change: WireChange) -> str:
         return self._drop_routine("AGGREGATE", change)
 
-    def _up_replace_aggregate(self, change: SchemaChange) -> str:
+    def _up_replace_aggregate(self, change: WireChange) -> str:
         """An aggregate has no ``OR REPLACE`` either: drop it, then define it again."""
         return self._drop_routine("AGGREGATE", change) + self._statement(
             change.new_value, f"REPLACE_AGGREGATE {change.table}"
         )
 
-    def _down_replace_aggregate(self, change: SchemaChange) -> str:
+    def _down_replace_aggregate(self, change: WireChange) -> str:
         return self._drop_routine("AGGREGATE", change) + self._statement(
             change.old_value, f"REPLACE_AGGREGATE {change.table}"
         )
 
-    def _up_drop_aggregate(self, change: SchemaChange) -> str:
+    def _up_drop_aggregate(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP AGGREGATE {change.table!r} is destructive. "
@@ -530,16 +539,16 @@ class DifferSQLGenerator:
             )
         return self._drop_routine("AGGREGATE", change)
 
-    def _down_drop_aggregate(self, change: SchemaChange) -> str:
+    def _down_drop_aggregate(self, change: WireChange) -> str:
         return self._statement(change.old_value, f"DROP_AGGREGATE {change.table}")
 
-    def _up_add_domain(self, change: SchemaChange) -> str:
+    def _up_add_domain(self, change: WireChange) -> str:
         return self._statement(change.new_value, f"ADD_DOMAIN {change.table}")
 
-    def _down_add_domain(self, change: SchemaChange) -> str:
+    def _down_add_domain(self, change: WireChange) -> str:
         return f"DROP DOMAIN IF EXISTS {change.table};\n"
 
-    def _up_drop_domain(self, change: SchemaChange) -> str:
+    def _up_drop_domain(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP DOMAIN {change.table!r} is destructive. "
@@ -547,16 +556,16 @@ class DifferSQLGenerator:
             )
         return f"DROP DOMAIN IF EXISTS {change.table};\n"
 
-    def _down_drop_domain(self, change: SchemaChange) -> str:
+    def _down_drop_domain(self, change: WireChange) -> str:
         return self._statement(change.old_value, f"DROP_DOMAIN {change.table}")
 
-    def _up_add_type(self, change: SchemaChange) -> str:
+    def _up_add_type(self, change: WireChange) -> str:
         return self._statement(change.new_value, f"ADD_TYPE {change.table}")
 
-    def _down_add_type(self, change: SchemaChange) -> str:
+    def _down_add_type(self, change: WireChange) -> str:
         return f"DROP TYPE IF EXISTS {change.table};\n"
 
-    def _up_drop_type(self, change: SchemaChange) -> str:
+    def _up_drop_type(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP TYPE {change.table!r} is destructive. "
@@ -564,11 +573,11 @@ class DifferSQLGenerator:
             )
         return f"DROP TYPE IF EXISTS {change.table};\n"
 
-    def _down_drop_type(self, change: SchemaChange) -> str:
+    def _down_drop_type(self, change: WireChange) -> str:
         return self._statement(change.old_value, f"DROP_TYPE {change.table}")
 
     @staticmethod
-    def _drop_routine(keyword: str, change: SchemaChange) -> str:
+    def _drop_routine(keyword: str, change: WireChange) -> str:
         """``DROP <keyword> IF EXISTS name(args)``.
 
         ``change.table`` carries the routine's identity — ``fn_c(bigint)`` — so
@@ -589,36 +598,36 @@ class DifferSQLGenerator:
             return f"-- WARNING: no definition captured for {missing}\n"
         return f"{sql.rstrip().rstrip(';')};\n"
 
-    def _up_add_view(self, change: SchemaChange) -> str:
+    def _up_add_view(self, change: WireChange) -> str:
         return self._statement(change.new_value, f"ADD_VIEW {change.table}")
 
-    def _down_add_view(self, change: SchemaChange) -> str:
+    def _down_add_view(self, change: WireChange) -> str:
         return f"DROP VIEW IF EXISTS {change.table};\n"
 
-    def _up_replace_view(self, change: SchemaChange) -> str:
+    def _up_replace_view(self, change: WireChange) -> str:
         return self._statement(change.new_value, f"REPLACE_VIEW {change.table}")
 
-    def _down_replace_view(self, change: SchemaChange) -> str:
+    def _down_replace_view(self, change: WireChange) -> str:
         """Back to the definition that was there — a replace is not undone by a drop."""
         return self._statement(change.old_value, f"REPLACE_VIEW {change.table}")
 
-    def _up_drop_view(self, change: SchemaChange) -> str:
+    def _up_drop_view(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP VIEW {change.table!r} is destructive. Re-run with --force to generate this DDL."
             )
         return f"DROP VIEW IF EXISTS {change.table};\n"
 
-    def _down_drop_view(self, change: SchemaChange) -> str:
+    def _down_drop_view(self, change: WireChange) -> str:
         return self._statement(change.old_value, f"DROP_VIEW {change.table}")
 
-    def _up_add_matview(self, change: SchemaChange) -> str:
+    def _up_add_matview(self, change: WireChange) -> str:
         return self._statement(change.new_value, f"ADD_MATVIEW {change.table}")
 
-    def _down_add_matview(self, change: SchemaChange) -> str:
+    def _down_add_matview(self, change: WireChange) -> str:
         return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n"
 
-    def _up_replace_matview(self, change: SchemaChange) -> str:
+    def _up_replace_matview(self, change: WireChange) -> str:
         """PostgreSQL has no ``CREATE OR REPLACE MATERIALIZED VIEW``: drop, then create.
 
         The rows are lost and rebuilt, which is what a matview is for; what a
@@ -629,12 +638,12 @@ class DifferSQLGenerator:
             change.new_value, f"REPLACE_MATVIEW {change.table}"
         )
 
-    def _down_replace_matview(self, change: SchemaChange) -> str:
+    def _down_replace_matview(self, change: WireChange) -> str:
         return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n" + self._statement(
             change.old_value, f"REPLACE_MATVIEW {change.table}"
         )
 
-    def _up_drop_matview(self, change: SchemaChange) -> str:
+    def _up_drop_matview(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP MATERIALIZED VIEW {change.table!r} is destructive. "
@@ -642,10 +651,10 @@ class DifferSQLGenerator:
             )
         return f"DROP MATERIALIZED VIEW IF EXISTS {change.table};\n"
 
-    def _down_drop_matview(self, change: SchemaChange) -> str:
+    def _down_drop_matview(self, change: WireChange) -> str:
         return self._statement(change.old_value, f"DROP_MATVIEW {change.table}")
 
-    def _up_add_enum_type(self, change: SchemaChange) -> str:
+    def _up_add_enum_type(self, change: WireChange) -> str:
         details = change.details or {}
         values = details.get("values", [])
         name = change.table or ""
@@ -654,11 +663,11 @@ class DifferSQLGenerator:
             return f"CREATE TYPE {name} AS ENUM ({quoted});\n"
         return f"CREATE TYPE {name} AS ENUM ();\n"
 
-    def _down_add_enum_type(self, change: SchemaChange) -> str:
+    def _down_add_enum_type(self, change: WireChange) -> str:
         name = change.table or ""
         return f"DROP TYPE IF EXISTS {name};\n"
 
-    def _up_drop_enum_type(self, change: SchemaChange) -> str:
+    def _up_drop_enum_type(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP TYPE {change.table!r} is destructive. Re-run with --force to generate this DDL."
@@ -666,11 +675,11 @@ class DifferSQLGenerator:
         name = change.table or ""
         return f"DROP TYPE IF EXISTS {name};\n"
 
-    def _down_drop_enum_type(self, change: SchemaChange) -> str:
+    def _down_drop_enum_type(self, change: WireChange) -> str:
         name = change.table or ""
         return f"-- WARNING: Cannot automatically recreate dropped enum type {name}\n"
 
-    def _up_change_enum_values(self, change: SchemaChange) -> str:
+    def _up_change_enum_values(self, change: WireChange) -> str:
         details = change.details or {}
         name = change.table or ""
         added = details.get("added_values", [])
@@ -685,15 +694,15 @@ class DifferSQLGenerator:
             )
         return "".join(parts) if parts else f"-- No enum value changes for {name}\n"
 
-    def _up_add_sequence(self, change: SchemaChange) -> str:
+    def _up_add_sequence(self, change: WireChange) -> str:
         name = change.table or ""
         return f"CREATE SEQUENCE IF NOT EXISTS {name};\n"
 
-    def _down_add_sequence(self, change: SchemaChange) -> str:
+    def _down_add_sequence(self, change: WireChange) -> str:
         name = change.table or ""
         return f"DROP SEQUENCE IF EXISTS {name};\n"
 
-    def _up_drop_sequence(self, change: SchemaChange) -> str:
+    def _up_drop_sequence(self, change: WireChange) -> str:
         if not self._force:
             raise UnsafeOperationError(
                 f"DROP SEQUENCE {change.table!r} is destructive. Re-run with --force to generate this DDL."
@@ -701,6 +710,6 @@ class DifferSQLGenerator:
         name = change.table or ""
         return f"DROP SEQUENCE IF EXISTS {name};\n"
 
-    def _down_drop_sequence(self, change: SchemaChange) -> str:
+    def _down_drop_sequence(self, change: WireChange) -> str:
         name = change.table or ""
         return f"-- WARNING: Cannot automatically recreate dropped sequence {name}\n"

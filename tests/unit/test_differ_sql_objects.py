@@ -17,8 +17,8 @@ BASE = "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT);\n"
 
 def change_of(old_extra: str, new_extra: str, change_type: str):
     changes = SchemaDiffer().compare(BASE + old_extra, BASE + new_extra).changes
-    matching = [c for c in changes if c.type == change_type]
-    assert matching, f"expected a {change_type} among {[c.type for c in changes]}"
+    matching = [c for c in changes if c.to_wire().type == change_type]
+    assert matching, f"expected a {change_type} among {[c.to_wire().type for c in changes]}"
     return matching[0]
 
 
@@ -125,7 +125,7 @@ class TestTheMigrationIsNotShort:
         for old, new in pairs:
             for change in SchemaDiffer().compare(BASE + old, BASE + new).changes:
                 sql = generator.generate_up(change)
-                assert "WARNING" not in sql, f"{change.type} has no DDL generator"
+                assert "WARNING" not in sql, f"{change.to_wire().type} has no DDL generator"
 
     def test_the_exempt_changes_are_still_reported_and_still_have_no_generator(self):
         """Reported by the differ — the gate is what matters — and left to the author."""
@@ -149,7 +149,7 @@ class TestTheMigrationIsNotShort:
         }
         for change_type, (old, new) in cases.items():
             change = change_of(old, new, change_type)
-            kind = (change.details or {})["kind"]
+            kind = change.ref.kind
             assert kind in REPLACE_IS_AUTHORS_WORK, f"{change_type} has no stated reason"
             with pytest.raises(NotImplementedError):
                 DifferSQLGenerator(True).generate_up(change)
@@ -224,15 +224,6 @@ class TestRoutineDDL:
             .startswith("CREATE OR REPLACE FUNCTION fn_c(p bigint)")
         )
 
-    def test_add_function_still_honours_a_hand_built_source(self):
-        """`details["source"]` predates #288 and its caller must keep working."""
-        from confiture.models.schema import SchemaChange
-
-        change = SchemaChange(
-            type="ADD_FUNCTION", table="myfunc", details={"source": "CREATE FUNCTION myfunc()"}
-        )
-        assert "CREATE FUNCTION myfunc()" in DifferSQLGenerator().generate_up(change)
-
 
 class TestGenericObjectDDL:
     """The kinds #288 tracks that have no bespoke generator."""
@@ -301,7 +292,8 @@ class TestGenericObjectDDL:
             for old, new in (("", extra), (extra, "")):
                 for change in SchemaDiffer().compare(BASE + old, BASE + new).changes:
                     sql = generator.generate_up(change)
-                    assert "WARNING" not in sql, f"{change.type} renders a warning"
-                    assert sql.strip(), f"{change.type} renders nothing"
+                    wire_type = change.to_wire().type
+                    assert "WARNING" not in sql, f"{wire_type} renders a warning"
+                    assert sql.strip(), f"{wire_type} renders nothing"
                     seen += 1
         assert seen == 2 * len(extras), f"expected one change per case, saw {seen}"

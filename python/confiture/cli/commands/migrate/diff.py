@@ -123,11 +123,9 @@ def migrate_diff(
         differ = SchemaDiffer()
         diff = differ.compare(old_sql, new_sql)
 
-        # Convert changes to SchemaChange objects
-
         changes = [
             MigrateDiffChange(
-                change.type,
+                change.to_wire().type,
                 str(change),
                 irreversible_reason=data_loss_reason(change),
             )

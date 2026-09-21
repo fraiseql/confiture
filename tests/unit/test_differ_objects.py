@@ -11,13 +11,14 @@ what matters is that the change is *reported*, not which walker found it.
 """
 
 from confiture.core.differ import SchemaDiffer
+from confiture.models.schema import WireChange
 
 BASE = "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT);\n"
 
 
-def changes_of(old_extra: str, new_extra: str) -> list:
+def changes_of(old_extra: str, new_extra: str) -> list[WireChange]:
     """The changes between two schemas that share :data:`BASE`."""
-    return SchemaDiffer().compare(BASE + old_extra, BASE + new_extra).changes
+    return SchemaDiffer().compare(BASE + old_extra, BASE + new_extra).wire()
 
 
 def types_of(old_extra: str, new_extra: str) -> list[str]:

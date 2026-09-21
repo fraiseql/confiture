@@ -3,13 +3,42 @@
 from __future__ import annotations
 
 from confiture.core.migration_generator import MigrationGenerator
-from confiture.models.schema import SchemaChange, SchemaDiff
+from confiture.core.schema_change import (
+    CheckConstraintAdded,
+    CheckConstraintDropped,
+    EnumTypeAdded,
+    EnumTypeDropped,
+    EnumValuesChanged,
+    ForeignKeyAdded,
+    ForeignKeyDropped,
+    IndexAdded,
+    IndexDropped,
+    SchemaDiff,
+    SequenceAdded,
+    SequenceDropped,
+    UniqueConstraintAdded,
+    UniqueConstraintDropped,
+)
+from confiture.core.schema_model import Constraint, EnumType, Sequence
+from tests.unit._schema_models import index
 
 
 def _gen(tmp_path):
     d = tmp_path / "migrations"
     d.mkdir()
     return MigrationGenerator(migrations_dir=d)
+
+
+FK_ORDERS_USER = Constraint(
+    kind="foreign_key",
+    name="fk_orders_user",
+    columns=("user_id",),
+    ref_table="users",
+    ref_columns=("id",),
+)
+CHK_AMOUNT_POSITIVE = Constraint(kind="check", name="chk_amount_positive", expression="amount > 0")
+UQ_USERS_EMAIL = Constraint(kind="unique", name="uq_users_email", columns=("email",))
+IDX_USERS_EMAIL = index("idx_users_email", "users", "email")
 
 
 # ---------------------------------------------------------------------------
@@ -19,32 +48,20 @@ def _gen(tmp_path):
 
 class TestIndexChanges:
     def test_up_add_index_generates_create_index(self, tmp_path):
-        change = SchemaChange(
-            type="ADD_INDEX",
-            table="users",
-            details={"name": "idx_users_email", "columns": ["email"]},
-        )
+        change = IndexAdded("users", IDX_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "CREATE" in sql and "INDEX" in sql
         assert "idx_users_email" in sql
 
     def test_up_drop_index_generates_drop_index(self, tmp_path):
-        change = SchemaChange(
-            type="DROP_INDEX",
-            table="users",
-            details={"name": "idx_users_email"},
-        )
+        change = IndexDropped("users", IDX_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "DROP INDEX" in sql
 
     def test_down_add_index_generates_drop(self, tmp_path):
-        change = SchemaChange(
-            type="ADD_INDEX",
-            table="users",
-            details={"name": "idx_users_email", "columns": ["email"]},
-        )
+        change = IndexAdded("users", IDX_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_down_sql(change)
         assert sql is not None
         assert "DROP" in sql
@@ -57,43 +74,19 @@ class TestIndexChanges:
 
 class TestForeignKeyChanges:
     def test_up_add_foreign_key(self, tmp_path):
-        change = SchemaChange(
-            type="ADD_FOREIGN_KEY",
-            table="orders",
-            details={
-                "name": "fk_orders_user",
-                "columns": ["user_id"],
-                "ref_table": "users",
-                "ref_columns": ["id"],
-                "on_delete": None,
-            },
-        )
+        change = ForeignKeyAdded("orders", FK_ORDERS_USER)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "FOREIGN KEY" in sql
 
     def test_up_drop_foreign_key(self, tmp_path):
-        change = SchemaChange(
-            type="DROP_FOREIGN_KEY",
-            table="orders",
-            details={"name": "fk_orders_user"},
-        )
+        change = ForeignKeyDropped("orders", FK_ORDERS_USER)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "DROP CONSTRAINT" in sql
 
     def test_down_add_foreign_key(self, tmp_path):
-        change = SchemaChange(
-            type="ADD_FOREIGN_KEY",
-            table="orders",
-            details={
-                "name": "fk_orders_user",
-                "columns": ["user_id"],
-                "ref_table": "users",
-                "ref_columns": ["id"],
-                "on_delete": None,
-            },
-        )
+        change = ForeignKeyAdded("orders", FK_ORDERS_USER)
         sql = _gen(tmp_path)._change_to_down_sql(change)
         assert sql is not None
 
@@ -105,21 +98,13 @@ class TestForeignKeyChanges:
 
 class TestCheckConstraintChanges:
     def test_up_add_check_constraint(self, tmp_path):
-        change = SchemaChange(
-            type="ADD_CHECK_CONSTRAINT",
-            table="orders",
-            details={"name": "chk_amount_positive", "expression": "amount > 0"},
-        )
+        change = CheckConstraintAdded("orders", CHK_AMOUNT_POSITIVE)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "CHECK" in sql
 
     def test_up_drop_check_constraint(self, tmp_path):
-        change = SchemaChange(
-            type="DROP_CHECK_CONSTRAINT",
-            table="orders",
-            details={"name": "chk_amount_positive"},
-        )
+        change = CheckConstraintDropped("orders", CHK_AMOUNT_POSITIVE)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "DROP CONSTRAINT" in sql
@@ -132,21 +117,13 @@ class TestCheckConstraintChanges:
 
 class TestUniqueConstraintChanges:
     def test_up_add_unique_constraint(self, tmp_path):
-        change = SchemaChange(
-            type="ADD_UNIQUE_CONSTRAINT",
-            table="users",
-            details={"name": "uq_users_email", "columns": ["email"]},
-        )
+        change = UniqueConstraintAdded("users", UQ_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "UNIQUE" in sql
 
     def test_up_drop_unique_constraint(self, tmp_path):
-        change = SchemaChange(
-            type="DROP_UNIQUE_CONSTRAINT",
-            table="users",
-            details={"name": "uq_users_email"},
-        )
+        change = UniqueConstraintDropped("users", UQ_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "DROP CONSTRAINT" in sql
@@ -159,11 +136,7 @@ class TestUniqueConstraintChanges:
 
 class TestEnumTypeChanges:
     def test_up_add_enum_type(self, tmp_path):
-        change = SchemaChange(
-            type="ADD_ENUM_TYPE",
-            table="mood",
-            details={"values": ["happy", "sad"]},
-        )
+        change = EnumTypeAdded(EnumType("mood", values=("happy", "sad")))
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "CREATE TYPE" in sql
@@ -171,27 +144,19 @@ class TestEnumTypeChanges:
 
     def test_up_drop_enum_type_produces_warning_comment(self, tmp_path):
         """MigrationGenerator has no --force; DROP_ENUM_TYPE must emit a warning comment."""
-        change = SchemaChange(type="DROP_ENUM_TYPE", table="mood")
+        change = EnumTypeDropped(EnumType("mood", values=("happy", "sad")))
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "WARNING" in sql.upper() or "--" in sql
 
     def test_up_change_enum_values(self, tmp_path):
-        change = SchemaChange(
-            type="CHANGE_ENUM_VALUES",
-            table="mood",
-            details={"added_values": ["ecstatic"], "removed_values": []},
-        )
+        change = EnumValuesChanged("mood", added=("ecstatic",), removed=())
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "ADD VALUE" in sql
 
     def test_down_add_enum_type(self, tmp_path):
-        change = SchemaChange(
-            type="ADD_ENUM_TYPE",
-            table="mood",
-            details={"values": ["happy"]},
-        )
+        change = EnumTypeAdded(EnumType("mood", values=("happy",)))
         sql = _gen(tmp_path)._change_to_down_sql(change)
         assert sql is not None
         assert "DROP TYPE" in sql
@@ -204,7 +169,7 @@ class TestEnumTypeChanges:
 
 class TestSequenceChanges:
     def test_up_add_sequence(self, tmp_path):
-        change = SchemaChange(type="ADD_SEQUENCE", table="order_seq")
+        change = SequenceAdded(Sequence("order_seq"))
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "CREATE SEQUENCE" in sql
@@ -212,13 +177,13 @@ class TestSequenceChanges:
 
     def test_up_drop_sequence_produces_warning_comment(self, tmp_path):
         """MigrationGenerator has no --force; DROP_SEQUENCE must emit a warning comment."""
-        change = SchemaChange(type="DROP_SEQUENCE", table="order_seq")
+        change = SequenceDropped(Sequence("order_seq"))
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "WARNING" in sql.upper() or "--" in sql
 
     def test_down_add_sequence(self, tmp_path):
-        change = SchemaChange(type="ADD_SEQUENCE", table="order_seq")
+        change = SequenceAdded(Sequence("order_seq"))
         sql = _gen(tmp_path)._change_to_down_sql(change)
         assert sql is not None
         assert "DROP SEQUENCE" in sql
@@ -231,30 +196,14 @@ class TestSequenceChanges:
 
 class TestGeneratedFileContainsNewTypes:
     def test_migration_file_includes_add_index_sql(self, tmp_path):
-        diff = SchemaDiff(
-            changes=[
-                SchemaChange(
-                    type="ADD_INDEX",
-                    table="users",
-                    details={"name": "idx_email", "columns": ["email"]},
-                )
-            ]
-        )
+        diff = SchemaDiff(changes=[IndexAdded("users", index("idx_email", "users", "email"))])
         gen = _gen(tmp_path)
         path = gen.generate(diff, name="add_idx_email")
         content = path.read_text()
         assert "idx_email" in content
 
     def test_migration_file_includes_add_enum_sql(self, tmp_path):
-        diff = SchemaDiff(
-            changes=[
-                SchemaChange(
-                    type="ADD_ENUM_TYPE",
-                    table="mood",
-                    details={"values": ["happy", "sad"]},
-                )
-            ]
-        )
+        diff = SchemaDiff(changes=[EnumTypeAdded(EnumType("mood", values=("happy", "sad")))])
         gen = _gen(tmp_path)
         path = gen.generate(diff, name="add_mood_enum")
         content = path.read_text()

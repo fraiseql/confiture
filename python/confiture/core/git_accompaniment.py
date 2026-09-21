@@ -30,7 +30,7 @@ _BODY_CHANGE_TYPES = frozenset(f"REPLACE_{kind.upper()}" for kind in BODY_KINDS)
 
 def _without_body_changes(changes: list) -> list:
     """The changes the gate acts on when ``--require-migration-bodies`` is off."""
-    return [change for change in changes if change.type not in _BODY_CHANGE_TYPES]
+    return [change for change in changes if change.to_wire().type not in _BODY_CHANGE_TYPES]
 
 
 class MigrationAccompanimentChecker:
@@ -142,7 +142,7 @@ class MigrationAccompanimentChecker:
         return MigrationAccompanimentReport(
             has_ddl_changes=bool(ddl_changes),
             has_new_migrations=len(new_migrations) > 0,
-            ddl_changes=ddl_changes,
+            ddl_changes=[change.to_wire() for change in ddl_changes],
             new_migration_files=new_migrations,
             base_ref=base_ref,
             target_ref=target_ref,

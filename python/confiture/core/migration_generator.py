@@ -16,10 +16,11 @@ from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.change_set import classify_statements
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.risk_tier import RiskTier, worst_tier
+from confiture.core.schema_change import SchemaChange, SchemaDiff, TableAdded, TableDropped
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX
 from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.exceptions import DifferError, ExternalGeneratorError, UnsafeOperationError
-from confiture.models.schema import SchemaChange, SchemaDiff
+from confiture.models.schema import WireChange
 
 
 def _execute_call(sql: str) -> str:
@@ -29,7 +30,7 @@ def _execute_call(sql: str) -> str:
     return f'        self.execute("{sql}")'
 
 
-def _restore_column(change: SchemaChange) -> str | None:
+def _restore_column(change: WireChange) -> str | None:
     """``ADD COLUMN`` with the definition the differ captured, or nothing to restore from."""
     if not change.old_value:
         return None
@@ -56,7 +57,7 @@ def _with_tier(statement: str, *, floor: RiskTier | None = None) -> str:
     return f"-- {DIRECTIVE_PREFIX}tier {tier.value}\n{statement}"
 
 
-def _rename_target(change: SchemaChange, key: str) -> str:
+def _rename_target(change: WireChange, key: str) -> str:
     """The bare half of a ``RENAME_TABLE`` — what ``RENAME TO`` will accept.
 
     ``ALTER TABLE a.t RENAME TO a.t2`` is a syntax error: PostgreSQL's
@@ -520,42 +521,39 @@ class {class_name}(Migration):
         Returns:
             SQL string or None if not applicable
         """
-        if change.type == "DROP_TABLE":
-            return f"DROP TABLE {change.table}"
+        wire = change.to_wire()
+        if wire.type == "DROP_TABLE":
+            return f"DROP TABLE {wire.table}"
 
-        elif change.type == "RENAME_TABLE":
-            return f"ALTER TABLE {change.old_value} RENAME TO {_rename_target(change, 'new_name')}"
+        elif wire.type == "RENAME_TABLE":
+            return f"ALTER TABLE {wire.old_value} RENAME TO {_rename_target(wire, 'new_name')}"
 
-        elif change.type == "ADD_COLUMN":
-            col_def = change.new_value if change.new_value else "TEXT"
-            return f"ALTER TABLE {change.table} ADD COLUMN {change.column} {col_def}"
+        elif wire.type == "ADD_COLUMN":
+            col_def = wire.new_value if wire.new_value else "TEXT"
+            return f"ALTER TABLE {wire.table} ADD COLUMN {wire.column} {col_def}"
 
-        elif change.type == "DROP_COLUMN":
-            return f"ALTER TABLE {change.table} DROP COLUMN {change.column}"
+        elif wire.type == "DROP_COLUMN":
+            return f"ALTER TABLE {wire.table} DROP COLUMN {wire.column}"
 
-        elif change.type == "RENAME_COLUMN":
-            return (
-                f"ALTER TABLE {change.table} RENAME COLUMN {change.old_value} TO {change.new_value}"
-            )
+        elif wire.type == "RENAME_COLUMN":
+            return f"ALTER TABLE {wire.table} RENAME COLUMN {wire.old_value} TO {wire.new_value}"
 
-        elif change.type == "CHANGE_COLUMN_TYPE":
-            return (
-                f"ALTER TABLE {change.table} ALTER COLUMN {change.column} TYPE {change.new_value}"
-            )
+        elif wire.type == "CHANGE_COLUMN_TYPE":
+            return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} TYPE {wire.new_value}"
 
-        elif change.type == "CHANGE_COLUMN_NULLABLE":
-            if change.new_value == "false":
-                return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} SET NOT NULL"
+        elif wire.type == "CHANGE_COLUMN_NULLABLE":
+            if wire.new_value == "false":
+                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} SET NOT NULL"
             else:
-                return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} DROP NOT NULL"
+                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} DROP NOT NULL"
 
-        elif change.type == "CHANGE_COLUMN_DEFAULT":
-            if change.new_value:
-                return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} SET DEFAULT {change.new_value}"
+        elif wire.type == "CHANGE_COLUMN_DEFAULT":
+            if wire.new_value:
+                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} SET DEFAULT {wire.new_value}"
             else:
-                return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} DROP DEFAULT"
+                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} DROP DEFAULT"
 
-        elif change.type in self._DELEGATED_UP_TYPES:
+        elif wire.type in self._DELEGATED_UP_TYPES:
             try:
                 return self._sql_gen.generate_up(change).rstrip("\n")
             except UnsafeOperationError as exc:
@@ -646,11 +644,10 @@ class {class_name}(Migration):
         return (resolved, output_path)
 
     def _recreate_table(self, change: SchemaChange) -> str | None:
-        """``CREATE TABLE`` from the columns the differ captured, or nothing to recreate from."""
-        if not (change.details or {}).get("columns"):
+        """``CREATE TABLE`` from the table the differ captured, or nothing to recreate from."""
+        if not isinstance(change, TableDropped) or not change.table.columns:
             return None
-        recreate = SchemaChange(type="ADD_TABLE", table=change.table, details=change.details)
-        return self._sql_gen.generate_up(recreate).rstrip("\n")
+        return self._sql_gen.generate_up(TableAdded(change.table)).rstrip("\n")
 
     def _change_to_down_sql(self, change: SchemaChange) -> str | None:
         """Convert schema change to SQL for down migration (reverse).
@@ -661,44 +658,41 @@ class {class_name}(Migration):
         Returns:
             SQL string or None if not applicable
         """
-        if change.type == "ADD_TABLE":
-            return f"DROP TABLE {change.table}"
+        wire = change.to_wire()
+        if wire.type == "ADD_TABLE":
+            return f"DROP TABLE {wire.table}"
 
-        elif change.type == "DROP_TABLE":
+        elif wire.type == "DROP_TABLE":
             return self._recreate_table(change)
 
-        elif change.type == "RENAME_TABLE":
-            return f"ALTER TABLE {change.new_value} RENAME TO {_rename_target(change, 'old_name')}"
+        elif wire.type == "RENAME_TABLE":
+            return f"ALTER TABLE {wire.new_value} RENAME TO {_rename_target(wire, 'old_name')}"
 
-        elif change.type == "ADD_COLUMN":
-            return f"ALTER TABLE {change.table} DROP COLUMN {change.column}"
+        elif wire.type == "ADD_COLUMN":
+            return f"ALTER TABLE {wire.table} DROP COLUMN {wire.column}"
 
-        elif change.type == "DROP_COLUMN":
-            return _restore_column(change)
+        elif wire.type == "DROP_COLUMN":
+            return _restore_column(wire)
 
-        elif change.type == "RENAME_COLUMN":
-            return (
-                f"ALTER TABLE {change.table} RENAME COLUMN {change.new_value} TO {change.old_value}"
-            )
+        elif wire.type == "RENAME_COLUMN":
+            return f"ALTER TABLE {wire.table} RENAME COLUMN {wire.new_value} TO {wire.old_value}"
 
-        elif change.type == "CHANGE_COLUMN_TYPE":
-            return (
-                f"ALTER TABLE {change.table} ALTER COLUMN {change.column} TYPE {change.old_value}"
-            )
+        elif wire.type == "CHANGE_COLUMN_TYPE":
+            return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} TYPE {wire.old_value}"
 
-        elif change.type == "CHANGE_COLUMN_NULLABLE":
-            if change.old_value == "false":
-                return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} SET NOT NULL"
+        elif wire.type == "CHANGE_COLUMN_NULLABLE":
+            if wire.old_value == "false":
+                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} SET NOT NULL"
             else:
-                return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} DROP NOT NULL"
+                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} DROP NOT NULL"
 
-        elif change.type == "CHANGE_COLUMN_DEFAULT":
-            if change.old_value:
-                return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} SET DEFAULT {change.old_value}"
+        elif wire.type == "CHANGE_COLUMN_DEFAULT":
+            if wire.old_value:
+                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} SET DEFAULT {wire.old_value}"
             else:
-                return f"ALTER TABLE {change.table} ALTER COLUMN {change.column} DROP DEFAULT"
+                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} DROP DEFAULT"
 
-        elif change.type in self._DELEGATED_UP_TYPES:
+        elif wire.type in self._DELEGATED_UP_TYPES:
             sql = self._sql_gen.generate_down(change).rstrip("\n")
             return sql if sql else None
 

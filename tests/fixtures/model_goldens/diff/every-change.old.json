@@ -1,0 +1,74 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE legacy",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE parent",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE people",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE things",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE ren.tb_orders_archive",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_ENUM_TYPE",
+        "details": "ADD ENUM TYPE mood",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_ENUM_TYPE",
+        "details": "ADD ENUM TYPE retired_status",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_SEQUENCE",
+        "details": "ADD SEQUENCE retired_seq",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "details": "ADD SCHEMA ren",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW v_retired",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW v_things",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 11,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": []
+  }
+}

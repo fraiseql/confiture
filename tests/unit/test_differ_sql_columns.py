@@ -14,18 +14,23 @@ and the generator looked in the wrong field.
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import TypeVar
 
 import pglast
 
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
-from confiture.models.schema import SchemaChange
+from confiture.core.schema_change import ColumnAdded, ColumnDropped, TableDropped
+from tests.unit._schema_models import table
 
 ONE_COLUMN = ("CREATE TABLE tenant.t (id INT);", "CREATE TABLE tenant.t (id INT, x INT NOT NULL);")
 
 
-def _change(old: str, new: str, change_type: str) -> SchemaChange:
-    return next(c for c in SchemaDiffer().compare(old, new).changes if c.type == change_type)
+_Change = TypeVar("_Change")
+
+
+def _change(old: str, new: str, kind: type[_Change]) -> _Change:
+    return next(c for c in SchemaDiffer().compare(old, new).changes if isinstance(c, kind))
 
 
 def _parses(sql: str) -> bool:
@@ -40,7 +45,7 @@ def _parses(sql: str) -> bool:
 
 class TestAnAddedColumnKeepsItsDeclaration:
     def test_the_declared_type_is_written(self) -> None:
-        sql = DifferSQLGenerator().generate_up(_change(*ONE_COLUMN, "ADD_COLUMN"))
+        sql = DifferSQLGenerator().generate_up(_change(*ONE_COLUMN, ColumnAdded))
         assert _parses(sql)
         assert sql.strip() == "ALTER TABLE tenant.t ADD COLUMN IF NOT EXISTS x INTEGER NOT NULL;"
 
@@ -48,7 +53,7 @@ class TestAnAddedColumnKeepsItsDeclaration:
         """``text`` was the fallback for a change with no ``details``, which is
         every column change the differ emits. A column of the wrong type is a
         worse artefact than one that does not parse."""
-        sql = DifferSQLGenerator().generate_up(_change(*ONE_COLUMN, "ADD_COLUMN"))
+        sql = DifferSQLGenerator().generate_up(_change(*ONE_COLUMN, ColumnAdded))
         assert "text" not in sql
 
     def test_the_default_survives(self) -> None:
@@ -56,7 +61,7 @@ class TestAnAddedColumnKeepsItsDeclaration:
             _change(
                 "CREATE TABLE tenant.t (id INT);",
                 "CREATE TABLE tenant.t (id INT, x INT NOT NULL DEFAULT 5);",
-                "ADD_COLUMN",
+                ColumnAdded,
             )
         )
         assert _parses(sql)
@@ -65,34 +70,10 @@ class TestAnAddedColumnKeepsItsDeclaration:
     def test_a_generated_column_reparses_to_the_column_declared(self) -> None:
         """The round trip, which no field-name assertion can fake."""
         declared = SchemaDiffer().parse_schema(ONE_COLUMN[1]).tables[0].column("x")
-        sql = DifferSQLGenerator().generate_up(_change(*ONE_COLUMN, "ADD_COLUMN"))
+        sql = DifferSQLGenerator().generate_up(_change(*ONE_COLUMN, ColumnAdded))
         regenerated = SchemaDiffer().parse_schema(ONE_COLUMN[0] + "\n" + sql).tables[0]
         # `line` is where each text wrote it, not what it declares.
         assert regenerated.column("x") == replace(declared, line=regenerated.column("x").line)
-
-    def test_structured_details_still_win(self) -> None:
-        """A hand-built change may carry the fields separately; that is the older
-        shape and the one the method was written for."""
-        sql = DifferSQLGenerator().generate_up(
-            SchemaChange(
-                type="ADD_COLUMN",
-                table="tenant.t",
-                column="x",
-                new_value="INTEGER",
-                details={"type": "bigint", "nullable": False, "default": "0"},
-            )
-        )
-        assert _parses(sql)
-        assert sql.strip() == (
-            "ALTER TABLE tenant.t ADD COLUMN IF NOT EXISTS x bigint NOT NULL DEFAULT 0;"
-        )
-
-    def test_a_change_carrying_no_type_warns(self) -> None:
-        sql = DifferSQLGenerator().generate_up(
-            SchemaChange(type="ADD_COLUMN", table="tenant.t", column="x")
-        )
-        assert sql.startswith("-- WARNING:")
-        assert _parses(sql)
 
 
 class TestADroppedColumnIsRestoredByItsDown:
@@ -104,19 +85,13 @@ class TestADroppedColumnIsRestoredByItsDown:
     DROPPED = ("CREATE TABLE tenant.t (id INT, x INT NOT NULL);", "CREATE TABLE tenant.t (id INT);")
 
     def test_the_down_restores_the_column(self) -> None:
-        sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, "DROP_COLUMN"))
+        sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, ColumnDropped))
         assert _parses(sql)
         assert "ADD COLUMN IF NOT EXISTS x INTEGER NOT NULL" in sql
 
     def test_the_down_says_the_rows_do_not_come_back(self) -> None:
-        sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, "DROP_COLUMN"))
+        sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, ColumnDropped))
         assert "-- review:" in sql
-
-    def test_a_change_carrying_no_definition_still_warns(self) -> None:
-        sql = DifferSQLGenerator().generate_down(
-            SchemaChange(type="DROP_COLUMN", table="tenant.t", column="x")
-        )
-        assert sql.startswith("-- WARNING:")
 
 
 class TestADroppedTableIsRecreatedByItsDown:
@@ -134,12 +109,12 @@ class TestADroppedTableIsRecreatedByItsDown:
     )
 
     def test_the_down_recreates_the_table(self) -> None:
-        sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, "DROP_TABLE"))
+        sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, TableDropped))
         assert _parses(sql)
         assert "CREATE TABLE IF NOT EXISTS tenant.t" in sql
 
     def test_the_recreated_table_keeps_its_constraints(self) -> None:
-        sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, "DROP_TABLE"))
+        sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, TableDropped))
         restored = SchemaDiffer().parse_schema(self.DROPPED[1] + "\n" + sql).tables[1]
         assert [(fk.columns, fk.ref_table) for fk in restored.constraints_of("foreign_key")] == [
             (("pid",), "b.parent")
@@ -147,7 +122,7 @@ class TestADroppedTableIsRecreatedByItsDown:
         assert [c.name for c in restored.columns if c.primary_key] == ["id"]
 
     def test_a_change_carrying_no_columns_still_warns(self) -> None:
-        sql = DifferSQLGenerator().generate_down(SchemaChange(type="DROP_TABLE", table="tenant.t"))
+        sql = DifferSQLGenerator().generate_down(TableDropped(table("tenant.t")))
         assert sql.startswith("-- WARNING:")
 
 
@@ -161,7 +136,7 @@ class TestBothGeneratorsWriteTheSameColumn:
         change = _change(
             "CREATE TABLE tenant.t (id INT);",
             "CREATE TABLE tenant.t (id INT, x INT NOT NULL DEFAULT 5);",
-            "ADD_COLUMN",
+            ColumnAdded,
         )
         sql_gen = DifferSQLGenerator().generate_up(change)
         py_gen = MigrationGenerator(tmp_path)._change_to_up_sql(change)

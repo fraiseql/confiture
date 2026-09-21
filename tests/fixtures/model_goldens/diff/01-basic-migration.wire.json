@@ -1,0 +1,112 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 1,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": "uuid_generate_v4()"
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "display_name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "bio",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "email"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "btree_gist",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION btree_gist",
+        "details": {
+          "kind": "extension",
+          "name": "btree_gist",
+          "keyword": "EXTENSION"
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "uuid-ossp",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION \"uuid-ossp\"",
+        "details": {
+          "kind": "extension",
+          "name": "uuid-ossp",
+          "keyword": "EXTENSION"
+        }
+      }
+    ]
+  }
+}

@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from confiture.core.git_schema import GitSchemaBuilder, GitSchemaDiffer
+from confiture.core.schema_change import TableAdded
 
 
 class TestGitSchemaBuilder:
@@ -224,7 +225,7 @@ class TestGitSchemaDiffer:
             diff = differ.compare_refs("HEAD~1", "HEAD")
 
             assert diff.has_changes()
-            assert diff.count_by_type("ADD_TABLE") >= 1
+            assert sum(isinstance(c, TableAdded) for c in diff.changes) >= 1
 
     def test_has_ddl_changes_ignores_whitespace(self):
         """Test that whitespace changes are not considered DDL changes."""

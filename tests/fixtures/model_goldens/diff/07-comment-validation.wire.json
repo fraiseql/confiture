@@ -1,0 +1,194 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 2,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "posts",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "SERIAL",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "user_id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "title",
+              "type": "VARCHAR(500)",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "content",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP",
+              "nullable": true,
+              "default": "CURRENT_TIMESTAMP"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "user_id"
+              ],
+              "ref_table": "users",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "SERIAL",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "username",
+              "type": "VARCHAR(255)",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "email",
+              "type": "VARCHAR(255)",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMP",
+              "nullable": true,
+              "default": "CURRENT_TIMESTAMP"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "username"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "email"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "v_recent_posts",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW v_recent_posts AS SELECT p.id, p.title, p.content, u.username AS author, p.created_at FROM posts AS p INNER JOIN users AS u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT 100",
+        "details": {
+          "kind": "view",
+          "name": "v_recent_posts",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "v_recent_posts",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW v_recent_posts AS SELECT p.id, p.title, p.content, u.username AS author, p.created_at FROM posts AS p INNER JOIN users AS u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT 100",
+        "details": {
+          "kind": "view",
+          "name": "v_recent_posts",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "v_user_stats",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW v_user_stats AS SELECT u.id, u.username, count(p.id) AS post_count, max(p.created_at) AS last_post_date FROM users AS u LEFT JOIN posts AS p ON u.id = p.user_id GROUP BY u.id, u.username",
+        "details": {
+          "kind": "view",
+          "name": "v_user_stats",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "v_user_stats",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW v_user_stats AS SELECT u.id, u.username, count(p.id) AS post_count, max(p.created_at) AS last_post_date FROM users AS u LEFT JOIN posts AS p ON u.id = p.user_id GROUP BY u.id, u.username",
+        "details": {
+          "kind": "view",
+          "name": "v_user_stats",
+          "keyword": "VIEW"
+        }
+      }
+    ]
+  }
+}

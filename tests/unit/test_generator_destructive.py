@@ -15,11 +15,21 @@ import pytest
 from confiture.core import sql_lexer
 from confiture.core.change_set import classify_statements
 from confiture.core.destructive import resolve_policy
-from confiture.core.differ import SchemaDiffer, _column_definition
+from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.risk_tier import worst_tier
+from confiture.core.schema_change import (
+    ColumnAdded,
+    ColumnDropped,
+    ColumnTypeChanged,
+    SchemaChange,
+    SchemaDiff,
+    TableDropped,
+    column_definition,
+)
 from confiture.exceptions import DifferError, ValidationError
-from confiture.models.schema import SchemaChange, SchemaDiff
+from tests.unit._schema_changes import spelled
+from tests.unit._schema_models import table
 
 VERSION = "20260101000000"
 
@@ -38,9 +48,7 @@ def _tiers(text: str) -> dict[int, str | None]:
 
 
 def test_a_dropped_column_is_real_ddl_at_tier_irreversible(tmp_path: Path) -> None:
-    up, _ = _generate(
-        tmp_path, SchemaChange(type="DROP_COLUMN", table="tb_user", column="display_name")
-    )
+    up, _ = _generate(tmp_path, ColumnDropped("tb_user", spelled("display_name", "TEXT")))
     assert "ALTER TABLE tb_user DROP COLUMN display_name;" in up
     # Data is lost with the column: the change set tiers the drop irreversible, not merely destructive.
     assert list(_tiers(up).values()) == ["irreversible"]
@@ -49,18 +57,12 @@ def test_a_dropped_column_is_real_ddl_at_tier_irreversible(tmp_path: Path) -> No
 @pytest.mark.parametrize(
     "change",
     [
-        SchemaChange(type="DROP_TABLE", table="tb_old"),
-        SchemaChange(type="DROP_COLUMN", table="tb_user", column="display_name"),
-        SchemaChange(
-            type="CHANGE_COLUMN_TYPE",
-            table="tb_user",
-            column="score",
-            old_value="BIGINT",
-            new_value="INTEGER",
-        ),
-        SchemaChange(type="ADD_COLUMN", table="tb_user", column="bio", new_value="TEXT"),
+        TableDropped(table("tb_old")),
+        ColumnDropped("tb_user", spelled("display_name", "TEXT")),
+        ColumnTypeChanged("tb_user", spelled("score", "BIGINT"), spelled("score", "INTEGER")),
+        ColumnAdded("tb_user", spelled("bio", "TEXT")),
     ],
-    ids=lambda c: c.type,
+    ids=lambda c: c.to_wire().type,
 )
 def test_every_statement_carries_the_tier_the_change_set_gives_it(
     tmp_path: Path, change: SchemaChange
@@ -81,8 +83,8 @@ def test_every_statement_carries_the_tier_the_change_set_gives_it(
 class TestTheGate:
     """``destructive`` policy at generation: gated marks the file, allow leaves it, forbid refuses."""
 
-    DROP = SchemaChange(type="DROP_COLUMN", table="tb_user", column="display_name")
-    ADD = SchemaChange(type="ADD_COLUMN", table="tb_user", column="bio", new_value="TEXT")
+    DROP = ColumnDropped("tb_user", spelled("display_name", "TEXT"))
+    ADD = ColumnAdded("tb_user", spelled("bio", "TEXT"))
 
     def _gate(self, text: str) -> list[int | None]:
         return [d.statement_line for d in sql_lexer.directives(text) if d.name == "destructive"]
@@ -170,7 +172,7 @@ class TestDown:
         return up.read_text(), up.with_name(up.name.replace(".up.sql", ".down.sql")).read_text()
 
     def test_the_differ_carries_the_dropped_columns_definition(self) -> None:
-        changes = {c.type: c for c in SchemaDiffer().compare(CURRENT, DESIRED).changes}
+        changes = {c.type: c for c in SchemaDiffer().compare(CURRENT, DESIRED).wire()}
         assert changes["DROP_COLUMN"].old_value == "TEXT NOT NULL DEFAULT 'anon'"
         assert changes["DROP_TABLE"].details == {
             "columns": [
@@ -217,16 +219,14 @@ class TestDown:
         assert not [line for line in (up + down).splitlines() if line.startswith("#")]
 
     def test_a_change_with_no_rollback_says_so_at_tier_irreversible(self, tmp_path: Path) -> None:
-        # A hand-built DROP_COLUMN without the old definition: nothing to restore from.
-        change = SchemaChange(type="DROP_COLUMN", table="tb_user", column="ghost")
+        # A dropped table that declared no columns: nothing to recreate it from.
+        change = TableDropped(table("ghost"))
         up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
             SchemaDiff(changes=[change]), name="ghost", version=VERSION, destructive="allow"
         )
         down = up.with_name(up.name.replace(".up.sql", ".down.sql")).read_text()
         irreversible = [d for d in sql_lexer.directives(down) if d.name == "irreversible"]
-        assert [d.argument for d in irreversible] == [
-            "no rollback derived for DROP_COLUMN tb_user.ghost"
-        ]
+        assert [d.argument for d in irreversible] == ["no rollback derived for DROP_TABLE ghost"]
         assert "WARNING" not in down and "#" not in down
         assert [d.argument for d in sql_lexer.directives(up.read_text()) if d.name == "tier"] == [
             "irreversible"
@@ -256,4 +256,4 @@ def test_the_generator_never_writes_a_python_comment_into_sql() -> None:
 def test_a_default_survives_to_the_column_definition(default: str, rendered: str) -> None:
     """What pg_dump writes as a default comes back as SQL, arguments and casts included."""
     table = SchemaDiffer().parse_schema(f"CREATE TABLE t (a text DEFAULT {default});").tables[0]
-    assert _column_definition(table.columns[0]) == f"TEXT DEFAULT {rendered}"
+    assert column_definition(table.columns[0]) == f"TEXT DEFAULT {rendered}"

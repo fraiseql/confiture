@@ -484,6 +484,21 @@ pinned in `tests/fixtures/model_goldens/model/`. A column carries its type twice
 like a model type or carries the fields of one; its allow-list names the question
 each existing one answers, and an entry that matches nothing fails.
 
+**One change union too** (since 1.15.0). What changed between two trees is
+`core/schema_change.py`'s `SchemaChange`: 25 frozen variants, closed, each carrying the
+model objects it is about — `ColumnAdded(table, column: Column)`,
+`ForeignKeyDropped(table, constraint: Constraint)`, `ObjectReplaced(ref, old, new)` for
+#288's nineteen definition-compared kinds. The differ builds nothing else. The names are
+past participles because `core/replica/classifier.py` names *migration operations* in
+the imperative (`AddColumn`, `DropObject`), and a test keeps the two vocabularies apart.
+
+The wire is `to_wire()` → `models.schema.WireChange`, the six fields and one line every
+JSON payload has always carried, byte for byte (the `*.wire.json` model goldens, over
+every tree and over `tests/fixtures/every_change/`, a pair whose diff is every kind
+once). The wire's `type` strings (`"ADD_COLUMN"`) are a serialisation: read the variant,
+not the string. A renderer reads the wire only at its boundary until it matches on the
+variant.
+
 Prep-seed level 2 reads the qualifier too (1.14.0, #317): `SchemaTables` keys
 `(schema, name)` and routes on `Table.schema`, not on
 `"prep_seed" in str(sql_file)`. A tree declaring nothing in the configured
@@ -646,7 +661,7 @@ confiture/
 │   │   ├── desired_state.py      # Where ``migrate diff`` reads its desired state from (issue #196)
 │   │   ├── destructive.py        # The destructive gate: who may generate, and who may apply, a migration…
 │   │   ├── differ.py             # Schema differ for detecting database schema changes
-│   │   ├── differ_sql.py         # Generate DDL SQL from SchemaChange objects
+│   │   ├── differ_sql.py         # Generate DDL SQL from a schema change: the up and the down each variant…
 │   │   ├── drift.py              # Schema drift detection for Confiture
 │   │   ├── dry_run.py            # SAVEPOINT-based dry-run execution with guaranteed rollback
 │   │   ├── error_context.py      # Enhanced error context system for user-friendly error messages
@@ -691,6 +706,7 @@ confiture/
 │   │   ├── rollback_generator.py # Auto-generate rollback SQL for simple operations
 │   │   ├── schema_analyzer.py    # Schema analysis and validation for dry-run mode
 │   │   ├── schema_artifact.py    # Cacheable schema-artifact dumper (Medium 1, CI provisioning)
+│   │   ├── schema_change.py      # What changed between two schema trees: one variant per kind, closed, an…
 │   │   ├── schema_exporter.py    # The JSON schemas confiture publishes, and the one place they come from
 │   │   ├── schema_facts.py       # What a live database can tell preflight that migration files cannot (is…
 │   │   ├── schema_identity.py    # Where an unqualified schema object lands: the one default schema
@@ -741,7 +757,7 @@ confiture/
 │   │   ├── pgtap_models.py       # Data models for pgTAP test scaffold generation
 │   │   ├── preflight.py          # Models for the preflight dependent-objects check
 │   │   ├── results.py            # Command result models for structured output
-│   │   ├── schema.py             # The change set ``migrate diff`` produces: :class:`SchemaChange` and :cl…
+│   │   ├── schema.py             # A schema change as it crosses a wire: :class:`WireChange`
 │   │   ├── sql_file_migration.py # SQL file-based migrations
 │   │   ├── stub_models.py        # Data models for Python stub generation from PostgreSQL functions
 │   │   ├── unified_lint.py       # Models for unified SQL linting results

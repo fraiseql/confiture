@@ -198,11 +198,11 @@ class TestMigrationAccompanimentChecker:
 
     def test_accompaniment_report_to_dict(self):
         """Test report serialization to dictionary."""
-        from confiture.models.schema import SchemaChange
+        from confiture.models.schema import WireChange
 
         changes = [
-            SchemaChange(type="ADD_TABLE", table="users"),
-            SchemaChange(type="ADD_COLUMN", table="posts", column="author_id"),
+            WireChange(type="ADD_TABLE", table="users"),
+            WireChange(type="ADD_COLUMN", table="posts", column="author_id"),
         ]
         files = [
             Path("db/migrations/001_add_users.up.sql"),
@@ -230,13 +230,13 @@ class TestMigrationAccompanimentChecker:
 
     def test_accompaniment_report_summary(self):
         """Test report summary generation."""
-        from confiture.models.schema import SchemaChange
+        from confiture.models.schema import WireChange
 
         # Valid case
         report = MigrationAccompanimentReport(
             has_ddl_changes=True,
             has_new_migrations=True,
-            ddl_changes=[SchemaChange(type="ADD_TABLE", table="users")],
+            ddl_changes=[WireChange(type="ADD_TABLE", table="users")],
             new_migration_files=[Path("db/migrations/001.up.sql")],
         )
         assert "Valid" in report.summary()
@@ -245,7 +245,7 @@ class TestMigrationAccompanimentChecker:
         report = MigrationAccompanimentReport(
             has_ddl_changes=True,
             has_new_migrations=False,
-            ddl_changes=[SchemaChange(type="ADD_TABLE", table="users")],
+            ddl_changes=[WireChange(type="ADD_TABLE", table="users")],
         )
         assert "Invalid" in report.summary()
 

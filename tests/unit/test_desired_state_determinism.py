@@ -55,7 +55,7 @@ def test_change_order_does_not_depend_on_the_hash_seed() -> None:
         "from confiture.core.desired_state import load_desired_state\n"
         "from confiture.core.differ import SchemaDiffer\n"
         f"diff = SchemaDiffer().compare('', load_desired_state({str(FIXTURE)!r}).read())\n"
-        "print('|'.join(f'{c.type}:{c.table}' for c in diff.changes))\n"
+        "print('|'.join(f'{c.type}:{c.table}' for c in diff.wire()))\n"
     )
     orders = set()
     for seed in ("0", "1", "2", "3", "4", "5"):

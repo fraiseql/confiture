@@ -147,6 +147,21 @@ comparisons say today, are now tests in its own suite.
   reads the objects; `live_catalog.triggers()` returns `schema_model.Trigger`s
   (`TriggerRow` is gone).
 
+- **A schema change is a type, not a string** (`core/schema_change.py`). The differ
+  emits one of 25 frozen variants — `TableAdded`, `ColumnTypeChanged`,
+  `ForeignKeyDropped`, `EnumValuesChanged`, `ObjectReplaced`, … — each carrying the
+  model objects it is about, where it built `SchemaChange(type="ADD_COLUMN",
+  details={...})`, a string every reader had to spell alike and a dict of keys the
+  differ may never have written. The views, routines and the rest of #288's nineteen
+  kinds are three variants (`ObjectAdded`/`ObjectDropped`/`ObjectReplaced`), which is
+  what makes the union finite. The names are past participles because
+  `core/replica/classifier.py` already names *migration operations* in the
+  imperative (`AddColumn`, `DropObject`): two taxonomies, two vocabularies, and a test
+  that keeps them apart. Every JSON payload reads `to_wire()`, whose six fields and one
+  line are byte-identical to before — `confiture diff --format json` is now recorded
+  in the model goldens (`*.wire.json`) for every tree and for a new fixture pair,
+  `tests/fixtures/every_change/`, whose diff is every kind once.
+
 ### Changed
 
 - **One live reader, enforced.** Every schema fact confiture reads from a live database
@@ -228,6 +243,13 @@ comparisons say today, are now tests in its own suite.
   `confiture.core.*` module paid psycopg on import. `from confiture.core import X`
   still works.
 
+- **⚠️ `confiture.models.schema.SchemaChange` and `SchemaDiff` are retired** for
+  `confiture.core.schema_change.SchemaChange` (the union) and `SchemaDiff`; importing
+  either old name says where it went. `SchemaDiff.count_by_type(str)` goes with the
+  string. The serialised form is `confiture.models.schema.WireChange`, which is what
+  `DiffResult.changes` and `MigrationAccompanimentReport.ddl_changes` now hold — the
+  same six attributes, so a caller reading `change.type` there reads what it always did.
+
 ### Fixed
 
 - **An extra view, routine or trigger is reported in a schema the tree declares one
@@ -292,6 +314,13 @@ comparisons say today, are now tests in its own suite.
   constraint reader, wherever they were written.
 - **A quoted default is written back escaped.** `DEFAULT 'it''s'` generated
   `DEFAULT 'it's'`, which PostgreSQL rejects.
+
+- **`migrate diff` lists enum types and sequences in one order.** They were emitted in
+  `set` iteration order, and a `str` hash is randomised per process, so two added enum
+  types came out in a different order from one run to the next and `--generate` wrote
+  a different migration from the same two trees. They are listed by identity, as
+  tables already were (`tests/unit/test_differ_order_is_stable.py` runs eight hash
+  seeds).
 
 ### Known, not fixed
 

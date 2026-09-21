@@ -1,0 +1,634 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 9,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "audit_logs",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "actor_email",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "action",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "detail",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "occurred_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "employees",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "full_name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "phone",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "ssn",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "bank_account_number",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "department",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "hired_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "order_items",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "order_id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "product_id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "quantity",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "order_id"
+              ],
+              "ref_table": "orders",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "product_id"
+              ],
+              "ref_table": "products",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "CHECK",
+              "name": "",
+              "expression": "quantity > 0"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "orders",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "user_id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "billing_email",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "customer_notes",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "total_cents",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "status",
+              "type": "TEXT",
+              "nullable": false,
+              "default": "'paid'"
+            },
+            {
+              "name": "placed_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "user_id"
+              ],
+              "ref_table": "users",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "CHECK",
+              "name": "",
+              "expression": "total_cents >= 0"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "payments",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "order_id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "cardholder_name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "card_last4",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "stripe_customer_id",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "billing_zip",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "amount_cents",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "order_id"
+              ],
+              "ref_table": "orders",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "CHECK",
+              "name": "",
+              "expression": "amount_cents >= 0"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "products",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "sku",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "price_cents",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "sku"
+              ]
+            },
+            {
+              "kind": "CHECK",
+              "name": "",
+              "expression": "price_cents >= 0"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "support_tickets",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "user_id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "customer_email",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "subject",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "body",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "opened_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "user_id"
+              ],
+              "ref_table": "users",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "user_sessions",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "user_id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "ip_address",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "user_agent",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "started_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "user_id"
+              ],
+              "ref_table": "users",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "full_name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "phone",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "ssn",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "country_code",
+              "type": "TEXT",
+              "nullable": false,
+              "default": "'US'"
+            },
+            {
+              "name": "is_active",
+              "type": "BOOLEAN",
+              "nullable": false,
+              "default": "true"
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

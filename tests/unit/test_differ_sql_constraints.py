@@ -17,13 +17,21 @@ import pytest
 
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
-from confiture.models.schema import SchemaChange
+from confiture.core.schema_change import (
+    CheckConstraintAdded,
+    ForeignKeyAdded,
+    ForeignKeyDropped,
+    SchemaChange,
+    TableAdded,
+    UniqueConstraintAdded,
+)
+from confiture.core.schema_model import Constraint
 
 PARENT = "CREATE TABLE b.parent (id INT PRIMARY KEY);\n"
 
 
-def _up(old: str, new: str, change_type: str) -> str:
-    change = next(c for c in SchemaDiffer().compare(old, new).changes if c.type == change_type)
+def _up(old: str, new: str, kind: type[SchemaChange]) -> str:
+    change = next(c for c in SchemaDiffer().compare(old, new).changes if isinstance(c, kind))
     return DifferSQLGenerator(force_destructive=True).generate_up(change)
 
 
@@ -48,7 +56,7 @@ class TestACheckConstraintIsGeneratedAsItsExpression:
         sql = _up(
             "CREATE TABLE tenant.t (id INT);",
             "CREATE TABLE tenant.t (id INT, CONSTRAINT ck CHECK (id > 0));",
-            "ADD_CHECK_CONSTRAINT",
+            CheckConstraintAdded,
         )
         assert _parses(sql)
         assert sql.strip() == "ALTER TABLE tenant.t ADD CONSTRAINT ck CHECK (id > 0);"
@@ -57,18 +65,14 @@ class TestACheckConstraintIsGeneratedAsItsExpression:
         sql = _up(
             "CREATE TABLE tenant.t (id INT);",
             "CREATE TABLE tenant.t (id INT, CONSTRAINT ck CHECK (id > 0));",
-            "ADD_CHECK_CONSTRAINT",
+            CheckConstraintAdded,
         )
         assert "()" not in sql
 
     def test_a_check_with_no_expression_is_a_warning_not_empty_parentheses(self) -> None:
         generator = DifferSQLGenerator()
         sql = generator.generate_up(
-            SchemaChange(
-                type="ADD_CHECK_CONSTRAINT",
-                table="tenant.t",
-                details={"name": "ck", "expression": ""},
-            )
+            CheckConstraintAdded("tenant.t", Constraint(kind="check", name="ck", expression=""))
         )
         assert sql.startswith("-- WARNING:")
         assert _without_comments(sql).strip() == ""
@@ -80,7 +84,7 @@ class TestTheReferencedSideIsGeneratedAsWritten:
             PARENT + "CREATE TABLE a.child (pid INT);",
             PARENT + "CREATE TABLE a.child (pid INT,"
             " CONSTRAINT fk FOREIGN KEY (pid) REFERENCES b.parent);",
-            "ADD_FOREIGN_KEY",
+            ForeignKeyAdded,
         )
         assert _parses(sql)
         assert "b.parent()" not in sql
@@ -90,7 +94,7 @@ class TestTheReferencedSideIsGeneratedAsWritten:
             PARENT + "CREATE TABLE a.child (pid INT);",
             PARENT + "CREATE TABLE a.child (pid INT,"
             " CONSTRAINT fk FOREIGN KEY (pid) REFERENCES b.parent(id));",
-            "ADD_FOREIGN_KEY",
+            ForeignKeyAdded,
         )
         assert _parses(sql)
         assert "REFERENCES b.parent (id)" in sql
@@ -112,7 +116,7 @@ class TestTheReferencedSideIsGeneratedAsWritten:
             PARENT + "CREATE TABLE a.child (pid INT);",
             PARENT + "CREATE TABLE a.child (pid INT, CONSTRAINT fk FOREIGN KEY (pid)"
             f" REFERENCES b.parent(id) {clause});",
-            "ADD_FOREIGN_KEY",
+            ForeignKeyAdded,
         )
         assert _parses(sql)
         assert rendered in sql
@@ -122,7 +126,7 @@ class TestTheReferencedSideIsGeneratedAsWritten:
             PARENT + "CREATE TABLE a.child (pid INT);",
             PARENT + "CREATE TABLE a.child (pid INT, CONSTRAINT fk FOREIGN KEY (pid)"
             " REFERENCES b.parent(id) ON DELETE NO ACTION);",
-            "ADD_FOREIGN_KEY",
+            ForeignKeyAdded,
         )
         assert _parses(sql)
         assert "ON DELETE" not in sql
@@ -139,14 +143,14 @@ class TestAnUnnamedConstraintIsGeneratedUnnamed:
     )
 
     def test_it_parses(self) -> None:
-        assert _parses(_up(*self.ADDED_UNNAMED_FK, "ADD_FOREIGN_KEY"))
+        assert _parses(_up(*self.ADDED_UNNAMED_FK, ForeignKeyAdded))
 
     def test_it_carries_no_constraint_clause(self) -> None:
-        sql = _up(*self.ADDED_UNNAMED_FK, "ADD_FOREIGN_KEY")
+        sql = _up(*self.ADDED_UNNAMED_FK, ForeignKeyAdded)
         assert "CONSTRAINT" not in _without_comments(sql)
 
     def test_reading_it_back_finds_no_invented_name(self) -> None:
-        sql = _up(*self.ADDED_UNNAMED_FK, "ADD_FOREIGN_KEY")
+        sql = _up(*self.ADDED_UNNAMED_FK, ForeignKeyAdded)
         parsed = SchemaDiffer().parse_schema(
             PARENT + "CREATE TABLE a.child (pid INT);\n" + _without_comments(sql)
         )
@@ -155,7 +159,7 @@ class TestAnUnnamedConstraintIsGeneratedUnnamed:
     def test_it_says_why_it_is_not_validated_separately(self) -> None:
         """``NOT VALID`` is only useful with a matching ``VALIDATE CONSTRAINT``,
         which needs the name. The lock difference is stated, not hidden."""
-        sql = _up(*self.ADDED_UNNAMED_FK, "ADD_FOREIGN_KEY")
+        sql = _up(*self.ADDED_UNNAMED_FK, ForeignKeyAdded)
         assert "NOT VALID" not in _without_comments(sql)
         assert "-- review:" in sql
 
@@ -164,7 +168,7 @@ class TestAnUnnamedConstraintIsGeneratedUnnamed:
             _up(
                 "CREATE TABLE tenant.t (u INT);",
                 "CREATE TABLE tenant.t (u INT UNIQUE);",
-                "ADD_UNIQUE_CONSTRAINT",
+                UniqueConstraintAdded,
             )
         )
 
@@ -173,7 +177,7 @@ class TestAnUnnamedConstraintIsGeneratedUnnamed:
             _up(
                 "CREATE TABLE tenant.t (c INT);",
                 "CREATE TABLE tenant.t (c INT CHECK (c > 0));",
-                "ADD_CHECK_CONSTRAINT",
+                CheckConstraintAdded,
             )
         )
 
@@ -186,7 +190,7 @@ class TestAnUnnamedConstraintIsGeneratedUnnamed:
         sql = _up(
             PARENT + "CREATE TABLE a.child (pid INT REFERENCES b.parent(id));",
             PARENT + "CREATE TABLE a.child (pid INT);",
-            "DROP_FOREIGN_KEY",
+            ForeignKeyDropped,
         )
         assert sql.startswith("-- WARNING:")
         assert _without_comments(sql).strip() == ""
@@ -221,7 +225,7 @@ class TestANewTableIsGeneratedWhole:
     def _regenerated(self) -> tuple[object, object]:
         differ = SchemaDiffer()
         declared = differ.parse_schema(self.DECLARED).tables[1]
-        sql = _up(PARENT, self.DECLARED, "ADD_TABLE")
+        sql = _up(PARENT, self.DECLARED, TableAdded)
         assert _parses(sql)
         return declared, SchemaDiffer().parse_schema(PARENT + sql).tables[1]
 
@@ -248,5 +252,5 @@ class TestANewTableIsGeneratedWhole:
         )
 
     def test_a_table_with_no_constraints_is_unchanged(self) -> None:
-        sql = _up("", "CREATE TABLE tenant.t (id INT);", "ADD_TABLE")
+        sql = _up("", "CREATE TABLE tenant.t (id INT);", TableAdded)
         assert sql.strip() == "CREATE TABLE IF NOT EXISTS tenant.t (\n    id INTEGER\n);"

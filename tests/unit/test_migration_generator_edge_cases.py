@@ -3,7 +3,16 @@
 import re
 
 from confiture.core.migration_generator import MigrationGenerator
-from confiture.models.schema import SchemaChange, SchemaDiff
+from confiture.core.schema_change import (
+    ColumnAdded,
+    ColumnDropped,
+    ColumnRenamed,
+    ColumnTypeChanged,
+    SchemaDiff,
+    TableDropped,
+)
+from tests.unit._schema_changes import spelled
+from tests.unit._schema_models import table
 
 
 class TestMigrationGeneratorEdgeCases:
@@ -16,7 +25,7 @@ class TestMigrationGeneratorEdgeCases:
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        diff = SchemaDiff(changes=[SchemaChange(type="ADD_COLUMN", table="users", column="email")])
+        diff = SchemaDiff(changes=[ColumnAdded("users", spelled("email", "TEXT"))])
 
         migration_file = generator.generate(diff=diff, name="add_email")
 
@@ -46,41 +55,31 @@ class TestMigrationGeneratorEdgeCases:
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
         # Test ADD_COLUMN
-        change = SchemaChange(type="ADD_COLUMN", table="users", column="email")
+        change = ColumnAdded("users", spelled("email", "TEXT"))
         sql = generator._change_to_up_sql(change)
         assert "ALTER TABLE users" in sql
         assert "ADD COLUMN email" in sql
 
         # Test DROP_COLUMN
-        change = SchemaChange(type="DROP_COLUMN", table="users", column="old_field")
+        change = ColumnDropped("users", spelled("old_field", "TEXT"))
         sql = generator._change_to_up_sql(change)
         assert "ALTER TABLE users" in sql
         assert "DROP COLUMN old_field" in sql
 
         # Test RENAME_COLUMN
-        change = SchemaChange(
-            type="RENAME_COLUMN",
-            table="users",
-            old_value="full_name",
-            new_value="display_name",
-        )
+        change = ColumnRenamed("users", "full_name", "display_name")
         sql = generator._change_to_up_sql(change)
         assert "ALTER TABLE users" in sql
         assert "RENAME COLUMN full_name TO display_name" in sql
 
         # Test CHANGE_COLUMN_TYPE
-        change = SchemaChange(
-            type="CHANGE_COLUMN_TYPE",
-            table="users",
-            column="age",
-            new_value="BIGINT",
-        )
+        change = ColumnTypeChanged("users", spelled("age", "INTEGER"), spelled("age", "BIGINT"))
         sql = generator._change_to_up_sql(change)
         assert "ALTER TABLE users" in sql
         assert "ALTER COLUMN age TYPE BIGINT" in sql
 
         # Test DROP_TABLE
-        change = SchemaChange(type="DROP_TABLE", table="old_table")
+        change = TableDropped(table("old_table", spelled("id", "INTEGER", nullable=False)))
         sql = generator._change_to_up_sql(change)
         assert "DROP TABLE old_table" in sql
 
@@ -92,27 +91,22 @@ class TestMigrationGeneratorEdgeCases:
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
         # Test ADD_COLUMN (reverse is DROP)
-        change = SchemaChange(type="ADD_COLUMN", table="users", column="email")
+        change = ColumnAdded("users", spelled("email", "TEXT"))
         sql = generator._change_to_down_sql(change)
         assert "DROP COLUMN email" in sql
 
-        # Test DROP_COLUMN (reverse is ADD - warning)
-        change = SchemaChange(type="DROP_COLUMN", table="users", column="old_field")
+        # Test DROP_COLUMN (reverse is ADD, from the definition the change carries)
+        change = ColumnDropped("users", spelled("old_field", "TEXT", nullable=False))
         sql = generator._change_to_down_sql(change)
-        assert sql is None  # nothing to restore from without the column definition
+        assert sql == "ALTER TABLE users ADD COLUMN old_field TEXT NOT NULL"
 
         # Test RENAME_COLUMN (reverse names)
-        change = SchemaChange(
-            type="RENAME_COLUMN",
-            table="users",
-            old_value="full_name",
-            new_value="display_name",
-        )
+        change = ColumnRenamed("users", "full_name", "display_name")
         sql = generator._change_to_down_sql(change)
         assert "RENAME COLUMN display_name TO full_name" in sql
 
         # Test DROP_TABLE (reverse is warning)
-        change = SchemaChange(type="DROP_TABLE", table="old_table")
+        change = TableDropped(table("old_table"))
         sql = generator._change_to_down_sql(change)
         assert sql is None  # nothing to recreate from without the columns
 
@@ -126,14 +120,9 @@ class TestMigrationGeneratorEdgeCases:
         # Complex diff with multiple changes (ADD_TABLE is not auto-generatable)
         diff = SchemaDiff(
             changes=[
-                SchemaChange(type="ADD_COLUMN", table="posts", column="title"),
-                SchemaChange(
-                    type="RENAME_COLUMN",
-                    table="users",
-                    old_value="name",
-                    new_value="full_name",
-                ),
-                SchemaChange(type="DROP_TABLE", table="old_logs"),
+                ColumnAdded("posts", spelled("title", "TEXT")),
+                ColumnRenamed("users", "name", "full_name"),
+                TableDropped(table("old_logs", spelled("id", "INTEGER", nullable=False))),
             ]
         )
 

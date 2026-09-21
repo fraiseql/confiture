@@ -46,7 +46,7 @@ def test_diff_detects_add_table_after_copy_stdin_block() -> None:
     target = base + "CREATE TABLE added_later (id INT PRIMARY KEY);\n"
     differ = SchemaDiffer()
     diff = differ.compare(base, target)
-    assert any(c.type == "ADD_TABLE" and c.table == "added_later" for c in diff.changes)
+    assert any(c.type == "ADD_TABLE" and c.table == "added_later" for c in diff.wire())
 
 
 def test_copy_without_inline_data_is_untouched() -> None:

@@ -1,0 +1,514 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 3,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "projects",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": "uuid_generate_v4()"
+            },
+            {
+              "name": "owner_id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "description",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "status",
+              "type": "TEXT",
+              "nullable": false,
+              "default": "'active'"
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "owner_id"
+              ],
+              "ref_table": "users",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": "CASCADE",
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "projects_owner_name_unique",
+              "columns": [
+                "owner_id",
+                "name"
+              ]
+            },
+            {
+              "kind": "CHECK",
+              "name": "projects_name_length",
+              "expression": "char_length(name) >= 3 AND char_length(name) <= 100"
+            },
+            {
+              "kind": "CHECK",
+              "name": "projects_status_valid",
+              "expression": "status IN ('active', 'archived', 'deleted')"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "tasks",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": "uuid_generate_v4()"
+            },
+            {
+              "name": "project_id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "assigned_to",
+              "type": "UUID",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "title",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "description",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "priority",
+              "type": "TEXT",
+              "nullable": false,
+              "default": "'medium'"
+            },
+            {
+              "name": "status",
+              "type": "TEXT",
+              "nullable": false,
+              "default": "'todo'"
+            },
+            {
+              "name": "due_date",
+              "type": "TIMESTAMPTZ",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "completed_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "project_id"
+              ],
+              "ref_table": "projects",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": "CASCADE",
+              "on_update": null
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "assigned_to"
+              ],
+              "ref_table": "users",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": "SET NULL",
+              "on_update": null
+            },
+            {
+              "kind": "CHECK",
+              "name": "tasks_title_length",
+              "expression": "char_length(title) >= 3 AND char_length(title) <= 200"
+            },
+            {
+              "kind": "CHECK",
+              "name": "tasks_priority_valid",
+              "expression": "priority IN ('low', 'medium', 'high', 'urgent')"
+            },
+            {
+              "kind": "CHECK",
+              "name": "tasks_status_valid",
+              "expression": "status IN ('todo', 'in_progress', 'done', 'cancelled')"
+            },
+            {
+              "kind": "CHECK",
+              "name": "tasks_completed_when_done",
+              "expression": "(status = 'done' AND completed_at IS NOT NULL) OR (status <> 'done' AND completed_at IS NULL)"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": "uuid_generate_v4()"
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "display_name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "bio",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "avatar_url",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "email"
+              ]
+            },
+            {
+              "kind": "CHECK",
+              "name": "users_email_format",
+              "expression": "email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'"
+            },
+            {
+              "kind": "CHECK",
+              "name": "users_display_name_length",
+              "expression": "char_length(display_name) >= 2"
+            },
+            {
+              "kind": "CHECK",
+              "name": "users_bio_length",
+              "expression": "char_length(bio) <= 1000"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "btree_gist",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION btree_gist",
+        "details": {
+          "kind": "extension",
+          "name": "btree_gist",
+          "keyword": "EXTENSION"
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "pg_trgm",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION pg_trgm",
+        "details": {
+          "kind": "extension",
+          "name": "pg_trgm",
+          "keyword": "EXTENSION"
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "pgcrypto",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION pgcrypto",
+        "details": {
+          "kind": "extension",
+          "name": "pgcrypto",
+          "keyword": "EXTENSION"
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "uuid-ossp",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION \"uuid-ossp\"",
+        "details": {
+          "kind": "extension",
+          "name": "uuid-ossp",
+          "keyword": "EXTENSION"
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "public.prevent_delete_project_with_tasks()",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE FUNCTION public.prevent_delete_project_with_tasks() RETURNS trigger AS $$\nBEGIN\n    IF EXISTS (\n        SELECT 1 FROM tasks\n        WHERE project_id = OLD.id\n        AND status NOT IN ('done', 'cancelled')\n    ) THEN\n        RAISE EXCEPTION 'Cannot delete project with active tasks. Complete or cancel tasks first.';\n    END IF;\n    RETURN OLD;\nEND;\n$$ LANGUAGE plpgsql",
+        "details": {
+          "kind": "function",
+          "name": "public.prevent_delete_project_with_tasks()",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "public.set_task_completed_at()",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE FUNCTION public.set_task_completed_at() RETURNS trigger AS $$\nBEGIN\n    IF NEW.status = 'done' AND OLD.status != 'done' THEN\n        NEW.completed_at = NOW();\n    ELSIF NEW.status != 'done' AND OLD.status = 'done' THEN\n        NEW.completed_at = NULL;\n    END IF;\n    RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql",
+        "details": {
+          "kind": "function",
+          "name": "public.set_task_completed_at()",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "public.update_updated_at_column()",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE FUNCTION public.update_updated_at_column() RETURNS trigger AS $$\nBEGIN\n    NEW.updated_at = NOW();\n    RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql",
+        "details": {
+          "kind": "function",
+          "name": "public.update_updated_at_column()",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "table": "projects.prevent_delete_project_with_tasks_trigger",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE TRIGGER prevent_delete_project_with_tasks_trigger BEFORE DELETE ON projects FOR EACH ROW EXECUTE PROCEDURE prevent_delete_project_with_tasks()",
+        "details": {
+          "kind": "trigger",
+          "name": "projects.prevent_delete_project_with_tasks_trigger",
+          "keyword": "TRIGGER"
+        }
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "table": "projects.update_projects_updated_at",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "details": {
+          "kind": "trigger",
+          "name": "projects.update_projects_updated_at",
+          "keyword": "TRIGGER"
+        }
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "table": "tasks.set_task_completed_at_trigger",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE TRIGGER set_task_completed_at_trigger BEFORE UPDATE ON tasks FOR EACH ROW WHEN (old.status IS DISTINCT FROM new.status) EXECUTE PROCEDURE set_task_completed_at()",
+        "details": {
+          "kind": "trigger",
+          "name": "tasks.set_task_completed_at_trigger",
+          "keyword": "TRIGGER"
+        }
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "table": "tasks.update_tasks_updated_at",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "details": {
+          "kind": "trigger",
+          "name": "tasks.update_tasks_updated_at",
+          "keyword": "TRIGGER"
+        }
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "table": "users.update_users_updated_at",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "details": {
+          "kind": "trigger",
+          "name": "users.update_users_updated_at",
+          "keyword": "TRIGGER"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "active_user_dashboard",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW active_user_dashboard AS SELECT u.id, u.email, u.display_name, count(DISTINCT t.id) FILTER (WHERE t.assigned_to = u.id AND t.status = 'todo') AS my_todo_tasks, count(DISTINCT t.id) FILTER (WHERE t.assigned_to = u.id AND t.status = 'in_progress') AS my_active_tasks, count(DISTINCT t.id) FILTER (WHERE t.assigned_to = u.id AND t.due_date < now() AND t.status NOT IN ('done', 'cancelled')) AS my_overdue_tasks, count(DISTINCT p.id) FILTER (WHERE p.owner_id = u.id AND p.status = 'active') AS my_active_projects, max(t.updated_at) FILTER (WHERE t.assigned_to = u.id) AS last_task_activity FROM users AS u LEFT JOIN tasks AS t ON t.assigned_to = u.id OR t.project_id IN (SELECT id FROM projects WHERE owner_id = u.id) LEFT JOIN projects AS p ON p.owner_id = u.id GROUP BY u.id, u.email, u.display_name",
+        "details": {
+          "kind": "view",
+          "name": "active_user_dashboard",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "project_task_stats",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW project_task_stats AS SELECT p.id AS project_id, p.name AS project_name, p.status AS project_status, u.email AS owner_email, count(t.id) AS total_tasks, count(t.id) FILTER (WHERE t.status = 'todo') AS todo_tasks, count(t.id) FILTER (WHERE t.status = 'in_progress') AS in_progress_tasks, count(t.id) FILTER (WHERE t.status = 'done') AS done_tasks, count(t.id) FILTER (WHERE t.priority = 'urgent') AS urgent_tasks, count(t.id) FILTER (WHERE t.due_date < now() AND t.status <> 'done') AS overdue_tasks, min(t.created_at) AS first_task_created, max(t.updated_at) AS last_task_updated FROM projects AS p LEFT JOIN users AS u ON u.id = p.owner_id LEFT JOIN tasks AS t ON t.project_id = p.id GROUP BY p.id, p.name, p.status, u.email",
+        "details": {
+          "kind": "view",
+          "name": "project_task_stats",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "user_project_summary",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW user_project_summary AS SELECT u.id AS user_id, u.email, u.display_name, count(DISTINCT p.id) AS total_projects, count(DISTINCT p.id) FILTER (WHERE p.status = 'active') AS active_projects, count(DISTINCT p.id) FILTER (WHERE p.status = 'archived') AS archived_projects, count(DISTINCT t.id) AS total_tasks, count(DISTINCT t.id) FILTER (WHERE t.status = 'done') AS completed_tasks, u.created_at FROM users AS u LEFT JOIN projects AS p ON p.owner_id = u.id LEFT JOIN tasks AS t ON t.project_id = p.id GROUP BY u.id, u.email, u.display_name, u.created_at",
+        "details": {
+          "kind": "view",
+          "name": "user_project_summary",
+          "keyword": "VIEW"
+        }
+      }
+    ]
+  }
+}

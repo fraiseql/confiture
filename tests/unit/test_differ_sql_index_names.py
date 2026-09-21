@@ -16,11 +16,23 @@ import pytest
 
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
-from confiture.models.schema import SchemaChange
+from confiture.core.schema_change import (
+    CheckConstraintAdded,
+    ForeignKeyAdded,
+    IndexAdded,
+    IndexDropped,
+    UniqueConstraintAdded,
+)
+from confiture.core.schema_model import Constraint, ConstraintKind
+from tests.unit._schema_models import index
 
 
-def _index_changes(old: str, new: str) -> list[SchemaChange]:
-    return [c for c in SchemaDiffer().compare(old, new).changes if "INDEX" in c.type]
+def _index_changes(old: str, new: str) -> list[IndexAdded | IndexDropped]:
+    return [
+        c
+        for c in SchemaDiffer().compare(old, new).changes
+        if isinstance(c, IndexAdded | IndexDropped)
+    ]
 
 
 class TestTheGeneratedIndexHasTheAuthorsName:
@@ -82,7 +94,7 @@ class TestAFabricatedNameIsNotAName:
     def test_an_index_change_with_no_name_warns_rather_than_inventing_one(
         self, method: str
     ) -> None:
-        change = SchemaChange(type="ADD_INDEX", table="tenant.t", details={"columns": ["x"]})
+        change = IndexAdded("tenant.t", index(None, "tenant.t", "x"))
         sql = getattr(DifferSQLGenerator(), method)(change)
         assert sql.startswith("-- WARNING:")
         assert "idx_" not in sql
@@ -103,10 +115,18 @@ class TestNoConstraintNameIsInventedEither:
     """
 
     @pytest.mark.parametrize(
-        "change_type",
-        ["ADD_CONSTRAINT", "ADD_FOREIGN_KEY", "ADD_CHECK_CONSTRAINT", "ADD_UNIQUE_CONSTRAINT"],
+        ("added", "kind"),
+        [
+            (ForeignKeyAdded, "foreign_key"),
+            (CheckConstraintAdded, "check"),
+            (UniqueConstraintAdded, "unique"),
+        ],
     )
-    def test_a_nameless_constraint_change_warns(self, change_type: str) -> None:
-        sql = DifferSQLGenerator().generate_up(SchemaChange(type=change_type, table="tenant.t"))
+    def test_a_nameless_constraint_change_warns(
+        self,
+        added: type[ForeignKeyAdded | CheckConstraintAdded | UniqueConstraintAdded],
+        kind: ConstraintKind,
+    ) -> None:
+        sql = DifferSQLGenerator().generate_up(added("tenant.t", Constraint(kind=kind)))
         assert sql.startswith("-- WARNING:")
         assert "tenant.t" in sql

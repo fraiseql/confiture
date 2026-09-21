@@ -17,12 +17,14 @@ ordering picks the worst of a set, policy maps each tier to an action.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from confiture.core.risk_tier import RiskTier
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX, directives
 from confiture.exceptions import ValidationError
-from confiture.models.schema import SchemaChange
+
+if TYPE_CHECKING:
+    from confiture.core.schema_change import SchemaChange
 
 Policy = Literal["gated", "allow", "forbid"]
 
@@ -72,8 +74,9 @@ def irreversible_line(reason: str) -> str:
 
 def no_rollback(change: SchemaChange) -> str:
     """The reason written when no down statement can be derived for ``change``."""
-    target = ".".join(part for part in (change.table, change.column) if part)
-    return f"no rollback derived for {change.type} {target}".rstrip()
+    wire = change.to_wire()
+    target = ".".join(part for part in (wire.table, wire.column) if part)
+    return f"no rollback derived for {wire.type} {target}".rstrip()
 
 
 def irreversible_reason(change: SchemaChange, *, has_down: bool) -> str | None:
@@ -91,7 +94,7 @@ def irreversible_reason(change: SchemaChange, *, has_down: bool) -> str | None:
 
 def data_loss_reason(change: SchemaChange) -> str | None:
     """``data`` for a change whose rows no down file can bring back; ``None`` otherwise."""
-    return "data" if change.type in DATA_LOSS_TYPES else None
+    return "data" if change.to_wire().type in DATA_LOSS_TYPES else None
 
 
 def irreversible_reasons(sql: str) -> list[str]:

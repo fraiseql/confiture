@@ -1,0 +1,144 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "RENAME_TABLE",
+        "details": "RENAME TABLE ren.tb_orders_archive TO ren.tb_orders_history",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_TABLE",
+        "details": "DROP TABLE legacy",
+        "irreversible_reason": "data"
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE audit",
+        "irreversible_reason": null
+      },
+      {
+        "type": "RENAME_COLUMN",
+        "details": "RENAME COLUMN people.full_name TO display_name",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_COLUMN",
+        "details": "DROP COLUMN things.legacy_flag",
+        "irreversible_reason": "data"
+      },
+      {
+        "type": "ADD_COLUMN",
+        "details": "ADD COLUMN things.created_at",
+        "irreversible_reason": null
+      },
+      {
+        "type": "CHANGE_COLUMN_NULLABLE",
+        "details": "CHANGE COLUMN NULLABLE things.note FROM false TO true",
+        "irreversible_reason": null
+      },
+      {
+        "type": "CHANGE_COLUMN_TYPE",
+        "details": "CHANGE COLUMN TYPE things.size FROM VARCHAR(50) TO VARCHAR(100)",
+        "irreversible_reason": null
+      },
+      {
+        "type": "CHANGE_COLUMN_DEFAULT",
+        "details": "CHANGE COLUMN DEFAULT things.status",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_INDEX",
+        "details": "ADD INDEX things_new_ix ON things",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_INDEX",
+        "details": "DROP INDEX things_old_ix",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_FOREIGN_KEY",
+        "details": "ADD FOREIGN KEY things_new_fk ON things",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_FOREIGN_KEY",
+        "details": "DROP FOREIGN KEY things_old_fk",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_CHECK_CONSTRAINT",
+        "details": "ADD CHECK CONSTRAINT things_new_ck ON things",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_CHECK_CONSTRAINT",
+        "details": "DROP CHECK CONSTRAINT things_old_ck",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_UNIQUE_CONSTRAINT",
+        "details": "ADD UNIQUE CONSTRAINT things_new_uq ON things",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_UNIQUE_CONSTRAINT",
+        "details": "DROP UNIQUE CONSTRAINT things_old_uq",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_ENUM_TYPE",
+        "details": "ADD ENUM TYPE new_status",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_ENUM_TYPE",
+        "details": "DROP ENUM TYPE retired_status",
+        "irreversible_reason": null
+      },
+      {
+        "type": "CHANGE_ENUM_VALUES",
+        "details": "CHANGE ENUM VALUES mood",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_SEQUENCE",
+        "details": "ADD SEQUENCE new_seq",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_SEQUENCE",
+        "details": "DROP SEQUENCE retired_seq",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW v_added",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_VIEW",
+        "details": "DROP VIEW v_retired",
+        "irreversible_reason": null
+      },
+      {
+        "type": "REPLACE_VIEW",
+        "details": "REPLACE VIEW v_things",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 25,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": []
+  }
+}
