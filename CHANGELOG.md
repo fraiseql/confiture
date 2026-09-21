@@ -14,8 +14,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-No change to what confiture does. What it promises its consumers, and what its
-comparisons say today, are now tests in its own suite.
+## [1.15.0] - 2026-09-21
+
+**One model.** The parse side and the live side of a schema produce the same model,
+and drift on a freshly built database is empty by construction. Closes [#308],
+[#309].
+
+Before this release a table had six models in this package, a routine five, and the
+live catalogue three readers; `confiture drift` compared two of those representations
+and reported their differences as drift. Now `core/schema_model.py` is the one model.
+The lint inventory reads a DDL tree into it, `core/live_catalog.py` reads `pg_catalog`
+into it, and `tests/integration/test_parse_live_parity.py` holds a database built from
+each of this repository's eight schema trees **equal** to the tree, after
+normalisations each measured on the server. Drift, `migrate diff`, the routine and
+view checks and the pytest plugin read that model, and a schema change is a closed
+union of typed variants rendered in one place. Every before/after that moved is
+recorded in `tests/fixtures/model_goldens/`.
+
+**What a consumer will see:**
+
+- ⚠️ `confiture drift` and `migrate validate --check-live-drift` report
+  `missing_constraint` (warning), `extra_constraint` (info) and `default_mismatch`
+  (warning) — published, and never emitted before. A gate that fails on warnings sees
+  a lost constraint or a changed default the first time it runs.
+- ⚠️ The routine checks print a declared argument type in PostgreSQL's words
+  (`timestamp` → `timestamp without time zone`), so an alerter keyed on
+  `old_signature` / `new_signature` re-alerts once. A routine taking `timestamp`,
+  `time`, `timetz`, `char(n)` or `bit varying` is no longer reported as a stale
+  overload of itself — `migrate fix-signatures` planned to `DROP` it.
+- `migrate diff --generate` writes identity and generated columns as declared, an added
+  enum type with its labels, and enum types and sequences in one order on every run.
+- ⚠️ For a library caller: `confiture.models.schema`'s table model and its
+  `SchemaChange` / `SchemaDiff` are retired, and importing one says where it went;
+  `SchemaDriftDetector.compare_schemas` takes two models; the pytest plugin's schema
+  snapshot and `introspect` read the catalogue as confiture does, and no longer read an
+  extension's own tables as the project's.
+- Unchanged: exit codes `0..8`, `ChangeEntry`'s `CONTRACT_VERSION` (1), and every JSON
+  payload not named above.
+
+fraisier caps confiture below 1.15 until fraisier#413 lifts it to `<2` against the
+consumer surface this release pins in `tests/contract/`.
 
 ### Added
 
@@ -379,6 +417,9 @@ comparisons say today, are now tests in its own suite.
   `ADD EXTENSION` change derives no SQL — so the generated up-migration for
   `examples/02-fraiseql-integration` and `examples/basic` does not apply to an empty
   database as written. Both were true before this release.
+
+[#308]: https://github.com/fraiseql/confiture/issues/308
+[#309]: https://github.com/fraiseql/confiture/issues/309
 
 ## [1.14.0] - 2026-09-20
 
