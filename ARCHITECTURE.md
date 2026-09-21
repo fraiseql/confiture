@@ -134,7 +134,6 @@ A package providing PostgreSQL introspection beyond tables and columns, used as 
 | `introspection/functions.py` | `FunctionIntrospector` — queries `pg_catalog` to retrieve function/procedure definitions, parameters, volatility, language, and source |
 | `introspection/type_mapping.py` | `TypeMapper` — maps PostgreSQL types to Python/GraphQL types |
 | `introspection/dependency_graph.py` | `DependencyGraph` + `DependencyOrder` — tracks function/view dependencies for safe drop/recreate ordering |
-| `introspection/sql_ast.py` | `CTENode`, `JSONBKey` — lightweight SQL AST nodes for structured query analysis |
 | `introspector.py` | `SchemaIntrospector` — existing table/column/FK introspection via `pg_catalog` |
 
 #### 2.4 Database Operations
@@ -394,7 +393,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 
 ### Decision 7: Introspection Layer as Shared Foundation
 
-**Choice**: `core/introspection/` provides `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`, and `sql_ast` as a reusable package.
+**Choice**: `core/introspection/` provides `FunctionIntrospector`, `TypeMapper` and `DependencyGraph` as a reusable package.
 
 **Rationale**: Multiple CLI commands (`migrate introspect`, code generation features) need PostgreSQL function and type metadata. A shared layer avoids duplicating `pg_catalog` queries and provides a stable API for future code generation features (GraphQL resolver stubs, type-safe wrappers, etc.).
 
