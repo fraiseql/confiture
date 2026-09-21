@@ -3,42 +3,17 @@
   "stdout": {
     "database_name": "<database>",
     "expected_schema_source": "file:<schema>",
-    "has_drift": true,
+    "has_drift": false,
     "has_critical_drift": false,
     "critical_count": 0,
-    "warning_count": 3,
+    "warning_count": 0,
     "info_count": 0,
     "tables_checked": 6,
     "columns_checked": 52,
     "indexes_checked": 37,
     "objects_checked": 4,
     "detection_time_ms": 0,
-    "drift_items": [
-      {
-        "type": "nullable_mismatch",
-        "severity": "warning",
-        "object": "public.tb_comment.id",
-        "expected": "nullable=True",
-        "actual": "nullable=False",
-        "message": "Column 'public.tb_comment.id' nullable mismatch: expected True, got False"
-      },
-      {
-        "type": "nullable_mismatch",
-        "severity": "warning",
-        "object": "public.tb_post.id",
-        "expected": "nullable=True",
-        "actual": "nullable=False",
-        "message": "Column 'public.tb_post.id' nullable mismatch: expected True, got False"
-      },
-      {
-        "type": "nullable_mismatch",
-        "severity": "warning",
-        "object": "public.tb_user.id",
-        "expected": "nullable=True",
-        "actual": "nullable=False",
-        "message": "Column 'public.tb_user.id' nullable mismatch: expected True, got False"
-      }
-    ],
+    "drift_items": [],
     "hints": []
   }
 }

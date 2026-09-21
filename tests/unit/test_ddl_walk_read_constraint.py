@@ -165,3 +165,12 @@ def test_a_generated_expression_is_never_read_as_a_check() -> None:
 def test_an_exclusion_constraint_is_declined_not_misread() -> None:
     node = _statement("CREATE TABLE t (r int4range, EXCLUDE USING gist (r WITH &&))").tableElts[1]
     assert read_constraint(node) is None
+
+
+def test_a_quoted_default_is_written_back_escaped() -> None:
+    """``DEFAULT 'it''s'`` generated ``DEFAULT 'it's'``, which PostgreSQL rejects."""
+    fact, _ = read_column_constraints(
+        _statement("CREATE TABLE t (c TEXT DEFAULT 'it''s')").tableElts[0]
+    )
+    assert fact.default == "'it''s'"
+    assert pglast.parse_sql(f"CREATE TABLE t (c TEXT DEFAULT {fact.default})")

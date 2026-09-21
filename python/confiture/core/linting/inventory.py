@@ -31,17 +31,21 @@ from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import (
     ColumnEdit,
     ObjectEdit,
-    adds_primary_key,
+    added_constraint,
     column_edit,
-    column_is_not_null,
     object_edits,
     object_kinds,
+    read_column_constraints,
+    read_constraint,
+    render_default,
+    written_type,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
 
 # The fold lives in its own module so a reader that needs it but not a parser
 # can have it; imported here because this is where object identity is decided.
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_model import Column, Constraint
 from confiture.core.type_lattice import canonical_type, parse_type
 
 _T = TypeVar("_T")
@@ -95,21 +99,9 @@ _INPUT_MODES = frozenset({"d", "i", "b", "v"})
 _CATALOG_SCHEMA = "pg_catalog"
 
 
-@dataclass(frozen=True)
-class SchemaColumn:
-    """A column as written: ``name`` keeps the author's case and quoting is stripped.
-
-    ``type_text`` is the type as written (``varchar(50)``), ``not_null`` covers
-    ``NOT NULL`` and ``PRIMARY KEY``, ``default`` is the default expression's
-    text or ``None``.
-    """
-
-    name: str
-    folded: str
-    line: int
-    type_text: str | None = None
-    not_null: bool = False
-    default: str | None = None
+#: A column, whole: the one model of it (``core/schema_model.py``). The name is
+#: kept because the rules and ``drift.py`` have always read ``SchemaColumn``.
+SchemaColumn = Column
 
 
 #: A routine's input parameter types, each as ``(schema, canonical name)``.
@@ -148,6 +140,10 @@ class SchemaObject:
     folded_schema: str | None
     line: int
     columns: list[SchemaColumn] = field(default_factory=list)
+    #: A table's primary key, UNIQUEs, CHECKs and foreign keys, wherever the
+    #: grammar allowed them to be written — on a column, at table level, or in a
+    #: later ``ALTER TABLE … ADD CONSTRAINT``.
+    constraints: list[Constraint] = field(default_factory=list)
     has_primary_key: bool = False
     is_partition: bool = False
     is_temporary: bool = False
@@ -343,33 +339,56 @@ def _sql_type(type_node: Any) -> str | None:
     return written[: -2 * (written.count("[]") - 1)] if written.count("[]") > 1 else written
 
 
-def _default_text(node: Any) -> str | None:
-    raw = getattr(node, "raw_default", None)
-    if raw is None:
-        for c in getattr(node, "constraints", None) or ():
-            if _enum_value(getattr(c, "contype", None)) == _CONSTR_DEFAULT:
-                raw = getattr(c, "raw_expr", None)
-                break
-    return RawStream()(raw) if raw is not None else None
+def _column(sql: str, node: Any) -> tuple[SchemaColumn, tuple[Constraint, ...]]:
+    """One ``ColumnDef``: the column, and the constraints its own clauses add to the table.
 
-
-def _column(sql: str, node: Any) -> SchemaColumn:
+    What the clauses *mean* is ``ddl_walk.read_column_constraints``' answer — the
+    one reader of a ``Constraint`` node. A primary key among them is applied to
+    the column by :func:`_apply_primary_keys`, where a table-level one is too.
+    """
     written = identifier_at(sql, getattr(node, "location", None), node.colname)[-1]
-    return SchemaColumn(
+    fact, constraints = read_column_constraints(node)
+    type_node = getattr(node, "typeName", None)
+    column = SchemaColumn(
         name=written,
         folded=node.colname,
         line=_line_of(sql, getattr(node, "location", None)),
-        type_text=_sql_type(getattr(node, "typeName", None)),
-        not_null=column_is_not_null(node)
-        or _has_primary_constraint(getattr(node, "constraints", None)),
-        default=_default_text(node),
+        type_text=_sql_type(type_node),
+        type_key=canonical_type(ddl_type_name(type_node)),
+        raw_sql_type=written_type(type_node),
+        not_null=fact.not_null,
+        default=fact.default,
+        identity=fact.identity,
+        generated=fact.generated,
+        generated_kind=fact.generated_kind,
     )
+    return column, constraints
 
 
-def _has_primary_constraint(constraints: Any) -> bool:
-    return any(
-        _enum_value(getattr(c, "contype", None)) == _CONSTR_PRIMARY for c in constraints or []
-    )
+def _add_constraints(table: SchemaObject, constraints: Iterable[Constraint]) -> None:
+    """Record *constraints* on *table*; a primary key also marks the columns it covers.
+
+    A primary key makes its columns ``NOT NULL`` whichever spelling declared it.
+    ``PRIMARY KEY (id)`` at table level left the column nullable here while the
+    differ read it ``NOT NULL`` — so ``confiture drift`` reported a database
+    applied verbatim from its own DDL as drifted.
+    """
+    for constraint in constraints:
+        table.constraints.append(constraint)
+        if constraint.kind != "primary_key":
+            continue
+        table.has_primary_key = True
+        covered = set(constraint.columns)
+        table.columns = [
+            replace(column, primary_key=True, not_null=True) if column.folded in covered else column
+            for column in table.columns
+        ]
+
+
+def _append_column(sql: str, table: SchemaObject, node: Any) -> None:
+    column, constraints = _column(sql, node)
+    table.columns.append(column)
+    _add_constraints(table, constraints)
 
 
 # Two functions over one `TypeName`, and they answer different questions.
@@ -526,11 +545,11 @@ def _table_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     for elt in stmt.tableElts or []:
         kind = type(elt).__name__
         if kind == "ColumnDef":
-            table.columns.append(_column(sql, elt))
-            if _has_primary_constraint(elt.constraints):
-                table.has_primary_key = True
-        elif kind == "Constraint" and _enum_value(elt.contype) == _CONSTR_PRIMARY:
-            table.has_primary_key = True
+            _append_column(sql, table, elt)
+        elif kind == "Constraint":
+            read = read_constraint(elt)
+            if isinstance(read, Constraint):
+                _add_constraints(table, (read,))
     return table
 
 
@@ -666,9 +685,7 @@ def _schema_declaration(sql: str, raw: Any) -> SchemaObject | None:
 
 
 def _added(sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
-    table.columns.append(_column(sql, edit.coldef))
-    if _has_primary_constraint(getattr(edit.coldef, "constraints", None)):
-        table.has_primary_key = True
+    _append_column(sql, table, edit.coldef)
 
 
 def _dropped(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
@@ -681,7 +698,14 @@ def _retyped(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
     A retype never invents a column: naming one the tree has not created is an
     ``ALTER`` against a schema built elsewhere, which both readers ignore.
     """
-    _edited(table, edit.column, type_text=_sql_type(getattr(edit.coldef, "typeName", None)))
+    type_node = getattr(edit.coldef, "typeName", None)
+    _edited(
+        table,
+        edit.column,
+        type_text=_sql_type(type_node),
+        type_key=canonical_type(ddl_type_name(type_node)),
+        raw_sql_type=written_type(type_node),
+    )
 
 
 def _edited(table: SchemaObject, column_name: str | None, **changes: Any) -> None:
@@ -701,7 +725,7 @@ def _drop_not_null(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
 
 
 def _set_default(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
-    _edited(table, edit.column, default=RawStream()(edit.default))
+    _edited(table, edit.column, default=render_default(edit.default))
 
 
 def _drop_default(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
@@ -733,10 +757,13 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
     if table is None:
         return
     for cmd in stmt.cmds or []:
-        if adds_primary_key(cmd):
-            # A table-level constraint, so the flag it sets is the table's —
-            # which is why it is not a `ColumnEdit`.
-            table.has_primary_key = True
+        node = added_constraint(cmd)
+        if node is not None:
+            # A table-level constraint, so it lands on the table — which is why
+            # it is not a `ColumnEdit`.
+            read = read_constraint(node)
+            if isinstance(read, Constraint):
+                _add_constraints(table, (read,))
             continue
         edit = column_edit(cmd)
         apply = _COLUMN_APPLIERS.get(edit.kind) if edit is not None else None

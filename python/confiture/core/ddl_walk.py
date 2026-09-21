@@ -832,7 +832,9 @@ def render_default(raw_expr: Any) -> str | None:
         if vtype == "Float":
             return str(val.fval)
         if vtype == "String":
-            return f"'{val.sval}'"
+            # Written back as a literal, so its quotes are doubled again: the
+            # parser hands over `it's` for `'it''s'`, and `'it's'` is not SQL.
+            return "'" + val.sval.replace("'", "''") + "'"
         if vtype == "Boolean":
             return "true" if val.boolval else "false"
     # A call, a cast, a column reference: the expression as PostgreSQL would
