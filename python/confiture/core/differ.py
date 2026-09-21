@@ -11,58 +11,32 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 import pglast
-from pglast.stream import RawStream
 
 from confiture.core.ddl_objects import OBJECT_KEYWORD, objects_in, pair_definitions
-from confiture.core.ddl_walk import (
-    ColumnEdit,
-    ColumnFact,
-    ObjectEdit,
-    added_constraint,
-    column_edit,
-    object_edits,
-    read_column_constraints,
-    read_constraint,
-    readable_type,
-    render_default,
-    written_type,
-)
 from confiture.core.differ_sql import column_body
 from confiture.core.linting.duplicates import WINS_TEXT, CreateFlags, wins
+from confiture.core.linting.inventory import (
+    Inventory,
+    SchemaObject,
+    build_inventory,
+    group_definitions,
+    schema_model,
+)
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.schema_model import Constraint
-from confiture.core.sql_lexer import blank_copy_blocks
-from confiture.core.type_lattice import same_type
-from confiture.models.schema import (
-    CheckConstraint,
+from confiture.core.schema_model import (
     Column,
-    ColumnType,
+    Constraint,
     EnumType,
-    ForeignKey,
-    Index,
-    ParsedSchema,
-    SchemaChange,
-    SchemaDiff,
     Sequence,
     Table,
-    UniqueConstraint,
     qualified_name,
 )
+from confiture.core.sql_lexer import blank_copy_blocks
+from confiture.core.type_lattice import same_type
+from confiture.models.schema import ParsedSchema, SchemaChange, SchemaDiff
 from confiture.models.warnings import BuildWarning
 
-# ---------------------------------------------------------------------------
-# Module-level constants: compiled once for performance
-# ---------------------------------------------------------------------------
-
-
 logger = logging.getLogger(__name__)
-
-
-#: The differ's own model classes, in the kind vocabulary ``ObjectEdit`` speaks.
-#: A ``Table`` answers for a table and a matview alike here, because this model
-#: has only the one; a view and a routine live in ``ParsedSchema.objects``, and
-#: ``ddl_objects`` folds their drops.
-_MODEL_KINDS: dict[str, str] = {"Table": "table", "EnumType": "type", "Sequence": "sequence"}
 
 
 def _identity(schema: str | None, name: str) -> tuple[str, str]:
@@ -81,70 +55,47 @@ def _identity(schema: str | None, name: str) -> tuple[str, str]:
     return (schema or DEFAULT_SCHEMA).lower(), name
 
 
-def _written_as(stmt: Any) -> CreateFlags:
-    """How a ``CREATE`` node spelled itself, as :func:`wins` reads it.
+#: The kinds this module compares structurally, as a duplicate warning names them.
+_DUPLICATE_KINDS: dict[str, str] = {"table": "Table", "type": "Type", "sequence": "Sequence"}
 
-    ``CREATE TABLE`` and ``CREATE SEQUENCE`` carry ``if_not_exists``;
-    ``CREATE TYPE … AS ENUM`` carries neither flag, and none of the three kinds
-    this module models has an ``OR REPLACE`` form — so ``wins`` never answers
-    ``last`` for them. A view or a routine does, and is compared by definition
-    through ``ddl_objects.pair_definitions`` instead.
+
+def _structural(obj: SchemaObject) -> bool:
+    """A table, an enum or a sequence — what the model holds and this module compares."""
+    return obj.kind in ("table", "sequence") or (obj.kind == "type" and obj.enum_values is not None)
+
+
+def _duplicate_warnings(inventory: Inventory) -> list[BuildWarning]:
+    """Say so when one ``(schema, name)`` is defined more than once in one tree.
+
+    Two definitions of one object is #313's defect with the schema taken out of
+    it. The model keeps the definition a build keeps — a later ``IF NOT EXISTS``
+    is a no-op, a later plain ``CREATE`` fails the build at that statement — and
+    the collapse is reported either way. The verdict is ``duplicates.wins``,
+    ``build_001``'s own rule. A warning, not a failure: a duplicate is
+    ``confiture lint``'s and ``build --fail-on-duplicates``' problem, and failing
+    ``--require-migration`` for it would fail the gate for a reason it is not about.
     """
-    return CreateFlags(
-        replace=bool(getattr(stmt, "replace", False)),
-        if_not_exists=bool(getattr(stmt, "if_not_exists", False)),
-    )
-
-
-_DUPLICATE_KINDS: dict[str, str] = {"Table": "Table", "EnumType": "Type", "Sequence": "Sequence"}
-
-
-def _resolve_duplicates(result: ParsedSchema, written_as: dict[int, CreateFlags]) -> None:
-    """Keep the definition the build keeps, and say that there was more than one.
-
-    Two definitions of one ``(schema, name)`` in one tree is #313's defect with
-    the schema taken out of it: an identity two objects share, resolved by "last
-    one wins" rather than by asking which one ``confiture build`` ends up with.
-    A later ``IF NOT EXISTS`` is a no-op, so the *first* is what the database
-    has; a later plain ``CREATE`` fails the build at that statement, so the
-    first is what exists when it does.
-
-    The verdict is ``duplicates.wins`` — ``build_001``'s own rule, not a second
-    one — and the collapse is reported either way. It is a warning, not a
-    failure: a duplicate definition is real but it is ``confiture lint``'s
-    problem and ``build --fail-on-duplicates``' problem, both of which already
-    exist and are opt-in. Failing ``--require-migration`` for it would fail the
-    gate for a reason the gate is not about.
-    """
-    for attribute in ("tables", "enum_types", "sequences"):
-        models: list[Any] = getattr(result, attribute)
-        groups: dict[tuple[str, str], list[Any]] = {}
-        for model in models:
-            groups.setdefault(_identity(model.schema, model.name), []).append(model)
-        if all(len(group) == 1 for group in groups.values()):
-            continue
-        kept: list[Any] = []
-        for group in groups.values():
+    warnings: list[BuildWarning] = []
+    for kind in ("table", "type", "sequence"):
+        objects = [obj for obj in inventory.objects if obj.kind == kind and _structural(obj)]
+        for group in group_definitions(objects):
             if len(group) == 1:
-                kept.extend(group)
                 continue
-            verdict = wins([written_as.get(id(model), CreateFlags()) for model in group])
-            used = "last" if verdict == "last" else "first"
-            kept.append(group[-1] if verdict == "last" else group[0])
-            result.warnings.append(
+            verdict = wins(
+                [CreateFlags(replace=obj.replace, if_not_exists=obj.if_not_exists) for obj in group]
+            )
+            first = group[0]
+            warnings.append(
                 BuildWarning.of(
                     "DIFFER_402",
-                    kind=_DUPLICATE_KINDS[type(group[0]).__name__],
-                    identity=group[0].qualified,
+                    kind=_DUPLICATE_KINDS[kind],
+                    identity=qualified_name(first.folded_schema, first.folded_name),
                     count=len(group),
                     outcome=WINS_TEXT[verdict],
-                    used=used,
+                    used="last" if verdict == "last" else "first",
                 )
             )
-        # Filtered by object identity, not by ``==``: two duplicate definitions
-        # of one table may well be structurally equal.
-        keep = {id(model) for model in kept}
-        setattr(result, attribute, [model for model in models if id(model) in keep])
+    return warnings
 
 
 def _merged_warnings(old_schema: ParsedSchema, new_schema: ParsedSchema) -> list[BuildWarning]:
@@ -161,33 +112,6 @@ def _merged_warnings(old_schema: ParsedSchema, new_schema: ParsedSchema) -> list
     return merged
 
 
-def _relation_spelling(relation: Any) -> str:
-    """A ``RangeVar`` as the statement wrote it: ``tenant.t``, or ``t`` unqualified.
-
-    What the constraint and index models carry, because it is what a finding
-    prints and what generated DDL alters. Never an invented ``public.`` — see
-    :func:`~confiture.models.schema.qualified_name`.
-    """
-    return qualified_name(getattr(relation, "schemaname", None), relation.relname)
-
-
-def _schema_matches(model_schema: str | None, edit_schema: str | None) -> bool:
-    """Whether a statement qualified *edit_schema* reaches an object in *model_schema*.
-
-    Either side naming no schema matches any: PostgreSQL resolves a bare
-    spelling through ``search_path``, and a statement that wrote no qualifier did
-    not say which schema it meant. That is ``ddl_objects._matches``' wildcard,
-    and the reason ``DROP TABLE t`` still drops ``tenant.t`` in a tree that
-    declares only that one.
-
-    :func:`_identity` folds a missing schema to a default instead, because a
-    dict key cannot express a wildcard. Same rule, two constraints.
-    """
-    if model_schema is None or edit_schema is None:
-        return True
-    return model_schema.lower() == edit_schema.lower()
-
-
 # ---------------------------------------------------------------------------
 # The model constraint, landed on this module's own ``Table``
 # ---------------------------------------------------------------------------
@@ -196,63 +120,6 @@ def _schema_matches(model_schema: str | None, edit_schema: str | None) -> bool:
 # #316) and returns what the node declares. This module still compares its own
 # ``models.schema`` types, so a returned value is applied to them here; nothing
 # below decides what a node means.
-
-
-def _apply_constraint(constraint: Constraint, table: Table) -> None:
-    """Attach one model constraint to *table*, in this module's vocabulary."""
-    if constraint.kind == "foreign_key":
-        table.foreign_keys.append(
-            ForeignKey(
-                name=constraint.name,
-                table=table.qualified,
-                columns=list(constraint.columns),
-                ref_table=constraint.ref_table or "",
-                ref_columns=list(constraint.ref_columns),
-                on_delete=constraint.on_delete,
-                on_update=constraint.on_update,
-            )
-        )
-    elif constraint.kind == "check" and constraint.expression is not None:
-        table.check_constraints.append(
-            CheckConstraint(
-                name=constraint.name, table=table.qualified, expression=constraint.expression
-            )
-        )
-    elif constraint.kind == "unique":
-        # ``Column.unique`` stays untouched: ``u INT UNIQUE`` and ``UNIQUE (u)`` are
-        # one declaration and must compare equal.
-        table.unique_constraints.append(
-            UniqueConstraint(
-                name=constraint.name, table=table.qualified, columns=list(constraint.columns)
-            )
-        )
-    elif constraint.kind == "primary_key":
-        # A primary key travels on its columns, whichever spelling declared it:
-        # ``PRIMARY KEY (id)`` otherwise compared unequal to ``id INT PRIMARY KEY``
-        # and generated ``DROP NOT NULL`` on a primary-key column.
-        for name in constraint.columns:
-            target = table.get_column(name)
-            if target is not None:
-                target.primary_key = True
-                target.nullable = False
-
-
-def _apply_column_fact(fact: ColumnFact, column: Column) -> None:
-    """What a column's own clauses say about it, applied to this module's ``Column``."""
-    if fact.not_null:
-        column.nullable = False
-    if fact.default is not None:
-        column.default = fact.default
-    column.identity = fact.identity
-    column.generated = fact.generated
-    column.generated_kind = fact.generated_kind
-
-
-def _read_constraint(node: Any, table: Table) -> None:
-    """A table-level or ``ALTER TABLE … ADD CONSTRAINT`` node, read and applied."""
-    read = read_constraint(node)
-    if isinstance(read, Constraint):
-        _apply_constraint(read, table)
 
 
 def _object_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
@@ -289,12 +156,21 @@ def _types_differ(old: Column, new: Column) -> bool:
     job too, which is why this compares the written spellings rather than adding
     a second alias table beside ``_COLUMN_TYPE_MAP``.
 
-    A column built by hand may carry no spelling; then the canonical
-    :class:`ColumnType` is all there is to compare.
+    A column with no written type — none from a parse, but a model built by
+    hand — compares by its canonical type alone.
     """
     if old.raw_sql_type and new.raw_sql_type:
         return not same_type(old.raw_sql_type, new.raw_sql_type)
-    return old.type != new.type or old.raw_sql_type != new.raw_sql_type
+    return old.type_key != new.type_key or old.raw_sql_type != new.raw_sql_type
+
+
+#: What a column with no written type is called in a change — none from a parse.
+_UNKNOWN_TYPE = "UNKNOWN"
+
+
+def _written(column: Column) -> str:
+    """The column's type as generated DDL writes it."""
+    return column.raw_sql_type or column.type_key or _UNKNOWN_TYPE
 
 
 def _column_detail(column: Column) -> dict[str, Any]:
@@ -304,9 +180,9 @@ def _column_detail(column: Column) -> dict[str, Any]:
     ordinary column's details read exactly as they always have.
     """
     detail: dict[str, Any] = {
-        "name": column.name,
-        "type": column.raw_sql_type or column.type.value,
-        "nullable": column.nullable,
+        "name": column.folded,
+        "type": _written(column),
+        "nullable": not column.not_null,
         "default": column.default,
     }
     if column.identity is not None:
@@ -342,30 +218,33 @@ def _constraint_details(table: Table) -> list[dict[str, Any]]:
         {
             "kind": "PRIMARY KEY",
             "name": "",
-            "columns": [column.name for column in table.columns if column.primary_key],
+            "columns": [column.folded for column in table.columns if column.primary_key],
         }
     ]
-    details.extend(
-        {
-            "kind": "FOREIGN KEY",
-            "name": fk.name,
-            "columns": fk.columns,
-            "ref_table": fk.ref_table,
-            "ref_columns": fk.ref_columns,
-            "on_delete": fk.on_delete,
-            "on_update": fk.on_update,
-        }
-        for fk in table.foreign_keys
-    )
-    details.extend(
-        {"kind": "UNIQUE", "name": uc.name, "columns": uc.columns}
-        for uc in table.unique_constraints
-    )
-    details.extend(
-        {"kind": "CHECK", "name": cc.name, "expression": cc.expression}
-        for cc in table.check_constraints
-    )
+    details.extend(_foreign_key_detail(fk) for fk in table.constraints_of("foreign_key"))
+    details.extend(_unique_detail(uc) for uc in table.constraints_of("unique"))
+    details.extend(_check_detail(cc) for cc in table.constraints_of("check"))
     return [detail for detail in details if detail.get("columns") or detail.get("expression")]
+
+
+def _foreign_key_detail(fk: Constraint) -> dict[str, Any]:
+    return {
+        "kind": "FOREIGN KEY",
+        "name": fk.name,
+        "columns": list(fk.columns),
+        "ref_table": fk.ref_table or "",
+        "ref_columns": list(fk.ref_columns),
+        "on_delete": fk.on_delete,
+        "on_update": fk.on_update,
+    }
+
+
+def _unique_detail(uc: Constraint) -> dict[str, Any]:
+    return {"kind": "UNIQUE", "name": uc.name, "columns": list(uc.columns)}
+
+
+def _check_detail(cc: Constraint) -> dict[str, Any]:
+    return {"kind": "CHECK", "name": cc.name, "expression": cc.expression}
 
 
 def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
@@ -438,365 +317,44 @@ class SchemaDiffer:
         return self.parse_schema(sql).tables
 
     def parse_schema(self, sql: str) -> ParsedSchema:
-        """Parse SQL DDL into a ParsedSchema (tables, enums, sequences, objects).
+        """Parse SQL DDL into the schema model, plus the objects compared by definition.
 
-        Uses pglast (PostgreSQL's own parser) when available for accurate,
-        limit-free parsing.
-        Non-DDL statements (INSERT, COPY, GRANT, etc.) are silently ignored.
+        The one parse (ANA-04): ``pglast.parse_sql`` once, the statements handed
+        to the lint inventory — which reads a table whole through
+        ``ddl_walk``'s one constraint reader, folds every ``ALTER``, ``DROP``
+        and rename order-aware (#301), and keys every object by ``(schema,
+        name)`` (#313) — and to ``ddl_objects`` for the views, routines and
+        the rest. This module parses nothing itself. Non-DDL statements
+        (INSERT, COPY, GRANT, …) declare nothing and are ignored.
 
         Args:
             sql: SQL DDL string (may contain any SQL, including non-DDL)
 
         Returns:
-            ParsedSchema with tables, enum_types, sequences
+            ParsedSchema with the model's tables, enum types and sequences
+
+        Raises:
+            pglast.parser.ParseError: what PostgreSQL rejects is not a schema
+                to diff; ``migrate diff`` reports it as ``DIFFER_400``.
         """
         if not sql or not sql.strip():
             return ParsedSchema()
 
-        # Blank inline-COPY data blocks before ANY parser or regex pass sees
-        # the text: pglast rejects them outright (#194), and the free-form data
-        # lines could false-match the regex passes below.
-        #
-        # Blanked, not deleted: the block keeps its length and its newlines, so
-        # the `DIFFER_400` a rejected statement raises below carries a position
-        # into the text the author wrote, not one shifted by however many data
-        # rows an earlier seed file happened to carry.
+        # Blank inline-COPY data blocks before the parser sees the text: pglast
+        # rejects them outright (#194). Blanked, not deleted: the block keeps its
+        # length and its newlines, so the `DIFFER_400` a rejected statement
+        # raises carries a position into the text the author wrote.
         sql = blank_copy_blocks(sql)
-
-        result = ParsedSchema()
-
-        # One parse, one walk (ANA-04): pglast.parser.ParseError propagates —
-        # what PostgreSQL rejects is not a schema to diff, and `migrate diff`
-        # reports it as DIFFER_400. A commented-out statement is not a node.
         raws = list(pglast.parse_sql(sql) or [])
-        result.objects = objects_in(sql, raws)
-        # Where each model was declared, so a `DROP` folded below reaches what the
-        # tree had written *before* it and not what it writes after: the everyday
-        # `DROP TABLE IF EXISTS x; CREATE TABLE x (…);` declares `x` (#301).
-        declared_at: dict[int, int] = {}
-        # How each `CREATE` was written, so `duplicates.wins` can say which of
-        # several definitions of one object the build actually keeps.
-        written_as: dict[int, CreateFlags] = {}
-        for raw in raws:
-            if type(raw.stmt).__name__ == "CreateStmt":
-                table = self._parse_create_table_pglast(raw.stmt)
-                if table:
-                    result.tables.append(table)
-                    declared_at[id(table)] = raw.stmt_location or 0
-                    written_as[id(table)] = _written_as(raw.stmt)
-        for raw in raws:
-            self._collect_statement(raw, result, declared_at, written_as)
-        _resolve_duplicates(result, written_as)
-        return result
-
-    def _collect_statement(
-        self,
-        raw: Any,
-        result: ParsedSchema,
-        declared_at: dict[int, int],
-        written_as: dict[int, CreateFlags],
-    ) -> None:
-        stmt = raw.stmt
-        kind = type(stmt).__name__
-        offset = raw.stmt_location or 0
-        if kind == "IndexStmt":
-            self._collect_index(stmt, result, declared_at, offset)
-        elif kind == "CreateEnumStmt":
-            enum_type = _enum_type_from_stmt(stmt)
-            result.enum_types.append(enum_type)
-            declared_at[id(enum_type)] = offset
-            written_as[id(enum_type)] = _written_as(stmt)
-        elif kind == "CreateSeqStmt":
-            sequence = _sequence_from_stmt(stmt)
-            result.sequences.append(sequence)
-            declared_at[id(sequence)] = offset
-            written_as[id(sequence)] = _written_as(stmt)
-        elif kind == "AlterTableStmt":
-            self._collect_alter_table(stmt, result)
-        else:
-            self._fold_object_edits(stmt, result, declared_at, offset)
-
-    def _fold_object_edits(
-        self, stmt: Any, result: ParsedSchema, declared_at: dict[int, int], offset: int
-    ) -> None:
-        """Apply a ``DROP`` / ``RENAME`` / ``SET SCHEMA`` to what this tree declared.
-
-        Every model here carries the schema its statement wrote (#313), so an
-        edit reaches the object it names and no same-named object in another
-        schema. ``SET SCHEMA`` folds for the same reason: a move between schemas
-        became expressible in this model the moment a ``Table`` had one. The
-        lint inventory folds all four; only the application differs.
-        """
-        for edit in object_edits(stmt):
-            declared = [
-                model
-                for model in (*result.tables, *result.enum_types, *result.sequences)
-                if declared_at.get(id(model), 0) < offset
-            ]
-            if edit.kind == "drop":
-                self._drop_declared(edit, result, declared)
-            elif edit.kind == "rename":
-                self._rename_declared(edit, declared)
-            elif edit.kind == "rename_column":
-                self._rename_column(edit, declared)
-            elif edit.kind == "set_schema":
-                self._move_declared(edit, declared)
-
-    @staticmethod
-    def _named(edit: ObjectEdit, model: Any) -> bool:
-        """Whether *edit* names *model*: the same kind, the same name, a matching schema."""
-        return (
-            getattr(model, "name", None) == edit.name
-            and _MODEL_KINDS.get(type(model).__name__) == edit.object_kind
-            and _schema_matches(getattr(model, "schema", None), edit.schema)
+        inventory = build_inventory(sql, raws)
+        model = schema_model(inventory)
+        return ParsedSchema(
+            tables=list(model.tables.values()),
+            enum_types=list(model.enum_types.values()),
+            sequences=list(model.sequences.values()),
+            objects=objects_in(sql, raws),
+            warnings=_duplicate_warnings(inventory),
         )
-
-    def _drop_declared(self, edit: ObjectEdit, result: ParsedSchema, declared: list[Any]) -> None:
-        gone = {id(model) for model in declared if self._named(edit, model)}
-        result.tables = [t for t in result.tables if id(t) not in gone]
-        result.enum_types = [e for e in result.enum_types if id(e) not in gone]
-        result.sequences = [s for s in result.sequences if id(s) not in gone]
-        if edit.object_kind == "index":
-            # An index name is unique per schema, not per table, and `DROP INDEX`
-            # names no table — so the drop is scoped to the schema and then
-            # applied to every table in it.
-            for table in result.tables:
-                if _schema_matches(table.schema, edit.schema):
-                    table.indexes = [ix for ix in table.indexes if ix.name != edit.name]
-
-    def _rename_declared(self, edit: ObjectEdit, declared: list[Any]) -> None:
-        for model in declared:
-            if self._named(edit, model) and edit.new_name:
-                model.name = edit.new_name
-
-    def _move_declared(self, edit: ObjectEdit, declared: list[Any]) -> None:
-        """``ALTER … SET SCHEMA`` — the object keeps its name and changes schema."""
-        for model in declared:
-            if self._named(edit, model) and edit.new_schema:
-                model.schema = edit.new_schema
-
-    def _rename_column(self, edit: ObjectEdit, declared: list[Any]) -> None:
-        for model in declared:
-            if not isinstance(model, Table) or not self._named(edit, model):
-                continue
-            column = model.get_column(edit.column) if edit.column else None
-            if column is not None and edit.new_name:
-                column.name = edit.new_name
-
-    # ------------------------------------------------------------------
-    # pglast-based CREATE TABLE parser (primary path)
-    # ------------------------------------------------------------------
-
-    def _parse_create_table_pglast(self, stmt: Any) -> Table | None:
-        """Build a Table model from a pglast CreateStmt node.
-
-        A column is appended before its own constraints are read, because a
-        constraint reads back the column it covers — ``PRIMARY KEY`` marks it
-        ``NOT NULL`` whichever of the two spellings declared it.
-        """
-        try:
-            table = Table(name=stmt.relation.relname, schema=stmt.relation.schemaname)
-
-            for elt in stmt.tableElts or []:
-                if type(elt).__name__ == "ColumnDef":
-                    self._add_column_pglast(elt, table)
-                elif type(elt).__name__ == "Constraint":
-                    _read_constraint(elt, table)
-
-            return table
-        except (AttributeError, KeyError, TypeError, ValueError):
-            return None
-
-    def _add_column_pglast(self, col_def: Any, table: Table) -> Column | None:
-        """Append the column *col_def* declares, then read what it declares about it."""
-        column = self._parse_column_pglast(col_def)
-        if column is None:
-            return None
-        self._replace_column(table, column)
-        fact, constraints = read_column_constraints(col_def)
-        _apply_column_fact(fact, column)
-        for constraint in constraints:
-            _apply_constraint(constraint, table)
-        return column
-
-    def _parse_column_pglast(self, col_def: Any) -> Column | None:
-        """Build a Column model from a pglast ColumnDef node."""
-        try:
-            readable = readable_type(col_def.typeName)
-            col_type = ColumnType(readable) if readable is not None else ColumnType.UNKNOWN
-
-            # Extract length from first typmod (VARCHAR(N), NUMERIC(P,S), etc.)
-            length: int | None = None
-            typmods = col_def.typeName.typmods
-            if typmods:
-                first = typmods[0]
-                if type(first).__name__ == "A_Const" and hasattr(first, "val"):
-                    val = first.val
-                    if type(val).__name__ == "Integer":
-                        length = val.ival
-
-            # The spelling is recorded for every column, not only for a type the
-            # map missed: it is what carries the length and the precision. An
-            # array has no readable keyword and keeps the parser's spelling.
-            raw_sql_type = written_type(col_def.typeName)
-
-            return Column(
-                name=col_def.colname,
-                type=col_type,
-                nullable=True,
-                default=None,
-                primary_key=False,
-                unique=False,
-                length=length,
-                raw_sql_type=raw_sql_type,
-            )
-        except (AttributeError, KeyError, TypeError, ValueError):
-            return None
-
-    # ------------------------------------------------------------------
-    # AST collectors for indexes and ALTER TABLE constraints (ANA-04)
-    # ------------------------------------------------------------------
-
-    def _table_named(self, result: ParsedSchema, relation: Any) -> Table | None:
-        """The declared table a ``RangeVar`` names, by identity rather than by name.
-
-        A relation that wrote no schema matches any — the wildcard
-        ``ddl_objects._matches`` and ``inventory.find_all`` already apply, and
-        the reason a tree writing ``ALTER TABLE t`` after ``CREATE TABLE
-        public.t`` still folds. First match is still the answer: with the
-        wildcard it is the only one an unambiguous tree has, and a genuine
-        ambiguity is a duplicate definition, reported as such rather than
-        resolved here.
-        """
-        relname = getattr(relation, "relname", None)
-        schema = getattr(relation, "schemaname", None)
-        wanted = _identity(schema, relname)
-        return next(
-            (
-                t
-                for t in result.tables
-                if t.name == relname
-                and (schema is None or t.schema is None or _identity(t.schema, t.name) == wanted)
-            ),
-            None,
-        )
-
-    def _collect_index(
-        self,
-        stmt: Any,
-        result: ParsedSchema,
-        declared_at: dict[int, int] | None = None,
-        offset: int = 0,
-    ) -> None:
-        table = self._table_named(result, stmt.relation)
-        if table is None:
-            return
-        columns = [
-            elem.name if elem.name else RawStream()(elem.expr) for elem in stmt.indexParams or []
-        ]
-        index = Index(
-            name=stmt.idxname,
-            table=table.qualified,
-            columns=columns,
-            unique=bool(stmt.unique),
-            where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
-        )
-        table.indexes.append(index)
-        if declared_at is not None:
-            declared_at[id(index)] = offset
-
-    def _collect_alter_table(self, stmt: Any, result: ParsedSchema) -> None:
-        """Fold an ``ALTER TABLE`` into the table the tree already created.
-
-        A build-from-DDL tree may append ``ALTER TABLE`` rather than edit the
-        ``CREATE TABLE``; what a database ends up with is the two together, so
-        that is what the comparison has to see. Before #288 only ``Constraint``
-        nodes were read out of ``stmt.cmds``, which meant a ``ColumnDef`` — an
-        added or dropped *column* — was dropped on the floor.
-
-        An ``ALTER`` naming a table this tree never creates has nothing to fold
-        into and is ignored: it belongs to a schema built elsewhere.
-        """
-        table = self._table_named(result, stmt.relation)
-        if table is None:
-            return
-        for cmd in stmt.cmds or []:
-            self._apply_alter_column(cmd, table)
-        self._collect_alter_table_constraints(stmt, result)
-
-    def _apply_alter_column(self, cmd: Any, table: Table) -> None:
-        """Add, drop or retype one column, as ``ddl_walk.column_edit`` reads ``cmd``.
-
-        *What* the cmd does is decided there, once, for both readers of a DDL
-        tree — this one and the lint inventory, whose object model shares none of
-        these types (#301). *How* it lands is here, because only the differ knows
-        what a ``Column`` is.
-
-        Nothing in this module names an ``AlterTableType`` member: PostgreSQL 18
-        renumbered the enum at index >= 13 and a literal ordinal then stops
-        matching silently, which is the whole of #192.
-        """
-        edit = column_edit(cmd)
-        if edit is None:
-            return
-        if edit.kind == "add":
-            # Through the same reader a CREATE TABLE column goes through: an
-            # added column carries the same clauses, NOT NULL and a column-level
-            # REFERENCES included.
-            self._add_column_pglast(edit.coldef, table)
-        elif edit.kind == "drop":
-            table.columns = [c for c in table.columns if c.name != edit.column]
-        elif edit.kind == "retype":
-            self._retype_column(table, edit)
-        else:
-            self._edit_column_property(table, edit)
-
-    def _edit_column_property(self, table: Table, edit: ColumnEdit) -> None:
-        """Nullability and defaults, which change a column rather than replace it."""
-        existing = table.get_column(edit.column) if edit.column else None
-        if existing is None:
-            return
-        if edit.kind == "set_not_null":
-            existing.nullable = False
-        elif edit.kind == "drop_not_null":
-            existing.nullable = True
-        elif edit.kind == "set_default":
-            existing.default = render_default(edit.default)
-        elif edit.kind == "drop_default":
-            existing.default = None
-
-    def _retype_column(self, table: Table, edit: ColumnEdit) -> None:
-        retyped = self._parse_column_pglast(edit.coldef)
-        existing = table.get_column(edit.column) if edit.column else None
-        if retyped is not None and existing is not None:
-            existing.type = retyped.type
-            existing.raw_sql_type = retyped.raw_sql_type
-            existing.length = retyped.length
-
-    @staticmethod
-    def _replace_column(table: Table, column: Column) -> None:
-        """Append the column, or overwrite one of the same name written earlier."""
-        for index, existing in enumerate(table.columns):
-            if existing.name == column.name:
-                table.columns[index] = column
-                return
-        table.columns.append(column)
-
-    def _collect_alter_table_constraints(self, stmt: Any, result: ParsedSchema) -> None:
-        """``ALTER TABLE … ADD CONSTRAINT``, through the reader the CREATE path uses.
-
-        This was the third reader of a ``Constraint`` node, and the only one that
-        rendered a CHECK expression rather than storing the AST class name — so
-        the two ways of writing one constraint produced two different models
-        (#316).
-        """
-        table = self._table_named(result, stmt.relation)
-        if table is None:
-            return
-        for cmd in stmt.cmds or []:
-            constraint = added_constraint(cmd)
-            if constraint is not None:
-                _read_constraint(constraint, table)
 
     def compare(self, old_sql: str, new_sql: str) -> SchemaDiff:
         """Compare two schemas and detect changes.
@@ -988,8 +546,10 @@ class SchemaDiffer:
         changes: list[SchemaChange] = []
 
         table = old_table.qualified
-        old_col_map = {c.name: c for c in old_table.columns}
-        new_col_map = {c.name: c for c in new_table.columns}
+        # By the parser's spelling of each name, which is also what generated DDL
+        # writes: an unquoted `UserId` is the column `userid`.
+        old_col_map = {c.folded: c for c in old_table.columns}
+        new_col_map = {c.folded: c for c in new_table.columns}
 
         old_col_names = set(old_col_map.keys())
         new_col_names = set(new_col_map.keys())
@@ -1067,20 +627,20 @@ class SchemaDiffer:
                 SchemaChange(
                     type="CHANGE_COLUMN_TYPE",
                     table=table,
-                    column=old_col.name,
-                    old_value=old_col.raw_sql_type or old_col.type.value,
-                    new_value=new_col.raw_sql_type or new_col.type.value,
+                    column=old_col.folded,
+                    old_value=_written(old_col),
+                    new_value=_written(new_col),
                 )
             )
 
-        if old_col.nullable != new_col.nullable:
+        if old_col.not_null != new_col.not_null:
             changes.append(
                 SchemaChange(
                     type="CHANGE_COLUMN_NULLABLE",
                     table=table,
-                    column=old_col.name,
-                    old_value="true" if old_col.nullable else "false",
-                    new_value="true" if new_col.nullable else "false",
+                    column=old_col.folded,
+                    old_value="false" if old_col.not_null else "true",
+                    new_value="false" if new_col.not_null else "true",
                 )
             )
 
@@ -1089,7 +649,7 @@ class SchemaDiffer:
                 SchemaChange(
                     type="CHANGE_COLUMN_DEFAULT",
                     table=table,
-                    column=old_col.name,
+                    column=old_col.folded,
                     old_value=str(old_col.default) if old_col.default else None,
                     new_value=str(new_col.default) if new_col.default else None,
                 )
@@ -1111,34 +671,33 @@ class SchemaDiffer:
         instead of the index the author declared.
         """
         return self._compare_named_objects(
-            old=old_table.indexes,
-            new=new_table.indexes,
+            old=list(old_table.indexes),
+            new=list(new_table.indexes),
             add_type="ADD_INDEX",
             drop_type="DROP_INDEX",
             table=old_table.qualified,
             detail_fn=lambda obj: {
                 "name": obj.name,
-                "columns": obj.columns,
+                "columns": list(obj.columns),
                 "unique": obj.unique,
             },
-            identity=("columns", "unique"),
+            # The access method is part of what an index *is*: a btree and a hash
+            # index on one column are two indexes, and were one to this module
+            # while it never read `USING`.
+            identity=("columns", "unique", "method"),
+            compared=("method",),
         )
 
     def _compare_foreign_keys(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped foreign keys."""
         return self._compare_named_objects(
-            old=old_table.foreign_keys,
-            new=new_table.foreign_keys,
+            old=list(old_table.constraints_of("foreign_key")),
+            new=list(new_table.constraints_of("foreign_key")),
             add_type="ADD_FOREIGN_KEY",
             drop_type="DROP_FOREIGN_KEY",
             table=old_table.qualified,
             detail_fn=lambda obj: {
-                "name": obj.name,
-                "columns": obj.columns,
-                "ref_table": obj.ref_table,
-                "ref_columns": obj.ref_columns,
-                "on_delete": obj.on_delete,
-                "on_update": obj.on_update,
+                key: value for key, value in _foreign_key_detail(obj).items() if key != "kind"
             },
             identity=("columns", "ref_table", "ref_columns"),
         )
@@ -1146,8 +705,8 @@ class SchemaDiffer:
     def _compare_check_constraints(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped check constraints."""
         return self._compare_named_objects(
-            old=old_table.check_constraints,
-            new=new_table.check_constraints,
+            old=list(old_table.constraints_of("check")),
+            new=list(new_table.constraints_of("check")),
             add_type="ADD_CHECK_CONSTRAINT",
             drop_type="DROP_CHECK_CONSTRAINT",
             table=old_table.qualified,
@@ -1166,12 +725,12 @@ class SchemaDiffer:
     def _compare_unique_constraints(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped unique constraints."""
         return self._compare_named_objects(
-            old=old_table.unique_constraints,
-            new=new_table.unique_constraints,
+            old=list(old_table.constraints_of("unique")),
+            new=list(new_table.constraints_of("unique")),
             add_type="ADD_UNIQUE_CONSTRAINT",
             drop_type="DROP_UNIQUE_CONSTRAINT",
             table=old_table.qualified,
-            detail_fn=lambda obj: {"name": obj.name, "columns": obj.columns},
+            detail_fn=lambda obj: {"name": obj.name, "columns": list(obj.columns)},
             identity=("columns",),
         )
 
@@ -1337,35 +896,3 @@ class SchemaDiffer:
             return len(common_chars) / len(name1_chars | name2_chars)
 
         return 0.0
-
-
-def _enum_value(value: Any) -> int | None:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _qualified_parts(names: Any) -> tuple[str | None, str]:
-    parts = [str(getattr(part, "sval", part)) for part in names or []]
-    return (parts[-2] if len(parts) >= 2 else None), parts[-1]
-
-
-def _enum_type_from_stmt(stmt: Any) -> EnumType:
-    schema, name = _qualified_parts(stmt.typeName)
-    return EnumType(name=name, schema=schema, values=[v.sval for v in stmt.vals or []])
-
-
-def _sequence_from_stmt(stmt: Any) -> Sequence:
-    options: dict[str, Any] = {}
-    for opt in stmt.options or []:
-        arg = getattr(opt, "arg", None)
-        options[opt.defname] = getattr(arg, "ival", None) if arg is not None else None
-    return Sequence(
-        name=stmt.sequence.relname,
-        schema=stmt.sequence.schemaname,
-        start=options.get("start", 1) if options.get("start") is not None else 1,
-        increment=options.get("increment", 1) if options.get("increment") is not None else 1,
-        min_value=options.get("minvalue"),
-        max_value=options.get("maxvalue"),
-    )

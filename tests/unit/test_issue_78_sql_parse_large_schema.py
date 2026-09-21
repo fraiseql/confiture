@@ -9,7 +9,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from confiture.core.differ import SchemaDiffer
-from confiture.models.schema import ColumnType
 
 
 class TestLargeSchemaDoesNotCrash:
@@ -108,23 +107,23 @@ class TestPglastParser:
         tbl = result.tables[0]
         assert tbl.name == "products"
 
-        id_col = tbl.get_column("id")
+        id_col = tbl.column("id")
         assert id_col is not None
         assert id_col.primary_key is True
 
-        sku_col = tbl.get_column("sku")
+        sku_col = tbl.column("sku")
         assert sku_col is not None
-        assert sku_col.nullable is False
-        assert sku_col.type == ColumnType.VARCHAR
-        assert sku_col.length == 100
+        assert sku_col.not_null is True
+        assert sku_col.type_key == "varchar(100)"
+        assert sku_col.raw_sql_type == "VARCHAR(100)"
 
-        price_col = tbl.get_column("price")
+        price_col = tbl.column("price")
         assert price_col is not None
         assert price_col.default is not None
 
-        desc_col = tbl.get_column("description")
+        desc_col = tbl.column("description")
         assert desc_col is not None
-        assert desc_col.nullable is True
+        assert desc_col.not_null is False
 
     def test_pglast_parses_if_not_exists(self):
         """CREATE TABLE IF NOT EXISTS is handled."""
@@ -158,8 +157,8 @@ class TestPglastParser:
 
         assert len(result.tables) == 1
         tbl = result.tables[0]
-        assert len(tbl.foreign_keys) == 1
-        fk = tbl.foreign_keys[0]
+        assert len(tbl.constraints_of("foreign_key")) == 1
+        fk = tbl.constraints_of("foreign_key")[0]
         assert fk.name == "fk_user"
         assert fk.ref_table == "users"
 
@@ -176,8 +175,8 @@ class TestPglastParser:
         result = differ.parse_schema(sql)
 
         tbl = result.tables[0]
-        assert len(tbl.check_constraints) == 1
-        assert tbl.check_constraints[0].name == "chk_price"
+        assert len(tbl.constraints_of("check")) == 1
+        assert tbl.constraints_of("check")[0].name == "chk_price"
 
     def test_pglast_parses_inline_unique_constraint(self):
         """Inline CONSTRAINT ... UNIQUE in CREATE TABLE body is captured."""
@@ -192,8 +191,8 @@ class TestPglastParser:
         result = differ.parse_schema(sql)
 
         tbl = result.tables[0]
-        assert len(tbl.unique_constraints) == 1
-        assert tbl.unique_constraints[0].name == "uq_email"
+        assert len(tbl.constraints_of("unique")) == 1
+        assert tbl.constraints_of("unique")[0].name == "uq_email"
 
     def test_pglast_handles_graceful_fallback_on_parse_error(self):
         """If pglast raises a parse error, fallback to sqlparse without crashing."""

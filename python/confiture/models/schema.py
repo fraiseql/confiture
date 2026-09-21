@@ -222,9 +222,11 @@ class Sequence:
 class ParsedSchema:
     """Result of parsing a full SQL DDL string."""
 
-    tables: list["Table"] = field(default_factory=list)
-    enum_types: list[EnumType] = field(default_factory=list)
-    sequences: list[Sequence] = field(default_factory=list)
+    #: ``core.schema_model`` Tables, EnumTypes and Sequences — typed loosely here
+    #: because ``models/`` imports nothing from ``core/``.
+    tables: list[Any] = field(default_factory=list)
+    enum_types: list[Any] = field(default_factory=list)
+    sequences: list[Any] = field(default_factory=list)
     #: The objects compared by definition rather than by structure (#288) —
     #: views, and in later phases everything else a schema tree defines. Keyed
     #: by what makes two ``CREATE`` statements the same object; the value

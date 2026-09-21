@@ -13,6 +13,8 @@ and the generator looked in the wrong field.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pglast
 
 from confiture.core.differ import SchemaDiffer
@@ -62,10 +64,11 @@ class TestAnAddedColumnKeepsItsDeclaration:
 
     def test_a_generated_column_reparses_to_the_column_declared(self) -> None:
         """The round trip, which no field-name assertion can fake."""
-        declared = SchemaDiffer().parse_schema(ONE_COLUMN[1]).tables[0].get_column("x")
+        declared = SchemaDiffer().parse_schema(ONE_COLUMN[1]).tables[0].column("x")
         sql = DifferSQLGenerator().generate_up(_change(*ONE_COLUMN, "ADD_COLUMN"))
         regenerated = SchemaDiffer().parse_schema(ONE_COLUMN[0] + "\n" + sql).tables[0]
-        assert regenerated.get_column("x") == declared
+        # `line` is where each text wrote it, not what it declares.
+        assert regenerated.column("x") == replace(declared, line=regenerated.column("x").line)
 
     def test_structured_details_still_win(self) -> None:
         """A hand-built change may carry the fields separately; that is the older
@@ -138,8 +141,8 @@ class TestADroppedTableIsRecreatedByItsDown:
     def test_the_recreated_table_keeps_its_constraints(self) -> None:
         sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, "DROP_TABLE"))
         restored = SchemaDiffer().parse_schema(self.DROPPED[1] + "\n" + sql).tables[1]
-        assert [(fk.columns, fk.ref_table) for fk in restored.foreign_keys] == [
-            (["pid"], "b.parent")
+        assert [(fk.columns, fk.ref_table) for fk in restored.constraints_of("foreign_key")] == [
+            (("pid",), "b.parent")
         ]
         assert [c.name for c in restored.columns if c.primary_key] == ["id"]
 

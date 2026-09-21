@@ -178,6 +178,14 @@ class Table:
     def qualified(self) -> str:
         return qualified_name(self.schema, self.name)
 
+    def column(self, folded: str) -> Column | None:
+        """The column the parser spells *folded*, or ``None``."""
+        return next((column for column in self.columns if column.folded == folded), None)
+
+    def constraints_of(self, kind: ConstraintKind) -> tuple[Constraint, ...]:
+        """The table's constraints of one kind, in the order the tree declared them."""
+        return tuple(constraint for constraint in self.constraints if constraint.kind == kind)
+
 
 @dataclass(frozen=True)
 class EnumType:

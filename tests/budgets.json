@@ -63,7 +63,7 @@
     "python/confiture/core/anonymization/strategies/credit_card.py": 4,
     "python/confiture/core/anonymization/strategies/differential_privacy.py": 3,
     "python/confiture/core/change_set/naming.py": 3,
-    "python/confiture/core/differ.py": 3,
+    "python/confiture/core/differ.py": 2,
     "python/confiture/core/dry_run.py": 1,
     "python/confiture/core/git_accompaniment.py": 1,
     "python/confiture/core/git_schema.py": 1,

@@ -63,7 +63,7 @@ class TestTheDifferKeepsTheDefinitionTheBuildKeeps:
             "CREATE TYPE e AS ENUM ('a');\nCREATE TYPE e AS ENUM ('b');\n"
             "CREATE SEQUENCE s;\nCREATE SEQUENCE IF NOT EXISTS s;"
         )
-        assert [e.values for e in parsed.enum_types] == [["a"]]
+        assert [e.values for e in parsed.enum_types] == [("a",)]
         assert len(parsed.sequences) == 1
         assert {w.message.split("'")[1] for w in parsed.warnings} == {"e", "s"}
 

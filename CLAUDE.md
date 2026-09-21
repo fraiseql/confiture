@@ -279,9 +279,10 @@ bounds the walk and the patterns filter what it found; nothing rewrites a
 pattern between what the YAML says and what the matcher sees.
 
 **One ALTER folder too** (since 1.11.0, #301). `core/ddl_walk.py` decides what a
-DDL statement does to the schema a tree declares, and two readers apply the
-verdict to object models that share nothing — the lint inventory (`confiture
-drift`'s expected side) and `SchemaDiffer` (`migrate diff`'s). `column_edit`
+DDL statement does to the schema a tree declares, and the lint inventory applies
+the verdict — `confiture drift`'s expected side, and since the schema model also
+`SchemaDiffer`'s, which reads the model the inventory builds rather than folding a
+model of its own. `column_edit`
 answers for one `AlterTableCmd`, `adds_primary_key` for the table-level flag, and
 `object_edits` for the statement kinds that are not `AlterTableStmt` at all:
 `DROP TABLE`, `ALTER TABLE … RENAME COLUMN`, `… RENAME TO` and `… SET SCHEMA` are
@@ -302,10 +303,10 @@ module asks (replica observability, risk tier, an `IF NOT EXISTS` guard, the
 object a finding names).
 
 The fold is **order-aware**, and that is not a detail:
-`DROP TABLE IF EXISTS x; CREATE TABLE x (…);` is everyday DDL and both readers
+`DROP TABLE IF EXISTS x; CREATE TABLE x (…);` is everyday DDL and the readers
 collect every `CREATE` before folding anything, so an order-blind fold deletes a
 table the tree really declares. Each compares the statement's offset against the
-object's. One reader folds less than the other on purpose: `objects_in` applies a
+object's. `ddl_objects` folds less than the inventory on purpose: `objects_in` applies a
 `DROP` and **not** a rename, because its two renderings are of the creating
 statement and rewriting `CREATE VIEW v` as `CREATE VIEW v2` is SQL generation, not
 parsing.

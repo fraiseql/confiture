@@ -53,7 +53,7 @@ def test_a_dropped_index_is_not_declared() -> None:
     parsed = SchemaDiffer().parse_schema(
         "CREATE TABLE t (a int); CREATE INDEX ix ON t (a); DROP INDEX ix;"
     )
-    assert parsed.tables[0].indexes == []
+    assert parsed.tables[0].indexes == ()
 
 
 def test_a_statement_naming_something_this_tree_never_created_changes_nothing() -> None:

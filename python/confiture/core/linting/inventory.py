@@ -16,7 +16,9 @@ which is what pglast reports.
 
 from __future__ import annotations
 
+import bisect
 import copy
+import functools
 import re
 from collections import defaultdict
 from collections.abc import Callable, Hashable, Iterable, Sequence
@@ -297,10 +299,27 @@ def identifier_at(sql: str, location: int | None, fallback: str) -> list[str]:
     return segments or [fallback]
 
 
+@functools.lru_cache(maxsize=8)
+def _newlines(sql: str) -> tuple[int, ...]:
+    """Where every newline in *sql* is. Cached: one text is asked for thousands of lines."""
+    positions: list[int] = []
+    position = sql.find("\n")
+    while position != -1:
+        positions.append(position)
+        position = sql.find("\n", position + 1)
+    return tuple(positions)
+
+
 def _line_of(sql: str, location: int | None) -> int:
+    """The 1-based line *location* falls on.
+
+    A binary search over the text's newlines, not a count from the start: every
+    object and column asks, so counting made reading a tree quadratic in its size
+    — a 2.9 MB schema spent 5 of its 11 seconds here.
+    """
     if location is None or location < 0:
         return 1
-    return sql.count("\n", 0, min(location, len(sql))) + 1
+    return bisect.bisect_left(_newlines(sql), min(location, len(sql))) + 1
 
 
 def _statement_offset(sql: str, raw: Any) -> int:
@@ -402,7 +421,15 @@ def _add_constraints(table: SchemaObject, constraints: Iterable[Constraint]) -> 
 
 
 def _append_column(sql: str, table: SchemaObject, node: Any) -> None:
+    """Add the column *node* declares, unless the table already holds one of that name.
+
+    A second ``ADD COLUMN a`` is what a database built from the tree never holds:
+    with ``IF NOT EXISTS`` PostgreSQL skips it, and without it the build fails at
+    that statement — so the column is the one declared first, either way.
+    """
     column, constraints = _column(sql, node)
+    if any(existing.folded == column.folded for existing in table.columns):
+        return
     table.columns.append(column)
     _add_constraints(table, constraints)
 
@@ -944,10 +971,14 @@ def _apply_comment(stmt: Any, inventory: Inventory) -> None:
         obj.comment = getattr(stmt, "comment", None)
 
 
-def build_inventory(sql: str) -> Inventory:
-    """Parse ``sql`` and collect its objects. Raises ``pglast.parser.ParseError``."""
+def build_inventory(sql: str, raws: Sequence[Any] | None = None) -> Inventory:
+    """Parse ``sql`` and collect its objects. Raises ``pglast.parser.ParseError``.
+
+    *raws* are ``sql``'s statements when the caller has parsed it already — the
+    differ parses once and hands the same statements to ``ddl_objects``.
+    """
     inventory = Inventory()
-    raws = list(pglast.parse_sql(sql) or [])
+    raws = list(pglast.parse_sql(sql) or []) if raws is None else list(raws)
     for raw in raws:
         obj = object_from_statement(sql, raw) or _schema_declaration(sql, raw)
         if obj is not None:
