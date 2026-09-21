@@ -117,7 +117,7 @@ This documentation provides everything you need to understand and use PostgreSQL
 
 **With COPY format:**
 ```bash
-confiture seed apply --sequential --copy-format --env local
+confiture seed apply --copy-format --env local
 ```
 
 **Documentation:**
@@ -158,7 +158,7 @@ seeds during `--sequential` but exposes no format control, so the COPY load is a
 second command.
 
 ```bash
-confiture seed apply --sequential --copy-format --database-url postgresql://localhost/myapp
+confiture seed apply --copy-format --database-url postgresql://localhost/myapp
 ```
 
 **Documentation:**
@@ -207,7 +207,7 @@ How many rows total? ───────────────────�
   ```
 - [ ] **If faster, use it:**
   ```bash
-  confiture seed apply --sequential --copy-format --env local
+  confiture seed apply --copy-format --env local
   ```
 - [ ] **Integrate into CI/CD** ([Example](copy-format-examples.md#scenario-3-cicd-pipeline))
 

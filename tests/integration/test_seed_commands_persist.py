@@ -66,16 +66,14 @@ def _rows(url: str) -> list[int]:
 
 
 def test_seed_apply_leaves_its_rows(project: Path, fresh_database: str) -> None:
-    result = runner.invoke(app, ["seed", "apply", "--sequential", "--env", "test"])
+    result = runner.invoke(app, ["seed", "apply", "--env", "test"])
 
     assert result.exit_code == 0, result.output
     assert _rows(fresh_database) == [1, 2]
 
 
 def test_seed_apply_json_is_the_whole_of_stdout(project: Path, fresh_database: str) -> None:
-    result = runner.invoke(
-        app, ["seed", "apply", "--sequential", "--env", "test", "--format", "json"]
-    )
+    result = runner.invoke(app, ["seed", "apply", "--env", "test", "--format", "json"])
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout)["succeeded"] == 2
@@ -84,7 +82,7 @@ def test_seed_apply_json_is_the_whole_of_stdout(project: Path, fresh_database: s
 def test_a_failing_seed_file_leaves_no_row(project: Path, fresh_database: str) -> None:
     (project / "db" / "seeds" / "02_second.sql").write_text("INSERT INTO widgets VALUES (1);\n")
 
-    result = runner.invoke(app, ["seed", "apply", "--sequential", "--env", "test"])
+    result = runner.invoke(app, ["seed", "apply", "--env", "test"])
 
     assert result.exit_code != 0, result.output
     assert _rows(fresh_database) == []
@@ -94,11 +92,17 @@ def test_continue_on_error_keeps_the_files_that_applied(project: Path, fresh_dat
     (project / "db" / "seeds" / "02_second.sql").write_text("INSERT INTO widgets VALUES (1);\n")
     (project / "db" / "seeds" / "03_third.sql").write_text("INSERT INTO widgets VALUES (3);\n")
 
-    result = runner.invoke(
-        app, ["seed", "apply", "--sequential", "--continue-on-error", "--env", "test"]
-    )
+    result = runner.invoke(app, ["seed", "apply", "--continue-on-error", "--env", "test"])
 
     assert _rows(fresh_database) == [1, 3], result.output
+
+
+def test_seed_apply_has_one_mode(project: Path, fresh_database: str) -> None:
+    """``--sequential`` was the only mode that applied anything (owner decision 14)."""
+    result = runner.invoke(app, ["seed", "apply", "--sequential", "--env", "test"])
+
+    assert result.exit_code == 2, result.output
+    assert _rows(fresh_database) == []
 
 
 def test_build_sequential_leaves_its_rows(project: Path, fresh_database: str) -> None:

@@ -349,14 +349,10 @@ def validate(
         fail(e, json_mode=is_json(format_), output_file=output)
 
 
-SequentialOpt = Annotated[
-    bool,
-    typer.Option("--sequential", help="Apply files sequentially, solves 650+ row parser limits"),
-]
 ContinueOnErrorOpt = Annotated[
     bool,
     typer.Option(
-        "--continue-on-error", help="Continue if file fails (--sequential only, useful for CI/CD)"
+        "--continue-on-error", help="Keep the files that apply when one fails (useful for CI/CD)"
     ),
 ]
 CopyFormatOpt = Annotated[
@@ -382,7 +378,6 @@ ProfileOpt = Annotated[
 def apply(
     seeds_dir: SeedsDirOpt = DEFAULT_SEEDS_DIR,
     env: str = env_option(DEFAULT_ENV),
-    sequential: SequentialOpt = False,
     continue_on_error: ContinueOnErrorOpt = False,
     database_url: str | None = database_url_option(
         help="Database URL (overrides environment config)"
@@ -401,23 +396,24 @@ def apply(
     """Load seed data into the database.
 
     PROCESS:
-      Applies seed files with optional sequential execution and COPY format.
-      Sequential mode solves PostgreSQL's 650+ row parser limit. COPY format
-      provides 2-10x faster loading for large datasets.
+      Applies each seed file in order, in one transaction with a savepoint
+      per file, so no file meets PostgreSQL's 650+ row parser limit that a
+      concatenated script does. COPY format provides 2-10x faster loading for
+      large datasets. A failed file rolls the run back, unless
+      --continue-on-error keeps the files that applied.
 
     COMMON USAGE:
 
-      📌 Development (small seeds < 5K rows):
-        confiture seed apply --env local --sequential
+      📌 Development:
+        confiture seed apply --env local
 
       ⚡ Testing (large seeds > 50K rows):
-        confiture seed apply --sequential --copy-format --env test
+        confiture seed apply --copy-format --env test
 
       🚀 CI/CD (maximum speed):
-        confiture seed apply --sequential --copy-format --continue-on-error
+        confiture seed apply --copy-format --continue-on-error
 
     PERFORMANCE TIPS:
-      • Use --sequential if any file has 650+ rows
       • Use --copy-format if total rows > 50,000
       • Use `confiture seed benchmark` to compare VALUES vs COPY
 
@@ -433,8 +429,8 @@ def apply(
       📖 Examples: docs/guides/copy-format-examples.md
 
     OPTIONS:
-      EXECUTION: --sequential, --continue-on-error
-        Mode and error handling (sequential for 650+ rows)
+      EXECUTION: --continue-on-error
+        Keep the files that apply when one fails
 
       DATABASE: --env, --database-url
         Connection parameters (URL overrides environment)
@@ -445,11 +441,6 @@ def apply(
       OUTPUT: --format, --report
         Structured results (JSON/CSV for automation)
     """
-    if not sequential:
-        console.print("[yellow]ℹ Use --sequential for files with 500+ rows[/yellow]")
-        console.print(f"[yellow]  confiture seed apply --sequential --env {env}[/yellow]")
-        raise typer.Exit(SUCCESS)  # success-signal: advisory, nothing applied
-
     # Verify seeds directory exists
     if not seeds_dir.exists():
         fail(

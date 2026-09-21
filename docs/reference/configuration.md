@@ -396,7 +396,7 @@ seed:
 confiture build --sequential --database-url postgresql://localhost/mydb
 
 # Or explicitly
-confiture seed apply --sequential --env local
+confiture seed apply --env local
 ```
 
 **See [Sequential Seed Execution](../guides/sequential-seed-execution.md)** for complete guide.

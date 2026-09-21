@@ -2,7 +2,11 @@
 
 ## Overview
 
-Confiture supports **sequential seed file execution** to solve PostgreSQL's parser limitations when working with large seed files (650+ rows).
+`confiture seed apply` applies seed files **sequentially** — each on its own, in
+order — which is what solves PostgreSQL's parser limitations with large seed files
+(650+ rows). It is the only way `seed apply` works: until 1.16 the command did
+nothing without a `--sequential` flag, which is gone. `confiture build --sequential`
+opts into the same execution for the seeds a build selects.
 
 ### The Problem
 
@@ -31,13 +35,13 @@ Sequential execution applies each seed file **independently within its own savep
 
 ```bash
 # Apply seed files sequentially
-confiture seed apply --sequential --env local
+confiture seed apply --env local
 
 # With continue-on-error (skip failed files)
-confiture seed apply --sequential --continue-on-error
+confiture seed apply --continue-on-error
 
 # With explicit database URL
-confiture seed apply --sequential --database-url postgresql://localhost/mydb
+confiture seed apply --database-url postgresql://localhost/mydb
 ```
 
 #### Via `confiture build --sequential` (recommended for CI/CD)
@@ -146,7 +150,7 @@ INSERT INTO posts (user_id, title) VALUES (2, 'Second Post');
 Apply sequentially:
 
 ```bash
-$ confiture seed apply --sequential --env local
+$ confiture seed apply --env local
 
 → 01_users.sql ✓
 → 02_posts.sql ✓
@@ -169,7 +173,7 @@ INSERT INTO users (name, email) VALUES ('User2', 'user2@example.com');
 Apply with sequential mode:
 
 ```bash
-$ confiture seed apply --sequential --env local
+$ confiture seed apply --env local
 
 → 01_large.sql ✓
 
@@ -197,7 +201,7 @@ INSERT INTO posts (user_id, title) VALUES (1, 'Valid Post');
 Apply with continue-on-error:
 
 ```bash
-$ confiture seed apply --sequential --continue-on-error --env local
+$ confiture seed apply --continue-on-error --env local
 
 → 01_users.sql ✓
 → 02_bad.sql ✗ ERROR: insert or update on table "posts" violates foreign key constraint
@@ -256,8 +260,8 @@ Apply seed files to database.
 
 **Options:**
 
-- `--sequential`: Apply files sequentially instead of concatenating
-- `--continue-on-error`: Continue applying remaining files if one fails
+- `--continue-on-error`: Keep the files that applied when one fails (without it, a
+  failed file stops the run, and in the default `savepoint` mode rolls it back)
 - `--seeds-dir PATH`: Directory containing seed files (default: `db/seeds`)
 - `--env NAME`: Environment name (default: `local`)
 - `--database-url URL`: Database URL (overrides environment config)
@@ -266,22 +270,22 @@ Apply seed files to database.
 
 ```bash
 # Sequential execution
-confiture seed apply --sequential --env local
+confiture seed apply --env local
 
 # Sequential with continue-on-error
-confiture seed apply --sequential --continue-on-error --env local
+confiture seed apply --continue-on-error --env local
 
 # Custom seeds directory
-confiture seed apply --sequential --seeds-dir db/seeds/production --env production
+confiture seed apply --seeds-dir db/seeds/production --env production
 
 # Explicit database URL
-confiture seed apply --sequential --database-url postgresql://prod.example.com/myapp
+confiture seed apply --database-url postgresql://prod.example.com/myapp
 ```
 
 **Exit Codes:**
 
 - `0`: All seed files applied successfully
-- `1`: One or more files failed (or no `--sequential` flag used)
+- `1`: One or more files failed
 - `2`: Configuration error or database connection failed
 
 ## Troubleshooting
@@ -294,7 +298,7 @@ confiture seed apply --sequential --database-url postgresql://prod.example.com/m
 
 ```bash
 confiture build --env local
-confiture seed apply --sequential --env local
+confiture seed apply --env local
 ```
 
 ### "Foreign key constraint violation"
@@ -324,7 +328,7 @@ confiture seed apply --sequential --env local
 cat db/environments/local.yaml
 
 # Or use explicit URL
-confiture seed apply --sequential --database-url postgresql://localhost/myapp
+confiture seed apply --database-url postgresql://localhost/myapp
 ```
 
 ### "Transaction command not allowed"
@@ -371,7 +375,7 @@ For robust deployments, allow partial seeding:
 ```bash
 # CI/CD pipeline
 confiture build --env staging
-confiture seed apply --sequential --continue-on-error --env staging
+confiture seed apply --continue-on-error --env staging
 ```
 
 ### 4. Validate Before Production
@@ -380,10 +384,10 @@ Always test seed files in staging first:
 
 ```bash
 # Staging (test environment)
-confiture seed apply --sequential --env staging
+confiture seed apply --env staging
 
 # Production (only if staging passed)
-confiture seed apply --sequential --env production
+confiture seed apply --env production
 ```
 
 ### 5. Document Dependencies

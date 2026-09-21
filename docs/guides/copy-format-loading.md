@@ -57,10 +57,10 @@ Let Confiture automatically choose the best format based on dataset size:
 
 ```bash
 # Apply seeds with automatic format selection
-confiture seed apply --sequential --copy-format
+confiture seed apply --copy-format
 
 # Configure threshold (default: 1000 rows)
-confiture seed apply --sequential --copy-format --copy-threshold 500
+confiture seed apply --copy-format --copy-threshold 500
 ```
 
 **How it works:**
@@ -107,10 +107,10 @@ Use COPY format when building fresh databases:
 ```bash
 # Build the schema, then load the seeds as COPY
 confiture build --schema-only
-confiture seed apply --sequential --copy-format
+confiture seed apply --copy-format
 
 # Custom threshold
-confiture seed apply --sequential --copy-format --copy-threshold 500
+confiture seed apply --copy-format --copy-threshold 500
 ```
 
 ## Decision Tree: When to Use COPY
@@ -175,16 +175,15 @@ COMMIT
 - ✅ Atomic per-table (all rows or none)
 - ✅ Automatic rollback on error
 - ✅ Safe parallel execution
-- ✅ Compatible with `--sequential` mode
+- ✅ Applied file by file, like every `seed apply`
 
 ## Use Cases
 
 ### 1. Fresh Database Initialization (⭐ Recommended)
 
 ```bash
-# Build fresh database with COPY format (fastest)
-confiture build \
-  --sequential \
+# Load a fresh database's seeds as COPY (fastest), once its schema is applied
+confiture seed apply \
   --copy-format \
   --database-url postgresql://localhost/myapp_fresh
 ```
@@ -198,9 +197,8 @@ confiture build \
 ### 2. Large Seed Files (650+ rows)
 
 ```bash
-# Combine --sequential (parser limits) with --copy-format (speed)
+# File-by-file application (parser limits) with --copy-format (speed)
 confiture seed apply \
-  --sequential \
   --copy-format \
   --env production
 ```
@@ -214,8 +212,7 @@ confiture seed apply \
 
 ```bash
 # Fast, reliable seed loading for testing
-confiture build \
-  --sequential \
+confiture seed apply \
   --copy-format \
   --continue-on-error \
   --database-url $DATABASE_URL
@@ -235,7 +232,6 @@ confiture seed benchmark --seeds-dir db/seeds
 
 # If showing < 5x speedup, increase threshold
 confiture seed apply \
-  --sequential \
   --copy-format \
   --copy-threshold 2000
 ```
@@ -286,11 +282,10 @@ seed:
 ### CLI Options Reference
 
 ```bash
-confiture seed apply --sequential --copy-format [OPTIONS]
+confiture seed apply --copy-format [OPTIONS]
 
 --copy-format          # Enable COPY format conversion
 --copy-threshold N     # Row threshold for auto COPY (default: 1000)
---sequential           # Required for COPY format
 --continue-on-error    # Skip failed files and continue
 --env ENV              # Environment name
 --database-url URL     # Explicit database URL
@@ -392,7 +387,7 @@ INSERT INTO posts (user_id) SELECT id FROM user_ids;
 confiture seed benchmark --seeds-dir db/seeds
 
 # If no speedup, stick with VALUES
-confiture seed apply --sequential --env local
+confiture seed apply --env local
 ```
 
 ### Issue: "Unsupported data type in COPY"
@@ -407,7 +402,7 @@ COPY supports all PostgreSQL data types. If you see errors:
 # Test conversion first
 confiture seed convert --input small_test.sql
 # Then apply if successful
-confiture seed apply --sequential --copy-format
+confiture seed apply --copy-format
 ```
 
 ## Performance Tuning
@@ -419,8 +414,7 @@ confiture seed apply --sequential --copy-format
 # 2. Use sequential execution (isolates parser state)
 # 3. Adjust threshold based on your data
 
-confiture build \
-  --sequential \
+confiture seed apply \
   --copy-format \
   --copy-threshold 500 \
   --database-url postgresql://localhost/myapp_fresh
@@ -435,7 +429,6 @@ confiture seed benchmark --seeds-dir db/seeds
 
 # Adjust threshold to catch more tables
 confiture seed apply \
-  --sequential \
   --copy-format \
   --copy-threshold 500
 # OUTPUT: COPY 7.5x faster
@@ -458,14 +451,12 @@ Confiture automatically tunes batch sizes for optimal performance:
 .PHONY: db-setup db-seed
 
 db-setup:
-	confiture build \
-		--sequential \
+	confiture seed apply \
 		--copy-format \
 		--database-url postgresql://localhost/myapp
 
 db-seed:
 	confiture seed apply \
-		--sequential \
 		--copy-format \
 		--env local
 ```
@@ -478,8 +469,7 @@ FROM postgres:16-alpine
 COPY db/schema /schema
 COPY db/seeds /seeds
 
-CMD confiture build \
-      --sequential \
+CMD confiture seed apply \
       --copy-format \
       --database-url postgresql://postgres@localhost/myapp
 ```
@@ -505,10 +495,9 @@ jobs:
       - name: Install Confiture
         run: pip install fraiseql-confiture
 
-      - name: Build and seed database
+      - name: Load seeds as COPY
         run: |
-          confiture build \
-            --sequential \
+          confiture seed apply \
             --copy-format \
             --database-url postgresql://postgres:test@localhost/myapp_test
 ```

@@ -72,7 +72,7 @@ confiture build --database-url postgresql://localhost/myapp
 
 ### Command
 ```bash
-confiture seed apply --sequential --env local
+confiture seed apply --env local
 # or
 confiture build --sequential --database-url postgresql://localhost/myapp
 ```
@@ -122,9 +122,9 @@ seed:
 
 ### Command
 ```bash
-confiture seed apply --sequential --copy-format --env local
+confiture seed apply --copy-format --env local
 # or (recommended)
-confiture seed apply --sequential --copy-format \
+confiture seed apply --copy-format \
   --database-url postgresql://localhost/myapp
 ```
 
@@ -142,7 +142,7 @@ confiture seed apply --sequential --copy-format \
 ### Example
 ```bash
 # Maximum speed for large datasets
-confiture seed apply --sequential --copy-format \
+confiture seed apply --copy-format \
   --database-url postgresql://localhost/myapp
 
 # Output:
@@ -282,7 +282,7 @@ confiture build --sequential --database-url postgresql://localhost/myapp
 #### **Web Application**
 ```bash
 # Typical web app has 10-50K rows
-confiture seed apply --sequential --copy-format \
+confiture seed apply --copy-format \
   --database-url postgresql://localhost/myapp
 
 # Files:
@@ -309,7 +309,7 @@ confiture build --sequential --database-url $DATABASE_URL
 #### **Testing Suite**
 ```bash
 # CI/CD needs fast, reliable setup
-confiture seed apply --sequential --copy-format \
+confiture seed apply --copy-format \
   --continue-on-error \
   --database-url postgresql://localhost/test_db
 
@@ -331,7 +331,7 @@ confiture build --sequential --database-url postgresql://localhost/myapp
 ### Step 2: Add COPY Format (when speed matters)
 ```bash
 # If builds are slow:
-confiture seed apply --sequential --copy-format \
+confiture seed apply --copy-format \
   --database-url postgresql://localhost/myapp
 ```
 
@@ -401,7 +401,7 @@ Reason: Detected NOW() function in VALUES clause
 → **Solution:** That file stays as INSERT (automatic), others convert
 ```bash
 # Just continue - graceful fallback is automatic
-confiture seed apply --sequential --copy-format \
+confiture seed apply --copy-format \
   --database-url postgresql://localhost/myapp
 ```
 

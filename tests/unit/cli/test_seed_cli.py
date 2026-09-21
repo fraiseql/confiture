@@ -306,13 +306,3 @@ class TestSeedCliConfiguration:
         )
         # Help should show the default value
         assert "1000" in result.stdout or result.exit_code == 0
-
-    def test_accepts_environment_variable_override(
-        self, cli_runner: CliRunner, temp_seed_file: Path
-    ) -> None:
-        """Test that CLI respects environment variable overrides."""
-        with patch.dict("os.environ", {"CONFITURE_COPY_THRESHOLD": "500"}):
-            result = cli_runner.invoke(
-                seed_app, ["apply", "--seeds-dir", str(temp_seed_file.parent)]
-            )
-            assert result.exit_code == 0, result.output

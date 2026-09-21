@@ -273,10 +273,10 @@ def benchmark(
 
     NEXT STEPS:
       If speedup >= 5x:
-        confiture seed apply --sequential --copy-format
+        confiture seed apply --copy-format
 
       If speedup < 5x:
-        confiture seed apply --sequential
+        confiture seed apply
         (VALUES format is fast enough)
 
     RELATED COMMANDS:
@@ -295,9 +295,6 @@ def benchmark(
 
       Specific directory:
         $ confiture seed benchmark --seeds-dir db/seeds/test
-
-      With apply (simultaneous benchmark):
-        $ confiture seed apply --sequential --benchmark
     """
     try:
         if not seeds_dir.exists():

@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- ⚠️ **`seed apply` applies; `--sequential` is gone from it.** Without the flag the
+  command printed a hint and exited 0 having applied nothing, so `seed apply --env x`
+  in a script reported success over an empty database. Applying each file in order,
+  in one transaction with a savepoint per file, is now simply what it does (owner
+  decision 14); `--sequential` is refused, with no alias, as decision 3's flags were.
+  `build --sequential` is unchanged. Seven guides and `seed benchmark`'s help showed
+  the flag; they show the command.
 - ⚠️ **`migrate estimate` is gone; `migrate preflight --against` names the large tables
   instead.** The command had failed on every run since at least 0.49 — it built its
   estimator inside `with open_connection(…)` and read after the block closed the
@@ -209,8 +216,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **`seed apply --sequential`, `build --sequential` and `migrate rebuild --seed` leave
-  their rows in the database.** None did. The applier runs every file in its caller's
+- **`seed apply`, `build --sequential` and `migrate rebuild --seed` leave their rows in
+  the database.** None did. The applier runs every file in its caller's
   transaction (`seed.transaction_mode: savepoint`, the default) and none of the three
   callers committed it, so each reported its files applied and closed a connection
   that rolled them back — while a failed file *did* commit every file before it,
@@ -226,7 +233,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Applied 0 seed files". The applier now takes the build's own selection, in the
   build's order.
 - **A seed pass prints its progress on standard error under `--format json`.**
-  `seed apply --sequential --format json`, `build --sequential --format json` and
+  `seed apply --format json`, `build --sequential --format json` and
   `migrate rebuild --seed --format json` each printed the applier's per-file lines
   and summary ahead of the payload on standard output. The applier's own console is
   standard error unless a caller gives it one.
@@ -255,8 +262,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CREATE … FUNCTION [schema.]name(` with a regex, so an unqualified definition
   matched a stale overload in any schema; it now asks the inventory, where an
   unqualified name lives in the default schema (#313).
-- **`seed apply` without `--sequential` names the environment in its hint.** It
-  printed `--env {env}`.
+- **The docs guard reads a command written over several lines.** It matched each line
+  on its own, so no flag after a `\` continuation was ever checked; joined, it found
+  fifteen that do not exist — `build --copy-format`, `--copy-threshold` and
+  `--progress` in the COPY guides (the COPY load is `seed apply`'s, as the guides'
+  own index said), `migrate up --statement-timeout` in the runbook, and a PRD example
+  of `migrate schema-to-schema --from/--to/--execute`, which is
+  `migrate schema-to-schema migrate --source … --target … --mapping …`. A `$(…)` inside a command line runs another program, and its
+  flags are no longer read as confiture's.
 - **`migrate up --dry-run`'s `estimated_rows` is the touched table's own.** It asked
   for each table by its bare name, so `tenant.t` could be given `public.t`'s estimate,
   and a change to a column (`schema.table.column`) failed the name split and was

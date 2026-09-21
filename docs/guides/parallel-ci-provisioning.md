@@ -185,7 +185,7 @@ seed:
 ```
 
 ```bash
-confiture seed apply --sequential --env test --profile slim
+confiture seed apply --env test --profile slim
 confiture build --sequential --env test --seed-profile slim --dump db/generated/
 confiture test-db provision-template --env test --template app_tmpl --seed-profile slim
 ```

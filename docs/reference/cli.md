@@ -4136,8 +4136,7 @@ confiture seed apply [OPTIONS]
 |---|---|---|---|---|
 | `--seeds-dir` | - | path | `db/seeds` | Directory containing seed files (default: db/seeds) |
 | `--env` | `-e` | str | `local` | Environment name: reads db/environments/<name>.yaml (default: local) |
-| `--sequential` | - | Flag | off | Apply files sequentially, solves 650+ row parser limits |
-| `--continue-on-error` | - | Flag | off | Continue if file fails (--sequential only, useful for CI/CD) |
+| `--continue-on-error` | - | Flag | off | Keep the files that apply when one fails (useful for CI/CD) |
 | `--database-url` | `-d` | str | - | Database URL (overrides environment config) |
 | `--copy-format` | - | Flag | off | Use COPY format (2-10x faster for large datasets) |
 | `--copy-threshold` | - | int | `1000` | Row threshold for auto COPY (default: 1000, use >1000 rows) |

@@ -123,6 +123,21 @@ def code_regions(path: Path) -> list[str]:
     return regions
 
 
+_SUBSHELL = re.compile(r"\$\([^()]*\)")
+
+
+def logical_lines(region: str) -> list[str]:
+    """*region*'s lines with each shell ``\\`` continuation joined to the next.
+
+    A command written over several lines is one command: read line by line, every
+    flag after the first line was invisible, and a guide could document a flag
+    the command has not got as long as it put it on a line of its own.
+    """
+    joined = region.replace("\\\n", " ")
+    # A ``$(…)`` inside a command line runs another program; its flags are not ours.
+    return [_SUBSHELL.sub("", line) for line in joined.splitlines()]
+
+
 def invocations(files: list[Path]) -> list[Invocation]:
     """Every ``confiture …`` invocation in the code regions of *files*."""
     found: list[Invocation] = []
@@ -131,7 +146,7 @@ def invocations(files: list[Path]) -> list[Invocation]:
             continue
         rel = str(path.relative_to(REPO_ROOT))
         for region in code_regions(path):
-            for line in region.splitlines():
+            for line in logical_lines(region):
                 match = INVOCATION.match(line)
                 if not match:
                     continue

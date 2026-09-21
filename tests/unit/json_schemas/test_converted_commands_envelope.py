@@ -61,7 +61,7 @@ _CASES = [
         id="seed-validate-missing-dir",
     ),
     pytest.param(
-        ["seed", "apply", "--sequential", "--seeds-dir", "/no/such-dir", "--format", "json"],
+        ["seed", "apply", "--seeds-dir", "/no/such-dir", "--format", "json"],
         "CONFIG_004",
         id="seed-apply-missing-dir",
     ),

@@ -112,7 +112,6 @@ def test_seed_apply_copy_options_reach_the_applier(project: Path) -> None:
                 "apply",
                 "--seeds-dir",
                 str(seeds),
-                "--sequential",
                 "--copy-format",
                 "--copy-threshold",
                 "100",

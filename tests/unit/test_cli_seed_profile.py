@@ -58,7 +58,6 @@ class TestSeedApplyProfile:
             [
                 "seed",
                 "apply",
-                "--sequential",
                 "--env",
                 "local",
                 "--seeds-dir",
@@ -85,7 +84,6 @@ class TestSeedApplyProfile:
             [
                 "seed",
                 "apply",
-                "--sequential",
                 "--env",
                 "local",
                 "--seeds-dir",
