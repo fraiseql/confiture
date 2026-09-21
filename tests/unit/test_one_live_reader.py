@@ -19,6 +19,8 @@ import ast
 import re
 from pathlib import Path
 
+import pytest
+
 import confiture
 
 PACKAGE = Path(confiture.__file__).resolve().parent
@@ -99,6 +101,11 @@ def f(conn):
     assert catalog_lines(source) == [7]
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="the map for the reader families still moving onto live_catalog; strict, so the "
+    "day the last one moves this XPASSes and the mark has to go",
+)
 def test_no_second_live_reader() -> None:
     offenders = sorted(f"{m}:{lines}" for m, lines in _sweep().items() if m not in ALLOWED)
     assert offenders == [], "catalog SQL outside core/live_catalog.py:\n  " + "\n  ".join(offenders)

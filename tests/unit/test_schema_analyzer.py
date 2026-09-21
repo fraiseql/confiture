@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
+from confiture.core import live_catalog
 from confiture.core.schema_analyzer import (
     SchemaAnalyzer,
     SchemaInfo,
@@ -11,6 +12,7 @@ from confiture.core.schema_analyzer import (
     ValidationResult,
     ValidationSeverity,
 )
+from confiture.core.schema_model import SchemaModel
 
 
 class TestValidationIssue:
@@ -154,11 +156,11 @@ class TestSchemaAnalyzer:
         conn.cursor.return_value.__exit__ = Mock(return_value=False)
         return conn, cursor
 
-    def test_get_schema_info_caches(self, mock_connection):
+    def test_get_schema_info_caches(self, mock_connection, monkeypatch):
         """Test schema info is cached."""
-        conn, cursor = mock_connection
-        cursor.fetchall.return_value = []
-        cursor.description = []
+        conn, _cursor = mock_connection
+        # The live side is `live_catalog.read`'s; what is tested here is the cache.
+        monkeypatch.setattr(live_catalog, "read", lambda *_a, **_k: SchemaModel())
 
         analyzer = SchemaAnalyzer(conn)
 
@@ -169,11 +171,11 @@ class TestSchemaAnalyzer:
 
         assert info1 is info2
 
-    def test_get_schema_info_refresh(self, mock_connection):
+    def test_get_schema_info_refresh(self, mock_connection, monkeypatch):
         """Test schema info refresh."""
-        conn, cursor = mock_connection
-        cursor.fetchall.return_value = []
-        cursor.description = []
+        conn, _cursor = mock_connection
+        # The live side is `live_catalog.read`'s; what is tested here is the cache.
+        monkeypatch.setattr(live_catalog, "read", lambda *_a, **_k: SchemaModel())
 
         analyzer = SchemaAnalyzer(conn)
 
