@@ -209,6 +209,61 @@ def read_references(sql: str) -> ReferenceScan:
     return ReferenceScan(found, unread)
 
 
+def temp_relations(sql: str) -> frozenset[str]:
+    """The bare names of the relations a PL/pgSQL body in ``sql`` creates ``TEMP``.
+
+    They exist only while that body runs, so an analyser that resolves a body
+    against the built schema reports each one missing — the ``temp_table``
+    artefact ``body_003`` names (#354). Read from the same fragments
+    :func:`read_references` walks; a body that will not parse contributes nothing.
+    """
+    try:
+        raws = list(pglast.parse_sql(sql) or [])
+    except pglast.parser.ParseError:
+        return frozenset()
+    found: set[str] = set()
+    for raw in raws:
+        obj = object_from_statement(sql, raw)
+        if obj is None or obj.kind not in _ROUTINE_KINDS:
+            continue
+        language, body = routine_body(raw.stmt)
+        if language != "plpgsql" or body is None:
+            continue
+        at = _as_location(raw.stmt)
+        offset = raw.stmt_location or 0
+        try:
+            tree = plpgsql_parse.parse_body(
+                _statement_text(sql, raw), body_at=None if at is None else at - offset
+            ).tree
+        except (pglast.parser.ParseError, json.JSONDecodeError):
+            continue
+        for query, _line, dynamic in _fragments(tree, line=1, dynamic=False):
+            if not dynamic:
+                found.update(_created_temp(query))
+    return frozenset(found)
+
+
+def _created_temp(query: str) -> set[str]:
+    """What one fragment creates ``TEMP``: ``CREATE TEMP TABLE`` or ``… AS``."""
+    try:
+        statements = pglast.parse_sql(query) or []
+    except pglast.parser.ParseError:
+        return set()
+    created: set[str] = set()
+    for raw in statements:
+        stmt = raw.stmt
+        kind = type(stmt).__name__
+        if kind == "CreateStmt":
+            relation = getattr(stmt, "relation", None)
+        elif kind == "CreateTableAsStmt":
+            relation = getattr(getattr(stmt, "into", None), "rel", None)
+        else:
+            relation = None
+        if relation is not None and relation.relpersistence == "t":
+            created.add(relation.relname)
+    return created
+
+
 def referenced_objects(sql: str) -> list[Reference]:
     """Every object the routine and view bodies in ``sql`` name, in source order."""
     return read_references(sql).references

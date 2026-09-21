@@ -147,6 +147,7 @@ def _to_violation(violation: LintViolation) -> Violation:
         suggested_fix=violation.suggested_fix,
         file=violation.file_path,
         line=violation.line_number,
+        finding_class=violation.finding_class,
     )
 
 

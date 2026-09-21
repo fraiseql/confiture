@@ -30,6 +30,7 @@ import psycopg
 import psycopg.sql
 
 from confiture.core.linting import references
+from confiture.core.linting.rule_registry import BODY_CLASS_CODES
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 
 #: A body that will raise on its first call.
@@ -374,25 +375,83 @@ def _arity(signature: str | None) -> int:
     return 0 if not signature else signature.count(",") + 1
 
 
+#: The SQLSTATEs an artefact class is read from.
+_UNDEFINED_TABLE = "42P01"
+_UNDEFINED_FUNCTION = "42883"
+_NOT_IN_PREREQUISITE_STATE = "55000"
+
+#: How PostgreSQL words a relation it cannot find.
+_MISSING_RELATION = ('relation "', '" does not exist')
+
+#: The name each class is reported under.
+_CLASS_NAMES = {
+    "real": "Unresolved Body",
+    "temp_table": "Temp Table Artefact",
+    "record": "Record Artefact",
+    "dblink": "dblink Artefact",
+}
+
+
+def classify(diagnosis: Diagnosis, temp: frozenset[str]) -> str:
+    """``real``, or which artefact of the analysis a diagnosis is (#354).
+
+    Read from what PostgreSQL said, never guessed from the routine:
+
+    - ``temp_table`` — ``42P01`` on an unqualified relation that some analysed
+      body creates ``TEMP`` (*temp*): it exists only while that body runs, so an
+      analyser resolving against the built schema reports it forever;
+    - ``record`` — ``55000``, a RECORD whose assignment the analyser cannot see;
+    - ``dblink`` — ``42883`` on a ``dblink`` routine: the extension is absent
+      from the scratch database, so every call into it is undefined there.
+
+    Anything else that raises is ``real`` — a lead, not a verdict: confirming it
+    still means calling the routine in a rolled-back transaction.
+    """
+    message = diagnosis.message
+    if diagnosis.sqlstate == _UNDEFINED_TABLE:
+        head, tail = _MISSING_RELATION
+        name = message.removeprefix(head).removesuffix(tail)
+        if name != message and "." not in name and name.lower() in temp:
+            return "temp_table"
+    if (
+        diagnosis.sqlstate == _NOT_IN_PREREQUISITE_STATE
+        and message.startswith('record "')
+        and "is not assigned yet" in message
+    ):
+        return "record"
+    if diagnosis.sqlstate == _UNDEFINED_FUNCTION and "dblink" in message:
+        return "dblink"
+    return "real"
+
+
 def findings(
-    diagnoses: Iterable[Diagnosis], where: Mapping[tuple[str, str, int], Location]
+    diagnoses: Iterable[Diagnosis],
+    where: Mapping[tuple[str, str, int], Location],
+    *,
+    temp: frozenset[str] = frozenset(),
 ) -> list[LintViolation]:
-    """One finding per diagnosis, at the file line the routine's body puts it on."""
-    return [_finding(diagnosis, locate(where, diagnosis)) for diagnosis in diagnoses]
+    """One finding per diagnosis, at the file line the routine's body puts it on.
+
+    A diagnosis that raises is reported under its class's code (``body_001`` for
+    ``real``, ``body_003``–``body_005`` for an artefact); *temp* is the relations
+    the analysed bodies create ``TEMP`` (:func:`references.temp_relations`).
+    """
+    return [_finding(diagnosis, locate(where, diagnosis), temp) for diagnosis in diagnoses]
 
 
-def _finding(diagnosis: Diagnosis, at: Location | None) -> LintViolation:
-    raising = diagnosis.raises
+def _finding(diagnosis: Diagnosis, at: Location | None, temp: frozenset[str]) -> LintViolation:
+    finding_class = classify(diagnosis, temp) if diagnosis.raises else None
     return LintViolation(
-        rule_id=RULE_ID if raising else WARNING_RULE_ID,
-        rule_name="Unresolved Body" if raising else "Body Warning",
-        severity=RuleSeverity.WARNING if raising else RuleSeverity.INFO,
+        rule_id=WARNING_RULE_ID if finding_class is None else BODY_CLASS_CODES[finding_class],
+        rule_name="Body Warning" if finding_class is None else _CLASS_NAMES[finding_class],
+        severity=RuleSeverity.INFO if finding_class is None else RuleSeverity.WARNING,
         object_type=diagnosis.kind,
         object_name=diagnosis.identity,
         message=_message(diagnosis),
         file_path=None if at is None else at.file,
         line_number=None if at is None else at.at(diagnosis.body_line),
         suggested_fix=diagnosis.hint,
+        finding_class=finding_class,
     )
 
 

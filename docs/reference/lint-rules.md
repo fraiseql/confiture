@@ -40,6 +40,9 @@ Adopt a rule on a schema that already trips it with a
 | `tree_007` | tree | warning | off | An entry numbered like its siblings, or none of them numbered |
 | `tree_008` | tree | info | off | No status word in a file or directory name the build reads |
 | `body_001` | body | warning | off | A plpgsql body resolves against the schema it is built into |
+| `body_003` | body | warning | off | Analysis artefact: a body names a TEMP table only a running body creates |
+| `body_004` | body | warning | off | Analysis artefact: plpgsql_check cannot follow a RECORD variable's assignment |
+| `body_005` | body | warning | off | Analysis artefact: a body calls dblink, which the analysed database lacks |
 | `body_002` | body | info | off | A plpgsql body carries no unused variable or shadowed declaration |
 | `sec_002` | security-definer | warning | off | SECURITY DEFINER routines pin search_path (CVE-2018-1058) |
 <!-- END GENERATED -->
@@ -566,17 +569,36 @@ SQLSTATE and all — because confiture has nothing to add to it.
 This is not a second parser. confiture still reads DDL with pglast; PostgreSQL
 is consulted only for what a parser cannot know.
 
-| Code | What it reports | Severity |
-|------|-----------------|----------|
-| `body_001` | a diagnosis carrying a real SQLSTATE: the body raises on its first call | `warning` |
-| `body_002` | the analyser's own opinion about a body that works — an unused variable, a shadowed declaration | `info` |
+| Code | What it reports | Severity | JSON `class` |
+|------|-----------------|----------|--------------|
+| `body_001` | a diagnosis carrying a real SQLSTATE: the body raises on its first call | `warning` | `real` |
+| `body_003` | an artefact: `42P01` on an unqualified relation some analysed body creates `TEMP` — it exists only while that body runs | `warning` | `temp_table` |
+| `body_004` | an artefact: `55000`, `record "…" is not assigned yet` — the analyser cannot follow a RECORD's assignment | `warning` | `record` |
+| `body_005` | an artefact: `42883` on a `dblink` routine — the extension is absent from the scratch database | `warning` | `dblink` |
+| `body_002` | the analyser's own opinion about a body that works — an unused variable, a shadowed declaration | `info` | — |
 
-Both are opt-in and separately selectable, so a project can adopt the failures
-without the style opinions:
+Every code is opt-in and separately selectable, so a project can adopt the failures
+without the artefacts or the style opinions:
 
 ```bash
 confiture lint --select body_001 --server-url postgresql://localhost/postgres
 ```
+
+### A finding says what it is
+
+Most of what `plpgsql_check` reports on a real tree is an artefact of analysing a
+body statically — on one FraiseQL project, 132 of 177 findings (#354). A TEMP table
+a running body creates is invisible to an analyser by construction, and the same
+body reports it forever. Each such class is read from the diagnosis, never guessed,
+and reported under a code of its own, with the class in the JSON's `class`.
+
+That is what keeps a baseline honest: its entries are keyed per routine, so a
+routine baselined for an artefact under `body_001` would absorb every later real
+error on it. Under their own codes they cannot. A baseline taken before 1.16
+carries artefacts under `body_001`; they move to `body_003`–`body_005` once.
+
+A `real` finding is a lead, not a verdict: confirming it still means calling the
+routine in a rolled-back transaction.
 
 ### The extension is not in a stock PostgreSQL
 

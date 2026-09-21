@@ -114,6 +114,16 @@
                   "string",
                   "null"
                 ]
+              },
+              "class": {
+                "type": "string",
+                "enum": [
+                  "real",
+                  "temp_table",
+                  "record",
+                  "dblink"
+                ],
+                "description": "A `body` finding only (1.16.0, #354): `real` for a body that raises on its first call (`body_001`), or the artefact of the analysis it is — `temp_table` (`body_003`), `record` (`body_004`), `dblink` (`body_005`). Absent for every other rule."
               }
             }
           }

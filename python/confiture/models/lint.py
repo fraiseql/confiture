@@ -45,6 +45,8 @@ class Violation:
         line: 1-based line within ``file``, or ``None`` for the same reason.
             Never a line in the concatenated build: a line without a file is
             not a location.
+        finding_class: For a ``body`` finding, ``real`` or the analysis
+            artefact it is (#354); ``None``, and absent from the JSON, otherwise.
     """
 
     rule_name: str
@@ -55,6 +57,7 @@ class Violation:
     rule_id: str = ""
     file: str | None = None
     line: int | None = None
+    finding_class: str | None = None
 
     def __str__(self) -> str:
         """Format violation for human consumption."""
@@ -257,6 +260,7 @@ class LintReport:
                         "line": v.line,
                         "message": v.message,
                         "suggested_fix": v.suggested_fix,
+                        **({"class": v.finding_class} if v.finding_class else {}),
                     }
                     for v in self.violations
                 ],

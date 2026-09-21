@@ -101,10 +101,16 @@ class TestASkippedRuleIsReported:
         assert "body_001 did not run" in result.output
 
     def test_each_selected_body_rule_is_skipped_on_its_own(self, in_tmp: Path) -> None:
-        """Two codes, two entries: a project may adopt one and not the other."""
+        """One entry per code: a project may adopt one and not the others (#354)."""
         _project(in_tmp)
 
-        assert sorted(_skipped(_payload("body"))) == ["body_001", "body_002"]
+        assert sorted(_skipped(_payload("body"))) == [
+            "body_001",
+            "body_002",
+            "body_003",
+            "body_004",
+            "body_005",
+        ]
 
     def test_a_rule_nobody_selected_is_not_reported_as_skipped(self, in_tmp: Path) -> None:
         """A run that never asked for the body rules is not a run that lost them."""

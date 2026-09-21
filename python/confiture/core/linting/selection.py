@@ -25,6 +25,7 @@ from confiture.core.linting.inventory import label_for
 from confiture.core.linting.libraries.generate import TREE_RULE_CODES, tree_violations
 from confiture.core.linting.libraries.security_definer import Sec002SecurityDefinerSearchPath
 from confiture.core.linting.rule_registry import (
+    ARTEFACT_CODES,
     DEFAULT_SELECTOR,
     LINT_RULES,
     resolve_selection,
@@ -87,6 +88,7 @@ def linter_config(
         check_qualification_relations="qual_002" in selected,
         check_bodies="body_001" in selected,
         check_body_warnings="body_002" in selected,
+        check_body_classes=selected & ARTEFACT_CODES,
         server_url=server_url,
     )
 
