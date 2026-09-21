@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`MigratorSession.up` hands the apply loop one `UpOptions`.** `up()` keeps its
+  seventeen keyword parameters — fraisier and printoptim call them, and
+  `tests/contract/` pins the shapes — but the chain below it forwarded each by name
+  through three functions, where one dropped in any of them was silently ignored.
+  `test_one_session_signature.py` reads through the options object: every keyword
+  `up()` accepts is a field, and every field is given one. `apply_loop.py` no longer
+  has a function over `max-args`.
 - **Opening a connection knows nothing about migrations.** `load_migration_class`,
   `load_migration_module` and `get_migration_class` move from `core.connection` to
   `core._migrator.loader`, and `core.connection` no longer imports the migration models

@@ -25,7 +25,6 @@
     "python/confiture/cli/coordinate.py": 1,
     "python/confiture/cli/seed.py": 2,
     "python/confiture/cli/sync.py": 1,
-    "python/confiture/core/_migrator/apply_loop.py": 2,
     "python/confiture/core/_migrator/session.py": 1,
     "python/confiture/core/linting/schema_linter.py": 1,
     "python/confiture/core/migration_grant_extractor.py": 1
