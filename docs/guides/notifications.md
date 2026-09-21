@@ -31,7 +31,7 @@ To verify the configuration before a real migration:
 confiture hooks test --env production
 ```
 
-The command fires a synthetic event through the configured hook with `StdoutTransport` swapped in by default — you see exactly what would be sent, with no external service contacted. Pass `--no-dry-run` once you trust the setup.
+The command fires a synthetic event through the configured hook with `StdoutTransport` swapped in by default — you see exactly what would be sent, with no external service contacted. Pass `--mode send` once you trust the setup.
 
 ---
 
@@ -267,7 +267,7 @@ confiture hooks test --env production
 confiture hooks test --env production --id prod-slack
 
 # Actually send through the real transport
-confiture hooks test --env production --id prod-slack --no-dry-run
+confiture hooks test --env production --id prod-slack --mode send
 ```
 
 ---

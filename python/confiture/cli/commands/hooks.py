@@ -2,11 +2,10 @@
 
 Currently exposes a single command:
 
-* ``confiture hooks test [--id <id>] [--no-dry-run]`` — fire a synthetic
-  notification through one configured hook.  Default is ``--dry-run``
-  (the real transport is swapped for :class:`StdoutTransport` so no
-  external service is contacted).  Pass ``--no-dry-run`` to call the
-  real transport.
+* ``confiture hooks test [--id <id>] [--mode plan|send]`` — fire a synthetic
+  notification through one configured hook.  The default mode, ``plan``,
+  swaps the real transport for :class:`StdoutTransport` so no external
+  service is contacted.  ``--mode send`` calls the real transport.
 
 The command reads the ``notifications:`` block from the environment YAML
 indicated by ``--config`` (or ``--env``), validates it via the same
@@ -26,7 +25,7 @@ import yaml
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _resolve_config, console
-from confiture.cli.options import CONFITURE_YAML, config_option, env_option
+from confiture.cli.options import CONFITURE_YAML, config_option, env_option, mode_option
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.notifications.config import load_notifications_config
 from confiture.core.hooks.notifications.factory import from_config
@@ -102,14 +101,11 @@ def hooks_test(
         "--id",
         help="Hook id to test (required when multiple hooks configured)",
     ),
-    no_dry_run: bool = typer.Option(
-        False,
-        "--no-dry-run",
-        help=(
-            "Send through the real transport.  Default is dry-run — the "
-            "configured transport is swapped for StdoutTransport so no "
-            "external service is contacted."
-        ),
+    mode: str = mode_option(
+        "plan",
+        "send",
+        help="plan: render the notification to stdout, contacting nothing; "
+        "send: deliver it through the hook's real transport",
     ),
 ) -> None:
     """Fire a synthetic notification through one configured hook."""
@@ -151,14 +147,14 @@ def hooks_test(
 
     hook = from_config(chosen, allow_templated_renderers=root_cfg.allow_templated_renderers)
 
-    if not no_dry_run:
+    if mode == "plan":
         # Default path — swap to StdoutTransport so the real service is not
         # contacted.  The renderer is unchanged so the user sees exactly
         # what would be sent.
         hook.transport = StdoutTransport()
         console.print(
-            f"[cyan]🔍 Dry-run for hook {chosen.id!r} "
-            "(transport swapped to stdout).  Pass --no-dry-run to send for real.[/cyan]"
+            f"[cyan]🔍 Plan for hook {chosen.id!r} "
+            "(transport swapped to stdout).  Pass --mode send to send for real.[/cyan]"
         )
     else:
         console.print(

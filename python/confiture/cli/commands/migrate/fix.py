@@ -47,7 +47,7 @@ def migrate_fix(
         False,
         "--force",
         help=(
-            "With --ownership --apply: rewrite migration files even when "
+            "With --ownership: rewrite migration files even when "
             "their checksum is already recorded in the local tracking table.  "
             "Use with care — downstream `migrate verify` will report drift."
         ),

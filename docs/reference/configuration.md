@@ -722,7 +722,7 @@ Generated from `confiture.config.environment`; the description is the model's ow
 | `apply_to` | list[[OwnershipApplyTo](#ownershipapplyto)] | **required** | Per-schema scope entries (which relkinds to check). |
 | `ignore` | list[str] | `[]` | Object-path globs that opt specific relations out of both static lint and runtime drift detection. |
 | `lint_enabled` | bool | `true` | Master switch for the static ``own_001`` rule. |
-| `bootstrap_connection_url` | str \| NoneType | - | Optional superuser URL used by ``confiture bootstrap`` (issue #137). Required for ``--apply`` because ``CREATE ROLE`` and ``REASSIGN OWNED`` both need superuser. Falls back to the env's main URL only when the user passes the explicit override; we never guess. Supports ``${VAR}`` expansion at load time. |
+| `bootstrap_connection_url` | str \| NoneType | - | Optional superuser URL used by ``confiture bootstrap`` (issue #137). Required for ``--mode apply`` because ``CREATE ROLE`` and ``REASSIGN OWNED`` both need superuser. Falls back to the env's main URL only when the user passes the explicit override; we never guess. Supports ``${VAR}`` expansion at load time. |
 | `default_privileges` | dict[str, dict[str, list[str]]] \| NoneType | - | Mapping of ``schema -> role -> [PRIVILEGE, ...]`` used to plan ``ALTER DEFAULT PRIVILEGES`` statements in ``confiture bootstrap`` (issue #137 part 1). ``None`` means the bootstrap step is skipped with a one-line notice. Privilege strings are validated against the standard PostgreSQL allow-list. |
 
 #### `OwnershipApplyTo`

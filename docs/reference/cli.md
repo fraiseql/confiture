@@ -2882,7 +2882,7 @@ confiture migrate fix [OPTIONS]
 | `--idempotent` | - | Flag | off | Fix non-idempotent SQL statements (default: off) |
 | `--ownership` | - | Flag | off | Insert missing `ALTER … OWNER TO <expected_owner>` after each CREATE that lacks one. Requires an `ownership:` block in the config. |
 | `--config` | `-c` | path | - | Config file (needed for --ownership; defaults to confiture.yaml) |
-| `--force` | - | Flag | off | With --ownership --apply: rewrite migration files even when their checksum is already recorded in the local tracking table. Use with care — downstream `migrate verify` will report drift. |
+| `--force` | - | Flag | off | With --ownership: rewrite migration files even when their checksum is already recorded in the local tracking table. Use with care — downstream `migrate verify` will report drift. |
 | `--dry-run` | - | Flag | off | Preview changes without modifying files (default: off) |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--output` | `-o` | path | - | Write the output to this file instead of stdout |
@@ -2910,7 +2910,7 @@ confiture migrate fix-signatures [OPTIONS]
 | `--schema` | - | path | - | Schema SQL file containing the authoritative function definitions. If omitted, schema is auto-built from DDL files. |
 | `--schemas` | - | str | - | Comma-separated list of schemas to inspect. Defaults to the schemas the source declares, which is what --check-live-drift derives from the same DDL. |
 | `--ssh` | - | str | - | Open an SSH tunnel before connecting: user@host or host. Overrides the ssh_tunnel block in the config file. |
-| `--apply` | - | Flag | off | Execute the fixes in a single transaction. Default is dry-run: print the SQL and exit without changing the DB. |
+| `--mode` | - | str | `plan` | plan: print the DROP + CREATE SQL and change nothing; apply: execute every fix in one transaction (default: plan) |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 | `--output` | `-o` | path | - | Write the output to this file instead of stdout |
 | `--check-body` | - | Flag | off | Also detect and fix function body drift (same signature, different body). Runs CREATE OR REPLACE from source for each drifted function — no DROP needed. |
@@ -3198,9 +3198,7 @@ confiture bootstrap [OPTIONS]
 |---|---|---|---|---|
 | `--config` | `-c` | path | `confiture.yaml` | Configuration file (default: confiture.yaml); --env reads db/environments/<name>.yaml |
 | `--env` | `-e` | str | - | Environment name: reads db/environments/<name>.yaml, instead of --config |
-| `--check` / `--no-check` | - | Flag | on | Read-only: report drift; exit 1 if drift exists. Default mode. |
-| `--dry-run` | - | Flag | off | Print the SQL that --apply would run; no side effects. |
-| `--apply` | - | Flag | off | Execute the bootstrap plan against the database. |
+| `--mode` | - | str | `check` | check: report drift, exit 1 if any; plan: print the SQL apply would run; apply: execute it (default: check) |
 | `--all-schemas` | - | Flag | off | Authorize `REASSIGN OWNED` across schemas outside `ownership.apply_to`. Required when postgres-owned objects exist in non-scoped schemas. Use during maintenance windows. |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
@@ -3986,7 +3984,7 @@ confiture hooks test [OPTIONS]
 | `--config` | `-c` | path | `confiture.yaml` | Configuration file (default: confiture.yaml); --env reads db/environments/<name>.yaml |
 | `--env` | `-e` | str | - | Environment name: reads db/environments/<name>.yaml, instead of --config |
 | `--id` | - | str | - | Hook id to test (required when multiple hooks configured) |
-| `--no-dry-run` | - | Flag | off | Send through the real transport. Default is dry-run — the configured transport is swapped for StdoutTransport so no external service is contacted. |
+| `--mode` | - | str | `plan` | plan: render the notification to stdout, contacting nothing; send: deliver it through the hook's real transport (default: plan) |
 
 <!-- END GENERATED: cli confiture hooks test -->
 

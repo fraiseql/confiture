@@ -115,7 +115,7 @@ def test_bootstrap_apply_then_migrate_with_superuser_halt_and_apply_as(
     # #137 — bootstrap --apply provisions the migrator role.
     boot = runner.invoke(
         app,
-        ["bootstrap", "--apply", "--all-schemas", "--config", str(cfg)],
+        ["bootstrap", "--mode", "apply", "--all-schemas", "--config", str(cfg)],
     )
     assert boot.exit_code == 0, boot.output
 

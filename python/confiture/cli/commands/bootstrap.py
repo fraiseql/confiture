@@ -1,20 +1,21 @@
 """``confiture bootstrap`` — one-shot environment ownership setup (issue #137).
 
-Three modes:
+Three modes, chosen with ``--mode``:
 
-- ``--check`` (default): report drift; exit 0 if clean, exit 1 if drift
-  exists, exit 2 on fatal error.  Read-only.
-- ``--dry-run``: print the exact SQL that ``--apply`` would run; no
-  side effects.
-- ``--apply``: execute.  Refuses to proceed without ``--all-schemas``
+- ``check`` (default): report drift; exit 0 if clean, exit 1 if drift
+  exists.  Read-only.
+- ``plan``: print the exact SQL that ``apply`` would run; no side effects.
+  Its JSON payload keeps ``"mode": "dry-run"``, the value it carried before
+  the flag was renamed.
+- ``apply``: execute.  Refuses to proceed without ``--all-schemas``
   if ``REASSIGN OWNED`` would affect schemas outside
   ``ownership.apply_to``.
 
 Connection requirement
 ======================
 All three modes connect with
-``ownership.bootstrap_connection_url``.  Required for ``--apply``
-because every step needs superuser; ``--check`` and ``--dry-run`` also
+``ownership.bootstrap_connection_url``.  Required for ``apply``
+because every step needs superuser; ``check`` and ``plan`` also
 need it because the planner reads from pg_catalog with permissions
 that the regular migrator role typically lacks.
 
@@ -33,7 +34,13 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, is_json
-from confiture.cli.options import CONFITURE_YAML, config_option, env_option, format_option
+from confiture.cli.options import (
+    CONFITURE_YAML,
+    config_option,
+    env_option,
+    format_option,
+    mode_option,
+)
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
 from confiture.core.connection import load_config
@@ -46,20 +53,12 @@ from confiture.exceptions import BootstrapError, BootstrapScopeError, Configurat
 def bootstrap(
     config: Path = config_option(CONFITURE_YAML),
     env: str | None = env_option(None),
-    check: bool = typer.Option(
-        True,
-        "--check/--no-check",
-        help="Read-only: report drift; exit 1 if drift exists.  Default mode.",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Print the SQL that --apply would run; no side effects.",
-    ),
-    apply_mode: bool = typer.Option(
-        False,
-        "--apply",
-        help="Execute the bootstrap plan against the database.",
+    mode: str = mode_option(
+        "check",
+        "plan",
+        "apply",
+        help="check: report drift, exit 1 if any; plan: print the SQL apply would run; "
+        "apply: execute it",
     ),
     all_schemas: bool = typer.Option(
         False,
@@ -85,17 +84,17 @@ def bootstrap(
       the environment matches the desired state.
 
     EXAMPLES:
-      confiture bootstrap --check --env production
+      confiture bootstrap --env production
         ↳ Report whether bootstrap is needed; exit 1 if drift exists.
 
-      confiture bootstrap --dry-run --env production
-        ↳ Print the SQL --apply would run.
+      confiture bootstrap --mode plan --env production
+        ↳ Print the SQL --mode apply would run.
 
-      confiture bootstrap --apply --env production --all-schemas
+      confiture bootstrap --mode apply --env production --all-schemas
         ↳ Execute the plan, authorizing database-wide REASSIGN OWNED.
 
     SAFETY:
-      - --apply refuses to proceed without --all-schemas when postgres
+      - --mode apply refuses to proceed without --all-schemas when postgres
         owns objects in schemas outside `ownership.apply_to`.
       - REASSIGN OWNED takes AccessExclusiveLock; run during a maintenance
         window.
@@ -115,22 +114,6 @@ def bootstrap(
             ),
             json_mode=json_mode,
         )
-
-    # Resolve mode: --apply and --dry-run override --check.
-    if apply_mode and dry_run:
-        fail(ConfigurationError("Cannot combine --apply with --dry-run"), json_mode=json_mode)
-    if not check and not apply_mode and not dry_run:
-        fail(
-            ConfigurationError(
-                "Nothing to do: --no-check without --dry-run or --apply.",
-                resolution_hint=(
-                    "Pass --check (the default) to report drift, --dry-run to print the "
-                    "plan, or --apply to execute it."
-                ),
-            ),
-            json_mode=json_mode,
-        )
-    mode = "apply" if apply_mode else "dry-run" if dry_run else "check"
 
     config_data = load_config(config)
     ownership = load_ownership_expectation(config_data, config, require=True)
@@ -185,7 +168,7 @@ def bootstrap(
                 raise typer.Exit(SUCCESS)  # success-signal: no drift
             raise typer.Exit(FINDINGS)  # success-signal: drift detected
 
-        if mode == "dry-run":
+        if mode == "plan":
             _render_dry_run(plan, output_format)
             raise typer.Exit(SUCCESS)  # success-signal: plan rendered, no side effects
 
@@ -219,7 +202,8 @@ def _render_check(plan, output_format: str) -> None:
     for step in plan.steps:
         console.print(f"  • [bold]{step.label}[/bold]: {step.description}")
     console.print(
-        "[dim]Run `confiture bootstrap --dry-run` to see the SQL, then `--apply` to execute.[/dim]"
+        "[dim]Run `confiture bootstrap --mode plan` to see the SQL, then `--mode apply` to "
+        "execute it.[/dim]"
     )
 
 

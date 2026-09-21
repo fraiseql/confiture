@@ -47,7 +47,7 @@ def _write_env_config(tmp_path: Path, db_url: str) -> Path:
 def test_check_exits_1_when_drift_exists(bootstrap_db: str, tmp_path: Path) -> None:
     """`bootstrap --check` exits 1 when the migrator role is missing."""
     cfg = _write_env_config(tmp_path, bootstrap_db)
-    result = CliRunner().invoke(app, ["bootstrap", "--check", "--config", str(cfg)])
+    result = CliRunner().invoke(app, ["bootstrap", "--mode", "check", "--config", str(cfg)])
     assert result.exit_code == 1, result.output
     assert "drift" in result.output.lower()
     assert "create_role" in result.output
@@ -58,18 +58,18 @@ def test_apply_then_check_exits_0(bootstrap_db: str, tmp_path: Path) -> None:
     cfg = _write_env_config(tmp_path, bootstrap_db)
     runner = CliRunner()
     apply_result = runner.invoke(
-        app, ["bootstrap", "--apply", "--all-schemas", "--config", str(cfg)]
+        app, ["bootstrap", "--mode", "apply", "--all-schemas", "--config", str(cfg)]
     )
     assert apply_result.exit_code == 0, apply_result.output
     assert "applied" in apply_result.output.lower()
 
-    check_result = runner.invoke(app, ["bootstrap", "--check", "--config", str(cfg)])
+    check_result = runner.invoke(app, ["bootstrap", "--mode", "check", "--config", str(cfg)])
     assert check_result.exit_code == 0, check_result.output
 
 
-def test_dry_run_prints_sql(bootstrap_db: str, tmp_path: Path) -> None:
+def test_plan_prints_sql(bootstrap_db: str, tmp_path: Path) -> None:
     cfg = _write_env_config(tmp_path, bootstrap_db)
-    result = CliRunner().invoke(app, ["bootstrap", "--dry-run", "--config", str(cfg)])
+    result = CliRunner().invoke(app, ["bootstrap", "--mode", "plan", "--config", str(cfg)])
     assert result.exit_code == 0, result.output
     assert "CREATE ROLE" in result.output
 
@@ -77,7 +77,7 @@ def test_dry_run_prints_sql(bootstrap_db: str, tmp_path: Path) -> None:
 def test_check_emits_json(bootstrap_db: str, tmp_path: Path) -> None:
     cfg = _write_env_config(tmp_path, bootstrap_db)
     result = CliRunner().invoke(
-        app, ["bootstrap", "--check", "--config", str(cfg), "--format", "json"]
+        app, ["bootstrap", "--mode", "check", "--config", str(cfg), "--format", "json"]
     )
     assert result.exit_code == 1, result.output
     payload = json.loads(result.stdout)
@@ -101,7 +101,7 @@ def test_config_without_bootstrap_url_exits_2(bootstrap_db: str, tmp_path: Path)
             """
         )
     )
-    result = CliRunner().invoke(app, ["bootstrap", "--check", "--config", str(cfg)])
+    result = CliRunner().invoke(app, ["bootstrap", "--mode", "check", "--config", str(cfg)])
     # Missing bootstrap_connection_url is a config error → exit 5, not the
     # reserved exit 2 (tracking table absent).
     assert result.exit_code == 5, result.output

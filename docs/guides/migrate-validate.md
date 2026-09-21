@@ -619,8 +619,8 @@ hash-only for back-compatibility:
 ```
 
 To re-apply the source body over the live drift, use
-`confiture migrate fix-signatures --check-body --apply` (dry-run without
-`--apply`).
+`confiture migrate fix-signatures --check-body --mode apply` (the default, `--mode
+plan`, prints the SQL and changes nothing).
 
 ## `--check-body-views`
 

@@ -27,6 +27,7 @@ from confiture.cli.options import (
     config_option,
     env_option,
     format_option,
+    mode_option,
     output_option,
 )
 from confiture.config.environment import SshTunnelConfig
@@ -82,14 +83,6 @@ SshViaOpt = Annotated[
         "Overrides the ssh_tunnel block in the config file.",
     ),
 ]
-ApplyOpt = Annotated[
-    bool,
-    typer.Option(
-        "--apply",
-        help="Execute the fixes in a single transaction. "
-        "Default is dry-run: print the SQL and exit without changing the DB.",
-    ),
-]
 CheckBodyOpt = Annotated[
     bool,
     typer.Option(
@@ -107,7 +100,12 @@ def migrate_fix_signatures(
     schema_file: SchemaFileOpt = None,
     check_signature_schemas: CheckSignatureSchemasOpt = None,
     ssh_via: SshViaOpt = None,
-    apply: ApplyOpt = False,
+    mode: str = mode_option(
+        "plan",
+        "apply",
+        help="plan: print the DROP + CREATE SQL and change nothing; "
+        "apply: execute every fix in one transaction",
+    ),
     format_output: str = format_option("text", "json"),
     output_file: Path | None = output_option(),
     check_body: CheckBodyOpt = False,
@@ -119,19 +117,20 @@ def migrate_fix_signatures(
       2. Introspect live database signatures.
       3. Detect stale overloads (present in DB but not in source).
       4. For each stale overload, generate DROP FUNCTION + CREATE OR REPLACE.
-      5. Dry-run (default): print the combined SQL.
-         With --apply: execute all fixes in a single transaction.
+      5. --mode plan (default): print the combined SQL.
+         --mode apply: execute all fixes in a single transaction.
 
     EXAMPLES:
       confiture migrate fix-signatures --env local
-        ↳ Dry-run: show DROP + CREATE SQL for any stale overloads
+        ↳ Plan: show DROP + CREATE SQL for any stale overloads
 
-      confiture migrate fix-signatures --env production --apply
+      confiture migrate fix-signatures --env production --mode apply
         ↳ Apply fixes atomically in one transaction
 
-      confiture migrate fix-signatures --env production --ssh lionel@prod-db --apply
+      confiture migrate fix-signatures --env production --ssh lionel@prod-db --mode apply
         ↳ Apply via SSH tunnel
     """
+    apply = mode == "apply"
     try:
         config = _resolve_config(config, env)
         if not config.exists():
@@ -391,14 +390,14 @@ def _render_fix_dry_run(
         return
     if fix_blocks:
         console.print(
-            f"[bold]Dry-run: {len(fix_blocks)} fix(es) planned (pass --apply to execute):[/bold]"
+            f"[bold]Plan: {len(fix_blocks)} fix(es) (pass --mode apply to execute):[/bold]"
         )
         console.print()
         console.print(combined_sql)
     if body_fix_blocks:
         console.print(
-            f"[bold]Dry-run: {len(body_fix_blocks)} body drift fix(es) planned"
-            " (pass --apply to execute):[/bold]"
+            f"[bold]Plan: {len(body_fix_blocks)} body drift fix(es)"
+            " (pass --mode apply to execute):[/bold]"
         )
         for block in body_fix_blocks:
             console.print()
