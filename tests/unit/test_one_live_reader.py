@@ -26,7 +26,8 @@ READER = PACKAGE / "core" / "live_catalog.py"
 
 CATALOG = re.compile(
     r"\b(?:pg_class|pg_attribute|pg_constraint|pg_index|pg_proc|pg_namespace|pg_type"
-    r"|pg_depend)\b|\binformation_schema\."
+    r"|pg_depend|pg_attrdef|pg_enum|pg_sequence|pg_tables|pg_indexes|pg_views|pg_matviews"
+    r"|pg_sequences)\b|\binformation_schema\."
 )
 
 #: Module -> the question it asks of the catalog that is not a schema fact.
