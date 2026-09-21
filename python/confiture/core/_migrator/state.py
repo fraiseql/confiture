@@ -19,7 +19,7 @@ from confiture.core.step_runner import CheckpointStore, steps_table
 from confiture.exceptions import ConfiturError, MigrationError
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.engine import MigrationEngine
+    from confiture.core._migrator.ports import EngineHost
     from confiture.models.migration import Migration
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -27,7 +27,7 @@ from concurrent.futures import ThreadPoolExecutor
 logger = logging.getLogger(__name__)
 
 
-def _qualified_table(migrator: MigrationEngine) -> str:
+def _qualified_table(migrator: EngineHost) -> str:
     """Reassemble the migrator's tracking table into a single name.
 
     ``MigrationEngine`` splits the configured ``tracking_table`` into
@@ -46,7 +46,7 @@ def _qualified_table(migrator: MigrationEngine) -> str:
     return str(migrator._table_base)
 
 
-def initialize(migrator: MigrationEngine) -> None:
+def initialize(migrator: EngineHost) -> None:
     """Create the tracking table (Trinity identity pattern). Idempotent.
 
     Raises:
@@ -118,7 +118,7 @@ def initialize(migrator: MigrationEngine) -> None:
         ) from e
 
 
-def is_applied(migrator: MigrationEngine, version: str) -> bool:
+def is_applied(migrator: EngineHost, version: str) -> bool:
     """Check if migration *version* has been applied."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(
@@ -132,7 +132,7 @@ def is_applied(migrator: MigrationEngine, version: str) -> bool:
         return count > 0
 
 
-def get_applied_versions(migrator: MigrationEngine) -> list[str]:
+def get_applied_versions(migrator: EngineHost) -> list[str]:
     """Return all applied migration versions, ordered by applied_at ascending."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(
@@ -143,7 +143,7 @@ def get_applied_versions(migrator: MigrationEngine) -> list[str]:
         return [row[0] for row in cursor.fetchall()]
 
 
-def get_applied_migrations_with_timestamps(migrator: MigrationEngine) -> list[dict[str, Any]]:
+def get_applied_migrations_with_timestamps(migrator: EngineHost) -> list[dict[str, Any]]:
     """Return applied migrations with version, name, and applied_at timestamp."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(
@@ -161,7 +161,7 @@ def get_applied_migrations_with_timestamps(migrator: MigrationEngine) -> list[di
         ]
 
 
-def get_current_revision_row(migrator: MigrationEngine) -> dict[str, Any] | None:
+def get_current_revision_row(migrator: EngineHost) -> dict[str, Any] | None:
     """Return the most-recently-applied migration row, or None if empty.
 
     Raises psycopg's UndefinedTable when the tracking table is absent; callers
@@ -185,13 +185,13 @@ def get_current_revision_row(migrator: MigrationEngine) -> dict[str, Any] | None
     }
 
 
-def tracking_table_exists(migrator: MigrationEngine) -> bool:
+def tracking_table_exists(migrator: EngineHost) -> bool:
     """Return True if the tracking table exists in the database."""
     return ledger_exists(migrator.connection, _qualified_table(migrator))
 
 
 def trigger_hook(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     phase: Any,
     migration: Migration,
     execution_time_ms: int = 0,

@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from psycopg import sql as pgsql
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.session import MigratorSession
+    from confiture.core._migrator.ports import SessionHost
 
 
 import time as _time
@@ -22,7 +22,7 @@ from confiture.models.results import PreflightAgainstMigration, PreflightAgainst
 
 
 def run_against(
-    session: MigratorSession,
+    session: SessionHost,
     pending_files: list[Path],
     against_url: str,
     *,

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from confiture.exceptions import ConfigurationError, MigrationError
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.session import MigratorSession
+    from confiture.core._migrator.ports import SessionHost
 
 
 import time as _time
@@ -26,7 +26,7 @@ from confiture.models.results import DownToResult, MigrateDownResult, MigrationA
 
 
 def _rollback_sequence(
-    session: MigratorSession, versions: list[str], *, dry_run: bool = False
+    session: SessionHost, versions: list[str], *, dry_run: bool = False
 ) -> tuple[list, int]:
     """Roll back an ordered (newest → oldest) list of versions.
 
@@ -75,7 +75,7 @@ def _rollback_sequence(
     return rolled_back, total_duration_ms
 
 
-def _reversible_versions(session: MigratorSession) -> set[str]:
+def _reversible_versions(session: SessionHost) -> set[str]:
     """Set of discoverable versions that have a usable rollback.
 
     A ``.up.sql`` migration is reversible iff its sibling ``.down.sql``
@@ -98,7 +98,7 @@ def _reversible_versions(session: MigratorSession) -> set[str]:
 
 
 def down(
-    session: MigratorSession,
+    session: SessionHost,
     *,
     steps: int = 1,
     dry_run: bool = False,
@@ -138,7 +138,7 @@ def down(
 
 
 def down_to(
-    session: MigratorSession,
+    session: SessionHost,
     target: str,
     *,
     dry_run: bool = False,
@@ -160,7 +160,7 @@ def down_to(
         return _down_to_under_lock(session, target, dry_run=False)
 
 
-def _down_to_under_lock(session: MigratorSession, target: str, *, dry_run: bool) -> DownToResult:
+def _down_to_under_lock(session: SessionHost, target: str, *, dry_run: bool) -> DownToResult:
     """Plan and execute ``down_to`` — the caller holds the lock unless ``dry_run``."""
 
     assert session._migrator is not None

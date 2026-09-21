@@ -27,10 +27,10 @@ from confiture.exceptions import ConfigurationError, MigrationError, ValidationE
 from confiture.models.results import MigrateUpResult, MigrationApplied, SkippedMigration
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.session import MigratorSession
+    from confiture.core._migrator.ports import SessionHost
 
 
-def _plan_under_lock(session: MigratorSession, *, force: bool) -> tuple[list[Path], list[str]]:
+def _plan_under_lock(session: SessionHost, *, force: bool) -> tuple[list[Path], list[str]]:
     """Initialize the ledger and discover what to apply — the caller holds the lock.
 
     Returns:
@@ -58,7 +58,7 @@ def _plan_under_lock(session: MigratorSession, *, force: bool) -> tuple[list[Pat
 
 
 def _verify_checksums(
-    session: MigratorSession, *, enabled: bool, on_mismatch: str
+    session: SessionHost, *, enabled: bool, on_mismatch: str
 ) -> tuple[bool, list[str]]:
     """Check every applied migration file against the ledger — the caller holds the lock.
 
@@ -99,7 +99,7 @@ class _Plan:
     loaded: dict[Path, type] = field(default_factory=dict)  # each file's class, loaded once
 
 
-def _migration_class(session: MigratorSession, plan: _Plan, path: Path) -> type:
+def _migration_class(session: SessionHost, plan: _Plan, path: Path) -> type:
     """The migration class for ``path``, loaded once per ``up`` and shared by every step."""
     if path not in plan.loaded:
         plan.loaded[path] = session.migration_loader(path)
@@ -118,7 +118,7 @@ class _Applied:
     halted: bool = False
 
 
-def _up_under_lock(session: MigratorSession, options: UpOptions) -> MigrateUpResult:
+def _up_under_lock(session: SessionHost, options: UpOptions) -> MigrateUpResult:
     """The body of :meth:`MigratorSession.up`, run while the migration lock is held."""
     plan = _plan(session, options)
     early = _before_apply(session, plan, options)
@@ -141,7 +141,7 @@ def _run_options(options: UpOptions) -> RunOptions | None:
     )
 
 
-def _plan(session: MigratorSession, options: UpOptions) -> _Plan:
+def _plan(session: SessionHost, options: UpOptions) -> _Plan:
     """Baseline, plan, view helpers, checksums and strict mode — the lock is held."""
     assert session._migrator is not None
     force, on_event, auto_baseline = options.force, options.on_event, options.auto_baseline
@@ -178,9 +178,7 @@ def _plan(session: MigratorSession, options: UpOptions) -> _Plan:
     )
 
 
-def _before_apply(
-    session: MigratorSession, plan: _Plan, options: UpOptions
-) -> MigrateUpResult | None:
+def _before_apply(session: SessionHost, plan: _Plan, options: UpOptions) -> MigrateUpResult | None:
     """The result ``up`` returns without applying anything, or ``None`` to go on."""
     dry_run, target = options.dry_run, options.target
     require_reversible, allow_destructive = options.require_reversible, options.allow_destructive
@@ -240,7 +238,7 @@ def _before_apply(
 
 
 def _apply_pending(
-    session: MigratorSession,
+    session: SessionHost,
     plan: _Plan,
     options: UpOptions,
     *,
@@ -341,7 +339,7 @@ def _apply_pending(
 
 
 def _apply_one(
-    session: MigratorSession,
+    session: SessionHost,
     migration: Any,
     migration_file: Path,
     *,
@@ -390,7 +388,7 @@ def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResul
     )
 
 
-def _rehearse(session: MigratorSession, plan: _Plan, options: UpOptions) -> MigrateUpResult:
+def _rehearse(session: SessionHost, plan: _Plan, options: UpOptions) -> MigrateUpResult:
     """``--dry-run-execute``: the apply loop itself, inside a SAVEPOINT that is rolled back.
 
     Real SQL errors — syntax, constraints, type mismatches — surface without
@@ -465,7 +463,7 @@ def _apply_strict_mode(migration: Any, strict: bool) -> None:
         migration.strict_mode = True
 
 
-def up(session: MigratorSession, options: UpOptions) -> MigrateUpResult:
+def up(session: SessionHost, options: UpOptions) -> MigrateUpResult:
     """See :meth:`MigratorSession.up`."""
     dry_run, dry_run_execute = options.dry_run, options.dry_run_execute
     if session._migrator is None:
@@ -499,7 +497,7 @@ def up(session: MigratorSession, options: UpOptions) -> MigrateUpResult:
 
 
 def apply_one(
-    session: MigratorSession,
+    session: SessionHost,
     version: str,
     *,
     applied_by: str | None = None,

@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **No part of the migrator names the engine or the session it serves.** Ten modules
+  — the engine's `state`, `apply`, `rollback`, `baseline`, `discovery` and `policy`, and
+  the session's `apply_loop`, `rollback_loop`, `replay` and `reporting` — took their host
+  as a parameter and imported its class under `TYPE_CHECKING` to annotate it, a
+  layering the interpreter never checks. `core/_migrator/ports.py` names what they read
+  (`EngineHost`, `SessionHost`), and `tests/unit/test_migrator_has_no_back_edges.py`
+  fails on a host import and holds each host to its protocol — every member present,
+  with the protocol's parameters — because ty does not check that conformance there.
 - **`MigratorSession.up` hands the apply loop one `UpOptions`.** `up()` keeps its
   seventeen keyword parameters — fraisier and printoptim call them, and
   `tests/contract/` pins the shapes — but the chain below it forwarded each by name

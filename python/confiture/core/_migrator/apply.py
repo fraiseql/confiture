@@ -26,7 +26,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol
+from typing import Any, ClassVar
 
 import psycopg
 import psycopg.pq
@@ -34,6 +34,7 @@ from psycopg import sql as pgsql
 
 from confiture.core._migrator._constants import _VIEW_COLUMN_RENAME_RE
 from confiture.core._migrator.loader import load_migration_class
+from confiture.core._migrator.ports import ApplyStage, EngineHost, Strategy
 from confiture.core.checksum import compute_checksum
 from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.expand_contract import StagedPlan
@@ -45,9 +46,6 @@ from confiture.core.step_runner import CheckpointStore, RunOptions, run, steps_t
 from confiture.exceptions import MigrationError
 from confiture.models.migration import Migration
 
-if TYPE_CHECKING:
-    from confiture.core._migrator.engine import MigrationEngine
-
 logger = logging.getLogger(__name__)
 
 _DEPENDENT_VIEWS_HINT = (
@@ -58,39 +56,6 @@ _DEPENDENT_VIEWS_HINT = (
     "auto-recreated — check SELECT schema_name, view_name, error_message, "
     "definition FROM confiture.saved_views for preserved definitions"
 )
-
-
-@dataclass(frozen=True)
-class ApplyStage:
-    """What a strategy works with: the connection, the hooks, and the ledger's recorder.
-
-    ``trigger_hook(phase, migration, execution_time_ms=, success=, error=)`` runs
-    the hooks registered for *phase*; ``record(migration, execution_time_ms,
-    migration_file, applied_by=)`` writes the ledger row.
-    """
-
-    connection: Any
-    trigger_hook: Callable[..., None]
-    record: Callable[..., None]
-
-
-class Strategy(Protocol):
-    """How a migration's body runs, between its hooks, and how it is recorded."""
-
-    #: Whether the body runs inside the connection's transaction, so a caller's
-    #: savepoint can hold it (``--dry-run-execute``).
-    transactional: ClassVar[bool]
-
-    def execute(
-        self,
-        stage: ApplyStage,
-        migration: Migration,
-        *,
-        already_applied: bool,
-        migration_file: Path | None,
-        commit: bool,
-        applied_by: str | None,
-    ) -> None: ...
 
 
 def create_savepoint(connection: Any, name: str) -> None:
@@ -421,7 +386,7 @@ class ApplyPipeline:
 
 
 def validate_preconditions(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     migration: Migration,
     direction: str,
     preconditions: list,
@@ -453,7 +418,7 @@ def validate_preconditions(
 
 
 def record_applied(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     migration: Migration,
     execution_time_ms: int,
     migration_file: Path | None = None,
@@ -479,7 +444,7 @@ def record_applied(
 
 
 def mark_applied(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     migration_file: Path,
     reason: str = "baseline",
 ) -> str:
@@ -554,7 +519,7 @@ def warn_mixed_transactional_modes(migration_files: list[Path]) -> None:
         )
 
 
-def dry_run(migrator: MigrationEngine, migration: Migration) -> DryRunResult:
+def dry_run(migrator: EngineHost, migration: Migration) -> DryRunResult:
     """Test a migration without making permanent changes.
 
     See :meth:`MigrationEngine.dry_run` for the full contract.
@@ -579,7 +544,7 @@ def dry_run(migrator: MigrationEngine, migration: Migration) -> DryRunResult:
 
 
 def check_preconditions(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     migration: Migration,
     direction: str = "up",
 ) -> tuple[bool, list[tuple[Any, str]]]:

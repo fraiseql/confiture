@@ -28,11 +28,12 @@ from confiture.core._migrator import baseline as baseline_impl
 from confiture.core._migrator import discovery as discovery_impl
 from confiture.core._migrator import rollback as rollback_impl
 from confiture.core._migrator import state as state_impl
-from confiture.core._migrator.apply import ApplyPipeline, ApplyStage, Strategy
+from confiture.core._migrator.apply import ApplyPipeline
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
 )
+from confiture.core._migrator.ports import ApplyStage, Strategy
 from confiture.core.dry_run import DryRunResult
 from confiture.core.hooks import HookRegistry
 from confiture.core.hooks.context import ExecutionContext
