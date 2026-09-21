@@ -3,7 +3,7 @@
 
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS comments (
-    id BIGINT NOT NULL,
+    id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     pk_comment UUID NOT NULL DEFAULT uuid_generate_v4(),
     post_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS comments (
 
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS posts (
-    id BIGINT NOT NULL,
+    id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     pk_post UUID NOT NULL DEFAULT uuid_generate_v4(),
     slug TEXT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS posts (
 
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS users (
-    id BIGINT NOT NULL,
+    id BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     pk_user UUID NOT NULL DEFAULT uuid_generate_v4(),
     slug TEXT NOT NULL,
     username TEXT NOT NULL,

@@ -1,0 +1,167 @@
+"""One reader of a ``Constraint`` node, and it returns what the node declares.
+
+PostgreSQL's grammar puts a ``Constraint`` in three places — on a column, at table
+level inside ``CREATE TABLE``, and in ``ALTER TABLE … ADD CONSTRAINT`` — and the
+same declaration must read as the same value from all three. The reader used to
+mutate the differ's own ``Table`` and return nothing, so there was no value to
+compare and no second model could use it; now it returns a
+:class:`~confiture.core.schema_model.Constraint` or a :class:`ColumnFact`.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pglast
+import pytest
+
+from confiture.core.ddl_walk import ColumnFact, read_column_constraints, read_constraint
+from confiture.core.schema_model import Constraint
+
+
+def _statement(sql: str) -> Any:
+    return pglast.parse_sql(sql)[0].stmt
+
+
+def _on_column(sql: str) -> tuple[ColumnFact, tuple[Constraint, ...]]:
+    """What the first column of ``CREATE TABLE`` declares about itself and its table."""
+    column = _statement(sql).tableElts[0]
+    return read_column_constraints(column)
+
+
+def _at_table_level(sql: str) -> Constraint:
+    elements = _statement(sql).tableElts
+    node = next(e for e in elements if type(e).__name__ == "Constraint")
+    read = read_constraint(node)
+    assert isinstance(read, Constraint)
+    return read
+
+
+def _in_alter(sql: str) -> Constraint:
+    read = read_constraint(_statement(sql).cmds[0].def_)
+    assert isinstance(read, Constraint)
+    return read
+
+
+FK = Constraint(
+    kind="foreign_key",
+    name="fk",
+    columns=("pid",),
+    ref_table="b.p",
+    ref_columns=("id",),
+    on_delete="CASCADE",
+)
+
+
+@pytest.mark.parametrize(
+    ("column_form", "table_form", "alter_form", "expected"),
+    [
+        (
+            "CREATE TABLE a.c (pid INT CONSTRAINT fk REFERENCES b.p(id) ON DELETE CASCADE)",
+            "CREATE TABLE a.c (pid INT, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES b.p(id) "
+            "ON DELETE CASCADE)",
+            "ALTER TABLE a.c ADD CONSTRAINT fk FOREIGN KEY (pid) REFERENCES b.p(id) "
+            "ON DELETE CASCADE",
+            FK,
+        ),
+        (
+            "CREATE TABLE a.c (pid INT CONSTRAINT ck CHECK (pid > 0))",
+            "CREATE TABLE a.c (pid INT, CONSTRAINT ck CHECK (pid > 0))",
+            "ALTER TABLE a.c ADD CONSTRAINT ck CHECK (pid > 0)",
+            Constraint(kind="check", name="ck", expression="pid > 0"),
+        ),
+        (
+            "CREATE TABLE a.c (pid INT CONSTRAINT uq UNIQUE)",
+            "CREATE TABLE a.c (pid INT, CONSTRAINT uq UNIQUE (pid))",
+            "ALTER TABLE a.c ADD CONSTRAINT uq UNIQUE (pid)",
+            Constraint(kind="unique", name="uq", columns=("pid",)),
+        ),
+        (
+            "CREATE TABLE a.c (pid INT CONSTRAINT pk PRIMARY KEY)",
+            "CREATE TABLE a.c (pid INT, CONSTRAINT pk PRIMARY KEY (pid))",
+            "ALTER TABLE a.c ADD CONSTRAINT pk PRIMARY KEY (pid)",
+            Constraint(kind="primary_key", name="pk", columns=("pid",)),
+        ),
+    ],
+    ids=["foreign_key", "check", "unique", "primary_key"],
+)
+def test_one_declaration_reads_the_same_in_all_three_places(
+    column_form: str, table_form: str, alter_form: str, expected: Constraint
+) -> None:
+    _fact, on_column = _on_column(column_form)
+    assert on_column == (expected,)
+    assert _at_table_level(table_form) == expected
+    assert _in_alter(alter_form) == expected
+
+
+def test_deferrability_reads_the_same_whether_sibling_or_field() -> None:
+    """On a column it arrives as sibling nodes; at table level, on the node itself."""
+    _fact, (on_column,) = _on_column(
+        "CREATE TABLE a.c (pid INT CONSTRAINT fk REFERENCES b.p(id) DEFERRABLE INITIALLY DEFERRED)"
+    )
+    at_table = _at_table_level(
+        "CREATE TABLE a.c (pid INT, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES b.p(id) "
+        "DEFERRABLE INITIALLY DEFERRED)"
+    )
+    assert on_column.deferrable == at_table.deferrable == "deferred"
+    immediate = _in_alter(
+        "ALTER TABLE a.c ADD CONSTRAINT fk FOREIGN KEY (pid) REFERENCES b.p(id) DEFERRABLE"
+    )
+    assert immediate.deferrable == "immediate"
+    assert _in_alter("ALTER TABLE a.c ADD CONSTRAINT uq UNIQUE (pid)").deferrable is None
+
+
+def test_an_unnamed_foreign_key_names_the_parent_primary_key_by_omission() -> None:
+    _fact, (fk,) = _on_column("CREATE TABLE a.c (pid INT REFERENCES b.p)")
+    assert fk == Constraint(kind="foreign_key", columns=("pid",), ref_table="b.p")
+
+
+@pytest.mark.parametrize(
+    ("sql", "expected"),
+    [
+        ("CREATE TABLE t (c INT NOT NULL)", ColumnFact(not_null=True)),
+        ("CREATE TABLE t (c INT DEFAULT 7)", ColumnFact(default="7")),
+        ("CREATE TABLE t (c TEXT DEFAULT 'x')", ColumnFact(default="'x'")),
+        ("CREATE TABLE t (c TIMESTAMPTZ DEFAULT now())", ColumnFact(default="now()")),
+        (
+            "CREATE TABLE t (c BIGINT GENERATED BY DEFAULT AS IDENTITY)",
+            ColumnFact(not_null=True, identity="by default"),
+        ),
+        (
+            "CREATE TABLE t (c BIGINT GENERATED ALWAYS AS IDENTITY)",
+            ColumnFact(not_null=True, identity="always"),
+        ),
+        (
+            "CREATE TABLE t (b INT, c INT GENERATED ALWAYS AS (b * 2) STORED)",
+            ColumnFact(generated="b * 2", generated_kind="stored"),
+        ),
+        ("CREATE TABLE t (c INT NULL)", ColumnFact()),
+    ],
+    ids=[
+        "not_null",
+        "default_int",
+        "default_text",
+        "default_call",
+        "identity_by_default",
+        "identity_always",
+        "generated",
+        "explicit_null",
+    ],
+)
+def test_a_column_property_is_a_column_fact(sql: str, expected: ColumnFact) -> None:
+    elements = _statement(sql).tableElts
+    fact, constraints = read_column_constraints(elements[-1])
+    assert fact == expected
+    assert constraints == ()
+
+
+def test_a_generated_expression_is_never_read_as_a_check() -> None:
+    """``CONSTR_GENERATED`` carries a ``raw_expr``; dispatch is on the kind, never that field."""
+    fact, constraints = _on_column("CREATE TABLE t (c INT GENERATED ALWAYS AS (1) STORED)")
+    assert fact.generated == "1"
+    assert constraints == ()
+
+
+def test_an_exclusion_constraint_is_declined_not_misread() -> None:
+    node = _statement("CREATE TABLE t (r int4range, EXCLUDE USING gist (r WITH &&))").tableElts[1]
+    assert read_constraint(node) is None

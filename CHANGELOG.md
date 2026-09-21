@@ -46,6 +46,33 @@ comparisons say today, are now tests in its own suite.
   grow; exit codes stay `0..8`; a withdrawn release is yanked as a tag, never reverted
   on `main`.
 
+### Changed
+
+- **`migrate diff --generate` writes an identity column and a generated column as the
+  schema declared them.** `id BIGINT GENERATED ALWAYS AS IDENTITY` generated
+  `id BIGINT`, and `slug TEXT GENERATED ALWAYS AS (data ->> 'slug') STORED` generated
+  `slug TEXT`: a migration created a plain column where the schema held a sequence or
+  an expression. An identity column is also written `NOT NULL`, which PostgreSQL makes
+  it whatever the DDL says. The model goldens for `examples/02`, `06`, `basic` and this
+  repository's own schema move accordingly — that edit is this change.
+- **One reader of a `Constraint` node, and it returns a value.** It moved from
+  `core/differ.py` to `core/ddl_walk.py` (`read_constraint`, `read_column_constraints`),
+  so the lint inventory can read what the differ reads. It now reads identity,
+  generated columns and deferrability; `EXCLUDE` (#322) and PostgreSQL 18's
+  `NOT ENFORCED` stay declined, with their reasons. `ALTER TABLE … ALTER CONSTRAINT`
+  is no longer read as a *new* constraint: only `ADD CONSTRAINT` adds one.
+- **`confiture.core`'s public names resolve on first use.** Its `__init__` imported the
+  dry-run executor, the hook system and the preconditions eagerly, so every
+  `confiture.core.*` module paid psycopg on import. `from confiture.core import X`
+  still works.
+
+### Known, not fixed
+
+- A generated `CREATE TABLE` sequence is ordered by name, not by foreign key, and an
+  `ADD EXTENSION` change derives no SQL — so the generated up-migration for
+  `examples/02-fraiseql-integration` and `examples/basic` does not apply to an empty
+  database as written. Both were true before this release.
+
 ## [1.14.0] - 2026-09-20
 
 A constraint reaches the diff, and the DDL, whole. Closes [#315], [#316], [#317].

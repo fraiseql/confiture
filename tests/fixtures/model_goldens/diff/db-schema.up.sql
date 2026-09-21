@@ -4,7 +4,7 @@
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS tb_confiture (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
-    pk_confiture BIGINT,
+    pk_confiture BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     slug TEXT NOT NULL,
     version VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,

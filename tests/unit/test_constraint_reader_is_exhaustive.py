@@ -1,6 +1,7 @@
 """Every constraint kind PostgreSQL's grammar has is decided, once (#315).
 
-``core/differ.py`` reads a ``Constraint`` node in one place. What made #315
+``core/ddl_walk.py`` reads a ``Constraint`` node in one place, for every model
+of a table — the lint inventory's and the differ's alike. What made #315
 possible was not that ``CONSTR_FOREIGN`` was forgotten but that nothing said
 which kinds the reader answered for — so a kind nobody had considered looked
 exactly like a kind deliberately skipped.
@@ -24,10 +25,10 @@ from __future__ import annotations
 from pglast.enums.parsenodes import ConstrType
 
 from confiture.core._pglast_enums import REQUIRED_MEMBERS
-from confiture.core.differ import (
-    _CONSTRAINT_READERS,
-    _MODELLED_CONSTRAINTS,
-    _NOT_MODELLED_CONSTRAINTS,
+from confiture.core.ddl_walk import (
+    CONSTRAINT_READERS,
+    MODELLED_CONSTRAINTS,
+    NOT_MODELLED_CONSTRAINTS,
 )
 
 #: Declined members that only some supported pglast defines, and where they
@@ -48,16 +49,16 @@ def test_the_grammar_has_not_moved_under_us() -> None:
 
 
 def test_every_constraint_kind_is_decided() -> None:
-    undecided = sorted(_members() - set(_MODELLED_CONSTRAINTS) - set(_NOT_MODELLED_CONSTRAINTS))
+    undecided = sorted(_members() - set(MODELLED_CONSTRAINTS) - set(NOT_MODELLED_CONSTRAINTS))
     assert undecided == [], (
-        f"{undecided} can appear in DDL and nothing says what the differ does with it. "
-        "Read it in _MODELLED_CONSTRAINTS, or decline it in _NOT_MODELLED_CONSTRAINTS "
+        f"{undecided} can appear in DDL and nothing says what the model does with it. "
+        "Read it in MODELLED_CONSTRAINTS, or decline it in NOT_MODELLED_CONSTRAINTS "
         "with the reason."
     )
 
 
 def test_no_kind_is_both_read_and_declined() -> None:
-    both = sorted(set(_MODELLED_CONSTRAINTS) & set(_NOT_MODELLED_CONSTRAINTS))
+    both = sorted(set(MODELLED_CONSTRAINTS) & set(NOT_MODELLED_CONSTRAINTS))
     assert both == [], f"{both} is claimed by both tables; a kind can only have one home"
 
 
@@ -67,14 +68,14 @@ def test_no_decision_has_gone_stale() -> None:
     Except across the supported version range, where the absence is the point —
     see :data:`ADDED_BY_A_LATER_POSTGRES`.
     """
-    decided = set(_MODELLED_CONSTRAINTS) | set(_NOT_MODELLED_CONSTRAINTS)
+    decided = set(MODELLED_CONSTRAINTS) | set(NOT_MODELLED_CONSTRAINTS)
     stale = sorted(decided - _members() - set(ADDED_BY_A_LATER_POSTGRES))
     assert stale == [], f"decided kinds that pglast no longer defines: {stale}"
 
 
 def test_every_declined_kind_states_a_reason() -> None:
     unreasoned = sorted(
-        kind for kind, reason in _NOT_MODELLED_CONSTRAINTS.items() if not reason.strip()
+        kind for kind, reason in NOT_MODELLED_CONSTRAINTS.items() if not reason.strip()
     )
     assert unreasoned == []
 
@@ -86,7 +87,7 @@ def test_the_reader_declares_the_members_it_depends_on() -> None:
     reader starts depending on joins the CONFIG_011 check automatically rather
     than by being remembered.
     """
-    assert set(_MODELLED_CONSTRAINTS) == set(REQUIRED_MEMBERS["ConstrType"])
+    assert set(MODELLED_CONSTRAINTS) == set(REQUIRED_MEMBERS["ConstrType"])
 
 
 def test_the_dispatch_resolves_every_modelled_kind_by_name() -> None:
@@ -95,6 +96,6 @@ def test_the_dispatch_resolves_every_modelled_kind_by_name() -> None:
     PostgreSQL 18 renumbered ``AlterTableType``; a hardcoded ordinal then stops
     matching silently, which is the whole of #192.
     """
-    assert len(_CONSTRAINT_READERS) == len(_MODELLED_CONSTRAINTS)
-    for name in _MODELLED_CONSTRAINTS:
-        assert int(getattr(ConstrType, name)) in _CONSTRAINT_READERS
+    assert len(CONSTRAINT_READERS) == len(MODELLED_CONSTRAINTS)
+    for name in MODELLED_CONSTRAINTS:
+        assert int(getattr(ConstrType, name)) in CONSTRAINT_READERS

@@ -20,12 +20,21 @@ was decided (#288, #301).
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 
 from pglast import ast as _pg_ast
+from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.schema_model import (
+    Constraint,
+    Deferral,
+    GeneratedKind,
+    IdentityKind,
+    qualified_name,
+)
+from confiture.core.type_lattice import parse_type
 
 _CONSTR_NOTNULL = _pg_member("ConstrType", "CONSTR_NOTNULL")
 _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
@@ -733,6 +742,331 @@ def column_has_default(coldef: object) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# The one constraint reader (#315, #316)
+# ---------------------------------------------------------------------------
+#
+# PostgreSQL's grammar puts a ``Constraint`` node in three places: on a column,
+# at table level inside ``CREATE TABLE``, and in ``ALTER TABLE … ADD CONSTRAINT``.
+# The differ read them with three pieces of code and every divergence reached an
+# artefact: a column-level ``REFERENCES`` parsed to nothing (#315), and a CHECK
+# rendered in one reader was stored as its AST class name in another (#316).
+#
+# One node, one reader, and it *returns* what the node declares — a
+# :class:`~confiture.core.schema_model.Constraint` for what the table enforces, a
+# :class:`ColumnFact` for what the column is. Where the node was written decides
+# only which columns it covers: a constraint on a column covers that column, and
+# one written at table level names its own. The caller applies a primary key to
+# the columns it covers, because that is a fact about those columns wherever it
+# was written.
+
+
+@dataclass(frozen=True)
+class ColumnFact:
+    """What a column-level clause says about the column itself.
+
+    ``not_null`` is set by ``NOT NULL`` and by an identity column, which
+    PostgreSQL makes ``NOT NULL`` whatever the DDL says. ``default`` is the
+    default expression's text; ``identity`` the kind of ``AS IDENTITY``;
+    ``generated`` the expression of a ``GENERATED ALWAYS AS (…)`` column and
+    ``generated_kind`` whether it is stored or, from PostgreSQL 18, virtual.
+    """
+
+    not_null: bool = False
+    default: str | None = None
+    identity: IdentityKind | None = None
+    generated: str | None = None
+    generated_kind: GeneratedKind | None = None
+
+    def merged(self, other: ColumnFact) -> ColumnFact:
+        """This fact with *other*'s clauses applied after it, as the grammar reads them."""
+        return ColumnFact(
+            not_null=self.not_null or other.not_null,
+            default=other.default if other.default is not None else self.default,
+            identity=other.identity or self.identity,
+            generated=other.generated if other.generated is not None else self.generated,
+            generated_kind=other.generated_kind or self.generated_kind,
+        )
+
+
+@dataclass(frozen=True)
+class _Deferrable:
+    """A sibling ``DEFERRABLE`` / ``INITIALLY …`` node, for the constraint before it."""
+
+    deferrable: bool | None = None
+    initially_deferred: bool | None = None
+
+
+#: PostgreSQL's referential-action codes. ``ON DELETE`` and ``ON UPDATE`` are
+#: spelled with the same letters, so one map answers for both.
+_FK_ACTIONS: dict[str, str | None] = {
+    "a": None,  # NO ACTION — PostgreSQL's default, reported as no clause
+    "r": "RESTRICT",
+    "c": "CASCADE",
+    "n": "SET NULL",
+    "d": "SET DEFAULT",
+    "": None,
+    "\x00": None,
+}
+
+#: ``Constraint.generated_when`` for ``GENERATED ALWAYS``; ``BY DEFAULT`` is ``d``.
+_GENERATED_ALWAYS = "a"
+#: ``Constraint.generated_kind`` for ``VIRTUAL``. pglast 8 only: PostgreSQL 18
+#: added virtual generated columns, and before it every one is stored.
+_GENERATED_VIRTUAL = "v"
+
+
+def render_default(raw_expr: Any) -> str | None:
+    """A default expression as comparable text: a literal as SQL, anything else as printed."""
+    if raw_expr is None:
+        return None
+    if type(raw_expr).__name__ == "A_Const":
+        if getattr(raw_expr, "isnull", False):
+            return "NULL"
+        val = getattr(raw_expr, "val", None)
+        if val is None:
+            return None
+        vtype = type(val).__name__
+        if vtype == "Integer":
+            return str(val.ival)
+        if vtype == "Float":
+            return str(val.fval)
+        if vtype == "String":
+            return f"'{val.sval}'"
+        if vtype == "Boolean":
+            return "true" if val.boolval else "false"
+    # A call, a cast, a column reference: the expression as PostgreSQL would
+    # print it, arguments included, so a down file can write the default back.
+    return RawStream()(raw_expr)
+
+
+def _fk_action(code: Any) -> str | None:
+    return _FK_ACTIONS.get(str(code or ""))
+
+
+def _deferral(node: Any) -> Deferral | None:
+    """What a table-level node or an ``ALTER … ADD CONSTRAINT`` says about deferral."""
+    if not getattr(node, "deferrable", False):
+        return None
+    return "deferred" if getattr(node, "initdeferred", False) else "immediate"
+
+
+def _covered(nodes: Any, column: str | None) -> tuple[str, ...]:
+    """The columns a constraint covers: the ones it names, or the one it sits on."""
+    if column is not None:
+        return (column,)
+    return tuple(node.sval for node in nodes or ())
+
+
+def _read_foreign_key(node: Any, column: str | None) -> Constraint:
+    pktable = node.pktable
+    return Constraint(
+        kind="foreign_key",
+        name=node.conname or "",
+        columns=_covered(node.fk_attrs, column),
+        ref_table=(
+            qualified_name(getattr(pktable, "schemaname", None), pktable.relname)
+            if pktable is not None
+            else None
+        ),
+        # ``REFERENCES b.parent`` names no column: it means the parent's primary
+        # key, and generated DDL has to write it that way.
+        ref_columns=tuple(n.sval for n in node.pk_attrs or ()),
+        on_delete=_fk_action(node.fk_del_action),
+        on_update=_fk_action(node.fk_upd_action),
+        deferrable=_deferral(node),
+    )
+
+
+def _read_check(node: Any, _column: str | None) -> Constraint | None:
+    """The expression, rendered — never ``type(raw_expr).__name__`` (#316)."""
+    if node.raw_expr is None:
+        return None
+    return Constraint(
+        kind="check",
+        name=node.conname or "",
+        expression=RawStream()(node.raw_expr),
+        deferrable=_deferral(node),
+    )
+
+
+def _read_unique(node: Any, column: str | None) -> Constraint:
+    return Constraint(
+        kind="unique",
+        name=node.conname or "",
+        columns=_covered(node.keys, column),
+        deferrable=_deferral(node),
+    )
+
+
+def _read_primary_key(node: Any, column: str | None) -> Constraint:
+    return Constraint(
+        kind="primary_key",
+        name=node.conname or "",
+        columns=_covered(node.keys, column),
+        deferrable=_deferral(node),
+    )
+
+
+def _read_not_null(_node: Any, _column: str | None) -> ColumnFact:
+    return ColumnFact(not_null=True)
+
+
+def _read_default(node: Any, _column: str | None) -> ColumnFact:
+    return ColumnFact(default=render_default(node.raw_expr))
+
+
+def _read_identity(node: Any, _column: str | None) -> ColumnFact:
+    """``GENERATED … AS IDENTITY``, which PostgreSQL makes ``NOT NULL``."""
+    always = getattr(node, "generated_when", None) == _GENERATED_ALWAYS
+    return ColumnFact(not_null=True, identity="always" if always else "by default")
+
+
+def _read_generated(node: Any, _column: str | None) -> ColumnFact:
+    """``GENERATED ALWAYS AS (…)`` — an expression, and never a CHECK."""
+    virtual = getattr(node, "generated_kind", None) == _GENERATED_VIRTUAL
+    return ColumnFact(
+        generated=RawStream()(node.raw_expr),
+        generated_kind="virtual" if virtual else "stored",
+    )
+
+
+def _read_deferrable(_node: Any, _column: str | None) -> _Deferrable:
+    return _Deferrable(deferrable=True)
+
+
+def _read_not_deferrable(_node: Any, _column: str | None) -> _Deferrable:
+    return _Deferrable(deferrable=False)
+
+
+def _read_initially_deferred(_node: Any, _column: str | None) -> _Deferrable:
+    return _Deferrable(initially_deferred=True)
+
+
+def _read_initially_immediate(_node: Any, _column: str | None) -> _Deferrable:
+    return _Deferrable(initially_deferred=False)
+
+
+_Read = Constraint | ColumnFact | _Deferrable | None
+
+#: What each ``ConstrType`` member becomes in the schema model, by member name so
+#: nothing here compares against a literal ordinal (#192). Every name is also in
+#: ``_pglast_enums.REQUIRED_MEMBERS["ConstrType"]``, which is version-fatal: only
+#: members every supported pglast defines belong here.
+MODELLED_CONSTRAINTS: dict[str, Callable[[Any, str | None], _Read]] = {
+    "CONSTR_FOREIGN": _read_foreign_key,
+    "CONSTR_CHECK": _read_check,
+    "CONSTR_UNIQUE": _read_unique,
+    "CONSTR_PRIMARY": _read_primary_key,
+    "CONSTR_NOTNULL": _read_not_null,
+    "CONSTR_DEFAULT": _read_default,
+    "CONSTR_IDENTITY": _read_identity,
+    "CONSTR_GENERATED": _read_generated,
+    # On a column, deferrability arrives as sibling nodes after the constraint it
+    # qualifies (`DEFERRABLE INITIALLY DEFERRED` is two of them); at table level
+    # the grammar folds it into the constraint's own fields instead.
+    "CONSTR_ATTR_DEFERRABLE": _read_deferrable,
+    "CONSTR_ATTR_NOT_DEFERRABLE": _read_not_deferrable,
+    "CONSTR_ATTR_DEFERRED": _read_initially_deferred,
+    "CONSTR_ATTR_IMMEDIATE": _read_initially_immediate,
+}
+
+#: The kinds the model does not carry, and why — a table of **reasons**, so a
+#: kind nobody considered cannot look like a kind deliberately skipped.
+#: ``tests/unit/test_constraint_reader_is_exhaustive.py`` fails on a member in
+#: neither table or in both.
+NOT_MODELLED_CONSTRAINTS: dict[str, str] = {
+    "CONSTR_NULL": (
+        "an explicit NULL restates the default; a column is nullable already, and "
+        "recording it would make `c INT NULL` and `c INT` compare unequal"
+    ),
+    "CONSTR_EXCLUSION": (
+        "the model has no exclusion-constraint type, so an EXCLUDE clause is skipped "
+        "deliberately; giving it one is a new model, a change type and a generator (#322)"
+    ),
+    "CONSTR_ATTR_ENFORCED": (
+        "NOT ENFORCED arrives as a sibling node like deferrability, and PostgreSQL 18 "
+        "added the pair: pglast 6 and 7 do not define them, and a REQUIRED_MEMBERS "
+        "entry the installed pglast lacks makes confiture refuse to start"
+    ),
+    "CONSTR_ATTR_NOT_ENFORCED": (
+        "the other half of the PostgreSQL 18 ENFORCED pair, declined for the same reason"
+    ),
+}
+
+#: The dispatch table, resolved once against the installed pglast.
+CONSTRAINT_READERS: dict[int, Callable[[Any, str | None], _Read]] = {
+    _pg_member("ConstrType", name): read for name, read in MODELLED_CONSTRAINTS.items()
+}
+
+
+def _read(node: Any, column: str | None) -> _Read:
+    read = CONSTRAINT_READERS.get(enum_int(getattr(node, "contype", None)))
+    return read(node, column) if read is not None else None
+
+
+def read_constraint(node: Any, *, column: str | None = None) -> Constraint | ColumnFact | None:
+    """What one ``Constraint`` node declares, wherever the grammar put it.
+
+    *column* is the column the node was written on, and supplies the covered
+    columns for a form that names none; ``None`` for a constraint written at
+    table level or added by ``ALTER TABLE``. ``None`` comes back for a kind the
+    model declines (see :data:`NOT_MODELLED_CONSTRAINTS`) and for a lone
+    deferrability node, which qualifies a sibling — read a column's clauses
+    together with :func:`read_column_constraints`.
+    """
+    read = _read(node, column)
+    return None if isinstance(read, _Deferrable) else read
+
+
+def _deferred(constraint: Constraint, attribute: _Deferrable) -> Constraint:
+    """*constraint* as a sibling ``DEFERRABLE`` / ``INITIALLY …`` node leaves it."""
+    deferrable = constraint.deferrable is not None
+    initially = constraint.deferrable == "deferred"
+    if attribute.deferrable is not None:
+        deferrable = attribute.deferrable
+    if attribute.initially_deferred is not None:
+        initially = attribute.initially_deferred
+        # `INITIALLY DEFERRED` alone implies DEFERRABLE, as PostgreSQL reads it.
+        deferrable = deferrable or initially
+    if not deferrable:
+        return replace(constraint, deferrable=None)
+    return replace(constraint, deferrable="deferred" if initially else "immediate")
+
+
+def read_column_constraints(coldef: Any) -> tuple[ColumnFact, tuple[Constraint, ...]]:
+    """Every clause written on one column: what it says of the column, and of the table.
+
+    The clauses are read in order, because a deferrability node qualifies the
+    constraint written before it. ``is_not_null`` and ``raw_default`` — the
+    fields a ``ColumnDef`` built by hand may carry instead of clause nodes — are
+    read too.
+    """
+    column = coldef.colname
+    fact = ColumnFact(
+        not_null=bool(getattr(coldef, "is_not_null", False)),
+        default=render_default(getattr(coldef, "raw_default", None)),
+    )
+    constraints: list[Constraint] = []
+    for node in getattr(coldef, "constraints", None) or ():
+        read = _read(node, column)
+        if isinstance(read, ColumnFact):
+            fact = fact.merged(read)
+        elif isinstance(read, Constraint):
+            constraints.append(read)
+        elif isinstance(read, _Deferrable) and constraints:
+            constraints[-1] = _deferred(constraints[-1], read)
+    return fact, tuple(constraints)
+
+
+def added_constraint(cmd: Any) -> Any | None:
+    """The ``Constraint`` node of an ``ALTER TABLE … ADD CONSTRAINT``, else ``None``."""
+    if enum_int(getattr(cmd, "subtype", None)) != _AT_ADD_CONSTRAINT:
+        return None
+    definition = getattr(cmd, "def_", None)
+    return definition if type(definition).__name__ == "Constraint" else None
+
+
 def type_name(type_node: Any) -> str | None:
     """Render a pglast ``TypeName`` back to ``varchar(50)`` / ``numeric(10,2)[]``.
 
@@ -763,3 +1097,124 @@ def type_name(type_node: Any) -> str | None:
     ]
     bounds = "[]" * len(getattr(type_node, "arrayBounds", None) or ())
     return (f"{name}({', '.join(mods)})" if mods else name) + bounds
+
+
+# ---------------------------------------------------------------------------
+# How generated DDL spells a column's type
+# ---------------------------------------------------------------------------
+#
+# Not the type's identity — that is ``type_lattice.canonical_type`` — but the
+# readable upper-case keyword ``migrate diff`` prints and writes into a
+# migration. pglast has already folded the author's keywords into PostgreSQL's
+# internal names (``INT`` arrives as ``int4``), and writing those back is valid
+# DDL nobody wants to read. One rule, read by every model of a column.
+
+#: The readable keyword for each name pglast may report, upper-cased.
+READABLE_TYPES: dict[str, str] = {
+    "SMALLINT": "SMALLINT",
+    "INT2": "SMALLINT",
+    "INT": "INTEGER",
+    "INTEGER": "INTEGER",
+    "INT4": "INTEGER",
+    "BIGINT": "BIGINT",
+    "INT8": "BIGINT",
+    "SERIAL": "SERIAL",
+    "BIGSERIAL": "BIGSERIAL",
+    "NUMERIC": "NUMERIC",
+    "DECIMAL": "DECIMAL",
+    "REAL": "REAL",
+    "FLOAT4": "REAL",
+    "DOUBLE": "DOUBLE PRECISION",
+    "FLOAT8": "DOUBLE PRECISION",
+    "DOUBLE PRECISION": "DOUBLE PRECISION",
+    "VARCHAR": "VARCHAR",
+    "CHARACTER VARYING": "VARCHAR",
+    "CHAR": "CHAR",
+    "CHARACTER": "CHAR",
+    "TEXT": "TEXT",
+    "BOOLEAN": "BOOLEAN",
+    "BOOL": "BOOLEAN",
+    "DATE": "DATE",
+    "TIME": "TIME",
+    "TIMETZ": "TIME",
+    "TIMESTAMP": "TIMESTAMP",
+    "TIMESTAMP WITHOUT TIME ZONE": "TIMESTAMP",
+    "TIMESTAMPTZ": "TIMESTAMPTZ",
+    "TIMESTAMP WITH TIME ZONE": "TIMESTAMPTZ",
+    "UUID": "UUID",
+    "JSON": "JSON",
+    "JSONB": "JSONB",
+    "BYTEA": "BYTEA",
+    # Network types
+    "CIDR": "CIDR",
+    "INET": "INET",
+    "MACADDR": "MACADDR",
+    "MACADDR8": "MACADDR8",
+    # Money
+    "MONEY": "MONEY",
+    # Bit strings
+    "BIT": "BIT",
+    "VARBIT": "VARBIT",
+    "BIT VARYING": "VARBIT",
+    # Text search
+    "TSVECTOR": "TSVECTOR",
+    "TSQUERY": "TSQUERY",
+    # XML
+    "XML": "XML",
+    # Range types
+    "INT4RANGE": "INT4RANGE",
+    "INT8RANGE": "INT8RANGE",
+    "NUMRANGE": "NUMRANGE",
+    "TSRANGE": "TSRANGE",
+    "TSTZRANGE": "TSTZRANGE",
+    "DATERANGE": "DATERANGE",
+}
+
+# pglast reports internal type aliases rather than the SQL keyword the user wrote.
+# Map them back to the keys of READABLE_TYPES.
+_PGLAST_TYPE_ALIASES: dict[str, str] = {
+    "INT4": "INTEGER",
+    "INT8": "BIGINT",
+    "INT2": "SMALLINT",
+    "FLOAT4": "REAL",
+    "FLOAT8": "DOUBLE PRECISION",
+    "BOOL": "BOOLEAN",
+}
+
+
+def readable_type(type_node: Any) -> str | None:
+    """The keyword generated DDL writes for this type, or ``None`` when it has none.
+
+    ``None`` for a type :data:`READABLE_TYPES` does not know and for an array:
+    both are written the way the parser holds them.
+    """
+    names = [str(getattr(part, "sval", part)) for part in getattr(type_node, "names", None) or ()]
+    if not names or getattr(type_node, "arrayBounds", None):
+        return None
+    written = names[-1].upper()
+    return READABLE_TYPES.get(_PGLAST_TYPE_ALIASES.get(written, written))
+
+
+def written_type(type_node: Any) -> str | None:
+    """The column's type as generated DDL writes it — **with its typmod**.
+
+    The typmod and the array bounds come from :func:`type_name`, the one reader
+    of a pglast ``TypeName``; the name from :func:`readable_type`. A type with no
+    readable keyword is left exactly as the parser holds it, case included,
+    because ``"MyType"`` is not ``mytype``. A length lives in the spelling: a
+    schema saying ``VARCHAR(50)`` generated an unbounded ``VARCHAR`` while this
+    was filled only for the types the table missed.
+    """
+    written = type_name(type_node)
+    readable = readable_type(type_node)
+    if written is None or readable is None:
+        return written
+    parsed = parse_type(written)
+    if parsed is None:
+        return written
+    suffix = "[]" * parsed.dimensions
+    if parsed.precision is None:
+        return readable + suffix
+    if parsed.scale is None:
+        return f"{readable}({parsed.precision}){suffix}"
+    return f"{readable}({parsed.precision},{parsed.scale}){suffix}"

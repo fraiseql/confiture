@@ -4,7 +4,7 @@
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS catalog.tb_manufacturer (
     id UUID NOT NULL,
-    pk_manufacturer BIGINT NOT NULL,
+    pk_manufacturer BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     name TEXT NOT NULL,
     country_code VARCHAR(2) NOT NULL,
     PRIMARY KEY (pk_manufacturer),

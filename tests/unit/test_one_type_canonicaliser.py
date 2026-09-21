@@ -8,7 +8,7 @@ different directions:
 ``core/type_lattice.py``                         ``int4`` -> ``integer``
 ``core/linting/libraries/functions.py``          ``int4`` -> ``integer``
 ``core/linting/libraries/security_definer.py``   ``int4`` -> ``integer``
-``core/differ.py``                               ``INT4`` -> ``INTEGER``
+``core/differ.py`` (now ``core/ddl_walk.py``)     ``INT4`` -> ``INTEGER``
 ``core/function_signature_parser.py``            ``varchar`` -> ``character varying``
 ``core/drift.py``                                ``integer`` -> ``int4``
 ===============================================  ==================================
@@ -107,9 +107,9 @@ MIN_ENTRIES = 3
 #: canonicalises in a *different direction* from `type_lattice`, so folding it in
 #: is a behaviour change to a surface neither #274 nor #275 is about.
 ALLOWED: dict[str, str] = {
-    "core/differ.py": (
+    "core/ddl_walk.py": (
         "`_PGLAST_TYPE_ALIASES` maps pglast's internal names back into the upper-case "
-        "spellings of `_COLUMN_TYPE_MAP`, which is the column type `migrate diff` prints "
+        "spellings of `READABLE_TYPES`, which is the column type `migrate diff` prints "
         "and writes into a generated migration; `canonical_type` answers lower-case"
     ),
     "core/function_signature_parser.py": (

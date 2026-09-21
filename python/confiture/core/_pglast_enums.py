@@ -60,6 +60,12 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "CONSTR_PRIMARY",
         "CONSTR_UNIQUE",
         "CONSTR_FOREIGN",
+        "CONSTR_IDENTITY",
+        "CONSTR_GENERATED",
+        "CONSTR_ATTR_DEFERRABLE",
+        "CONSTR_ATTR_NOT_DEFERRABLE",
+        "CONSTR_ATTR_DEFERRED",
+        "CONSTR_ATTR_IMMEDIATE",
     ),
     "ObjectType": (
         "OBJECT_TABLE",

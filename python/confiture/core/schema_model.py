@@ -40,6 +40,10 @@ IdentityKind = Literal["always", "by default"]
 #: ``DEFERRABLE INITIALLY IMMEDIATE`` / ``… DEFERRED``; ``None`` is ``NOT DEFERRABLE``.
 Deferral = Literal["immediate", "deferred"]
 
+#: How a generated column holds its value. ``virtual`` arrived with PostgreSQL 18,
+#: where it is also what ``GENERATED ALWAYS AS (…)`` with neither keyword means.
+GeneratedKind = Literal["stored", "virtual"]
+
 
 @dataclass(frozen=True)
 class ObjectRef:
@@ -103,7 +107,7 @@ class Column:
     a primary key — on the column or at table level — and an identity column all
     set it. ``default`` is the default expression's text, ``identity`` the kind
     of ``GENERATED … AS IDENTITY``, ``generated`` the expression of a
-    ``GENERATED ALWAYS AS (…) STORED`` column.
+    ``GENERATED ALWAYS AS (…)`` column and ``generated_kind`` how it is held.
     """
 
     name: str
@@ -116,6 +120,7 @@ class Column:
     default: str | None = None
     identity: IdentityKind | None = None
     generated: str | None = None
+    generated_kind: GeneratedKind | None = None
     primary_key: bool = False
 
 
