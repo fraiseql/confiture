@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- ⚠️ **pgGit is a plugin: `branch`, `coordinate` and `generate from-branch | preview |
+  diff` leave the package** (owner decisions 1 and 7). They live in
+  `plugins/fraiseql-confiture-pggit/`, a distribution of their own in this repository
+  whose tests run in this CI (the `pggit-plugin` job) and which is not published;
+  installed, it registers every one of those spellings again through the
+  `confiture.plugins` entry point. `confiture.integrations` is gone, and so are the
+  top-level exports `IntentRegistry`, `IntentStatus` and `ConflictSeverity` — import
+  them from `confiture_pggit.coordination`. The three real-database test files, the
+  `multi-agent-workflow` example and the coordination guides moved with the code;
+  the documentation no longer presents coordination as built in.
 - ⚠️ **`seed apply` applies; `--sequential` is gone from it.** Without the flag the
   command printed a hint and exited 0 having applied nothing, so `seed apply --env x`
   in a script reported success over an empty database. Applying each file in order,
@@ -49,6 +59,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The `confiture.plugins` entry-point group.** A distribution that declares
+  `[project.entry-points."confiture.plugins"] name = "module:register"` has
+  `register(app)` called with the root Typer app before the command tree is built
+  (`confiture.cli.plugins`). A plugin that fails to load is named on stderr and
+  skipped; confiture's own commands never depend on it. It is the package's first
+  plugin group, which also settles `examples/07-external-emitter`'s stated reason:
+  that emitter is resolved as `module:callable` on the command line, not through an
+  entry point, and the examples guard now says so.
 - **`migrate preflight --against` names the large tables the migrations touch.** Its
   JSON gains `large_tables` — each existing table a pending migration touches that
   holds 100,000 rows or more, or that was never analysed (`estimated_rows: null`),

@@ -19,10 +19,7 @@ FACTORIES = CLI_ROOT / "options.py"
 FLAGS = {"--config", "--env", "--database-url", "--migrations-dir", "--output", "--verbose"}
 
 #: Modules that keep their own declarations, and why.
-EXEMPT = {
-    "branch.py": "pgGit: leaves the package for its plugin, which owns its options",
-    "coordinate.py": "pgGit: leaves the package for its plugin, which owns its options",
-}
+EXEMPT: dict[str, str] = {}
 
 
 def _is_option(node: ast.AST) -> bool:

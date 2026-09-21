@@ -96,31 +96,3 @@ def test_builtin_tools_have_valid_json_schema():
         assert "description" in tool
         assert "inputSchema" in tool
         assert tool["inputSchema"]["type"] == "object"
-
-
-def test_intent_registry_importable():
-    """IntentRegistry is importable from the top-level package."""
-    from confiture import IntentRegistry  # noqa: F401
-
-    assert "IntentRegistry" in confiture.__all__
-
-
-def test_conflict_severity_importable():
-    """ConflictSeverity is importable from the top-level package."""
-    from confiture import ConflictSeverity  # noqa: F401
-
-    assert "ConflictSeverity" in confiture.__all__
-
-
-def test_intent_status_importable():
-    """IntentStatus is importable from the top-level package."""
-    from confiture import IntentStatus  # noqa: F401
-
-    assert "IntentStatus" in confiture.__all__
-
-
-def test_intent_registry_is_class():
-    """IntentRegistry is a proper class that can be instantiated with a connection."""
-    from confiture import IntentRegistry
-
-    assert isinstance(IntentRegistry, type)

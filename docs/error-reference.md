@@ -658,7 +658,7 @@ psql -c "SELECT pg_terminate_backend(12345);"
 
 **Still stuck?**:
 - Check the [GitHub Issues](https://github.com/evoludigit/confiture/issues)
-- Review [Architecture Documentation](./architecture/)
+- Review [Architecture Documentation](https://github.com/fraiseql/confiture/blob/main/ARCHITECTURE.md)
 - Check command help: `confiture build --help`
 
 ---

@@ -41,7 +41,6 @@ __all__ = [
     # Exceptions
     "ConfiturError",
     "ConfitureEmitter",
-    "ConflictSeverity",
     "DependencyGraph",
     # Diff
     "DiffResult",
@@ -69,9 +68,6 @@ __all__ = [
     "GrantAccompanimentReport",
     "HealthCheckResult",
     "HookPhase",
-    # Multi-agent coordination
-    "IntentRegistry",
-    "IntentStatus",
     "IntrospectedColumn",
     "IntrospectedTable",
     "IntrospectionResult",
@@ -241,19 +237,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "BatchProgress": ("confiture.core.large_tables", "BatchProgress"),
     "OnlineIndexBuilder": ("confiture.core.large_tables", "OnlineIndexBuilder"),
     "TableSizeEstimator": ("confiture.core.large_tables", "TableSizeEstimator"),
-    # Multi-agent coordination
-    "IntentRegistry": (
-        "confiture.integrations.pggit.coordination.registry",
-        "IntentRegistry",
-    ),
-    "ConflictSeverity": (
-        "confiture.integrations.pggit.coordination.models",
-        "ConflictSeverity",
-    ),
-    "IntentStatus": (
-        "confiture.integrations.pggit.coordination.models",
-        "IntentStatus",
-    ),
     # Dry run
     "DryRunError": ("confiture.core.dry_run", "DryRunError"),
     "DryRunExecutor": ("confiture.core.dry_run", "DryRunExecutor"),

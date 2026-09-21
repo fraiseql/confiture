@@ -46,20 +46,16 @@ NOT_EXECUTABLE: dict[str, str] = {
         "rules apply to a schema this directory does not have; the invocations "
         "are checked by test_examples_reference_real_commands.py."
     ),
-    "multi-agent-workflow": (
-        "A walkthrough of two agents coordinating through the `coordinate` "
-        "commands. Running it needs two agents and a shared coordination "
-        "database, which a smoke test cannot stand up."
-    ),
     "03-zero-downtime-migration": (
         "Medium 4 over FDW, between two live databases across a cutover. The "
         "scripts under scripts/ are the walkthrough; executing them needs two "
         "servers and a traffic switch."
     ),
     "07-external-emitter": (
-        "An emitter plugin registered through an entry point. It is loaded by "
-        "confiture at runtime from an installed distribution, and is exercised "
-        "by tests/integration/test_external_emitter_example.py."
+        "An emitter `generate scaffold --from` resolves as `module:callable` on its "
+        "own command line — no entry point: the `confiture.plugins` group adds "
+        "commands, not emitters. Exercised by "
+        "tests/integration/test_external_emitter_example.py."
     ),
 }
 

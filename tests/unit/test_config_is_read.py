@@ -56,7 +56,7 @@ ALL_COMMANDS = commands_declaring_config()
 
 def test_the_sweep_found_the_commands():
     """A floor: an empty sweep would make every test below vacuous."""
-    assert len(ALL_COMMANDS) > 30
+    assert len(ALL_COMMANDS) > 20
     for expected in ("migrate status", "migrate validate", "migrate fix", "migrate preflight"):
         assert expected in ALL_COMMANDS
 

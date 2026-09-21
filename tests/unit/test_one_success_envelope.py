@@ -27,10 +27,7 @@ CLI_ROOT = Path(__file__).resolve().parents[2] / "python" / "confiture" / "cli"
 WRITER = "helpers.py"
 
 #: Modules that keep a writer of their own, and why.
-EXEMPT = {
-    "branch.py": "pgGit: leaves the package for its plugin, which owns its output",
-    "coordinate.py": "pgGit: leaves the package for its plugin, which owns its output",
-}
+EXEMPT: dict[str, str] = {}
 
 WRITER_CALLS = {"dump", "dumps", "print_json"}
 

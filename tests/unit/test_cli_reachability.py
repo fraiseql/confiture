@@ -37,16 +37,17 @@ def _walk(t: typer.Typer, prefix: tuple[str, ...] = ()) -> list[tuple[str, ...]]
 ALL_COMMAND_PATHS = sorted(_walk(app))
 ALL_GROUP_NAMES = sorted(g.name for g in app.registered_groups if g.name)
 
-# Floor below the live count (70) so adding commands never breaks this, but
-# dropping a whole group (the failure we care about) does.
-_MIN_COMMANDS = 60
+# Floor below the live count (58 since pgGit's commands left for their plugin) so
+# adding commands never breaks this, but dropping a whole group (the failure we
+# care about) does.
+_MIN_COMMANDS = 50
 
 
 def test_command_tree_is_non_trivial() -> None:
     """The walk finds the full command surface, not an empty/half-registered app."""
     assert len(ALL_COMMAND_PATHS) >= _MIN_COMMANDS, ALL_COMMAND_PATHS
     # The major subcommand groups must all still be mounted.
-    for group in ("migrate", "seed", "branch", "coordinate", "generate"):
+    for group in ("migrate", "seed", "generate"):
         assert group in ALL_GROUP_NAMES, f"group {group!r} not registered"
 
 

@@ -23,7 +23,6 @@
     "python/confiture/cli/commands/migrate/up.py": 1,
     "python/confiture/cli/commands/migrate/validate.py": 1,
     "python/confiture/cli/commands/migrate/verify.py": 1,
-    "python/confiture/cli/coordinate.py": 1,
     "python/confiture/cli/seed.py": 2,
     "python/confiture/cli/sync.py": 1,
     "python/confiture/core/_migrator/session.py": 1,
@@ -53,7 +52,6 @@
     "python/confiture/cli/commands/migrate/validate.py": 1,
     "python/confiture/cli/dry_run.py": 1,
     "python/confiture/cli/formatters/migrate_formatter.py": 1,
-    "python/confiture/cli/generate.py": 1,
     "python/confiture/cli/idempotency.py": 3,
     "python/confiture/cli/seed.py": 1,
     "python/confiture/core/_migrator/apply.py": 1,
@@ -89,9 +87,6 @@
     "python/confiture/core/validation/signature_drift.py": 2,
     "python/confiture/core/view_manager.py": 1,
     "python/confiture/exceptions.py": 1,
-    "python/confiture/integrations/pggit/client.py": 10,
-    "python/confiture/integrations/pggit/exceptions.py": 1,
-    "python/confiture/integrations/pggit/generator.py": 1,
     "python/confiture/testing/frameworks/mutation.py": 2,
     "python/confiture/testing/frameworks/performance.py": 4
   },
@@ -112,7 +107,7 @@
     "python/confiture/cli/commands/validate_checks.py": 3,
     "python/confiture/cli/dsn.py": 1,
     "python/confiture/cli/error_json.py": 1,
-    "python/confiture/cli/generate.py": 3,
+    "python/confiture/cli/plugins.py": 1,
     "python/confiture/cli/seed.py": 4,
     "python/confiture/cli/seed_copy.py": 2,
     "python/confiture/core/_migrator/apply.py": 1,
@@ -173,7 +168,6 @@
     "python/confiture/core/seed/validation/prep_seed/level_1_seed_files.py": 1,
     "python/confiture/core/seed/validation/prep_seed/level_3_resolvers.py": 1,
     "python/confiture/core/temp_database.py": 1,
-    "python/confiture/integrations/pggit/coordination/detector.py": 5,
     "python/confiture/testing/frameworks/mutation.py": 2
   }
 }

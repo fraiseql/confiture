@@ -10,7 +10,6 @@ import typer
 from confiture import __version__
 
 # Sub-applications
-from confiture.cli.branch import branch_app
 from confiture.cli.commands.admin import (
     install_helpers,
     restore,
@@ -46,9 +45,9 @@ from confiture.cli.commands.migrate.steps import migrate_steps
 from confiture.cli.commands.migrate.up import migrate_up
 from confiture.cli.commands.migrate.validate import migrate_validate
 from confiture.cli.commands.migrate.verify import migrate_verify
-from confiture.cli.coordinate import coordinate_app
 from confiture.cli.generate import generate_app
 from confiture.cli.helpers import console
+from confiture.cli.plugins import load_plugins
 from confiture.cli.schema_to_schema import schema_to_schema_app
 from confiture.cli.seed import seed_app
 from confiture.cli.sync import sync
@@ -67,9 +66,7 @@ COMMON_COMMANDS = [
     "lint",
     "introspect",
     "seed",
-    "branch",
     "generate",
-    "coordinate",
     "install-helpers",
     "restore",
     "bootstrap",
@@ -101,14 +98,8 @@ app = typer.Typer(
 migrate_app = typer.Typer(help="Migration commands")
 app.add_typer(migrate_app, name="migrate")
 
-# Add branch subcommand group (pgGit integration)
-app.add_typer(branch_app, name="branch")
-
-# Add generate subcommand group (pgGit migration generation)
+# Add generate subcommand group (function trees, pgTAP, stubs)
 app.add_typer(generate_app, name="generate")
-
-# Add coordinate subcommand group (multi-agent coordination)
-app.add_typer(coordinate_app, name="coordinate")
 
 # Add seed subcommand group (seed validation)
 app.add_typer(seed_app, name="seed")
@@ -249,6 +240,9 @@ migrate_app.command("apply-as")(migrate_apply_as)
 
 # Medium 4: schema-to-schema (FDW) subcommand group
 migrate_app.add_typer(schema_to_schema_app, name="schema-to-schema")
+
+# Installed distributions add theirs last, to a tree whose own commands are all in.
+load_plugins(app)
 
 
 if __name__ == "__main__":

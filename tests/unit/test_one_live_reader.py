@@ -64,14 +64,6 @@ ALLOWED: dict[str, str] = {
         "the views that depend on a table's columns, saved whole — definition, "
         "indexes, comment, grants — to drop and recreate around ALTER COLUMN TYPE"
     ),
-    "integrations/pggit/client.py": (
-        "whether pgGit's own bookkeeping tables are installed: a tool's installation "
-        "state, not the project's schema"
-    ),
-    "integrations/pggit/detection.py": (
-        "whether pgGit is installed and initialised, and what it installed: a tool's "
-        "installation state, not the project's schema"
-    ),
     "testing/fixtures/data_validator.py": (
         "how many foreign keys PostgreSQL has not validated against the rows already "
         "there (`convalidated`): whether the data was checked, not what is declared"

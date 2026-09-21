@@ -30,9 +30,7 @@ The full feature laundry list — for the 30-second pitch and quick-start, see [
 - **5-level prep-seed validation** — static analysis through full execution, pre-commit safe at levels 1-3.
 
 ## Multi-Agent Coordination
-- **Intent registration** — declare which tables you're changing before you start.
-- **Conflict detection** — automatic alerts when agents touch overlapping tables.
-- **JSON output** — machine-readable for CI/CD pipelines.
+- **A plugin since 1.16** — pgGit branching and multi-agent coordination (intent registration, conflict detection) are not part of confiture's core. See [`plugins/fraiseql-confiture-pggit/`](https://github.com/fraiseql/confiture/tree/main/plugins/fraiseql-confiture-pggit).
 
 ## Developer Experience
 - **Structured output** — JSON, CSV, and YAML for all commands.

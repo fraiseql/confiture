@@ -27,7 +27,7 @@ COMMANDS = _registered_callbacks(app)
 
 
 def test_registry_is_populated() -> None:
-    assert len(COMMANDS) >= 70, [c for c, _ in COMMANDS]
+    assert len(COMMANDS) >= 50, [c for c, _ in COMMANDS]
 
 
 @pytest.mark.parametrize(("name", "callback"), COMMANDS, ids=[c for c, _ in COMMANDS])

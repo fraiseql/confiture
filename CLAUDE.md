@@ -632,8 +632,6 @@ confiture/
 │   ├── url_redaction.py          # DSN credential helpers (core-side, import-safe)
 │   ├── cli/
 │   │   ├── __init__.py
-│   │   ├── branch.py             # CLI commands for pgGit branch operations
-│   │   ├── coordinate.py         # Multi-agent coordination CLI commands for pgGit
 │   │   ├── dry_run.py            # Dry-run mode helpers for CLI integration
 │   │   ├── dsn.py                # Database-URL resolution for the CLI (#152 precedence contract) and the…
 │   │   ├── error_json.py         # Structured error envelope + JSON-aware CLI error boundary (issue #145)
@@ -645,6 +643,7 @@ confiture/
 │   │   ├── main.py               # Main CLI entry point for Confiture
 │   │   ├── options.py            # Shared CLI option factories and the option aliases more than one comman…
 │   │   ├── ownership.py          # ``migrate fix --ownership``: apply the ownership expectation to a live…
+│   │   ├── plugins.py            # Commands other distributions add to ``confiture``: the ``confiture.plug…
 │   │   ├── prep_seed_formatter.py # Formatter for prep-seed validation reports
 │   │   ├── schema_to_schema.py   # ``confiture migrate schema-to-schema`` — Medium 4 (FDW) CLI (issue ARCH…
 │   │   ├── seed.py               # CLI commands for seed data validation
@@ -758,9 +757,6 @@ confiture/
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
 │   │   ├── seed/                 # Seed data management and optimization (24 modules)
 │   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (16 modules)
-│   ├── integrations/
-│   │   ├── __init__.py
-│   │   └── pggit/                # pgGit integration module for Confiture (9 modules)
 │   ├── models/                   # Confiture migration models
 │   │   ├── __init__.py           # Confiture migration models
 │   │   ├── debug_models.py       # Data models for CTE step-through debugging
@@ -808,17 +804,18 @@ confiture/
 │
 ├── docs/                         # the mkdocs site: guides, reference, api, features
 │   ├── api/
-│   ├── architecture/
 │   ├── features/
 │   ├── guides/
 │   ├── operations/
-│   ├── performance/
 │   ├── reference/
 │   ├── release-notes/
 │   ├── research/
 │   └── security/
 │
 ├── examples/                     # runnable example projects (examples.yml runs them in CI)
+├── plugins/                      # distributions that add commands through confiture.plugins (pgGit)
+│   └── fraiseql-confiture-pggit/
+│
 ├── scripts/                      # generators (--check in CI) and developer helpers
 ├── src/                          # the confiture._core extension (file hashing)
 ├── ci/                           # local Dagger pipeline mirroring quality-gate.yml
@@ -1480,7 +1477,9 @@ except psycopg.OperationalError as e:
 
 ## 📊 Implementation Capabilities
 
-- ✅ **CLI**: commands across schema, migrate, admin, seed, branch, coordinate, generate subgroups
+- ✅ **CLI**: commands across schema, migrate, admin, seed, generate subgroups; other
+  distributions add theirs through the `confiture.plugins` entry point (pgGit's `branch`
+  and `coordinate`: `plugins/fraiseql-confiture-pggit/`)
 - ✅ **Validation System**: 5-level prep-seed orchestrator with full database support
 - ✅ **CI/CD**: Multi-platform wheel building, quality gates (ruff + ty + pytest)
 - ✅ **Python Support**: 3.11, 3.12, 3.13 tested
