@@ -1,13 +1,13 @@
 """Unit tests for MigratorSession constructor URL/table overrides."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
-from tests.unit._doubles import injected_connection
+from tests.unit._doubles import injected_connection, injected_engine
 
 
 @pytest.fixture()
@@ -49,7 +49,7 @@ def test_no_config_no_override_raises():
 def test_migration_table_override_used(mock_env):
     with (
         injected_connection(MagicMock()) as mock_cc,
-        patch("confiture.core.migrator.Migrator", autospec=True) as MockMigrator,
+        injected_engine() as MockMigrator,
     ):
         mock_cc.return_value = MagicMock()
         session = MigratorSession(
@@ -69,7 +69,7 @@ def test_migration_table_override_used(mock_env):
 def test_override_url_no_table_override_defaults_to_tb_confiture():
     with (
         injected_connection(MagicMock()) as mock_cc,
-        patch("confiture.core.migrator.Migrator", autospec=True) as MockMigrator,
+        injected_engine() as MockMigrator,
     ):
         mock_cc.return_value = MagicMock()
         session = MigratorSession(

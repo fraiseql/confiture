@@ -570,14 +570,6 @@ def up(
     backfill: BackfillSettings | None = None,
 ) -> MigrateUpResult:
     """See :meth:`MigratorSession.up`."""
-    # Bound at call time through the module, so a test that patches
-    # confiture.core.migrator.<name> still holds.
-    # Reason: import cycle — session → apply_loop → migrator → session
-    import confiture.core.migrator as _m
-
-    # Import through confiture.core.migrator so tests can patch
-    # confiture.core.migrator.load_migration_class and confiture.core.migrator.MigrationLock.
-
     if session._migrator is None:
         raise ConfigurationError(
             "MigratorSession must be used as a context manager",
@@ -601,10 +593,7 @@ def up(
     # deployer that waited for the lock finds nothing left to apply instead
     # of failing on what the first one just recorded — and two first-run
     # deployers cannot race the ledger CREATE.
-    lock_config = _m.LockConfig(
-        enabled=not no_lock, timeout_ms=lock_timeout, command=session._command
-    )
-    lock = _m.MigrationLock(session._conn, lock_config)
+    lock = session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout)
     with lock.acquire():
         if not no_lock:
             emit(on_event, "lock_acquired")
@@ -642,20 +631,12 @@ def apply_one(
     no_lock: bool = False,
 ) -> MigrationApplied:
     """See :meth:`MigratorSession.apply_one`."""
-    # Bound at call time through the module, so a test that patches
-    # confiture.core.migrator.<name> still holds.
-    # Reason: import cycle — session → apply_loop → migrator → session
-    import confiture.core.migrator as _m
-
     if session._migrator is None:
         raise ConfigurationError(
             "MigratorSession must be used as a context manager",
             resolution_hint="Use: with Migrator.from_config(...) as m: ...",
         )
-    lock = _m.MigrationLock(
-        session._conn,
-        _m.LockConfig(enabled=not no_lock, timeout_ms=lock_timeout, command=session._command),
-    )
+    lock = session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout)
     with lock.acquire():
         session._migrator.initialize()
         if version in set(session._migrator.get_applied_versions()):

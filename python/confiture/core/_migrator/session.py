@@ -47,6 +47,7 @@ from confiture.core._migrator import apply_loop as _apply_loop
 from confiture.core._migrator import replay as _replay
 from confiture.core._migrator import reporting as _reporting
 from confiture.core._migrator import rollback_loop as _rollback_loop
+from confiture.core._migrator.engine import Migrator
 from confiture.core._migrator.events import UpObserver
 from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_settings
 from confiture.exceptions import ConfigurationError
@@ -89,6 +90,12 @@ class MigratorSession:
     default_migration_loader: ClassVar[Callable[[Path], type]] = staticmethod(
         lambda path: _core_connection().load_migration_class(path)
     )
+    #: What the session drives once it is connected, and what takes the migration
+    #: lock. Class attributes for the same reason: a test injects a double here,
+    #: where it used to patch a name in ``confiture.core.migrator`` that this package
+    #: then had to look up at call time — an import cycle kept alive for a test seam.
+    default_engine: ClassVar[Callable[..., Migrator]] = Migrator
+    default_lock: ClassVar[Callable[[Any, LockConfig], MigrationLock]] = MigrationLock
 
     def __init__(
         self,
@@ -152,11 +159,6 @@ class MigratorSession:
         return session
 
     def __enter__(self) -> MigratorSession:
-        # Import through confiture.core.migrator so tests can patch
-        # confiture.core.migrator.create_connection and have it intercepted here.
-        # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        import confiture.core.migrator as _m
-
         if self._migrator is not None:  # attached to a live engine
             return self
 
@@ -177,7 +179,7 @@ class MigratorSession:
 
         self._conn = self.connection_factory(url)
         try:
-            self._migrator = _m.Migrator(
+            self._migrator = type(self).default_engine(
                 connection=self._conn,
                 migration_table=migration_table,
             )
@@ -213,6 +215,17 @@ class MigratorSession:
             raise _not_entered()
         return self._migrator
 
+    def _migration_lock(
+        self, *, no_lock: bool, lock_timeout: int, command: str | None = None
+    ) -> MigrationLock:
+        """The migration lock for one run of a verb, on this session's connection."""
+        return type(self).default_lock(
+            self._conn,
+            LockConfig(
+                enabled=not no_lock, timeout_ms=lock_timeout, command=command or self._command
+            ),
+        )
+
     def _lock_settings(self, lock_timeout: int | None, no_lock: bool | None) -> tuple[int, bool]:
         """Explicit arguments win; otherwise the environment's ``migration.locking`` block."""
         migration = getattr(self._config, "migration", None)
@@ -231,7 +244,7 @@ class MigratorSession:
         Raises:
             ConfigurationError: If used outside ``with`` context manager.
         """
-        lock = MigrationLock(self.connection, LockConfig())
+        lock = type(self).default_lock(self.connection, LockConfig())
         return lock.is_locked()
 
     def get_lock_holder(self) -> dict[str, Any] | None:
@@ -244,7 +257,7 @@ class MigratorSession:
         Raises:
             ConfigurationError: If used outside ``with`` context manager.
         """
-        lock = MigrationLock(self.connection, LockConfig())
+        lock = type(self).default_lock(self.connection, LockConfig())
         return lock.get_lock_holder()
 
     # ------------------------------------------------------------------ #
@@ -706,8 +719,3 @@ class MigratorSession:
         return _replay.run_against(
             self, pending_files, against_url, allow_non_transactional=allow_non_transactional
         )
-
-
-# Avoid circular import: Migrator is defined in engine.py but MigratorSession
-# references it. We import it here so the type annotation and runtime value work.
-from confiture.core._migrator.engine import Migrator  # noqa: E402

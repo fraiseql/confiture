@@ -40,9 +40,6 @@ def _rollback_sequence(
         of MigrationApplied in the order rolled back.
     """
 
-    # Import through confiture.core.migrator so tests can patch
-    # confiture.core.migrator.load_migration_class.
-
     assert session._migrator is not None
 
     migration_files = session._migrator.find_migration_files(migrations_dir=session._migrations_dir)
@@ -110,11 +107,6 @@ def down(
     command: str | None = None,
 ) -> MigrateDownResult:
     """See :meth:`MigratorSession.down`."""
-    # Bound at call time through the module, so a test that patches
-    # confiture.core.migrator.<name> still holds.
-    # Reason: import cycle — session → apply_loop → migrator → session
-    import confiture.core.migrator as _m
-
     if session._migrator is None:
         raise ConfigurationError(
             "MigratorSession must be used as a context manager",
@@ -135,10 +127,7 @@ def down(
     if dry_run:
         rolled_back, total_ms = _plan_and_roll_back(True)
     else:
-        lock_config = _m.LockConfig(
-            enabled=not no_lock, timeout_ms=lock_timeout, command=command or session._command
-        )
-        lock = _m.MigrationLock(session._conn, lock_config)
+        lock = session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout, command=command)
         with lock.acquire():
             rolled_back, total_ms = _plan_and_roll_back(False)
     return MigrateDownResult(
@@ -158,11 +147,6 @@ def down_to(
     command: str | None = None,
 ) -> DownToResult:
     """See :meth:`MigratorSession.down_to`."""
-    # Bound at call time through the module, so a test that patches
-    # confiture.core.migrator.<name> still holds.
-    # Reason: import cycle — session → apply_loop → migrator → session
-    import confiture.core.migrator as _m
-
     if session._migrator is None:
         raise ConfigurationError(
             "MigratorSession must be used as a context manager",
@@ -171,10 +155,7 @@ def down_to(
 
     if dry_run:
         return _down_to_under_lock(session, target, dry_run=True)
-    lock_config = _m.LockConfig(
-        enabled=not no_lock, timeout_ms=lock_timeout, command=command or session._command
-    )
-    lock = _m.MigrationLock(session._conn, lock_config)
+    lock = session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout, command=command)
     with lock.acquire():
         return _down_to_under_lock(session, target, dry_run=False)
 

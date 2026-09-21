@@ -62,7 +62,9 @@ def test_the_reader_sees_a_deferral_and_nothing_else() -> None:
     assert _deferrals(source, "m.py") == ["m.py:3"]
 
 
-@pytest.mark.xfail(strict=True, reason="the map for Phase 07 cycles 2-4; removed by Cycle 4")
+@pytest.mark.xfail(
+    strict=True, reason="a map of the cycles still to remove; the mark goes with the last one"
+)
 def test_no_import_cycle_is_deferred_in_the_migrator_or_the_models() -> None:
     deferrals = _all_deferrals()
     assert deferrals == [], "function-local imports that defer a cycle:\n  " + "\n  ".join(

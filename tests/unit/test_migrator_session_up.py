@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from confiture.config.environment import Environment
 from confiture.core.migrator import MigratorSession
 from confiture.models.results import MigrateUpResult
-from tests.unit._doubles import connection_double, injected_connection, injected_loader
+from tests.unit._doubles import (
+    connection_double,
+    injected_connection,
+    injected_loader,
+    injected_lock,
+)
 
 
 def _make_env() -> Environment:
@@ -85,7 +90,7 @@ class TestMigratorSessionUpAppliesMigrations:
         session._migrator._version_from_filename = MagicMock(return_value="001")
 
         with injected_loader(return_value=mock_class):
-            with patch("confiture.core.migrator.MigrationLock") as mock_lock_cls:
+            with injected_lock(MagicMock()) as mock_lock_cls:
                 mock_lock = MagicMock()
                 mock_lock_cls.return_value = mock_lock
                 mock_lock.acquire.return_value.__enter__ = MagicMock(return_value=None)
@@ -123,7 +128,7 @@ class TestMigratorSessionUpAppliesMigrations:
         session._migrator._version_from_filename = MagicMock(side_effect=_ver_from_filename)
 
         with injected_loader(return_value=mock_class):
-            with patch("confiture.core.migrator.MigrationLock") as mock_lock_cls:
+            with injected_lock(MagicMock()) as mock_lock_cls:
                 mock_lock = MagicMock()
                 mock_lock_cls.return_value = mock_lock
                 mock_lock.acquire.return_value.__enter__ = MagicMock(return_value=None)
@@ -184,7 +189,7 @@ class TestMigratorSessionUpAppliesMigrations:
         session._migrator._version_from_filename = MagicMock(return_value="001")
 
         with injected_loader(return_value=mock_class):
-            with patch("confiture.core.migrator.MigrationLock") as mock_lock_cls:
+            with injected_lock(MagicMock()) as mock_lock_cls:
                 mock_lock = MagicMock()
                 mock_lock_cls.return_value = mock_lock
                 mock_lock.acquire.return_value.__enter__ = MagicMock(return_value=None)
@@ -231,7 +236,7 @@ class TestMigratorSessionUpAppliesMigrations:
         session._migrator._version_from_filename = MagicMock(side_effect=lambda n: n.split("_")[0])
 
         with injected_loader(side_effect=_load_class):
-            with patch("confiture.core.migrator.MigrationLock") as mock_lock_cls:
+            with injected_lock(MagicMock()) as mock_lock_cls:
                 mock_lock = MagicMock()
                 mock_lock_cls.return_value = mock_lock
                 mock_lock.acquire.return_value.__enter__ = MagicMock(return_value=None)

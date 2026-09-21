@@ -17,9 +17,12 @@ Two build modes:
   ``db/schema`` files, or passed explicitly). This is the "build-from-DDL"
   expectation used by view drift (#174).
 * :meth:`ExpectedSchemaDB.from_base_plus_migrations` — apply an optional base
-  schema, then replay every migration in ``migrations_dir`` via ``migrate up``.
-  This is the "migrate-strategy" expectation used by replay drift (#179) and
-  require-migration bodies (#178).
+  schema, then replay every migration in ``migrations_dir`` with the ``replay``
+  the caller hands it (``confiture.core.migrator.replay_migrations`` is
+  ``migrate up``). This is the "migrate-strategy" expectation used by replay drift
+  (#179) and require-migration bodies (#178). The replay is the caller's so that a
+  scratch database knows nothing about the migrator: the linter reaches this module,
+  and the migrator reaches the linter.
 
 The scratch database is always built on a **writable** maintenance server (given
 by ``server_url``) — usually local or CI, and *not necessarily* the production
@@ -37,15 +40,15 @@ Usage::
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import psycopg
 
 from confiture.core import builder as _core_builder
-from confiture.core._migrator.session import MigratorSession
 from confiture.core.temp_database import TempDatabase
-from confiture.exceptions import ConfigurationError, SchemaError
+from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -54,6 +57,11 @@ if TYPE_CHECKING:
 
 _MODE_SOURCE = "source"
 _MODE_MIGRATIONS = "migrations"
+
+
+#: Applies every migration in a directory to the database at a URL, or raises:
+#: ``(database_url, migrations_dir, migration_table)``.
+Replay = Callable[[str, Path, "str | None"], None]
 
 
 class ExpectedSchemaDB:
@@ -98,6 +106,7 @@ class ExpectedSchemaDB:
         self._mode: str | None = None
         self._schema_sql: str | None = None
         self._base_sql: str | None = None
+        self._replay: Replay | None = None
 
         self._stack: contextlib.ExitStack | None = None
         self._td: TempDatabase | None = None
@@ -118,19 +127,24 @@ class ExpectedSchemaDB:
         self._schema_sql = schema_sql
         return self
 
-    def from_base_plus_migrations(self, *, base_sql: str | None = None) -> ExpectedSchemaDB:
+    def from_base_plus_migrations(
+        self, *, replay: Replay, base_sql: str | None = None
+    ) -> ExpectedSchemaDB:
         """Build the scratch DB by replaying migrations.
 
-        Applies ``base_sql`` first (if given), then runs ``migrate up`` over
-        every migration in ``migrations_dir`` against the scratch DB. With
-        ``base_sql=None`` the scratch starts empty and the migrations build the
-        whole schema — the pure migrate-strategy expectation.
+        Applies ``base_sql`` first (if given), then calls ``replay`` with the
+        scratch database's URL, ``migrations_dir`` and the tracking-table
+        override. With ``base_sql=None`` the scratch starts empty and the
+        migrations build the whole schema — the pure migrate-strategy expectation.
 
         Args:
+            replay: Applies every migration in a directory to a database, or
+                raises — ``confiture.core.migrator.replay_migrations``.
             base_sql: Optional baseline DDL applied before the migration replay.
         """
         self._mode = _MODE_MIGRATIONS
         self._base_sql = base_sql
+        self._replay = replay
         return self
 
     # -- context management ---------------------------------------------- #
@@ -199,17 +213,5 @@ class ExpectedSchemaDB:
         )
 
     def _replay_migrations(self) -> None:
-
-        session = MigratorSession(
-            config=None,
-            migrations_dir=self._migrations_dir,
-            database_url_override=self._temp_url,
-            migration_table_override=self._migration_table,
-        )
-        with session:
-            result = session.up()
-        if not result.success:
-            raise SchemaError(
-                f"Migration replay into the scratch database failed: {result.errors}",
-                resolution_hint="Fix the failing migration, then retry the drift check.",
-            )
+        assert self._replay is not None and self._temp_url is not None
+        self._replay(self._temp_url, self._migrations_dir, self._migration_table)

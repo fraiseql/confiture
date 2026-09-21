@@ -131,3 +131,26 @@ def injected_loader(**mock_kwargs: Any) -> Iterator[MagicMock]:
     loader = MagicMock(name="migration_loader", **mock_kwargs)
     with patch.object(MigratorSession, "default_migration_loader", staticmethod(loader)):
         yield loader
+
+
+@contextmanager
+def injected_engine(double: Any | None = None) -> Iterator[MagicMock]:
+    """The engine every session builds inside the block: an autospecced ``Migrator`` class.
+
+    Sets ``MigratorSession.default_engine`` and yields the class double, whose
+    ``return_value`` is *double* (an autospecced ``migrator_double()`` by default), so
+    a test can assert what the session constructed it with.
+    """
+    engine = create_autospec(Migrator, return_value=double or migrator_double())
+    with patch.object(MigratorSession, "default_engine", engine):
+        yield engine
+
+
+@contextmanager
+def injected_lock(lock: Any) -> Iterator[Any]:
+    """The migration lock every session takes inside the block: *lock*, a class or a factory.
+
+    Sets ``MigratorSession.default_lock``, called as ``lock(connection, lock_config)``.
+    """
+    with patch.object(MigratorSession, "default_lock", lock):
+        yield lock

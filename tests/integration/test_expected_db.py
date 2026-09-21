@@ -16,6 +16,7 @@ import pytest
 from tests.conftest import database_url_for
 
 from confiture.core.expected_db import ExpectedSchemaDB
+from confiture.core.migrator import replay_migrations
 
 
 @pytest.fixture
@@ -127,7 +128,7 @@ def test_from_base_plus_migrations_applies_all_migrations(
     )
 
     with ExpectedSchemaDB(server_url, migrations_dir=tmp_path).from_base_plus_migrations(
-        base_sql=_BASE_SQL
+        replay=replay_migrations, base_sql=_BASE_SQL
     ) as conn:
         # Column added by migration 1 is present.
         columns = {
@@ -157,7 +158,9 @@ def test_from_base_plus_migrations_without_base_starts_empty(
     )
     (tmp_path / "20260708000010_create_all.down.sql").write_text("DROP TABLE solo;\n")
 
-    with ExpectedSchemaDB(server_url, migrations_dir=tmp_path).from_base_plus_migrations() as conn:
+    with ExpectedSchemaDB(server_url, migrations_dir=tmp_path).from_base_plus_migrations(
+        replay=replay_migrations
+    ) as conn:
         tables = {
             r[0]
             for r in conn.execute(

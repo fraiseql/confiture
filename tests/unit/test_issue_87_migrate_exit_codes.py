@@ -16,7 +16,12 @@ from unittest.mock import MagicMock, patch
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from tests.unit._doubles import connection_double, migrator_double
+from tests.unit._doubles import (
+    connection_double,
+    injected_engine,
+    injected_lock,
+    migrator_double,
+)
 
 runner = CliRunner()
 
@@ -224,7 +229,7 @@ class TestMigrateUpLockExitCodes:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.cli.helpers.create_connection", return_value=mock_conn),
-            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
+            injected_engine(mock_migrator),
             patch(
                 "confiture.core.locking.MigrationLock.acquire",
                 side_effect=lock_error,
@@ -269,7 +274,7 @@ class TestMigrateUpLockExitCodes:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.cli.helpers.create_connection", return_value=mock_conn),
-            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
+            injected_engine(mock_migrator),
             patch(
                 "confiture.core.locking.MigrationLock.acquire",
                 side_effect=lock_error,
@@ -332,11 +337,11 @@ class TestMigrateUpMigrationFailure:
         with (
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.cli.helpers.create_connection", return_value=mock_conn),
-            patch("confiture.core.migrator.Migrator", autospec=True, return_value=mock_migrator),
+            injected_engine(mock_migrator),
             patch(
                 "confiture.core.connection.load_migration_class", return_value=mock_migration_class
             ),
-            patch("confiture.core.locking.MigrationLock", return_value=mock_lock),
+            injected_lock(MagicMock(return_value=mock_lock)),
         ):
             result = runner.invoke(
                 app,

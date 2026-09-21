@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from confiture.config.environment import Environment
 from confiture.core._migrator.session import MigratorSession
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
-from tests.unit._doubles import connection_double, injected_loader
+from tests.unit._doubles import connection_double, injected_loader, injected_lock
 
 
 def _make_entered_session(migrations_dir: Path | None = None) -> MigratorSession:
@@ -58,25 +58,22 @@ class TestRequireReversible:
         session._migrator.find_pending.return_value = [mdir / "001_create_users.up.sql"]
         session._migrator._version_from_filename.return_value = "001"
 
-        import confiture.core.migrator as _m
-
         with patch.object(session, "preflight", return_value=_preflight_all_reversible()):
-            with patch.object(_m, "LockConfig"):
-                with patch.object(_m, "MigrationLock") as MockLock:
-                    mock_lock = MagicMock()
-                    mock_lock.acquire.return_value.__enter__ = MagicMock()
-                    mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
-                    MockLock.return_value = mock_lock
+            with injected_lock(MagicMock()) as MockLock:
+                mock_lock = MagicMock()
+                mock_lock.acquire.return_value.__enter__ = MagicMock()
+                mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
+                MockLock.return_value = mock_lock
 
-                    with injected_loader() as mock_load:
-                        mock_cls = MagicMock()
-                        mock_instance = MagicMock()
-                        mock_instance.version = "001"
-                        mock_instance.name = "create_users"
-                        mock_cls.return_value = mock_instance
-                        mock_load.return_value = mock_cls
+                with injected_loader() as mock_load:
+                    mock_cls = MagicMock()
+                    mock_instance = MagicMock()
+                    mock_instance.version = "001"
+                    mock_instance.name = "create_users"
+                    mock_cls.return_value = mock_instance
+                    mock_load.return_value = mock_cls
 
-                        result = session.up(require_reversible=True)
+                    result = session.up(require_reversible=True)
 
         assert result.success is True
 
@@ -110,24 +107,21 @@ class TestRequireReversible:
         session._migrator.find_pending.return_value = [mdir / "001_create_users.up.sql"]
         session._migrator._version_from_filename.return_value = "001"
 
-        import confiture.core.migrator as _m
+        with injected_lock(MagicMock()) as MockLock:
+            mock_lock = MagicMock()
+            mock_lock.acquire.return_value.__enter__ = MagicMock()
+            mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
+            MockLock.return_value = mock_lock
 
-        with patch.object(_m, "LockConfig"):
-            with patch.object(_m, "MigrationLock") as MockLock:
-                mock_lock = MagicMock()
-                mock_lock.acquire.return_value.__enter__ = MagicMock()
-                mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
-                MockLock.return_value = mock_lock
+            with injected_loader() as mock_load:
+                mock_cls = MagicMock()
+                mock_instance = MagicMock()
+                mock_instance.version = "001"
+                mock_instance.name = "create_users"
+                mock_cls.return_value = mock_instance
+                mock_load.return_value = mock_cls
 
-                with injected_loader() as mock_load:
-                    mock_cls = MagicMock()
-                    mock_instance = MagicMock()
-                    mock_instance.version = "001"
-                    mock_instance.name = "create_users"
-                    mock_cls.return_value = mock_instance
-                    mock_load.return_value = mock_cls
-
-                    result = session.up(require_reversible=False)
+                result = session.up(require_reversible=False)
 
         assert result.success is True
 
