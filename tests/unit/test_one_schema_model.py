@@ -51,10 +51,6 @@ FIELD_SIGNATURES: dict[str, tuple[frozenset[str], ...]] = {
     "Sequence": (frozenset({"start", "increment"}),),
 }
 
-_DIFFER_MODEL = (
-    "the differ's own model of a DDL tree; it retires when the differ compares the "
-    "schema model instead"
-)
 _SNAPSHOT = (
     "the pytest plugin's own snapshot of a live database, part of the `pytest11` "
     "entry point's surface and shaped for its users' assertions"
@@ -62,14 +58,6 @@ _SNAPSHOT = (
 
 #: ``module:Class`` -> the different question that class answers.
 ALLOWED: dict[str, str] = {
-    "models/schema.py:Table": _DIFFER_MODEL,
-    "models/schema.py:Column": _DIFFER_MODEL,
-    "models/schema.py:Index": _DIFFER_MODEL,
-    "models/schema.py:ForeignKey": _DIFFER_MODEL,
-    "models/schema.py:CheckConstraint": _DIFFER_MODEL,
-    "models/schema.py:UniqueConstraint": _DIFFER_MODEL,
-    "models/schema.py:EnumType": _DIFFER_MODEL,
-    "models/schema.py:Sequence": _DIFFER_MODEL,
     "core/linting/inventory.py:SchemaObject": (
         "one CREATE statement as the lint rules read it — any kind, with the file, "
         "line, offset and existence clauses a finding needs; `schema_model()` turns "

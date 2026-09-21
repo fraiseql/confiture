@@ -8,6 +8,7 @@ This module provides functionality to:
 
 import logging
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 from typing import Any
 
 import pglast
@@ -33,10 +34,30 @@ from confiture.core.schema_model import (
 )
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.core.type_lattice import same_type
-from confiture.models.schema import ParsedSchema, SchemaChange, SchemaDiff
+from confiture.models.schema import SchemaChange, SchemaDiff
 from confiture.models.warnings import BuildWarning
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ParsedSchema:
+    """One side of a comparison: the schema model's objects, and what the parse had to say.
+
+    ``tables``, ``enum_types`` and ``sequences`` are the model's, in the order the
+    tree declared them. ``objects`` are the ones compared by definition rather than
+    by structure (#288) — views, routines, triggers and the rest — keyed by
+    ``ObjectRef``; the value carries the definition, so a redefinition in place is
+    visible. ``warnings`` is what the parse has to say that is not a change: two
+    definitions of one object, resolved the way ``confiture build`` resolves it
+    (#313) — always present, empty when there is nothing to report.
+    """
+
+    tables: list[Table] = field(default_factory=list)
+    enum_types: list[EnumType] = field(default_factory=list)
+    sequences: list[Sequence] = field(default_factory=list)
+    objects: dict[Any, Any] = field(default_factory=dict)
+    warnings: list[BuildWarning] = field(default_factory=list)
 
 
 def _identity(schema: str | None, name: str) -> tuple[str, str]:

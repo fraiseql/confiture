@@ -76,6 +76,13 @@ comparisons say today, are now tests in its own suite.
     it, and without it the build fails at that statement, so a database built from the
     tree holds the column declared first. The differ let the second overwrite it, and
     the lint inventory kept both.
+- **⚠️ `confiture.models.schema`'s table model is retired.** `Table`, `Column`,
+  `ColumnType`, `Index`, `ForeignKey`, `CheckConstraint`, `UniqueConstraint`,
+  `EnumType`, `Sequence`, `ParsedSchema` and `qualified_name` — the differ's own model,
+  which nothing reads any more — are gone; importing one raises `ImportError` naming
+  where it went (`confiture.core.schema_model`, or `confiture.core.differ.ParsedSchema`).
+  `SchemaChange` and `SchemaDiff` stay. A column's type is compared by its identity
+  (`type_key`, through `type_lattice.same_type`), never by its spelling.
 - **`models/` imports one way.** `BuildWarning` moves to `models/warnings.py` (still
   importable from `models.results`) and `VerifyResult` to `models/results.py` (still
   importable from `core.migration_verifier`): `models/schema` imported `models/results`

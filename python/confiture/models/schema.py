@@ -1,293 +1,40 @@
-"""Data models for schema representation.
+"""The change set ``migrate diff`` produces: :class:`SchemaChange` and :class:`SchemaDiff`.
 
-These models represent database schema objects (tables, columns, indexes, etc.)
-in a structured format for diff detection and comparison.
+What a schema *declares* is ``core/schema_model.py``'s — one model, read by the lint
+inventory and compared by the differ. The differ's own model of a table, its
+columns, indexes, constraints, enums and sequences lived here and is retired;
+importing one of its names says where the model is now.
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
 from confiture.models.warnings import BuildWarning
 
-
-def qualified_name(schema: str | None, name: str) -> str:
-    """The object's name as the schema file spells it.
-
-    ``tenant.t`` when the author wrote a schema, ``t`` when they did not — never
-    an invented ``public.``. This is the *spelling*, which is what a finding
-    prints and what generated DDL says; the *identity* that decides whether two
-    statements are one object folds the missing schema to
-    :data:`~confiture.core.linting.inventory.DEFAULT_SCHEMA` and lives in
-    ``core.differ._identity``. The two are deliberately different: a project
-    whose ``search_path`` is not ``public`` would have its DDL rewritten into
-    another schema by a qualifier confiture invented.
-    """
-    return f"{schema}.{name}" if schema else name
-
-
-class ColumnType(str, Enum):
-    """PostgreSQL column types."""
-
-    # Integer types
-    SMALLINT = "SMALLINT"
-    INTEGER = "INTEGER"
-    BIGINT = "BIGINT"
-    SERIAL = "SERIAL"
-    BIGSERIAL = "BIGSERIAL"
-
-    # Numeric types
-    NUMERIC = "NUMERIC"
-    DECIMAL = "DECIMAL"
-    REAL = "REAL"
-    DOUBLE_PRECISION = "DOUBLE PRECISION"
-
-    # Text types
-    VARCHAR = "VARCHAR"
-    CHAR = "CHAR"
-    TEXT = "TEXT"
-
-    # Boolean
-    BOOLEAN = "BOOLEAN"
-
-    # Date/Time
-    DATE = "DATE"
-    TIME = "TIME"
-    TIMESTAMP = "TIMESTAMP"
-    TIMESTAMPTZ = "TIMESTAMPTZ"
-
-    # UUID
-    UUID = "UUID"
-
-    # JSON
-    JSON = "JSON"
-    JSONB = "JSONB"
-
-    # Binary
-    BYTEA = "BYTEA"
-
-    # Network types
-    CIDR = "CIDR"
-    INET = "INET"
-    MACADDR = "MACADDR"
-    MACADDR8 = "MACADDR8"
-
-    # Money
-    MONEY = "MONEY"
-
-    # Bit strings
-    BIT = "BIT"
-    VARBIT = "VARBIT"
-
-    # Text search
-    TSVECTOR = "TSVECTOR"
-    TSQUERY = "TSQUERY"
-
-    # XML
-    XML = "XML"
-
-    # Range types
-    INT4RANGE = "INT4RANGE"
-    INT8RANGE = "INT8RANGE"
-    NUMRANGE = "NUMRANGE"
-    TSRANGE = "TSRANGE"
-    TSTZRANGE = "TSTZRANGE"
-    DATERANGE = "DATERANGE"
-
-    # Unknown/Custom
-    UNKNOWN = "UNKNOWN"
+#: The names this module held before the schema model, and where each went.
+_MOVED: dict[str, str] = {
+    "Table": "confiture.core.schema_model.Table",
+    "Column": "confiture.core.schema_model.Column",
+    "Index": "confiture.core.schema_model.Index",
+    "EnumType": "confiture.core.schema_model.EnumType",
+    "Sequence": "confiture.core.schema_model.Sequence",
+    "ForeignKey": 'confiture.core.schema_model.Constraint (kind="foreign_key")',
+    "CheckConstraint": 'confiture.core.schema_model.Constraint (kind="check")',
+    "UniqueConstraint": 'confiture.core.schema_model.Constraint (kind="unique")',
+    "ColumnType": "confiture.core.schema_model.Column.type_key (a canonical type name)",
+    "ParsedSchema": "confiture.core.differ.ParsedSchema",
+    "qualified_name": "confiture.core.schema_model.qualified_name",
+}
 
 
-@dataclass
-class Column:
-    """Represents a database column."""
-
-    name: str
-    type: ColumnType
-    nullable: bool = True
-    default: str | None = None
-    primary_key: bool = False
-    unique: bool = False
-    length: int | None = None  # For VARCHAR(n), etc.
-    raw_sql_type: str | None = field(default=None, compare=False, hash=False)
-    #: ``GENERATED {ALWAYS|BY DEFAULT} AS IDENTITY`` — ``"always"`` / ``"by default"``.
-    identity: str | None = None
-    #: The expression of a generated column, and whether it is stored or virtual.
-    generated: str | None = None
-    generated_kind: str | None = None
-
-    def __eq__(self, other: object) -> bool:
-        """Compare columns for equality."""
-        if not isinstance(other, Column):
-            return NotImplemented
-        return (
-            self.name == other.name
-            and self.type == other.type
-            and self.nullable == other.nullable
-            and self.default == other.default
-            and self.primary_key == other.primary_key
-            and self.unique == other.unique
-            and self.length == other.length
-        )
-
-    def __hash__(self) -> int:
-        """Make column hashable for use in sets."""
-        return hash(
-            (
-                self.name,
-                self.type,
-                self.nullable,
-                self.default,
-                self.primary_key,
-                self.unique,
-                self.length,
-            )
-        )
-
-
-@dataclass
-class Index:
-    """Represents a database index."""
-
-    name: str
-    table: str
-    columns: list[str]
-    unique: bool = False
-    where: str | None = None  # partial index predicate
-
-
-@dataclass
-class ForeignKey:
-    """Represents a foreign key constraint."""
-
-    name: str
-    table: str
-    columns: list[str]
-    ref_table: str
-    ref_columns: list[str]
-    on_delete: str | None = None
-    on_update: str | None = None
-
-
-@dataclass
-class CheckConstraint:
-    """Represents a CHECK constraint."""
-
-    name: str
-    table: str
-    expression: str
-
-
-@dataclass
-class UniqueConstraint:
-    """Represents a UNIQUE constraint."""
-
-    name: str
-    table: str
-    columns: list[str]
-
-
-@dataclass
-class EnumType:
-    """Represents a CREATE TYPE ... AS ENUM."""
-
-    name: str
-    schema: str | None = None
-    values: list[str] = field(default_factory=list)
-
-    @property
-    def qualified(self) -> str:
-        """The type as the schema file names it — see :func:`qualified_name`."""
-        return qualified_name(self.schema, self.name)
-
-
-@dataclass
-class Sequence:
-    """Represents a CREATE SEQUENCE."""
-
-    name: str
-    schema: str | None = None
-    start: int = 1
-    increment: int = 1
-    min_value: int | None = None
-    max_value: int | None = None
-
-    @property
-    def qualified(self) -> str:
-        """The sequence as the schema file names it — see :func:`qualified_name`."""
-        return qualified_name(self.schema, self.name)
-
-
-@dataclass
-class ParsedSchema:
-    """Result of parsing a full SQL DDL string."""
-
-    #: ``core.schema_model`` Tables, EnumTypes and Sequences — typed loosely here
-    #: because ``models/`` imports nothing from ``core/``.
-    tables: list[Any] = field(default_factory=list)
-    enum_types: list[Any] = field(default_factory=list)
-    sequences: list[Any] = field(default_factory=list)
-    #: The objects compared by definition rather than by structure (#288) —
-    #: views, and in later phases everything else a schema tree defines. Keyed
-    #: by what makes two ``CREATE`` statements the same object; the value
-    #: carries the definition, so a redefinition in place is visible. Typed
-    #: loosely here because ``core.ddl_objects`` imports this module.
-    objects: dict[Any, Any] = field(default_factory=dict)
-    #: What the parse has to say that is not a change: two definitions of one
-    #: object in one tree, resolved the way ``confiture build`` resolves it
-    #: (#313). Always present, empty when there is nothing to report.
-    warnings: list[BuildWarning] = field(default_factory=list)
-
-
-@dataclass
-class Table:
-    """Represents a database table.
-
-    ``name`` is the relation's own name as pglast folded it; ``schema`` is the
-    qualifier the statement wrote, and ``None`` when it wrote none. The pair is
-    the identity — ``tenant.t`` and ``etl.t`` are two tables (#313) — while
-    :attr:`qualified` is the spelling a finding prints.
-    """
-
-    name: str
-    schema: str | None = None
-    columns: list[Column] = field(default_factory=list)
-    indexes: list[Index] = field(default_factory=list)
-    foreign_keys: list[ForeignKey] = field(default_factory=list)
-    check_constraints: list[CheckConstraint] = field(default_factory=list)
-    unique_constraints: list[UniqueConstraint] = field(default_factory=list)
-
-    def get_column(self, name: str) -> Column | None:
-        """Get column by name."""
-        for col in self.columns:
-            if col.name == name:
-                return col
-        return None
-
-    def has_column(self, name: str) -> bool:
-        """Check if table has column."""
-        return self.get_column(name) is not None
-
-    @property
-    def qualified(self) -> str:
-        """The table as the schema file names it — see :func:`qualified_name`."""
-        return qualified_name(self.schema, self.name)
-
-    __hash__ = None  # mutable; equality is structural
-
-    def __eq__(self, other: object) -> bool:
-        """Compare tables for equality."""
-        if not isinstance(other, Table):
-            return NotImplemented
-        return (
-            self.name == other.name
-            and self.schema == other.schema
-            and self.columns == other.columns
-            and self.indexes == other.indexes
-            and self.foreign_keys == other.foreign_keys
-            and self.check_constraints == other.check_constraints
-            and self.unique_constraints == other.unique_constraints
-        )
+def __getattr__(name: str) -> Any:
+    """A retired name fails with where it went, rather than a bare ``ImportError``."""
+    moved = _MOVED.get(name)
+    if moved is not None:
+        msg = f"confiture.models.schema.{name} is retired: use {moved}"
+        raise ImportError(msg)
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
 
 
 # ``str(SchemaChange)`` per change type; ``name`` comes from ``details``, under the
