@@ -120,6 +120,25 @@ def test_check_live_exact_flagged_set(secdef_db: psycopg.Connection) -> None:
     }
 
 
+def test_check_live_an_extensions_routine_only_when_asked(
+    fresh_database_factory,
+) -> None:
+    """``exclude_extensions`` decides whether an extension's own routine is judged."""
+    with psycopg.connect(fresh_database_factory("confiture_sec002"), autocommit=True) as conn:
+        conn.execute(
+            "CREATE EXTENSION citext;"
+            f" CREATE SCHEMA {_SCRATCH_SCHEMA};"
+            f" CREATE FUNCTION {_SCRATCH_SCHEMA}.f_ext(a integer) RETURNS void"
+            " LANGUAGE sql SECURITY DEFINER AS $$ SELECT $$;"
+            f" ALTER EXTENSION citext ADD FUNCTION {_SCRATCH_SCHEMA}.f_ext(integer);"
+        )
+        rule = Sec002SecurityDefinerSearchPath(severity=RuleSeverity.ERROR)
+        assert rule.check_live(conn, schemas=[_SCRATCH_SCHEMA]) == []
+        [violation] = rule.check_live(conn, schemas=[_SCRATCH_SCHEMA], exclude_extensions=False)
+    assert violation.object_name == f"{_SCRATCH_SCHEMA}.f_ext"
+    assert "(a integer)" in (violation.suggested_fix or "")
+
+
 def test_check_live_ignore_pattern_excludes(secdef_db: psycopg.Connection) -> None:
     rule = Sec002SecurityDefinerSearchPath(
         ignore=[f"{_SCRATCH_SCHEMA}.f_unpinned"],

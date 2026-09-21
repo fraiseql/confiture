@@ -21,6 +21,7 @@ from pathlib import Path
 
 import psycopg
 
+from confiture.core import live_catalog
 from confiture.exceptions import RestoreError
 from confiture.url_redaction import libpq_env
 
@@ -809,8 +810,9 @@ class DatabaseRestorer:
     def _validate_table_count(self, options: RestoreOptions) -> RestoreResult:
         """Count base tables in the target schema and compare against the minimum.
 
-        Uses ``pg_catalog.pg_class`` (faster than ``information_schema.tables``
-        on large schemas) with a parameterised schema name to avoid SQL injection.
+        Counts ordinary tables (``relkind 'r'``, a partition included) through
+        ``core/live_catalog``, which names them without reading their columns; an
+        extension's own table is not one of the restored schema's.
 
         Args:
             options: Restore configuration (provides connection details and
@@ -824,28 +826,14 @@ class DatabaseRestorer:
             RestoreError: If the database connection fails.
         """
         try:
-            with (
-                psycopg.connect(
-                    host=options.host,
-                    port=options.port,
-                    dbname=options.target_db,
-                    user=options.username or None,
-                    password=options.password,
-                ) as conn,
-                conn.cursor() as cur,
-            ):
-                cur.execute(
-                    """
-                        SELECT COUNT(*)
-                        FROM pg_catalog.pg_class c
-                        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                        WHERE c.relkind = 'r'
-                          AND n.nspname = %s
-                        """,
-                    (options.min_tables_schema,),
-                )
-                row = cur.fetchone()
-                count = row[0] if row else 0
+            with psycopg.connect(
+                host=options.host,
+                port=options.port,
+                dbname=options.target_db,
+                user=options.username or None,
+                password=options.password,
+            ) as conn:
+                count = len(live_catalog.relations(conn, [options.min_tables_schema], kinds=("r",)))
         except psycopg.OperationalError as e:
             raise RestoreError(
                 f"Cannot connect to {options.target_db} for table count validation: {e}"

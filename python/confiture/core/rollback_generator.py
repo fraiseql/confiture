@@ -11,6 +11,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from confiture.core import live_catalog
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import split_statements
 
 logger = logging.getLogger(__name__)
@@ -312,25 +314,16 @@ class RollbackTester:
         return result
 
     def _get_tables(self) -> set[str]:
-        """Get all tables in public schema."""
-        with self.connection.cursor() as cur:
-            cur.execute("""
-                SELECT table_name
-                FROM information_schema.tables
-                WHERE table_schema = 'public'
-                AND table_type = 'BASE TABLE'
-            """)
-            return {row[0] for row in cur.fetchall()}
+        """Every table where an unqualified migration puts one, by name."""
+        return {name for _schema, name in live_catalog.relations(self.connection, [DEFAULT_SCHEMA])}
 
     def _get_indexes(self) -> set[str]:
-        """Get all indexes in public schema."""
-        with self.connection.cursor() as cur:
-            cur.execute("""
-                SELECT indexname
-                FROM pg_indexes
-                WHERE schemaname = 'public'
-            """)
-            return {row[0] for row in cur.fetchall()}
+        """Every index in that schema, a constraint's own included, by name."""
+        return {
+            index.name or ""
+            for found in live_catalog.indexes(self.connection, [DEFAULT_SCHEMA]).values()
+            for index in found
+        }
 
 
 def suggest_backup_for_destructive_operations(sql: str) -> list[str]:

@@ -42,9 +42,8 @@ from typing import Any, ClassVar
 
 import pglast
 import pglast.parser
-import psycopg.rows
 
-from confiture.core import sql_lexer
+from confiture.core import live_catalog, sql_lexer
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
 from confiture.core.linting.inventory import type_text
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
@@ -52,6 +51,9 @@ from confiture.core.linting.unparseable import unparseable_notice
 
 _DEFAULT_SCHEMA = "public"
 _SYSTEM_SCHEMAS: frozenset[str] = frozenset({"pg_catalog", "information_schema"})
+
+#: Every ``prokind``: the live check asks about any routine that can be SECURITY DEFINER.
+_EVERY_PROKIND = ("f", "p", "a", "w")
 
 # Directive: opt the *next* CREATE FUNCTION/PROCEDURE out of sec_002.
 _SECDEF_ALLOW = "secdef-allow-unpinned"
@@ -336,7 +338,7 @@ class Sec002SecurityDefinerSearchPath:
         schemas: list[str],
         exclude_extensions: bool = True,
     ) -> list[LintViolation]:
-        """Query ``pg_proc`` and return violations for unpinned SECURITY DEFINER callables.
+        """Return violations for the live database's unpinned SECURITY DEFINER callables.
 
         This is the authoritative path for migrate-strategy databases where
         ``ALTER FUNCTION … SET search_path`` may have pinned a function after the
@@ -354,48 +356,21 @@ class Sec002SecurityDefinerSearchPath:
             List of :class:`~confiture.core.linting.schema_linter.LintViolation`,
             one per unpinned SECURITY DEFINER function/procedure.
         """
-
-        ext_join = (
-            "LEFT JOIN pg_depend dep ON dep.objid = p.oid AND dep.deptype = 'e'"
-            if exclude_extensions
-            else ""
-        )
-        ext_where = "AND dep.objid IS NULL" if exclude_extensions else ""
-
-        sql = f"""
-            SELECT
-                n.nspname  AS schema,
-                p.proname  AS name,
-                p.prokind  AS kind,
-                pg_get_function_identity_arguments(p.oid) AS identity_args
-            FROM pg_proc p
-            JOIN pg_namespace n ON n.oid = p.pronamespace
-            {ext_join}
-            WHERE p.prosecdef
-              AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-              AND n.nspname = ANY(%s::text[])
-              AND (
-                  p.proconfig IS NULL
-                  OR NOT EXISTS (
-                      SELECT 1 FROM unnest(p.proconfig) c
-                      WHERE c LIKE 'search_path=%%'
-                  )
-              )
-              {ext_where}
-            ORDER BY n.nspname, p.proname
-        """
-
-        with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-            cur.execute(sql, (schemas,))
-            rows = cur.fetchall()
+        unpinned = [
+            routine
+            for routine in live_catalog.routines(conn, schemas, kinds=_EVERY_PROKIND)
+            if routine.security_definer
+            and not routine.search_path_pinned
+            and not (exclude_extensions and routine.extension_owned)
+        ]
 
         violations: list[LintViolation] = []
-        for row in rows:
-            schema = row["schema"]
-            name = row["name"]
-            kind = "procedure" if row["kind"] == "p" else "function"
+        for routine in unpinned:
+            schema = routine.schema
+            name = routine.name
+            kind = "procedure" if routine.kind == "p" else "function"
             qualified = f"{schema}.{name}"
-            identity_args: str = row["identity_args"] or ""
+            identity_args = routine.identity_arguments
 
             if schema in _SYSTEM_SCHEMAS:
                 continue

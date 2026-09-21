@@ -1,13 +1,17 @@
 """Schema introspector for existing PostgreSQL databases.
 
-Queries pg_catalog (not information_schema) for correctness across all
-PostgreSQL 12+ versions, including composite FKs and cross-schema references.
+The ``introspect`` wire shape over :func:`confiture.core.live_catalog.read`: the
+tables, their columns and the foreign-key graph between them, as the catalog
+holds them — ``format_type``'s spelling of a type, a composite foreign key paired
+column by column, a reference into another schema.
 """
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
-import psycopg
-
+from confiture.core import live_catalog
 from confiture.models.introspection import (
     FKReference,
     IntrospectedColumn,
@@ -16,13 +20,18 @@ from confiture.models.introspection import (
     TableHints,
 )
 
+if TYPE_CHECKING:
+    import psycopg
+
+    from confiture.core.schema_model import Table
+
+#: What ``introspect`` has always meant by a table: an ordinary one, a partition
+#: included, a partitioned parent — which holds no rows of its own — not.
+_INTROSPECTED_KINDS = ("r",)
+
 
 class SchemaIntrospector:
     """Introspects an existing PostgreSQL database and returns structured output.
-
-    Uses pg_catalog views and functions (format_type, pg_constraint,
-    pg_attribute) rather than information_schema to guarantee accurate
-    type names and correct FK resolution for all column configurations.
 
     Args:
         connection: An open psycopg connection to the target database.
@@ -54,15 +63,17 @@ class SchemaIntrospector:
         Returns:
             IntrospectionResult with the full FK graph and column details.
         """
-        db_name = self._get_db_name()
-        table_names = self._list_tables(schema, all_tables)
-
-        tables = [self._introspect_table(schema, name, include_hints) for name in table_names]
+        model = live_catalog.read(self._conn, schemas=[schema], kinds=_INTROSPECTED_KINDS)
+        tables = [
+            _introspected(table, include_hints)
+            for table in model.tables.values()
+            if all_tables or table.name.startswith("tb_")
+        ]
 
         self._resolve_inbound_fks(tables)
 
         return IntrospectionResult(
-            database=db_name,
+            database=self._get_db_name(),
             schema=schema,
             introspected_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             tables=tables,
@@ -78,185 +89,6 @@ class SchemaIntrospector:
             cur.execute("SELECT current_database()")
             row = cur.fetchone()
             return str(row[0]) if row else "unknown"
-
-    def _list_tables(self, schema: str, all_tables: bool) -> list[str]:
-        """Return sorted table names in the schema.
-
-        Args:
-            schema: Schema to query.
-            all_tables: If False, restrict to ``tb_*`` tables.
-
-        Returns:
-            Alphabetically sorted list of table names.
-        """
-        with self._conn.cursor() as cur:
-            if all_tables:
-                cur.execute(
-                    """
-                    SELECT c.relname
-                    FROM pg_class c
-                    JOIN pg_namespace n ON n.oid = c.relnamespace
-                    WHERE n.nspname = %s AND c.relkind = 'r'
-                    ORDER BY c.relname
-                    """,
-                    (schema,),
-                )
-            else:
-                cur.execute(
-                    """
-                    SELECT c.relname
-                    FROM pg_class c
-                    JOIN pg_namespace n ON n.oid = c.relnamespace
-                    WHERE n.nspname = %s AND c.relkind = 'r'
-                      AND c.relname LIKE 'tb\\_%%'
-                    ORDER BY c.relname
-                    """,
-                    (schema,),
-                )
-            return [row[0] for row in cur.fetchall()]
-
-    def _introspect_table(self, schema: str, table: str, include_hints: bool) -> IntrospectedTable:
-        """Build an IntrospectedTable for one table.
-
-        Args:
-            schema: Schema containing the table.
-            table: Table name.
-            include_hints: Whether to populate the hints field.
-
-        Returns:
-            IntrospectedTable with columns and outbound FKs populated.
-            Inbound FKs are filled in later by _resolve_inbound_fks.
-        """
-        pk_cols = self._get_primary_keys(schema, table)
-        columns = self._get_columns(schema, table, pk_cols)
-        outbound_fks = self._get_outbound_fks(schema, table)
-        hints = _detect_hints(columns) if include_hints else None
-
-        return IntrospectedTable(
-            name=table,
-            columns=columns,
-            outbound_fks=outbound_fks,
-            inbound_fks=[],
-            hints=hints,
-        )
-
-    def _get_primary_keys(self, schema: str, table: str) -> set[str]:
-        """Return the set of primary-key column names for a table.
-
-        Uses pg_index rather than information_schema.table_constraints so that
-        the result is always consistent with what pg_attribute reports.
-
-        Args:
-            schema: Schema containing the table.
-            table: Table name.
-
-        Returns:
-            Set of column names that form the primary key (may be empty).
-        """
-        with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT a.attname
-                FROM pg_index i
-                JOIN pg_class c ON c.oid = i.indrelid
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-                JOIN pg_attribute a
-                    ON a.attrelid = i.indrelid
-                    AND a.attnum = ANY(i.indkey)
-                WHERE n.nspname = %s AND c.relname = %s
-                  AND i.indisprimary
-                """,
-                (schema, table),
-            )
-            return {row[0] for row in cur.fetchall()}
-
-    def _get_columns(self, schema: str, table: str, pk_cols: set[str]) -> list[IntrospectedColumn]:
-        """Return columns in ordinal order for a table.
-
-        Uses pg_attribute + format_type() to get accurate PostgreSQL type
-        names (e.g. "character varying(255)" not the generic SQL name).
-
-        Args:
-            schema: Schema containing the table.
-            table: Table name.
-            pk_cols: Set of column names that are primary keys.
-
-        Returns:
-            List of IntrospectedColumn in ordinal position order.
-        """
-        with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    a.attname,
-                    pg_catalog.format_type(a.atttypid, a.atttypmod),
-                    NOT a.attnotnull
-                FROM pg_attribute a
-                JOIN pg_class c ON c.oid = a.attrelid
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-                WHERE n.nspname = %s AND c.relname = %s
-                  AND a.attnum > 0 AND NOT a.attisdropped
-                ORDER BY a.attnum
-                """,
-                (schema, table),
-            )
-            return [
-                IntrospectedColumn(
-                    name=name,
-                    pg_type=pg_type,
-                    nullable=nullable,
-                    is_primary_key=name in pk_cols,
-                )
-                for name, pg_type, nullable in cur.fetchall()
-            ]
-
-    def _get_outbound_fks(self, schema: str, table: str) -> list[FKReference]:
-        """Return FKs declared by this table (pointing to other tables).
-
-        Uses pg_constraint with LATERAL unnest to correctly pair local and
-        referenced columns for composite FKs, which information_schema joins
-        cannot handle reliably.
-
-        Args:
-            schema: Schema containing the table.
-            table: Table name.
-
-        Returns:
-            List of FKReference with to_table set and from_table as None.
-        """
-        with self._conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    src_att.attname  AS local_column,
-                    tgt_cls.relname  AS referenced_table,
-                    tgt_att.attname  AS referenced_column
-                FROM pg_constraint con
-                JOIN pg_class src_cls ON src_cls.oid = con.conrelid
-                JOIN pg_namespace src_ns ON src_ns.oid = src_cls.relnamespace
-                JOIN pg_class tgt_cls ON tgt_cls.oid = con.confrelid
-                JOIN LATERAL unnest(con.conkey) WITH ORDINALITY AS sk(n, ord) ON true
-                JOIN pg_attribute src_att
-                    ON src_att.attrelid = con.conrelid AND src_att.attnum = sk.n
-                JOIN LATERAL unnest(con.confkey) WITH ORDINALITY AS tk(n, ord)
-                    ON sk.ord = tk.ord
-                JOIN pg_attribute tgt_att
-                    ON tgt_att.attrelid = con.confrelid AND tgt_att.attnum = tk.n
-                WHERE con.contype = 'f'
-                  AND src_ns.nspname = %s AND src_cls.relname = %s
-                ORDER BY con.conname, sk.ord
-                """,
-                (schema, table),
-            )
-            return [
-                FKReference(
-                    from_table=None,
-                    to_table=referenced_table,
-                    via_column=local_column,
-                    on_column=referenced_column,
-                )
-                for local_column, referenced_table, referenced_column in cur.fetchall()
-            ]
 
     def _resolve_inbound_fks(self, tables: list[IntrospectedTable]) -> None:
         """Populate inbound_fks on each table by inverting outbound FKs.
@@ -281,6 +113,47 @@ class SchemaIntrospector:
                             on_column=fk.on_column,
                         )
                     )
+
+
+def _introspected(table: Table, include_hints: bool) -> IntrospectedTable:
+    """One table in the wire shape; its inbound FKs are filled in afterwards."""
+    columns = [
+        IntrospectedColumn(
+            name=column.name,
+            pg_type=column.type_text or "",
+            nullable=not column.not_null,
+            is_primary_key=column.primary_key,
+        )
+        for column in table.columns
+    ]
+    return IntrospectedTable(
+        name=table.name,
+        columns=columns,
+        outbound_fks=_outbound_fks(table),
+        inbound_fks=[],
+        hints=_detect_hints(columns) if include_hints else None,
+    )
+
+
+def _outbound_fks(table: Table) -> list[FKReference]:
+    """The table's foreign keys, one reference per column pair.
+
+    In constraint-name order — the catalog's — then in key order, so a composite
+    key pairs its first column with the first column it references. ``to_table``
+    is the referenced relation's name without its schema: ``pg_get_constraintdef``
+    qualifies it only when ``search_path`` would not find it, and the graph is
+    keyed by bare name either way.
+    """
+    return [
+        FKReference(
+            from_table=None,
+            to_table=(fk.ref_table or "").rpartition(".")[2],
+            via_column=via,
+            on_column=on,
+        )
+        for fk in table.constraints_of("foreign_key")
+        for via, on in zip(fk.columns, fk.ref_columns, strict=True)
+    ]
 
 
 def _detect_hints(columns: list[IntrospectedColumn]) -> TableHints | None:

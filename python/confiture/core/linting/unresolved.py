@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 from typing import Any
 
+from confiture.core import live_catalog
 from confiture.core.linting.inventory import KIND_KEYWORD, SchemaObject
 from confiture.core.linting.references import RELATION, ROUTINE, Reference
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
@@ -189,19 +190,6 @@ class LiveCatalogue:
         return any(_qualified(p) in names for p in candidates_for(reference, search_path))
 
 
-#: One statement, both kinds, each row tagged with which catalogue answered.
-_LIVE_QUERY = """
-SELECT 'relation' AS kind, name
-  FROM unnest(%(relations)s::text[]) AS name
- WHERE to_regclass(name) IS NOT NULL
-UNION ALL
-SELECT 'routine' AS kind, n.nspname || '.' || p.proname
-  FROM pg_proc p
-  JOIN pg_namespace n ON n.oid = p.pronamespace
- WHERE n.nspname || '.' || p.proname = ANY(%(routines)s::text[])
-"""
-
-
 def probe_live(
     connection: Any,
     candidates: Iterable[tuple[str | None, Reference]],
@@ -212,14 +200,10 @@ def probe_live(
     for _file, reference in candidates:
         bucket = wanted[RELATION if reference.kind == RELATION else ROUTINE]
         bucket.update(_qualified(p) for p in candidates_for(reference, search_path))
-    rows = connection.execute(
-        _LIVE_QUERY,
-        {"relations": sorted(wanted[RELATION]), "routines": sorted(wanted[ROUTINE])},
-    ).fetchall()
-    return LiveCatalogue(
-        relations=frozenset(name for kind, name in rows if kind == "relation"),
-        routines=frozenset(name for kind, name in rows if kind == "routine"),
+    relations, routines = live_catalog.existing_names(
+        connection, relations=wanted[RELATION], routines=wanted[ROUTINE]
     )
+    return LiveCatalogue(relations=relations, routines=routines)
 
 
 def reference_findings(

@@ -180,6 +180,39 @@ def test_an_orphaned_reference_under_not_valid_is_found(widgets: psycopg.Connect
     assert "1" in violations[0].message, violations[0].message
 
 
+def test_an_orphaned_reference_to_a_table_on_search_path_is_found(
+    widgets: psycopg.Connection,
+) -> None:
+    """``pg_get_constraintdef`` leaves a parent ``search_path`` finds unqualified;
+    the count still reaches that parent, and the message still names it."""
+    with widgets.cursor() as cur:
+        cur.execute("DROP TABLE IF EXISTS public.tb_region CASCADE")
+        cur.execute("CREATE TABLE public.tb_region (pk_region BIGINT PRIMARY KEY)")
+        cur.execute("INSERT INTO public.tb_region VALUES (1)")
+        cur.execute(f"""
+            CREATE TABLE {_SCHEMA}.tb_depot (
+                pk_depot BIGINT PRIMARY KEY,
+                fk_region BIGINT
+            )
+        """)
+        cur.execute(f"INSERT INTO {_SCHEMA}.tb_depot VALUES (1, 1), (2, 7), (3, 8)")
+        cur.execute(f"""
+            ALTER TABLE {_SCHEMA}.tb_depot
+            ADD CONSTRAINT tb_depot_fk_region_fkey
+            FOREIGN KEY (fk_region) REFERENCES public.tb_region (pk_region) NOT VALID
+        """)
+    widgets.commit()
+    try:
+        violations = _validator().detect_fk_constraint_violations(widgets, ["tb_depot"])
+        assert len(violations) == 1, violations
+        assert "referencing tb_region" in violations[0].message
+        assert "found 2 orphaned" in violations[0].message, violations[0].message
+    finally:
+        with widgets.cursor() as cur:
+            cur.execute("DROP TABLE IF EXISTS public.tb_region CASCADE")
+        widgets.commit()
+
+
 # ---------------------------------------------------------------------------
 # The cycles, end to end.
 #

@@ -18,8 +18,10 @@ from psycopg.pq import TransactionStatus
 from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 
 from confiture.config.environment import DatabaseConfig, Environment
+from confiture.core import live_catalog
 from confiture.core.anonymization.pseudonymizer import Pseudonymizer
 from confiture.core.connection import create_connection
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.exceptions import ConfigurationError
 
 
@@ -180,14 +182,9 @@ class ProductionSyncer:
         if not self._source_conn:
             raise RuntimeError("Not connected. Use context manager.")
 
-        with self._source_conn.cursor() as cursor:
-            cursor.execute("""
-                SELECT tablename
-                FROM pg_tables
-                WHERE schemaname = 'public'
-                ORDER BY tablename
-            """)
-            return [row[0] for row in cursor.fetchall()]
+        return sorted(
+            name for _schema, name in live_catalog.relations(self._source_conn, [DEFAULT_SCHEMA])
+        )
 
     def select_tables(self, selection: TableSelection) -> list[str]:
         """Select tables based on include/exclude patterns.

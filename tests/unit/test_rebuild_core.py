@@ -13,59 +13,31 @@ from confiture.models.results import MigrateRebuildResult, MigrationApplied
 
 
 class TestDiscoverUserSchemas:
-    """Cycle 2.1: _discover_user_schemas."""
+    """Cycle 2.1: _discover_user_schemas.
 
-    def test_filters_system_schemas(self):
+    The schemas come from ``live_catalog.schemas``; what is tested here is which
+    of them a rebuild drops. What the catalog lists on a real server is
+    ``tests/integration/test_live_catalog_listings.py``.
+    """
+
+    @staticmethod
+    def _discover(monkeypatch: pytest.MonkeyPatch, listed: list[str]) -> list[str]:
+        from confiture.core import live_catalog
         from confiture.core.migrator import Migrator
 
-        conn = MagicMock()
-        cursor = MagicMock()
-        cursor.fetchall.return_value = [
-            ("public",),
-            ("myapp",),
-            ("pg_catalog",),
-            ("information_schema",),
-            ("pg_toast",),
-        ]
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        monkeypatch.setattr(live_catalog, "schemas", lambda _conn: listed)
+        return Migrator(connection=MagicMock())._discover_user_schemas()
 
-        migrator = Migrator(connection=conn)
-        schemas = migrator._discover_user_schemas()
-        assert sorted(schemas) == ["myapp", "public"]
+    def test_filters_system_schemas(self, monkeypatch):
+        listed = ["public", "myapp", "pg_catalog", "information_schema", "pg_toast"]
+        assert sorted(self._discover(monkeypatch, listed)) == ["myapp", "public"]
 
-    def test_filters_pg_temp_schemas(self):
-        from confiture.core.migrator import Migrator
+    def test_filters_pg_temp_schemas(self, monkeypatch):
+        listed = ["public", "pg_temp_1", "pg_toast_temp_1"]
+        assert self._discover(monkeypatch, listed) == ["public"]
 
-        conn = MagicMock()
-        cursor = MagicMock()
-        cursor.fetchall.return_value = [
-            ("public",),
-            ("pg_temp_1",),
-            ("pg_toast_temp_1",),
-        ]
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-
-        migrator = Migrator(connection=conn)
-        schemas = migrator._discover_user_schemas()
-        assert schemas == ["public"]
-
-    def test_empty_database(self):
-        from confiture.core.migrator import Migrator
-
-        conn = MagicMock()
-        cursor = MagicMock()
-        cursor.fetchall.return_value = [
-            ("pg_catalog",),
-            ("information_schema",),
-        ]
-        conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
-        conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
-
-        migrator = Migrator(connection=conn)
-        schemas = migrator._discover_user_schemas()
-        assert schemas == []
+    def test_empty_database(self, monkeypatch):
+        assert self._discover(monkeypatch, ["pg_catalog", "information_schema"]) == []
 
 
 class TestDropUserSchemas:

@@ -4,16 +4,42 @@ Captures and compares database schema states to validate migrations work correct
 Can be extracted to confiture-testing package in the future.
 """
 
+from __future__ import annotations
+
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import psycopg
+from confiture.core import live_catalog
+
+if TYPE_CHECKING:
+    import psycopg
+
+    from confiture.core.schema_model import Index, Table
+
+
+#: What ``information_schema.table_constraints`` called each kind a table
+#: constraint can be; a NOT NULL column is not one of them.
+_CONSTRAINT_TYPES = {
+    "primary_key": "PRIMARY KEY",
+    "unique": "UNIQUE",
+    "check": "CHECK",
+    "foreign_key": "FOREIGN KEY",
+}
+
+#: Every ``prokind``: function, procedure, aggregate, window function.
+_ROUTINE_KINDS = ("f", "p", "a", "w")
 
 
 @dataclass
 class ColumnInfo:
-    """Information about a database column."""
+    """Information about a database column.
+
+    ``data_type`` is ``format_type``'s spelling — ``character varying(50)``,
+    ``text[]``, the enum's own name — and ``column_default`` the default as
+    confiture renders a DDL default.
+    """
 
     name: str
     data_type: str
@@ -26,7 +52,9 @@ class ConstraintInfo:
     """Information about a table constraint."""
 
     name: str
-    constraint_type: str  # PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK, etc.
+    constraint_type: str  # PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
+    #: The key columns, in key order — a foreign key's own, not the ones it
+    #: references; empty for a CHECK.
     columns: list[str] = field(default_factory=list)
 
 
@@ -37,6 +65,7 @@ class IndexInfo:
     name: str
     table_name: str
     is_unique: bool
+    #: Each key, a column name or its expression as confiture renders one.
     columns: list[str] = field(default_factory=list)
 
 
@@ -104,181 +133,35 @@ class SchemaSnapshotter:
     def capture(self) -> SchemaSnapshot:
         """Capture current schema state.
 
+        Every user schema the connection's role can use is read through
+        ``core/live_catalog``. ``tables`` holds every table, partitioned table,
+        view and foreign table — what ``information_schema.tables`` listed —
+        and ``functions`` the name of every routine of every kind; an
+        extension's own routines, views and indexes are kept, its tables are
+        not.
+
         Returns:
             SchemaSnapshot with complete schema information
         """
         snapshot = SchemaSnapshot()
+        schemas = live_catalog.user_schemas(self.connection)
 
-        with self.connection.cursor() as cur:
-            # Get all tables
-            cur.execute(
-                """
-                SELECT table_schema, table_name
-                FROM information_schema.tables
-                WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-                ORDER BY table_schema, table_name
-                """
+        model = live_catalog.read(self.connection, schemas=schemas, kinds=live_catalog.TABLE_LIKE)
+        indexes = live_catalog.indexes(self.connection, schemas)
+        for ref, table in model.tables.items():
+            snapshot.tables[f"{table.schema}.{table.name}"] = _table_schema(
+                table, indexes.get(ref, ())
             )
-            tables = cur.fetchall()
 
-            # Capture each table's schema
-            for schema_name, table_name in tables:
-                table_key = f"{schema_name}.{table_name}"
-                snapshot.tables[table_key] = self._capture_table_schema(
-                    cur, schema_name, table_name
-                )
-
-            # Get views
-            cur.execute(
-                """
-                SELECT table_name
-                FROM information_schema.views
-                WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-                ORDER BY table_name
-                """
-            )
-            snapshot.views = {row[0] for row in cur.fetchall()}
-
-            # Get materialized views
-            cur.execute("SELECT matviewname FROM pg_matviews WHERE schemaname != 'pg_catalog'")
-            snapshot.materialized_views = {row[0] for row in cur.fetchall()}
-
-            # Get functions
-            cur.execute(
-                """
-                SELECT routine_name
-                FROM information_schema.routines
-                WHERE routine_schema NOT IN ('pg_catalog', 'information_schema')
-                ORDER BY routine_name
-                """
-            )
-            snapshot.functions = {row[0] for row in cur.fetchall()}
+        views = live_catalog.views(self.connection, schemas)
+        snapshot.views = {view.name for view in views if view.relkind == "v"}
+        snapshot.materialized_views = {view.name for view in views if view.relkind == "m"}
+        snapshot.functions = {
+            routine.name
+            for routine in live_catalog.routines(self.connection, schemas, kinds=_ROUTINE_KINDS)
+        }
 
         return snapshot
-
-    def _capture_table_schema(
-        self, cur: psycopg.Cursor, schema_name: str, table_name: str
-    ) -> TableSchema:
-        """Capture schema for a single table.
-
-        Args:
-            cur: Database cursor
-            schema_name: Schema name
-            table_name: Table name
-
-        Returns:
-            TableSchema with complete table information
-        """
-        table = TableSchema(name=table_name, schema_name=schema_name)
-
-        # Get columns
-        cur.execute(
-            """
-            SELECT column_name, data_type, is_nullable, column_default
-            FROM information_schema.columns
-            WHERE table_schema = %s AND table_name = %s
-            ORDER BY ordinal_position
-            """,
-            (schema_name, table_name),
-        )
-
-        for col_name, data_type, is_nullable, col_default in cur.fetchall():
-            table.columns[col_name] = ColumnInfo(
-                name=col_name,
-                data_type=data_type,
-                is_nullable=is_nullable == "YES",
-                column_default=col_default,
-            )
-
-        # Get constraints
-        cur.execute(
-            """
-            SELECT constraint_name, constraint_type
-            FROM information_schema.table_constraints
-            WHERE table_schema = %s AND table_name = %s
-            ORDER BY constraint_name
-            """,
-            (schema_name, table_name),
-        )
-
-        for constraint_name, constraint_type in cur.fetchall():
-            # Get columns for this constraint
-            cur.execute(
-                """
-                SELECT column_name
-                FROM information_schema.constraint_column_usage
-                WHERE constraint_schema = %s
-                  AND constraint_name = %s
-                ORDER BY column_name
-                """,
-                (schema_name, constraint_name),
-            )
-            columns = [row[0] for row in cur.fetchall()]
-
-            table.constraints.append(
-                ConstraintInfo(
-                    name=constraint_name, constraint_type=constraint_type, columns=columns
-                )
-            )
-
-        # Get indexes
-        cur.execute(
-            """
-            SELECT indexname, indexdef
-            FROM pg_indexes
-            WHERE schemaname = %s AND tablename = %s
-            ORDER BY indexname
-            """,
-            (schema_name, table_name),
-        )
-
-        for index_name, index_def in cur.fetchall():
-            is_unique = "UNIQUE" in (index_def or "").upper()
-            table.indexes.append(
-                IndexInfo(
-                    name=index_name,
-                    table_name=table_name,
-                    is_unique=is_unique,
-                    columns=[],  # Would need to parse index_def to get columns
-                )
-            )
-
-        # Get foreign keys
-        cur.execute(
-            """
-            SELECT
-                kcu.constraint_name,
-                kcu.column_name,
-                ccu.table_name,
-                ccu.column_name
-            FROM information_schema.key_column_usage kcu
-            JOIN information_schema.constraint_column_usage ccu
-                ON kcu.constraint_name = ccu.constraint_name
-                AND kcu.table_schema = ccu.table_schema
-            WHERE kcu.table_schema = %s
-              AND kcu.table_name = %s
-              AND kcu.constraint_name IN (
-                SELECT constraint_name
-                FROM information_schema.table_constraints
-                WHERE table_schema = %s
-                  AND table_name = %s
-                  AND constraint_type = 'FOREIGN KEY'
-              )
-            """,
-            (schema_name, table_name, schema_name, table_name),
-        )
-
-        for constraint_name, col_name, ref_table, ref_col in cur.fetchall():
-            table.foreign_keys.append(
-                ForeignKeyInfo(
-                    constraint_name=constraint_name,
-                    column_name=col_name,
-                    referenced_table=ref_table,
-                    referenced_column=ref_col,
-                )
-            )
-
-        return table
 
     def compare(self, before: SchemaSnapshot, after: SchemaSnapshot) -> dict[str, Any]:
         """Compare two schema snapshots.
@@ -354,3 +237,47 @@ class SchemaSnapshotter:
                 changes["tables_modified"].append(table_changes)
 
         return changes
+
+
+def _table_schema(table: Table, indexes: Iterable[Index]) -> TableSchema:
+    """One table as the snapshot holds it."""
+    return TableSchema(
+        name=table.name,
+        schema_name=table.schema or "",
+        columns={
+            column.name: ColumnInfo(
+                name=column.name,
+                data_type=column.type_text or "",
+                is_nullable=not column.not_null,
+                column_default=column.default,
+            )
+            for column in table.columns
+        },
+        constraints=[
+            ConstraintInfo(
+                name=constraint.name,
+                constraint_type=_CONSTRAINT_TYPES[constraint.kind],
+                columns=list(constraint.columns),
+            )
+            for constraint in table.constraints
+        ],
+        indexes=[
+            IndexInfo(
+                name=index.name or "",
+                table_name=table.name,
+                is_unique=index.unique,
+                columns=list(index.columns),
+            )
+            for index in indexes
+        ],
+        foreign_keys=[
+            ForeignKeyInfo(
+                constraint_name=fk.name,
+                column_name=column,
+                referenced_table=(fk.ref_table or "").rpartition(".")[2],
+                referenced_column=referenced,
+            )
+            for fk in table.constraints_of("foreign_key")
+            for column, referenced in zip(fk.columns, fk.ref_columns, strict=True)
+        ],
+    )

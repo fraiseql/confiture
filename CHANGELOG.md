@@ -76,6 +76,24 @@ comparisons say today, are now tests in its own suite.
 
 ### Changed
 
+- **One live reader, enforced.** Every schema fact confiture reads from a live database
+  comes through `core/live_catalog.py` — introspection, the live object and view
+  catalogs, the routine introspector (one query now; the per-parameter `format_type`
+  round trip is gone), the pytest plugin's snapshotter and sandbox, baseline detection,
+  restore's table count, the rollback tester, prep-seed level 5, two lint rules and the
+  sync table list. `tests/unit/test_one_live_reader.py` fails on catalog SQL anywhere
+  else; the eleven modules that ask the catalog a *different* question (ownership,
+  dependencies, grants, pgGit's installation, index validity, the ledger) are listed
+  with that question.
+- **⚠️ The pytest plugin's schema snapshot reads the catalog as confiture does**
+  (`testing/fixtures/schema_snapshotter.py`, `testing/sandbox.py`). `data_type` is
+  `format_type`'s spelling, so a length change is a change; `column_default` is
+  confiture's rendering; NOT NULL columns are no longer reported as CHECK constraints;
+  an index's columns are filled in; a composite foreign key pairs its columns in order
+  rather than as a cross product; a cross-schema foreign key appears.
+- **⚠️ An extension's own tables are no longer read as the project's** by `introspect`,
+  the plugin's snapshot, a `TableExists` precondition, restore's `--min-tables` count,
+  the rollback tester, or `sync`'s table list.
 - **`migrate diff` compares the schema model; it no longer parses.**
   `SchemaDiffer.parse_schema` hands its one `pglast.parse_sql` to the lint inventory,
   which reads a tree whole, and compares the `core/schema_model` types it builds —
@@ -148,6 +166,10 @@ comparisons say today, are now tests in its own suite.
 
 ### Known, not fixed
 
+- Prep-seed level 5's NOT NULL check reads `attnotnull`, as drift does, and so no longer
+  sees a NOT NULL that a column has only through its **domain** type.
+- `testing/fixtures/data_validator.validate_indexes` tests `indexdef ~ 'INVALID'`, which
+  never matches; it has never reported an invalid index.
 - A generated `CREATE INDEX` writes neither `USING`, nor a partial index's `WHERE`, nor
   an operator class: a gin, hash or partial index is generated as a plain btree.
   The model now carries the method and the predicate; the renderer does not read them yet.

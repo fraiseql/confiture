@@ -11,7 +11,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import psycopg
+import pytest
 
+from confiture.core import live_catalog
+from confiture.core.schema_model import Column
 from confiture.core.seed.validation.prep_seed.level_5_execution import (
     Level5ExecutionValidator,
 )
@@ -115,27 +118,35 @@ class TestLevel5ExecutionValidator:
         # Should execute without errors
         assert len(violations) == 0
 
-    def test_detects_null_fks_after_resolution(self) -> None:
+    # The columns come from `live_catalog.columns`; what is tested here is which
+    # of them level 5 counts NULLs in. The counts themselves are measured on a
+    # real database in tests/integration/test_level_5_measures_data.py.
+
+    @staticmethod
+    def _columns(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
+        monkeypatch.setattr(
+            live_catalog,
+            "columns",
+            lambda *_a, **_k: tuple(Column(name=n, folded=n, line=0) for n in names),
+        )
+
+    def test_detects_null_fks_after_resolution(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Detects NULL foreign keys after resolution."""
         validator = Level5ExecutionValidator()
+        self._columns(monkeypatch, "pk_product", "fk_manufacturer", "fk_category")
 
-        # Mock database with NULL FKs
+        # Mock database with NULL FKs: every count comes back 1
         mock_conn = MagicMock()
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = [
-            ("tb_product", "fk_manufacturer", 1),  # 1 NULL FK
-            ("tb_product", "fk_category", 3),  # 3 NULL FKs
-        ]
-
-        mock_conn.execute.return_value = mock_result
+        mock_conn.execute.return_value.fetchone.return_value = (1,)
 
         violations = validator.detect_null_fks(
             connection=mock_conn,
             tables=["tb_product", "tb_category"],
         )
 
-        # Should detect NULL FKs
+        # Should detect NULL FKs, in the fk_ columns only
         assert any(v.pattern == PrepSeedPattern.NULL_FK_AFTER_RESOLUTION for v in violations)
+        assert not any("pk_product" in v.message for v in violations)
 
         # Should describe impact
         null_violation = next(
@@ -144,16 +155,14 @@ class TestLevel5ExecutionValidator:
         assert "tb_product" in null_violation.message
         assert null_violation.severity == ViolationSeverity.CRITICAL
 
-    def test_passes_when_no_null_fks(self) -> None:
+    def test_passes_when_no_null_fks(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Passes when all FK values are non-NULL."""
         validator = Level5ExecutionValidator()
+        self._columns(monkeypatch, "fk_manufacturer")
 
         # Mock database with no NULL FKs
         mock_conn = MagicMock()
-        mock_result = MagicMock()
-        mock_result.fetchall.return_value = []  # No NULL FKs found
-
-        mock_conn.execute.return_value = mock_result
+        mock_conn.execute.return_value.fetchone.return_value = (0,)
 
         violations = validator.detect_null_fks(
             connection=mock_conn,

@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 import psycopg
 from psycopg import sql as pgsql
 
+from confiture.core import live_catalog
 from confiture.exceptions import PreStateSimulationError
 
 if TYPE_CHECKING:
@@ -415,7 +416,8 @@ class MigrationSandbox:
     def table_exists(self, table: str, schema: str = "public") -> bool:
         """Check if a table exists in the database.
 
-        Convenience method for assertions in tests.
+        Convenience method for assertions in tests. A table, a partitioned
+        table, a view or a foreign table counts; an extension's own does not.
 
         Args:
             table: Table name
@@ -428,18 +430,9 @@ class MigrationSandbox:
             >>> assert sandbox.table_exists("users")
             >>> assert sandbox.table_exists("products", schema="catalog")
         """
-        with self.connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables
-                    WHERE table_schema = %s AND table_name = %s
-                )
-                """,
-                (schema, table),
-            )
-            result = cursor.fetchone()
-            return result[0] if result else False
+        return live_catalog.relation_exists(
+            self.connection, schema, table, kinds=live_catalog.TABLE_LIKE
+        )
 
     def column_exists(self, table: str, column: str, schema: str = "public") -> bool:
         """Check if a column exists in a table.
@@ -457,20 +450,7 @@ class MigrationSandbox:
         Example:
             >>> assert sandbox.column_exists("users", "email")
         """
-        with self.connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_schema = %s
-                      AND table_name = %s
-                      AND column_name = %s
-                )
-                """,
-                (schema, table, column),
-            )
-            result = cursor.fetchone()
-            return result[0] if result else False
+        return live_catalog.column(self.connection, schema, table, column) is not None
 
     def get_row_count(self, table: str, schema: str = "public") -> int:
         """Get the number of rows in a table.
