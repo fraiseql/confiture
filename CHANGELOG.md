@@ -92,6 +92,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`debug` and `mcp` are experimental, and say so.** Their `--help` opens with
+  "Experimental:", and the CLI reference says what that means: shipped, run against a
+  database in CI (`tests/integration/test_experimental_commands.py`), and free to change
+  its options and output in any release without a deprecation.
+  `tests/unit/test_experimental_commands.py` holds the list, each entry with its reason,
+  and fails on a command that calls itself experimental without being on it.
+  `mcp --port`'s help said "not yet implemented"; it serves HTTP with the `[mcp-http]`
+  extra.
 - **One module per command.** `cli/commands/schema.py` (1,848 lines at the start of
   this release) held `init`, `build`, `lint`, `lint-unified` and `introspect`; each is
   now its own module, the largest `build.py` at 651 lines. `--project-dir`, which

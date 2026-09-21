@@ -11,7 +11,11 @@ from confiture.core.connection import DatabaseError, connect_url
 from confiture.core.mcp_server import MCPServer
 from confiture.exceptions import ConfigurationError, ConfiturError
 
-mcp_app = typer.Typer(help="Run confiture as an MCP server.", no_args_is_help=True)
+mcp_app = typer.Typer(
+    help="Experimental: run confiture as an MCP server. "
+    "Its options and tools may change in any release.",
+    no_args_is_help=True,
+)
 
 
 @mcp_app.callback(invoke_without_command=True)
@@ -20,7 +24,9 @@ def mcp_server(
     schema: str = typer.Option("public", "--schema", "-s", help="Schema to expose"),
     stdio: bool = typer.Option(False, "--stdio", help="Run in stdio mode (for Claude Code)"),
     include: str | None = typer.Option(None, "--include", help="LIKE pattern to filter functions"),
-    port: int | None = typer.Option(None, "--port", help="HTTP port (not yet implemented)"),
+    port: int | None = typer.Option(
+        None, "--port", help="Serve over HTTP on this port (needs the [mcp-http] extra)"
+    ),
     no_confiture_tools: bool = typer.Option(
         False,
         "--no-confiture-tools",

@@ -16,7 +16,8 @@ from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError
 
 debug_app = typer.Typer(
-    help="Debug SQL queries step by step.",
+    help="Experimental: debug SQL queries step by step. "
+    "Its options and output may change in any release.",
     no_args_is_help=True,
 )
 

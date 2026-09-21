@@ -3693,7 +3693,9 @@ confiture coordinate start [OPTIONS]
 
 ## `confiture debug`
 
-Debug SQL queries step by step.
+**Experimental.** Debug SQL queries step by step. Its options and its JSON may change
+in any release, without a deprecation; it is run against a database in every CI run
+(`tests/integration/test_experimental_commands.py`), but no caller depends on its shape.
 
 ### `confiture debug cte`
 
@@ -4071,7 +4073,10 @@ confiture lint-unified [OPTIONS] [files]...
 
 ## `confiture mcp`
 
-Run confiture as an MCP server.
+**Experimental.** Run confiture as an MCP server. Its options and the tools it exposes
+may change in any release, without a deprecation, as the Model Context Protocol does;
+it is run against a database in every CI run
+(`tests/integration/test_experimental_commands.py`).
 
 <!-- BEGIN GENERATED: cli confiture mcp -->
 
@@ -4089,7 +4094,7 @@ confiture mcp [OPTIONS] COMMAND [ARGS]...
 | `--schema` | `-s` | str | `public` | Schema to expose |
 | `--stdio` | - | Flag | off | Run in stdio mode (for Claude Code) |
 | `--include` | - | str | - | LIKE pattern to filter functions |
-| `--port` | - | int | - | HTTP port (not yet implemented) |
+| `--port` | - | int | - | Serve over HTTP on this port (needs the [mcp-http] extra) |
 | `--no-confiture-tools` | - | Flag | off | Disable built-in Confiture migration/introspection tools |
 
 <!-- END GENERATED: cli confiture mcp -->
