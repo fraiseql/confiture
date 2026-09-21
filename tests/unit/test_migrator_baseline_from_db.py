@@ -165,8 +165,18 @@ class TestMigrateBaselineCliArgs:
 
         captured: dict = {}
 
-        def _fake_flow(**kwargs) -> None:
+        def _fake_flow(**kwargs) -> dict:
             captured.update(kwargs)
+            return {
+                "mode": "from_db",
+                "source": kwargs["from_db"],
+                "through": kwargs["through"],
+                "copied": [],
+                "skipped": [],
+                "source_only": [],
+                "warnings": [],
+                "dry_run": kwargs["dry_run"],
+            }
 
         monkeypatch.setattr(migrate_state, "_baseline_from_db_flow", _fake_flow)
 
@@ -197,3 +207,37 @@ class TestMigrateBaselineCliArgs:
         assert captured["from_db"] == "postgresql://source-host/x"
         assert captured["dry_run"] is True
         assert captured["through"] is None
+
+
+def test_from_db_report_never_carries_the_source_password(tmp_path) -> None:
+    """The source DSN is printed and emitted, so it is redacted before either."""
+    from contextlib import nullcontext
+    from unittest.mock import MagicMock, patch
+
+    from confiture.cli.commands.migrate import baseline
+
+    config = tmp_path / "local.yaml"
+    config.write_text("database_url: postgresql://localhost/target\n")
+    migrator = MagicMock()
+    migrator.baseline_from_db.return_value = {
+        "copied": [],
+        "skipped": [],
+        "source_only": [],
+        "warnings": [],
+        "dry_run": True,
+    }
+    with (
+        patch.object(baseline, "open_connection", return_value=nullcontext(MagicMock())),
+        patch.object(baseline._core_migrator, "Migrator", return_value=migrator),
+    ):
+        report = baseline._baseline_from_db_flow(
+            from_db="postgresql://admin:hunter2@prod-host/app",
+            through=None,
+            source_table=None,
+            migrations_dir=tmp_path,
+            config=config,
+            dry_run=True,
+        )
+
+    assert "hunter2" not in repr(report)
+    assert report["source"].startswith("postgresql://admin:")

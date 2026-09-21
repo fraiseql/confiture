@@ -364,6 +364,41 @@ class TestMigrateReinitCLI:
 
         self._clean_tracking(test_db_connection)
 
+    def test_cli_reinit_and_baseline_answer_in_json(
+        self, tmp_path, test_db_connection, test_db_url
+    ):
+        """``--format json``: baseline marks, reinit re-marks, each says so in the envelope."""
+        import json
+
+        config_file = _make_config_file(tmp_path, test_db_url)
+        migrations_dir = tmp_path / "db" / "migrations"
+        migrations_dir.mkdir(parents=True)
+        _make_migration_file(migrations_dir, "001_create_users.py", "001", "create_users")
+        _make_migration_file(migrations_dir, "002_add_posts.py", "002", "add_posts")
+        self._clean_tracking(test_db_connection)
+        where = ["--config", str(config_file), "--migrations-dir", str(migrations_dir)]
+        as_json = ["--format", "json"]
+
+        baseline = runner.invoke(app, ["migrate", "baseline", "-t", "001", *where, *as_json])
+        again = runner.invoke(app, ["migrate", "baseline", "-t", "002", *where, *as_json])
+        refused = runner.invoke(app, ["migrate", "reinit", *where, *as_json])
+        reinit = runner.invoke(app, ["migrate", "reinit", "--yes", *where, *as_json])
+
+        assert baseline.exit_code == 0, baseline.output
+        first = json.loads(baseline.stdout)
+        assert (first["command"], first["marked_count"]) == ("migrate baseline", 1)
+        assert [m["status"] for m in json.loads(again.stdout)["migrations"]] == [
+            "already_applied",
+            "marked",
+        ]
+        assert refused.exit_code == 5  # json cannot ask: --yes or --dry-run
+        assert json.loads(refused.stdout)["ok"] is False
+        assert reinit.exit_code == 0, reinit.output
+        result = json.loads(reinit.stdout)
+        assert (result["deleted_count"], len(result["marked"])) == (2, 2)
+
+        self._clean_tracking(test_db_connection)
+
     def test_cli_reinit_all_files(self, tmp_path, test_db_connection, test_db_url):
         """CLI reinit without --through marks all files."""
         config_file = _make_config_file(tmp_path, test_db_url)

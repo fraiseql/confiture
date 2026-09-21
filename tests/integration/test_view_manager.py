@@ -876,3 +876,25 @@ class TestCrossSchemaViews:
                 WHERE schemaname = 'public' AND viewname = 'v_product_list'
             """)
             assert cur.fetchone()[0] == 1
+
+
+def test_install_helpers_says_what_it_did_in_json(
+    vm_db: psycopg.Connection, test_db_url: str, tmp_path
+) -> None:
+    """``install-helpers --format json``: installed, then already installed."""
+    import json
+
+    from typer.testing import CliRunner
+
+    from confiture.cli.main import app
+
+    config = tmp_path / "local.yaml"
+    config.write_text(f"database_url: {test_db_url}\n")
+    argv = ["install-helpers", "-c", str(config), "--format", "json"]
+
+    first = CliRunner().invoke(app, argv)
+    second = CliRunner().invoke(app, argv)
+
+    assert first.exit_code == 0, first.output
+    assert json.loads(first.stdout)["status"] == "installed"
+    assert json.loads(second.stdout)["status"] == "already_installed"

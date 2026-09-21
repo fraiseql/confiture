@@ -11,13 +11,17 @@ from typing import Any
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import console
+from confiture.cli.helpers import console, emit, is_json
+from confiture.cli.options import format_option
 from confiture.core import migrator as _core_migrator
 from confiture.core.migrator import find_duplicate_migration_versions, parse_migration_filename
 from confiture.exceptions import ConfigurationError, MigrationError
+from confiture.models.results import MigrateReinitResult
 
 
-def _reinit_preconditions(config: Path, migrations_dir: Path, find_duplicates: Any) -> None:
+def _reinit_preconditions(
+    config: Path, migrations_dir: Path, find_duplicates: Any, *, json_mode: bool
+) -> None:
     """Config file, migrations directory and unique versions — all checked before any DB work."""
     if not config.exists():
         fail(
@@ -26,7 +30,7 @@ def _reinit_preconditions(config: Path, migrations_dir: Path, find_duplicates: A
                 error_code="CONFIG_004",
                 resolution_hint="Specify config with --config path/to/config.yaml.",
             ),
-            json_mode=False,
+            json_mode=json_mode,
         )
 
     if not migrations_dir.exists():
@@ -35,28 +39,33 @@ def _reinit_preconditions(config: Path, migrations_dir: Path, find_duplicates: A
                 f"Migrations directory not found: {migrations_dir}",
                 error_code="CONFIG_004",
             ),
-            json_mode=False,
+            json_mode=json_mode,
         )
 
     duplicates = find_duplicates(migrations_dir)
     if duplicates:
-        console.print("[red]Multiple migration files share the same version number:[/red]\n")
-        for version, files in sorted(duplicates.items()):
-            console.print(f"  Version {version}:")
-            for f in files:
-                console.print(f"    • {f.name}")
-        console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
-        console.print("[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]")
+        if not json_mode:
+            console.print("[red]Multiple migration files share the same version number:[/red]\n")
+            for version, files in sorted(duplicates.items()):
+                console.print(f"  Version {version}:")
+                for f in files:
+                    console.print(f"    • {f.name}")
+            console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
+            console.print(
+                "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
+            )
         fail(
             MigrationError(
                 "Duplicate migration versions detected — refusing to proceed.",
                 error_code="MIGR_106",
             ),
-            json_mode=False,
+            json_mode=json_mode,
         )
 
 
-def _migrations_through(all_migrations: list[Path], through: str | None) -> list[Path]:
+def _migrations_through(
+    all_migrations: list[Path], through: str | None, *, json_mode: bool
+) -> list[Path]:
     """The files to re-mark: everything, or up to and including ``through`` (else exit 1)."""
     if through is None:
         return list(all_migrations)
@@ -66,19 +75,19 @@ def _migrations_through(all_migrations: list[Path], through: str | None) -> list
         migrations_to_mark.append(migration_file)
         if version == through:
             return migrations_to_mark
-    console.print("[yellow]Available versions:[/yellow]")
-    for mf in all_migrations[:10]:
-        v = parse_migration_filename(mf.name)[0]
-        console.print(f"  • {v}")
-    if len(all_migrations) > 10:
-        console.print(f"  ... and {len(all_migrations) - 10} more")
+    if not json_mode:
+        console.print("[yellow]Available versions:[/yellow]")
+        for mf in all_migrations[:10]:
+            console.print(f"  • {parse_migration_filename(mf.name)[0]}")
+        if len(all_migrations) > 10:
+            console.print(f"  ... and {len(all_migrations) - 10} more")
     fail(
         MigrationError(
             f"Migration version '{through}' not found",
             version=through,
             error_code="MIGR_100",
         ),
-        json_mode=False,
+        json_mode=json_mode,
     )
     return migrations_to_mark  # unreachable: fail() exits
 
@@ -130,6 +139,7 @@ def migrate_reinit(
         "-y",
         help="Skip confirmation prompt",
     ),
+    format_output: str = format_option("text", "json"),
 ) -> None:
     """Reset tracking table and re-baseline from migration files on disk.
 
@@ -157,7 +167,18 @@ def migrate_reinit(
       confiture migrate status    - View migration history
     """
 
-    _reinit_preconditions(config, migrations_dir, find_duplicate_migration_versions)
+    json_mode = is_json(format_output)
+    _reinit_preconditions(
+        config, migrations_dir, find_duplicate_migration_versions, json_mode=json_mode
+    )
+    if json_mode and not (yes or dry_run):
+        fail(
+            ConfigurationError(
+                "migrate reinit asks before deleting the ledger, and --format json cannot ask.",
+                resolution_hint="Pass --yes to confirm, or --dry-run to preview.",
+            ),
+            json_mode=True,
+        )
 
     with _core_migrator.Migrator.from_config(config, migrations_dir=migrations_dir) as m:
         migrator = m.migrator
@@ -165,15 +186,18 @@ def migrate_reinit(
 
         all_migrations = migrator.find_migration_files(migrations_dir)
         if not all_migrations:
-            console.print("[yellow]No migrations found.[/yellow]")
+            if json_mode:
+                emit(MigrateReinitResult(True, 0, [], 0, dry_run=dry_run).to_dict())
+            else:
+                console.print("[yellow]No migrations found.[/yellow]")
             return
 
-        migrations_to_mark = _migrations_through(all_migrations, through)
+        migrations_to_mark = _migrations_through(all_migrations, through, json_mode=json_mode)
         current_count = len(migrator.get_applied_versions())
-        _print_reinit_plan(migrations_to_mark, through=through, current_count=current_count)
-
-        if dry_run:
-            console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
+        if not json_mode:
+            _print_reinit_plan(migrations_to_mark, through=through, current_count=current_count)
+            if dry_run:
+                console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
 
         if not yes and not dry_run:
             # The resolved name, not the default (#190). This is a
@@ -190,14 +214,16 @@ def migrate_reinit(
 
         result = m.reinit(through=through, dry_run=dry_run)
 
-        if dry_run:
-            console.print(
-                f"[cyan]📊 Would delete {result.deleted_count} tracking entries "
-                f"and re-mark {len(result.migrations_marked)} migration(s)[/cyan]"
-            )
-            console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
-        else:
-            console.print(
-                f"[green]✅ Reinit complete: deleted {result.deleted_count} entries, "
-                f"re-marked {len(result.migrations_marked)} migration(s)[/green]"
-            )
+    if json_mode:
+        emit(result.to_dict())
+    elif dry_run:
+        console.print(
+            f"[cyan]📊 Would delete {result.deleted_count} tracking entries "
+            f"and re-mark {len(result.migrations_marked)} migration(s)[/cyan]"
+        )
+        console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
+    else:
+        console.print(
+            f"[green]✅ Reinit complete: deleted {result.deleted_count} entries, "
+            f"re-marked {len(result.migrations_marked)} migration(s)[/green]"
+        )
