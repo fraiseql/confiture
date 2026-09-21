@@ -12,6 +12,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from pathlib import Path
+
+import confiture
 
 _SCRIPT = """
 import json
@@ -28,7 +31,12 @@ print(json.dumps([str(change) for change in SchemaDiffer().compare(old, new).cha
 def _changes(seed: int) -> list[str]:
     result = subprocess.run(
         [sys.executable, "-c", _SCRIPT],
-        env={"PYTHONHASHSEED": str(seed), "PATH": ""},
+        # Only the seed varies; the package is found where this run found it,
+        # installed or not (the pglast-matrix leg does not install it).
+        env={
+            "PYTHONHASHSEED": str(seed),
+            "PYTHONPATH": str(Path(confiture.__file__).resolve().parents[1]),
+        },
         capture_output=True,
         text=True,
         check=True,
