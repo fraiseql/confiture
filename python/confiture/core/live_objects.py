@@ -31,59 +31,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from confiture.core import live_catalog
 from confiture.core.linting.inventory import signature_from_type_names
 
 if TYPE_CHECKING:
     import psycopg
 
     from confiture.core.linting.inventory import Signature
-
-#: Objects PostgreSQL created as part of an extension are the extension's, not the
-#: DDL tree's. ``citext`` alone installs a dozen functions, so without this a
-#: pristine database reports dozens of extra routines.
-_NOT_EXTENSION_OWNED = """
-    AND NOT EXISTS (
-        SELECT 1 FROM pg_depend d
-        WHERE d.objid = {oid} AND d.classid = '{catalog}'::regclass AND d.deptype = 'e'
-    )
-"""
-
-_VIEWS = f"""
-SELECT n.nspname, c.relname, c.relkind
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relkind IN ('v', 'm')
-  AND n.nspname = ANY(%s)
-  {_NOT_EXTENSION_OWNED.format(oid="c.oid", catalog="pg_class")}
-"""
-
-# `NOT tgisinternal` is load-bearing: a FOREIGN KEY creates internal triggers on
-# both tables, and reporting those would put two items on every FK in the schema.
-_TRIGGERS = """
-SELECT n.nspname, c.relname, t.tgname
-FROM pg_trigger t
-JOIN pg_class c ON c.oid = t.tgrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE NOT t.tgisinternal
-  AND n.nspname = ANY(%s)
-"""
-
-# The input argument types, from `proargtypes` — *not*
-# `pg_get_function_identity_arguments`, which on PostgreSQL 18 returns
-# `a integer, OUT b integer` for a routine with an OUT parameter: parameter names
-# and OUT parameters included, byte-identical to `pg_get_function_arguments`. The
-# expected side counts neither, so every such routine would be permanently
-# missing.
-_ROUTINES = f"""
-SELECT n.nspname, p.proname, p.prokind,
-       (SELECT coalesce(array_agg(format_type(t, NULL) ORDER BY ord), '{{}}')
-        FROM unnest(p.proargtypes) WITH ORDINALITY AS u(t, ord))
-FROM pg_proc p
-JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = ANY(%s)
-  AND p.prokind IN ('f', 'p', 'a')
-  {_NOT_EXTENSION_OWNED.format(oid="p.oid", catalog="pg_proc")}
-"""
 
 #: ``relkind`` / ``prokind`` -> the kind vocabulary ``ddl_objects`` speaks.
 _RELKINDS = {"v": "view", "m": "matview"}
@@ -122,9 +76,9 @@ class LiveObjects:
 class LiveObjectCatalog:
     """Read the objects a database holds, in the schemas a DDL tree declares.
 
-    One query per family, all filtered to the requested schemas with ``= ANY(%s)``
-    — the schema names come from a user's DDL file, so they are parameters and
-    never interpolated.
+    One ``core/live_catalog`` read per family, all filtered to the requested
+    schemas — the schema names come from a user's DDL file, so they are
+    parameters and never interpolated.
 
     Existence does not need a throwaway database. ``ExpectedSchemaDB`` exists for
     the body checks, which ask PostgreSQL about *resolved types*; asking it
@@ -139,7 +93,13 @@ class LiveObjectCatalog:
         self._conn = connection
 
     def read(self, schemas: list[str]) -> LiveObjects:
-        """Every view, matview, trigger and routine in *schemas*."""
+        """Every view, matview, trigger and routine in *schemas*.
+
+        Objects PostgreSQL created as part of an extension are the extension's,
+        not the DDL tree's: ``citext`` alone installs a dozen functions, so
+        without leaving them out a pristine database reports dozens of extra
+        routines.
+        """
         wanted = sorted(set(schemas))
         found: list[LiveObject] = [
             *self._read_views(wanted),
@@ -149,32 +109,28 @@ class LiveObjectCatalog:
         return LiveObjects(objects=found, kinds_read=self.KINDS)
 
     def _read_views(self, wanted: list[str]) -> list[LiveObject]:
-        with self._conn.cursor() as cur:
-            cur.execute(_VIEWS, (wanted,))
-            return [
-                LiveObject(kind=_RELKINDS[relkind], schema=schema, name=name)
-                for schema, name, relkind in cur.fetchall()
-                if relkind in _RELKINDS
-            ]
+        return [
+            LiveObject(kind=_RELKINDS[view.relkind], schema=view.schema, name=view.name)
+            for view in live_catalog.views(self._conn, wanted)
+            if view.relkind in _RELKINDS and not view.extension_owned
+        ]
 
     def _read_triggers(self, wanted: list[str]) -> list[LiveObject]:
-        with self._conn.cursor() as cur:
-            cur.execute(_TRIGGERS, (wanted,))
-            return [
-                LiveObject(kind="trigger", schema=schema, name=f"{table}.{trigger}")
-                for schema, table, trigger in cur.fetchall()
-            ]
+        return [
+            LiveObject(
+                kind="trigger", schema=trigger.schema, name=f"{trigger.table}.{trigger.name}"
+            )
+            for trigger in live_catalog.triggers(self._conn, wanted)
+        ]
 
     def _read_routines(self, wanted: list[str]) -> list[LiveObject]:
-        with self._conn.cursor() as cur:
-            cur.execute(_ROUTINES, (wanted,))
-            return [
-                LiveObject(
-                    kind=_PROKINDS[prokind],
-                    schema=schema,
-                    name=name,
-                    signature=signature_from_type_names(arg_types or ()),
-                )
-                for schema, name, prokind, arg_types in cur.fetchall()
-                if prokind in _PROKINDS
-            ]
+        return [
+            LiveObject(
+                kind=_PROKINDS[routine.kind],
+                schema=routine.schema,
+                name=routine.name,
+                signature=signature_from_type_names(routine.input_types),
+            )
+            for routine in live_catalog.routines(self._conn, wanted, kinds=tuple(_PROKINDS))
+            if not routine.extension_owned
+        ]

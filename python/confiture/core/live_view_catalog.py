@@ -1,33 +1,23 @@
 """Query live view (and materialized-view) definitions from a database.
 
-Enumerates ``pg_class`` relations of kind ``'v'`` (view) and ``'m'`` (materialized
-view) in the requested schemas and returns each one's deparsed definition via
-``pg_get_viewdef(oid, true)``. The same catalog is run against both the scratch
-"expected" database and the live database so both sides pass through the identical
-deparser — see :mod:`confiture.core.view_body_drift`.
+Every view (``'v'``) and materialized view (``'m'``) in the requested schemas,
+with its deparsed definition — ``core/live_catalog``'s :func:`views`, which
+deparses through ``pg_get_viewdef(oid, true)``. The same catalog is run against
+both the scratch "expected" database and the live database so both sides pass
+through the identical deparser — see :mod:`confiture.core.view_body_drift`.
+An extension's own views are read too: both sides hold them, so they compare
+equal.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from confiture.core import live_catalog
 from confiture.core.view_body_drift import ViewDefinition
 
 if TYPE_CHECKING:
     import psycopg
-
-# One round-trip: enumerate views/matviews in the target schemas and deparse each.
-_VIEW_DEFS_SQL = """\
-SELECT n.nspname AS schema,
-       c.relname AS name,
-       c.relkind::text AS relkind,
-       pg_get_viewdef(c.oid, true) AS definition
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relkind IN ('v', 'm')
-  AND n.nspname = ANY(%(schemas)s)
-ORDER BY n.nspname, c.relname
-"""
 
 
 class LiveViewCatalog:
@@ -59,14 +49,12 @@ class LiveViewCatalog:
         """
         schemas = schemas or ["public"]
         result: dict[str, ViewDefinition] = {}
-        for schema, name, relkind, definition in self._conn.execute(
-            _VIEW_DEFS_SQL, {"schemas": schemas}
-        ).fetchall():
+        for row in live_catalog.views(self._conn, schemas, definitions=True):
             view = ViewDefinition(
-                schema=schema,
-                name=name,
-                relkind=relkind,
-                definition=definition,
+                schema=row.schema,
+                name=row.name,
+                relkind=row.relkind,
+                definition=row.definition or "",
             )
             result[view.view_key] = view
         return result

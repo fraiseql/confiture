@@ -5,7 +5,11 @@ All database interactions are mocked so these tests run without PostgreSQL.
 
 from unittest.mock import MagicMock
 
+import pytest
+
+from confiture.core import live_catalog
 from confiture.core.introspection.tables import SchemaIntrospector, _detect_hints
+from confiture.core.schema_model import Column, Constraint, SchemaModel, Table, ref_for
 from confiture.models.introspection import (
     FKReference,
     IntrospectedColumn,
@@ -13,141 +17,222 @@ from confiture.models.introspection import (
 )
 
 
-def _make_conn(rows_per_execute: list[list[tuple]]) -> MagicMock:
-    """Build a mock psycopg connection whose cursor returns successive row sets.
+def stub_catalog(monkeypatch: pytest.MonkeyPatch, *tables: Table) -> list[dict]:
+    """Answer ``live_catalog.read`` with *tables*; return the calls it received.
 
-    Each call to cursor.execute() is paired with a fetchall() that returns
-    the next entry in rows_per_execute.
+    The introspector reads the schema through ``core/live_catalog``; what is
+    tested here is what it makes of the model. What the reader answers on a real
+    server is ``tests/integration/test_introspection_live.py``.
     """
-    conn = MagicMock()
-    cursor = MagicMock()
-    conn.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
-    conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    calls: list[dict] = []
 
-    cursor.fetchall.side_effect = rows_per_execute
+    def read(_conn: object, **kwargs: object) -> SchemaModel:
+        calls.append(kwargs)
+        return SchemaModel(tables={ref_for("table", t.schema, t.name): t for t in tables})
+
+    monkeypatch.setattr(live_catalog, "read", read)
+    return calls
+
+
+def _conn() -> MagicMock:
+    """A connection whose only query is ``current_database()``."""
+    conn = MagicMock()
+    cursor = conn.cursor.return_value.__enter__.return_value
     cursor.fetchone.return_value = ("testdb",)
     return conn
 
 
+def column(name: str, type_text: str = "bigint", *, not_null: bool = False, pk: bool = False):
+    return Column(
+        name=name, folded=name, line=0, type_text=type_text, not_null=not_null, primary_key=pk
+    )
+
+
+def table(name: str, *columns: Column, constraints: tuple[Constraint, ...] = ()) -> Table:
+    return Table(name=name, schema="public", columns=columns, constraints=constraints)
+
+
+def fk(name: str, columns: tuple[str, ...], ref_table: str, ref_columns: tuple[str, ...]):
+    return Constraint(
+        kind="foreign_key",
+        name=name,
+        columns=columns,
+        ref_table=ref_table,
+        ref_columns=ref_columns,
+    )
+
+
+def introspect(monkeypatch: pytest.MonkeyPatch, *tables: Table, **kwargs: object):
+    stub_catalog(monkeypatch, *tables)
+    return SchemaIntrospector(_conn()).introspect(**kwargs)
+
+
 class TestListTables:
-    """Tests for _list_tables()."""
+    """Which tables are introspected."""
 
-    def test_default_filter_returns_only_tb_tables(self):
+    def test_default_filter_returns_only_tb_tables(self, monkeypatch):
         """Only tables starting with tb_ are returned when all_tables=False."""
-        conn = _make_conn([[("tb_user",), ("tb_post",)]])
-        introspector = SchemaIntrospector(conn)
-        tables = introspector._list_tables("public", all_tables=False)
-        assert tables == ["tb_user", "tb_post"]
+        result = introspect(
+            monkeypatch, table("tb_user"), table("audit_log"), table("tb_post"), all_tables=False
+        )
+        assert [t.name for t in result.tables] == ["tb_user", "tb_post"]
 
-    def test_all_tables_returns_every_table(self):
+    def test_all_tables_returns_every_table(self, monkeypatch):
         """all_tables=True returns all base tables regardless of name."""
-        conn = _make_conn([[("audit_log",), ("tb_user",), ("users",)]])
-        introspector = SchemaIntrospector(conn)
-        tables = introspector._list_tables("public", all_tables=True)
-        assert tables == ["audit_log", "tb_user", "users"]
+        result = introspect(
+            monkeypatch, table("audit_log"), table("tb_user"), table("users"), all_tables=True
+        )
+        assert [t.name for t in result.tables] == ["audit_log", "tb_user", "users"]
 
-    def test_empty_schema_returns_empty_list(self):
+    def test_empty_schema_returns_empty_list(self, monkeypatch):
         """Empty schema yields empty list."""
-        conn = _make_conn([[]])
-        introspector = SchemaIntrospector(conn)
-        assert introspector._list_tables("public", all_tables=False) == []
+        assert introspect(monkeypatch, all_tables=False).tables == []
+
+    def test_reads_the_schema_asked_for_and_ordinary_tables_only(self, monkeypatch):
+        """A partitioned parent is not read — ``introspect`` never read one."""
+        calls = stub_catalog(monkeypatch)
+        result = SchemaIntrospector(_conn()).introspect(schema="catalog")
+        assert calls == [{"schemas": ["catalog"], "kinds": ("r",)}]
+        assert (result.schema, result.database) == ("catalog", "testdb")
 
 
-class TestGetPrimaryKeys:
-    """Tests for _get_primary_keys()."""
+class TestPrimaryKeys:
+    """is_primary_key comes from the primary key the reader found."""
 
-    def test_single_pk_column(self):
-        """Single-column primary key is returned as a one-element set."""
-        conn = _make_conn([[("pk_user",)]])
-        introspector = SchemaIntrospector(conn)
-        pks = introspector._get_primary_keys("public", "tb_user")
-        assert pks == {"pk_user"}
+    def test_single_pk_column(self, monkeypatch):
+        """Single-column primary key flags exactly that column."""
+        result = introspect(
+            monkeypatch, table("tb_user", column("pk_user", pk=True), column("name", "text"))
+        )
+        assert {c.name for c in result.tables[0].columns if c.is_primary_key} == {"pk_user"}
 
-    def test_composite_pk(self):
-        """Composite primary key returns all member columns."""
-        conn = _make_conn([[("fk_left",), ("fk_right",)]])
-        introspector = SchemaIntrospector(conn)
-        pks = introspector._get_primary_keys("public", "tb_join")
-        assert pks == {"fk_left", "fk_right"}
+    def test_composite_pk(self, monkeypatch):
+        """Composite primary key flags all member columns."""
+        result = introspect(
+            monkeypatch,
+            table("tb_join", column("fk_left", pk=True), column("fk_right", pk=True)),
+        )
+        assert {c.name for c in result.tables[0].columns if c.is_primary_key} == {
+            "fk_left",
+            "fk_right",
+        }
 
-    def test_no_pk(self):
-        """Table without a PK returns an empty set."""
-        conn = _make_conn([[]])
-        introspector = SchemaIntrospector(conn)
-        assert introspector._get_primary_keys("public", "tb_nopk") == set()
+    def test_no_pk(self, monkeypatch):
+        """Table without a PK flags nothing."""
+        result = introspect(monkeypatch, table("tb_nopk", column("a"), column("b")))
+        assert not any(c.is_primary_key for c in result.tables[0].columns)
 
 
-class TestGetColumns:
-    """Tests for _get_columns()."""
+class TestColumns:
+    """Columns, in order, as the reader spelled them."""
 
-    def test_pg_type_preserved_verbatim(self):
+    def test_pg_type_preserved_verbatim(self, monkeypatch):
         """pg_type values from format_type() are kept as-is."""
-        rows = [
-            ("pk_user", "bigint", False),
-            ("id", "uuid", False),
-            ("email", "character varying(255)", False),
-            ("bio", "text", True),
-        ]
-        conn = _make_conn([rows])
-        introspector = SchemaIntrospector(conn)
-        cols = introspector._get_columns("public", "tb_user", {"pk_user"})
-
+        result = introspect(
+            monkeypatch,
+            table(
+                "tb_user",
+                column("pk_user", "bigint", pk=True),
+                column("id", "uuid"),
+                column("email", "character varying(255)"),
+                column("bio", "text"),
+            ),
+        )
+        cols = result.tables[0].columns
         assert cols[0].pg_type == "bigint"
         assert cols[2].pg_type == "character varying(255)"
 
-    def test_primary_key_flag_set_correctly(self):
-        """is_primary_key is True only for columns in the pk_cols set."""
-        rows = [("pk_user", "bigint", False), ("username", "text", False)]
-        conn = _make_conn([rows])
-        introspector = SchemaIntrospector(conn)
-        cols = introspector._get_columns("public", "tb_user", {"pk_user"})
-
+    def test_primary_key_flag_set_correctly(self, monkeypatch):
+        """is_primary_key is True only for primary-key columns."""
+        result = introspect(
+            monkeypatch,
+            table("tb_user", column("pk_user", pk=True), column("username", "text")),
+        )
+        cols = result.tables[0].columns
         assert cols[0].is_primary_key is True
         assert cols[1].is_primary_key is False
 
-    def test_nullable_flag(self):
-        """nullable flag matches the NOT attnotnull expression."""
-        rows = [("name", "text", True), ("required", "text", False)]
-        conn = _make_conn([rows])
-        introspector = SchemaIntrospector(conn)
-        cols = introspector._get_columns("public", "tb_x", set())
-
+    def test_nullable_flag(self, monkeypatch):
+        """nullable is the negation of NOT NULL."""
+        result = introspect(
+            monkeypatch,
+            table("tb_x", column("name", "text"), column("required", "text", not_null=True)),
+        )
+        cols = result.tables[0].columns
         assert cols[0].nullable is True
         assert cols[1].nullable is False
 
 
-class TestGetOutboundFks:
-    """Tests for _get_outbound_fks()."""
+class TestOutboundFks:
+    """Outbound FKs, one reference per column pair."""
 
-    def test_single_fk(self):
+    def test_single_fk(self, monkeypatch):
         """Single FK produces one FKReference with to_table set."""
-        rows = [("fk_user", "tb_user", "pk_user")]
-        conn = _make_conn([rows])
-        introspector = SchemaIntrospector(conn)
-        fks = introspector._get_outbound_fks("public", "tb_post")
-
+        result = introspect(
+            monkeypatch,
+            table(
+                "tb_post",
+                column("fk_user"),
+                constraints=(fk("fk_post_user", ("fk_user",), "tb_user", ("pk_user",)),),
+            ),
+        )
+        fks = result.tables[0].outbound_fks
         assert len(fks) == 1
         assert fks[0].to_table == "tb_user"
         assert fks[0].via_column == "fk_user"
         assert fks[0].on_column == "pk_user"
         assert fks[0].from_table is None
 
-    def test_no_fks(self):
+    def test_no_fks(self, monkeypatch):
         """Table without FKs returns empty list."""
-        conn = _make_conn([[]])
-        introspector = SchemaIntrospector(conn)
-        assert introspector._get_outbound_fks("public", "tb_user") == []
+        result = introspect(monkeypatch, table("tb_user", column("pk_user", pk=True)))
+        assert result.tables[0].outbound_fks == []
 
-    def test_multiple_fks(self):
+    def test_multiple_fks(self, monkeypatch):
         """Multiple FK columns produce one FKReference each."""
-        rows = [
-            ("fk_user", "tb_user", "pk_user"),
-            ("fk_category", "tb_category", "pk_category"),
+        result = introspect(
+            monkeypatch,
+            table(
+                "tb_post",
+                constraints=(
+                    fk("a_user", ("fk_user",), "tb_user", ("pk_user",)),
+                    fk("b_category", ("fk_category",), "tb_category", ("pk_category",)),
+                ),
+            ),
+        )
+        assert len(result.tables[0].outbound_fks) == 2
+
+    def test_composite_fk_pairs_columns_in_key_order(self, monkeypatch):
+        """A composite key pairs position with position — never a cross product."""
+        result = introspect(
+            monkeypatch,
+            table("tb_child", constraints=(fk("zz_pair", ("pb", "pa"), "tb_pair", ("b", "a")),)),
+        )
+        assert [(f.via_column, f.on_column) for f in result.tables[0].outbound_fks] == [
+            ("pb", "b"),
+            ("pa", "a"),
         ]
-        conn = _make_conn([rows])
-        introspector = SchemaIntrospector(conn)
-        fks = introspector._get_outbound_fks("public", "tb_post")
-        assert len(fks) == 2
+
+    def test_a_qualified_reference_names_the_bare_table(self, monkeypatch):
+        """``pg_get_constraintdef`` qualifies a table ``search_path`` misses."""
+        result = introspect(
+            monkeypatch,
+            table("tb_child", constraints=(fk("fk_ext", ("ext_id",), "other.tb_ext", ("id",)),)),
+        )
+        assert result.tables[0].outbound_fks[0].to_table == "tb_ext"
+
+    def test_other_constraints_are_not_foreign_keys(self, monkeypatch):
+        result = introspect(
+            monkeypatch,
+            table(
+                "tb_x",
+                constraints=(
+                    Constraint(kind="primary_key", name="tb_x_pkey", columns=("id",)),
+                    Constraint(kind="check", name="ck", expression="id > 0"),
+                ),
+            ),
+        )
+        assert result.tables[0].outbound_fks == []
 
 
 class TestResolveInboundFks:

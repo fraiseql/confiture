@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from confiture.core.introspection.functions import _proconfig_pins_search_path
+from dataclasses import replace
+
+from confiture.core.live_catalog import RoutineRow
 from confiture.models.function_info import FunctionInfo, Volatility
 
 
@@ -46,41 +48,63 @@ def test_function_info_security_fields_explicit() -> None:
 
 
 # ---------------------------------------------------------------------------
-# _proconfig_pins_search_path helper
+# RoutineRow.search_path_pinned — the rule the introspector and sec_002 share
 # ---------------------------------------------------------------------------
+
+_ROW = RoutineRow(
+    oid=1,
+    schema="public",
+    name="fn",
+    kind="f",
+    volatility="v",
+    language="sql",
+    result="void",
+    returns_set=False,
+    source="",
+    cost=100.0,
+    arg_names=(),
+    arg_modes=(),
+    arg_types=(),
+    input_types=(),
+    identity_arguments="",
+    comment=None,
+    security_definer=True,
+    config=(),
+    extension_owned=False,
+)
+
+
+def _pins(proconfig: list[str] | None) -> bool:
+    """``live_catalog.routines`` reads a NULL ``proconfig`` as no entries."""
+    return replace(_ROW, config=tuple(proconfig or ())).search_path_pinned
 
 
 def test_proconfig_none_not_pinned() -> None:
-    assert _proconfig_pins_search_path(None) is False
+    assert _pins(None) is False
 
 
 def test_proconfig_empty_list_not_pinned() -> None:
-    assert _proconfig_pins_search_path([]) is False
+    assert _pins([]) is False
 
 
 def test_proconfig_search_path_entry_pinned() -> None:
-    assert _proconfig_pins_search_path(["search_path=public"]) is True
+    assert _pins(["search_path=public"]) is True
 
 
 def test_proconfig_search_path_with_other_entries() -> None:
-    assert _proconfig_pins_search_path(["role=app", "search_path=pg_catalog, public"]) is True
+    assert _pins(["role=app", "search_path=pg_catalog, public"]) is True
 
 
 def test_proconfig_only_non_search_path_not_pinned() -> None:
-    assert _proconfig_pins_search_path(["role=app", "work_mem=64MB"]) is False
+    assert _pins(["role=app", "work_mem=64MB"]) is False
 
 
 def test_proconfig_search_path_empty_string_pinned() -> None:
-    assert _proconfig_pins_search_path(["search_path="]) is True
+    assert _pins(["search_path="]) is True
 
 
 def test_row_to_info_maps_security_fields() -> None:
-    """_proconfig_pins_search_path agrees with the live-catalog contract."""
-    row_pinned = ["search_path=public", "role=app"]
-    assert _proconfig_pins_search_path(row_pinned) is True
-
-    row_unpinned = ["role=app"]
-    assert _proconfig_pins_search_path(row_unpinned) is False
-
-    row_none: list[str] | None = None
-    assert _proconfig_pins_search_path(row_none) is False
+    """The row's pin reading agrees with the live-catalog contract."""
+    assert _pins(["search_path=public", "role=app"]) is True
+    assert _pins(["role=app"]) is False
+    assert _pins(None) is False
