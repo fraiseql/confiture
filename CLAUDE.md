@@ -745,7 +745,8 @@ confiture/
 │   │   ├── schema.py             # Data models for schema representation
 │   │   ├── sql_file_migration.py # SQL file-based migrations
 │   │   ├── stub_models.py        # Data models for Python stub generation from PostgreSQL functions
-│   │   └── unified_lint.py       # Models for unified SQL linting results
+│   │   ├── unified_lint.py       # Models for unified SQL linting results
+│   │   └── warnings.py           # The build-time warning every envelope that carries ``warnings[]`` repor…
 │   ├── schemas/                  # The JSON schemas confiture publishes: the one source
 │   │   └── __init__.py           # The JSON schemas confiture publishes: the one source
 │   ├── sql/

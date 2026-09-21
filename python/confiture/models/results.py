@@ -9,13 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal
 
-from confiture.error_codes import ERROR_CODE_REGISTRY
+from confiture.models.warnings import BuildWarning
 from confiture.url_redaction import redact_url
 
 if TYPE_CHECKING:
-    from confiture.core.migration_verifier import VerifyResult
     from confiture.models.schema import SchemaChange, SchemaDiff
 
 
@@ -136,71 +136,6 @@ class CurrentRevision:
             "name": self.name,
             "applied_at": self.applied_at,
             "checksum": self.checksum,
-        }
-
-
-@dataclass(frozen=True)
-class BuildWarning:
-    """A build-time diagnostic that reaches the envelope, not only the console.
-
-    ``confiture build`` has always had diagnostics it printed and never
-    published — a seed file that failed under ``--continue-on-error``, a file
-    pglast could not parse during the duplicate scan. A consumer doing the right
-    thing (reading the JSON, not the prose) could not see them (issue #268).
-    They are entries here now, keyed by an error-code registry entry so a
-    consumer matches a code rather than a sentence.
-
-    Attributes:
-        code: The registry entry that names the situation.
-        severity: That entry's severity — ``warning`` or ``info``. Resolved from
-            the registry by :meth:`of`, never written twice.
-        message: What happened, in one line.
-        file: The file the warning is about, named the way a finding names one;
-            ``None`` when the warning is about the build rather than a file.
-    """
-
-    code: str
-    severity: str
-    message: str
-    file: str | None = None
-
-    @classmethod
-    def of(cls, code: str, *, file: str | None = None, **fields: object) -> BuildWarning:
-        """The registry's entry for *code*, filled in.
-
-        Severity *and* wording come from the registry, so the sentence a build
-        prints is the one the published codebook documents — neither can drift
-        from the other by being written twice.
-
-        Args:
-            code: A registered error code.
-            file: The file the warning is about, when it is about one. Also
-                available to the message template as ``{file}``.
-            **fields: The remaining placeholders of the code's message template.
-
-        Returns:
-            The warning, ready for the envelope.
-
-        Raises:
-            ValueError: *code* is not registered — a warning no consumer could
-                look up is a bug, not a payload.
-            KeyError: The template has a placeholder *fields* does not fill.
-        """
-        definition = ERROR_CODE_REGISTRY.get(code)
-        return cls(
-            code=code,
-            severity=definition.severity.value,
-            message=definition.message_template.format(file=file, **fields),
-            file=file,
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to the envelope's ``warnings[]`` entry."""
-        return {
-            "code": self.code,
-            "severity": self.severity,
-            "message": self.message,
-            "file": self.file,
         }
 
 
@@ -737,6 +672,28 @@ class ConversionReport:
             "success_rate": self.success_rate,
             "results": [r.to_dict() for r in self.results],
         }
+
+
+@dataclass
+class VerifyResult:
+    """Result of verifying a single migration.
+
+    Attributes:
+        version: Migration version string (e.g., "001" or "20260228120530")
+        name: Human-readable migration name
+        verify_file: Path to the .verify.sql file, or None if not found
+        status: "verified", "failed", "skipped" (a sidecar with no statement in
+            it), or "no_file" (no sidecar at all)
+        actual_value: The first column of the first row returned, or None
+        error: Error message if status is "failed", or None
+    """
+
+    version: str
+    name: str
+    verify_file: Path | None
+    status: Literal["verified", "failed", "skipped", "no_file"]
+    actual_value: Any | None = None
+    error: str | None = None
 
 
 @dataclass

@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from confiture.models.results import BuildWarning
 from confiture.models.schema import SchemaChange
+from confiture.models.warnings import BuildWarning
 
 if TYPE_CHECKING:
     from confiture.core.function_body_checker import FunctionBodyViolation

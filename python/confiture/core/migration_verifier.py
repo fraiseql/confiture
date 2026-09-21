@@ -17,9 +17,8 @@ File format contract:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import psycopg
 
@@ -27,28 +26,7 @@ from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.migrator import _version_from_migration_filename
 from confiture.core.sql_lexer import split_statements, statement_type
 from confiture.exceptions import VerifyFileError
-
-
-@dataclass
-class VerifyResult:
-    """Result of verifying a single migration.
-
-    Attributes:
-        version: Migration version string (e.g., "001" or "20260228120530")
-        name: Human-readable migration name
-        verify_file: Path to the .verify.sql file, or None if not found
-        status: "verified", "failed", "skipped" (a sidecar with no statement in
-            it), or "no_file" (no sidecar at all)
-        actual_value: The first column of the first row returned, or None
-        error: Error message if status is "failed", or None
-    """
-
-    version: str
-    name: str
-    verify_file: Path | None
-    status: Literal["verified", "failed", "skipped", "no_file"]
-    actual_value: Any | None = None
-    error: str | None = None
+from confiture.models.results import VerifyResult
 
 
 class MigrationVerifier:
