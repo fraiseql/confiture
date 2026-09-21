@@ -15,6 +15,7 @@ from typing import Any
 import psycopg
 from psycopg import sql as pgsql
 
+from confiture.core import live_catalog
 from confiture.core.ledger import split_qualified_table
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 
@@ -496,15 +497,12 @@ class BatchedMigration:
             # Get columns if not specified
             if columns is None:
                 schema, bare = split_qualified_table(source_table)
-                cur.execute(
-                    """
-                    SELECT column_name FROM information_schema.columns
-                    WHERE table_name = %s AND table_schema = %s
-                    ORDER BY ordinal_position
-                """,
-                    (bare, schema or DEFAULT_SCHEMA),
-                )
-                columns = [row[0] for row in cur.fetchall()]
+                columns = [
+                    column.folded
+                    for column in live_catalog.columns(
+                        self.connection, schema or DEFAULT_SCHEMA, bare
+                    )
+                ]
 
             # Build select expressions
             transform = transform or {}

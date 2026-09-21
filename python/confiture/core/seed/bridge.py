@@ -8,6 +8,8 @@ from typing import Any
 
 import psycopg
 
+from confiture.core import live_catalog
+
 
 @dataclasses.dataclass
 class SeedGenerationConfig:
@@ -77,25 +79,15 @@ class SeedBridge:
     def _get_table_columns(self, table: str, schema: str = "public") -> list[dict[str, Any]]:
         """Introspect columns for a given table."""
 
-        with psycopg.connect(self._database_url) as conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                    SELECT column_name, data_type, is_nullable, column_default
-                    FROM information_schema.columns
-                    WHERE table_schema = %s AND table_name = %s
-                    ORDER BY ordinal_position
-                    """,
-                (schema, table),
-            )
-            rows = cur.fetchall()
+        with psycopg.connect(self._database_url) as conn:
             return [
                 {
-                    "name": row[0],
-                    "type": row[1],
-                    "nullable": row[2] == "YES",
-                    "default": row[3],
+                    "name": column.folded,
+                    "type": column.type_text,
+                    "nullable": not column.not_null,
+                    "default": column.default,
                 }
-                for row in rows
+                for column in live_catalog.columns(conn, schema, table)
             ]
 
     def _generate_stub_sql(

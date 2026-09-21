@@ -14,6 +14,8 @@ from typing import Any
 
 import psycopg
 
+from confiture.core import live_catalog
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import split_statements, statement_type
 
 logger = logging.getLogger(__name__)
@@ -166,109 +168,32 @@ class SchemaAnalyzer:
         if schemas is None and self._schema_info is not None and not refresh:
             return self._schema_info
 
-        info = SchemaInfo()
-        wanted = list(schemas) if schemas is not None else ["public"]
+        wanted = list(schemas) if schemas is not None else [DEFAULT_SCHEMA]
 
         def key(schema: str, name: str) -> str:
             return f"{schema}.{name}" if schemas is not None else name
 
-        self._read_columns(info, wanted, key)
-        self._read_indexes(info, wanted, key)
+        info = SchemaInfo()
+        for table in live_catalog.read(self.connection, schemas=wanted).tables.values():
+            name = key(table.schema or DEFAULT_SCHEMA, table.name)
+            info.tables[name] = {
+                column.folded: {
+                    "type": column.type_text,
+                    "nullable": not column.not_null,
+                    "default": column.default,
+                }
+                for column in table.columns
+            }
+            # An index backing a PRIMARY KEY or UNIQUE constraint carries the
+            # constraint's name; the DDL declares the constraint, never the index,
+            # so drift must not count it against the tree.
+            backing = {c.name for c in table.constraints if c.kind in ("primary_key", "unique")}
+            info.indexes[name] = [index.name or "" for index in table.indexes] + sorted(backing)
+            if backing:
+                info.constraint_indexes[name] = backing
 
         self._schema_info = info
         return info
-
-    def _read_columns(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:
-        """Tables and their columns, as PostgreSQL's own catalogue spells them.
-
-        The type comes from ``format_type(atttypid, atttypmod)``, which answers
-        "what type is this column" in the vocabulary the DDL is written in.
-        ``information_schema.columns.data_type`` does not: it spells an array
-        ``ARRAY``, a user-defined type ``USER-DEFINED``, a domain by its *base*
-        type, and drops every typmod — so ``tags TEXT[]`` in a schema file met
-        ``array`` from the database and reported a ``type_mismatch`` against the
-        tree it was built from (#302).
-
-        ``relkind IN ('r', 'p')`` reproduces the old ``table_type = 'BASE
-        TABLE'``: a partitioned parent is ``'p'`` and the expected side models
-        it, while a view, a matview and a foreign table are compared — where they
-        are compared — as objects rather than as tables with columns.
-
-        ``NOT attisdropped AND attnum > 0`` is required: ``pg_attribute`` keeps a
-        tombstone row for a dropped column and negative rows for the system
-        columns. The ordering is the column-order comparison's input, and
-        ``attnum`` and ``ordinal_position`` agree — measured, including across a
-        dropped column.
-        """
-        with self.connection.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    n.nspname,
-                    c.relname,
-                    a.attname,
-                    format_type(a.atttypid, a.atttypmod),
-                    NOT a.attnotnull,
-                    pg_get_expr(d.adbin, d.adrelid)
-                FROM pg_attribute a
-                JOIN pg_class c ON c.oid = a.attrelid
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-                LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-                WHERE n.nspname = ANY(%s)
-                  AND c.relkind IN ('r', 'p')
-                  AND a.attnum > 0
-                  AND NOT a.attisdropped
-                ORDER BY n.nspname, c.relname, a.attnum
-            """,
-                (wanted,),
-            )
-            for schema, relname, column, written, nullable, default in cur.fetchall():
-                table_name = key(schema, relname)
-                if table_name not in info.tables:
-                    info.tables[table_name] = {}
-                info.tables[table_name][column] = {
-                    "type": written,
-                    "nullable": nullable,
-                    "default": default,
-                }
-
-    def _read_indexes(self, info: SchemaInfo, wanted: list[str], key: Any) -> None:
-        """Every index per table, and which of them back a constraint."""
-        with self.connection.cursor() as cur:
-            cur.execute(
-                """
-                SELECT
-                    schemaname,
-                    tablename,
-                    indexname,
-                    indexdef
-                FROM pg_indexes
-                WHERE schemaname = ANY(%s)
-            """,
-                (wanted,),
-            )
-            for row in cur.fetchall():
-                table_name = key(row[0], row[1])
-                if table_name not in info.indexes:
-                    info.indexes[table_name] = []
-                info.indexes[table_name].append(row[2])
-
-        # Which of those indexes exist only to back a constraint
-        with self.connection.cursor() as cur:
-            cur.execute(
-                """
-                SELECT n.nspname, t.relname, i.relname
-                FROM pg_constraint c
-                JOIN pg_class i ON i.oid = c.conindid
-                JOIN pg_class t ON t.oid = c.conrelid
-                JOIN pg_namespace n ON n.oid = t.relnamespace
-                WHERE c.contype IN ('p', 'u', 'x')
-                AND n.nspname = ANY(%s)
-            """,
-                (wanted,),
-            )
-            for row in cur.fetchall():
-                info.constraint_indexes.setdefault(key(row[0], row[1]), set()).add(row[2])
 
     def validate_sql(self, sql: str) -> list[ValidationIssue]:
         """Validate a SQL string against current schema.
