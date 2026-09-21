@@ -1,6 +1,5 @@
 """Drift command: compare live database schema against expected DDL."""
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -8,7 +7,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.common import display_drift_report
-from confiture.cli.helpers import console, is_json, open_connection
+from confiture.cli.helpers import console, emit, is_json, open_connection
 from confiture.cli.options import format_option
 from confiture.config.environment import AclExpectation, OwnershipExpectation
 from confiture.core.connection import load_config
@@ -122,7 +121,7 @@ def _render_drift(drift_report: DriftReport, format_output: str) -> None:
         # always empty; the contract guarantees the key exists so
         # agents can read `payload["hints"]` without a defensive get().
         payload["hints"] = []
-        print(json.dumps(payload, indent=2, default=str))
+        emit(payload)
     else:
         display_drift_report(drift_report, console)
 

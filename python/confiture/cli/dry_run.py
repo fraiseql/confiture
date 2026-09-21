@@ -3,7 +3,6 @@
 This module provides helper functions for dry-run analysis integration with the CLI.
 """
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -11,6 +10,8 @@ from typing import Any
 import typer
 from rich.console import Console
 from rich.table import Table
+
+from confiture.cli.helpers import emit
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -28,30 +29,6 @@ def save_text_report(report_text: str, filepath: Path) -> None:
     """
     filepath.parent.mkdir(parents=True, exist_ok=True)
     filepath.write_text(report_text)
-
-
-def save_json_report(report_data: dict, filepath: Path) -> None:
-    """Save JSON report to file.
-
-    Args:
-        report_data: Report dictionary to save
-        filepath: Path to save report to
-
-    Raises:
-        IOError: If file write fails
-    """
-    filepath.parent.mkdir(parents=True, exist_ok=True)
-    with filepath.open("w") as f:
-        json.dump(report_data, f, indent=2)
-
-
-def print_json_report(report_data: dict) -> None:
-    """Print JSON report to console.
-
-    Args:
-        report_data: Report dictionary to print
-    """
-    console.print_json(data=report_data)
 
 
 def show_report_summary(report: Any) -> None:
@@ -104,7 +81,7 @@ def display_dry_run_result(result, format_type: str = "text") -> None:
         format_type: Output format ('text' or 'json')
     """
     if format_type == "json":
-        print_json_report(result.__dict__)
+        emit(result.__dict__)
     else:
         # Text format
         status = "[green]✓ SUCCESS[/green]" if result.success else "[red]❌ FAILED[/red]"

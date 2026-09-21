@@ -84,6 +84,10 @@
           "type": "integer"
         }
       }
+    },
+    "command": {
+      "type": "string",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture` (`migrate up`, `lint`)."
     }
   }
 }

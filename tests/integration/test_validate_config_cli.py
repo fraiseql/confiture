@@ -90,6 +90,8 @@ def test_json_output_shape(tmp_path: Path) -> None:
         "migration_count",
         "issues",
         "parser",  # every envelope names its parser since 0.50.0
+        "ok",  # the envelope, since 1.16.0
+        "command",
     }
 
 

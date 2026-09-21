@@ -14,9 +14,9 @@ import typer
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import (
-    _output_json,
     _resolve_config,
     console,
+    emit,
     error_console,
     open_connection,
 )
@@ -294,7 +294,7 @@ def _render_clean(
     extra: dict[str, Any] | None = None,
 ) -> None:
     if format_output == "json":
-        _output_json(
+        emit(
             {"status": "clean", "message": message, "fixes_applied": 0, **(extra or {})},
             output_file,
             console,
@@ -370,7 +370,7 @@ def _render_fix_dry_run(
 ) -> None:
     combined_sql = "\n\n".join(f"{b['drop_sql']}\n{b['create_sql']}" for b in fix_blocks)
     if format_output == "json":
-        _output_json(
+        emit(
             {
                 "status": "dry_run",
                 "fixes_planned": len(fix_blocks),
@@ -442,7 +442,7 @@ def _render_fix_applied(
     applied = [b["stale_signature"] for b in fix_blocks]
     body_applied = [b["signature_key"] for b in body_fix_blocks]
     if format_output == "json":
-        _output_json(
+        emit(
             {
                 "status": "applied" if not has_residual else "partial",
                 "fixes_applied": len(fix_blocks),

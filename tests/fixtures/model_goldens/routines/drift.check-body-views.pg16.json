@@ -21,6 +21,8 @@
     ],
     "views_checked": 3,
     "detection_time_ms": 0,
+    "ok": true,
+    "command": "migrate validate",
     "parser": {
       "pglast": "8.4",
       "pg_major": 18

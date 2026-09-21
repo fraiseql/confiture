@@ -7,9 +7,9 @@ from typing import Any
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import (
     _extract_version,
-    _output_json,
     _query_applied_versions,
     console,
+    emit,
     is_json,
 )
 from confiture.core import connection as _core_connection
@@ -109,7 +109,7 @@ def _fix_ownership(
     expectation = load_ownership_expectation(config_data, config_path, require=False)
     if expectation is None:
         if format_output == "json":
-            _output_json(
+            emit(
                 {"status": "skipped", "reason": "no ownership: block in config"},
                 output_file,
                 console,
@@ -148,7 +148,7 @@ def _fix_ownership(
     if format_output == "json":
         if refused and not force:
             _refuse()
-        _output_json(
+        emit(
             {
                 "status": "preview" if dry_run else "fixed",
                 "previews": [

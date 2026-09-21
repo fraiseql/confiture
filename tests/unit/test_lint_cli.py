@@ -3,6 +3,7 @@
 These tests verify the lint command integrates properly with the CLI framework.
 """
 
+import json
 from pathlib import Path
 from unittest.mock import ANY, MagicMock, patch
 
@@ -168,23 +169,21 @@ class TestLintCommand:
         assert "TestRule" in result.stdout
 
     @patch("confiture.cli.commands.schema.SchemaLinter")
-    @patch("confiture.cli.commands.schema.save_report")
-    def test_lint_command_save_json_output(self, mock_save, mock_linter_class):
+    def test_lint_command_save_json_output(self, mock_linter_class, tmp_path):
         """Should save JSON output to file when --output specified."""
         mock_linter = MagicMock()
         mock_linter_class.return_value = mock_linter
 
         mock_report = LintReport(errors=[], warnings=[], info=[])
         mock_linter.lint.return_value = mock_report
+        target = tmp_path / "report.json"
 
-        # Run with --output and --format json
-        result = runner.invoke(
-            app,
-            ["lint", "--format", "json", "--output", "/tmp/report.json"],
-        )
+        result = runner.invoke(app, ["lint", "--format", "json", "--output", str(target)])
 
-        assert result.exit_code == 0
-        mock_save.assert_called_once()
+        assert result.exit_code == 0, result.output
+        payload = json.loads(target.read_text())
+        assert (payload["ok"], payload["command"]) == (True, "lint")
+        assert "parser" in payload
 
     def test_lint_command_invalid_format(self):
         """Should fail with invalid format option."""

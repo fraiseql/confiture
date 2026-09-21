@@ -61,6 +61,16 @@ Every top-level payload and the error envelope carry `parser` (0.50.0):
 parsed the SQL behind the verdict. It is declared (`_common.schema.json#/$defs/Parser`)
 but not required, so payloads from earlier versions stay valid.
 
+Since 1.16.0 they also carry `ok` and `command` — the envelope, written by the
+one emitter every command's JSON goes through. `command` is the command as typed
+after `confiture` (`migrate up`). `ok` is `true` when the command produced its
+report and `false` in the error envelope; what the report *found* is in its own
+fields (`success`, `is_valid`, `status`). A payload that carries an `ok` of its
+own keeps it: `migrate preflight`, `migrate verify` and `verify-checksums` define
+`ok` as their verdict, and `schema-to-schema` names its step in `command`. The
+three keys come after every key the payload already had; every payload schema
+declares them, none requires them.
+
 Aside from `hints` population, schemas are additive — new optional fields
 may appear in patch releases, but documented `required` fields will not
 change without a top-level version bump.

@@ -12,61 +12,8 @@ from rich.console import Console
 from confiture.cli.formatters.common import (
     handle_output,
     print_csv,
-    print_json,
     save_csv,
-    save_json,
 )
-
-
-class TestSaveJson:
-    """Tests for save_json function."""
-
-    def test_save_json_creates_file(self):
-        """Test save_json creates a file with formatted JSON."""
-        with TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "output.json"
-            data = {"key": "value", "count": 42}
-
-            save_json(data, output_path)
-
-            assert output_path.exists()
-            loaded = json.loads(output_path.read_text())
-            assert loaded["key"] == "value"
-            assert loaded["count"] == 42
-
-    def test_save_json_formats_with_indentation(self):
-        """Test save_json uses proper indentation."""
-        with TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "output.json"
-            data = {"nested": {"value": 1}}
-
-            save_json(data, output_path)
-
-            content = output_path.read_text()
-            assert '  "nested"' in content  # Indented
-
-    def test_save_json_handles_none_values(self):
-        """Test save_json handles None values."""
-        with TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "output.json"
-            data = {"key": None, "other": "value"}
-
-            save_json(data, output_path)
-
-            loaded = json.loads(output_path.read_text())
-            assert loaded["key"] is None
-
-    def test_save_json_overwrites_existing(self):
-        """Test save_json overwrites existing file."""
-        with TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "output.json"
-            output_path.write_text('{"old": "data"}')
-
-            save_json({"new": "data"}, output_path)
-
-            loaded = json.loads(output_path.read_text())
-            assert loaded["new"] == "data"
-            assert "old" not in loaded
 
 
 class TestSaveCsv:
@@ -175,22 +122,9 @@ class TestHandleOutput:
 
         # Should not raise
         handle_output("json", data, None, None, console)
-        output = capsys.readouterr().out
-        assert '"test": "data"' in output
-
-
-class TestPrintJson:
-    """Tests for print_json function."""
-
-    def test_print_json_valid_data(self, capsys):
-        """Test print_json with valid JSON data."""
-        console = Console()
-        data = {"key": "value"}
-
-        # Should not raise
-        print_json(data, console)
-        output = capsys.readouterr().out
-        assert '"key": "value"' in output
+        output = json.loads(capsys.readouterr().out)
+        assert output["test"] == "data"
+        assert output["ok"] is True  # the envelope: JSON goes through helpers.emit
 
 
 class TestPrintCsv:

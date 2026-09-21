@@ -5,37 +5,13 @@ across all CLI commands that support structured output.
 """
 
 import csv
-import json
-import sys
 from io import StringIO
 from pathlib import Path
 from typing import Any
 
 from rich.console import Console
 
-
-def save_json(data: dict[str, Any], output_path: Path) -> None:
-    """Save data as formatted JSON file.
-
-    Args:
-        data: Dictionary to serialize as JSON
-        output_path: Path to write JSON file to
-    """
-    output_path.write_text(json.dumps(data, indent=2, default=str))
-
-
-def print_json(data: dict[str, Any], console: Console) -> None:
-    """Print JSON to console using standard print to avoid Rich formatting.
-
-    Args:
-        data: Dictionary to display as JSON
-        console: Rich console for output (ignored for JSON to avoid formatting)
-    """
-    del console  # JSON goes through print(): Rich would re-wrap and colour the payload
-    # Print raw JSON without Rich formatting
-
-    json_text = json.dumps(data, indent=2, default=str)
-    print(json_text, file=sys.stdout)
+from confiture.cli.helpers import emit
 
 
 def save_csv(headers: list[str], rows: list[list[Any]], output_path: Path) -> None:
@@ -167,11 +143,7 @@ def handle_output(
         console: Rich console for printing
     """
     if format_type == "json":
-        if output_path:
-            save_json(data_dict, output_path)
-            console.print(f"[green]✓ JSON report saved to {output_path.absolute()}[/green]")
-        else:
-            print_json(data_dict, console)
+        emit(data_dict, output_path, console)
 
     elif format_type == "csv":
         if csv_data is None:

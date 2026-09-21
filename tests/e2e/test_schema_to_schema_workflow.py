@@ -115,11 +115,9 @@ def test_workflow_json_envelopes_are_well_formed(tmp_path) -> None:
     with patch("confiture.cli.schema_to_schema._migrator", return_value=m):
         r = runner.invoke(app, [*S2S, "setup", *CONN, "--format", "json"])
         assert r.exit_code == 0, r.output
-        assert json.loads(r.output) == {
-            "ok": True,
-            "command": "setup",
-            "skip_import": False,
-        }
+        payload = json.loads(r.output)
+        assert set(payload.pop("parser")) == {"pglast", "pg_major"}  # the envelope, 1.16.0
+        assert payload == {"ok": True, "command": "setup", "skip_import": False}
 
         r = runner.invoke(
             app, [*S2S, "verify", *CONN, "--tables", "users,events", "--format", "json"]

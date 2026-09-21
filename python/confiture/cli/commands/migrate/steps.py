@@ -8,7 +8,7 @@ from typing import Annotated, Any
 import typer
 
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import _get_tracking_table, _output_json, console, is_json
+from confiture.cli.helpers import _get_tracking_table, console, emit, is_json
 from confiture.cli.options import format_option
 from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
@@ -87,7 +87,7 @@ def migrate_steps(
             resumed=resume,
         )
     if is_json(format_type):
-        _output_json(result.to_dict(), output_file, console)
+        emit(result.to_dict(), output_file, console)
         return
     if result.resumed:
         console.print(

@@ -20,7 +20,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from confiture.cli.error_json import fail
-from confiture.cli.helpers import _output_json
+from confiture.cli.helpers import emit
 from confiture.cli.main import app
 from confiture.exceptions import ConfigurationError
 
@@ -49,16 +49,16 @@ def test_version_has_a_second_line_naming_the_parser() -> None:
     assert int(m.group(2)) == _expected_stamp()["pg_major"]
 
 
-def test_output_json_stamps_the_parser(capsys: pytest.CaptureFixture[str]) -> None:
-    _output_json({"ok": True}, None, Console())
+def test_emit_stamps_the_parser(capsys: pytest.CaptureFixture[str]) -> None:
+    emit({"ok": True}, None, Console())
     data = json.loads(capsys.readouterr().out)
     assert data["parser"] == _expected_stamp()
     assert data["ok"] is True
 
 
-def test_output_json_stamps_the_parser_into_a_file(tmp_path: Path) -> None:
+def test_emit_stamps_the_parser_into_a_file(tmp_path: Path) -> None:
     target = tmp_path / "out.json"
-    _output_json({"ok": True}, target, Console(file=(tmp_path / "log").open("w")))
+    emit({"ok": True}, target, Console(file=(tmp_path / "log").open("w")))
     assert json.loads(target.read_text())["parser"] == _expected_stamp()
 
 

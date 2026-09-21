@@ -5,7 +5,6 @@ Split out of the monolithic migrate command modules.
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 from typing import Annotated
@@ -16,6 +15,7 @@ from confiture.cli.commands.migrate._settings import _load_environment_if_presen
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     console,
+    emit,
     error_console,
     is_json,
 )
@@ -404,19 +404,16 @@ def _render_dry_run_preview(
     format_output: str,
 ) -> None:
     if format_output == "json":
-        print(
-            json.dumps(
-                {
-                    "status": "dry_run",
-                    "version": version,
-                    "name": name,
-                    "filepath": str(filepath.absolute()),
-                    "class_name": class_name,
-                    "template": template,
-                    "warnings": warnings,
-                },
-                indent=2,
-            )
+        emit(
+            {
+                "status": "dry_run",
+                "version": version,
+                "name": name,
+                "filepath": str(filepath.absolute()),
+                "class_name": class_name,
+                "template": template,
+                "warnings": warnings,
+            }
         )
         return
     console.print("[cyan]🔍 Dry-run mode - no files will be created[/cyan]\n")
@@ -500,23 +497,20 @@ def _render_generated(
     verify_path: Path | None = None,
 ) -> None:
     if format_output == "json":
-        print(
-            json.dumps(
-                {
-                    "status": "success",
-                    "version": version,
-                    "name": name,
-                    "filepath": str(filepath.absolute()),
-                    "verify_file": str(verify_path.absolute()) if verify_path else None,
-                    "class_name": class_name,
-                    "migrations_dir": str(migrations_dir.absolute()),
-                    "next_available_version": version,
-                    "snapshot": str(snapshot_path.absolute()) if snapshot_path else None,
-                    "snapshot_mode": snapshot_mode if snapshot_path else None,
-                    "warnings": warnings,
-                },
-                indent=2,
-            )
+        emit(
+            {
+                "status": "success",
+                "version": version,
+                "name": name,
+                "filepath": str(filepath.absolute()),
+                "verify_file": str(verify_path.absolute()) if verify_path else None,
+                "class_name": class_name,
+                "migrations_dir": str(migrations_dir.absolute()),
+                "next_available_version": version,
+                "snapshot": str(snapshot_path.absolute()) if snapshot_path else None,
+                "snapshot_mode": snapshot_mode if snapshot_path else None,
+                "warnings": warnings,
+            }
         )
         return
     console.print("[green]✅ Migration generated successfully![/green]")

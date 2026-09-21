@@ -6,7 +6,6 @@ output formats (table, JSON, CSV) for the lint CLI command.
 
 import csv
 import io
-import json
 from pathlib import Path
 from typing import Literal
 
@@ -14,28 +13,28 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from confiture.core.parser_info import parser_stamp
 from confiture.models.lint import LintReport, LintSeverity, Violation
 
 
 def format_lint_report(
     report: LintReport,
-    format_type: Literal["table", "json", "csv"] = "table",
+    format_type: Literal["table", "csv"] = "table",
     console: Console | None = None,
 ) -> str:
-    """Format a LintReport in the specified format.
+    """Format a LintReport as a table (printed) or as CSV (returned).
+
+    JSON is not a format here: ``lint --format json`` is ``report.to_dict()``
+    through ``helpers.emit``, the one writer of machine output.
 
     Args:
         report: LintReport to format
-        format_type: Output format (table, json, or csv)
+        format_type: Output format (table or csv)
         console: Rich Console instance for table rendering
 
     Returns:
-        Formatted report as string
+        The CSV text, or ``""`` for a table (already printed)
     """
-    if format_type == "json":
-        return format_json(report)
-    elif format_type == "csv":
+    if format_type == "csv":
         return format_csv(report)
     else:  # table
         if console is None:
@@ -184,20 +183,6 @@ def _print_documentation(report: LintReport, console: Console) -> None:
     console.print(f"[dim]{line}[/dim]\n")
 
 
-def format_json(report: LintReport) -> str:
-    """Format LintReport as JSON.
-
-    Args:
-        report: LintReport to format
-
-    Returns:
-        JSON string representation
-    """
-    data = report.to_dict()
-    data["parser"] = parser_stamp()
-    return json.dumps(data, indent=2)
-
-
 def format_csv(report: LintReport) -> str:
     """Format LintReport as CSV.
 
@@ -227,17 +212,11 @@ def format_csv(report: LintReport) -> str:
     return buffer.getvalue().rstrip("\n")
 
 
-def save_report(
-    report: LintReport,
-    output_path: Path,
-    format_type: Literal["json", "csv"] = "json",
-) -> None:
-    """Save LintReport to a file.
+def save_report(report: LintReport, output_path: Path) -> None:
+    """Save LintReport to a file as CSV.
 
     Args:
         report: LintReport to save
         output_path: Path to save to
-        format_type: Output format (json or csv)
     """
-    content = format_json(report) if format_type == "json" else format_csv(report)
-    output_path.write_text(content)
+    output_path.write_text(format_csv(report))

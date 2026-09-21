@@ -12,7 +12,6 @@ boundary. Errors emit the #145 envelope in ``--format json``.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -20,7 +19,7 @@ import psycopg
 import typer
 
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import connect, console, is_json
+from confiture.cli.helpers import connect, console, emit, is_json
 from confiture.cli.options import format_option
 from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -135,7 +134,7 @@ def s2s_setup(
         m = _migrator(source, target)
         m.setup_fdw(skip_import=skip_import)
         if json_mode:
-            print(json.dumps({"ok": True, "command": "setup", "skip_import": skip_import}))
+            emit({"ok": True, "command": "setup", "skip_import": skip_import})
         else:
             console.print("[green]✅ FDW configured[/green] (target → source)")
     finally:
@@ -157,7 +156,7 @@ def s2s_analyze(
         m = _migrator(source, target)
         recommendations = m.analyze_tables(schema=schema)
         if json_mode:
-            print(json.dumps({"command": "analyze", "tables": recommendations}, default=str))
+            emit({"command": "analyze", "tables": recommendations})
         else:
             console.print(f"[cyan]Strategy recommendations for schema '{schema}':[/cyan]")
             for table, info in recommendations.items():
@@ -201,7 +200,7 @@ def s2s_migrate(
                 source_table=src_table, target_table=dst_table, column_mapping=columns
             )
         if json_mode:
-            print(json.dumps({"command": "migrate", "strategy": strategy, "migrated": results}))
+            emit({"command": "migrate", "strategy": strategy, "migrated": results})
         else:
             for table, rows in results.items():
                 console.print(f"  • {table}: [green]{rows}[/green] rows migrated")
@@ -236,9 +235,7 @@ def s2s_migrate_table(
             source_table=source_table, target_table=target_table, column_mapping=column_mapping
         )
         if json_mode:
-            print(
-                json.dumps({"command": "migrate-table", "target_table": target_table, "rows": rows})
-            )
+            emit({"command": "migrate-table", "target_table": target_table, "rows": rows})
         else:
             console.print(f"[green]✅ {target_table}: {rows} rows migrated[/green]")
     finally:
@@ -266,7 +263,7 @@ def s2s_verify(
         )
         mismatches = [t for t, info in report.items() if not info.get("match", False)]
         if json_mode:
-            print(json.dumps({"command": "verify", "tables": report, "matched": not mismatches}))
+            emit({"command": "verify", "tables": report, "matched": not mismatches})
         else:
             for table, info in report.items():
                 ok = info.get("match", False)
@@ -299,7 +296,7 @@ def s2s_cleanup(
         m = _migrator(source, target)
         m.cleanup_fdw()
         if json_mode:
-            print(json.dumps({"ok": True, "command": "cleanup"}))
+            emit({"ok": True, "command": "cleanup"})
         else:
             console.print("[green]✅ FDW removed from target[/green]")
     finally:

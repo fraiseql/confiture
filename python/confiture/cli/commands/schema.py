@@ -1,6 +1,5 @@
 """Schema commands: init, build, lint, introspect."""
 
-import json
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -21,10 +20,10 @@ from confiture.cli.helpers import (
     FINDINGS_EXIT_CODE,
     USAGE_EXIT_CODE,
     _convert_linter_report,
-    _output_json,
     _output_yaml,
     connect,
     console,
+    emit,
     error_console,
     is_json,
 )
@@ -1142,17 +1141,18 @@ def lint(
             baseline=None if baseline_diff is None else baseline_diff.summary(),
             gate=gate.to_dict(),
         )
-        if format_type == "table":
+        if format_type == "json":
+            emit(report.to_dict(), output, console)
+        elif format_type == "table":
             format_lint_report(report, format_type="table", console=console)
         else:
-            fmt = "json" if format_type == "json" else "csv"
-            formatted = format_lint_report(report, format_type=fmt, console=console)
+            formatted = format_lint_report(report, format_type="csv", console=console)
             if output:
-                save_report(report, output, format_type=fmt)
+                save_report(report, output)
                 console.print(f"[green]✅ Report saved to: {output.absolute()}[/green]")
             else:
                 # print(), not console.print(): Rich wraps long lines at the
-                # terminal width, which breaks the JSON stream (see _output_json).
+                # terminal width, which breaks a CSV row.
                 print(formatted)
 
         _print_gate_notice(gate, format_type)
@@ -1579,7 +1579,7 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
     """
 
     if is_json(format_type):
-        _output_json(
+        emit(
             {
                 "version": "1",
                 "status": "ok",
@@ -1740,7 +1740,7 @@ def lint_unified(
     unified_result = UnifiedLintResult(issues=all_issues)
 
     if format_type == "json":
-        print(json.dumps(unified_result.to_dict(), indent=2))
+        emit(unified_result.to_dict())
     elif not unified_result.issues:
         console.print("[green]No issues found.[/green]")
     else:
@@ -1846,4 +1846,4 @@ def introspect(
     if format_type == "yaml":
         _output_yaml(data, output, _console)
     else:
-        _output_json(data, output, _console)
+        emit(data, output, _console)

@@ -10,8 +10,8 @@ from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, resolve_database_url
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     _get_tracking_table,
-    _output_json,
     console,
+    emit,
     error_console,
     is_json,
     open_connection,
@@ -309,7 +309,7 @@ def _report_absent_ledger(
         # 0.37.0 turned this crash into a graceful exit but left it returning
         # after a Rich print, so --format json produced no JSON at all on the
         # one path most likely to be scripted.
-        _output_json(
+        emit(
             _checksum_payload(
                 ledger_present=False,
                 checked=0,
@@ -450,7 +450,7 @@ def verify_checksums(
 
         if not mismatches:
             if json_mode:
-                _output_json(
+                emit(
                     _checksum_payload(
                         ledger_present=True,
                         checked=checked,
@@ -477,7 +477,7 @@ def verify_checksums(
             updated = verifier.update_checksums_for(mismatches)
 
         if json_mode:
-            _output_json(
+            emit(
                 _checksum_payload(
                     ledger_present=True,
                     checked=checked,
@@ -565,7 +565,7 @@ def validate_config(
     exit_code = 5 if has_error or (strict and has_warning) else 0
 
     if is_json(output_format):
-        _output_json(report.to_dict(), None, console)
+        emit(report.to_dict(), None, console)
         if exit_code:
             raise typer.Exit(exit_code)
         return

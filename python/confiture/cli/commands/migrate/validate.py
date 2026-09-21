@@ -18,7 +18,7 @@ from confiture.cli.commands.validate_checks import (
 )
 from confiture.cli.dsn import param_is_explicit, require_readable_config
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import _output_json, _resolve_config, console, is_json
+from confiture.cli.helpers import _resolve_config, console, emit, is_json
 from confiture.cli.options import CheckSignatureSchemasOpt, format_option
 from confiture.core.idempotency.patterns import list_patterns
 from confiture.core.validation.context import ValidationContext
@@ -619,7 +619,7 @@ def migrate_validate(
 
     payload = compose_payload(outcomes)
     if payload is not None:
-        _output_json(payload, output_file, console)
+        emit(payload, output_file, console)
 
     exit_code = aggregate_exit_code(outcomes)
     if exit_code:

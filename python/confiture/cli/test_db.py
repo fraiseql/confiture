@@ -14,7 +14,7 @@ from pathlib import Path
 import typer
 
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import _output_json, console, is_json, redact_url
+from confiture.cli.helpers import console, emit, is_json, redact_url
 from confiture.cli.options import format_option
 from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
@@ -152,7 +152,7 @@ def provision_template(
         )
 
     if is_json(format_type):
-        _output_json(status.to_dict(), None, console)
+        emit(status.to_dict(), None, console)
     else:
         console.print(f"[green]✅ Template '{template}' provisioned ({status.state.value})[/green]")
 
@@ -189,7 +189,7 @@ def clone(
     if is_json(format_type):
         payload = result.to_dict()
         payload["target_url"] = redact_url(payload["target_url"])  # no DSN creds in logs
-        _output_json(payload, None, console)
+        emit(payload, None, console)
     else:
         console.print(f"[green]✅ Cloned '{template}' → '{target}'[/green]")
 
@@ -237,7 +237,7 @@ def ram_setup(
         payload = result.to_dict()
         if guided_command is not None:
             payload["action_command"] = guided_command
-        _output_json(payload, None, console)
+        emit(payload, None, console)
     else:
         _print_ram_setup_text(result, guided_command)
 
@@ -261,7 +261,7 @@ def drop(
     provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
     dropped = provisioner.drop(target, force=force)
     if is_json(format_type):
-        _output_json({"target": target, "dropped": dropped}, None, console)
+        emit({"target": target, "dropped": dropped}, None, console)
     elif dropped:
         console.print(f"[green]✅ Dropped '{target}'[/green]")
     else:
@@ -285,7 +285,7 @@ def status(
     result = provisioner.template_status(template, current_hash)
 
     if is_json(format_type):
-        _output_json(result.to_dict(), None, console)
+        emit(result.to_dict(), None, console)
     else:
         console.print(f"Template '{template}': [bold]{result.state.value}[/bold]")
 
@@ -305,7 +305,7 @@ def list_databases(
     provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
     databases = provisioner.list_databases()
     if is_json(format_type):
-        _output_json({"databases": [d.to_dict() for d in databases]}, None, console)
+        emit({"databases": [d.to_dict() for d in databases]}, None, console)
     elif databases:
         for db in databases:
             console.print(f"  {db.kind:9} {db.name}  ({db.detail})")
@@ -326,6 +326,6 @@ def prune(
     provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
     dropped = provisioner.prune(template)
     if is_json(format_type):
-        _output_json({"template": template, "dropped": dropped}, None, console)
+        emit({"template": template, "dropped": dropped}, None, console)
     else:
         console.print(f"[green]✅ Pruned {len(dropped)} clone(s) of '{template}'[/green]")

@@ -12,6 +12,13 @@ import yaml
 from psycopg import sql as pgsql
 from rich.console import Console
 
+try:
+    # typer vendors click from 0.2x on; `click.get_current_context()` is then a
+    # different module's and returns None inside a command body.
+    from typer._click.globals import get_current_context as _current_context
+except ImportError:
+    from click import get_current_context as _current_context
+
 from confiture.core.connection import create_connection
 from confiture.core.connection import open_connection as _core_open_connection
 from confiture.core.ledger import table_identifier, validate_table_name
@@ -301,23 +308,44 @@ FINDINGS_EXIT_CODE = 1
 USAGE_EXIT_CODE = 2
 
 
-def _output_json(data: dict[str, Any], output_file: Path | None, console: Console) -> None:
-    """Output JSON data to file or console.
+def _command_path() -> str | None:
+    """The running command's path — ``migrate up`` — from the Click context, if one is live."""
+    context = _current_context(silent=True)
+    names: list[str] = []
+    while context is not None and context.parent is not None:
+        names.append(str(context.info_name))
+        context = context.parent
+    return " ".join(reversed(names)) or None
 
-    Args:
-        data: Data to output as JSON
-        output_file: Optional file to write to
-        console: Console for output
+
+def emit(data: dict[str, Any], output_file: Path | None = None, out: Console | None = None) -> None:
+    """The one writer of a command's machine output: its payload, in the envelope.
+
+    The envelope is three keys: ``ok`` — ``true`` when the command produced its
+    report, ``false`` in the error envelope (the report's own fields, ``success`` or
+    ``is_valid``, say what it found) — ``command`` (``migrate up``) and ``parser``
+    (what parsed the SQL). Each is added only when the payload does not carry it,
+    after every key it does: nothing is renamed, nested or reordered, so a consumer
+    that read a payload before reads the same payload now (owner decision 2).
+
+    With *output_file* the JSON goes to the file and one human line to stdout — the
+    split the fraisier adapter depends on, reading clean JSON from ``--output`` while
+    progress goes to stdout. Without it the JSON goes to stdout through ``print``,
+    never Rich, which would re-wrap and colour it.
     """
-    if isinstance(data, dict) and "parser" not in data:
-        data = {**data, "parser": parser_stamp()}
-    json_str = json.dumps(data, indent=2, default=str)
+    payload = dict(data)
+    payload.setdefault("ok", True)
+    command = _command_path()
+    if command is not None:
+        payload.setdefault("command", command)
+    payload.setdefault("parser", parser_stamp())
+    text = json.dumps(payload, indent=2, default=str)
     if output_file:
-        output_file.write_text(json_str)
-        console.print(f"[green]✅ Output written to {output_file}[/green]")
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(text)
+        (out or console).print(f"[green]✅ Output written to {output_file}[/green]")
     else:
-        # Use print() instead of console.print() to avoid Rich wrapping long lines
-        print(json_str)
+        print(text)
 
 
 def _find_orphaned_sql_files(migrations_dir: Path) -> list[Path]:

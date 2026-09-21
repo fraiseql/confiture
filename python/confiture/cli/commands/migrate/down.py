@@ -23,9 +23,9 @@ from confiture.cli.error_json import cli_boundary, fail, lock_error_to_confiture
 from confiture.cli.formatters.migrate_formatter import format_migrate_down_result
 from confiture.cli.helpers import (
     _get_tracking_table,
-    _output_json,
     connect,
     console,
+    emit,
     error_console,
     is_json,
 )
@@ -277,7 +277,7 @@ def migrate_down_to(
         result = s.down_to(revision, dry_run=dry_run, command="confiture migrate down-to")
 
     if is_json(format_output):
-        _output_json(result.to_dict(), output_file, console)
+        emit(result.to_dict(), output_file, console)
     elif result.noop:
         console.print(f"Already at {revision}; nothing to roll back.")
     else:

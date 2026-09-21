@@ -22,8 +22,8 @@ from confiture.cli.error_json import cli_boundary
 from confiture.cli.formatters.migrate_formatter import format_verify_results
 from confiture.cli.helpers import (
     _get_tracking_table,
-    _output_json,
     console,
+    emit,
     is_json,
     open_connection,
 )
@@ -146,7 +146,7 @@ def migrate_verify(
                 ledger_present=False,
             )
             if format_output == "json":
-                _output_json(empty.to_dict(), output_file, console)
+                emit(empty.to_dict(), output_file, console)
             else:
                 console.print(
                     f"[yellow]⏭️  Skipped: no migration ledger found (`{tracking_table}` "
@@ -179,7 +179,7 @@ def migrate_verify(
         )
 
         if format_output == "json":
-            _output_json(verify_result.to_dict(), output_file, console)
+            emit(verify_result.to_dict(), output_file, console)
         else:
             format_verify_results(verify_result, console)
 

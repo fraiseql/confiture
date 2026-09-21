@@ -21,7 +21,6 @@ Usage:
 from __future__ import annotations
 
 import importlib
-import json
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -32,7 +31,7 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import connect
+from confiture.cli.helpers import connect, emit
 from confiture.core.git import GitRepository
 from confiture.core.pgtap_generator import PgTAPGenerator
 from confiture.core.scaffold.emitter import EmittedFunction
@@ -126,7 +125,7 @@ def alloc_filename(
         fail(ConfigurationError(str(exc)), json_mode=output_json)
 
     if output_json:
-        print(json.dumps({"path": str(next_path)}))
+        emit({"path": str(next_path)})
     else:
         typer.echo(str(next_path))
 
@@ -221,7 +220,7 @@ def scaffold_functions(
     results = orchestrator.run(functions)
 
     if output_json:
-        print(json.dumps({"results": [{"path": str(r.path), "action": r.action} for r in results]}))
+        emit({"results": [{"path": str(r.path), "action": r.action} for r in results]})
         return
 
     dry_tag = " [dim](dry run)[/dim]" if dry_run else ""
@@ -300,26 +299,22 @@ def renumber_path(
         fail(ConfigurationError(str(exc)), json_mode=output_json)
 
     if output_json:
-        print(
-            json.dumps(
-                {
-                    "moves": [
-                        {"old": str(p.old_path), "new": str(p.new_path)} for p in result.plans
-                    ],
-                    "ref_rewrites": [
-                        {
-                            "file": str(rw.ref_file),
-                            "old_name": rw.old_name,
-                            "new_name": rw.new_name,
-                        }
-                        for rw in result.ref_rewrites
-                    ],
-                    "dangling_refs": [
-                        {"file": str(f), "name": name} for f, name in result.dangling_refs
-                    ],
-                    "cross_repo_refs": [str(p) for p in result.cross_repo_refs],
-                }
-            )
+        emit(
+            {
+                "moves": [{"old": str(p.old_path), "new": str(p.new_path)} for p in result.plans],
+                "ref_rewrites": [
+                    {
+                        "file": str(rw.ref_file),
+                        "old_name": rw.old_name,
+                        "new_name": rw.new_name,
+                    }
+                    for rw in result.ref_rewrites
+                ],
+                "dangling_refs": [
+                    {"file": str(f), "name": name} for f, name in result.dangling_refs
+                ],
+                "cross_repo_refs": [str(p) for p in result.cross_repo_refs],
+            }
         )
     else:
         dry_tag = " [dim](dry run)[/dim]" if dry_run else ""

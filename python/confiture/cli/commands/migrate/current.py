@@ -18,8 +18,8 @@ from confiture.cli.dsn import (
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import (
     _get_tracking_table,
-    _output_json,
     console,
+    emit,
     is_json,
     open_connection,
 )
@@ -113,7 +113,7 @@ def migrate_current(
             if cur is None
             else cur.to_dict()
         )
-        _output_json(payload, output_file, console)
+        emit(payload, output_file, console)
     else:
         # Bare revision on stdout (plain print avoids Rich markup interpretation).
         print(cur.version if cur is not None else "")
