@@ -700,6 +700,37 @@ def object_from_statement(sql: str, raw: Any) -> SchemaObject | None:
     return obj
 
 
+def routine_source(sql: str, schema: str | None, name: str) -> str | None:
+    """The first ``CREATE FUNCTION`` / ``PROCEDURE`` in *sql* that defines (*schema*, *name*).
+
+    Which statement defines it is this inventory's answer — an unqualified name
+    lives in ``DEFAULT_SCHEMA`` (#313) — and the statement comes back as the author
+    wrote it, with the comments that lead it and without its semicolon, as
+    ``sql_lexer.split_statements`` gives it; never re-rendered:
+    ``migrate fix-signatures --mode apply`` executes it. ``None`` when nothing in
+    *sql* defines that routine.
+
+    Raises:
+        pglast.parser.ParseError: pglast rejects *sql*.
+    """
+    wanted = (schema or DEFAULT_SCHEMA, name)
+    # A statement's text runs from the previous one's semicolon: pglast 8 starts
+    # ``stmt_location`` past a leading comment, and the scanner's split does not.
+    previous_end = 0
+    for raw in pglast.parse_sql(sql) or []:
+        location = raw.stmt_location or 0
+        end = location + raw.stmt_len if raw.stmt_len else len(sql)
+        obj = object_from_statement(sql, raw)
+        if (
+            obj is not None
+            and obj.kind in ("function", "procedure")
+            and (obj.schema or DEFAULT_SCHEMA, obj.name) == wanted
+        ):
+            return sql[previous_end:end].strip()
+        previous_end = end + 1 if sql[end : end + 1] == ";" else end
+    return None
+
+
 def _schema_declaration(sql: str, raw: Any) -> SchemaObject | None:
     """``CREATE SCHEMA app``, or ``None`` for any other statement.
 

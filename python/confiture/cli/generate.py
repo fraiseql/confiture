@@ -25,7 +25,6 @@ import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
-import psycopg
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -33,6 +32,7 @@ from rich.table import Table
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import connect, emit
 from confiture.cli.options import config_option, database_url_option, output_option
+from confiture.core.connection import DatabaseError, connect_url
 from confiture.core.git import GitRepository
 from confiture.core.pgtap_generator import PgTAPGenerator
 from confiture.core.scaffold.emitter import EmittedFunction
@@ -620,7 +620,7 @@ def generate_pgtap(
     """Generate pgTAP test scaffolds for PostgreSQL stored functions."""
 
     try:
-        with psycopg.connect(database_url) as conn:
+        with connect_url(database_url) as conn:
             gen = PgTAPGenerator(
                 conn,
                 schema=schema,
@@ -629,7 +629,7 @@ def generate_pgtap(
                 include_return_type=not no_return_type,
             )
             pgtap_file = gen.generate()
-    except psycopg.Error as e:
+    except DatabaseError as e:
         fail(
             ConfigurationError(f"Error connecting to database: {e}", error_code="CONFIG_006"),
             json_mode=False,
@@ -666,10 +666,10 @@ def generate_stubs(
     """Generate typed Python wrapper functions for stored procedures."""
 
     try:
-        with psycopg.connect(database_url) as conn:
+        with connect_url(database_url) as conn:
             gen = StubGenerator(conn, schema=schema, name_pattern=include)
             stub_file = gen.generate()
-    except psycopg.Error as e:
+    except DatabaseError as e:
         fail(
             ConfigurationError(f"Error connecting to database: {e}", error_code="CONFIG_006"),
             json_mode=False,

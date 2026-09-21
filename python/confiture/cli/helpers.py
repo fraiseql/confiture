@@ -7,9 +7,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any
 
-import psycopg
 import yaml
-from psycopg import sql as pgsql
 from rich.console import Console
 
 try:
@@ -19,9 +17,9 @@ try:
 except ImportError:
     from click import get_current_context as _current_context
 
-from confiture.core.connection import create_connection
+from confiture.core.connection import DatabaseError, create_connection
 from confiture.core.connection import open_connection as _core_open_connection
-from confiture.core.ledger import table_identifier, validate_table_name
+from confiture.core.ledger import recorded_versions, validate_table_name
 from confiture.core.linting.schema_linter import (
     LintReport as LinterReport,
 )
@@ -47,7 +45,7 @@ error_console = Console(stderr=True)
 _MACHINE_OUTPUT_FORMATS = frozenset({"json", "csv", "yaml"})
 
 
-def open_connection(config: Any) -> AbstractContextManager["psycopg.Connection[Any]"]:
+def open_connection(config: Any) -> AbstractContextManager[Any]:
     """The CLI's one connection seam.
 
     Every command opens its database connection here, so a test replaces
@@ -57,7 +55,7 @@ def open_connection(config: Any) -> AbstractContextManager["psycopg.Connection[A
     return _core_open_connection(config, factory=create_connection)
 
 
-def connect(config: Any) -> "psycopg.Connection[Any]":
+def connect(config: Any) -> Any:
     """Open a connection the caller owns (and closes) — same seam as :func:`open_connection`."""
     return create_connection(config)
 
@@ -444,8 +442,7 @@ def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
     table = _get_tracking_table(config_data)
 
     try:
-        with open_connection(config_data) as conn, conn.cursor() as cur:
-            cur.execute(pgsql.SQL("SELECT version FROM {}").format(table_identifier(table)))
-            return {row[0] for row in cur.fetchall()}
-    except (ConfiturError, psycopg.Error):
+        with open_connection(config_data) as conn:
+            return recorded_versions(conn, table)
+    except (ConfiturError, DatabaseError):
         return set()

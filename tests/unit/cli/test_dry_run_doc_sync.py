@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from confiture.cli.dry_run_summary import build_dry_run_summary, render_dry_run_text
+from confiture.core.dry_run_summary import build_dry_run_summary, render_dry_run_text
 
 GUIDE = Path(__file__).resolve().parents[3] / "docs" / "guides" / "dry-run.md"
 FIXTURE = {

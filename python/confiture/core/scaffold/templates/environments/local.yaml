@@ -1,0 +1,21 @@
+# Local development environment configuration
+
+name: local
+include_dirs:
+  - db/schema/00_common
+  - db/schema/10_tables
+exclude_dirs: []
+
+database:
+  host: localhost
+  port: 5432
+  database: myapp_local
+  user: postgres
+  password: postgres
+
+migration:
+  # View helper mode for ALTER COLUMN TYPE with dependent views.
+  #   auto   — install helper functions on first migrate up (default)
+  #   manual — you run `confiture install-helpers` yourself
+  #   off    — disabled; manage views in your migration SQL
+  view_helpers: auto

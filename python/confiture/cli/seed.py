@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Annotated, Any
 
-import psycopg
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -21,6 +20,7 @@ from confiture.cli.helpers import connect, emit, is_json
 from confiture.cli.options import database_url_option, env_option, format_option, output_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.config.environment import Environment
+from confiture.core.connection import DatabaseError
 from confiture.core.progress import ProgressManager
 from confiture.core.seed.applier import SeedApplier
 from confiture.core.seed.bridge import SeedBridge, SeedGenerationConfig
@@ -503,7 +503,7 @@ def apply(
 
         try:
             connection = connect(database_url)
-        except (ConfiturError, psycopg.Error) as e:
+        except (ConfiturError, DatabaseError) as e:
             fail(
                 ConfigurationError(
                     f"Failed to connect to database: {e}",
@@ -519,7 +519,7 @@ def apply(
             seed_settings = env_config.seed
 
             connection = connect(env_config.database_url)
-        except (ConfiturError, psycopg.Error, OSError) as e:
+        except (ConfiturError, DatabaseError, OSError) as e:
             fail(
                 ConfigurationError(
                     f"Failed to load environment {env}: {e}",

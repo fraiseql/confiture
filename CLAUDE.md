@@ -635,7 +635,6 @@ confiture/
 │   │   ├── branch.py             # CLI commands for pgGit branch operations
 │   │   ├── coordinate.py         # Multi-agent coordination CLI commands for pgGit
 │   │   ├── dry_run.py            # Dry-run mode helpers for CLI integration
-│   │   ├── dry_run_summary.py    # The ``--dry-run`` summary: what confiture knows about the pending migra…
 │   │   ├── dsn.py                # Database-URL resolution for the CLI (#152 precedence contract) and the…
 │   │   ├── error_json.py         # Structured error envelope + JSON-aware CLI error boundary (issue #145)
 │   │   ├── generate.py           # CLI commands for the `confiture generate` subcommand group
@@ -680,6 +679,7 @@ confiture/
 │   │   ├── differ_sql.py         # Render a schema change as DDL: the up and the down each variant is, in…
 │   │   ├── drift.py              # Schema drift detection for Confiture
 │   │   ├── dry_run.py            # SAVEPOINT-based dry-run execution with guaranteed rollback
+│   │   ├── dry_run_summary.py    # The ``--dry-run`` summary: what confiture knows about the pending migra…
 │   │   ├── error_context.py      # Enhanced error context system for user-friendly error messages
 │   │   ├── error_handler.py      # CLI error handler for structured error output
 │   │   ├── expand_contract.py    # The expand/contract plan: the classifier's online advice as explicit, c…
@@ -750,13 +750,13 @@ confiture/
 │   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
 │   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (5 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
-│   │   ├── idempotency/          # Idempotency validation for SQL migrations (17 modules)
+│   │   ├── idempotency/          # Idempotency validation for SQL migrations (19 modules)
 │   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (6 modules)
-│   │   ├── linting/              # Rule Library System (36 modules)
+│   │   ├── linting/              # Rule Library System (37 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
-│   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (3 modules)
+│   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
 │   │   ├── seed/                 # Seed data management and optimization (24 modules)
-│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (15 modules)
+│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (16 modules)
 │   ├── integrations/
 │   │   ├── __init__.py
 │   │   └── pggit/                # pgGit integration module for Confiture (9 modules)

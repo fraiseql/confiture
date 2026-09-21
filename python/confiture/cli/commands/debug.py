@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import psycopg
 import typer
 from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, is_json
 from confiture.cli.options import database_url_option, format_option
+from confiture.core.connection import DatabaseError, connect_url
 from confiture.core.cte_debugger import CTEDebugger
 from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError
@@ -75,8 +75,8 @@ def debug_cte(
         query = sql
 
     try:
-        conn = psycopg.connect(database_url)
-    except psycopg.Error as e:
+        conn = connect_url(database_url)
+    except DatabaseError as e:
         fail(
             ConfigurationError(
                 f"Connection failed: {e}",

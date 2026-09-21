@@ -12,27 +12,20 @@ boundary. Errors emit the #145 envelope in ``--format json``.
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-import psycopg
 import typer
+import yaml
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import connect, console, emit, is_json
 from confiture.cli.options import format_option
-from confiture.exceptions import ConfigurationError, ConfiturError
-
-if TYPE_CHECKING:
-    import psycopg
-import contextlib
-
-import psycopg
-import yaml
-
 from confiture.core import connection as _core_connection
 from confiture.core.schema_to_schema import SchemaToSchemaMigrator
 from confiture.error_codes import FINDINGS
+from confiture.exceptions import ConfigurationError, ConfiturError
 
 schema_to_schema_app = typer.Typer(
     help="Medium 4: zero-downtime schema migration via Foreign Data Wrapper (FDW).",
@@ -52,7 +45,7 @@ _TARGET_OPTION = typer.Option(
 _FORMAT_OPTION = format_option("text", "json")
 
 
-def _resolve_connection(spec: str) -> psycopg.Connection:
+def _resolve_connection(spec: str) -> Any:
     """Open a connection from an env name, a config path, or a raw DSN.
 
     Resolution order:
@@ -66,7 +59,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
 
     try:
         if spec.startswith(("postgres://", "postgresql://")):
-            return psycopg.connect(spec)
+            return _core_connection.connect_url(spec)
 
         candidate = Path(spec)
         if not (spec.endswith(".yaml") or candidate.exists()):
@@ -80,7 +73,7 @@ def _resolve_connection(spec: str) -> psycopg.Connection:
         return connect(_core_connection.load_config(candidate))
     except ConfiturError:
         raise
-    except (psycopg.Error, OSError) as exc:
+    except (_core_connection.DatabaseError, OSError) as exc:
         raise ConfigurationError(
             f"Could not connect to '{spec}': {exc}", error_code="CONFIG_006"
         ) from exc

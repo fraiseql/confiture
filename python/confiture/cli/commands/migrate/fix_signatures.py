@@ -5,11 +5,9 @@ Split out of the monolithic migrate command modules.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
-import psycopg
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
@@ -32,7 +30,7 @@ from confiture.cli.options import (
 )
 from confiture.config.environment import SshTunnelConfig
 from confiture.core import builder as _core_builder
-from confiture.core.connection import load_config
+from confiture.core.connection import DatabaseError, load_config
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
 from confiture.core.function_signature_drift import (
     FunctionSignatureDriftDetector,
@@ -40,31 +38,12 @@ from confiture.core.function_signature_drift import (
     live_routines,
     schemas_to_scan,
 )
-from confiture.core.sql_lexer import split_statements
+from confiture.core.linting.inventory import routine_source
 from confiture.error_codes import FINDINGS, USAGE, exit_code_of
 from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
     from confiture.core.schema_model import Routine
-
-
-def _extract_function_source(sql: str, schema: str, name: str) -> str | None:
-    """Return the full CREATE [OR REPLACE] FUNCTION statement for (schema, name).
-
-    Splits *sql* into individual statements with sqlparse, then returns the
-    first one whose header matches ``[schema.]name(``.  Returns ``None`` when
-    no matching statement is found.
-    """
-    # Pattern matches both qualified (schema.name) and unqualified (name) forms
-    header_re = re.compile(
-        r"CREATE\s+(?:OR\s+REPLACE\s+)?(?:FUNCTION|PROCEDURE)\s+"
-        rf"(?:{re.escape(schema)}\.)?{re.escape(name)}\s*\(",
-        re.IGNORECASE,
-    )
-    for stripped in split_statements(sql):
-        if header_re.search(stripped):
-            return stripped
-    return None
 
 
 SchemaFileOpt = Annotated[
@@ -307,7 +286,7 @@ def _plan_signature_fixes(
     fix_blocks: list[dict[str, Any]] = []
     missing_source: list[str] = []
     for overload in drift_report.stale_overloads:
-        create_sql = _extract_function_source(source_sql, overload.schema, overload.name)
+        create_sql = routine_source(source_sql, overload.schema, overload.name)
         if create_sql is None:
             missing_source.append(overload.stale_signature)
             continue
@@ -347,7 +326,7 @@ def _plan_body_fixes(
         for drift in body_report.body_drifts:
             if f"{drift.schema}.{drift.name}" in stale_fn_keys:
                 continue
-            create_sql = _extract_function_source(source_sql, drift.schema, drift.name)
+            create_sql = routine_source(source_sql, drift.schema, drift.name)
             if create_sql is None:
                 body_missing_source.append(drift.signature_key)
                 continue
@@ -417,7 +396,7 @@ def _apply_fix_blocks(
             for block in body_fix_blocks:
                 cur.execute(block["create_sql"])
         conn.commit()
-    except psycopg.Error as apply_exc:
+    except DatabaseError as apply_exc:
         conn.rollback()
         error_console.print(f"[red]❌ Fix failed (rolled back): {apply_exc}[/red]")
         raise typer.Exit(exit_code_of("SQL_001")) from apply_exc

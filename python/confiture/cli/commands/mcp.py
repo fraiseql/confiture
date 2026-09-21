@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import psycopg
 import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console
 from confiture.cli.options import database_url_option
+from confiture.core.connection import DatabaseError, connect_url
 from confiture.core.mcp_server import MCPServer
 from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -54,8 +54,8 @@ def mcp_server(
         return
 
     try:
-        conn = psycopg.connect(database_url)
-    except psycopg.Error as e:
+        conn = connect_url(database_url)
+    except DatabaseError as e:
         fail(
             ConfigurationError(
                 f"Connection failed: {e}",

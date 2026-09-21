@@ -11,7 +11,7 @@ import json
 import re
 from pathlib import Path
 
-from confiture.cli.dry_run_summary import build_dry_run_summary
+from confiture.core.dry_run_summary import build_dry_run_summary
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GUIDE = REPO_ROOT / "docs" / "guides" / "dry-run.md"

@@ -489,3 +489,17 @@ def write_backup(rows: Any, table: str, directory: Path | None = None) -> Path:
     path = (directory or Path()) / f"{table.replace('.', '_')}_backup_{timestamp}.json"
     path.write_text(json.dumps(rows, indent=2, default=str))
     return path
+
+
+def recorded_versions(connection: Any, table: str) -> set[str]:
+    """Every version the ledger *table* records. Raises the driver's error if it cannot read it."""
+    with connection.cursor() as cursor:
+        cursor.execute(pgsql.SQL("SELECT version FROM {}").format(table_identifier(table)))
+        return {row[0] for row in cursor.fetchall()}
+
+
+def ledger_is_empty(connection: Any, table: str) -> bool:
+    """Whether the ledger *table* holds no row. Raises the driver's error if it cannot read it."""
+    with connection.cursor() as cursor:
+        cursor.execute(pgsql.SQL("SELECT 1 FROM {} LIMIT 1").format(table_identifier(table)))
+        return cursor.fetchone() is None

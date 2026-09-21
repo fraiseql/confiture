@@ -24,8 +24,8 @@ def _render_dry_run_analysis(
     rollback: bool = False,
 ) -> None:
     """The dry-run summary of ``migrate up --dry-run`` / ``migrate down --dry-run``."""
-    # Reason: CLI start-up: importing confiture.cli.dry_run_summary costs ~11 ms at start (importtime, 2026-09-07); deferred until the command runs
-    from confiture.cli.dry_run_summary import build_dry_run_summary, render_dry_run_text
+    # Reason: CLI start-up: importing confiture.core.dry_run_summary costs ~11 ms at start (importtime, 2026-09-07); deferred until the command runs
+    from confiture.core.dry_run_summary import build_dry_run_summary, render_dry_run_text
 
     summary = build_dry_run_summary(
         pending,
@@ -51,7 +51,7 @@ def _render_dry_run_analysis(
 
 
 def _row_estimator(connection: Any) -> Any:
-    # Reason: CLI start-up: importing confiture.cli.dry_run_summary costs ~11 ms at start (importtime, 2026-09-07); deferred until the command runs
-    from confiture.cli.dry_run_summary import row_estimator
+    # Reason: CLI start-up: importing confiture.core.dry_run_summary costs ~11 ms at start (importtime, 2026-09-07); deferred until the command runs
+    from confiture.core.dry_run_summary import row_estimator
 
     return row_estimator(connection)
