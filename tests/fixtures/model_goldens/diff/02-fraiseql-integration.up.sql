@@ -1,0 +1,124 @@
+-- Migration: golden
+-- Version: <version>
+
+-- confiture:tier additive
+CREATE TABLE IF NOT EXISTS tb_comment (
+    id INTEGER NOT NULL,
+    pk_comment UUID NOT NULL DEFAULT gen_random_uuid(),
+    identifier TEXT,
+    fk_post UUID NOT NULL,
+    fk_user UUID NOT NULL,
+    fk_parent_comment UUID,
+    content TEXT NOT NULL,
+    is_edited BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id),
+    CONSTRAINT fk_tb_comment_post FOREIGN KEY (fk_post) REFERENCES tb_post (pk_post) ON DELETE CASCADE,
+    CONSTRAINT fk_tb_comment_user FOREIGN KEY (fk_user) REFERENCES tb_user (pk_user) ON DELETE CASCADE,
+    CONSTRAINT fk_tb_comment_parent FOREIGN KEY (fk_parent_comment) REFERENCES tb_comment (pk_comment) ON DELETE CASCADE,
+    CONSTRAINT uq_tb_comment_pk UNIQUE (pk_comment),
+    CONSTRAINT ck_tb_comment_content_length CHECK (length(content) >= 1),
+    CONSTRAINT ck_tb_comment_not_self_parent CHECK (pk_comment <> fk_parent_comment)
+);
+
+-- confiture:tier additive
+CREATE TABLE IF NOT EXISTS tb_post (
+    id INTEGER NOT NULL,
+    pk_post UUID NOT NULL DEFAULT gen_random_uuid(),
+    identifier TEXT,
+    fk_user UUID NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    slug VARCHAR(500) NOT NULL,
+    content TEXT NOT NULL,
+    excerpt TEXT,
+    tags text[] DEFAULT CAST(ARRAY[] AS text[]),
+    is_published BOOLEAN NOT NULL DEFAULT false,
+    published_at TIMESTAMPTZ,
+    view_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id),
+    CONSTRAINT fk_tb_post_user FOREIGN KEY (fk_user) REFERENCES tb_user (pk_user) ON DELETE CASCADE,
+    CONSTRAINT uq_tb_post_pk UNIQUE (pk_post),
+    CONSTRAINT uq_tb_post_slug UNIQUE (slug),
+    CONSTRAINT ck_tb_post_title_length CHECK (length(title) >= 1),
+    CONSTRAINT ck_tb_post_slug_format CHECK (slug ~ '^[a-z0-9-]+$'),
+    CONSTRAINT ck_tb_post_view_count CHECK (view_count >= 0),
+    CONSTRAINT ck_tb_post_published_at CHECK ((is_published = FALSE AND published_at IS NULL) OR (is_published = TRUE AND published_at IS NOT NULL))
+);
+
+-- confiture:tier additive
+CREATE TABLE IF NOT EXISTS tb_user (
+    id INTEGER NOT NULL,
+    pk_user UUID NOT NULL DEFAULT gen_random_uuid(),
+    identifier TEXT,
+    email TEXT NOT NULL,
+    username TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    bio TEXT,
+    avatar_url TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id),
+    CONSTRAINT uq_tb_user_pk UNIQUE (pk_user),
+    CONSTRAINT uq_tb_user_email UNIQUE (email),
+    CONSTRAINT uq_tb_user_username UNIQUE (username),
+    CONSTRAINT ck_tb_user_email_format CHECK (email LIKE '%@%'),
+    CONSTRAINT ck_tb_user_username_length CHECK (length(username) >= 3 AND length(username) <= 30)
+);
+
+-- confiture:tier additive
+CREATE TABLE IF NOT EXISTS tv_comment (
+    id UUID NOT NULL,
+    data JSONB NOT NULL,
+    post_id UUID,
+    author_id UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- confiture:tier additive
+CREATE TABLE IF NOT EXISTS tv_post (
+    id UUID NOT NULL,
+    data JSONB NOT NULL,
+    slug TEXT,
+    is_published BOOLEAN,
+    view_count INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- confiture:tier additive
+CREATE TABLE IF NOT EXISTS tv_user (
+    id UUID NOT NULL,
+    data JSONB NOT NULL,
+    email TEXT,
+    username TEXT,
+    is_active BOOLEAN,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (id)
+);
+
+-- WARNING: no SQL derived for: ADD EXTENSION btree_gist. Edit this file before deploying.
+
+-- WARNING: no SQL derived for: ADD EXTENSION pg_trgm. Edit this file before deploying.
+
+-- WARNING: no SQL derived for: ADD EXTENSION unaccent. Edit this file before deploying.
+
+-- WARNING: no SQL derived for: ADD EXTENSION uuid-ossp. Edit this file before deploying.
+
+-- confiture:tier reversible
+CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS trigger AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- WARNING: no SQL derived for: ADD TRIGGER tb_comment.trigger_tb_comment_updated_at. Edit this file before deploying.
+
+-- WARNING: no SQL derived for: ADD TRIGGER tb_post.trigger_tb_post_updated_at. Edit this file before deploying.
+
+-- WARNING: no SQL derived for: ADD TRIGGER tb_user.trigger_tb_user_updated_at. Edit this file before deploying.

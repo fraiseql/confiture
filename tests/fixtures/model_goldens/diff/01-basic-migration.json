@@ -1,0 +1,34 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE users",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION btree_gist",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION uuid-ossp",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 3,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": []
+  }
+}

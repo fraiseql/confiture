@@ -1,0 +1,34 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE users",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "details": "ADD FUNCTION update_updated_at_column()",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "details": "ADD TRIGGER users.trigger_users_updated_at",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 3,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": []
+  }
+}
