@@ -22,7 +22,7 @@ from confiture.exceptions import MigrationError
 
 if TYPE_CHECKING:
     from confiture.config.environment import Environment
-    from confiture.core._migrator.engine import MigrationEngine
+    from confiture.core._migrator.ports import EngineHost
 
 from confiture.core import builder as _core_builder
 from confiture.core._migrator.baseline_copy import _select_rows_to_copy
@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 def baseline_from_db(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     source_dsn: str,
     migrations_dir: Path,
     *,
@@ -125,7 +125,7 @@ def _read_source_tracking_table(
     return [dict(zip(columns, row, strict=False)) for row in rows]
 
 
-def _insert_baseline_row(migrator: MigrationEngine, row: dict[str, Any], *, index: int = 0) -> None:
+def _insert_baseline_row(migrator: EngineHost, row: dict[str, Any], *, index: int = 0) -> None:
     """Copy one ledger row from the source database (``baseline-from-db``)."""
 
     record_migration(
@@ -142,7 +142,7 @@ def _insert_baseline_row(migrator: MigrationEngine, row: dict[str, Any], *, inde
     )
 
 
-def clear_tracking_table(migrator: MigrationEngine) -> int:
+def clear_tracking_table(migrator: EngineHost) -> int:
     """Delete all entries from the tracking table (DELETE, not TRUNCATE).
 
     Returns the number of rows deleted.
@@ -154,7 +154,7 @@ def clear_tracking_table(migrator: MigrationEngine) -> int:
 
 
 def reinit(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     through: str | None = None,
     dry_run: bool = False,
     migrations_dir: Path | None = None,
@@ -240,12 +240,12 @@ def reinit(
         raise
 
 
-def discover_user_schemas(migrator: MigrationEngine) -> list[str]:
+def discover_user_schemas(migrator: EngineHost) -> list[str]:
     """Every user-created schema the role can use, excluding system schemas."""
     return live_catalog.user_schemas(migrator.connection)
 
 
-def drop_user_schemas(migrator: MigrationEngine, schemas: list[str]) -> list[str]:
+def drop_user_schemas(migrator: EngineHost, schemas: list[str]) -> list[str]:
     """Drop user schemas with CASCADE and recreate ``public`` (autocommit)."""
     if not schemas:
         return []
@@ -266,7 +266,7 @@ def drop_user_schemas(migrator: MigrationEngine, schemas: list[str]) -> list[str
         migrator.connection.autocommit = original_autocommit
 
 
-def apply_ddl_string(migrator: MigrationEngine, ddl: str) -> tuple[int, list[str]]:
+def apply_ddl_string(migrator: EngineHost, ddl: str) -> tuple[int, list[str]]:
     """Execute DDL statements in autocommit mode.
 
     Strips BEGIN/COMMIT wrappers, splits into statements, and executes each.
@@ -305,7 +305,7 @@ def apply_ddl_string(migrator: MigrationEngine, ddl: str) -> tuple[int, list[str
     return executed, warnings
 
 
-def backup_tracking_table(migrator: MigrationEngine) -> list[dict[str, Any]]:
+def backup_tracking_table(migrator: EngineHost) -> list[dict[str, Any]]:
     """Dump current tracking table contents as list of dicts (empty if absent)."""
     if not migrator.tracking_table_exists():
         return []
@@ -317,7 +317,7 @@ def backup_tracking_table(migrator: MigrationEngine) -> list[dict[str, Any]]:
 
 
 def rebuild(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     *,
     drop_schemas: bool = False,
     dry_run: bool = False,
@@ -437,7 +437,7 @@ def rebuild(
 
 
 def baseline_through(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     through: str,
     migrations_dir: Path,
 ) -> list[str]:

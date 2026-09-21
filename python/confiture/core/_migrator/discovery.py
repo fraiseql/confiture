@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.engine import MigrationEngine
+    from confiture.core._migrator.ports import EngineHost
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +87,7 @@ def find_duplicate_migration_versions(migrations_dir: Path) -> dict[str, list[Pa
 # ---------------------------------------------------------------------------
 
 
-def find_migration_files(
-    migrator: MigrationEngine, migrations_dir: Path | None = None
-) -> list[Path]:
+def find_migration_files(migrator: EngineHost, migrations_dir: Path | None = None) -> list[Path]:
     """Find all migration files (``.py`` and ``.up.sql``), sorted by version."""
     del migrator  # discovery does not depend on the engine
     return discover_migration_files(migrations_dir or Path("db") / "migrations")
@@ -115,7 +113,7 @@ def find_orphaned_sql_files(migrations_dir: Path | None = None) -> list[Path]:
 
 
 def fix_orphaned_sql_files(
-    migrator: MigrationEngine, migrations_dir: Path | None = None, dry_run: bool = False
+    migrator: EngineHost, migrations_dir: Path | None = None, dry_run: bool = False
 ) -> dict[str, list[tuple[str, str]]]:
     """Rename orphaned ``{NNN}_{name}.sql`` files to ``{NNN}_{name}.up.sql``.
 
@@ -157,7 +155,7 @@ def fix_orphaned_sql_files(
     return {"renamed": renamed, "errors": errors}
 
 
-def find_pending(migrator: MigrationEngine, migrations_dir: Path | None = None) -> list[Path]:
+def find_pending(migrator: EngineHost, migrations_dir: Path | None = None) -> list[Path]:
     """Find migrations that have not been applied yet."""
     all_migrations = migrator.find_migration_files(migrations_dir)
     applied_versions = set(migrator.get_applied_versions())

@@ -746,7 +746,7 @@ confiture/
 │   │   ├── unified_linter.py     # Unified SQL linter orchestrating Squawk, SQLFluff, and other tools
 │   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection
 │   │   ├── view_manager.py       # View dependency manager for ALTER COLUMN TYPE migrations
-│   │   ├── _migrator/            # (21 modules)
+│   │   ├── _migrator/            # (22 modules)
 │   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
 │   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (5 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)

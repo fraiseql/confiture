@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from confiture.core._migrator.discovery import parse_migration_filename
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.session import MigratorSession
+    from confiture.core._migrator.ports import SessionHost
     from confiture.models.results import PreflightResult
 
 
@@ -23,7 +23,7 @@ from confiture.exceptions import ConfigurationError, DatabaseNotInitializedError
 from confiture.models.results import CurrentRevision, MigrationInfo, StatusResult
 
 
-def status(session: MigratorSession) -> StatusResult:
+def status(session: SessionHost) -> StatusResult:
     """See :meth:`MigratorSession.status`."""
 
     if session._migrator is None:
@@ -98,7 +98,7 @@ def status(session: MigratorSession) -> StatusResult:
     )
 
 
-def current_revision(session: MigratorSession) -> CurrentRevision | None:
+def current_revision(session: SessionHost) -> CurrentRevision | None:
     """See :meth:`MigratorSession.current_revision`."""
 
     if session._migrator is None:
@@ -125,7 +125,7 @@ def current_revision(session: MigratorSession) -> CurrentRevision | None:
 
 
 def preflight(
-    session: MigratorSession,
+    session: SessionHost,
     *,
     versions: list[str] | None = None,
 ) -> PreflightResult:

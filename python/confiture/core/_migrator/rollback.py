@@ -15,14 +15,14 @@ from psycopg import sql as pgsql
 from confiture.exceptions import MigrationError
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.engine import MigrationEngine
+    from confiture.core._migrator.ports import EngineHost
     from confiture.models.migration import Migration
 
 logger = logging.getLogger(__name__)
 
 
 def rollback(
-    migrator: MigrationEngine,
+    migrator: EngineHost,
     migration: Migration,
     skip_preconditions: bool = False,
 ) -> None:
@@ -56,7 +56,7 @@ def rollback(
         _rollback_non_transactional(migrator, migration)
 
 
-def _rollback_transactional(migrator: MigrationEngine, migration: Migration) -> None:
+def _rollback_transactional(migrator: EngineHost, migration: Migration) -> None:
     """Rollback a migration within a transaction."""
     try:
         logger.debug(f"Executing rollback (down) for migration {migration.version}")
@@ -81,7 +81,7 @@ def _rollback_transactional(migrator: MigrationEngine, migration: Migration) -> 
         ) from e
 
 
-def _rollback_non_transactional(migrator: MigrationEngine, migration: Migration) -> None:
+def _rollback_non_transactional(migrator: EngineHost, migration: Migration) -> None:
     """Rollback a migration in autocommit mode (no transaction).
 
     WARNING: If this fails, manual cleanup may be required.
