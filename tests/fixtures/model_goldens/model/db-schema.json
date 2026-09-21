@@ -180,7 +180,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_confiture_slug",
@@ -190,7 +191,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_confiture_version",
@@ -200,7 +202,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_confiture_applied_at",
@@ -210,7 +213,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     }

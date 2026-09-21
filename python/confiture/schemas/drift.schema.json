@@ -62,7 +62,7 @@
     "objects_checked": {
       "type": "integer",
       "minimum": 0,
-      "description": "Views, materialized views, triggers and routines whose existence was compared (1.11.0, #303). Zero when the caller compared two `SchemaInfo` objects, which carry no objects to compare."
+      "description": "Views, materialized views, triggers and routines whose existence was compared (1.11.0, #303). Zero when the caller compared two schema models without their objects."
     },
     "detection_time_ms": {
       "type": "integer",

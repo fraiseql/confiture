@@ -12,17 +12,12 @@ The expected side of that comparison already existed: ``core.ddl_objects``
 not model — a trigger among them. This module is the live half, keyed to match
 the same ``ObjectRef``.
 
-It is deliberately *not* part of :class:`~confiture.core.schema_analyzer.SchemaInfo`:
-that is ``SchemaAnalyzer``'s return type and is read by migration validation as
-well, and four more dicts on a structure three other call sites walk would make
-every one of them answer for objects it never asked about.
-
-It reads **only** what :func:`confiture.core.drift.compare_objects` compares.
-``SchemaInfo`` carried four fields — constraints, sequences, extensions, foreign
-keys — queried on every run and compared by nothing, which is what published
-three drift types confiture could not emit. An extension is a good example of the
-temptation: ``ddl_objects`` tracks ``CREATE EXTENSION``, so the expected side is
-there for the taking, and the comparison still does not exist. So this does not
+It is not part of the schema model yet: routines, views and triggers join it as
+kinds of their own, and until then this is the live half of
+:func:`confiture.core.drift.compare_objects` and reads **only** what that compares.
+An extension is a good example of the temptation: ``ddl_objects`` tracks
+``CREATE EXTENSION``, so the expected side is there for the taking, and the
+comparison still does not exist. So this does not
 read them.
 """
 

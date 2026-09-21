@@ -16,8 +16,8 @@ from pathlib import Path
 
 import psycopg
 
+from confiture.core import live_catalog
 from confiture.core.drift import DriftType, SchemaDriftDetector
-from confiture.core.schema_analyzer import SchemaAnalyzer
 
 DDL = """
 CREATE TABLE t (
@@ -104,15 +104,25 @@ def test_a_declared_index_that_backs_a_constraint_is_neither_missing_nor_extra(
     assert _items(report, DriftType.MISSING_INDEX) == []
 
 
-def test_schema_info_names_the_constraint_backed_indexes(
+def test_the_live_model_flags_the_constraint_backed_indexes(
     clean_test_db: psycopg.Connection,
 ) -> None:
     _apply(clean_test_db, DDL)
 
-    info = SchemaAnalyzer(clean_test_db).get_schema_info(schemas=["public"])
+    model = live_catalog.read(clean_test_db, schemas=["public"])
+    tables = {f"{t.schema}.{t.name}": t for t in model.tables.values()}
 
-    assert info.constraint_indexes == {
+    backing = {
+        name: {ix.name for ix in table.indexes if ix.backs_constraint}
+        for name, table in tables.items()
+    }
+    assert backing == {
         "public.t": {"t_pkey", "t_code_key", "t_label_uq"},
         "public.u": {"u_pkey"},
     }
-    assert set(info.indexes["public.t"]) == {"t_pkey", "t_code_key", "t_label_uq", "idx_t_code"}
+    assert {ix.name for ix in tables["public.t"].indexes} == {
+        "t_pkey",
+        "t_code_key",
+        "t_label_uq",
+        "idx_t_code",
+    }

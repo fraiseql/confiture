@@ -98,7 +98,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_catalog_tb_manufacturer_id",
@@ -108,7 +109,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     },
@@ -183,7 +185,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     }

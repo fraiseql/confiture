@@ -12,12 +12,14 @@ DDL: ``pg_get_constraintdef`` through ``ddl_walk.read_constraint``,
 ``ddl_walk.written_type``. One reader on both sides is what makes a parity test
 meaningful rather than two readers agreeing by luck.
 
+An index that exists only to back a PRIMARY KEY, UNIQUE or EXCLUDE constraint is read
+and flagged (``Index.backs_constraint``): the DDL declares the constraint, never the
+index, so it is never *extra* — but it still answers to its name.
+
 Deliberately not read, each for a stated reason:
 
 - objects an **extension** owns (``pg_depend.deptype = 'e'``) — they are the
   extension's, not the tree's;
-- an index that exists only to back a PRIMARY KEY, UNIQUE or EXCLUDE constraint —
-  the DDL declares the constraint, never the index;
 - a sequence a **column** owns (``deptype`` ``a`` for ``serial``, ``i`` for an
   identity) — it is part of that column, and the tree never wrote it;
 - a ``NOT NULL`` constraint row (PostgreSQL 18's ``contype = 'n'``) — it is
@@ -116,11 +118,17 @@ ORDER BY conrelid, conname
 """
 
 _INDEXES = """
-SELECT i.indrelid, pg_get_indexdef(i.indexrelid)
+SELECT
+    i.indrelid,
+    pg_get_indexdef(i.indexrelid),
+    EXISTS (
+        SELECT 1 FROM pg_constraint k
+        WHERE k.conindid = i.indexrelid AND k.conrelid = i.indrelid
+          AND k.contype IN ('p', 'u', 'x')
+    )
 FROM pg_index i
 JOIN pg_class ic ON ic.oid = i.indexrelid
 WHERE i.indrelid = ANY(%s)
-  AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid)
 ORDER BY i.indrelid, ic.relname
 """
 
@@ -218,9 +226,9 @@ def _tables(
         read = _constraint(name, definition)
         if read is not None:
             constraints[relid].append(read)
-    indexes: dict[int, list[Any]] = defaultdict(list)
-    for relid, definition in conn.execute(_INDEXES, (oids,)).fetchall():
-        indexes[relid].append(pglast.parse_sql(definition)[0].stmt)
+    indexes: dict[int, list[tuple[Any, bool]]] = defaultdict(list)
+    for relid, definition, backs in conn.execute(_INDEXES, (oids,)).fetchall():
+        indexes[relid].append((pglast.parse_sql(definition)[0].stmt, bool(backs)))
 
     tables: dict[ObjectRef, Table] = {}
     for oid, schema, name in relations:
@@ -229,7 +237,10 @@ def _tables(
             _column(row, node)
             for row, node in zip(rows[oid], _type_nodes([r[2] for r in rows[oid]]), strict=True)
         ]
-        index_models: list[Index] = [read_index(stmt, table=qualified) for stmt in indexes[oid]]
+        index_models: list[Index] = [
+            replace(read_index(stmt, table=qualified), backs_constraint=backs)
+            for stmt, backs in indexes[oid]
+        ]
         tables[ref_for("table", schema, name)] = Table(
             name=name,
             schema=schema,
@@ -448,7 +459,7 @@ def user_schemas(conn: psycopg.Connection) -> list[str]:
 
 
 #: Every index on a table, a partitioned table or a materialized view — the ones
-#: backing a constraint included, which :func:`read` leaves out. This is the set
+#: backing a constraint included, which :func:`read` flags. This is the set
 #: ``pg_indexes`` lists.
 _ALL_INDEXES = """
 SELECT n.nspname, t.relname, pg_get_indexdef(i.indexrelid)

@@ -19,12 +19,15 @@ was decided (#288, #301).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
+import pglast
 from pglast import ast as _pg_ast
 from pglast.stream import RawStream
+from pglast.visitors import Visitor
 
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.schema_model import (
@@ -35,7 +38,7 @@ from confiture.core.schema_model import (
     Index,
     qualified_name,
 )
-from confiture.core.type_lattice import parse_type
+from confiture.core.type_lattice import canonical_type, parse_type
 
 _CONSTR_NOTNULL = _pg_member("ConstrType", "CONSTR_NOTNULL")
 _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
@@ -1248,3 +1251,50 @@ def written_type(type_node: Any) -> str | None:
     if parsed.scale is None:
         return f"{readable}({parsed.precision}){suffix}"
     return f"{readable}({parsed.precision},{parsed.scale}){suffix}"
+
+
+# ---------------------------------------------------------------------------
+# Whether two default expressions are one default
+# ---------------------------------------------------------------------------
+
+
+class _LiteralCasts(Visitor):
+    """Replace every cast of a literal with the literal.
+
+    PostgreSQL casts a literal wherever its type is not yet known — ``'x'`` in a
+    ``text`` default is stored ``'x'::text``, and ``lower('ABC')`` is stored
+    ``lower('ABC'::text)`` — so the cast is what the analyser added, not what the
+    author wrote.
+    """
+
+    def visit_TypeCast(self, _ancestors: Any, node: Any) -> Any:
+        return node.arg if isinstance(node.arg, _pg_ast.A_Const) else None
+
+
+#: A number written as a string literal: ``'-7'::integer`` is how PostgreSQL
+#: stores ``-7``.
+_QUOTED_NUMBER = re.compile(r"'(-?\d+(?:\.\d+)?)'")
+
+
+def canonical_default(text: str | None, column_type: str | None) -> str | None:
+    """A default expression as a comparable string, the same from DDL and from ``pg_get_expr``.
+
+    Read as a parse tree, never as text: every cast of a literal is dropped, and so is
+    an outer cast to the column's own type; a quoted number is the number; ``NULL`` is
+    no default, because PostgreSQL stores none. Measured over 23 defaults on
+    PostgreSQL 18.4, text agreed on 10 and this agrees on all 23.
+    """
+    if text is None:
+        return None
+    select: Any = pglast.parse_sql(f"SELECT {text}")[0].stmt
+    _LiteralCasts()(select)
+    node = select.targetList[0].val
+    own = parse_type(canonical_type(column_type)) if column_type else None
+    while isinstance(node, _pg_ast.TypeCast) and own is not None:
+        cast = parse_type(canonical_type(type_name(node.typeName)))
+        if cast is None or (cast.name, cast.dimensions) != (own.name, own.dimensions):
+            break
+        node = node.arg
+    if isinstance(node, _pg_ast.A_Const) and getattr(node, "isnull", False):
+        return None
+    return _QUOTED_NUMBER.sub(r"\1", RawStream()(node))

@@ -31,31 +31,9 @@ PACKAGE = Path(confiture.__file__).resolve().parent
 
 #: Members nothing constructs, with what it would take to emit them. The reason
 #: is the deliverable: a hole someone decided on is a decision, and a hole nobody
-#: noticed is the defect this guard exists to prevent.
-UNEMITTED: dict[str, str] = {
-    "default_mismatch": (
-        "PostgreSQL rewrites a default expression on storage, so the two sides "
-        "cannot be compared as text. Measured on 18.4 over twelve columns, only "
-        "**5** agree: a literal gains a cast (`'x'` -> `'x'::text`, `'{}'` -> "
-        "`'{}'::text[]`, `'ab'` -> `'ab'::character varying`), a keyword changes "
-        "case (`TRUE` -> `true`), an expression gains parentheses (`1 + 2` -> "
-        "`(1 + 2)`), `CAST('{}' AS jsonb)` becomes `'{}'::jsonb`, and `serial` "
-        "becomes `nextval(...)`. A comparison that fires on every array column is "
-        "worse than none. The decidable route is to materialise the DDL with "
-        "`ExpectedSchemaDB.from_source()` and read `pg_get_expr` on both sides, "
-        "which is a throwaway database per run and its own phase (#309)"
-    ),
-    "missing_constraint": (
-        "the expected side has no constraint reader at all — "
-        "`parse_expected_schema` populates tables and indexes only — and the live "
-        "read it would have used, `information_schema.table_constraints`, emits a "
-        "CHECK row **per NOT NULL column** on PostgreSQL 18, so a naive pass "
-        "reports an extra constraint for every NOT NULL column in the schema. It "
-        "needs `pg_constraint` with a `contype` filter, an expected-side reader, "
-        "and a rule for the constraints PostgreSQL names itself (#308)"
-    ),
-    "extra_constraint": "the same reader, the same live source, the same contype filter (#308)",
-}
+#: noticed is the defect this guard exists to prevent. Empty since drift compares
+#: the schema model on both sides: its constraints and its defaults are compared.
+UNEMITTED: dict[str, str] = {}
 
 
 def _constructed_members() -> set[str]:

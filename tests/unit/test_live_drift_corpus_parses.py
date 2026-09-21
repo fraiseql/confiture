@@ -40,5 +40,5 @@ def test_every_corpus_file_parses(path: Path) -> None:
 
 def test_the_corpus_yields_an_expected_schema() -> None:
     expected = parse_expected_schema(corpus_sql())
-    assert expected.info.tables, "no tables parsed out of the corpus"
+    assert expected.model.tables, "no tables parsed out of the corpus"
     assert "core" in expected.schemas
