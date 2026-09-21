@@ -146,7 +146,6 @@ nav:
   - 'API':
       - 'API Reference': api/index.md
       - 'Anonymization Strategy API Reference': api/anonymization.md
-      - 'Blue-Green Orchestration API Reference': api/blue-green.md
       - 'SchemaBuilder API': api/builder.md
       - 'Hook API Reference': api/hooks.md
       - 'Migrator API': api/migrator.md

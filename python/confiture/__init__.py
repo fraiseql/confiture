@@ -34,9 +34,7 @@ __all__ = [
     "BatchProgress",
     # Large table operations
     "BatchedMigration",
-    "BlueGreenConfig",
     # Blue-green orchestration (library API)
-    "BlueGreenOrchestrator",
     "ConfigurationError",
     # Exceptions
     "ConfiturError",
@@ -66,7 +64,6 @@ __all__ = [
     "GrantAccompanimentChecker",
     "GrantAccompanimentError",
     "GrantAccompanimentReport",
-    "HealthCheckResult",
     "HookPhase",
     "IntrospectedColumn",
     "IntrospectedTable",
@@ -82,9 +79,7 @@ __all__ = [
     "MigrationInfo",
     # Locking
     "MigrationLock",
-    "MigrationPhase",
     "MigrationPreflightInfo",
-    "MigrationState",
     # Result models
     "MigrationStatus",
     # Migration verification
@@ -128,7 +123,6 @@ __all__ = [
     "StrategyConfig",
     "StrategyRegistry",
     "TableSizeEstimator",
-    "TrafficController",
     "TypeMapper",
     "VerifyAllResult",
     "VerifyFileError",
@@ -156,7 +150,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Core
     "SchemaBuilder": ("confiture.core.builder", "SchemaBuilder"),
     "Migrator": ("confiture.core.migrator", "Migrator"),
-    # The four mediums are a set in the documentation and in CLAUDE.md;
     # two of them were importable from the top level and two were not (#287).
     "ProductionSyncer": ("confiture.core.syncer", "ProductionSyncer"),
     "SchemaToSchemaMigrator": ("confiture.core.schema_to_schema", "SchemaToSchemaMigrator"),
@@ -250,13 +243,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Scaffold / generate tree
     "EmittedFunction": ("confiture.core.scaffold.emitter", "EmittedFunction"),
     "ConfitureEmitter": ("confiture.core.scaffold.emitter", "ConfitureEmitter"),
-    # Blue-green orchestration (library API)
-    "BlueGreenOrchestrator": ("confiture.core.blue_green", "BlueGreenOrchestrator"),
-    "BlueGreenConfig": ("confiture.core.blue_green", "BlueGreenConfig"),
-    "TrafficController": ("confiture.core.blue_green", "TrafficController"),
-    "MigrationPhase": ("confiture.core.blue_green", "MigrationPhase"),
-    "MigrationState": ("confiture.core.blue_green", "MigrationState"),
-    "HealthCheckResult": ("confiture.core.blue_green", "HealthCheckResult"),
     # PostgreSQL version detection / feature gating (library API)
     "detect_version": ("confiture.core.pg_version", "detect_version"),
     "parse_version_string": ("confiture.core.pg_version", "parse_version_string"),
@@ -281,7 +267,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "BackupHook": ("confiture.core.hooks.builtin.backup_hook", "BackupHook"),
     "BackupConfig": ("confiture.core.hooks.builtin.backup_hook", "BackupConfig"),
     "HookPhase": ("confiture.core.hooks.phases", "HookPhase"),
-    # PII anonymization framework (library API). Imported from the package
     # facade so the built-in strategies are registered on first access.
     "AnonymizationStrategy": ("confiture.core.anonymization", "AnonymizationStrategy"),
     "StrategyConfig": ("confiture.core.anonymization", "StrategyConfig"),

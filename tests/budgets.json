@@ -120,7 +120,6 @@
     "python/confiture/core/_migrator/session.py": 1,
     "python/confiture/core/anonymization/plugins/import_lint.py": 1,
     "python/confiture/core/anonymization/strategies/custom.py": 2,
-    "python/confiture/core/blue_green.py": 3,
     "python/confiture/core/builder.py": 1,
     "python/confiture/core/dry_run.py": 1,
     "python/confiture/core/expected_db.py": 1,

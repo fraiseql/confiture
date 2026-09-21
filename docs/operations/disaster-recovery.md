@@ -267,9 +267,7 @@ kubectl logs -f deployment/app
 
 **Immediate Actions (< 1 minute):**
 
-There is no blue-green rollback command. `confiture.core.blue_green` is a
-library API driven from your own code (see
-[Blue-Green API](../api/blue-green.md)); nothing in the CLI swaps schemas. In an
+There is no blue-green rollback command: nothing in confiture swaps schemas. In an
 incident, swap them yourself:
 
 ```sql

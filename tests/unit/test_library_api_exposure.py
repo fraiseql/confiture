@@ -15,14 +15,6 @@ import confiture
 from confiture import _LAZY_IMPORTS
 
 # Names promoted to the public library surface.
-_BLUE_GREEN = (
-    "BlueGreenOrchestrator",
-    "BlueGreenConfig",
-    "TrafficController",
-    "MigrationPhase",
-    "MigrationState",
-    "HealthCheckResult",
-)
 _PG_VERSION = (
     "detect_version",
     "parse_version_string",
@@ -56,7 +48,7 @@ _ANONYMIZATION = (
     "register_strategy",
     "AnonymizationProfile",
 )
-_NEWLY_EXPOSED = _BLUE_GREEN + _PG_VERSION + _ROLLBACK_GEN + _BUILTIN_HOOKS + _ANONYMIZATION
+_NEWLY_EXPOSED = _PG_VERSION + _ROLLBACK_GEN + _BUILTIN_HOOKS + _ANONYMIZATION
 
 
 def test_newly_exposed_symbols_resolve() -> None:
@@ -64,13 +56,6 @@ def test_newly_exposed_symbols_resolve() -> None:
     for name in _NEWLY_EXPOSED:
         assert name in confiture.__all__, f"{name} missing from __all__"
         assert getattr(confiture, name) is not None
-
-
-def test_blue_green_orchestrator_is_real() -> None:
-    from confiture import BlueGreenConfig, BlueGreenOrchestrator
-
-    assert BlueGreenOrchestrator.__name__ == "BlueGreenOrchestrator"
-    assert BlueGreenConfig.__name__ == "BlueGreenConfig"
 
 
 def test_pg_version_detect_is_callable() -> None:
