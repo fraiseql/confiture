@@ -160,4 +160,3 @@ class TestFloatIsAPrecisionInBits:
     def test_float_is_one_type_with_its_canonical_spelling(self) -> None:
         assert same_type("float", "double precision")
         assert same_type("float(10)", "real")
-
