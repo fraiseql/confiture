@@ -95,10 +95,10 @@
       },
       {
         "function_key": "public.fn_when",
-        "old_signature": "public.fn_when(timestamp,integer)",
-        "new_signature": "public.fn_when(timestamp,bigint)",
+        "old_signature": "public.fn_when(timestamp without time zone,integer)",
+        "new_signature": "public.fn_when(timestamp without time zone,bigint)",
         "migration_file": null,
-        "message": "Parameter type change for public.fn_when detected (('timestamp', 'integer') -> ('timestamp', 'bigint')) but no DROP FUNCTION public.fn_when(timestamp,integer) found in migrations."
+        "message": "Parameter type change for public.fn_when detected (('timestamp without time zone', 'integer') -> ('timestamp without time zone', 'bigint')) but no DROP FUNCTION public.fn_when(timestamp without time zone,integer) found in migrations."
       }
     ],
     "body_violations": [

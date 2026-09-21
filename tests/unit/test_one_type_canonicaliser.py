@@ -9,8 +9,8 @@ different directions:
 ``core/linting/libraries/functions.py``          ``int4`` -> ``integer``
 ``core/linting/libraries/security_definer.py``   ``int4`` -> ``integer``
 ``core/differ.py`` (now ``core/ddl_walk.py``)     ``INT4`` -> ``INTEGER``
-``core/function_signature_parser.py``            ``varchar`` -> ``character varying``
-``core/drift.py``                                ``integer`` -> ``int4``
+``core/function_signature_parser.py`` (gone)     ``varchar`` -> ``character varying``
+``core/drift.py`` (gone)                         ``integer`` -> ``int4``
 ===============================================  ==================================
 
 The two under ``core/linting/`` were `_PG_CATALOG_ALIASES`, pasted from one to
@@ -28,11 +28,20 @@ applied verbatim from its own DDL stopped reporting a ``type_mismatch`` (#302).
 Deleting the dict without deleting its allow-list entry turns
 ``test_allow_list_is_current`` red, which is how that rule earns its keep.
 
-The remaining **two** are listed below with the reason, and a listed module that
+The signature parser's ``_TYPE_ALIASES`` is gone too, with the parser: a
+routine's argument types are keyed by the lattice on both sides of
+``--check-signatures``, and what a report prints — ``character varying``, the
+catalogue's word — is ``type_lattice.catalog_spelling``, read off the lattice's
+own table in the other direction rather than written out a second time. Where
+the two canonicalisers disagreed (``timestamp`` against ``timestamp without
+time zone``, ``bpchar`` against ``character``) a deployed routine was reported
+as a stale overload of itself.
+
+The remaining **one** is listed below with the reason, and a listed module that
 no longer matches anything fails, as in the one-lexer and one-path-matcher
-guards. Each of them is a *different* direction from the lattice's and feeds a
-published output, so folding one in is a behaviour change to a surface neither
-#274 nor #275 is about — worth doing, not worth doing here.
+guards. It resolves in a *different* direction from the lattice's and feeds a
+published output — the column types ``migrate diff`` writes — so folding it in is
+a behaviour change to a surface none of these issues is about.
 
 The ten spellings that split, each a `CREATE` written one way and a `COMMENT`
 the other, are pinned in `tests/unit/linting/test_type_spellings_are_one_type.py`.
@@ -111,12 +120,6 @@ ALLOWED: dict[str, str] = {
         "`_PGLAST_TYPE_ALIASES` maps pglast's internal names back into the upper-case "
         "spellings of `READABLE_TYPES`, which is the column type `migrate diff` prints "
         "and writes into a generated migration; `canonical_type` answers lower-case"
-    ),
-    "core/function_signature_parser.py": (
-        "`_TYPE_ALIASES` resolves toward the SQL-standard keyword form "
-        "(`varchar` -> `character varying`), the opposite of `canonical_type`, because its "
-        "output is the signature text `--check-signatures` prints and diffs; adopting the "
-        "lattice would move that text for every project with a `varchar` parameter"
     ),
 }
 

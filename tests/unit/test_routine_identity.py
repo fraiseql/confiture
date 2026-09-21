@@ -24,6 +24,7 @@ from confiture.core.linting.inventory import (
     signature_from_type_names,
     signatures_match,
 )
+from confiture.core.live_catalog import RoutineRow, routine_of
 from confiture.core.schema_model import Routine, View
 
 
@@ -72,10 +73,17 @@ def test_two_different_type_schemas_never_match() -> None:
         ("a app.status", "app.status"),
         ('a "MyType"', '"MyType"'),
         ("VARIADIC a text[]", "text[]"),
+        ('a "char"', '"char"'),
     ],
 )
 def test_the_ddl_and_the_catalogue_spell_one_signature(written: str, catalogued: str) -> None:
     assert signatures_match(_key(written), signature_from_type_names([catalogued]))
+
+
+def test_the_one_byte_char_is_not_character() -> None:
+    """``"char"`` is PostgreSQL's internal one-byte type; ``char(n)`` is ``bpchar``."""
+    assert not signatures_match(_key('a "char"'), signature_from_type_names(["character"]))
+    assert not signatures_match(_key("a char(1)"), signature_from_type_names(['"char"']))
 
 
 def test_out_parameters_are_not_part_of_the_signature() -> None:
@@ -149,3 +157,44 @@ class TestTheModelHoldsViews:
     def test_an_index_on_a_matview_is_the_matviews(self) -> None:
         (index,) = self._views()["mv"].indexes
         assert (index.name, index.columns, index.unique) == ("mv_id", ("id",), True)
+
+
+class TestABodyIsTheTextBetweenTheQuotes:
+    """What ``--check-body`` hashes, on the side each reader reads."""
+
+    def test_a_named_dollar_quote(self) -> None:
+        sql = "CREATE FUNCTION f(x int) RETURNS int LANGUAGE plpgsql AS $fn$ BEGIN RETURN x * 2; END $fn$;"
+        assert _routine(sql).body == " BEGIN RETURN x * 2; END "
+
+    @pytest.mark.parametrize("language", ["c", "internal"])
+    def test_a_symbol_is_not_a_body(self, language: str) -> None:
+        sql = f"CREATE FUNCTION f(cstring) RETURNS int LANGUAGE {language} AS 'int4in';"
+        assert _routine(sql).body is None
+
+    @pytest.mark.parametrize(("language", "body"), [("sql", "SELECT 1"), ("c", None)])
+    def test_the_catalogue_side_reads_prosrc_alike(self, language: str, body: str | None) -> None:
+        row = RoutineRow(
+            oid=1,
+            schema="public",
+            name="f",
+            kind="f",
+            volatility="s",
+            language=language,
+            result="integer",
+            returns_set=False,
+            source="SELECT 1",
+            cost=1.0,
+            arg_names=("a",),
+            arg_modes=(),
+            arg_types=("bigint",),
+            input_types=("bigint",),
+            identity_arguments="a bigint",
+            comment=None,
+            security_definer=False,
+            config=("search_path=app",),
+            extension_owned=False,
+        )
+        routine = routine_of(row)
+        assert routine.body == body
+        assert (routine.volatility, routine.search_path_pinned) == ("stable", True)
+        assert routine.signature_key == _key("a int8")

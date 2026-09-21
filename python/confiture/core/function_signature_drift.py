@@ -1,54 +1,118 @@
-"""Detect stale function overloads by comparing source signatures against a live database.
+"""Detect stale function overloads by comparing the routines a tree declares against a database.
 
 A stale overload occurs when a function's parameter types were changed via
 CREATE OR REPLACE (which silently creates a second overload) without a matching
-DROP FUNCTION for the old signature.  This module compares:
+DROP FUNCTION for the old signature. Both sides are the schema model's
+:class:`~confiture.core.schema_model.Routine`:
 
-  - Source signatures: parsed from the project's DDL SQL file
-  - Live signatures: introspected from pg_proc via FunctionIntrospector
+  - declared: read from the project's DDL by the lint inventory (:func:`declared_routines`)
+  - live: read from ``pg_proc`` by ``core/live_catalog`` (:func:`live_routines`)
 
-Functions present in the live DB but absent from source are only flagged when
-the source defines *at least one* signature for that (schema, name) — this
-avoids false positives for built-ins, extensions, and unmanaged functions.
+Two routines are one when their names match and their ``signature_key`` does,
+argument by argument (``type_lattice.signatures_match``) — one canonicaliser on
+both sides, so ``int8`` and ``bigint`` are one routine and ``text[]`` and
+``text`` are two. Functions present in the live DB but absent from source are
+only flagged when the source defines *at least one* signature for that
+(schema, name) — this avoids false positives for built-ins, extensions, and
+unmanaged functions.
+
+A report prints a routine as ``schema.name(type,type)``, each type in
+PostgreSQL's own vocabulary (``type_lattice.catalog_spelling``), whichever side
+it was read from: consumers key their alert state on these strings, and one
+routine is one string.
 """
 
 from __future__ import annotations
 
 import dataclasses
-import re
 import time
 from collections import defaultdict
-from typing import Any
+from collections.abc import Iterable, Sequence
+from typing import TYPE_CHECKING, Any
 
-from confiture.core.function_signature_parser import FunctionSignature
+from confiture.core import live_catalog
+from confiture.core.linting.inventory import build_model
+from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.type_lattice import catalog_spelling, signatures_match
 
-# Trailing array suffix (one or more '[]', possibly sized) used to compare two
-# param types ignoring array-ness — see the defensive guard in ``compare``.
-_ARRAY_SUFFIX_RE = re.compile(r"(?:\s*\[\s*\d*\s*\])+\s*$")
+if TYPE_CHECKING:
+    import psycopg
+
+    from confiture.core.schema_model import Routine
+
+#: The routine kinds a signature comparison reads: what ``CREATE FUNCTION`` and
+#: ``CREATE PROCEDURE`` define, on both sides. An aggregate is created otherwise.
+_SIGNATURE_KINDS = frozenset({"function", "procedure"})
+
+#: The same kinds as ``pg_proc.prokind`` letters.
+_SIGNATURE_PROKINDS = ("f", "p")
 
 
-def _strip_array(param_type: str) -> str:
-    """Return ``param_type`` with any trailing array suffix removed."""
-    return _ARRAY_SUFFIX_RE.sub("", param_type).strip()
+def declared_routines(sql: str) -> list[Routine]:
+    """Every function and procedure *sql* declares, in declaration order.
 
+    Read by the lint inventory into the schema model, so a routine the tree
+    later drops or renames is folded the way a build folds it, and a routine
+    redefined with ``CREATE OR REPLACE`` is its last definition.
 
-def _array_only_difference(
-    stale_params: tuple[str, ...], source_param_sets: set[tuple[str, ...]]
-) -> bool:
-    """True when a source signature of equal arity matches ``stale_params`` after
-    stripping array suffixes from both sides.
-
-    Guards against a normalisation gap emitting a destructive ``DROP FUNCTION``
-    for a function that plainly exists in source, differing only by an array
-    suffix (issue #176).  Conservative by design: suppressing a genuine
-    scalar/array overload is non-destructive, whereas dropping a live function is
-    catastrophic.
+    Raises:
+        pglast.parser.ParseError: pglast rejects *sql*.
     """
-    stale_base = tuple(_strip_array(p) for p in stale_params)
-    return any(
-        len(source_params) == len(stale_params)
-        and tuple(_strip_array(p) for p in source_params) == stale_base
-        for source_params in source_param_sets
+    return [
+        routine
+        for found in build_model(sql).routines.values()
+        for routine in found
+        if routine.kind in _SIGNATURE_KINDS
+    ]
+
+
+def live_routines(conn: psycopg.Connection, schemas: Sequence[str]) -> list[Routine]:
+    """Every function and procedure in *schemas*, a trigger function included.
+
+    A trigger function is included because the declared side has no such filter,
+    and a comparison whose two sides hold different kinds of thing is not a
+    comparison (#303). So is an extension's own routine: a tree that declares one
+    of the same name is comparing against it.
+    """
+    rows = live_catalog.routines(conn, schemas, kinds=_SIGNATURE_PROKINDS, include_triggers=True)
+    return [live_catalog.routine_of(row) for row in rows]
+
+
+def function_key(routine: Routine) -> str:
+    """``schema.name`` — the routine without its arguments, schema defaulted."""
+    return f"{routine.schema or DEFAULT_SCHEMA}.{routine.name}"
+
+
+def printed_arguments(routine: Routine) -> tuple[str, ...]:
+    """Each input argument type in PostgreSQL's vocabulary, its schema where it has one."""
+    return tuple(
+        f"{schema}.{catalog_spelling(name)}" if schema else catalog_spelling(name)
+        for schema, name in routine.signature_key
+    )
+
+
+def printed_signature(routine: Routine) -> str:
+    """``schema.name(type,type)``: how a report names one routine."""
+    return f"{function_key(routine)}({','.join(printed_arguments(routine))})"
+
+
+def by_function(routines: Iterable[Routine]) -> dict[str, list[Routine]]:
+    """*routines* grouped by :func:`function_key`, each group in the order given."""
+    grouped: dict[str, list[Routine]] = defaultdict(list)
+    for routine in routines:
+        grouped[function_key(routine)].append(routine)
+    return grouped
+
+
+def matching(routine: Routine, candidates: Iterable[Routine]) -> Routine | None:
+    """The first of *candidates* that is *routine*, argument type by argument type."""
+    return next(
+        (
+            other
+            for other in candidates
+            if signatures_match(routine.signature_key, other.signature_key)
+        ),
+        None,
     )
 
 
@@ -161,7 +225,7 @@ class FunctionSignatureDriftReport:
         }
 
 
-def schemas_to_scan(requested: str | None, source_sigs: list[FunctionSignature]) -> list[str]:
+def schemas_to_scan(requested: str | None, source: Iterable[Routine]) -> list[str]:
     """Which schemas a signature comparison covers.
 
     ``requested`` is a comma-separated ``--schemas`` value, or ``None`` when the
@@ -177,38 +241,37 @@ def schemas_to_scan(requested: str | None, source_sigs: list[FunctionSignature])
     named = [part.strip() for part in (requested or "").split(",") if part.strip()]
     if named:
         return named
-    declared = sorted({sig.schema for sig in source_sigs if sig.schema})
-    return declared or ["public"]
+    declared = sorted({routine.schema or DEFAULT_SCHEMA for routine in source})
+    return declared or [DEFAULT_SCHEMA]
 
 
 class FunctionSignatureDriftDetector:
-    """Compare source-defined function signatures against a live database.
+    """Compare the routines a tree declares against the ones a database holds.
 
     Usage:
         detector = FunctionSignatureDriftDetector()
-        report = detector.compare(source_sigs, live_sigs)
+        report = detector.compare(declared_routines(sql), live_routines(conn, schemas))
     """
 
     def compare(
         self,
-        source_sigs: list[FunctionSignature],
-        live_sigs: list[FunctionSignature],
+        source: Iterable[Routine],
+        live: Iterable[Routine],
         schemas_checked: list[str] | None = None,
         *,
         missing_is_drift: bool = False,
     ) -> FunctionSignatureDriftReport:
         """Detect stale overloads and missing functions.
 
-        A stale overload is a (schema, name, param_types) tuple present in the
-        live DB but absent from source, when source DOES define at least one
-        signature for that (schema, name).
-
-        If source has no signature for a (schema, name) at all, the live
-        function is not flagged (it may be a built-in or installed extension).
+        A stale overload is a live routine no source routine of the same
+        ``schema.name`` matches, when source DOES define at least one signature
+        for that ``schema.name``. If source has no signature for it at all, the
+        live function is not flagged (it may be a built-in or installed
+        extension).
 
         Args:
-            source_sigs: Signatures parsed from DDL source files
-            live_sigs: Signatures introspected from the live database
+            source: Routines the DDL declares
+            live: Routines the live database holds
             schemas_checked: Which schemas were included (for reporting)
             missing_is_drift: Whether a routine the source declares and the
                 database has not got makes ``has_critical_drift`` true
@@ -217,53 +280,36 @@ class FunctionSignatureDriftDetector:
             FunctionSignatureDriftReport
         """
         t0 = time.monotonic()
+        declared_in_order = list(source)
+        source_by_fn = by_function(declared_in_order)
+        live_by_fn = by_function(live)
 
-        source_by_fn: dict[str, set[tuple[str, ...]]] = defaultdict(set)
-        live_by_fn: dict[str, set[tuple[str, ...]]] = defaultdict(set)
+        stale_overloads = [
+            StaleOverload(
+                schema=routine.schema or DEFAULT_SCHEMA,
+                name=routine.name,
+                stale_signature=printed_signature(routine),
+                source_signatures=sorted(printed_signature(r) for r in declared),
+            )
+            for fn_key, declared in source_by_fn.items()
+            for routine in sorted(
+                (r for r in live_by_fn.get(fn_key, []) if matching(r, declared) is None),
+                key=printed_arguments,
+            )
+        ]
 
-        for sig in source_sigs:
-            source_by_fn[sig.function_key()].add(sig.param_types)
-
-        for sig in live_sigs:
-            live_by_fn[sig.function_key()].add(sig.param_types)
-
-        stale_overloads: list[StaleOverload] = []
-        for fn_key, source_param_sets in source_by_fn.items():
-            if fn_key not in live_by_fn:
-                continue
-            stale_param_sets = live_by_fn[fn_key] - source_param_sets
-            for stale_params in sorted(stale_param_sets):
-                # Never emit a destructive DROP for a base-name + arity match that
-                # differs only by an array suffix (issue #176 safety net).
-                if _array_only_difference(stale_params, source_param_sets):
-                    continue
-                schema, name = fn_key.split(".", 1)
-                stale_overloads.append(
-                    StaleOverload(
-                        schema=schema,
-                        name=name,
-                        stale_signature=f"{fn_key}({','.join(stale_params)})",
-                        source_signatures=sorted(
-                            f"{fn_key}({','.join(p)})" for p in source_param_sets
-                        ),
-                    )
-                )
-
-        missing_from_db: list[str] = []
-        for sig in source_sigs:
-            fn_key = sig.function_key()
-            if sig.param_types not in live_by_fn.get(fn_key, set()):
-                missing_from_db.append(sig.signature_key())
-
-        functions_checked = len(source_by_fn)
-        detection_time_ms = (time.monotonic() - t0) * 1000
+        missing_from_db = [
+            printed_signature(routine)
+            for routine in declared_in_order
+            if matching(routine, live_by_fn.get(function_key(routine), [])) is None
+        ]
 
         return FunctionSignatureDriftReport(
             stale_overloads=stale_overloads,
             missing_from_db=missing_from_db,
             schemas_checked=schemas_checked or [],
-            functions_checked=functions_checked,
+            functions_checked=len(source_by_fn),
             has_drift=len(stale_overloads) > 0,
-            detection_time_ms=detection_time_ms,
+            detection_time_ms=(time.monotonic() - t0) * 1000,
             missing_is_drift=missing_is_drift,
         )

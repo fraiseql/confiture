@@ -27,10 +27,10 @@ from confiture.core.connection import load_config
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
 from confiture.core.function_signature_drift import (
     FunctionSignatureDriftDetector,
+    declared_routines,
+    live_routines,
     schemas_to_scan,
 )
-from confiture.core.function_signature_parser import FunctionSignatureParser
-from confiture.core.live_function_catalog import LiveFunctionCatalog
 from confiture.core.sql_lexer import split_statements
 
 
@@ -144,19 +144,18 @@ def migrate_fix_signatures(
         config_data = load_config(config)
         source_sql = _resolve_source_sql(schema_file, config_data, format_output)
 
-        source_sigs = FunctionSignatureParser().parse(source_sql)
+        declared = declared_routines(source_sql)
         # The same scope the reporter uses. This command executes `DROP FUNCTION`,
         # so the two disagreeing about which schemas are in play would be worse
         # than both being wrong the same way (#303).
-        schemas = schemas_to_scan(check_signature_schemas, source_sigs)
+        schemas = schemas_to_scan(check_signature_schemas, declared)
         effective_config = _ssh_override(config_data, ssh_via, format_output)
 
         body_report_after: Any = None
         with open_connection(effective_config) as conn:
-            live_catalog = LiveFunctionCatalog(conn)
-            live_sigs = live_catalog.get_signatures(schemas=schemas)
+            live = live_routines(conn, schemas)
             drift_report = FunctionSignatureDriftDetector().compare(
-                source_sigs, live_sigs, schemas_checked=schemas
+                declared, live, schemas_checked=schemas
             )
             if not drift_report.has_drift and not check_body:
                 _render_clean(drift_report.summary(), format_output, output_file)
@@ -171,8 +170,8 @@ def migrate_fix_signatures(
                     "(source definitions missing for all stale overloads).[/red]"
                 )
                 raise typer.Exit(1)
-            source_bodies, body_fix_blocks, body_missing_source = _plan_body_fixes(
-                check_body, live_catalog, source_sql, schemas, fix_blocks
+            body_fix_blocks, body_missing_source = _plan_body_fixes(
+                check_body, declared, live, source_sql, fix_blocks
             )
             if not fix_blocks and not body_fix_blocks:
                 _render_clean(
@@ -195,18 +194,12 @@ def migrate_fix_signatures(
                 return
             _apply_fix_blocks(conn, fix_blocks, body_fix_blocks)
             # Re-check to confirm zero drift.
+            live_after = live_routines(conn, schemas)
             report_after = FunctionSignatureDriftDetector().compare(
-                source_sigs,
-                LiveFunctionCatalog(conn).get_signatures(schemas=schemas),
-                schemas_checked=schemas,
+                declared, live_after, schemas_checked=schemas
             )
-            if check_body and source_bodies:
-                live_bodies_after = LiveFunctionCatalog(conn).get_bodies(
-                    schemas=schemas, sig_keys=set(source_bodies)
-                )
-                body_report_after = FunctionBodyDriftDetector().compare(
-                    source_bodies, live_bodies_after
-                )
+            if check_body and declared:
+                body_report_after = FunctionBodyDriftDetector().compare(declared, live_after)
 
         has_residual = report_after.has_drift or (
             body_report_after is not None and body_report_after.has_drift
@@ -337,21 +330,16 @@ def _plan_signature_fixes(
 
 def _plan_body_fixes(
     check_body: bool,
-    live_catalog: Any,
+    declared: list[Any],
+    live: list[Any],
     source_sql: str,
-    schemas: list[str],
     fix_blocks: list[dict[str, Any]],
-) -> tuple[dict[str, str | None], list[dict[str, Any]], list[str]]:
+) -> tuple[list[dict[str, Any]], list[str]]:
     """``--check-body``: CREATE OR REPLACE for bodies that drifted (a DROP+CREATE already covers its function)."""
     if not check_body:
-        return {}, [], []
+        return [], []
 
-    source_bodies = {
-        sig.signature_key(): body
-        for sig, body in FunctionSignatureParser().parse_with_bodies(source_sql)
-    }
-    live_bodies = live_catalog.get_bodies(schemas=schemas, sig_keys=set(source_bodies))
-    body_report = FunctionBodyDriftDetector().compare(source_bodies, live_bodies)
+    body_report = FunctionBodyDriftDetector().compare(declared, live)
     body_fix_blocks: list[dict[str, Any]] = []
     body_missing_source: list[str] = []
     if body_report.has_drift:
@@ -364,7 +352,7 @@ def _plan_body_fixes(
                 body_missing_source.append(drift.signature_key)
                 continue
             body_fix_blocks.append({"signature_key": drift.signature_key, "create_sql": create_sql})
-    return source_bodies, body_fix_blocks, body_missing_source
+    return body_fix_blocks, body_missing_source
 
 
 def _render_fix_dry_run(

@@ -17,8 +17,8 @@ from __future__ import annotations
 import psycopg
 import pytest
 
+from confiture.core import live_catalog
 from confiture.core.expected_db import ExpectedSchemaDB
-from confiture.core.live_view_catalog import LiveViewCatalog
 from confiture.core.view_body_drift import ViewBodyDriftDetector
 
 
@@ -41,9 +41,9 @@ def _compare(server_url: str, live_ddl: str, source_ddl: str):
         ExpectedSchemaDB(server_url).from_source(schema_sql=live_ddl) as live_conn,
         ExpectedSchemaDB(server_url).from_source(schema_sql=source_ddl) as scratch_conn,
     ):
-        live_defs = LiveViewCatalog(live_conn).get_view_definitions(["public"])
-        src_defs = LiveViewCatalog(scratch_conn).get_view_definitions(["public"])
-        return ViewBodyDriftDetector().compare(src_defs, live_defs)
+        live = live_catalog.views(live_conn, ["public"], definitions=True)
+        expected = live_catalog.views(scratch_conn, ["public"], definitions=True)
+        return ViewBodyDriftDetector().compare(expected, live)
 
 
 @pytest.mark.integration
@@ -126,8 +126,8 @@ def test_schemas_filter_is_honored(server_url: str, _require_server: None) -> No
         + "CREATE VIEW other.ov AS SELECT id FROM other.t;\n"
     )
     with ExpectedSchemaDB(server_url).from_source(schema_sql=ddl) as conn:
-        public_only = LiveViewCatalog(conn).get_view_definitions(["public"])
-        both = LiveViewCatalog(conn).get_view_definitions(["public", "other"])
+        public_only = live_catalog.views(conn, ["public"], definitions=True)
+        both = live_catalog.views(conn, ["public", "other"], definitions=True)
 
-    assert set(public_only) == {"public.v"}
-    assert {"public.v", "other.ov"} <= set(both)
+    assert {f"{v.schema}.{v.name}" for v in public_only} == {"public.v"}
+    assert {"public.v", "other.ov"} <= {f"{v.schema}.{v.name}" for v in both}

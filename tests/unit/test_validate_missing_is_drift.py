@@ -20,11 +20,12 @@ from __future__ import annotations
 import pytest
 
 from confiture.core.function_signature_drift import FunctionSignatureDriftDetector
-from confiture.core.function_signature_parser import FunctionSignature
+from confiture.core.schema_model import Routine
+from tests._helpers import routine
 
 
-def sig(name: str, *params: str, schema: str = "core") -> FunctionSignature:
-    return FunctionSignature(schema=schema, name=name, param_types=tuple(params))
+def sig(name: str, *params: str, schema: str = "core") -> Routine:
+    return routine(name, *params, schema=schema)
 
 
 def compare(source, live, *, missing_is_drift: bool = False):

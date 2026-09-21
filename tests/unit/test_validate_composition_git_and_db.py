@@ -229,7 +229,7 @@ def test_db_backed_checks_open_one_connection(
         ),
     )
     monkeypatch.setattr(
-        "confiture.core.live_function_catalog.FunctionIntrospector",
+        "confiture.core.live_catalog.routines",
         MagicMock(
             return_value=MagicMock(introspect=MagicMock(return_value=MagicMock(functions=[])))
         ),

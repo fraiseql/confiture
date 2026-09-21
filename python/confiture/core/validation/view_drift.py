@@ -17,9 +17,9 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from confiture.core import live_catalog
 from confiture.core.connection import load_config, open_connection
 from confiture.core.expected_db import ExpectedSchemaDB
-from confiture.core.live_view_catalog import LiveViewCatalog
 from confiture.core.validation.signature_drift import _resolve_source_sql, _ssh_override
 from confiture.core.view_body_drift import ViewBodyDriftDetector
 from confiture.exceptions import ConfigurationError
@@ -117,10 +117,10 @@ def check_view_drift(
         nullcontext(ctx.connection()) if ctx is not None else open_connection(effective_config)
     )
     with conn_cm as live_conn:
-        live_defs = LiveViewCatalog(live_conn).get_view_definitions(schema_list)
+        live = live_catalog.views(live_conn, schema_list, definitions=True)
         with ExpectedSchemaDB(scratch).from_source(schema_sql=source_sql) as scratch_conn:
-            src_defs = LiveViewCatalog(scratch_conn).get_view_definitions(schema_list)
-        view_report = ViewBodyDriftDetector().compare(src_defs, live_defs)
+            expected = live_catalog.views(scratch_conn, schema_list, definitions=True)
+    view_report = ViewBodyDriftDetector().compare(expected, live)
 
     return ViewDriftResult(
         view_report=view_report,

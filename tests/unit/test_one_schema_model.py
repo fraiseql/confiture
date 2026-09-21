@@ -71,9 +71,7 @@ _RETIRING = (
 
 #: ``module:Class`` -> the different question that class answers.
 ALLOWED: dict[str, str] = {
-    "core/function_signature_parser.py:FunctionSignature": _RETIRING,
     "core/live_objects.py:LiveObject": _RETIRING,
-    "core/view_body_drift.py:ViewDefinition": _RETIRING,
     "core/live_catalog.py:RoutineRow": (
         "a pg_proc row with what the introspector's FunctionInfo needs and the model "
         "does not hold — every argument's name and mode, the cost, the comment, the oid"

@@ -111,6 +111,27 @@ comparisons say today, are now tests in its own suite.
   `core/type_lattice.py` (still importable from `core.linting.inventory`), so a
   reader of a live catalogue keys a routine without importing the lint package.
 
+- **The routine and view checks read the model on both sides.** `--check-signatures`,
+  `--check-body`, `--check-body-replay`, `--check-body-views`,
+  `--require-migration-bodies` and `migrate fix-signatures` compare
+  `schema_model.Routine`s and `View`s — the declared side from the lint inventory, the
+  live side from `live_catalog` — and pair two routines by one canonicaliser.
+  `--check-body` and `--check-body-replay` are one comparison with two expected sides:
+  the DDL, and a scratch database the migrations were replayed into.
+  `core/function_signature_parser.py`, `core/live_function_catalog.py` and
+  `core/live_view_catalog.py` are deleted, and with the parser its `_TYPE_ALIASES` —
+  the second type-alias table the one-canonicaliser guard allowed — and the #176
+  array-suffix safety net, which had nothing left to catch. ⚠️ For a library caller:
+  `FunctionSignatureDriftDetector.compare`, `FunctionBodyDriftDetector.compare` and
+  `ViewBodyDriftDetector.compare` take `Iterable[Routine]` / `Iterable[View]`
+  (`function_signature_drift.declared_routines(sql)` and `live_routines(conn,
+  schemas)` produce them); `FunctionSignatureChecker` and `FunctionBodyChecker` lose
+  their `parser` argument; `schemas_to_scan` takes routines; `FunctionSignature`,
+  `FunctionSignatureParser`, `LiveFunctionCatalog`, `LiveViewCatalog` and
+  `ViewDefinition` are gone. The JSON of every one of these commands is pinned in
+  `tests/fixtures/model_goldens/routines/`, recorded before the change; what moved is
+  listed under **Fixed**.
+
 ### Changed
 
 - **One live reader, enforced.** Every schema fact confiture reads from a live database
@@ -194,6 +215,38 @@ comparisons say today, are now tests in its own suite.
 
 ### Fixed
 
+- **A routine is no longer a stale overload of itself.** `--check-signatures` keyed
+  the declared side's argument types through one alias table and the live side's
+  through another, and they disagreed on `timestamp`, `time`, `timetz`, `char(n)`
+  and `bit varying`: a function taking any of them was reported both as a stale
+  overload *and* as missing from the database, and `migrate fix-signatures` planned
+  to `DROP` it and re-create it. Recorded on a database built verbatim from
+  `tests/fixtures/routine_drift`, where `fn_spellings(…, timestamp, char(2), …)` is
+  now neither. What moved in the goldens, before → after:
+  - `stale_overloads` / `remediation_sql` / `missing_from_db` lose the false
+    `public.fn_spellings(…)` entries; `migrate fix-signatures` plans one fix instead
+    of two, and none on a clean database (`status: clean`, exit 0 where it was 1);
+  - `body_drift.functions_checked` counts that routine too (9 → 10, 8 → 9);
+  - a routine's arguments print in PostgreSQL's own words on the declared side as
+    they always did on the live side: `timestamp` → `timestamp without time zone`,
+    `bpchar` → `character`, `time` → `time without time zone`, `timetz` →
+    `time with time zone`, `varbit` → `bit varying`, `text[][]` → `text[]`. It
+    shows in `--require-migration-bodies`' `old_signature` / `new_signature` and
+    message (`public.fn_when(timestamp,integer)` →
+    `public.fn_when(timestamp without time zone,integer)`);
+  - a `VARIADIC` argument is part of the signature, as PostgreSQL resolves a call
+    by it: `f(VARIADIC text[])` printed `f()` and prints `f(text[])`;
+  - a type `format_type` quotes for its case (`"MyType"`) prints unquoted, as the
+    declared side always printed it; the one-byte `"char"` keeps its quotes and is
+    no longer confused with `character`.
+
+  Every stale signature a live routine prints is unchanged — pinned by
+  `test_signature_spelling_is_the_catalogues.py` over all 303 types in `pg_catalog`.
+  Two behaviour changes follow from pairing by identity: a live `f(text[])` beside a
+  declared `f(text)` is now a stale overload (the #176 net suppressed it), and
+  `--require-migration` accepts a `DROP FUNCTION` only when it names the changed
+  function — it matched any `DROP FUNCTION` with the right argument types — and
+  reads one inside a `.py` migration's `execute()` too.
 - **A routine's signature is one identity on both sides.** The argument types a DDL
   file writes and the ones `format_type` writes now canonicalise alike where they used
   to split: `character` (a live `char(n)` argument) keyed as `char(1)` against the

@@ -40,6 +40,7 @@ __all__ = [
     "SqlType",
     "TypeChange",
     "canonical_type",
+    "catalog_spelling",
     "changes_rewrite_table",
     "compare_types",
     "parse_type",
@@ -389,7 +390,17 @@ def signature_type(written: str) -> str:
     parsed = parse_type(written)
     if parsed is None:
         return canonical_type(written) or written
-    return parsed.name + ("[]" if parsed.dimensions else "")
+    base = parsed.name
+    if written.partition("[")[0].strip() == _ONE_BYTE_CHAR:
+        base = f'"{_ONE_BYTE_CHAR}"'
+    return base + ("[]" if parsed.dimensions else "")
+
+
+#: A bare ``char`` in a signature is PostgreSQL's internal one-byte type, never the
+#: keyword: the parser reads the keyword as ``bpchar`` and ``format_type`` writes it
+#: ``character``, but writes this one quoted. It keeps its quotes, so a routine
+#: taking it is never mistaken for one taking ``character``.
+_ONE_BYTE_CHAR = "char"
 
 
 def signature_from_type_names(written: Iterable[str]) -> Signature:
@@ -440,3 +451,34 @@ def signatures_match(a: Signature | None, b: Signature | None) -> bool:
     if len(a) != len(b):
         return False
     return all(types_match(x, y) for x, y in zip(a, b, strict=True))
+
+
+#: The SQL-standard spellings ``format_type`` prints where the canonical name is
+#: another word. Each is already an alias in the table above, pointing at its
+#: canonical name; this says which alias is the catalogue's own word, and the
+#: direction back is read from that table rather than written out a second time.
+_CATALOG_WORDS = frozenset(
+    {
+        "character varying",
+        "character",
+        "timestamp without time zone",
+        "timestamp with time zone",
+        "time without time zone",
+        "time with time zone",
+    }
+)
+_SPELLED_BY_CATALOG = {
+    canonical: spelling for spelling, canonical in _ALIASES.items() if spelling in _CATALOG_WORDS
+}
+
+
+def catalog_spelling(name: str) -> str:
+    """How PostgreSQL's ``format_type`` spells a canonical argument type name.
+
+    ``varchar`` is ``character varying``, ``timestamptz`` is ``timestamp with time
+    zone``, ``char`` is ``character``; every other canonical name is already the
+    catalogue's word. The spelling a report prints for a routine's argument, so
+    one routine read from DDL and read live is printed once and not twice.
+    """
+    base, array = (name[:-2], "[]") if name.endswith("[]") else (name, "")
+    return _SPELLED_BY_CATALOG.get(base, base) + array

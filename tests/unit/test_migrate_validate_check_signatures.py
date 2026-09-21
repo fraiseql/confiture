@@ -160,7 +160,7 @@ class TestCheckSignaturesFlag:
         with (
             patch("confiture.core.validation.context.load_config", return_value=MagicMock()),
             patch("confiture.core.validation.context.open_connection", open_conn),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
+            patch("confiture.core.live_catalog.routines") as MockIntrospector,
         ):
             MockIntrospector.return_value.introspect.return_value = MagicMock(functions=[])
 
@@ -198,7 +198,7 @@ class TestCheckSignaturesFlag:
                 "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
+            patch("confiture.core.live_catalog.routines") as MockIntrospector,
         ):
             MockIntrospector.return_value.introspect.return_value = MagicMock(functions=[])
 
@@ -232,7 +232,7 @@ class TestCheckSignaturesFlag:
                 "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
+            patch("confiture.core.live_catalog.routines") as MockIntrospector,
         ):
             MockIntrospector.return_value.introspect.return_value = MagicMock(functions=[])
 
@@ -306,7 +306,7 @@ class TestCheckBodyFlag:
                 "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
+            patch("confiture.core.live_catalog.routines") as MockIntr,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 return_value=_empty_report(),
@@ -349,7 +349,7 @@ class TestCheckBodyFlag:
                 "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
+            patch("confiture.core.live_catalog.routines") as MockIntr,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 return_value=_empty_report(),
@@ -401,7 +401,7 @@ class TestCheckBodyFlag:
                 "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
+            patch("confiture.core.live_catalog.routines") as MockIntr,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 return_value=_empty_report(),
@@ -471,7 +471,7 @@ class TestCheckBodyFlag:
                 "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
+            patch("confiture.core.live_catalog.routines") as MockIntr,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 return_value=sig_report,
@@ -517,7 +517,7 @@ class TestCheckBodyFlag:
                 "confiture.core.validation.context.open_connection",
                 self._make_open_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntr,
+            patch("confiture.core.live_catalog.routines") as MockIntr,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 return_value=_empty_report(),

@@ -4,11 +4,12 @@ from confiture.core.function_signature_drift import (
     FunctionSignatureDriftDetector,
     StaleOverload,
 )
-from confiture.core.function_signature_parser import FunctionSignature
+from confiture.core.schema_model import Routine
+from tests._helpers import routine
 
 
-def _sig(name: str, types: tuple[str, ...], schema: str = "public") -> FunctionSignature:
-    return FunctionSignature(schema=schema, name=name, param_types=types)
+def _sig(name: str, types: tuple[str, ...], schema: str = "public") -> Routine:
+    return routine(name, *types, schema=schema)
 
 
 class TestFunctionSignatureDriftDetectorNoDrift:
@@ -21,14 +22,14 @@ class TestFunctionSignatureDriftDetectorNoDrift:
 
     def test_unknown_live_function_not_flagged(self):
         # live has a function not in source → not flagged (extension, built-in, etc.)
-        source: list[FunctionSignature] = []
+        source: list[Routine] = []
         live = [_sig("pg_extension_func", ("text",))]
         report = FunctionSignatureDriftDetector().compare(source, live)
         assert not report.has_drift
 
     def test_missing_from_db_is_informational_not_failure(self):
         source = [_sig("new_func", ("text",))]
-        live: list[FunctionSignature] = []
+        live: list[Routine] = []
         report = FunctionSignatureDriftDetector().compare(source, live)
         assert not report.has_drift
         assert len(report.missing_from_db) == 1
@@ -101,18 +102,28 @@ class TestFunctionSignatureDriftArraySafety:
         assert report.stale_overloads == []
         assert report.to_dict()["remediation_sql"] == []
 
-    def test_array_only_difference_never_emits_drop(self):
-        # Defensive guard (Change C): even if a normalisation gap leaves the live
-        # array signature differing from the source signature only by an array
-        # suffix on one position, a base-name + arity match must NOT be dropped.
+    def test_an_array_overload_the_source_does_not_declare_is_stale(self):
+        """The #176 safety net is gone with the gap it covered.
+
+        It suppressed a live overload that differed from a declared one only by
+        ``[]``, because the source side could lose the suffix. Both sides now key
+        an argument through one canonicaliser, which keeps it; ``f(text[])``
+        beside a declared ``f(text)`` is a second overload, and is reported.
+        """
         source = [_sig("f", ("text",), schema="core")]
         live = [
             _sig("f", ("text",), schema="core"),
-            _sig("f", ("text[]",), schema="core"),  # differs only by []
+            _sig("f", ("text[]",), schema="core"),
         ]
         report = FunctionSignatureDriftDetector().compare(source, live)
+        assert [o.stale_signature for o in report.stale_overloads] == ["core.f(text[])"]
+
+    def test_an_array_argument_keeps_its_suffix_on_both_sides(self):
+        source = [_sig("f", ("int[]", "varchar[]"), schema="core")]
+        live = [_sig("f", ("integer[]", "character varying[]"), schema="core")]
+        report = FunctionSignatureDriftDetector().compare(source, live)
         assert report.stale_overloads == []
-        assert report.to_dict()["remediation_sql"] == []
+        assert report.missing_from_db == []
 
     def test_genuine_scalar_overload_still_flagged(self):
         # Change C must not suppress genuine drift: different base type → still stale.
@@ -174,7 +185,7 @@ class TestStaleOverload:
 class TestTriggerFunctionsOnTheLiveSide:
     """What widening the live side to trigger functions can and cannot suggest.
 
-    `LiveFunctionCatalog` now asks for them (#303), because the source parser has
+    The live side asks for them (#303), because the declared side has
     no such filter and a comparison whose sides hold different kinds of thing is
     not a comparison. `stale_overloads` drives `remediation_sql`, which is
     **destructive**, so what the widening makes newly reportable is pinned here
@@ -182,8 +193,8 @@ class TestTriggerFunctionsOnTheLiveSide:
     """
 
     def test_a_trigger_function_the_source_declares_is_not_stale(self):
-        source = [FunctionSignature(schema="core", name="fn_touch", param_types=())]
-        live = [FunctionSignature(schema="core", name="fn_touch", param_types=())]
+        source = [_sig("fn_touch", (), schema="core")]
+        live = [_sig("fn_touch", (), schema="core")]
         report = FunctionSignatureDriftDetector().compare(source, live)
         assert report.stale_overloads == []
         assert report.missing_from_db == []
@@ -191,7 +202,7 @@ class TestTriggerFunctionsOnTheLiveSide:
     def test_a_trigger_function_no_source_function_of_that_name_matches_is_left_alone(self):
         """The existing rule, and the one that keeps this safe: an overload is only
         stale when source defines *some* signature for that name."""
-        live = [FunctionSignature(schema="core", name="fn_only_live", param_types=())]
+        live = [_sig("fn_only_live", (), schema="core")]
         report = FunctionSignatureDriftDetector().compare([], live)
         assert report.stale_overloads == []
 
@@ -200,10 +211,10 @@ class TestTriggerFunctionsOnTheLiveSide:
         the database also has a zero-argument `fn_touch()` returning trigger. That
         really is an overload source does not declare, and it was invisible before
         the live side included trigger functions."""
-        source = [FunctionSignature(schema="core", name="fn_touch", param_types=("integer",))]
+        source = [_sig("fn_touch", ("integer",), schema="core")]
         live = [
-            FunctionSignature(schema="core", name="fn_touch", param_types=("integer",)),
-            FunctionSignature(schema="core", name="fn_touch", param_types=()),
+            _sig("fn_touch", ("integer",), schema="core"),
+            _sig("fn_touch", (), schema="core"),
         ]
         report = FunctionSignatureDriftDetector().compare(source, live)
         assert [o.stale_signature for o in report.stale_overloads] == ["core.fn_touch()"]

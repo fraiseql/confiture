@@ -2,24 +2,34 @@
 
 When a function's parameter types change, PostgreSQL's CREATE OR REPLACE silently
 creates a second overload rather than replacing the old one.  This module detects
-that case by comparing old vs new signatures and verifying that a migration file
-contains a DROP FUNCTION statement for the old signature.
+that case by comparing old vs new routines — the schema model's, read from the
+file at each ref by the lint inventory — and verifying that a migration file
+drops the old signature.
 """
 
 from __future__ import annotations
 
 import dataclasses
-import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from confiture.core.function_signature_parser import FunctionSignature, FunctionSignatureParser
-from confiture.core.git import GitRepository
+import pglast
+
+from confiture.core.ddl_walk import object_edits, object_kinds
+from confiture.core.function_body_checker import migration_sql
+from confiture.core.function_signature_drift import (
+    by_function,
+    declared_routines,
+    printed_arguments,
+    printed_signature,
+)
+from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.type_lattice import signature_from_type_names, signatures_match
 from confiture.exceptions import GitError
 
-_DROP_FUNC_RE = re.compile(
-    r"DROP\s+(?:FUNCTION|PROCEDURE)\s+.*?\(([^)]*)\)",
-    re.IGNORECASE | re.DOTALL,
-)
+if TYPE_CHECKING:
+    from confiture.core.git import GitRepository
+    from confiture.core.schema_model import Routine
 
 
 @dataclasses.dataclass
@@ -55,16 +65,10 @@ class FunctionSignatureChecker:
 
     Args:
         git_repo: GitRepository instance for reading file content at refs
-        parser: FunctionSignatureParser instance (created if not provided)
     """
 
-    def __init__(
-        self,
-        git_repo: GitRepository,
-        parser: FunctionSignatureParser | None = None,
-    ) -> None:
+    def __init__(self, git_repo: GitRepository) -> None:
         self._git = git_repo
-        self._parser = parser or FunctionSignatureParser()
 
     def check(
         self,
@@ -86,88 +90,98 @@ class FunctionSignatureChecker:
         """
         violations: list[FunctionSignatureViolation] = []
         for sql_file in changed_sql_files:
-            old_sigs = self._get_sigs_at_ref(sql_file, base_ref)
-            new_sigs = self._get_sigs_at_ref(sql_file, target_ref)
-            violations.extend(self._check_file(old_sigs, new_sigs, migration_file_paths))
+            old = self._routines_at_ref(sql_file, base_ref)
+            new = self._routines_at_ref(sql_file, target_ref)
+            violations.extend(self._check_file(old, new, migration_file_paths))
         return violations
 
-    def _get_sigs_at_ref(self, path: Path, ref: str) -> list[FunctionSignature]:
-        """Retrieve file content at git ref and parse signatures."""
+    def _routines_at_ref(self, path: Path, ref: str) -> list[Routine]:
+        """The routines *path* declares at *ref*; none when it did not exist there."""
         try:
             content = self._git.show_file_at_ref(path, ref)
         except GitError:
             return []
         if content is None:
             return []
-        return self._parser.parse(content)
+        return declared_routines(content)
 
     def _check_file(
         self,
-        old_sigs: list[FunctionSignature],
-        new_sigs: list[FunctionSignature],
+        old_routines: list[Routine],
+        new_routines: list[Routine],
         migration_files: list[Path],
     ) -> list[FunctionSignatureViolation]:
-        """Compare old vs new signatures; for each type change, check migrations."""
+        """Compare old vs new routines; for each type change, check migrations.
+
+        A file is read one function at a time: the last overload each declares
+        of a ``schema.name``, as a file that redefines a function in place does.
+        """
         violations: list[FunctionSignatureViolation] = []
+        new_by_fn = by_function(new_routines)
 
-        old_by_key = {sig.function_key(): sig for sig in old_sigs}
-        new_by_key = {sig.function_key(): sig for sig in new_sigs}
-
-        for fn_key, old_sig in old_by_key.items():
-            new_sig = new_by_key.get(fn_key)
-            if new_sig is None:
+        for fn_key, old_overloads in by_function(old_routines).items():
+            new_overloads = new_by_fn.get(fn_key)
+            if not new_overloads:
                 # Function deleted — not a violation (accompaniment check handles this)
                 continue
-            if old_sig.param_types == new_sig.param_types:
+            old, new = old_overloads[-1], new_overloads[-1]
+            if signatures_match(old.signature_key, new.signature_key):
                 # No type change — no violation
                 continue
 
             # Parameter types changed: need DROP FUNCTION(old_types) in a migration
-            if not self._migration_has_drop(old_sig, migration_files):
+            if not self._migration_has_drop(old, migration_files):
                 violations.append(
                     FunctionSignatureViolation(
                         function_key=fn_key,
-                        old_signature=old_sig.signature_key(),
-                        new_signature=new_sig.signature_key(),
+                        old_signature=printed_signature(old),
+                        new_signature=printed_signature(new),
                         migration_file=None,
                         message=(
                             f"Parameter type change for {fn_key} detected "
-                            f"({old_sig.param_types} -> {new_sig.param_types}) "
-                            f"but no DROP FUNCTION {old_sig.signature_key()} found in migrations."
+                            f"({printed_arguments(old)} -> {printed_arguments(new)}) "
+                            f"but no DROP FUNCTION {printed_signature(old)} found in migrations."
                         ),
                     )
                 )
 
         return violations
 
-    def _migration_has_drop(
-        self,
-        old_sig: FunctionSignature,
-        migration_files: list[Path],
-    ) -> bool:
-        """Return True if any migration file has DROP FUNCTION matching old_sig."""
+    def _migration_has_drop(self, old: Routine, migration_files: list[Path]) -> bool:
+        """Whether any migration drops *old* — its name and its argument types."""
         for mig_path in migration_files:
             try:
                 content = mig_path.read_text()
             except OSError:
                 continue
-            for match in _DROP_FUNC_RE.finditer(content):
-                dropped_args_raw = match.group(1)
-                dropped_types = self._parse_dropped_types(dropped_args_raw)
-                if dropped_types == old_sig.param_types:
+            for sql in migration_sql(mig_path, content):
+                if _drops(sql, old):
                     return True
         return False
 
-    def _parse_dropped_types(self, args_raw: str) -> tuple[str, ...]:
-        """Parse the type list from a DROP FUNCTION(...) argument string."""
-        if not args_raw.strip():
-            return ()
-        types = []
-        for raw_arg in args_raw.split(","):
-            arg = raw_arg.strip()
-            if not arg:
-                continue
-            # DROP FUNCTION takes type-only args (no names), but may have schema: public.integer
-            # Normalise each token
-            types.append(self._parser._normalise_type(arg))
-        return tuple(types)
+
+def _drops(sql: str, routine: Routine) -> bool:
+    """Whether *sql* holds a ``DROP FUNCTION`` / ``PROCEDURE`` / ``ROUTINE`` of *routine*.
+
+    A drop that names no argument list drops the one routine of that name, so it
+    counts; a schema the drop leaves off matches any, as PostgreSQL resolves it
+    through ``search_path``. A migration pglast rejects drops nothing here; the
+    migration's own checks report it.
+    """
+    try:
+        statements = pglast.parse_sql(sql) or ()
+    except pglast.parser.ParseError:
+        return False
+    schema = routine.schema or DEFAULT_SCHEMA
+    return any(
+        edit.kind == "drop"
+        and routine.kind in object_kinds(edit.object_kind)
+        and edit.name == routine.name
+        and edit.schema in (None, schema)
+        and (
+            edit.arg_types is None
+            or signatures_match(signature_from_type_names(edit.arg_types), routine.signature_key)
+        )
+        for raw in statements
+        for edit in object_edits(raw.stmt)
+    )

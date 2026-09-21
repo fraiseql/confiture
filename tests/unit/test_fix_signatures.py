@@ -125,7 +125,7 @@ class TestFixSignaturesDryRun:
                 "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
+            patch("confiture.core.live_catalog.routines") as MockIntrospector,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 return_value=_CLEAN_REPORT,
@@ -161,7 +161,7 @@ class TestFixSignaturesDryRun:
                 "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
+            patch("confiture.core.live_catalog.routines") as MockIntrospector,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 return_value=_DRIFT_REPORT,
@@ -201,7 +201,7 @@ class TestFixSignaturesDryRun:
                 "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
+            patch("confiture.core.live_catalog.routines") as MockIntrospector,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 return_value=_DRIFT_REPORT,
@@ -244,7 +244,7 @@ class TestFixSignaturesApply:
                 "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
+            patch("confiture.core.live_catalog.routines") as MockIntrospector,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 side_effect=[_DRIFT_REPORT, _CLEAN_REPORT],
@@ -282,7 +282,7 @@ class TestFixSignaturesApply:
                 "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 _make_conn_mock(),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
+            patch("confiture.core.live_catalog.routines") as MockIntrospector,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 side_effect=[_DRIFT_REPORT, _DRIFT_REPORT],
@@ -328,7 +328,7 @@ class TestFixSignaturesApply:
                 "confiture.cli.commands.migrate.fix_signatures.open_connection",
                 MagicMock(return_value=cm),
             ),
-            patch("confiture.core.live_function_catalog.FunctionIntrospector") as MockIntrospector,
+            patch("confiture.core.live_catalog.routines") as MockIntrospector,
             patch(
                 "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
                 return_value=_DRIFT_REPORT,

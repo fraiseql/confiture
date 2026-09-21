@@ -15,8 +15,7 @@ import psycopg
 import pytest
 
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
-from confiture.core.function_signature_parser import FunctionSignatureParser
-from confiture.core.live_function_catalog import LiveFunctionCatalog
+from confiture.core.function_signature_drift import declared_routines, live_routines
 
 # The committed source — what the repo believes the function body is.
 _SOURCE_SQL = """
@@ -66,19 +65,12 @@ def test_body_drift_unified_diff_from_live_prosrc(
 ) -> None:
     conn = _hotpatched_function
 
-    # Source side: parse the committed DDL into signature → body.
-    source_bodies = {
-        sig.signature_key(): body
-        for sig, body in FunctionSignatureParser().parse_with_bodies(_SOURCE_SQL)
-    }
-    assert "public.calc_total(numeric)" in source_bodies
+    # Source side: the committed DDL, read into the schema model.
+    declared = declared_routines(_SOURCE_SQL)
+    assert [routine.name for routine in declared] == ["calc_total"]
 
-    # Live side: read the real prosrc back out of the database.
-    live_bodies = LiveFunctionCatalog(conn).get_bodies(
-        schemas=["public"], sig_keys=set(source_bodies)
-    )
-
-    report = FunctionBodyDriftDetector().compare(source_bodies, live_bodies)
+    # Live side: the real prosrc, read back out of the database.
+    report = FunctionBodyDriftDetector().compare(declared, live_routines(conn, ["public"]))
 
     assert report.has_drift
     drift = report.body_drifts[0]

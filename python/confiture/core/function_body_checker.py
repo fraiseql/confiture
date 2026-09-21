@@ -7,8 +7,9 @@ without a migration that re-applies it will run the old body in migrate-only
 environments (staging/production) — silent prod↔source drift.
 
 Like the signature checker, this is **git-based and static (no database)**: it
-compares bodies between ``base_ref`` and ``target_ref`` and requires the change
-to be carried by a migration that re-defines the function. The complementary
+compares the routines a file declares at ``base_ref`` and at ``target_ref`` —
+the schema model's, read by the lint inventory — and requires a body change to
+be carried by a migration that re-defines the function. The complementary
 *runtime* guarantee — that the migration actually produces the intended body — is
 provided by ``migrate validate --check-body-replay`` (#179).
 """
@@ -21,15 +22,20 @@ from typing import TYPE_CHECKING
 
 import pglast.parser
 
+from confiture.core.function_body_drift import paired
 from confiture.core.function_body_normalizer import FunctionBodyNormalizer
-from confiture.core.function_signature_parser import FunctionSignatureParser
+from confiture.core.function_signature_drift import (
+    declared_routines,
+    function_key,
+    printed_signature,
+)
 from confiture.exceptions import GitError
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from confiture.core.function_signature_parser import FunctionSignature
     from confiture.core.git import GitRepository
+    from confiture.core.schema_model import Routine
 
 
 @dataclasses.dataclass
@@ -66,18 +72,15 @@ class FunctionBodyChecker:
 
     Args:
         git_repo: GitRepository for reading file content at refs.
-        parser: FunctionSignatureParser (created if not provided).
         normalizer: FunctionBodyNormalizer (created if not provided).
     """
 
     def __init__(
         self,
         git_repo: GitRepository,
-        parser: FunctionSignatureParser | None = None,
         normalizer: FunctionBodyNormalizer | None = None,
     ) -> None:
         self._git = git_repo
-        self._parser = parser or FunctionSignatureParser()
         self._normalizer = normalizer or FunctionBodyNormalizer()
 
     def check(
@@ -102,45 +105,44 @@ class FunctionBodyChecker:
         carried = self._functions_redefined_by_migrations(migration_file_paths)
         violations: list[FunctionBodyViolation] = []
         for sql_file in changed_sql_files:
-            old = self._bodies_at_ref(sql_file, base_ref)
-            new = self._bodies_at_ref(sql_file, target_ref)
+            old = self._routines_at_ref(sql_file, base_ref)
+            new = self._routines_at_ref(sql_file, target_ref)
             violations.extend(self._check_file(old, new, carried))
         return violations
 
-    def _bodies_at_ref(
-        self, path: Path, ref: str
-    ) -> dict[str, tuple[FunctionSignature, str | None]]:
-        """Return ``{signature_key: (sig, body)}`` for functions in *path* at *ref*."""
+    def _routines_at_ref(self, path: Path, ref: str) -> list[Routine]:
+        """The routines *path* declares at *ref*; none when it did not exist there."""
         try:
             content = self._git.show_file_at_ref(path, ref)
         except GitError:
-            return {}
+            return []
         if content is None:
-            return {}
-        return {
-            sig.signature_key(): (sig, body)
-            for sig, body in self._parser.parse_with_bodies(content)
-        }
+            return []
+        return declared_routines(content)
 
     def _check_file(
         self,
-        old: dict[str, tuple[FunctionSignature, str | None]],
-        new: dict[str, tuple[FunctionSignature, str | None]],
+        old: list[Routine],
+        new: list[Routine],
         carried: set[str],
     ) -> list[FunctionBodyViolation]:
+        """A routine both refs declare whose body changed and no migration carries.
+
+        A routine only one ref declares — added, dropped, or given new argument
+        types — is not a body change.
+        """
         violations: list[FunctionBodyViolation] = []
-        for sigkey, (sig, new_body) in new.items():
-            if sigkey not in old:
-                continue  # new overload/function — not a body change
-            _old_sig, old_body = old[sigkey]
+        for after, before in paired(new, old):
+            old_body, new_body = before.body, after.body
             if old_body is None or new_body is None:
                 continue  # C/internal — no extractable body to compare
             if self._normalizer.hash_body(old_body) == self._normalizer.hash_body(new_body):
                 continue  # body unchanged (modulo comments/whitespace/case)
 
-            fn_key = sig.function_key()
+            fn_key = function_key(after)
             if fn_key in carried:
                 continue  # a migration re-defines this function
+            sigkey = printed_signature(after)
 
             violations.append(
                 FunctionBodyViolation(
@@ -174,7 +176,7 @@ class FunctionBodyChecker:
     def _functions_redefined_by_migrations(self, migration_files: list[Path]) -> set[str]:
         """Return the set of ``function_key`` re-defined by any migration file.
 
-        Reuses :meth:`FunctionSignatureParser.parse_with_bodies` so a
+        Read by the lint inventory, as the source is, so a
         ``CREATE [OR REPLACE] FUNCTION`` in a ``.sql`` migration — or inside a
         ``self.execute("…")`` string in a ``.py`` migration — is detected the same
         way, with the same schema-qualification/quoting handling as the source.
@@ -185,18 +187,18 @@ class FunctionBodyChecker:
                 content = mig_path.read_text()
             except OSError:
                 continue
-            for sql in _sql_units(mig_path, content):
+            for sql in migration_sql(mig_path, content):
                 try:
-                    pairs = self._parser.parse_with_bodies(sql)
+                    routines = declared_routines(sql)
                 except pglast.parser.ParseError:
                     # A migration pglast rejects carries nothing here; the
                     # migration's own checks report it as unparseable.
                     continue
-                carried.update(sig.function_key() for sig, _body in pairs)
+                carried.update(function_key(routine) for routine in routines)
         return carried
 
 
-def _sql_units(path: Path, content: str) -> list[str]:
+def migration_sql(path: Path, content: str) -> list[str]:
     """The SQL a migration file carries: the file itself, or a ``.py`` file's snippets."""
     if path.suffix != ".py":
         return [content]
