@@ -404,12 +404,15 @@ people bring to one:
 ### Is this migration big enough to need `--batched`?
 
 ```bash
-confiture migrate estimate
-confiture migrate estimate --table users --table orders
+confiture migrate preflight --against postgresql://localhost/myapp_preflight
+confiture migrate preflight --against postgresql://localhost/myapp_preflight --format json
 ```
 
-Reads `pg_class` statistics — fast, no `COUNT(*)` — and shows which tables are
-large enough for `migrate up --batched` to be worth it.
+Against a copy of the database the migrations will run on, preflight names the
+tables they touch that hold 100,000 rows or more — `large_tables` in the JSON — from
+`pg_class` statistics (fast, no `COUNT(*)`), read before the replay. A table that was
+never analysed is listed with `estimated_rows: null`: unknown, not small. Those are
+the tables `migrate up --batched` is worth it for.
 
 ### Should these seeds load as VALUES or COPY?
 

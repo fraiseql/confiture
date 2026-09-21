@@ -31,14 +31,19 @@ from confiture.cli.options import (
 from confiture.config.environment import SshTunnelConfig
 from confiture.core import builder as _core_builder
 from confiture.core.connection import DatabaseError, load_config
-from confiture.core.function_body_drift import FunctionBodyDriftDetector
+from confiture.core.function_body_drift import FunctionBodyDriftDetector, paired
 from confiture.core.function_signature_drift import (
+    Definitions,
     FunctionSignatureDriftDetector,
+    by_function,
     declared_routines,
+    definition_of,
     live_routines,
+    matching,
+    printed_signature,
+    replacing_definitions,
     schemas_to_scan,
 )
-from confiture.core.linting.inventory import routine_source
 from confiture.error_codes import FINDINGS, USAGE, exit_code_of
 from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -141,8 +146,9 @@ def migrate_fix_signatures(
                 _render_clean(drift_report.summary(), format_output, output_file)
                 return
             # when check_body and no sig drift: fall through to body detection
+            definitions = replacing_definitions(source_sql)
             fix_blocks, missing_source = _plan_signature_fixes(
-                drift_report, source_sql, format_output
+                drift_report, declared, live, definitions, format_output
             )
             if not fix_blocks and not check_body:
                 error_console.print(
@@ -151,7 +157,7 @@ def migrate_fix_signatures(
                 )
                 raise typer.Exit(FINDINGS)
             body_fix_blocks, body_missing_source = _plan_body_fixes(
-                check_body, declared, live, source_sql, fix_blocks
+                check_body, declared, live, definitions
             )
             if not fix_blocks and not body_fix_blocks:
                 _render_clean(
@@ -280,21 +286,43 @@ def _render_clean(
 
 
 def _plan_signature_fixes(
-    drift_report: Any, source_sql: str, format_output: str
+    drift_report: Any,
+    declared: list[Routine],
+    live: list[Routine],
+    definitions: Definitions,
+    format_output: str,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """DROP + CREATE for each stale overload whose source definition exists."""
+    """DROP each stale overload, and CREATE the overloads of its function the database lacks.
+
+    An overload the database holds is not created again: for the deploy shape —
+    a migration's ``CREATE OR REPLACE f(bigint)`` left ``f(integer)`` beside it —
+    the drop is the whole fix, and ``create_sql`` is empty. Each lacking overload
+    is created once, in its function's first block. A stale overload whose
+    lacking overloads the source cannot render is skipped: dropping it would leave
+    the function undefined.
+    """
     fix_blocks: list[dict[str, Any]] = []
     missing_source: list[str] = []
+    declared_by_fn, live_by_fn = by_function(declared), by_function(live)
+    planned: set[str] = set()
     for overload in drift_report.stale_overloads:
-        create_sql = routine_source(source_sql, overload.schema, overload.name)
-        if create_sql is None:
+        fn_key = f"{overload.schema}.{overload.name}"
+        lacking = [
+            routine
+            for routine in declared_by_fn.get(fn_key, [])
+            if matching(routine, live_by_fn.get(fn_key, [])) is None
+            and printed_signature(routine) not in planned
+        ]
+        creates = [definition_of(definitions, routine) for routine in lacking]
+        if fn_key not in definitions or None in creates:
             missing_source.append(overload.stale_signature)
             continue
+        planned.update(printed_signature(routine) for routine in lacking)
         fix_blocks.append(
             {
                 "stale_signature": overload.stale_signature,
                 "drop_sql": overload.drop_sql,
-                "create_sql": create_sql,
+                "create_sql": ";\n".join(create for create in creates if create),
             }
         )
     if missing_source and format_output == "text":
@@ -311,10 +339,14 @@ def _plan_body_fixes(
     check_body: bool,
     declared: list[Routine],
     live: list[Routine],
-    source_sql: str,
-    fix_blocks: list[dict[str, Any]],
+    definitions: Definitions,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """``--check-body``: CREATE OR REPLACE for bodies that drifted (a DROP+CREATE already covers its function)."""
+    """``--check-body``: CREATE OR REPLACE for each body that drifted.
+
+    A drifted body belongs to an overload both sides hold, which the signature
+    fixes never create, so the two plans cannot overlap. Its definition is the
+    declared routine the detector paired it with.
+    """
     if not check_body:
         return [], []
 
@@ -322,11 +354,12 @@ def _plan_body_fixes(
     body_fix_blocks: list[dict[str, Any]] = []
     body_missing_source: list[str] = []
     if body_report.has_drift:
-        stale_fn_keys = {b["stale_signature"].split("(")[0] for b in fix_blocks}
+        declared_twin = {
+            printed_signature(actual): expected for expected, actual in paired(declared, live)
+        }
         for drift in body_report.body_drifts:
-            if f"{drift.schema}.{drift.name}" in stale_fn_keys:
-                continue
-            create_sql = routine_source(source_sql, drift.schema, drift.name)
+            expected = declared_twin.get(drift.signature_key)
+            create_sql = definition_of(definitions, expected) if expected else None
             if create_sql is None:
                 body_missing_source.append(drift.signature_key)
                 continue
@@ -344,7 +377,9 @@ def _render_fix_dry_run(
     format_output: str,
     output_file: Path | None,
 ) -> None:
-    combined_sql = "\n\n".join(f"{b['drop_sql']}\n{b['create_sql']}" for b in fix_blocks)
+    combined_sql = "\n\n".join(
+        "\n".join(part for part in (b["drop_sql"], b["create_sql"]) if part) for b in fix_blocks
+    )
     if format_output == "json":
         emit(
             {
@@ -387,12 +422,17 @@ def _apply_fix_blocks(
     conn: Any, fix_blocks: list[dict[str, Any]], body_fix_blocks: list[dict[str, Any]]
 ) -> None:
     """All fixes in one transaction; a failure rolls everything back."""
+    # The drift reads left a transaction open, and psycopg refuses to change
+    # ``autocommit`` inside one: end it first (nothing in it to keep), as
+    # rebuild's DDL pass does (#93).
+    conn.rollback()
     conn.autocommit = False
     try:
         with conn.cursor() as cur:
             for block in fix_blocks:
                 cur.execute(block["drop_sql"])
-                cur.execute(block["create_sql"])
+                if block["create_sql"]:
+                    cur.execute(block["create_sql"])
             for block in body_fix_blocks:
                 cur.execute(block["create_sql"])
         conn.commit()

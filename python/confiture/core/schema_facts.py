@@ -1,14 +1,16 @@
 """What a live database can tell preflight that migration files cannot (issue #199).
 
 Preflight is a filesystem-only check by design, and that stays the primary path:
-everything here is **strictly additive**. Two facts are worth a connection when
-one is already open, because neither is recoverable from the migration SQL:
+everything here is **strictly additive**. Three facts are worth a connection when
+one is already open, because none is recoverable from the migration SQL:
 
 * **The current column type.** ``ALTER TABLE … ALTER COLUMN … TYPE bigint`` names
   the target and never the source, so without the database confiture cannot tell
   a widening from a narrowing — and so, honestly, emits no risk tier at all.
 * **The server version.** Two rows of the lock table changed with a PostgreSQL
   release. Knowing the version turns the conservative reading into the true one.
+* **How many rows each table holds**, as the planner estimates it — which of the
+  tables a migration touches are large enough for ``migrate up --batched``.
 
 Collection never raises: a database that refuses the introspection query yields
 empty facts, and every consumer degrades to the static answer. Losing the
@@ -40,6 +42,11 @@ class SchemaFacts:
     column_types: Mapping[str, str] = field(default_factory=dict)
     """``schema.table.column`` (case-folded) → the column's current type."""
 
+    row_estimates: Mapping[str, int | None] | None = None
+    """``schema.table`` → the planner's row estimate, ``None`` for a table never
+    analysed; the mapping itself is ``None`` when it was not read, so "no large
+    table" is never said of a database nobody asked."""
+
     def column_type(self, qualified: str | None) -> str | None:
         """The current type of ``schema.table.column``, or ``None`` if unknown."""
         if not qualified:
@@ -48,7 +55,11 @@ class SchemaFacts:
 
     def __bool__(self) -> bool:
         """False when nothing was learned, so callers can skip the refined path."""
-        return self.server_version is not None or bool(self.column_types)
+        return (
+            self.server_version is not None
+            or bool(self.column_types)
+            or self.row_estimates is not None
+        )
 
 
 def collect_schema_facts(conn: Any) -> SchemaFacts:
@@ -60,6 +71,7 @@ def collect_schema_facts(conn: Any) -> SchemaFacts:
     return SchemaFacts(
         server_version=_server_version(conn),
         column_types=_column_types(conn),
+        row_estimates=_row_estimates(conn),
     )
 
 
@@ -97,6 +109,17 @@ def _column_types(conn: Any) -> dict[str, str]:
         return live_catalog.column_types(conn)
     except Exception:  # Reason: schema facts are advisory; any failure to read them means 'unknown', never a preflight error
         return {}
+
+
+def _row_estimates(conn: Any) -> dict[str, int | None] | None:
+    """Every user table's row estimate, as ``large_tables`` reads it; ``None`` if unread."""
+    # Reason: start-up — the no-database path never reads the catalog, and large_tables imports psycopg
+    from confiture.core.large_tables import row_estimates
+
+    try:
+        return row_estimates(conn)
+    except Exception:  # Reason: schema facts are advisory; any failure to read them means 'unknown', never a preflight error
+        return None
 
 
 def _scalar(conn: Any, sql: str) -> object | None:

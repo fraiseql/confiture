@@ -135,7 +135,11 @@ class SeedExecutor:
             cursor.execute(f"RELEASE SAVEPOINT {name}")
 
     def _rollback_to_savepoint(self, name: str) -> None:
-        """Rollback to a savepoint (undo nested transaction).
+        """Undo this file's statements and nothing before them.
+
+        The transaction stays open: it is the caller's, and committing it here
+        kept every file before a failure and none after it — while a run with no
+        failure committed nothing at all.
 
         Args:
             name: Name of savepoint to rollback to
@@ -143,7 +147,6 @@ class SeedExecutor:
         try:
             with self.connection.cursor() as cursor:
                 cursor.execute(f"ROLLBACK TO SAVEPOINT {name}")
-            self.connection.commit()
         except psycopg.Error:
             # Savepoint rollback failed, do full rollback
             self.connection.rollback()

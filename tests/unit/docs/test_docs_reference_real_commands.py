@@ -35,6 +35,7 @@ from command_truth import (
     WORD,
     findings,
     invocations,
+    logical_lines,
     resolve,
     tracked,
 )
@@ -129,3 +130,19 @@ def test_the_guard_would_catch_these(fictional: str, reason: str) -> None:
     }
     bad = [f for f in FLAG.findall(fictional) if f not in NOT_OURS and f not in declared]
     assert bad, f"{fictional!r} now resolves cleanly, but should not ({reason})"
+
+
+def test_a_flag_on_a_continuation_line_is_read() -> None:
+    """Read line by line, the guard never saw a flag after a ``\\``: that is how
+    ``confiture build --copy-format`` — a flag ``build`` has never had — lived in two
+    guides. The command is one logical line."""
+    (line,) = logical_lines("confiture build \\\n  --sequential \\\n  --copy-format\n")
+
+    assert "--copy-format" in FLAG.findall(line)
+
+
+def test_a_flag_inside_a_subshell_is_not_ours() -> None:
+    """``$(git diff --name-only)`` inside a command line runs git, not confiture."""
+    (line,) = logical_lines("confiture lint --env $(git diff --name-only | head -1)\n")
+
+    assert "--name-only" not in FLAG.findall(line)

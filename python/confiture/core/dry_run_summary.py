@@ -16,7 +16,6 @@ import psycopg
 
 from confiture.core import large_tables as _core_large_tables
 from confiture.core.change_set import ChangeEntry, build_change_set
-from confiture.core.ledger import split_qualified_table
 from confiture.core.migrator import discover_migration_files, parse_migration_filename
 from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.sql_lexer import split_statements
@@ -27,16 +26,20 @@ SAFE_LINE = "✓ All migrations appear safe to execute"
 
 
 def row_estimator(connection: Any) -> RowEstimator:
-    """``table -> estimated rows`` from ``pg_class.reltuples``; None when unknown."""
+    """``target -> estimated rows`` of the table a change-set target names; None when unknown.
 
-    estimator = _core_large_tables.TableSizeEstimator(connection)
+    Read once, by ``schema.table``: it looked each table up by its bare name, so the
+    estimate of ``tenant.t`` could be ``public.t``'s.
+    """
+    try:
+        estimates = _core_large_tables.row_estimates(connection)
+    except psycopg.Error:
+        estimates = {}
 
-    def estimate(table: str) -> int | None:
-        try:
-            value = estimator.get_row_count_estimate(split_qualified_table(table)[1])
-        except (psycopg.Error, ValueError):
-            return None
-        return value if value > 0 else None
+    def estimate(target: str) -> int | None:
+        table = _core_large_tables.table_of(target)
+        value = estimates.get(table) if table else None
+        return value or None
 
     return estimate
 

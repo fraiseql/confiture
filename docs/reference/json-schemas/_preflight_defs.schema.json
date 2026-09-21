@@ -324,6 +324,31 @@
           "description": "Present only when status == \"skipped\". Identifies why the check didn't run (e.g. \"no_preflight_db\", \"no_pglast\")."
         }
       }
+    },
+    "LargeTables": {
+      "type": "array",
+      "description": "The existing tables the pending migrations touch that are at or past the `migrate up --batched` threshold (100,000 rows), or that were never analysed (`estimated_rows: null`), sorted by table. Read from the --against database before the replay, from the planner's estimate (`pg_class.reltuples`), never counted. Absent when the estimates could not be read; an empty array means they were read and no touched table is large. Replaces `migrate estimate` (1.16.0).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "table",
+          "estimated_rows"
+        ],
+        "properties": {
+          "table": {
+            "type": "string",
+            "description": "`schema.table`."
+          },
+          "estimated_rows": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The planner's estimate; null for a table never analysed."
+          }
+        }
+      }
     }
   }
 }

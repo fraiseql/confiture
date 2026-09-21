@@ -16,6 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- ⚠️ **`seed apply` applies; `--sequential` is gone from it.** Without the flag the
+  command printed a hint and exited 0 having applied nothing, so `seed apply --env x`
+  in a script reported success over an empty database. Applying each file in order,
+  in one transaction with a savepoint per file, is now simply what it does (owner
+  decision 14); `--sequential` is refused, with no alias, as decision 3's flags were.
+  `build --sequential` is unchanged. Seven guides and `seed benchmark`'s help showed
+  the flag; they show the command.
+- ⚠️ **`migrate estimate` is gone; `migrate preflight --against` names the large tables
+  instead.** The command had failed on every run since at least 0.49 — it built its
+  estimator inside `with open_connection(…)` and read after the block closed the
+  connection — so no caller can have depended on it (owner decision 13). It also looked
+  a table up by its bare name, listed only `public` by default, and printed a table
+  never analysed as "0 rows, Standard migration OK": on printoptim's database the only
+  two tables past its 100,000-row threshold are in `tenant` and `stat_transformed`.
+  `TableSizeEstimator.all_tables`, which only it called, goes with it. No alias.
 - ⚠️ **"Do not act" has one spelling; a command that previews by default takes
   `--mode`.** Six spellings asked for a preview. A command now either acts by default
   and takes `--dry-run`, or previews by default and takes `--mode`, whose default only
@@ -34,6 +49,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`migrate preflight --against` names the large tables the migrations touch.** Its
+  JSON gains `large_tables` — each existing table a pending migration touches that
+  holds 100,000 rows or more, or that was never analysed (`estimated_rows: null`),
+  as `schema.table` — and the text report lists them under "consider `migrate up
+  --batched`". The estimate is the planner's (`pg_class.reltuples`), read from the
+  target before the replay alongside the other schema facts
+  (`SchemaFacts.row_estimates`, `core.large_tables.row_estimates`); absent when it
+  could not be read, so an empty list always means "read, and none is large".
+  `migrate-preflight-against.schema.json` declares it.
 - **The six options most commands take are declared once each.** `--config` was
   declared 38 times in four spellings with three defaults, `--output` 20 times and
   twice without `-o`. `cli/options.py` has `config_option`, `env_option`,
@@ -92,6 +116,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`debug` and `mcp` are experimental, and say so.** Their `--help` opens with
+  "Experimental:", and the CLI reference says what that means: shipped, run against a
+  database in CI (`tests/integration/test_experimental_commands.py`), and free to change
+  its options and output in any release without a deprecation.
+  `tests/unit/test_experimental_commands.py` holds the list, each entry with its reason,
+  and fails on a command that calls itself experimental without being on it.
+  `mcp --port`'s help said "not yet implemented"; it serves HTTP with the `[mcp-http]`
+  extra.
 - **One module per command.** `cli/commands/schema.py` (1,848 lines at the start of
   this release) held `init`, `build`, `lint`, `lint-unified` and `introspect`; each is
   now its own module, the largest `build.py` at 651 lines. `--project-dir`, which
@@ -104,7 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   idempotency verdict — status, pass, exit — and the report collector
   (`core/idempotency/verdict.py`, `collect.py`), `lint`'s rule selection and the
   rules that read a file tree (`core/linting/selection.py`), `fix-signatures`'
-  routine lookup (`core.linting.inventory.routine_source`) and `init`'s project
+  routine lookup (`core.function_signature_drift.replacing_definitions`) and `init`'s project
   files, now templates under `core/scaffold/templates/` written by
   `core.scaffold.project.scaffold`.
 - **`cli/` imports no database driver and no parser.** Twelve modules imported
@@ -184,11 +216,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`seed apply`, `build --sequential` and `migrate rebuild --seed` leave their rows in
+  the database.** None did. The applier runs every file in its caller's
+  transaction (`seed.transaction_mode: savepoint`, the default) and none of the three
+  callers committed it, so each reported its files applied and closed a connection
+  that rolled them back — while a failed file *did* commit every file before it,
+  because rolling back to its savepoint also committed. Now the savepoint rollback
+  leaves the transaction open and whoever opened the connection commits it: a clean
+  run keeps every file, a failure keeps none, and `--continue-on-error` keeps the
+  files that applied. The library tests each committed for themselves, which is how
+  all three passed; `tests/integration/test_seed_commands_persist.py` and
+  `test_rebuild.py` read the rows back on a connection of their own.
+- **`build --sequential` applies the seed files the build selected.** It pointed the
+  applier at the first seed file's *grandparent* (`db/` for `db/seeds/x.sql`), whose
+  top-level `*.sql` is usually nothing, so it printed "No seed files found" and
+  "Applied 0 seed files". The applier now takes the build's own selection, in the
+  build's order.
+- **A seed pass prints its progress on standard error under `--format json`.**
+  `seed apply --format json`, `build --sequential --format json` and
+  `migrate rebuild --seed --format json` each printed the applier's per-file lines
+  and summary ahead of the payload on standard output. The applier's own console is
+  standard error unless a caller gives it one.
+- **`migrate fix-signatures --mode apply` runs.** It failed on every database with
+  "can't change 'autocommit' now": the drift reads opened a transaction and the fix
+  switched the connection's mode inside it. The unit tests handed it a connection
+  already in autocommit, which no real one is. It ends the read transaction first.
+- **`migrate fix-signatures` plans SQL that applies.** Three shapes failed, all of them
+  in the routine goldens it was recorded against:
+  - a stale overload beside the current one — the shape a deploy leaves, a
+    migration's `CREATE OR REPLACE f(bigint)` beside `f(integer)` — re-ran the
+    source's `CREATE FUNCTION f(bigint)`, "already exists". A fix now creates only the
+    source overloads the database lacks, each once; when it has them all, the drop is
+    the whole fix and `create_sql` is empty.
+  - a body fix re-ran the author's `CREATE FUNCTION` over a routine that exists. The
+    statement is now `ddl_objects`' re-appliable rendering — `CREATE OR REPLACE`, the
+    body verbatim, the author's leading comments no longer carried — and for a routine
+    the tree defines twice it is the last definition, the one the build leaves.
+  - a stale **procedure** was dropped with `DROP FUNCTION` ("… is not a function"); it
+    is `DROP PROCEDURE` now, in `migrate validate --check-signatures`'
+    `remediation_sql` too.
+
+  `tests/integration/test_fix_signatures.py` runs `--mode apply` against a database.
+  The routine goldens' plans change accordingly (`drift.fix-signatures*.json`).
 - **`migrate fix-signatures` finds a routine by its identity.** It matched
   `CREATE … FUNCTION [schema.]name(` with a regex, so an unqualified definition
   matched a stale overload in any schema; it now asks the inventory, where an
-  unqualified name lives in the default schema (#313). The statement it executes is
-  still the author's text.
+  unqualified name lives in the default schema (#313).
+- **The docs guard reads a command written over several lines.** It matched each line
+  on its own, so no flag after a `\` continuation was ever checked; joined, it found
+  fifteen that do not exist — `build --copy-format`, `--copy-threshold` and
+  `--progress` in the COPY guides (the COPY load is `seed apply`'s, as the guides'
+  own index said), `migrate up --statement-timeout` in the runbook, and a PRD example
+  of `migrate schema-to-schema --from/--to/--execute`, which is
+  `migrate schema-to-schema migrate --source … --target … --mapping …`. A `$(…)` inside a command line runs another program, and its
+  flags are no longer read as confiture's.
+- **`migrate up --dry-run`'s `estimated_rows` is the touched table's own.** It asked
+  for each table by its bare name, so `tenant.t` could be given `public.t`'s estimate,
+  and a change to a column (`schema.table.column`) failed the name split and was
+  always `null`. It reads every table's estimate once, by `schema.table`.
+  `TableSizeEstimator.get_row_count_estimate` resolves its argument as PostgreSQL does
+  (`to_regclass`), so a qualified name finds its table.
 - **`confiture init`'s `local.yaml` names `confiture install-helpers`.** It said
   `confiture admin install-helpers`, a command that does not exist.
 - ⚠️ **`seed generate --env` is `--seed-env`.** It never named an environment: it
@@ -200,12 +287,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`migrate baseline --from-db` no longer prints the source DSN's password.** The
   "Baseline from …" line printed the DSN as given; it is redacted now, as every other
   printed URL is.
-- ⚠️ **A missing config file exits 5 in `migrate fix-signatures` and
-  `migrate estimate`, as in every other command.** Both exited 2 — the "no
-  ledger" integer — and printed a line of their own; they now raise `CONFIG_004`
-  through the error boundary, which also gives them the JSON envelope under
-  `--format json`. `fix-signatures`' catch-all failure exits 1 (was 2). Neither
-  command has a known caller.
+- ⚠️ **A missing config file exits 5 in `migrate fix-signatures`, as in every
+  other command.** It exited 2 — the "no ledger" integer — and printed a line of its
+  own; it now raises `CONFIG_004` through the error boundary, which also gives it the
+  JSON envelope under `--format json`. Its catch-all failure exits 1 (was 2). It has
+  no known caller.
 - **`seed generate --format json` exits 1 when generation failed.** The text
   format did; the JSON format emitted `success: false` and exited 0.
 - **`--dry-run-execute` stops where `up` stops.** The copied loop never looked at

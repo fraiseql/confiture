@@ -272,3 +272,31 @@ def test_an_absent_change_set_still_validates(schemas_dir):
 def test_the_schema_rejects_shapes_confiture_must_never_emit(change_set, schemas_dir):
     with pytest.raises(ValidationError):
         _validator(schemas_dir).validate(_payload_with(change_set))
+
+
+def test_large_tables_validates_and_constrains(schemas_dir):
+    """The --against payload's ``large_tables`` (the fold of ``migrate estimate``)."""
+    validator = Draft202012Validator(
+        _load(schemas_dir, AGAINST_SCHEMA), registry=_build_registry(schemas_dir)
+    )
+    payload = {
+        "ok": True,
+        "window_safe": True,
+        "summary": {
+            "errors": 0,
+            "warnings": 0,
+            "info": 0,
+            "migrations_checked": 1,
+            "db_consumed": False,
+        },
+        "issues": [],
+        "large_tables": [
+            {"table": "app.tb_fresh", "estimated_rows": None},
+            {"table": "tenant.tb_stat", "estimated_rows": 196960},
+        ],
+    }
+    validator.validate(payload)
+
+    payload["large_tables"][1]["estimated_rows"] = "196960"
+    with pytest.raises(ValidationError):
+        validator.validate(payload)

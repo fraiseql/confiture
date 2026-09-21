@@ -2840,28 +2840,6 @@ confiture migrate baseline [OPTIONS]
 
 <!-- END GENERATED: cli confiture migrate baseline -->
 
-### `confiture migrate estimate`
-
-Estimate row counts for tables to decide if --batched is needed.
-
-<!-- BEGIN GENERATED: cli confiture migrate estimate -->
-
-**Usage**
-
-```bash
-confiture migrate estimate [OPTIONS]
-```
-
-**Options**
-
-| Option | Short | Type | Default | Description |
-|---|---|---|---|---|
-| `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
-| `--table` | `-t` | str | - | Tables to estimate (default: all tables) |
-| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
-
-<!-- END GENERATED: cli confiture migrate estimate -->
-
 ### `confiture migrate fix`
 
 Auto-fix non-idempotent SQL in migrations.
@@ -3693,7 +3671,9 @@ confiture coordinate start [OPTIONS]
 
 ## `confiture debug`
 
-Debug SQL queries step by step.
+**Experimental.** Debug SQL queries step by step. Its options and its JSON may change
+in any release, without a deprecation; it is run against a database in every CI run
+(`tests/integration/test_experimental_commands.py`), but no caller depends on its shape.
 
 ### `confiture debug cte`
 
@@ -4071,7 +4051,10 @@ confiture lint-unified [OPTIONS] [files]...
 
 ## `confiture mcp`
 
-Run confiture as an MCP server.
+**Experimental.** Run confiture as an MCP server. Its options and the tools it exposes
+may change in any release, without a deprecation, as the Model Context Protocol does;
+it is run against a database in every CI run
+(`tests/integration/test_experimental_commands.py`).
 
 <!-- BEGIN GENERATED: cli confiture mcp -->
 
@@ -4089,7 +4072,7 @@ confiture mcp [OPTIONS] COMMAND [ARGS]...
 | `--schema` | `-s` | str | `public` | Schema to expose |
 | `--stdio` | - | Flag | off | Run in stdio mode (for Claude Code) |
 | `--include` | - | str | - | LIKE pattern to filter functions |
-| `--port` | - | int | - | HTTP port (not yet implemented) |
+| `--port` | - | int | - | Serve over HTTP on this port (needs the [mcp-http] extra) |
 | `--no-confiture-tools` | - | Flag | off | Disable built-in Confiture migration/introspection tools |
 
 <!-- END GENERATED: cli confiture mcp -->
@@ -4153,8 +4136,7 @@ confiture seed apply [OPTIONS]
 |---|---|---|---|---|
 | `--seeds-dir` | - | path | `db/seeds` | Directory containing seed files (default: db/seeds) |
 | `--env` | `-e` | str | `local` | Environment name: reads db/environments/<name>.yaml (default: local) |
-| `--sequential` | - | Flag | off | Apply files sequentially, solves 650+ row parser limits |
-| `--continue-on-error` | - | Flag | off | Continue if file fails (--sequential only, useful for CI/CD) |
+| `--continue-on-error` | - | Flag | off | Keep the files that apply when one fails (useful for CI/CD) |
 | `--database-url` | `-d` | str | - | Database URL (overrides environment config) |
 | `--copy-format` | - | Flag | off | Use COPY format (2-10x faster for large datasets) |
 | `--copy-threshold` | - | int | `1000` | Row threshold for auto COPY (default: 1000, use >1000 rows) |

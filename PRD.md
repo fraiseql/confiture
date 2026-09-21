@@ -266,11 +266,11 @@ confiture migrate diff old_schema.sql new_schema.sql --generate --name add_user_
 
 **US-8**: As a **DevOps engineer**, I want zero-downtime production migrations, so users experience no interruption.
 ```bash
-confiture migrate schema-to-schema \
-    --from production \
-    --to production_new \
-    --strategy fdw \
-    --execute
+confiture migrate schema-to-schema migrate \
+    --source production \
+    --target production_new \
+    --mapping db/mapping.yaml \
+    --strategy fdw
 ```
 
 **US-9**: As a **FraiseQL developer**, I want my GraphQL schema to generate SQL migrations, so schema and DB stay in sync.

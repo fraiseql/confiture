@@ -46,6 +46,7 @@ from confiture.core import ledger as _core_ledger
 from confiture.core.connection import DatabaseError, connect_url, load_config
 from confiture.core.cor_extractor import find_cor_targets_in_file
 from confiture.core.dependent_objects import DependentObjectsChecker
+from confiture.core.large_tables import large_tables
 from confiture.core.migrator import Migrator, MigratorSession, parse_migration_filename
 from confiture.core.schema_facts import SchemaFacts, collect_schema_facts
 from confiture.error_codes import FINDINGS, USAGE
@@ -256,6 +257,27 @@ def _display_change_set(change_set: Any, cons: Any) -> None:
         color = _CHANGE_SET_TIER_COLOR.get(change.tier.value, "yellow")
         cost = _lock_annotation(change.lock)
         cons.print(f"  [{color}]{change.tier.value}[/{color}] {change.kind} {change.object}{cost}")
+
+
+def _large_tables(change_set: Any, facts: SchemaFacts) -> list[Any] | None:
+    """The tables the change set touches that are large or unmeasured; ``None`` if unread."""
+    if facts.row_estimates is None:
+        return None
+    return large_tables((change.object for change in change_set.changes), facts.row_estimates)
+
+
+def _display_large_tables(large: list[Any], cons: Any) -> None:
+    """What ``migrate estimate`` answered, for the tables these migrations touch."""
+    if not large:
+        return
+    cons.print("Large tables these migrations touch — consider `migrate up --batched`:")
+    for table in large:
+        rows = (
+            "rows unknown (never analysed)"
+            if table.estimated_rows is None
+            else f"≈{table.estimated_rows:,} rows"
+        )
+        cons.print(f"  [yellow]{table.table}[/yellow] {rows}")
 
 
 def _lock_annotation(lock: Any) -> str:
@@ -628,14 +650,18 @@ def migrate_preflight(
     # #199: the same change set as the no-`--against` path, plus the refinements
     # the target database made possible (current column types, server version).
     change_set = build_change_set(migrations_dir, facts=run.facts)
+    large = _large_tables(change_set, run.facts)
     if format_type == "json":
         payload = _preflight_payload(all_issues, summary, change_set, exit_code)
+        if large is not None:
+            payload["large_tables"] = [table.to_dict() for table in large]
         if dependent_report is not None:
             payload["dependent_analysis"] = dependent_report.to_dict()
         emit(payload, output_file, console)
     else:
         _display_against_result(run.result, format_type, console)
         _display_change_set(change_set, console)
+        _display_large_tables(large or [], console)
         if dependent_report is not None:
             _display_dependent_analysis(dependent_report, console)
     if exit_code:

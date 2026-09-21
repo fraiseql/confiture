@@ -49,6 +49,9 @@
     "change_set": {
       "$ref": "_preflight_defs.schema.json#/$defs/ChangeSet"
     },
+    "large_tables": {
+      "$ref": "_preflight_defs.schema.json#/$defs/LargeTables"
+    },
     "dependent_analysis": {
       "$ref": "_preflight_defs.schema.json#/$defs/DependentAnalysis"
     }

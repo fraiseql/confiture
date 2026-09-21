@@ -121,8 +121,7 @@ confiture migrate up --dry-run --verify-checksums
 # Step 3: Apply with safety checks
 confiture migrate up \
   --verify-checksums \
-  --lock-timeout 60000 \
-  --statement-timeout 300000
+  --lock-timeout 60000
 ```
 
 ### Rolling Back Migrations
