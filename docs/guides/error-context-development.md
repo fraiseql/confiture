@@ -64,7 +64,6 @@ Add an entry to `ERROR_CONTEXTS` in `error_context.py`:
 # In confiture/core/error_context.py
 ERROR_CONTEXTS = {
     # ... existing contexts ...
-
     "YOUR_ERROR_CODE": ErrorContext(
         error_code="YOUR_ERROR_CODE",
         message="Brief message for users",
@@ -112,6 +111,7 @@ def test_detect_your_error(self):
     error = YourExceptionType("Error message with pattern")
     detected = _detect_error_context(error)
     assert detected == "YOUR_ERROR_CODE"
+
 
 def test_format_your_error(self):
     """Format your error properly."""
@@ -303,6 +303,7 @@ def test_detect_my_error(self):
     detected = _detect_error_context(error)
     assert detected == "MY_ERROR_CODE"
 
+
 def test_format_my_error(self):
     """Verify formatting includes all sections."""
     output = format_error_with_context("MY_ERROR_CODE")
@@ -346,24 +347,26 @@ EOF
 
 ❌ **Bad**:
 ```python
-docs_url="https://github.com/fraiseql/confiture",
+docs_url = ("https://github.com/fraiseql/confiture",)
 ```
 
 ✅ **Good**:
 ```python
-docs_url="https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#db_connection_failed",
+docs_url = (
+    "https://github.com/fraiseql/confiture/blob/main/docs/error-reference.md#db_connection_failed",
+)
 ```
 
 ### 2. Unclear Solutions
 
 ❌ **Bad**:
 ```python
-solutions=["Check the database", "Verify settings"]
+solutions = ["Check the database", "Verify settings"]
 ```
 
 ✅ **Good**:
 ```python
-solutions=[
+solutions = [
     "Verify PostgreSQL is running: pg_isready localhost",
     "Check DATABASE_URL: echo $DATABASE_URL",
 ]

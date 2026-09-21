@@ -684,6 +684,7 @@ else:
 
 # Get report as JSON for CI/CD
 import json
+
 print(json.dumps(report.to_dict()))
 ```
 

@@ -27,8 +27,9 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
     # pg_dump before every migration
     m.register_hook(
         HookPhase.BEFORE_EXECUTE,
-        BackupHook(BackupConfig(backup_dir=Path("backups"),
-                                database_url="postgresql://localhost/prod")),
+        BackupHook(
+            BackupConfig(backup_dir=Path("backups"), database_url="postgresql://localhost/prod")
+        ),
     )
     m.up()
 ```

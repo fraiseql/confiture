@@ -159,11 +159,11 @@ def can_convert_to_copy(self, insert_sql: str) -> tuple[bool, str | None]:
     if not isinstance(ast.expression, exp.Values):
         return False, "INSERT...SELECT cannot be converted"
 
-    if ast.args.get('conflict'):
+    if ast.args.get("conflict"):
         return False, "ON CONFLICT not compatible"
-    if ast.args.get('returning'):
+    if ast.args.get("returning"):
         return False, "RETURNING not compatible"
-    if ast.args.get('with_'):
+    if ast.args.get("with_"):
         return False, "CTE not compatible"
 
     if self._has_functions(ast.expression):
@@ -286,6 +286,7 @@ Quick reference for implementing migration:
 ```python
 from sqlglot import parse_one, exp
 
+
 def can_convert_insert_to_copy(insert_sql: str) -> bool:
     """Check if INSERT can be converted to COPY format."""
     try:
@@ -298,7 +299,7 @@ def can_convert_insert_to_copy(insert_sql: str) -> bool:
         return False
 
     # Cannot have these clauses
-    if ast.args.get('conflict') or ast.args.get('returning'):
+    if ast.args.get("conflict") or ast.args.get("returning"):
         return False
 
     # Cannot have functions

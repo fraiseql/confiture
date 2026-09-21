@@ -27,9 +27,7 @@ target_conn = psycopg.connect("postgresql://localhost/new_db")
 
 # Initialize migrator
 migrator = SchemaToSchemaMigrator(
-    source_connection=source_conn,
-    target_connection=target_conn,
-    foreign_schema_name="old_schema"
+    source_connection=source_conn, target_connection=target_conn, foreign_schema_name="old_schema"
 )
 
 # Setup FDW
@@ -42,15 +40,13 @@ migrator.migrate_table(
     column_mapping={
         "id": "id",
         "full_name": "display_name",  # Rename column
-        "email": "email"
-    }
+        "email": "email",
+    },
 )
 
 # Verify migration
 results = migrator.verify_migration(
-    tables=["users"],
-    source_schema="old_schema",
-    target_schema="public"
+    tables=["users"], source_schema="old_schema", target_schema="public"
 )
 
 for table, result in results.items():
@@ -120,9 +116,9 @@ Column mapping supports:
 
 ```python
 column_mapping = {
-    "id": "id",                    # Keep same
-    "full_name": "display_name",   # Rename
-    "email": "email",              # Keep same
+    "id": "id",  # Keep same
+    "full_name": "display_name",  # Rename
+    "email": "email",  # Keep same
     # created_at not in mapping = not migrated
 }
 ```

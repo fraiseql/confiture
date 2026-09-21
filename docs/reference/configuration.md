@@ -146,15 +146,16 @@ confiture migrate up --config db/environments/production.yaml
 import yaml
 import boto3
 
+
 def load_config_with_secrets(env_name: str):
     # Load base config
     with open(f"db/environments/{env_name}.yaml") as f:
         config = yaml.safe_load(f)
 
     # Inject secret from AWS Secrets Manager
-    client = boto3.client('secretsmanager')
-    secret = client.get_secret_value(SecretId=f'confiture/{env_name}/database_url')
-    config['database_url'] = secret['SecretString']
+    client = boto3.client("secretsmanager")
+    secret = client.get_secret_value(SecretId=f"confiture/{env_name}/database_url")
+    config["database_url"] = secret["SecretString"]
 
     return config
 ```

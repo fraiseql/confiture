@@ -124,6 +124,7 @@ CREATE TABLE users (
 ```python
 from fraiseql import fraise_type
 
+
 @fraise_type
 class User:
     id: str  # GraphQL ID! → PostgreSQL UUID
@@ -289,11 +290,7 @@ class Comment:
     # Foreign keys
     post_id: str = Field(foreign_key="Post.id", index=True)
     author_id: str = Field(foreign_key="User.id", index=True)
-    parent_comment_id: Optional[str] = Field(
-        foreign_key="Comment.id",
-        index=True,
-        nullable=True
-    )
+    parent_comment_id: Optional[str] = Field(foreign_key="Comment.id", index=True, nullable=True)
 
     # Content
     content: str
@@ -633,9 +630,7 @@ async def lifespan(app: FastAPI):
 
     # Startup: Create database pool
     db_pool = await asyncpg.create_pool(
-        "postgresql://postgres:postgres@localhost/fraiseql_blog",
-        min_size=5,
-        max_size=20
+        "postgresql://postgres:postgres@localhost/fraiseql_blog", min_size=5, max_size=20
     )
     print("✓ Database connection pool created")
 
@@ -651,7 +646,7 @@ app = FastAPI(
     title="FraiseQL Blog API",
     description="Blog API with FraiseQL + Confiture",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 
@@ -669,11 +664,7 @@ app.include_router(graphql_app, prefix="/graphql")
 @app.get("/")
 async def root():
     """Root endpoint with API info."""
-    return {
-        "name": "FraiseQL Blog API",
-        "graphql": "/graphql",
-        "health": "/health"
-    }
+    return {"name": "FraiseQL Blog API", "graphql": "/graphql", "health": "/health"}
 
 
 @app.get("/health")
@@ -689,6 +680,7 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
 ```
 
@@ -1013,7 +1005,6 @@ class User:
         constraints = [
             # Email must contain @
             "CHECK (email LIKE '%@%')",
-
             # Username length
             "CHECK (LENGTH(username) >= 3 AND LENGTH(username) <= 30)",
         ]
@@ -1081,6 +1072,7 @@ and the build happily produces a schema with no tables in it. The types below
 should have a matching table in `db/schema/10_tables/`:
 ```python
 from fraiseql import fraise_type
+
 
 @fraise_type  # Don't forget this!
 class User:
