@@ -17,7 +17,7 @@ from psycopg import sql as pgsql
 
 from confiture.core import live_catalog
 from confiture.core._migrator.discovery import parse_migration_filename
-from confiture.core.ledger import VALID_TABLE_RE, table_identifier
+from confiture.core.ledger import VALID_TABLE_RE, LedgerRow, record_migration, table_identifier
 from confiture.exceptions import MigrationError
 
 if TYPE_CHECKING:
@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
 from confiture.core import builder as _core_builder
 from confiture.core import connection as _core_connection
-from confiture.core._migrator.apply import record_migration
 from confiture.core._migrator.baseline_copy import _select_rows_to_copy
 from confiture.core.checksum import compute_checksum
 from confiture.core.seed import applier as _core_seed_applier
@@ -130,13 +129,16 @@ def _insert_baseline_row(migrator: MigrationEngine, row: dict[str, Any], *, inde
     """Copy one ledger row from the source database (``baseline-from-db``)."""
 
     record_migration(
-        migrator,
-        version=row["version"],
-        name=row["name"],
-        execution_time_ms=row.get("execution_time_ms") or 0,
-        checksum=row.get("checksum"),
-        applied_at=row.get("applied_at"),
-        reason=f"{index:04d}_baseline_from_db",
+        migrator.connection,
+        migrator._table_ident,
+        LedgerRow(
+            version=row["version"],
+            name=row["name"],
+            execution_time_ms=row.get("execution_time_ms") or 0,
+            checksum=row.get("checksum"),
+            applied_at=row.get("applied_at"),
+            reason=f"{index:04d}_baseline_from_db",
+        ),
     )
 
 
@@ -200,11 +202,14 @@ def reinit(
             migration = migration_class(connection=migrator.connection)
 
             record_migration(
-                migrator,
-                version=migration.version,
-                name=migration.name,
-                checksum=compute_checksum(migration_file),
-                reason="reinit",
+                migrator.connection,
+                migrator._table_ident,
+                LedgerRow(
+                    version=migration.version,
+                    name=migration.name,
+                    checksum=compute_checksum(migration_file),
+                    reason="reinit",
+                ),
             )
             _, name = parse_migration_filename(migration_file.name)
             marked.append(

@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The ledger's one `INSERT` is `core.ledger.record_migration(connection, table,
+  LedgerRow(...))`.** The step runner's `migrate steps --resume` wrote it through the
+  migrator's internals.
 - **The migrator, the models, the config and the exceptions take part in no import
   cycle.** Over the imports that run — at module level *and* inside functions — two
   strongly connected components reached them: 23 modules through `_migrator/`
@@ -45,6 +48,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `ErrorSeverity` is defined in `confiture.models.error` (still importable from
   `confiture.exceptions`), so importing an error model no longer runs the migration
   runtime.
+
+### Fixed
+
+- **An `--online` migration runs its hooks and its preconditions.** The apply loop
+  handed a migration it could stage straight to the step runner and returned, past the
+  engine's `apply` — where the hooks run and the preconditions are asked. A
+  `BEFORE_EXECUTE` hook never fired for it, and a precondition that stopped the classic
+  apply let the online one run. Every migration now goes through one `ApplyPipeline`:
+  the gates every strategy shares (already applied, a body asked to run inside a
+  savepoint it would commit through, the preconditions), then the strategy —
+  `Transactional`, `Autocommit` or `Online` — which runs the body between its hooks and
+  records the ledger row. `tests/integration/test_every_strategy_reaches_hooks.py`
+  asserts the same hooks and the same precondition refusal of all three.
 
 ## [1.15.0] - 2026-09-21
 

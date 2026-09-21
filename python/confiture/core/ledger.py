@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import psycopg
@@ -422,3 +423,53 @@ def table_identifier(name: str) -> pgsql.Identifier:
     if schema is None:
         return pgsql.Identifier(base)
     return pgsql.Identifier(schema, base)
+
+
+@dataclass(frozen=True)
+class LedgerRow:
+    """One migration as the ledger records it.
+
+    ``reason`` marks a row that was not applied by ``up()`` (``baseline``,
+    ``reinit``, ``0003_baseline_from_db``); ``applied_by`` defaults to the
+    connection's ``current_user`` and ``applied_at`` to ``now()``.
+    """
+
+    version: str
+    name: str
+    execution_time_ms: int = 0
+    checksum: str | None = None
+    applied_by: str | None = None
+    applied_at: Any = None
+    reason: str | None = None
+
+
+def record_migration(connection: Any, table: pgsql.Composable, row: LedgerRow) -> None:
+    """The one INSERT into the ledger *table*, on *connection*.
+
+    ``slug`` is ``<name>_<version>_<timestamp>[_<reason>]`` — unique per row
+    because the version is, however many same-named migrations land in the
+    same second.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    slug = f"{row.name}_{row.version}_{timestamp}" + (f"_{row.reason}" if row.reason else "")
+    applied_by = row.applied_by
+    if applied_by is None:
+        found = connection.execute("SELECT current_user").fetchone()
+        applied_by = found[0] if found else None
+    with connection.cursor() as cursor:
+        cursor.execute(
+            pgsql.SQL("""
+            INSERT INTO {}
+                (id, slug, version, name, applied_at, execution_time_ms, checksum, applied_by)
+            VALUES (gen_random_uuid(), %s, %s, %s, COALESCE(%s, NOW()), %s, %s, %s)
+            """).format(table),
+            (
+                slug,
+                row.version,
+                row.name,
+                row.applied_at,
+                row.execution_time_ms,
+                row.checksum,
+                applied_by,
+            ),
+        )

@@ -28,6 +28,7 @@ from confiture.core._migrator import baseline as baseline_impl
 from confiture.core._migrator import discovery as discovery_impl
 from confiture.core._migrator import rollback as rollback_impl
 from confiture.core._migrator import state as state_impl
+from confiture.core._migrator.apply import ApplyPipeline, ApplyStage, Strategy
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
@@ -163,6 +164,7 @@ class MigrationEngine:
         *,
         commit: bool = True,
         applied_by: str | None = None,
+        strategy: Strategy | None = None,
     ) -> None:
         """Apply a migration and record it in the tracking table.
 
@@ -194,19 +196,36 @@ class MigrationEngine:
                 (issue #137). When None, defaults to the connection's
                 ``current_user``. ``migrate apply-as`` sets this explicitly
                 to the role argument.
+            strategy: How the body runs — ``apply.Online`` for
+                ``migrate up --online``; by default what the migration declares
+                (:func:`~confiture.core._migrator.apply.classic`).
 
         Raises:
             MigrationError: If migration fails or hooks fail
             PreconditionValidationError: If precondition validation fails
         """
-        apply_impl.apply(
-            self,
+        self._pipeline().apply(
             migration,
+            strategy or apply_impl.classic(migration),
             force=force,
             migration_file=migration_file,
             skip_preconditions=skip_preconditions,
             commit=commit,
             applied_by=applied_by,
+        )
+
+    def _pipeline(self) -> ApplyPipeline:
+        """The apply pipeline over this engine's connection, hooks and ledger."""
+        return ApplyPipeline(
+            ApplyStage(
+                connection=self.connection,
+                trigger_hook=self._trigger_hook,
+                record=self._record_migration,
+            ),
+            is_applied=self._is_applied,
+            validate=lambda migration: self._validate_preconditions(
+                migration, direction="up", preconditions=migration.up_preconditions
+            ),
         )
 
     def _validate_preconditions(
@@ -222,71 +241,13 @@ class MigrationEngine:
         """
         apply_impl.validate_preconditions(self, migration, direction, preconditions)
 
-    def _apply_transactional(
-        self,
-        migration: Migration,
-        already_applied: bool,
-        migration_file: Path | None = None,
-        *,
-        commit: bool = True,
-        applied_by: str | None = None,
-    ) -> None:
-        """Apply migration within a transaction using savepoints.
-
-        Args:
-            migration: Migration instance to apply
-            already_applied: Whether migration was already applied (force mode)
-            migration_file: Path to migration file for checksum computation
-            commit: If False, suppress the final ``connection.commit()``. The
-                migration DDL and tracking-table row stay inside the caller's
-                outer transaction; the caller is responsible for either
-                committing or rolling back. Used by ``--dry-run-execute``,
-                whose outer SAVEPOINT would otherwise be discarded by COMMIT.
-            applied_by: PostgreSQL role to record in ``tb_confiture.applied_by``
-                (issue #137). When None, defaults to the connection's
-                ``current_user``.
-        """
-        apply_impl.apply_transactional(
-            self,
-            migration,
-            already_applied,
-            migration_file,
-            commit=commit,
-            applied_by=applied_by,
-        )
-
-    def _apply_non_transactional(
-        self,
-        migration: Migration,
-        already_applied: bool,
-        migration_file: Path | None = None,
-        *,
-        applied_by: str | None = None,
-    ) -> None:
-        """Apply migration in autocommit mode (no transaction).
-
-        WARNING: If this fails, manual cleanup may be required.
-
-        Args:
-            migration: Migration instance to apply
-            already_applied: Whether migration was already applied (force mode)
-            migration_file: Path to migration file for checksum computation
-        """
-        apply_impl.apply_non_transactional(
-            self,
-            migration,
-            already_applied,
-            migration_file,
-            applied_by=applied_by,
-        )
-
     def _create_savepoint(self, name: str) -> None:
         """Create a savepoint for transaction rollback."""
-        apply_impl.create_savepoint(self, name)
+        apply_impl.create_savepoint(self.connection, name)
 
     def _release_savepoint(self, name: str) -> None:
         """Release a savepoint (commit nested transaction)."""
-        apply_impl.release_savepoint(self, name)
+        apply_impl.release_savepoint(self.connection, name)
 
     def _rollback_to_savepoint(self, name: str, *, commit: bool = True) -> None:
         """Rollback to a savepoint (undo nested transaction).
@@ -294,7 +255,7 @@ class MigrationEngine:
         When ``commit`` is False the post-rollback commit/full-rollback are
         suppressed so the rollback stays nested in the caller's transaction.
         """
-        apply_impl.rollback_to_savepoint(self, name, commit=commit)
+        apply_impl.rollback_to_savepoint(self.connection, name, commit=commit)
 
     def _record_migration(
         self,
