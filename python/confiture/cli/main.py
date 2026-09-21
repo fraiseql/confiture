@@ -34,7 +34,6 @@ from confiture.cli.commands.migrate.baseline import migrate_baseline
 from confiture.cli.commands.migrate.current import migrate_current
 from confiture.cli.commands.migrate.diff import migrate_diff
 from confiture.cli.commands.migrate.down import migrate_down, migrate_down_to
-from confiture.cli.commands.migrate.estimate import migrate_estimate
 from confiture.cli.commands.migrate.fix import migrate_fix
 from confiture.cli.commands.migrate.fix_signatures import migrate_fix_signatures
 from confiture.cli.commands.migrate.generate import migrate_generate
@@ -226,7 +225,6 @@ migrate_app.command("up")(migrate_up)
 migrate_app.command("down")(migrate_down)
 migrate_app.command("down-to")(migrate_down_to)
 migrate_app.command("generate")(migrate_generate)
-migrate_app.command("estimate")(migrate_estimate)
 
 # Register migrate state commands
 migrate_app.command("baseline")(migrate_baseline)

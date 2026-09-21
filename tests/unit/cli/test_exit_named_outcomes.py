@@ -19,16 +19,6 @@ from confiture.core.seed.bridge import SeedGenerationResult
 runner = CliRunner()
 
 
-def test_estimate_missing_config_is_config_004(tmp_path: Path) -> None:
-    result = runner.invoke(
-        app,
-        ["migrate", "estimate", "--config", str(tmp_path / "nope.yaml"), "--format", "json"],
-    )
-
-    assert result.exit_code == 5
-    assert json.loads(result.stdout)["error"]["code"] == "CONFIG_004"
-
-
 def test_seed_generate_failure_exits_1_in_json_too(tmp_path: Path) -> None:
     """The result carries the failure in both formats; JSON exited 0 on it until 1.16."""
     failed = SeedGenerationResult(

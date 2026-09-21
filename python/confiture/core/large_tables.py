@@ -8,7 +8,7 @@ reporting, and resumable patterns.
 import logging
 import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -20,6 +20,73 @@ from confiture.core.ledger import split_qualified_table
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 
 logger = logging.getLogger(__name__)
+
+#: The row count from which ``migrate up --batched`` is worth advising.
+LARGE_TABLE_THRESHOLD = 100_000
+
+#: Every user table's planner estimate. PostgreSQL 14 records a table never
+#: analysed as ``reltuples = -1``.
+_ROW_ESTIMATES = """
+SELECT n.nspname, c.relname, c.reltuples::bigint
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind IN ('r', 'p')
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+  AND n.nspname NOT LIKE 'pg\\_%'
+"""
+
+
+def row_estimates(connection: Any) -> dict[str, int | None]:
+    """The planner's row estimate of every user table, by ``schema.table``.
+
+    ``None`` where the table was never analysed: reading ``-1`` as zero rows called
+    a table small because nobody had measured it. Qualified, because a table is its
+    ``(schema, name)`` (#313): ``migrate estimate`` looked tables up by name alone
+    and listed only ``public``, and printoptim's large tables are elsewhere.
+    """
+    with connection.cursor() as cur:
+        cur.execute(_ROW_ESTIMATES)
+        return {
+            f"{schema}.{name}": rows if rows >= 0 else None for schema, name, rows in cur.fetchall()
+        }
+
+
+def table_of(target: str) -> str | None:
+    """The ``schema.table`` a change-set target names, or ``None`` if it names none.
+
+    A target is ``schema.table``, ``schema.table.column`` or ``schema.table.index``.
+    """
+    schema, dot, rest = target.partition(".")
+    return f"{schema}.{rest.partition('.')[0]}" if dot else None
+
+
+@dataclass(frozen=True)
+class LargeTable:
+    """A table a migration touches that is large, or that nobody has measured."""
+
+    table: str
+    estimated_rows: int | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"table": self.table, "estimated_rows": self.estimated_rows}
+
+
+def large_tables(
+    targets: Iterable[str],
+    estimates: Mapping[str, int | None],
+    threshold: int = LARGE_TABLE_THRESHOLD,
+) -> list[LargeTable]:
+    """The existing tables among *targets* at or past *threshold* rows, or unmeasured.
+
+    A target that is not a table the database holds — a table the migration creates,
+    a function — has no rows to weigh and is left out. Sorted by table.
+    """
+    touched = sorted({table for target in targets if (table := table_of(target))})
+    return [
+        LargeTable(table, estimates[table])
+        for table in touched
+        if table in estimates and ((rows := estimates[table]) is None or rows >= threshold)
+    ]
 
 
 _SIMPLE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
@@ -755,7 +822,7 @@ class TableSizeEstimator:
     """
 
     # Threshold in rows for using batched operations
-    LARGE_TABLE_THRESHOLD = 100_000
+    LARGE_TABLE_THRESHOLD = LARGE_TABLE_THRESHOLD
 
     def __init__(self, connection: Any):
         """Initialize estimator.
@@ -771,42 +838,19 @@ class TableSizeEstimator:
         Uses pg_class statistics rather than COUNT(*).
 
         Args:
-            table: Table name
+            table: Table name, ``schema.``-qualified or resolved through
+                ``search_path`` as PostgreSQL resolves it
 
         Returns:
             Estimated row count
         """
         with self.connection.cursor() as cur:
             cur.execute(
-                """
-                SELECT reltuples::bigint
-                FROM pg_class
-                WHERE relname = %s
-            """,
+                "SELECT reltuples::bigint FROM pg_class WHERE oid = to_regclass(%s)",
                 (table,),
             )
             result = cur.fetchone()
             return max(0, result[0]) if result else 0
-
-    def all_tables(self, schema: str = "public") -> list[str]:
-        """List the base tables in *schema*, ordered by name.
-
-        Centralizes the ``pg_tables`` enumeration the ``migrate estimate``
-        command needs when no explicit tables are passed, keeping raw catalog
-        SQL out of the CLI layer (ARCH-L2).
-
-        Args:
-            schema: Schema to enumerate (default ``public``).
-
-        Returns:
-            Sorted list of table names in *schema*.
-        """
-        with self.connection.cursor() as cur:
-            cur.execute(
-                "SELECT tablename FROM pg_tables WHERE schemaname = %s ORDER BY tablename",
-                (schema,),
-            )
-            return [row[0] for row in cur.fetchall()]
 
     def get_exact_row_count(self, table: str, where_clause: str = "TRUE") -> int:
         """Get exact row count (slow but accurate).

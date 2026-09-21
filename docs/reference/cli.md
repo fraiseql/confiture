@@ -2840,28 +2840,6 @@ confiture migrate baseline [OPTIONS]
 
 <!-- END GENERATED: cli confiture migrate baseline -->
 
-### `confiture migrate estimate`
-
-Estimate row counts for tables to decide if --batched is needed.
-
-<!-- BEGIN GENERATED: cli confiture migrate estimate -->
-
-**Usage**
-
-```bash
-confiture migrate estimate [OPTIONS]
-```
-
-**Options**
-
-| Option | Short | Type | Default | Description |
-|---|---|---|---|---|
-| `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
-| `--table` | `-t` | str | - | Tables to estimate (default: all tables) |
-| `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
-
-<!-- END GENERATED: cli confiture migrate estimate -->
-
 ### `confiture migrate fix`
 
 Auto-fix non-idempotent SQL in migrations.

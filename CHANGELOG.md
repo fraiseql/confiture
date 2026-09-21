@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- ⚠️ **`migrate estimate` is gone; `migrate preflight --against` names the large tables
+  instead.** The command had failed on every run since at least 0.49 — it built its
+  estimator inside `with open_connection(…)` and read after the block closed the
+  connection — so no caller can have depended on it (owner decision 13). It also looked
+  a table up by its bare name, listed only `public` by default, and printed a table
+  never analysed as "0 rows, Standard migration OK": on printoptim's database the only
+  two tables past its 100,000-row threshold are in `tenant` and `stat_transformed`.
+  `TableSizeEstimator.all_tables`, which only it called, goes with it. No alias.
 - ⚠️ **"Do not act" has one spelling; a command that previews by default takes
   `--mode`.** Six spellings asked for a preview. A command now either acts by default
   and takes `--dry-run`, or previews by default and takes `--mode`, whose default only
@@ -34,6 +42,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`migrate preflight --against` names the large tables the migrations touch.** Its
+  JSON gains `large_tables` — each existing table a pending migration touches that
+  holds 100,000 rows or more, or that was never analysed (`estimated_rows: null`),
+  as `schema.table` — and the text report lists them under "consider `migrate up
+  --batched`". The estimate is the planner's (`pg_class.reltuples`), read from the
+  target before the replay alongside the other schema facts
+  (`SchemaFacts.row_estimates`, `core.large_tables.row_estimates`); absent when it
+  could not be read, so an empty list always means "read, and none is large".
+  `migrate-preflight-against.schema.json` declares it.
 - **The six options most commands take are declared once each.** `--config` was
   declared 38 times in four spellings with three defaults, `--output` 20 times and
   twice without `-o`. `cli/options.py` has `config_option`, `env_option`,
@@ -240,6 +257,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unqualified name lives in the default schema (#313).
 - **`seed apply` without `--sequential` names the environment in its hint.** It
   printed `--env {env}`.
+- **`migrate up --dry-run`'s `estimated_rows` is the touched table's own.** It asked
+  for each table by its bare name, so `tenant.t` could be given `public.t`'s estimate,
+  and a change to a column (`schema.table.column`) failed the name split and was
+  always `null`. It reads every table's estimate once, by `schema.table`.
+  `TableSizeEstimator.get_row_count_estimate` resolves its argument as PostgreSQL does
+  (`to_regclass`), so a qualified name finds its table.
 - **`confiture init`'s `local.yaml` names `confiture install-helpers`.** It said
   `confiture admin install-helpers`, a command that does not exist.
 - ⚠️ **`seed generate --env` is `--seed-env`.** It never named an environment: it
@@ -251,12 +274,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`migrate baseline --from-db` no longer prints the source DSN's password.** The
   "Baseline from …" line printed the DSN as given; it is redacted now, as every other
   printed URL is.
-- ⚠️ **A missing config file exits 5 in `migrate fix-signatures` and
-  `migrate estimate`, as in every other command.** Both exited 2 — the "no
-  ledger" integer — and printed a line of their own; they now raise `CONFIG_004`
-  through the error boundary, which also gives them the JSON envelope under
-  `--format json`. `fix-signatures`' catch-all failure exits 1 (was 2). Neither
-  command has a known caller.
+- ⚠️ **A missing config file exits 5 in `migrate fix-signatures`, as in every
+  other command.** It exited 2 — the "no ledger" integer — and printed a line of its
+  own; it now raises `CONFIG_004` through the error boundary, which also gives it the
+  JSON envelope under `--format json`. Its catch-all failure exits 1 (was 2). It has
+  no known caller.
 - **`seed generate --format json` exits 1 when generation failed.** The text
   format did; the JSON format emitted `success: false` and exited 0.
 - **`--dry-run-execute` stops where `up` stops.** The copied loop never looked at

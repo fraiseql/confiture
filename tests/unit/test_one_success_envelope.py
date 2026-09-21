@@ -30,10 +30,6 @@ WRITER = "helpers.py"
 EXEMPT = {
     "branch.py": "pgGit: leaves the package for its plugin, which owns its output",
     "coordinate.py": "pgGit: leaves the package for its plugin, which owns its output",
-    "commands/migrate/estimate.py": (
-        "its payload is a top-level array; an envelope cannot join an array without "
-        "breaking the reader of one, so it waits for the command to be kept or folded"
-    ),
 }
 
 WRITER_CALLS = {"dump", "dumps", "print_json"}
