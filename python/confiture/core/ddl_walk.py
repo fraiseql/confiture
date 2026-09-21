@@ -32,6 +32,7 @@ from confiture.core.schema_model import (
     Deferral,
     GeneratedKind,
     IdentityKind,
+    Index,
     qualified_name,
 )
 from confiture.core.type_lattice import parse_type
@@ -1064,6 +1065,28 @@ def read_column_constraints(coldef: Any) -> tuple[ColumnFact, tuple[Constraint, 
         elif isinstance(read, _Deferrable) and constraints:
             constraints[-1] = _deferred(constraints[-1], read)
     return fact, tuple(constraints)
+
+
+def read_index(stmt: Any, *, table: str) -> Index:
+    """What one ``CREATE INDEX`` declares, for the table spelled *table*.
+
+    The one reader of an ``IndexStmt``: the lint inventory reads a tree's
+    statements with it, and ``live_catalog`` reads ``pg_get_indexdef``'s output
+    with it, so the two sides of a comparison cannot disagree about what an index
+    is. Each key is its column name or its expression as ``RawStream`` renders it.
+    ``accessMethod`` is always set: the grammar fills in ``btree`` when the
+    statement writes no ``USING``, which is also what the catalog reports.
+    """
+    return Index(
+        name=stmt.idxname,
+        table=table,
+        columns=tuple(
+            elem.name if elem.name else RawStream()(elem.expr) for elem in stmt.indexParams or ()
+        ),
+        unique=bool(stmt.unique),
+        where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
+        method=stmt.accessMethod,
+    )
 
 
 def added_constraint(cmd: Any) -> Any | None:

@@ -328,6 +328,7 @@ jobs:
           tests/unit/test_ddl_walk_read_constraint.py \
           tests/unit/linting/test_inventory_reads_columns_whole.py \
           tests/unit/linting/test_inventory_builds_the_model.py \
+          tests/unit/test_live_catalog_reads_text_like_ddl.py \
           -q
 
   plpgsql-check:

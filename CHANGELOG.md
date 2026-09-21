@@ -58,6 +58,22 @@ comparisons say today, are now tests in its own suite.
   that is named like one of its types or carries the fields of one; the fourteen that
   exist are listed with the different question each answers.
 
+- **`core/live_catalog.py`, the one reader of a live database's schema.**
+  `read(conn, schemas=…)` answers in the schema model — the same types the lint
+  inventory builds from DDL — and reads PostgreSQL's text answers with the code that
+  reads DDL: `pg_get_constraintdef` through the one constraint reader,
+  `pg_get_indexdef` through `ddl_walk.read_index`, `format_type` through
+  `ddl_walk.written_type`. Extension-owned objects, constraint-backing indexes and
+  column-owned sequences are left out, each for a stated reason.
+- **Parse/live parity, tested.** `tests/integration/test_parse_live_parity.py` builds
+  this repository's schema and every example tree into a scratch database and asserts
+  that `live_catalog.read` equals `inventory.build_model` after
+  `schema_model.normalise_for_parity` — seven named normalisations (generated
+  constraint names, analysed expressions, spellings, `serial`, sequence bounds, schema
+  spelling, declaration order), each a disagreement PostgreSQL introduces and each
+  measured in `test_parity_normalisations_are_measured.py`, which fails the day the
+  disagreement stops existing. All eight trees are equal.
+
 ### Changed
 
 - **`migrate diff` compares the schema model; it no longer parses.**
