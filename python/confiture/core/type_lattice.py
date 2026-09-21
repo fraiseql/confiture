@@ -28,8 +28,13 @@ live database, and when it does not, the answer stays UNKNOWN.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from confiture.core.schema_model import Signature
 
 __all__ = [
     "SqlType",
@@ -39,6 +44,10 @@ __all__ = [
     "compare_types",
     "parse_type",
     "same_type",
+    "signature_from_type_names",
+    "signature_type",
+    "signatures_match",
+    "types_match",
 ]
 
 
@@ -361,3 +370,73 @@ def _schema_and_type(written: str) -> tuple[str | None, str | None]:
 #: No user schema can be called this — the ``pg_`` prefix is reserved — so the
 #: qualifier is always the parser's rather than something the author wrote.
 _CATALOG_SCHEMA = "pg_catalog"
+
+
+# ---------------------------------------------------------------------------
+# A routine's signature: the argument types a call is resolved by
+# ---------------------------------------------------------------------------
+
+
+def signature_type(written: str) -> str:
+    """One argument type's canonical name, as a routine's signature holds it.
+
+    :func:`canonical_type`'s name, with what a signature does not have taken off:
+    a typmod — ``character`` is ``bpchar`` whatever its implicit length, and
+    PostgreSQL ignores a typmod in a signature anyway — and every array
+    dimension past the first, since PostgreSQL does not record how many a type
+    was written with (``text[][]`` is ``text[]``).
+    """
+    parsed = parse_type(written)
+    if parsed is None:
+        return canonical_type(written) or written
+    return parsed.name + ("[]" if parsed.dimensions else "")
+
+
+def signature_from_type_names(written: Iterable[str]) -> Signature:
+    """A routine's signature from its argument types spelled as *text*.
+
+    A ``DROP FUNCTION f(bigint)`` names its arguments as text, and so does a live
+    catalogue (``format_type``); the DDL's parse nodes are read by
+    ``inventory.type_key``, through :func:`signature_type` too, so there is one
+    idea of what makes two routines the same routine (#275). A quoted identifier
+    loses its quotes, which the DDL's parser has already dropped, and the
+    ``pg_catalog`` qualifier is the parser's, never the author's.
+    """
+    return tuple(_argument_key(name) for name in written)
+
+
+def _argument_key(written: str) -> tuple[str | None, str]:
+    schema, _, name = written.rpartition(".")
+    schema = schema.replace('"', "")
+    return (
+        None if not schema or schema == _CATALOG_SCHEMA else schema,
+        signature_type(name.replace('"', "")),
+    )
+
+
+def types_match(a: tuple[str | None, str], b: tuple[str | None, str]) -> bool:
+    """Whether two argument types, as each side spelled them, are one type.
+
+    The names must agree exactly — they are canonical by then, and the array
+    suffix is part of the name — but a schema written on one side and left off
+    the other matches, because PostgreSQL resolves the bare spelling through
+    ``search_path`` and lands on the same type. Two schemas that are both
+    present and disagree never match: ``app.custom_t`` and ``other.custom_t``
+    are two types (D9).
+    """
+    if a[1] != b[1]:
+        return False
+    return a[0] is None or b[0] is None or a[0] == b[0]
+
+
+def signatures_match(a: Signature | None, b: Signature | None) -> bool:
+    """Whether two canonical signatures name one routine, argument by argument.
+
+    ``None`` is not a signature but the absence of one — every kind that is not
+    a routine — so it matches only itself and never an empty argument list.
+    """
+    if a is None or b is None:
+        return a is None and b is None
+    if len(a) != len(b):
+        return False
+    return all(types_match(x, y) for x, y in zip(a, b, strict=True))

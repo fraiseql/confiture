@@ -95,6 +95,22 @@ comparisons say today, are now tests in its own suite.
   `tests/unit/test_one_schema_model.py` now also fails on a class that carries a
   routine's or a view's fields.
 
+- **`live_catalog` reads routines and views into the model.** `read(…, routines=True,
+  views=True)` adds them to the `SchemaModel` it returns — an extension's own left
+  out, as its tables are — and `live_catalog.routine_of(row)` reads one `pg_proc`
+  row as a `Routine`: `proargtypes` through `format_type`, keyed by the canonicaliser
+  the DDL side's keys come from. The parse/live parity test covers both on every
+  example tree and on `tests/fixtures/routine_drift` (a trigger function, a
+  procedure, `VARIADIC` and `OUT` arguments, arrays, a schema-qualified type, a
+  matview's index): equal, after two new measured normalisations — a routine's types
+  in `format_type`'s spelling, and a view's query read back deparsed.
+  ⚠️ `live_catalog.views()` returns `schema_model.View`s (`materialized` for
+  `relkind`); `ViewRow` is gone, and `extensions=False` leaves an extension's own out.
+- **The signature canonicaliser lives with the type canonicaliser.**
+  `signature_from_type_names`, `signatures_match` and `types_match` moved to
+  `core/type_lattice.py` (still importable from `core.linting.inventory`), so a
+  reader of a live catalogue keys a routine without importing the lint package.
+
 ### Changed
 
 - **One live reader, enforced.** Every schema fact confiture reads from a live database

@@ -53,7 +53,7 @@ class LiveViewCatalog:
             view = ViewDefinition(
                 schema=row.schema,
                 name=row.name,
-                relkind=row.relkind,
+                relkind="m" if row.materialized else "v",
                 definition=row.definition or "",
             )
             result[view.view_key] = view

@@ -72,7 +72,6 @@ _RETIRING = (
 #: ``module:Class`` -> the different question that class answers.
 ALLOWED: dict[str, str] = {
     "core/function_signature_parser.py:FunctionSignature": _RETIRING,
-    "core/live_catalog.py:ViewRow": _RETIRING,
     "core/live_objects.py:LiveObject": _RETIRING,
     "core/view_body_drift.py:ViewDefinition": _RETIRING,
     "core/live_catalog.py:RoutineRow": (

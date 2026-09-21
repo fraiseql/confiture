@@ -154,8 +154,8 @@ class SchemaSnapshotter:
             )
 
         views = live_catalog.views(self.connection, schemas)
-        snapshot.views = {view.name for view in views if view.relkind == "v"}
-        snapshot.materialized_views = {view.name for view in views if view.relkind == "m"}
+        snapshot.views = {view.name for view in views if not view.materialized}
+        snapshot.materialized_views = {view.name for view in views if view.materialized}
         snapshot.functions = {
             routine.name
             for routine in live_catalog.routines(self.connection, schemas, kinds=_ROUTINE_KINDS)

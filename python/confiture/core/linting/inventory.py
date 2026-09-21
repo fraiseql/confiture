@@ -67,7 +67,12 @@ from confiture.core.schema_model import (
     view_ref,
 )
 from confiture.core.schema_model import Sequence as SequenceModel
-from confiture.core.type_lattice import canonical_type, parse_type
+from confiture.core.type_lattice import (
+    canonical_type,
+    signature_from_type_names,
+    signature_type,
+    signatures_match,
+)
 
 _T = TypeVar("_T")
 
@@ -488,75 +493,7 @@ def type_key(type_name: Any) -> tuple[str | None, str]:
     bare.typmods = None
     rendered = ddl_type_name(bare) or ""
     schema, _, name = rendered.rpartition(".")
-    return (schema or None), _signature_type(name)
-
-
-def signature_from_type_names(written: Iterable[str]) -> Signature:
-    """A routine's signature from argument types spelled as *text*.
-
-    :func:`type_key` answers this for a parse node, and this is the only other
-    way in. A ``DROP FUNCTION f(bigint)`` names its arguments as text, and so
-    does a live catalogue; canonicalising them anywhere else would be a second
-    idea of what makes two routines the same routine, which is exactly what
-    ``signature`` and ``signature_key`` exist to keep apart (#275).
-
-    Typmods are dropped for :func:`type_key`'s reason: PostgreSQL ignores them
-    in a signature, and ``char`` carries an implicit one that ``bpchar`` does not.
-    """
-    return tuple(_type_key_from_text(name) for name in written)
-
-
-def _type_key_from_text(written: str) -> tuple[str | None, str]:
-    schema, _, name = written.rpartition(".")
-    schema = schema.replace('"', "")
-    return (
-        None if not schema or schema == _CATALOG_SCHEMA else schema,
-        _signature_type(name.replace('"', "")),
-    )
-
-
-def _signature_type(written: str) -> str:
-    """One argument type's canonical name, as a signature holds it.
-
-    The lattice's name, with what a signature does not have taken off: a typmod
-    — ``character`` is ``bpchar`` whatever its implicit length — and any array
-    dimension past the first, since PostgreSQL does not record how many a type
-    was written with (``text[][]`` is ``text[]``). A quoted identifier arrives
-    unquoted: the DDL's parser has already dropped the quotes ``format_type``
-    writes.
-    """
-    parsed = parse_type(written)
-    if parsed is None:
-        return canonical_type(written) or written
-    return parsed.name + ("[]" if parsed.dimensions else "")
-
-
-def types_match(a: tuple[str | None, str], b: tuple[str | None, str]) -> bool:
-    """Whether two argument types, as each side spelled them, are one type.
-
-    The names must agree exactly — they are canonical by then, and the array
-    suffix is part of the name — but a schema written on one side and left off
-    the other matches, because PostgreSQL resolves the bare spelling through
-    ``search_path`` and lands on the same type. Two schemas that are both
-    present and disagree never match: ``app.custom_t`` and ``other.custom_t``
-    are two types (D9).
-    """
-    if a[1] != b[1]:
-        return False
-    return a[0] is None or b[0] is None or a[0] == b[0]
-
-
-def signatures_match(a: Signature | None, b: Signature | None) -> bool:
-    """Whether two canonical signatures name one routine, argument by argument.
-
-    ``None`` is not a signature but the absence of one — every kind that is not
-    a routine — so it matches only itself and never an empty argument list.
-    """
-    if a is None or b is None:
-        return a is None and b is None
-    if len(a) != len(b):
-        return False
-    return all(types_match(x, y) for x, y in zip(a, b, strict=True))
+    return (schema or None), signature_type(name)
 
 
 def _signature(parameters: Any) -> str:
@@ -1156,7 +1093,7 @@ def label_for(path: Path, root: Path | None) -> str:
 #: canonical *names* of its input parameter types. A dict key cannot express a
 #: wildcard, so the types' own schemas are left out of it and
 #: :func:`group_definitions` decides which entries in a bucket really are one
-#: object; see :func:`types_match`.
+#: object; see :func:`~confiture.core.type_lattice.types_match`.
 ObjectKey = tuple[str, str | None, str, tuple[str, ...] | None]
 
 

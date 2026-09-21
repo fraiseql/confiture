@@ -77,12 +77,16 @@ def test_every_index_a_constraints_own_included(conn: psycopg.Connection) -> Non
     }
 
 
-def test_views_say_who_owns_them(conn: psycopg.Connection) -> None:
+def test_views_keep_an_extensions_own_unless_asked(conn: psycopg.Connection) -> None:
     rows = live_catalog.views(conn, ["app"])
-    assert [(v.name, v.relkind, v.definition, v.extension_owned) for v in rows] == [
-        ("mv_parent", "m", None, False),
-        ("v_owned", "v", None, True),
-        ("v_parent", "v", None, False),
+    assert [(v.name, v.materialized, v.definition) for v in rows] == [
+        ("mv_parent", True, None),
+        ("v_owned", False, None),
+        ("v_parent", False, None),
+    ]
+    assert [v.name for v in live_catalog.views(conn, ["app"], extensions=False)] == [
+        "mv_parent",
+        "v_parent",
     ]
     defined = {v.name: v.definition for v in live_catalog.views(conn, ["app"], definitions=True)}
     assert defined["v_parent"] is not None

@@ -402,6 +402,17 @@ PARITY_NORMALISATIONS: dict[str, str] = {
         "the catalog lists a table's constraints and indexes by name, a tree by where "
         "it declared them; which exist is the fact, not their order"
     ),
+    "routine_spellings": (
+        "a routine's argument and result types as a file wrote them (`int8`, "
+        "`RETURNS int4`) are spelling; the catalog knows format_type's (`bigint`, "
+        "`integer`). signature_key is the identity compared"
+    ),
+    "view_definitions": (
+        "a view's query is stored as a parse tree and read back through "
+        "pg_get_viewdef's deparse — qualified, reparenthesised, `*` expanded — so what "
+        "is compared is that one exists; comparing two through one deparser is "
+        "--check-body-views' question"
+    ),
 }
 
 #: What an expression is compared as: present.
@@ -457,21 +468,40 @@ def _parity_constraint(table: str, constraint: Constraint) -> Constraint:
 
 def _parity_table(table: Table) -> Table:
     constraints = [_parity_constraint(table.name, c) for c in table.constraints]
-    indexes = [
-        replace(
-            ix,
-            table=identity_of(ix.table) or ix.table,
-            columns=tuple(key if _COLUMN_KEY.fullmatch(key) else _EXPRESSION for key in ix.columns),
-            where=None if ix.where is None else _EXPRESSION,
-        )
-        for ix in table.indexes
-        if not ix.backs_constraint
-    ]
+    indexes = [_parity_index(ix) for ix in table.indexes if not ix.backs_constraint]
     return replace(
         table,
         schema=(table.schema or DEFAULT_SCHEMA).lower(),
         columns=tuple(_parity_column(c) for c in table.columns),
         constraints=tuple(sorted(constraints, key=repr)),
+        indexes=tuple(sorted(indexes, key=repr)),
+    )
+
+
+def _parity_index(index: Index) -> Index:
+    return replace(
+        index,
+        table=identity_of(index.table) or index.table,
+        columns=tuple(key if _COLUMN_KEY.fullmatch(key) else _EXPRESSION for key in index.columns),
+        where=None if index.where is None else _EXPRESSION,
+    )
+
+
+def _parity_routine(routine: Routine) -> Routine:
+    return replace(
+        routine,
+        schema=(routine.schema or DEFAULT_SCHEMA).lower(),
+        signature="",
+        returns=None,
+    )
+
+
+def _parity_view(view: View) -> View:
+    indexes = [_parity_index(ix) for ix in view.indexes if not ix.backs_constraint]
+    return replace(
+        view,
+        schema=(view.schema or DEFAULT_SCHEMA).lower(),
+        definition=None if view.definition is None else _EXPRESSION,
         indexes=tuple(sorted(indexes, key=repr)),
     )
 
@@ -501,4 +531,8 @@ def normalise_for_parity(model: SchemaModel) -> SchemaModel:
             for ref, e in model.enum_types.items()
         },
         sequences={ref: _parity_sequence(s) for ref, s in model.sequences.items()},
+        routines={
+            ref: tuple(_parity_routine(r) for r in found) for ref, found in model.routines.items()
+        },
+        views={ref: _parity_view(v) for ref, v in model.views.items()},
     )

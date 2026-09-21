@@ -27,13 +27,15 @@ Deliberately not read, each for a stated reason:
 
 That list is :func:`read`'s, the model a tree is compared with. The listings
 below it answer narrower questions — which relations, which schemas, every index
-a table carries — and each docstring says what it keeps. Views, triggers and
-routines are not in the model yet, and they come back as catalog rows
-(:class:`ViewRow`, :class:`TriggerRow`, :class:`RoutineRow`) rather than as a
-second model of each: the model's names are reserved for the day the DDL side
-reads them too. A row says whether an extension owns the object instead of
-leaving it out, because the callers disagree on purpose — a drift check asks what
-the *tree* holds, an introspector what the *database* holds.
+a table carries — and each docstring says what it keeps. Routines and views are
+read into the model too (:func:`read` with ``routines`` / ``views``,
+:func:`routine_of`, :func:`views`): a routine's argument types through the one
+signature canonicaliser, so a routine read live and read from DDL are one routine
+by the same rule. :class:`RoutineRow` is the catalog row the introspector also
+needs — argument names and modes, cost, comment — which the model does not hold.
+A listing says whether an extension owns an object, or leaves it out on request,
+because the callers disagree on purpose — a drift check asks what the *tree*
+holds, an introspector what the *database* holds.
 """
 
 from __future__ import annotations
@@ -56,13 +58,19 @@ from confiture.core.schema_model import (
     IdentityKind,
     Index,
     ObjectRef,
+    Routine,
+    RoutineKind,
     SchemaModel,
     Table,
+    View,
+    Volatility,
     qualified_name,
     ref_for,
+    routine_ref,
+    view_ref,
 )
 from confiture.core.schema_model import Sequence as SequenceModel
-from confiture.core.type_lattice import canonical_type
+from confiture.core.type_lattice import canonical_type, signature_from_type_names
 
 if TYPE_CHECKING:
     import psycopg
@@ -252,7 +260,12 @@ def _tables(
 
 
 def read(
-    conn: psycopg.Connection, *, schemas: Sequence[str], kinds: Sequence[str] = TABLE_KINDS
+    conn: psycopg.Connection,
+    *,
+    schemas: Sequence[str],
+    kinds: Sequence[str] = TABLE_KINDS,
+    routines: bool = False,
+    views: bool = False,
 ) -> SchemaModel:
     """The schema the database holds in *schemas*, in the model DDL is read into.
 
@@ -260,6 +273,10 @@ def read(
     table by default, which is what a tree declares with ``CREATE TABLE``. A
     caller that has always meant something else by "a table" says so —
     ``introspect`` reads ``('r',)``, the plugin's snapshot :data:`TABLE_LIKE`.
+
+    *routines* and *views* read those too — each a query, and a view's a deparse
+    per view — for the callers that compare them. An extension's own are left
+    out, as its tables are.
     """
     wanted = list(schemas)
     enum_types = {
@@ -279,8 +296,23 @@ def read(
             _SEQUENCES, (wanted,)
         ).fetchall()
     }
+    routine_models: dict[ObjectRef, list[Routine]] = defaultdict(list)
+    if routines:
+        for row in _catalog_routines(conn, wanted, kinds=_MODEL_PROKINDS):
+            if not row.extension_owned:
+                routine = routine_of(row)
+                routine_models[routine_ref(routine)].append(routine)
+    view_models = (
+        {view_ref(view): view for view in _views(conn, wanted, extensions=False, indexes=True)}
+        if views
+        else {}
+    )
     return SchemaModel(
-        tables=_tables(conn, wanted, kinds), enum_types=enum_types, sequences=sequences
+        tables=_tables(conn, wanted, kinds),
+        enum_types=enum_types,
+        sequences=sequences,
+        routines={ref: tuple(found) for ref, found in routine_models.items()},
+        views=view_models,
     )
 
 
@@ -490,24 +522,8 @@ def indexes(conn: psycopg.Connection, schemas: Sequence[str]) -> dict[ObjectRef,
 
 
 # ---------------------------------------------------------------------------
-# Views, triggers and routines: catalog rows, not yet the model's
+# Views, triggers and routines
 # ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class ViewRow:
-    """A view (``relkind`` ``v``) or a materialized view (``m``).
-
-    ``definition`` is ``pg_get_viewdef(oid, true)`` — PostgreSQL's deparse, so two
-    databases compared through it pass through one deparser — when it was asked
-    for, and ``None`` otherwise.
-    """
-
-    schema: str
-    name: str
-    relkind: str
-    definition: str | None
-    extension_owned: bool
 
 
 @dataclass(frozen=True)
@@ -568,9 +584,10 @@ class RoutineRow:
 #: ``pg_get_viewdef`` runs only when asked for: a deparse per view is the
 #: expensive half of the query, and an existence check does not need it.
 _VIEWS = f"""
-SELECT n.nspname,
+SELECT c.oid,
+       n.nspname,
        c.relname,
-       c.relkind::text,
+       c.relkind = 'm',
        CASE WHEN %s THEN pg_get_viewdef(c.oid, true) END,
        {_EXTENSION_OWNED.format(catalog="pg_class", oid="c.oid")}
 FROM pg_class c
@@ -639,13 +656,95 @@ ORDER BY n.nspname, p.proname, p.oid
 #: A routine that is not a trigger function, by the result it declares.
 _NOT_A_TRIGGER = "AND pg_get_function_result(p.oid) IS DISTINCT FROM 'trigger'"
 
+#: ``prokind`` as the model names it. A window function is created by
+#: ``CREATE FUNCTION … WINDOW``: a function, as the DDL says.
+_ROUTINE_KINDS: dict[str, RoutineKind] = {
+    "f": "function",
+    "w": "function",
+    "p": "procedure",
+    "a": "aggregate",
+}
+
+#: The ``prokind`` letters the model reads: every routine a tree can declare.
+_MODEL_PROKINDS = tuple(_ROUTINE_KINDS)
+
+#: ``provolatile`` as the model names it.
+_VOLATILITIES: dict[str, Volatility] = {"i": "immutable", "s": "stable", "v": "volatile"}
+
+#: Languages whose ``prosrc`` names a compiled symbol rather than holding a body.
+_SYMBOL_LANGUAGES = frozenset({"c", "internal"})
+
+
+def routine_of(row: RoutineRow) -> Routine:
+    """A catalog row as the model's :class:`Routine`.
+
+    The signature is ``proargtypes`` spelled by ``format_type`` — the arguments a
+    call is resolved by, ``VARIADIC`` included and ``OUT`` left out — and keyed
+    through ``type_lattice.signature_from_type_names``, the canonicaliser the DDL
+    side's keys come from. ``prosrc`` is the body where it is one: a C or
+    internal routine's is the name of a symbol.
+    """
+    return Routine(
+        name=row.name,
+        schema=row.schema,
+        kind=_ROUTINE_KINDS.get(row.kind, "function"),
+        signature=", ".join(row.input_types),
+        signature_key=signature_from_type_names(row.input_types),
+        returns=row.result,
+        language=row.language,
+        body=None if row.language in _SYMBOL_LANGUAGES else row.source,
+        security_definer=row.security_definer,
+        search_path_pinned=row.search_path_pinned,
+        volatility=_VOLATILITIES.get(row.volatility, "volatile"),
+    )
+
 
 def views(
-    conn: psycopg.Connection, schemas: Sequence[str], *, definitions: bool = False
-) -> list[ViewRow]:
-    """Every view and materialized view in *schemas*, with its definition if asked."""
-    rows = conn.execute(_VIEWS, (definitions, list(schemas))).fetchall()
-    return [ViewRow(*row) for row in rows]
+    conn: psycopg.Connection,
+    schemas: Sequence[str],
+    *,
+    definitions: bool = False,
+    extensions: bool = True,
+) -> list[View]:
+    """Every view and materialized view in *schemas*, with its definition if asked.
+
+    ``definition`` is ``pg_get_viewdef(oid, true)`` — PostgreSQL's deparse, so two
+    databases compared through it pass through one deparser — when *definitions*
+    asks for it, and ``None`` otherwise: a deparse per view is the expensive half.
+    An extension's own views are listed unless *extensions* is ``False``.
+    """
+    return _views(conn, schemas, definitions=definitions, extensions=extensions, indexes=False)
+
+
+def _views(
+    conn: psycopg.Connection,
+    schemas: Sequence[str],
+    *,
+    definitions: bool = True,
+    extensions: bool,
+    indexes: bool,
+) -> list[View]:
+    rows = [
+        row
+        for row in conn.execute(_VIEWS, (definitions, list(schemas))).fetchall()
+        if extensions or not row[5]
+    ]
+    on: dict[int, list[Index]] = defaultdict(list)
+    matviews = {oid: qualified_name(schema, name) for oid, schema, name, mat, *_ in rows if mat}
+    if indexes and matviews:
+        for relid, definition, _backs in conn.execute(_INDEXES, (list(matviews),)).fetchall():
+            stmt = pglast.parse_sql(definition)[0].stmt
+            on[relid].append(read_index(stmt, table=matviews[relid]))
+    return [
+        View(
+            name=name,
+            schema=schema,
+            materialized=bool(materialized),
+            definition=definition,
+            indexes=tuple(on[oid]),
+        )
+        for oid, schema, name, materialized, definition, _extension_owned in rows
+    ]
 
 
 def triggers(conn: psycopg.Connection, schemas: Sequence[str]) -> list[TriggerRow]:
@@ -667,8 +766,27 @@ def routines(
     *include_triggers* ``False`` leaves out a function that ``RETURNS trigger``;
     *name_pattern* keeps the names it matches — ``LIKE`` it, or equal to it when
     *exact_name*. Ordered by schema, name, then ``oid``, so overloads keep the
-    order they were created in.
+    order they were created in. :func:`routine_of` reads a row into the model.
     """
+    return _catalog_routines(
+        conn,
+        schemas,
+        kinds=kinds,
+        include_triggers=include_triggers,
+        name_pattern=name_pattern,
+        exact_name=exact_name,
+    )
+
+
+def _catalog_routines(
+    conn: psycopg.Connection,
+    schemas: Sequence[str],
+    *,
+    kinds: Sequence[str],
+    include_triggers: bool = True,
+    name_pattern: str | None = None,
+    exact_name: bool = False,
+) -> list[RoutineRow]:
     filters = [] if include_triggers else [_NOT_A_TRIGGER]
     params: list[Any] = [list(schemas), list(kinds)]
     if name_pattern is not None:

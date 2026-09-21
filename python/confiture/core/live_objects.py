@@ -34,8 +34,7 @@ if TYPE_CHECKING:
 
     from confiture.core.linting.inventory import Signature
 
-#: ``relkind`` / ``prokind`` -> the kind vocabulary ``ddl_objects`` speaks.
-_RELKINDS = {"v": "view", "m": "matview"}
+#: ``prokind`` -> the kind vocabulary ``ddl_objects`` speaks.
 _PROKINDS = {"f": "function", "p": "procedure", "a": "aggregate"}
 
 
@@ -105,9 +104,8 @@ class LiveObjectCatalog:
 
     def _read_views(self, wanted: list[str]) -> list[LiveObject]:
         return [
-            LiveObject(kind=_RELKINDS[view.relkind], schema=view.schema, name=view.name)
-            for view in live_catalog.views(self._conn, wanted)
-            if view.relkind in _RELKINDS and not view.extension_owned
+            LiveObject(kind=view.kind, schema=view.schema or "", name=view.name)
+            for view in live_catalog.views(self._conn, wanted, extensions=False)
         ]
 
     def _read_triggers(self, wanted: list[str]) -> list[LiveObject]:
