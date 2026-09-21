@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from confiture.core._migrator.engine import Migrator
+from confiture.core.migrator import Migrator
 from confiture.exceptions import MigrationError
 from confiture.models.migration import Migration
 from tests.unit._doubles import connection_double

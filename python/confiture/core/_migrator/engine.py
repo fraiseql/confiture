@@ -1,15 +1,19 @@
-"""Migration executor — Migrator class."""
+"""The migration engine: every operation on one connection's migrations and ledger.
+
+What a :class:`~confiture.core._migrator.session.MigratorSession` drives. The public
+``confiture.core.migrator.Migrator`` is this engine with the two conveniences that
+open or attach a session (``from_config``, ``migrate_up``); they live there, above
+the session, so that the engine never needs to know one exists.
+"""
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from confiture.config.environment import Environment
-    from confiture.core._migrator.session import MigratorSession
     from confiture.models.results import (
         MigrateRebuildResult,
         MigrateReinitResult,
@@ -22,15 +26,11 @@ from psycopg import sql as pgsql
 from confiture.core._migrator import apply as apply_impl
 from confiture.core._migrator import baseline as baseline_impl
 from confiture.core._migrator import discovery as discovery_impl
-from confiture.core._migrator import factory
 from confiture.core._migrator import rollback as rollback_impl
 from confiture.core._migrator import state as state_impl
 from confiture.core._migrator.discovery import (
     _version_from_migration_filename,
     find_duplicate_migration_versions,
-)
-from confiture.core.checksum import (
-    ChecksumConfig,
 )
 from confiture.core.dry_run import DryRunResult
 from confiture.core.hooks import HookRegistry
@@ -40,18 +40,16 @@ from confiture.core.ledger import (
     table_identifier,
     validate_table_name,
 )
-from confiture.core.locking import LockConfig
-from confiture.core.progress import ProgressManager
-from confiture.exceptions import MigrationError, SQLError
+from confiture.exceptions import SQLError
 from confiture.models.migration import Migration
 
 logger = logging.getLogger(__name__)
 
 
-class Migrator:
+class MigrationEngine:
     """Executes database migrations and tracks their state.
 
-    The Migrator class is responsible for:
+    The engine is responsible for:
     - Creating and managing the tb_confiture tracking table
     - Applying migrations (running up() methods)
     - Rolling back migrations (running down() methods)
@@ -730,65 +728,6 @@ class Migrator:
         """
         return _version_from_migration_filename(filename)
 
-    def migrate_up(
-        self,
-        force: bool = False,
-        migrations_dir: Path | None = None,
-        target: str | None = None,
-        lock_config: LockConfig | None = None,
-        checksum_config: ChecksumConfig | None = None,
-        progress: ProgressManager | None = None,
-    ) -> list[str]:
-        """Apply pending migrations through the one apply loop.
-
-        A thin call into :meth:`MigratorSession.up` attached to this engine's
-        connection: the lock is taken first, discovery and the ledger init run
-        under it, checksums are verified before anything is applied.
-
-        Args:
-            force: If True, skip migration state checks and apply all migrations
-            migrations_dir: Custom migrations directory (default: db/migrations)
-            target: Target migration version (applies all if None)
-            lock_config: ``enabled`` and ``timeout_ms`` are honoured (default:
-                enabled, 30s). Pass ``LockConfig(enabled=False)`` to disable locking.
-            checksum_config: ``enabled`` and ``on_mismatch`` are honoured (default:
-                enabled, fail on mismatch).
-            progress: Optional ProgressManager advanced once per applied migration
-
-        Returns:
-            Versions applied, in order.
-
-        Raises:
-            ChecksumVerificationError: A tampered applied file (``on_mismatch=FAIL``).
-            LockAcquisitionError: The migration lock could not be taken.
-            MigrationError: A migration failed (the original exception is re-raised),
-                or the chain halted on ``requires_superuser=True``.
-
-        Example:
-            >>> migrator = Migrator(connection=conn)
-            >>> applied = migrator.migrate_up()
-        """
-        # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core._migrator.session import MigratorSession  # session imports engine
-
-        lock_config = lock_config or LockConfig()
-        checksum_config = checksum_config or ChecksumConfig()
-        session = MigratorSession.attached(self, migrations_dir or Path("db/migrations"))
-        result = session.up(
-            target=target,
-            force=force,
-            verify_checksums=checksum_config.enabled,
-            on_checksum_mismatch=checksum_config.on_mismatch.value,
-            lock_timeout=lock_config.timeout_ms,
-            no_lock=not lock_config.enabled,
-            on_event=_progress_observer(progress) if progress is not None else None,
-        )
-        if result.failure is not None:
-            raise result.failure
-        if not result.success:
-            raise MigrationError(result.error_summary or "Migration chain halted before completion")
-        return [m.version for m in result.migrations_applied]
-
     def _warn_mixed_transactional_modes(self, migration_files: list[Path]) -> None:
         """Warn if batch contains both transactional and non-transactional migrations."""
         apply_impl.warn_mixed_transactional_modes(migration_files)
@@ -839,60 +778,3 @@ class Migrator:
         ``(precondition, error_message)`` tuples.
         """
         return apply_impl.check_preconditions(self, migration, direction)
-
-    @classmethod
-    def from_config(
-        cls,
-        config: Environment | Path | str,
-        *,
-        migrations_dir: Path | str = Path("db/migrations"),
-        connection_factory: Callable[[Any], Any] | None = None,
-        migration_loader: Callable[[Path], type] | None = None,
-    ) -> MigratorSession:
-        """Create a managed MigratorSession from an Environment config.
-
-        Accepts an ``Environment`` object, a ``Path`` to a YAML config file,
-        or a string path. The returned ``MigratorSession`` must be used as a
-        context manager (``with`` statement) to ensure the database connection
-        is properly closed.
-
-        Args:
-            config: One of:
-                    - ``Environment`` instance (pre-loaded config)
-                    - ``Path`` or ``str`` path to YAML config file
-                    Example: ``"db/environments/prod.yaml"``
-            migrations_dir: Directory containing migration files.
-                           Defaults to ``db/migrations``.
-
-        Returns:
-            MigratorSession context manager.
-
-        Raises:
-            MigrationError: If the config file cannot be found.
-            ConfigurationError: If the YAML config is invalid.
-
-        Example:
-            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
-            ...     status = m.status()
-            ...     if status.has_pending:
-            ...         result = m.up()
-        """
-        return factory.from_config(
-            config,
-            migrations_dir=migrations_dir,
-            connection_factory=connection_factory,
-            migration_loader=migration_loader,
-        )
-
-
-def _progress_observer(progress: ProgressManager) -> Any:
-    """Advance a ``ProgressManager`` task once per applied migration."""
-    state: dict[str, Any] = {"task": None}
-
-    def observe(event: Any) -> None:
-        if event.kind == "applying" and state["task"] is None:
-            state["task"] = progress.add_task("Applying migrations...", total=None)
-        elif event.kind == "applied" and state["task"] is not None:
-            progress.update(state["task"], advance=1)
-
-    return observe

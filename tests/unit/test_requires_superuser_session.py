@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from confiture.config.environment import Environment
 from confiture.core._migrator.session import MigratorSession
-from tests.unit._doubles import injected_loader
+from tests.unit._doubles import injected_loader, injected_lock
 
 
 def _make_entered_session(migrations_dir: Path) -> MigratorSession:
@@ -50,8 +50,6 @@ def _make_migration_class(version: str, name: str, *, requires_superuser: bool):
 
 def test_up_halts_at_first_requires_superuser_migration(tmp_path):
     """Chain [a, b(superuser), c] → up applies a, halts at b, reports c as pending."""
-    import confiture.core.migrator as _m
-
     session = _make_entered_session(tmp_path / "migrations")
     files = _setup_three_pending(session, tmp_path)
 
@@ -60,7 +58,7 @@ def test_up_halts_at_first_requires_superuser_migration(tmp_path):
     cls_c = _make_migration_class("03", "c", requires_superuser=False)
     classes = {files[0]: cls_a, files[1]: cls_b, files[2]: cls_c}
 
-    with patch.object(_m, "LockConfig"), patch.object(_m, "MigrationLock") as MockLock:
+    with injected_lock(MagicMock()) as MockLock:
         mock_lock = MagicMock()
         mock_lock.acquire.return_value.__enter__ = MagicMock()
         mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
@@ -84,8 +82,6 @@ def test_up_halts_at_first_requires_superuser_migration(tmp_path):
 
 def test_up_resumes_chain_after_apply_as_clears_skip(tmp_path):
     """Once b is no longer pending, up() picks up at c without halting."""
-    import confiture.core.migrator as _m
-
     session = _make_entered_session(tmp_path / "migrations")
     files = _setup_three_pending(session, tmp_path)
 
@@ -97,7 +93,7 @@ def test_up_resumes_chain_after_apply_as_clears_skip(tmp_path):
     cls_c = _make_migration_class("03", "c", requires_superuser=False)
     classes = {files[0]: cls_a, files[2]: cls_c}
 
-    with patch.object(_m, "LockConfig"), patch.object(_m, "MigrationLock") as MockLock:
+    with injected_lock(MagicMock()) as MockLock:
         mock_lock = MagicMock()
         mock_lock.acquire.return_value.__enter__ = MagicMock()
         mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
@@ -114,8 +110,6 @@ def test_up_resumes_chain_after_apply_as_clears_skip(tmp_path):
 
 def test_skipped_superuser_appears_in_json_output(tmp_path):
     """`MigrateUpResult.to_dict()` exposes skipped_superuser + pending."""
-    import confiture.core.migrator as _m
-
     session = _make_entered_session(tmp_path / "migrations")
     files = _setup_three_pending(session, tmp_path)
 
@@ -124,7 +118,7 @@ def test_skipped_superuser_appears_in_json_output(tmp_path):
     cls_c = _make_migration_class("03", "c", requires_superuser=False)
     classes = {files[0]: cls_a, files[1]: cls_b, files[2]: cls_c}
 
-    with patch.object(_m, "LockConfig"), patch.object(_m, "MigrationLock") as MockLock:
+    with injected_lock(MagicMock()) as MockLock:
         mock_lock = MagicMock()
         mock_lock.acquire.return_value.__enter__ = MagicMock()
         mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)

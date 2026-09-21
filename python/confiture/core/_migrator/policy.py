@@ -17,7 +17,7 @@ from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
     from confiture.config.environment import Environment
-    from confiture.core._migrator.engine import Migrator
+    from confiture.core._migrator.engine import MigrationEngine
 
 
 def resolve_strict_mode(flag: bool | None, config: Environment | None) -> bool:
@@ -48,7 +48,7 @@ def install_view_helpers(conn: Any, on_event: UpObserver | None = None) -> bool:
 def auto_baseline(
     *,
     conn: Any,
-    migrator: Migrator,
+    migrator: MigrationEngine,
     migrations_dir: Path,
     snapshots_dir: Path,
     on_event: UpObserver | None = None,

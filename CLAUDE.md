@@ -706,7 +706,7 @@ confiture/
 │   │   ├── migration_generator.py # Migration file generator from schema diffs
 │   │   ├── migration_grant_extractor.py # Static extraction of ``CREATE TABLE`` and ``GRANT`` statements from a
 │   │   ├── migration_verifier.py # Migration verification using .verify.sql sidecar files
-│   │   ├── migrator.py           # Migration executor — public re-exports
+│   │   ├── migrator.py           # The migrator's public face: :class:`Migrator`, :class:`MigratorSession`…
 │   │   ├── ownership_fixer.py    # Auto-fixer for ownership coverage gaps in migration files (issue #124)
 │   │   ├── parser_info.py        # What parses the SQL: pglast's version and the PostgreSQL grammar it emb…
 │   │   ├── path_globs.py         # The one path matcher: does this path, relative to its include directory…
@@ -763,7 +763,7 @@ confiture/
 │   ├── models/                   # Confiture migration models
 │   │   ├── __init__.py           # Confiture migration models
 │   │   ├── debug_models.py       # Data models for CTE step-through debugging
-│   │   ├── error.py              # Error models for structured error handling
+│   │   ├── error.py              # Error models for structured error handling: the severity every error an…
 │   │   ├── function_info.py      # Data models for PostgreSQL function/procedure introspection
 │   │   ├── git.py                # Data models for git-based validation reports
 │   │   ├── introspection.py      # Data models for schema introspection output

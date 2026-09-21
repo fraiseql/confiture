@@ -84,4 +84,4 @@ def test_from_source_requires_env_or_schema_sql(monkeypatch: pytest.MonkeyPatch)
 def test_from_source_and_from_base_return_self() -> None:
     edb = ExpectedSchemaDB("postgresql://localhost/x")
     assert edb.from_source(schema_sql="") is edb
-    assert edb.from_base_plus_migrations() is edb
+    assert edb.from_base_plus_migrations(replay=lambda *_: None) is edb

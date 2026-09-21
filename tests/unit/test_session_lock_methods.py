@@ -1,13 +1,14 @@
 """Tests for MigratorSession.is_locked() and get_lock_holder() (issue #91)."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from confiture.config.environment import Environment
 from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
+from tests.unit._doubles import injected_lock
 
 
 def _make_session() -> MigratorSession:
@@ -38,7 +39,7 @@ def test_is_locked_delegates_to_migration_lock():
     session = _make_session()
     session._conn = MagicMock()  # simulate entered context
 
-    with patch("confiture.core._migrator.session.MigrationLock") as MockLock:
+    with injected_lock(MagicMock()) as MockLock:
         mock_instance = MagicMock()
         mock_instance.is_locked.return_value = True
         MockLock.return_value = mock_instance
@@ -62,7 +63,7 @@ def test_get_lock_holder_delegates_to_migration_lock():
         "started_at": "2026-03-24T10:00:00",
     }
 
-    with patch("confiture.core._migrator.session.MigrationLock") as MockLock:
+    with injected_lock(MagicMock()) as MockLock:
         mock_instance = MagicMock()
         mock_instance.get_lock_holder.return_value = holder_info
         MockLock.return_value = mock_instance
@@ -78,7 +79,7 @@ def test_is_locked_returns_false_when_no_lock():
     session = _make_session()
     session._conn = MagicMock()
 
-    with patch("confiture.core._migrator.session.MigrationLock") as MockLock:
+    with injected_lock(MagicMock()) as MockLock:
         mock_instance = MagicMock()
         mock_instance.is_locked.return_value = False
         MockLock.return_value = mock_instance
@@ -91,7 +92,7 @@ def test_get_lock_holder_returns_none_when_no_lock():
     session = _make_session()
     session._conn = MagicMock()
 
-    with patch("confiture.core._migrator.session.MigrationLock") as MockLock:
+    with injected_lock(MagicMock()) as MockLock:
         mock_instance = MagicMock()
         mock_instance.get_lock_holder.return_value = None
         MockLock.return_value = mock_instance

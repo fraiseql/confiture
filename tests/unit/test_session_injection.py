@@ -32,6 +32,7 @@ DOCUMENTED = {
     "discover_migration_files",
     "parse_migration_filename",
     "_version_from_migration_filename",
+    "replay_migrations",
 }
 
 

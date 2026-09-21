@@ -24,6 +24,7 @@ from confiture.core.connection import load_config, open_connection
 from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
 from confiture.core.function_signature_drift import live_routines
+from confiture.core.migrator import replay_migrations
 from confiture.core.validation.signature_drift import _ssh_override
 from confiture.core.validation.view_drift import _config_database_url
 from confiture.exceptions import ConfigurationError
@@ -111,9 +112,9 @@ def check_replay_drift(
     )
     with conn_cm as live_conn:
         live = live_routines(live_conn, schema_list)
-        with ExpectedSchemaDB(
-            scratch, migrations_dir=migrations_dir
-        ).from_base_plus_migrations() as scratch_conn:
+        with ExpectedSchemaDB(scratch, migrations_dir=migrations_dir).from_base_plus_migrations(
+            replay=replay_migrations
+        ) as scratch_conn:
             replayed = live_routines(scratch_conn, schema_list)
     body_report = FunctionBodyDriftDetector().compare(replayed, live)
 

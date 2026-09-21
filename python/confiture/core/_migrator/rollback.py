@@ -1,7 +1,7 @@
-"""Rollback concern for :class:`~confiture.core._migrator.engine.Migrator`.
+"""Rollback concern for :class:`~confiture.core._migrator.engine.MigrationEngine`.
 
 Peeled out of ``engine.py``. These are free functions that
-take the ``Migrator`` instance as their first argument; the class keeps thin
+take the ``MigrationEngine`` instance as their first argument; the class keeps thin
 delegating methods so its public surface and patch targets are unchanged.
 """
 
@@ -15,14 +15,14 @@ from psycopg import sql as pgsql
 from confiture.exceptions import MigrationError
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.engine import Migrator
+    from confiture.core._migrator.engine import MigrationEngine
     from confiture.models.migration import Migration
 
 logger = logging.getLogger(__name__)
 
 
 def rollback(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     migration: Migration,
     skip_preconditions: bool = False,
 ) -> None:
@@ -56,7 +56,7 @@ def rollback(
         _rollback_non_transactional(migrator, migration)
 
 
-def _rollback_transactional(migrator: Migrator, migration: Migration) -> None:
+def _rollback_transactional(migrator: MigrationEngine, migration: Migration) -> None:
     """Rollback a migration within a transaction."""
     try:
         logger.debug(f"Executing rollback (down) for migration {migration.version}")
@@ -81,7 +81,7 @@ def _rollback_transactional(migrator: Migrator, migration: Migration) -> None:
         ) from e
 
 
-def _rollback_non_transactional(migrator: Migrator, migration: Migration) -> None:
+def _rollback_non_transactional(migrator: MigrationEngine, migration: Migration) -> None:
     """Rollback a migration in autocommit mode (no transaction).
 
     WARNING: If this fails, manual cleanup may be required.

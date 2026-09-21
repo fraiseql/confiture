@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from confiture.core.migrator import Migrator
-from tests.unit._doubles import migrator_double
+from tests.unit._doubles import injected_engine, migrator_double
 
 # ---------------------------------------------------------------------------
 # Migrator.__init__ — migration_table parameter
@@ -223,7 +223,7 @@ migration:
 
         with (
             patch("confiture.cli.helpers.create_connection") as mock_conn_factory,
-            patch("confiture.core.migrator.Migrator", autospec=True) as mock_migrator_cls,
+            injected_engine() as mock_migrator_cls,
             patch("confiture.core.connection.load_config") as mock_load_config,
         ):
             mock_load_config.return_value = self._make_env("public.tb_confiture")

@@ -104,7 +104,7 @@ def test_no_fictional_api_names_in_the_doc() -> None:
 
 # Every `def` fence in the doc, and the source the real signature lives in.
 SIGNATURE_FENCES: dict[str, tuple[str, str]] = {
-    "from_config": ("core/_migrator/engine.py", "Migrator"),
+    "from_config": ("core/migrator.py", "Migrator"),
     "status": ("core/_migrator/session.py", "MigratorSession"),
     "current_revision": ("core/_migrator/session.py", "MigratorSession"),
     "up": ("core/_migrator/session.py", "MigratorSession"),

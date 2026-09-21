@@ -20,11 +20,13 @@ nothing on a pull request.
 from __future__ import annotations
 
 import textwrap
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from tests.unit._doubles import injected_engine
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -58,7 +60,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def doubles(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+def doubles(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
     """Stand-ins for the connection, the migrator and the schema-blind sweep.
 
     ``elsewhere`` is what the sweep reports. ``calls`` records the two methods
@@ -78,14 +80,14 @@ def doubles(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     state["migrator"] = migrator
 
     monkeypatch.setattr("confiture.cli.helpers.create_connection", lambda *a, **k: MagicMock())
-    monkeypatch.setattr("confiture.core.migrator.Migrator", lambda *a, **k: migrator)
 
     def fake_sweep(_conn: Any, table: str) -> list[str]:
         state["swept"].append(table)
         return list(state["elsewhere"])
 
     monkeypatch.setattr("confiture.core.ledger.find_ledger_relations", fake_sweep)
-    return state
+    with injected_engine(migrator):
+        yield state
 
 
 def _invoke(*flags: str) -> Any:

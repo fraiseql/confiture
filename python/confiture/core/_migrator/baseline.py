@@ -1,7 +1,7 @@
-"""Baseline / reinit / rebuild concern for ``Migrator``.
+"""Baseline / reinit / rebuild concern for ``MigrationEngine``.
 
 Peeled out of ``engine.py``. Free functions taking the
-``Migrator`` instance as their first argument; the class keeps thin delegating
+``MigrationEngine`` instance as their first argument; the class keeps thin delegating
 methods so its public surface and patch targets are unchanged. Pure refactor.
 """
 
@@ -22,7 +22,7 @@ from confiture.exceptions import MigrationError
 
 if TYPE_CHECKING:
     from confiture.config.environment import Environment
-    from confiture.core._migrator.engine import Migrator
+    from confiture.core._migrator.engine import MigrationEngine
 
 from confiture.core import builder as _core_builder
 from confiture.core import connection as _core_connection
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 
 def baseline_from_db(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     source_dsn: str,
     migrations_dir: Path,
     *,
@@ -49,7 +49,7 @@ def baseline_from_db(
 ) -> dict[str, Any]:
     """Copy tracking-table rows from another database.
 
-    See :meth:`Migrator.baseline_from_db` for the full contract.
+    See :meth:`MigrationEngine.baseline_from_db` for the full contract.
     """
 
     local_files = migrator.find_migration_files(migrations_dir)
@@ -126,7 +126,7 @@ def _read_source_tracking_table(
     return [dict(zip(columns, row, strict=False)) for row in rows]
 
 
-def _insert_baseline_row(migrator: Migrator, row: dict[str, Any], *, index: int = 0) -> None:
+def _insert_baseline_row(migrator: MigrationEngine, row: dict[str, Any], *, index: int = 0) -> None:
     """Copy one ledger row from the source database (``baseline-from-db``)."""
 
     record_migration(
@@ -140,7 +140,7 @@ def _insert_baseline_row(migrator: Migrator, row: dict[str, Any], *, index: int 
     )
 
 
-def clear_tracking_table(migrator: Migrator) -> int:
+def clear_tracking_table(migrator: MigrationEngine) -> int:
     """Delete all entries from the tracking table (DELETE, not TRUNCATE).
 
     Returns the number of rows deleted.
@@ -152,14 +152,14 @@ def clear_tracking_table(migrator: Migrator) -> int:
 
 
 def reinit(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     through: str | None = None,
     dry_run: bool = False,
     migrations_dir: Path | None = None,
 ) -> MigrateReinitResult:
     """Reset tracking table and re-mark migrations as applied.
 
-    See :meth:`Migrator.reinit` for the full contract.
+    See :meth:`MigrationEngine.reinit` for the full contract.
     """
 
     start_time = time.time()
@@ -235,12 +235,12 @@ def reinit(
         raise
 
 
-def discover_user_schemas(migrator: Migrator) -> list[str]:
+def discover_user_schemas(migrator: MigrationEngine) -> list[str]:
     """Every user-created schema the role can use, excluding system schemas."""
     return live_catalog.user_schemas(migrator.connection)
 
 
-def drop_user_schemas(migrator: Migrator, schemas: list[str]) -> list[str]:
+def drop_user_schemas(migrator: MigrationEngine, schemas: list[str]) -> list[str]:
     """Drop user schemas with CASCADE and recreate ``public`` (autocommit)."""
     if not schemas:
         return []
@@ -261,7 +261,7 @@ def drop_user_schemas(migrator: Migrator, schemas: list[str]) -> list[str]:
         migrator.connection.autocommit = original_autocommit
 
 
-def apply_ddl_string(migrator: Migrator, ddl: str) -> tuple[int, list[str]]:
+def apply_ddl_string(migrator: MigrationEngine, ddl: str) -> tuple[int, list[str]]:
     """Execute DDL statements in autocommit mode.
 
     Strips BEGIN/COMMIT wrappers, splits into statements, and executes each.
@@ -300,7 +300,7 @@ def apply_ddl_string(migrator: Migrator, ddl: str) -> tuple[int, list[str]]:
     return executed, warnings
 
 
-def backup_tracking_table(migrator: Migrator) -> list[dict[str, Any]]:
+def backup_tracking_table(migrator: MigrationEngine) -> list[dict[str, Any]]:
     """Dump current tracking table contents as list of dicts (empty if absent)."""
     if not migrator.tracking_table_exists():
         return []
@@ -312,7 +312,7 @@ def backup_tracking_table(migrator: Migrator) -> list[dict[str, Any]]:
 
 
 def rebuild(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     *,
     drop_schemas: bool = False,
     dry_run: bool = False,
@@ -324,7 +324,7 @@ def rebuild(
 ) -> MigrateRebuildResult:
     """Rebuild database from DDL and bootstrap tracking table.
 
-    See :meth:`Migrator.rebuild` for the full contract.
+    See :meth:`MigrationEngine.rebuild` for the full contract.
     """
 
     start_time = time.time()
@@ -432,13 +432,13 @@ def rebuild(
 
 
 def baseline_through(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     through: str,
     migrations_dir: Path,
 ) -> list[str]:
     """Mark migrations applied through *through* without clearing the table.
 
-    See :meth:`Migrator.baseline_through` for the full contract.
+    See :meth:`MigrationEngine.baseline_through` for the full contract.
     """
     all_migrations = migrator.find_migration_files(migrations_dir)
 

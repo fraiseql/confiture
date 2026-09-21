@@ -45,8 +45,8 @@ from typing import Any
 
 import confiture
 from confiture.core._migrator import apply_loop, replay, reporting, rollback_loop
-from confiture.core._migrator.engine import Migrator
 from confiture.core._migrator.session import MigratorSession
+from confiture.core.migrator import Migrator
 
 SESSION_PY = Path(confiture.__file__).resolve().parent / "core" / "_migrator" / "session.py"
 

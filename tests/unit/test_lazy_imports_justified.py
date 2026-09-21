@@ -67,7 +67,13 @@ def test_reasons_name_a_cause(marker: str) -> None:
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if marker in line:
                 reason = line.split(marker, 1)[1].strip().lower()
-                if len(reason) < 8 or reason in {"lazy", "lazy import", "perf", "performance"}:
+                if len(reason) < 8 or reason in {
+                    "lazy",
+                    "lazy import",
+                    "perf",
+                    "performance",
+                    "import cycle",
+                }:
                     vague.append(
                         f"{path.relative_to(PACKAGE_ROOT).as_posix()}:{lineno}: {reason!r}"
                     )

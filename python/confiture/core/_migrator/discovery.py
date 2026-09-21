@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.engine import Migrator
+    from confiture.core._migrator.engine import MigrationEngine
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def discover_migration_files(migrations_dir: Path) -> list[Path]:
 def find_duplicate_migration_versions(migrations_dir: Path) -> dict[str, list[Path]]:
     """Find migration files that share the same version prefix.
 
-    Standalone function (no Migrator instance needed). Scans .py and .up.sql
+    Standalone function (no MigrationEngine instance needed). Scans .py and .up.sql
     files, groups by version prefix, returns only versions with >1 file.
 
     Args:
@@ -82,12 +82,14 @@ def find_duplicate_migration_versions(migrations_dir: Path) -> dict[str, list[Pa
 
 
 # ---------------------------------------------------------------------------
-# Migrator-bound discovery operations (peeled from engine.py).
-# Free functions taking the Migrator instance; the class keeps thin delegators.
+# MigrationEngine-bound discovery operations (peeled from engine.py).
+# Free functions taking the MigrationEngine instance; the class keeps thin delegators.
 # ---------------------------------------------------------------------------
 
 
-def find_migration_files(migrator: Migrator, migrations_dir: Path | None = None) -> list[Path]:
+def find_migration_files(
+    migrator: MigrationEngine, migrations_dir: Path | None = None
+) -> list[Path]:
     """Find all migration files (``.py`` and ``.up.sql``), sorted by version."""
     del migrator  # discovery does not depend on the engine
     return discover_migration_files(migrations_dir or Path("db") / "migrations")
@@ -113,7 +115,7 @@ def find_orphaned_sql_files(migrations_dir: Path | None = None) -> list[Path]:
 
 
 def fix_orphaned_sql_files(
-    migrator: Migrator, migrations_dir: Path | None = None, dry_run: bool = False
+    migrator: MigrationEngine, migrations_dir: Path | None = None, dry_run: bool = False
 ) -> dict[str, list[tuple[str, str]]]:
     """Rename orphaned ``{NNN}_{name}.sql`` files to ``{NNN}_{name}.up.sql``.
 
@@ -155,7 +157,7 @@ def fix_orphaned_sql_files(
     return {"renamed": renamed, "errors": errors}
 
 
-def find_pending(migrator: Migrator, migrations_dir: Path | None = None) -> list[Path]:
+def find_pending(migrator: MigrationEngine, migrations_dir: Path | None = None) -> list[Path]:
     """Find migrations that have not been applied yet."""
     all_migrations = migrator.find_migration_files(migrations_dir)
     applied_versions = set(migrator.get_applied_versions())

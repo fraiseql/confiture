@@ -5,9 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from confiture.core._migrator.engine import Migrator
 from confiture.core.connection import load_migration_module
-from confiture.core.migrator import MigratorSession
+from confiture.core.migrator import Migrator, MigratorSession
 from confiture.models.sql_file_migration import FileSQLMigration
 from tests.unit._doubles import connection_double
 

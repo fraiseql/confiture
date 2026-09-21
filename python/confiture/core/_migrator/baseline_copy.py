@@ -11,7 +11,7 @@ The flow:
 
 This module owns the pure parts of that flow (row selection, warning
 generation).  The IO parts (opening the source connection, executing
-INSERTs against the target) live on :class:`Migrator.baseline_from_db`.
+INSERTs against the target) live on :meth:`MigrationEngine.baseline_from_db`.
 """
 
 from __future__ import annotations

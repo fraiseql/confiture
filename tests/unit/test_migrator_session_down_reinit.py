@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from confiture.config.environment import Environment
 from confiture.core.migrator import MigratorSession
 from confiture.models.results import MigrateDownResult, MigrateReinitResult, MigrationApplied
-from tests.unit._doubles import connection_double, injected_connection, injected_loader
+from tests.unit._doubles import (
+    connection_double,
+    injected_connection,
+    injected_loader,
+    injected_lock,
+)
 
 
 def _make_env() -> Environment:
@@ -68,7 +73,7 @@ class TestMigratorSessionDown:
 
         with (
             injected_loader(return_value=mock_class),
-            patch("confiture.core.migrator.MigrationLock"),  # #142: down() now locks
+            injected_lock(MagicMock()),  # #142: down() now locks
         ):
             result = session.down()
 
@@ -110,7 +115,7 @@ class TestMigratorSessionDown:
 
         with (
             injected_loader(side_effect=_load_class),
-            patch("confiture.core.migrator.MigrationLock"),  # #142: down() now locks
+            injected_lock(MagicMock()),  # #142: down() now locks
         ):
             result = session.down(steps=2)
 

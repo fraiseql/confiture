@@ -342,7 +342,7 @@ class TestSavepointDryRunExecutor:
         """Migrator.dry_run() should use SAVEPOINT executor for SQL migrations."""
         from unittest.mock import Mock
 
-        from confiture.core._migrator.engine import Migrator
+        from confiture.core.migrator import Migrator
         from confiture.models.migration import SQLMigration
 
         # Create a test SQL migration

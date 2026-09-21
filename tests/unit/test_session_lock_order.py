@@ -13,13 +13,18 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 from typing import ClassVar
-from unittest.mock import patch
 
 import pytest
 
 from confiture.config.environment import Environment
 from confiture.core.migrator import MigratorSession
-from tests.unit._doubles import connection_double, injected_connection, migrator_double
+from tests.unit._doubles import (
+    connection_double,
+    injected_connection,
+    injected_engine,
+    injected_lock,
+    migrator_double,
+)
 
 
 def _env() -> Environment:
@@ -68,8 +73,8 @@ def _run_up(tmp_path: Path, events: list[str], **kwargs) -> None:
     )
     with (
         injected_connection(connection_double()),
-        patch("confiture.core.migrator.Migrator", autospec=True, return_value=double),
-        patch("confiture.core.migrator.MigrationLock", _RecordingLock),
+        injected_engine(double),
+        injected_lock(_RecordingLock),
     ):
         with MigratorSession(_env(), migrations) as session:
             result = session.up(**kwargs)

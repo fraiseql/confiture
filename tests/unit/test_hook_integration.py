@@ -2,10 +2,10 @@
 
 from unittest.mock import MagicMock
 
-from confiture.core._migrator.engine import Migrator
 from confiture.core.hooks.base import Hook, HookResult
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.phases import HookPhase
+from confiture.core.migrator import Migrator
 from confiture.models.migration import Migration
 
 

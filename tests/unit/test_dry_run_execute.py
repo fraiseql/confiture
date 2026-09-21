@@ -9,7 +9,7 @@ from confiture.config.environment import Environment
 from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
 from confiture.models.results import MigrateUpResult
-from tests.unit._doubles import connection_double, injected_loader
+from tests.unit._doubles import connection_double, injected_loader, injected_lock
 
 
 def _make_entered_session(migrations_dir: Path) -> MigratorSession:
@@ -49,27 +49,24 @@ class TestDryRunExecute:
 
     def test_returns_success_on_valid_sql(self, tmp_path):
         """Successful SAVEPOINT execution returns success=True."""
-        import confiture.core.migrator as _m
-
         session = _make_entered_session(tmp_path / "migrations")
         _setup_pending(session, tmp_path)
 
-        with patch.object(_m, "LockConfig"):
-            with patch.object(_m, "MigrationLock") as MockLock:
-                mock_lock = MagicMock()
-                mock_lock.acquire.return_value.__enter__ = MagicMock()
-                mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
-                MockLock.return_value = mock_lock
+        with injected_lock(MagicMock()) as MockLock:
+            mock_lock = MagicMock()
+            mock_lock.acquire.return_value.__enter__ = MagicMock()
+            mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
+            MockLock.return_value = mock_lock
 
-                with injected_loader() as mock_load:
-                    mock_cls = MagicMock()
-                    mock_instance = MagicMock()
-                    mock_instance.version = "001"
-                    mock_instance.name = "migration_1"
-                    mock_cls.return_value = mock_instance
-                    mock_load.return_value = mock_cls
+            with injected_loader() as mock_load:
+                mock_cls = MagicMock()
+                mock_instance = MagicMock()
+                mock_instance.version = "001"
+                mock_instance.name = "migration_1"
+                mock_cls.return_value = mock_instance
+                mock_load.return_value = mock_cls
 
-                    result = session.up(dry_run_execute=True)
+                result = session.up(dry_run_execute=True)
 
         assert result.success is True
         assert result.dry_run is True
@@ -79,30 +76,27 @@ class TestDryRunExecute:
 
     def test_returns_error_on_sql_failure(self, tmp_path):
         """SQL error during SAVEPOINT execution returns error result."""
-        import confiture.core.migrator as _m
-
         session = _make_entered_session(tmp_path / "migrations")
         _setup_pending(session, tmp_path)
 
         # Make apply() raise
         session._migrator.apply.side_effect = Exception("syntax error at or near 'CREAT'")
 
-        with patch.object(_m, "LockConfig"):
-            with patch.object(_m, "MigrationLock") as MockLock:
-                mock_lock = MagicMock()
-                mock_lock.acquire.return_value.__enter__ = MagicMock()
-                mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
-                MockLock.return_value = mock_lock
+        with injected_lock(MagicMock()) as MockLock:
+            mock_lock = MagicMock()
+            mock_lock.acquire.return_value.__enter__ = MagicMock()
+            mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
+            MockLock.return_value = mock_lock
 
-                with injected_loader() as mock_load:
-                    mock_cls = MagicMock()
-                    mock_instance = MagicMock()
-                    mock_instance.version = "001"
-                    mock_instance.name = "migration_1"
-                    mock_cls.return_value = mock_instance
-                    mock_load.return_value = mock_cls
+            with injected_loader() as mock_load:
+                mock_cls = MagicMock()
+                mock_instance = MagicMock()
+                mock_instance.version = "001"
+                mock_instance.name = "migration_1"
+                mock_cls.return_value = mock_instance
+                mock_load.return_value = mock_cls
 
-                    result = session.up(dry_run_execute=True)
+                result = session.up(dry_run_execute=True)
 
         assert result.success is False
         assert result.dry_run_execute is True
@@ -110,27 +104,24 @@ class TestDryRunExecute:
 
     def test_rolls_back_savepoint(self, tmp_path):
         """SAVEPOINT and ROLLBACK SQL are executed on the connection."""
-        import confiture.core.migrator as _m
-
         session = _make_entered_session(tmp_path / "migrations")
         _setup_pending(session, tmp_path)
 
-        with patch.object(_m, "LockConfig"):
-            with patch.object(_m, "MigrationLock") as MockLock:
-                mock_lock = MagicMock()
-                mock_lock.acquire.return_value.__enter__ = MagicMock()
-                mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
-                MockLock.return_value = mock_lock
+        with injected_lock(MagicMock()) as MockLock:
+            mock_lock = MagicMock()
+            mock_lock.acquire.return_value.__enter__ = MagicMock()
+            mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
+            MockLock.return_value = mock_lock
 
-                with injected_loader() as mock_load:
-                    mock_cls = MagicMock()
-                    mock_instance = MagicMock()
-                    mock_instance.version = "001"
-                    mock_instance.name = "migration_1"
-                    mock_cls.return_value = mock_instance
-                    mock_load.return_value = mock_cls
+            with injected_loader() as mock_load:
+                mock_cls = MagicMock()
+                mock_instance = MagicMock()
+                mock_instance.version = "001"
+                mock_instance.name = "migration_1"
+                mock_cls.return_value = mock_instance
+                mock_load.return_value = mock_cls
 
-                    session.up(dry_run_execute=True)
+                session.up(dry_run_execute=True)
 
         # Check SAVEPOINT calls on connection
         execute_calls = [str(c) for c in session._conn.execute.call_args_list]
@@ -140,28 +131,25 @@ class TestDryRunExecute:
 
     def test_rolls_back_even_on_failure(self, tmp_path):
         """ROLLBACK happens even when apply() raises."""
-        import confiture.core.migrator as _m
-
         session = _make_entered_session(tmp_path / "migrations")
         _setup_pending(session, tmp_path)
         session._migrator.apply.side_effect = Exception("boom")
 
-        with patch.object(_m, "LockConfig"):
-            with patch.object(_m, "MigrationLock") as MockLock:
-                mock_lock = MagicMock()
-                mock_lock.acquire.return_value.__enter__ = MagicMock()
-                mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
-                MockLock.return_value = mock_lock
+        with injected_lock(MagicMock()) as MockLock:
+            mock_lock = MagicMock()
+            mock_lock.acquire.return_value.__enter__ = MagicMock()
+            mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
+            MockLock.return_value = mock_lock
 
-                with injected_loader() as mock_load:
-                    mock_cls = MagicMock()
-                    mock_instance = MagicMock()
-                    mock_instance.version = "001"
-                    mock_instance.name = "migration_1"
-                    mock_cls.return_value = mock_instance
-                    mock_load.return_value = mock_cls
+            with injected_loader() as mock_load:
+                mock_cls = MagicMock()
+                mock_instance = MagicMock()
+                mock_instance.version = "001"
+                mock_instance.name = "migration_1"
+                mock_cls.return_value = mock_instance
+                mock_load.return_value = mock_cls
 
-                    session.up(dry_run_execute=True)
+                session.up(dry_run_execute=True)
 
         execute_calls = [str(c) for c in session._conn.execute.call_args_list]
         assert any("ROLLBACK TO SAVEPOINT" in c for c in execute_calls)
@@ -191,35 +179,32 @@ class TestDryRunExecute:
 
     def test_respects_target(self, tmp_path):
         """Stops at target version."""
-        import confiture.core.migrator as _m
-
         session = _make_entered_session(tmp_path / "migrations")
         _setup_pending(session, tmp_path, count=3)
 
         versions = ["001", "002", "003"]
         names = ["migration_1", "migration_2", "migration_3"]
 
-        with patch.object(_m, "LockConfig"):
-            with patch.object(_m, "MigrationLock") as MockLock:
-                mock_lock = MagicMock()
-                mock_lock.acquire.return_value.__enter__ = MagicMock()
-                mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
-                MockLock.return_value = mock_lock
+        with injected_lock(MagicMock()) as MockLock:
+            mock_lock = MagicMock()
+            mock_lock.acquire.return_value.__enter__ = MagicMock()
+            mock_lock.acquire.return_value.__exit__ = MagicMock(return_value=False)
+            MockLock.return_value = mock_lock
 
-                call_count = [0]
+            call_count = [0]
 
-                def make_migration_class(f):
-                    idx = call_count[0]
-                    call_count[0] += 1
-                    mock_cls = MagicMock()
-                    mock_instance = MagicMock()
-                    mock_instance.version = versions[idx]
-                    mock_instance.name = names[idx]
-                    mock_cls.return_value = mock_instance
-                    return mock_cls
+            def make_migration_class(f):
+                idx = call_count[0]
+                call_count[0] += 1
+                mock_cls = MagicMock()
+                mock_instance = MagicMock()
+                mock_instance.version = versions[idx]
+                mock_instance.name = names[idx]
+                mock_cls.return_value = mock_instance
+                return mock_cls
 
-                with injected_loader(side_effect=make_migration_class):
-                    result = session.up(dry_run_execute=True, target="002")
+            with injected_loader(side_effect=make_migration_class):
+                result = session.up(dry_run_execute=True, target="002")
 
         assert result.success is True
         assert len(result.migrations_applied) == 2

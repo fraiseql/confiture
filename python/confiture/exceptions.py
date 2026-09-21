@@ -6,34 +6,13 @@ This allows users to catch all Confiture-specific errors with a single except cl
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import TYPE_CHECKING, Any
+
+from confiture.error_codes import ERROR_CODE_REGISTRY
+from confiture.models.error import ErrorSeverity
 
 if TYPE_CHECKING:
     from confiture.core.preconditions import Precondition
-
-
-class ErrorSeverity(str, Enum):
-    """Severity levels for errors.
-
-    Attributes:
-        INFO: Informational, no action needed
-        WARNING: Should investigate but not blocking
-        ERROR: Blocking issue, must fix
-        CRITICAL: Severe issue, potential data loss
-
-    Example:
-        >>> from confiture.models.error import ErrorSeverity
-        >>> ErrorSeverity.ERROR
-        <ErrorSeverity.ERROR: 'error'>
-        >>> ErrorSeverity.ERROR == "error"
-        True
-    """
-
-    INFO = "info"
-    WARNING = "warning"
-    ERROR = "error"
-    CRITICAL = "critical"
 
 
 class ConfiturError(Exception):
@@ -176,9 +155,6 @@ class ConfiturError(Exception):
             Exit code (0-10)
         """
         if self.error_code:
-            # Reason: import cycle: confiture.core (its __init__ imports core.dry_run) -> exceptions -> error_codes -> models.error -> models/__init__ -> models.migration
-            from confiture.error_codes import ERROR_CODE_REGISTRY
-
             definition = ERROR_CODE_REGISTRY.get(self.error_code)
             return definition.exit_code
         return 1

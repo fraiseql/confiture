@@ -9,7 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from tests.unit._doubles import connection_double
+from tests.unit._doubles import connection_double, injected_engine
 
 runner = CliRunner()
 
@@ -36,9 +36,7 @@ class TestMigrateUpDryRun:
         """Test that --dry-run analyzes migrations without executing them."""
         with patch("confiture.cli.helpers.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
-                with patch(
-                    "confiture.core.migrator.Migrator", autospec=True
-                ) as mock_migrator_class:
+                with injected_engine() as mock_migrator_class:
                     # Setup mocks
                     mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
@@ -90,9 +88,7 @@ class TestMigrateUpDryRun:
         """Test --dry-run with JSON output format."""
         with patch("confiture.cli.helpers.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
-                with patch(
-                    "confiture.core.migrator.Migrator", autospec=True
-                ) as mock_migrator_class:
+                with injected_engine() as mock_migrator_class:
                     mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
@@ -155,9 +151,7 @@ class TestMigrateUpDryRun:
 
             with patch("confiture.cli.helpers.create_connection") as mock_conn_factory:
                 with patch("confiture.core.connection.load_config"):
-                    with patch(
-                        "confiture.core.migrator.Migrator", autospec=True
-                    ) as mock_migrator_class:
+                    with injected_engine() as mock_migrator_class:
                         mock_conn = connection_double()
                         mock_conn_factory.return_value = mock_conn
 
@@ -200,9 +194,7 @@ class TestMigrateUpDryRun:
         """Test --dry-run-execute shows analysis then executes with confirmation."""
         with patch("confiture.cli.helpers.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
-                with patch(
-                    "confiture.core.migrator.Migrator", autospec=True
-                ) as mock_migrator_class:
+                with injected_engine() as mock_migrator_class:
                     mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
@@ -254,9 +246,7 @@ class TestMigrateDownDryRun:
         """Test that --dry-run analyzes rollback without executing it."""
         with patch("confiture.cli.helpers.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
-                with patch(
-                    "confiture.core.migrator.Migrator", autospec=True
-                ) as mock_migrator_class:
+                with injected_engine() as mock_migrator_class:
                     mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
@@ -300,9 +290,7 @@ class TestMigrateDownDryRun:
         """Test --dry-run with JSON format for migrate down."""
         with patch("confiture.cli.helpers.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
-                with patch(
-                    "confiture.core.migrator.Migrator", autospec=True
-                ) as mock_migrator_class:
+                with injected_engine() as mock_migrator_class:
                     mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
@@ -406,9 +394,7 @@ class TestDryRunExecution:
         """Test that --dry-run-execute doesn't execute when user cancels."""
         with patch("confiture.cli.helpers.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
-                with patch(
-                    "confiture.core.migrator.Migrator", autospec=True
-                ) as mock_migrator_class:
+                with injected_engine() as mock_migrator_class:
                     mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
@@ -452,9 +438,7 @@ class TestDryRunExecution:
         """Test --dry-run when there are no pending migrations."""
         with patch("confiture.cli.helpers.create_connection") as mock_conn_factory:
             with patch("confiture.core.connection.load_config"):
-                with patch(
-                    "confiture.core.migrator.Migrator", autospec=True
-                ) as mock_migrator_class:
+                with injected_engine() as mock_migrator_class:
                     mock_conn = connection_double()
                     mock_conn_factory.return_value = mock_conn
 
