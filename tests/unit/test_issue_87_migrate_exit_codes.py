@@ -19,6 +19,7 @@ from confiture.cli.main import app
 from tests.unit._doubles import (
     connection_double,
     injected_engine,
+    injected_loader,
     injected_lock,
     migrator_double,
 )
@@ -338,9 +339,7 @@ class TestMigrateUpMigrationFailure:
             patch("confiture.core.connection.load_config", return_value=_make_env()),
             patch("confiture.cli.helpers.create_connection", return_value=mock_conn),
             injected_engine(mock_migrator),
-            patch(
-                "confiture.core.connection.load_migration_class", return_value=mock_migration_class
-            ),
+            injected_loader(return_value=mock_migration_class),
             injected_lock(MagicMock(return_value=mock_lock)),
         ):
             result = runner.invoke(

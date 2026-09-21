@@ -11,7 +11,7 @@ Example:
 
 from pathlib import Path
 
-from confiture.core.connection import get_migration_class, load_migration_module
+from confiture.core._migrator.loader import get_migration_class, load_migration_module
 from confiture.exceptions import MigrationError
 from confiture.models.migration import Migration
 from confiture.models.sql_file_migration import FileSQLMigration

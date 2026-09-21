@@ -32,10 +32,9 @@ import psycopg
 import psycopg.pq
 from psycopg import sql as pgsql
 
-from confiture.core import connection as _core_connection
 from confiture.core._migrator._constants import _VIEW_COLUMN_RENAME_RE
+from confiture.core._migrator.loader import load_migration_class
 from confiture.core.checksum import compute_checksum
-from confiture.core.connection import load_migration_class
 from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.expand_contract import StagedPlan
 from confiture.core.hooks import HookError
@@ -490,7 +489,7 @@ def mark_applied(
     """
 
     # Load the migration class to get version and name
-    migration_class = _core_connection.load_migration_class(migration_file)
+    migration_class = load_migration_class(migration_file)
 
     # Create a minimal instance just to read attributes
     # We need to pass a connection but won't use it

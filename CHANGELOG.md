@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Opening a connection knows nothing about migrations.** `load_migration_class`,
+  `load_migration_module` and `get_migration_class` move from `core.connection` to
+  `core._migrator.loader`, and `core.connection` no longer imports the migration models
+  (a layering test holds that). ⚠️ For a library caller or a test: import them from the
+  new module, and patch `confiture.core._migrator.loader.<name>` — or set
+  `MigratorSession.default_migration_loader`, which binds the function directly.
+- **`--dry-run-execute` rehearses with the loop `up` runs.** It had a loop of its own,
+  a copy of the apply loop's target stop, strict mode, batch and events, wrapped in a
+  SAVEPOINT; the rehearsal is now the apply loop itself under that SAVEPOINT, with
+  `commit=False`.
 - **The ledger's one `INSERT` is `core.ledger.record_migration(connection, table,
   LedgerRow(...))`.** The step runner's `migrate steps --resume` wrote it through the
   migrator's internals.
@@ -51,6 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`--dry-run-execute` stops where `up` stops.** The copied loop never looked at
+  `requires_superuser`, so the rehearsal ran a migration the real run halts before, and
+  never named the `migrate apply-as` the real run asks for. It halts at it, reports it
+  under `skipped_superuser` and lists what is left under `pending`, as `up` does.
 - **An `--online` migration runs its hooks and its preconditions.** The apply loop
   handed a migration it could stage straight to the step runner and returned, past the
   engine's `apply` — where the hooks run and the preconditions are asked. A

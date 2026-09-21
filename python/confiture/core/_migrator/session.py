@@ -49,6 +49,7 @@ from confiture.core._migrator import reporting as _reporting
 from confiture.core._migrator import rollback_loop as _rollback_loop
 from confiture.core._migrator.engine import MigrationEngine
 from confiture.core._migrator.events import UpObserver
+from confiture.core._migrator.loader import load_migration_class
 from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_settings
 from confiture.exceptions import ConfigurationError
 
@@ -87,9 +88,7 @@ class MigratorSession:
     default_connection_factory: ClassVar[Callable[[Any], Connection]] = staticmethod(
         lambda url: _core_connection().create_connection(url)
     )
-    default_migration_loader: ClassVar[Callable[[Path], type]] = staticmethod(
-        lambda path: _core_connection().load_migration_class(path)
-    )
+    default_migration_loader: ClassVar[Callable[[Path], type]] = staticmethod(load_migration_class)
     #: What the session drives once it is connected, and what takes the migration
     #: lock. Class attributes for the same reason: a test injects a double here,
     #: where it used to patch a name in ``confiture.core.migrator`` that this package

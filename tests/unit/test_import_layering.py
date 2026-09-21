@@ -111,3 +111,19 @@ def test_models_import_one_another_in_one_direction() -> None:
         f"{a} <-> {b}" for a, targets in edges.items() for b in targets if a < b and a in edges[b]
     )
     assert cycles == [], f"models/ modules import each other: {cycles}"
+
+
+def test_the_connection_knows_nothing_about_migrations() -> None:
+    """``core.connection`` opens a database; turning a file into a migration is the migrator's.
+
+    It imported ``models.migration`` and ``models.sql_file_migration`` at module level
+    for the loader it used to hold, so opening a connection loaded the migration
+    runtime. The loader is ``core/_migrator/loader.py``.
+    """
+    path = PACKAGE / "core" / "connection.py"
+    reaching = [
+        f"{line} {module}"
+        for line, module in _all_imports(path)
+        if module.startswith(("confiture.models", "confiture.core._migrator"))
+    ]
+    assert reaching == [], f"core/connection.py names the migrator or its models: {reaching}"

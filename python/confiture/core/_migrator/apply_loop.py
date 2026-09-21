@@ -158,9 +158,7 @@ def _up_under_lock(
     if early is not None:
         return early
     if dry_run_execute:
-        return _up_dry_run_execute(
-            session, plan, target=target, force=force, on_event=on_event, batch=batch
-        )
+        return _rehearse(session, plan, target=target, force=force, on_event=on_event, batch=batch)
     applied = _apply_pending(
         session,
         plan,
@@ -291,8 +289,13 @@ def _apply_pending(
     on_event: UpObserver | None,
     batch: Any | None,
     online: RunOptions | None = None,
+    rehearsal: bool = False,
 ) -> _Applied:
-    """Apply the pending files in order; stop at the target, a superuser halt or a failure."""
+    """Apply the pending files in order; stop at the target, a superuser halt or a failure.
+
+    A *rehearsal* (``--dry-run-execute``) runs inside its caller's SAVEPOINT: nothing
+    commits, and a body that would commit as it goes is skipped.
+    """
     assert session._migrator is not None
     applied = _Applied()
     try:
@@ -333,10 +336,20 @@ def _apply_pending(
                 applied.halted = True
                 break
 
+            if rehearsal and _skipped_in_rehearsal(plan, migration, on_event):
+                continue
+
             emit(on_event, "applying", version=migration.version, name=migration.name)
             try:
                 start = _time.time()
-                _apply_one(session, migration, migration_file, force=force, online=online)
+                _apply_one(
+                    session,
+                    migration,
+                    migration_file,
+                    force=force,
+                    online=online,
+                    commit=not rehearsal,
+                )
                 elapsed = int((_time.time() - start) * 1000)
                 applied.total_duration_ms += elapsed
                 applied.migrations.append(
@@ -377,6 +390,7 @@ def _apply_one(
     *,
     force: bool,
     online: RunOptions | None,
+    commit: bool = True,
 ) -> None:
     """Apply one migration: as expand/contract stages when asked and possible, else as it declares."""
     assert session._migrator is not None
@@ -387,7 +401,7 @@ def _apply_one(
         else None
     )
     session._migrator.apply(
-        migration, force=force, migration_file=migration_file, strategy=strategy
+        migration, force=force, migration_file=migration_file, commit=commit, strategy=strategy
     )
 
 
@@ -419,7 +433,7 @@ def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResul
     )
 
 
-def _up_dry_run_execute(
+def _rehearse(
     session: MigratorSession,
     plan: _Plan,
     *,
@@ -428,123 +442,80 @@ def _up_dry_run_execute(
     on_event: UpObserver | None = None,
     batch: Any | None = None,
 ) -> MigrateUpResult:
-    """Execute pending migrations inside a SAVEPOINT, then roll back.
+    """``--dry-run-execute``: the apply loop itself, inside a SAVEPOINT that is rolled back.
 
-    This catches real SQL errors (syntax, constraints, type mismatches)
-    without persisting any changes. Non-transactional DDL (e.g. ``CREATE
-    INDEX CONCURRENTLY``) cannot run inside a SAVEPOINT and is skipped.
+    Real SQL errors — syntax, constraints, type mismatches — surface without
+    anything persisting. It is the same loop ``up`` runs, so it stops where ``up``
+    would stop; what it cannot rehearse is a body that commits as it goes
+    (``CREATE INDEX CONCURRENTLY``), which it skips and says so.
     """
-    # Invariant: this helper only runs inside an active session (callers guard).
     assert session._conn is not None
-    assert session._migrator is not None
-
-    migrations_tested: list[MigrationApplied] = []
-    total_time = 0
-    failed_exception: Exception | None = None
-
+    applied = _Applied()
     try:
         session._conn.execute("SAVEPOINT dry_run_execute")
         try:
-            for migration_file in plan.pending_files:
-                migration_class = _migration_class(session, plan, migration_file)
-                migration = migration_class(connection=session._conn)
-                _apply_strict_mode(migration, plan.strict)
-                _apply_batch(migration, batch)
-
-                if target and migration.version > target:
-                    emit(
-                        on_event,
-                        "target_reached",
-                        version=migration.version,
-                        name=migration.name,
-                    )
-                    break
-
-                if not getattr(migration, "transactional", True):
-                    # Cannot run inside the SAVEPOINT: the autocommit path
-                    # would commit everything tested so far.
-                    plan.skipped_versions.append(migration.version)
-                    plan.checksum_warnings = [
-                        *plan.checksum_warnings,
-                        f"dry_run_execute: skipped {migration.version}_{migration.name} — "
-                        "non-transactional migrations cannot run inside a SAVEPOINT",
-                    ]
-                    emit(
-                        on_event,
-                        "skipped_non_transactional",
-                        version=migration.version,
-                        name=migration.name,
-                    )
-                    continue
-
-                emit(on_event, "applying", version=migration.version, name=migration.name)
-                try:
-                    start = _time.time()
-                    session._migrator.apply(
-                        migration,
-                        force=force,
-                        migration_file=migration_file,
-                        commit=False,
-                    )
-                    elapsed = int((_time.time() - start) * 1000)
-                    total_time += elapsed
-                    migrations_tested.append(
-                        MigrationApplied(
-                            version=migration.version,
-                            name=migration.name,
-                            duration_ms=elapsed,
-                        )
-                    )
-                    emit(
-                        on_event,
-                        "applied",
-                        version=migration.version,
-                        name=migration.name,
-                        elapsed_ms=elapsed,
-                    )
-                except Exception as exc:  # Reason: a migration's up() is user code and may raise anything; recorded and reported
-                    failed_exception = exc
-                    emit(
-                        on_event,
-                        "failed",
-                        version=migration.version,
-                        name=migration.name,
-                        message=str(exc),
-                    )
-                    break
+            applied = _apply_pending(
+                session,
+                plan,
+                target=target,
+                force=force,
+                on_event=on_event,
+                batch=batch,
+                rehearsal=True,
+            )
         finally:
             session._conn.execute("ROLLBACK TO SAVEPOINT dry_run_execute")
             session._conn.execute("RELEASE SAVEPOINT dry_run_execute")
-    except Exception as exc:  # Reason: user migration code under the dry-run savepoint may raise anything; recorded and reported
-        if failed_exception is None:
-            failed_exception = exc
+    except Exception as exc:  # Reason: releasing the dry-run savepoint after user code ran may raise anything; recorded and reported
+        applied.failure = applied.failure or exc
+    return _rehearsal_result(plan, applied)
 
-    if failed_exception is not None:
+
+def _rehearsal_result(plan: _Plan, applied: _Applied) -> MigrateUpResult:
+    """The :class:`MigrateUpResult` for a rehearsal: what ``up`` would have done, undone."""
+    if applied.failure is not None:
         return MigrateUpResult(
             success=False,
-            migrations_applied=migrations_tested,
-            total_duration_ms=total_time,
+            migrations_applied=applied.migrations,
+            total_duration_ms=applied.total_duration_ms,
             checksums_verified=plan.checksums_verified,
             dry_run=True,
             dry_run_execute=True,
-            errors=[str(failed_exception)],
-            failure=failed_exception,
+            errors=[str(applied.failure)],
+            failure=applied.failure,
             skipped=plan.skipped_versions,
+            skipped_superuser=applied.skipped_superuser,
+            pending=applied.pending_after_halt,
         )
-
     return MigrateUpResult(
-        success=True,
-        migrations_applied=migrations_tested,
-        total_duration_ms=total_time,
+        success=not applied.halted,
+        migrations_applied=applied.migrations,
+        total_duration_ms=applied.total_duration_ms,
         checksums_verified=plan.checksums_verified,
         dry_run=True,
         dry_run_execute=True,
         skipped=plan.skipped_versions,
+        skipped_superuser=applied.skipped_superuser,
+        pending=applied.pending_after_halt,
         warnings=[
             "dry_run_execute: all SQL executed successfully, changes rolled back",
             *plan.checksum_warnings,
         ],
     )
+
+
+def _skipped_in_rehearsal(plan: _Plan, migration: Any, on_event: UpObserver | None) -> bool:
+    """A body that commits as it goes cannot run inside the rehearsal's SAVEPOINT."""
+    if getattr(migration, "transactional", True):
+        return False
+    plan.skipped_versions.append(migration.version)
+    plan.checksum_warnings = [
+        *plan.checksum_warnings,
+        f"dry_run_execute: skipped {migration.version}_{migration.name} — "
+        "non-transactional migrations cannot run inside a SAVEPOINT",
+    ]
+    emit(on_event, "skipped_non_transactional", version=migration.version, name=migration.name)
+    return True
 
 
 def _apply_strict_mode(migration: Any, strict: bool) -> None:

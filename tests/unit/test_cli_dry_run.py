@@ -54,9 +54,11 @@ class TestMigrateUpDryRun:
                     ]
 
                     # Mock migration module loading
-                    with patch("confiture.core.connection.load_migration_module") as mock_load:
+                    with patch(
+                        "confiture.core._migrator.loader.load_migration_module"
+                    ) as mock_load:
                         with patch(
-                            "confiture.core.connection.get_migration_class"
+                            "confiture.core._migrator.loader.get_migration_class"
                         ) as mock_get_class:
                             # Setup migration mock
                             mock_migration = MagicMock()
@@ -102,9 +104,11 @@ class TestMigrateUpDryRun:
                         Path("db/migrations/001_init.py"),
                     ]
 
-                    with patch("confiture.core.connection.load_migration_module") as mock_load:
+                    with patch(
+                        "confiture.core._migrator.loader.load_migration_module"
+                    ) as mock_load:
                         with patch(
-                            "confiture.core.connection.get_migration_class"
+                            "confiture.core._migrator.loader.get_migration_class"
                         ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "001"
@@ -165,9 +169,11 @@ class TestMigrateUpDryRun:
                             Path("db/migrations/001_init.py"),
                         ]
 
-                        with patch("confiture.core.connection.load_migration_module") as mock_load:
+                        with patch(
+                            "confiture.core._migrator.loader.load_migration_module"
+                        ) as mock_load:
                             with patch(
-                                "confiture.core.connection.get_migration_class"
+                                "confiture.core._migrator.loader.get_migration_class"
                             ) as mock_get_class:
                                 mock_migration = MagicMock()
                                 mock_migration.version = "001"
@@ -211,9 +217,11 @@ class TestMigrateUpDryRun:
                         Path("db/migrations/001_init.py"),
                     ]
 
-                    with patch("confiture.core.connection.load_migration_module") as mock_load:
+                    with patch(
+                        "confiture.core._migrator.loader.load_migration_module"
+                    ) as mock_load:
                         with patch(
-                            "confiture.core.connection.get_migration_class"
+                            "confiture.core._migrator.loader.get_migration_class"
                         ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "001"
@@ -259,9 +267,11 @@ class TestMigrateDownDryRun:
                         Path("db/migrations/002_add_users.py"),
                     ]
 
-                    with patch("confiture.core.connection.load_migration_module") as mock_load:
+                    with patch(
+                        "confiture.core._migrator.loader.load_migration_module"
+                    ) as mock_load:
                         with patch(
-                            "confiture.core.connection.get_migration_class"
+                            "confiture.core._migrator.loader.get_migration_class"
                         ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "002"
@@ -302,9 +312,11 @@ class TestMigrateDownDryRun:
                         Path("db/migrations/001_init.py"),
                     ]
 
-                    with patch("confiture.core.connection.load_migration_module") as mock_load:
+                    with patch(
+                        "confiture.core._migrator.loader.load_migration_module"
+                    ) as mock_load:
                         with patch(
-                            "confiture.core.connection.get_migration_class"
+                            "confiture.core._migrator.loader.get_migration_class"
                         ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "001"
@@ -408,9 +420,11 @@ class TestDryRunExecution:
                         Path("db/migrations/001_init.py"),
                     ]
 
-                    with patch("confiture.core.connection.load_migration_module") as mock_load:
+                    with patch(
+                        "confiture.core._migrator.loader.load_migration_module"
+                    ) as mock_load:
                         with patch(
-                            "confiture.core.connection.get_migration_class"
+                            "confiture.core._migrator.loader.get_migration_class"
                         ) as mock_get_class:
                             mock_migration = MagicMock()
                             mock_migration.version = "001"
