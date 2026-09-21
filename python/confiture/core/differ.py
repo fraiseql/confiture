@@ -150,18 +150,12 @@ def _object_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
 def _types_differ(old: Column, new: Column) -> bool:
     """Whether two columns declare different types, typmod included.
 
-    ``type_lattice.same_type`` is the predicate, and says so itself: *a column
-    type must keep [typmods] or ``varchar(50)`` and ``varchar(100)`` compare
-    equal*. Deciding that ``int4`` and ``integer`` are one type is the lattice's
-    job too, which is why this compares the written spellings rather than adding
-    a second alias table beside ``_COLUMN_TYPE_MAP``.
-
-    A column with no written type — none from a parse, but a model built by
-    hand — compares by its canonical type alone.
+    By identity (``type_key``), through ``type_lattice.same_type`` — the one
+    canonicaliser, whose own docstring states this case: *a column type must keep
+    [typmods] or ``varchar(50)`` and ``varchar(100)`` compare equal*. Never by the
+    spellings: ``int4`` and ``integer`` are one type whichever side wrote which.
     """
-    if old.raw_sql_type and new.raw_sql_type:
-        return not same_type(old.raw_sql_type, new.raw_sql_type)
-    return old.type_key != new.type_key or old.raw_sql_type != new.raw_sql_type
+    return not same_type(old.type_key, new.type_key)
 
 
 #: What a column with no written type is called in a change — none from a parse.
