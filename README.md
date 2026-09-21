@@ -86,12 +86,11 @@ Walkthrough: [docs/guides/02-incremental-migrations.md](docs/guides/02-increment
 | Build from scratch in <1s | **yes** | no | no | no | no | yes (manual) |
 | Production sync + anonymization | **yes** | no | no | no | no | no |
 | Zero-downtime via FDW | **yes** | no | no | no | no | no |
-| Multi-agent coordination | **yes** | no | no | no | no | no |
 | Ecosystem maturity / stars | early | very mature | mature | mature | mature | n/a |
 
 > **Note on "source of truth":** confiture can run as a pure migration tool against a project that has no `db/schema/` directory — the DDL workflow is opt-in. See [No `db/schema/` directory?](#no-dbschema-directory-that-works-too) above.
 
-Confiture wins on **build-from-DDL**, **structural-diff preflight**, **production sync**, and **multi-agent coordination**. It loses on ecosystem age — Flyway and Alembic have a decade of community knowledge. Pick honestly.
+Confiture wins on **build-from-DDL**, **structural-diff preflight**, and **production sync**. It loses on ecosystem age — Flyway and Alembic have a decade of community knowledge. Pick honestly.
 
 ### Adoption checklist
 
@@ -99,7 +98,7 @@ Confiture wins on **build-from-DDL**, **structural-diff preflight**, **productio
 |---|---|
 | 1 environment + 1 contributor, schema rarely changes | plain `psql` |
 | 2+ environments, schema changes weekly | Confiture, Flyway, Alembic, or dbmate |
-| Multi-agent / AI-driven development on shared schemas | **Confiture** |
+| Multi-agent / AI-driven development on shared schemas | Confiture with the pgGit plugin ([`plugins/fraiseql-confiture-pggit/`](plugins/fraiseql-confiture-pggit/README.md)) |
 | You have a migration chain (no `db/schema/`) and want preflight + tracking | **Confiture** (use everything except `confiture build`) |
 | You want `db/schema/` to be source of truth, not a migration chain | **Confiture** |
 | You need zero-downtime schema swaps with `postgres_fdw` | **Confiture** (Medium 4) |
@@ -275,7 +274,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 - [Security-Definer Lint](docs/guides/security-definer-lint.md) — `sec_002` flags `SECURITY DEFINER` functions/procedures that don't pin `search_path` (CVE-2018-1058); static DDL scan and live `pg_proc` path; `--emit-remediation` generates ALTER scripts.
 - [Named Schemas](docs/guides/named-schemas.md)
 - [Hooks](docs/guides/hooks.md)
-- [Multi-Agent Coordination](docs/guides/multi-agent-coordination.md)
+- [pgGit branching and multi-agent coordination](plugins/fraiseql-confiture-pggit/README.md) — a plugin since 1.16, not part of confiture's core.
 
 **Reference**
 - [Tracking table (`tb_confiture`)](docs/reference/tracking-table.md)

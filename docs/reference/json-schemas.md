@@ -108,7 +108,6 @@ attribute names are scheduled to follow them at 1.0.0.
 | `confiture.core.view_body_drift.ViewBodyDriftReport` | `detection_time_ms` | `detection_time_ms` | `migrate validate --check-body-views` (`view_body_drift`) |
 | `confiture.core.schema_analyzer.ValidationResult` | `validation_time_ms` | `validation_time_ms` | library result of `SchemaAnalyzer.validate()` |
 | `confiture.core.rollback_generator.RollbackTestResult` | `duration_ms` | `duration_ms` | library only (rollback generator) |
-| `confiture.integrations.pggit.coordination.models.Intent` | `estimated_duration_ms` | `estimated_duration_ms` | `coordinate` subcommands (`intent`, `intents[]`) |
 
 ---
 

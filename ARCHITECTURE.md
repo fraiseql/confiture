@@ -46,7 +46,7 @@ Confiture is a modern PostgreSQL migration tool with **four distinct mediums** f
 
 #### 1.1 Entry Point
 
-- **`main.py`** — App setup only. Creates the `app` Typer instance, registers sub-apps (`migrate`, `branch`, `generate`, `coordinate`, `seed`), and attaches all command functions imported from command modules. Contains no business logic.
+- **`main.py`** — App setup only. Creates the `app` Typer instance, registers sub-apps (`migrate`, `generate`, `seed`, `test-db`, `mcp`, `debug`, `hooks`), attaches all command functions imported from command modules, and hands the app to installed plugins (`plugins.py`). Contains no business logic.
 
 #### 1.2 Shared Helpers (`helpers.py`, ≤600 lines, guarded)
 
@@ -84,8 +84,7 @@ CLI module reaches into a `_private` attribute of a core object (`tests/unit/cli
 
 #### 1.4 Additional CLI Modules
 
-- **`branch.py`** — `branch` subcommand group (pgGit integration)
-- **`coordinate.py`** — `coordinate` subcommand group (multi-agent coordination)
+- **`plugins.py`** — loads the `confiture.plugins` entry points: another distribution adds its commands to the root app. pgGit's `branch` and `coordinate` groups arrive this way from `plugins/fraiseql-confiture-pggit/`
 - **`seed.py`** — `seed` subcommand group (seed validation)
 - **`generate.py`** — `generate` subcommand group (migration generation)
 - **`dry_run.py`** — Dry-run UI helpers (`display_dry_run_header`, `save_text_report`, `save_json_report`, `ask_dry_run_execute_confirmation`)

@@ -32,9 +32,6 @@ SILENT = {
     ),
 }
 
-#: pgGit's commands leave the package for their plugin, which owns their output.
-PGGIT = ("branch ", "generate diff", "generate from-branch", "generate preview")
-
 
 def _leaves(command: Any, path: tuple[str, ...] = ()) -> Iterator[tuple[str, Any]]:
     subcommands = getattr(command, "commands", None)
@@ -60,9 +57,7 @@ LEAVES = dict(_leaves(get_command(app)))
 
 def test_every_command_speaks_json_or_says_why_not() -> None:
     mute = sorted(
-        path
-        for path, command in LEAVES.items()
-        if not _speaks_json(command) and path not in SILENT and not path.startswith(PGGIT)
+        path for path, command in LEAVES.items() if not _speaks_json(command) and path not in SILENT
     )
     assert mute == [], "commands with no JSON and no stated reason:\n  " + "\n  ".join(mute)
 

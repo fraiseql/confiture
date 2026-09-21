@@ -15,7 +15,9 @@ Follow these examples in order to master Confiture's migration workflows:
 | 3 | [Zero-Downtime Migration](#3-zero-downtime-migration) | Schema-to-Schema (FDW) | Advanced | 30 min |
 | 4 | [Production Sync](#4-production-sync--anonymization) | Production Data Sync | Advanced | 25 min |
 | 5 | [Multi-Environment Workflow](#5-multi-environment-workflow) | Complete CI/CD | Advanced | 30 min |
-| 6 | [Multi-Agent Coordination](#6-multi-agent-coordination-new) | Collaborative Schema Development | Intermediate | 20 min |
+
+The multi-agent coordination example moved with pgGit support into a plugin in 1.16:
+[`plugins/fraiseql-confiture-pggit/examples/multi-agent-workflow/`](../plugins/fraiseql-confiture-pggit/examples/multi-agent-workflow/).
 
 ---
 
@@ -197,65 +199,6 @@ Complete CI/CD workflow with automated testing, staging deployment, and producti
 
 ---
 
-### 6. Multi-Agent Coordination (NEW!)
-
-**Location**: [`multi-agent-workflow/`](./multi-agent-workflow/)
-
-**Perfect for**: Teams or AI agents working in parallel on schema changes
-
-**Strategies**: Multi-agent coordination with conflict detection
-
-Enable safe parallel schema development with automatic conflict detection. Learn how multiple agents (human developers or AI) can work on database schemas simultaneously without conflicts.
-
-**What you'll learn**:
-- ✅ Setting up coordination database
-- ✅ Registering intentions before making changes
-- ✅ Automatic conflict detection (table, column, timing overlaps)
-- ✅ Status tracking and audit trail
-- ✅ Completing and abandoning work
-- ✅ JSON output for CI/CD integration
-- ✅ Dashboard integration patterns
-
-**Scenarios covered**:
-- **Scenario 1**: Parallel feature development (2 agents, different tables) ✅ No conflict
-- **Scenario 2**: Conflicting changes (2 agents, same table) ⚠️ Conflict detected
-- **Scenario 3**: Timing conflicts (overlapping work periods) 📅 Warning issued
-
-**Key commands**:
-```bash
-# Register intention (the coordination tables are created on first use;
-# there is no separate init step)
-confiture coordinate register \
-    --agent-id alice \
-    --feature-name user_profiles \
-    --tables-affected users
-
-# Check for conflicts
-confiture coordinate check \
-    --agent-id bob \
-    --tables-affected users
-
-# View status (of everything, or of one intent)
-confiture coordinate status --format json
-confiture coordinate status --intent-id int_abc123
-
-# Resolve a conflict once the two agents have agreed
-confiture coordinate resolve --conflict-id cfl_abc123 --notes "alice goes first"
-
-# Drop an intent that was never carried out
-confiture coordinate abandon --intent-id int_abc123 --reason "superseded"
-```
-
-**Perfect for**:
-- Teams with multiple developers working on schema
-- AI-assisted schema development (multiple AI agents)
-- CI/CD pipelines with automated conflict detection
-- Audit trail requirements (who changed what, when)
-
-[→ Go to Multi-Agent Coordination Example](./multi-agent-workflow/README.md)
-
----
-
 ## Quick Start
 
 Each example includes:
@@ -324,12 +267,11 @@ example-name/
 **Start here if**: You understand basics and want to integrate with frameworks
 
 1. **[Example 2: FraiseQL Integration](./02-fraiseql-integration/)** - GraphQL integration (20 min)
-2. **[Example 6: Multi-Agent Coordination](./multi-agent-workflow/)** - Collaborative development (20 min)
-3. Read [Migration Decision Tree](../docs/guides/migration-decision-tree.md)
-4. Review [Configuration Reference](../docs/reference/configuration.md)
-5. Practice: Apply to your team's project
+2. Read [Migration Decision Tree](../docs/guides/migration-decision-tree.md)
+3. Review [Configuration Reference](../docs/reference/configuration.md)
+4. Practice: Apply to your team's project
 
-**Goal**: Choose the right strategy, configure multiple environments, and coordinate with team
+**Goal**: Choose the right strategy and configure multiple environments
 
 ---
 
@@ -403,11 +345,8 @@ Choose based on your specific needs:
 | Deploy to production safely | [Example 3](./03-zero-downtime-migration/) | 30 min |
 | Sync production data locally | [Example 4](./04-production-sync-anonymization/) | 25 min |
 | Set up CI/CD pipelines | [Example 5](./05-multi-environment-workflow/) | 30 min |
-| Work with multiple agents/teams | [Example 6](./multi-agent-workflow/) | 20 min |
 
-**Recommended order**: 1 → 2 → 6 → 5 → 3 → 4
-
-**For teams/AI agents**: Start with 1 → 6 → 5
+**Recommended order**: 1 → 2 → 5 → 3 → 4
 
 ---
 

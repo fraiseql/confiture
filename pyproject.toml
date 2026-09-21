@@ -161,7 +161,6 @@ markers = [
     # Orthogonal markers.
     "slow: Slow tests (skip in fast CI)",
     "benchmark: Asserts an upper bound on a measured duration; excluded by default",
-    "optional_extension: needs a PostgreSQL extension the runner may not have (pgGit); skips do not count against the CI skip target",
 ]
 
 [tool.coverage.run]
@@ -282,10 +281,8 @@ max-returns = 8
 "python/confiture/cli/commands/migrate/up.py" = ["PLR0913"]
 "python/confiture/cli/commands/migrate/validate.py" = ["PLR0913", "PLR2004"]
 "python/confiture/cli/commands/migrate/verify.py" = ["PLR0913"]
-"python/confiture/cli/coordinate.py" = ["PLR0913"]
 "python/confiture/cli/dry_run.py" = ["PLR2004"]
 "python/confiture/cli/formatters/migrate_formatter.py" = ["PLR2004"]
-"python/confiture/cli/generate.py" = ["PLR2004"]
 "python/confiture/cli/idempotency.py" = ["PLR2004"]
 "python/confiture/cli/seed.py" = ["PLR0913", "PLR2004"]
 "python/confiture/cli/seed_copy.py" = ["PLR0915"]
@@ -330,9 +327,6 @@ max-returns = 8
 "python/confiture/core/validation/signature_drift.py" = ["PLR2004"]
 "python/confiture/core/view_manager.py" = ["PLR2004"]
 "python/confiture/exceptions.py" = ["PLR2004"]
-"python/confiture/integrations/pggit/client.py" = ["PLR2004"]
-"python/confiture/integrations/pggit/exceptions.py" = ["PLR2004"]
-"python/confiture/integrations/pggit/generator.py" = ["PLR2004"]
 "python/confiture/testing/frameworks/mutation.py" = ["PLR2004"]
 "python/confiture/testing/frameworks/performance.py" = ["PLR2004"]
 # END GENERATED: budget-ignores

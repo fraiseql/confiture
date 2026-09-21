@@ -1,14 +1,12 @@
 # Getting Started with Confiture
 
-**Confiture** is a PostgreSQL schema evolution framework with built-in multi-agent coordination. Whether you're a solo developer or part of a team with AI agents, Confiture provides safe schema evolution with automatic conflict detection.
+**Confiture** is a PostgreSQL migration tool that treats the DDL files in `db/schema/` as the source of truth. It builds fresh databases from them, applies incremental migrations, syncs production data with anonymization, and migrates schema-to-schema through a foreign data wrapper.
 
 ## Choose Your Workflow
 
-**Solo Developer?** Follow the [Quick Start](#quick-start-5-minutes) below for traditional migration workflow.
+**New to Confiture?** Follow the [Quick Start](#quick-start-5-minutes) below for the migration workflow.
 
-**Working with a team or AI agents?** Skip to [Multi-Agent Coordination](#multi-agent-coordination-workflow) for collaborative schema development.
-
-Not sure? Multi-agent coordination is **optional but recommended** - it provides safety even for solo developers.
+**Looking for pgGit branching or multi-agent coordination?** They are a plugin since 1.16, not part of confiture's core — see [pgGit Branching and Multi-Agent Coordination](#pggit-branching-and-multi-agent-coordination).
 
 ## Installation
 
@@ -481,154 +479,9 @@ For more details, see the [Git-Aware Schema Validation Guide](guides/git-aware-v
 
 ---
 
-## Multi-Agent Coordination Workflow
+## pgGit Branching and Multi-Agent Coordination
 
-When working with multiple agents or team members on schema changes, use Confiture's coordination system to prevent conflicts.
-
-### When to Use Multi-Agent Coordination?
-
-**Use coordination when:**
-- 🤝 Multiple people/agents are working on the same database
-- 🔄 Schema changes are happening in parallel
-- 🛡️ You want safety checks before implementing changes
-- 📋 You need an audit trail of who's working on what
-
-**Skip coordination when:**
-- 👤 Solo developer with full context
-- 🔒 Exclusive lock on schema changes (no parallel work)
-
-### Setup Coordination (One-Time)
-
-Initialize the coordination database:
-
-```bash
-# Create coordination database
-createdb confiture_coordination
-
-# The coordination tables belong to the pgGit extension, not to confiture —
-# there is no `coordinate init`. Install the extension in that database:
-psql postgresql://localhost/confiture_coordination -c "CREATE EXTENSION IF NOT EXISTS pggit"
-
-```
-
-### Coordination Workflow Example
-
-**Agent Alice wants to add user profiles:**
-
-```bash
-# Step 1: Register intention BEFORE making changes
-confiture coordinate register \
-    --agent-id alice \
-    --feature-name user_profiles \
-    --tables-affected users,profiles \
-    --schema-changes "ALTER TABLE users ADD COLUMN bio TEXT; CREATE TABLE profiles (...)" \
-    --risk-level medium \
-    --estimated-hours 3
-
-# Output:
-# ✅ Intent registered: int_abc123def456
-# Branch allocated: feature/user_profiles_001
-# Status: REGISTERED
-```
-
-**Agent Bob wants to modify users table too:**
-
-```bash
-# Step 2: Check for conflicts BEFORE implementing
-confiture coordinate check \
-    --agent-id bob \
-    --tables-affected users
-
-# Output:
-# ⚠️ Conflict detected!
-#   - alice is working on 'users' table (int_abc123def456)
-#   - Suggestion: Coordinate with alice or work on different tables
-```
-
-**Viewing Active Work:**
-
-```bash
-# Check status of all active intentions
-confiture coordinate status
-
-# Output shows:
-# ┌─────────────────┬────────────┬───────────────┬──────────────┐
-# │ Intent ID       │ Agent      │ Feature       │ Status       │
-# ├─────────────────┼────────────┼───────────────┼──────────────┤
-# │ int_abc123...   │ alice      │ user_profiles │ IN_PROGRESS  │
-# └─────────────────┴────────────┴───────────────┴──────────────┘
-
-# Get JSON for CI/CD integration
-confiture coordinate status --format json > status.json
-```
-
-**Completing Work:**
-
-```bash
-# Step 2: say you have started (optional, but it is what `in_progress` means)
-confiture coordinate start --intent-id int_abc123def456
-
-# Step 3: when the changes are finished
-confiture coordinate complete \
-    --intent-id int_abc123def456 \
-    --notes "Migration 004 applied and verified"
-
-# Step 4: when they reach the main line. `merged` is a separate status from
-# `completed` — work can be finished for days before it lands.
-confiture coordinate merge \
-    --intent-id int_abc123def456 \
-    --notes "Merged in PR #412"
-```
-
-`--notes` is optional on all three; each has a sensible default. `abandon` is
-the one transition that *requires* a reason, because a cancellation that does
-not say why is not worth recording.
-
-**Abandoning Work:**
-
-```bash
-# If you need to abandon the work
-confiture coordinate abandon \
-    --intent-id int_abc123def456 \
-    --reason "Requirements changed, feature no longer needed"
-```
-
-### Coordination Best Practices
-
-1. **Register early** - Declare intentions before writing code
-2. **Check often** - Run `confiture coordinate check` before major changes
-3. **Keep updated** - Mark work as complete or abandoned promptly
-4. **Use JSON output** - Integrate with CI/CD for automated conflict detection
-5. **Review conflicts** - Don't ignore warnings, coordinate with other agents
-
-### CI/CD Integration Example
-
-```yaml
-# .github/workflows/check-schema-conflicts.yml
-name: Check Schema Conflicts
-
-on: [pull_request]
-
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Check for schema conflicts
-        run: |
-          confiture coordinate check \
-            --agent-id github-ci \
-            --tables-affected $(git diff --name-only | grep 'db/schema' | xargs) \
-            --format json > conflicts.json
-
-          # Fail if conflicts detected
-          if jq -e '.conflicts | length > 0' conflicts.json; then
-            echo "❌ Schema conflicts detected!"
-            exit 1
-          fi
-```
-
-**[→ Full Multi-Agent Coordination Guide](guides/multi-agent-coordination.md)**
+Schema branching on pgGit and multi-agent coordination (declaring intents, detecting conflicts between agents working on the same tables) are a plugin since 1.16: [`plugins/fraiseql-confiture-pggit/`](https://github.com/fraiseql/confiture/tree/main/plugins/fraiseql-confiture-pggit) in confiture's repository. Its README covers installing it, and its guide covers the coordination workflow and its CI/CD integration.
 
 ---
 

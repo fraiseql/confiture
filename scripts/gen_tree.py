@@ -57,6 +57,7 @@ TOP_LEVEL: dict[str, str] = {
     "db": "the repo's own schema, migrations and snapshots",
     "docs": "the mkdocs site: guides, reference, api, features",
     "examples": "runnable example projects (examples.yml runs them in CI)",
+    "plugins": "distributions that add commands through confiture.plugins (pgGit)",
     "scripts": "generators (--check in CI) and developer helpers",
     "src": "the confiture._core extension (file hashing)",
     "ci": "local Dagger pipeline mirroring quality-gate.yml",

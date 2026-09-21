@@ -82,9 +82,7 @@ def test_guard_sees_the_cli_package() -> None:
 DRIVERS = {"psycopg", "pglast"}
 
 #: Modules that keep their own driver import, and why.
-DRIVER_EXEMPT = {
-    "coordinate.py": "pgGit: leaves the package for its plugin, which owns its connections",
-}
+DRIVER_EXEMPT: dict[str, str] = {}
 
 
 def _driver_imports(path: Path) -> list[str]:

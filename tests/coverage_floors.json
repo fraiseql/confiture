@@ -1,7 +1,6 @@
 {
   "_comment": "Per-file line-coverage floors (percent) checked by scripts/coverage_floors.py against the full-suite report CI writes. Floors only rise. The 85s are the modules behind the desired-state ingest, the destructive gate and the online runner: they ship with real-database end-to-end tests, and a refactor that drops their coverage is a regression, not a style choice.",
   "files": {
-    "cli/branch.py": 70,
     "cli/commands/bootstrap.py": 70,
     "cli/commands/migrate/diff.py": 85,
     "cli/commands/migrate/steps.py": 85,

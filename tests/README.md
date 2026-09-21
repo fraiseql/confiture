@@ -40,8 +40,8 @@ The rule for a server that cannot be reached:
 * the variable is **unset** — the local default is probed once per session and, if
   unreachable, the test skips with that reason.
 
-Every remaining skip names a missing capability (the pgGit extension, a tmpfs
-tablespace, a superuser role), never a missing URL.
+Every remaining skip names a missing capability (a tmpfs tablespace, a superuser
+role), never a missing URL.
 
 Fixtures: `test_db_url`, `test_db_connection`, `clean_test_db` (drops every user schema
 and recreates `public`), `maintenance_url` / `maintenance_connection` (same server,
