@@ -25,8 +25,9 @@ invents a qualifier: :attr:`Table.qualified` prints what the author wrote.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 
 from confiture.core.schema_identity import DEFAULT_SCHEMA
@@ -236,3 +237,143 @@ class SchemaModel:
             "enum_types": section(self.enum_types),
             "sequences": section(self.sequences),
         }
+
+
+# ---------------------------------------------------------------------------
+# Parity: a database built from a tree reads back as the tree
+# ---------------------------------------------------------------------------
+
+#: What PostgreSQL rewrites on the way into its catalog, and why each is not a
+#: difference between a tree and the database built from it. Every entry is a
+#: disagreement measured in ``tests/integration/test_parity_normalisations_are_measured.py``,
+#: which fails the day PostgreSQL stops making it — so none can outlive its cause.
+PARITY_NORMALISATIONS: dict[str, str] = {
+    "generated_names": (
+        "an unnamed constraint is given a name at apply time (child_pid_fkey); a name "
+        "of PostgreSQL's own shape is no name, on either side"
+    ),
+    "analysed_expressions": (
+        "a default, a CHECK, a generation expression, an index's expression key and a "
+        "partial index's predicate are stored analysed — implicit casts added, IN "
+        "written back as = ANY (ARRAY[…]) — so what is compared is that one exists, "
+        "never its text; a key that is a plain column name is compared as written"
+    ),
+    "spellings": (
+        "a column's name, type and position as a file wrote them (`UserId`, "
+        "`VARCHAR(50)`, line 12) are spelling; the catalog knows the folded name, "
+        "format_type's spelling and no file. type_key is the identity compared"
+    ),
+    "serial": (
+        "serial is not a type: the catalog holds an integer, NOT NULL, a nextval "
+        "default and a sequence the column owns, none of which the tree wrote"
+    ),
+    "sequence_bounds": ("a sequence's unset bounds read back as its type's own bounds"),
+    "schema_spelling": (
+        "the catalog always knows a relation's schema and spells it in "
+        "pg_get_indexdef / pg_get_constraintdef only when search_path would miss it; "
+        "the tree spells what the author wrote. Identity is (schema, name) with "
+        "DEFAULT_SCHEMA folded in, on both sides"
+    ),
+    "declaration_order": (
+        "the catalog lists a table's constraints and indexes by name, a tree by where "
+        "it declared them; which exist is the fact, not their order"
+    ),
+}
+
+#: What an expression is compared as: present.
+_EXPRESSION = "<expression>"
+
+#: An index key that is a column, not an expression.
+_COLUMN_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
+
+#: The pseudo-types a column may be declared with and PostgreSQL never stores.
+_SERIALS = frozenset({"SMALLSERIAL", "SERIAL", "BIGSERIAL"})
+
+#: An ascending sequence's bounds when none is written, per sequence type.
+_DEFAULT_MAX = frozenset({2**15 - 1, 2**31 - 1, 2**63 - 1})
+
+
+def _identity_name(qualified: str | None) -> str | None:
+    """``b.p`` → ``b.p``, ``p`` → ``public.p``: a reference as an identity."""
+    if not qualified:
+        return qualified
+    schema, _, name = qualified.rpartition(".")
+    return f"{(schema or DEFAULT_SCHEMA).lower()}.{name}"
+
+
+def _generated_name(table: str, name: str) -> bool:
+    return bool(re.fullmatch(rf"{re.escape(table)}(_.+)?_(pkey|key|fkey|check|excl)\d*", name))
+
+
+def _parity_column(column: Column) -> Column:
+    serial = (column.raw_sql_type or "").upper() in _SERIALS or (column.default or "").startswith(
+        "nextval("
+    )
+    return replace(
+        column,
+        name=column.folded,
+        line=0,
+        type_text=None,
+        # `type_key` already says `serial` is `integer`; only the spelling differs.
+        raw_sql_type=None if serial else column.raw_sql_type,
+        not_null=column.not_null or serial,
+        default=None if serial or column.default is None else _EXPRESSION,
+        generated=None if column.generated is None else _EXPRESSION,
+    )
+
+
+def _parity_constraint(table: str, constraint: Constraint) -> Constraint:
+    return replace(
+        constraint,
+        name="" if _generated_name(table, constraint.name) else constraint.name,
+        expression=None if constraint.expression is None else _EXPRESSION,
+        ref_table=_identity_name(constraint.ref_table),
+    )
+
+
+def _parity_table(table: Table) -> Table:
+    constraints = [_parity_constraint(table.name, c) for c in table.constraints]
+    indexes = [
+        replace(
+            ix,
+            table=_identity_name(ix.table) or ix.table,
+            columns=tuple(key if _COLUMN_KEY.fullmatch(key) else _EXPRESSION for key in ix.columns),
+            where=None if ix.where is None else _EXPRESSION,
+        )
+        for ix in table.indexes
+    ]
+    return replace(
+        table,
+        schema=(table.schema or DEFAULT_SCHEMA).lower(),
+        columns=tuple(_parity_column(c) for c in table.columns),
+        constraints=tuple(sorted(constraints, key=repr)),
+        indexes=tuple(sorted(indexes, key=repr)),
+    )
+
+
+def _parity_sequence(sequence: Sequence) -> Sequence:
+    unbounded = sequence.min_value in (None, 1) and (
+        sequence.max_value is None or sequence.max_value in _DEFAULT_MAX
+    )
+    return replace(
+        sequence,
+        schema=(sequence.schema or DEFAULT_SCHEMA).lower(),
+        min_value=None if unbounded else sequence.min_value,
+        max_value=None if unbounded else sequence.max_value,
+    )
+
+
+def normalise_for_parity(model: SchemaModel) -> SchemaModel:
+    """*model* with every rewrite in :data:`PARITY_NORMALISATIONS` applied.
+
+    Applied to both sides of a parse/live comparison; what still differs after it
+    is a difference between the tree and the database, or a bug in a reader.
+    """
+    return SchemaModel(
+        tables={ref: _parity_table(t) for ref, t in model.tables.items()},
+        enum_types={
+            ref: replace(e, schema=(e.schema or DEFAULT_SCHEMA).lower())
+            for ref, e in model.enum_types.items()
+        },
+        sequences={ref: _parity_sequence(s) for ref, s in model.sequences.items()},
+    )

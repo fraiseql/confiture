@@ -39,6 +39,7 @@ from confiture.core.ddl_walk import (
     object_kinds,
     read_column_constraints,
     read_constraint,
+    read_index,
     render_default,
     written_type,
 )
@@ -876,28 +877,12 @@ def _targets(inventory: Inventory, edit: ObjectEdit, offset: int) -> list[Schema
 
 
 def _apply_index(stmt: Any, inventory: Inventory) -> None:
-    """Fold a ``CREATE INDEX`` onto the table the tree declared.
-
-    ``accessMethod`` is always set: PostgreSQL's grammar fills in ``btree`` when
-    the statement writes no ``USING``, which is also what the catalog reports.
-    """
+    """Fold a ``CREATE INDEX`` onto the table the tree declared."""
     relation = stmt.relation
     table = inventory.find(relation.schemaname, relation.relname)
     if table is None:
         return
-    table.indexes.append(
-        Index(
-            name=stmt.idxname,
-            table=table.qualified,
-            columns=tuple(
-                elem.name if elem.name else RawStream()(elem.expr)
-                for elem in stmt.indexParams or ()
-            ),
-            unique=bool(stmt.unique),
-            where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
-            method=stmt.accessMethod,
-        )
-    )
+    table.indexes.append(read_index(stmt, table=table.qualified))
 
 
 def _drop_index(inventory: Inventory, edit: ObjectEdit) -> None:
