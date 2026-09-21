@@ -165,6 +165,7 @@ nav:
   - 'Operations':
       - 'Confiture Disaster Recovery Procedures': operations/disaster-recovery.md
       - 'Confiture Performance Tuning Guide': operations/performance-tuning.md
+      - 'Release Trains': operations/release-trains.md
       - 'Confiture Operations Runbook': operations/runbook.md
   - 'Performance':
       - 'Multi-Agent Coordination Performance Benchmarks': performance/coordination-performance.md

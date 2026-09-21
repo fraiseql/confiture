@@ -14,11 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-No change to what confiture does. What its comparisons say today is now a test in
-its own suite.
+No change to what confiture does. What it promises its consumers, and what its
+comparisons say today, are now tests in its own suite.
 
 ### Added
 
+- **The consumer surface is pinned** in `tests/contract/`. `test_consumer_symbols.py`
+  imports every symbol fraisier and printoptim_backend import, by name — fraisier's
+  floor probe row for row, plus `exceptions.ValidationError`, which fraisier imports
+  and its probe does not list — and asserts the call shapes they rely on have not
+  narrowed. `test_consumer_cli_surface.py` resolves every command line they run
+  against the live Typer tree, flags included, and pins that `lint` accepts
+  `--format table` while `seed validate` refuses it with `VALID_001`. Every row
+  names the consumer file and line it was read from.
+- **The exit-code universe is closed** (`test_exit_code_universe_is_closed.py`): the
+  integers are exactly `0..8`, every symbolic code lands on one of them, and the
+  `--exit-codes-json` payload is recorded in `tests/fixtures/error_codes/exit_codes.json`,
+  so a change to it fails here with the command that regenerates fraisier-core's
+  vendored copy.
 - **Model goldens** in `tests/fixtures/model_goldens/`, recorded from the CLI by
   `scripts/refresh_model_goldens.py`: `migrate diff --format json --generate` for every
   example schema tree, this repository's own, and the before/after pair
@@ -28,6 +41,10 @@ its own suite.
   warnings, because an identity column whose primary key is declared at table level
   reads as nullable. That is recorded, not hidden — a fix shows up as an edit to the
   golden.
+- **`docs/operations/release-trains.md`**: when a version number is spent — three
+  trains (1.15.0, 1.16.0, 1.17.0), each cut when its thesis is whole; envelopes only
+  grow; exit codes stay `0..8`; a withdrawn release is yanked as a tag, never reverted
+  on `main`.
 
 ## [1.14.0] - 2026-09-20
 
