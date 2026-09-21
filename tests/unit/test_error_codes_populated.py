@@ -78,7 +78,7 @@ def test_schema_error_default_has_error_code():
 
 def test_apply_already_applied_uses_migr_101():
     """engine.apply() raises MigrationError with MIGR_101 when migration already applied."""
-    from confiture.core._migrator.engine import Migrator
+    from confiture.core.migrator import Migrator
 
     mock_conn = MagicMock()
     migrator = Migrator(connection=mock_conn)
@@ -96,7 +96,7 @@ def test_apply_already_applied_uses_migr_101():
 
 def test_reinit_version_not_found_uses_migr_100():
     """engine.reinit() raises MigrationError with MIGR_100 when through version not found."""
-    from confiture.core._migrator.engine import Migrator
+    from confiture.core.migrator import Migrator
 
     mock_conn = MagicMock()
     migrator = Migrator(connection=mock_conn)
@@ -110,7 +110,7 @@ def test_reinit_version_not_found_uses_migr_100():
 
 def test_rollback_not_applied_uses_migr_100():
     """engine.rollback() raises MigrationError with MIGR_100 when migration not applied."""
-    from confiture.core._migrator.engine import Migrator
+    from confiture.core.migrator import Migrator
 
     mock_conn = MagicMock()
     migrator = Migrator(connection=mock_conn)

@@ -178,7 +178,7 @@ def test_legacy_rows_retain_null_applied_by(apply_as_db: str) -> None:
     # Initializing the migrator now should add the applied_by column
     # via ALTER TABLE … ADD COLUMN IF NOT EXISTS, and the legacy row
     # should keep applied_by IS NULL.
-    from confiture.core._migrator.engine import Migrator
+    from confiture.core.migrator import Migrator
 
     with psycopg.connect(apply_as_db) as conn:
         migrator = Migrator(connection=conn, migration_table="tb_confiture")

@@ -47,7 +47,7 @@ from confiture.core._migrator import apply_loop as _apply_loop
 from confiture.core._migrator import replay as _replay
 from confiture.core._migrator import reporting as _reporting
 from confiture.core._migrator import rollback_loop as _rollback_loop
-from confiture.core._migrator.engine import Migrator
+from confiture.core._migrator.engine import MigrationEngine
 from confiture.core._migrator.events import UpObserver
 from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_settings
 from confiture.exceptions import ConfigurationError
@@ -57,7 +57,7 @@ def _not_entered() -> ConfigurationError:
     """The error every session method raises outside its ``with`` block."""
     return ConfigurationError(
         "MigratorSession must be used as a context manager",
-        resolution_hint="Use: with Migrator.from_config(...) as m: ...",
+        resolution_hint="Use: with MigrationEngine.from_config(...) as m: ...",
     )
 
 
@@ -68,14 +68,14 @@ def _core_connection():
 
 
 class MigratorSession:
-    """Context manager that wraps Migrator with connection lifecycle management.
+    """Context manager that wraps MigrationEngine with connection lifecycle management.
 
-    Created via ``Migrator.from_config()``. Ensures the database connection is
+    Created via ``MigrationEngine.from_config()``. Ensures the database connection is
     always closed, even when an exception is raised inside the ``with`` block.
 
     Example::
 
-        with Migrator.from_config("db/environments/prod.yaml") as m:
+        with MigrationEngine.from_config("db/environments/prod.yaml") as m:
             result = m.status()
             if result.has_pending:
                 m.up()
@@ -94,7 +94,7 @@ class MigratorSession:
     #: lock. Class attributes for the same reason: a test injects a double here,
     #: where it used to patch a name in ``confiture.core.migrator`` that this package
     #: then had to look up at call time — an import cycle kept alive for a test seam.
-    default_engine: ClassVar[Callable[..., Migrator]] = Migrator
+    default_engine: ClassVar[Callable[..., MigrationEngine]] = MigrationEngine
     default_lock: ClassVar[Callable[[Any, LockConfig], MigrationLock]] = MigrationLock
 
     def __init__(
@@ -113,7 +113,7 @@ class MigratorSession:
         self._migration_loader = migration_loader
         self._migrations_dir = migrations_dir
         self._conn: Connection | None = None
-        self._migrator: Migrator | None = None
+        self._migrator: MigrationEngine | None = None
         self._database_url_override = database_url_override
         self._migration_table_override = migration_table_override
         self._command = command  # recorded in the lock-holder metadata (#147)
@@ -140,7 +140,7 @@ class MigratorSession:
     @classmethod
     def attached(
         cls,
-        migrator: Migrator,
+        migrator: MigrationEngine,
         migrations_dir: Path,
         *,
         config: Environment | None = None,
@@ -149,7 +149,7 @@ class MigratorSession:
         """A session over an engine that already owns its connection.
 
         The caller keeps ownership: leaving the ``with`` block does not close
-        the connection. This is how :meth:`Migrator.migrate_up` runs the one
+        the connection. This is how :meth:`MigrationEngine.migrate_up` runs the one
         apply loop without opening a second connection.
         """
         session = cls(config, migrations_dir, command=command)
@@ -172,7 +172,7 @@ class MigratorSession:
             raise ConfigurationError(
                 "MigratorSession requires either a config or database_url_override",
                 resolution_hint=(
-                    "Use Migrator.from_config(...) or pass database_url_override= "
+                    "Use MigrationEngine.from_config(...) or pass database_url_override= "
                     "to MigratorSession directly."
                 ),
             )
@@ -209,7 +209,7 @@ class MigratorSession:
         return self._conn
 
     @property
-    def migrator(self) -> Migrator:
+    def migrator(self) -> MigrationEngine:
         """The session's engine (inside ``with``, or when attached)."""
         if self._migrator is None:
             raise _not_entered()
@@ -276,12 +276,12 @@ class MigratorSession:
 
         Raises:
             ConfigurationError: If called outside ``with`` context manager.
-                               Fix: ``with Migrator.from_config(...) as m: m.status()``
+                               Fix: ``with MigrationEngine.from_config(...) as m: m.status()``
             SchemaError: If migration files cannot be parsed (invalid filename format).
             SQLError: If querying the tracking table fails (permission denied, etc.).
 
         Example:
-            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            >>> with MigrationEngine.from_config("db/environments/prod.yaml") as m:
             ...     status = m.status()
             ...     print(f"Applied: {status.summary['applied']}")
             ...     print(f"Pending: {status.summary['pending']}")
@@ -302,7 +302,7 @@ class MigratorSession:
                 (confiture not initialized on this database) — exits 2 per #146.
 
         Example:
-            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            >>> with MigrationEngine.from_config("db/environments/prod.yaml") as m:
             ...     cur = m.current_revision()
             ...     print(cur.version if cur else "(none applied)")
         """
@@ -399,7 +399,7 @@ class MigratorSession:
         its message in ``errors`` and the exception itself in ``failure``.
 
         Example:
-            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            >>> with MigrationEngine.from_config("db/environments/prod.yaml") as m:
             ...     result = m.up()
             ...     if result.success:
             ...         print(f"Applied {len(result.migrations_applied)} migrations")
@@ -500,7 +500,7 @@ class MigratorSession:
             LockAcquisitionError: If the migration lock cannot be acquired.
 
         Example:
-            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            >>> with MigrationEngine.from_config("db/environments/prod.yaml") as m:
             ...     result = m.down(steps=2)
             ...     if result.success:
             ...         print(f"Rolled back {len(result.migrations_rolled_back)} migrations")
@@ -588,7 +588,7 @@ class MigratorSession:
             MigrationError: If tracking table operations fail.
 
         Example:
-            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            >>> with MigrationEngine.from_config("db/environments/prod.yaml") as m:
             ...     result = m.reinit(through="20260228180602")
             ...     print(f"Marked {len(result.migrations_marked)} migrations")
         """
@@ -630,7 +630,7 @@ class MigratorSession:
             RebuildError: If schema build or DDL application fails.
 
         Example:
-            >>> with Migrator.from_config("db/environments/prod.yaml") as m:
+            >>> with MigrationEngine.from_config("db/environments/prod.yaml") as m:
             ...     result = m.rebuild(drop_schemas=True, apply_seeds=True)
             ...     if result.success:
             ...         print(f"Rebuilt with {result.ddl_statements_executed} DDL statements")

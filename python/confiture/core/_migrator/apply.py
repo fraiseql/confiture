@@ -1,7 +1,7 @@
-"""Apply / migrate-up / dry-run concern for ``Migrator``.
+"""Apply / migrate-up / dry-run concern for ``MigrationEngine``.
 
 Peeled out of ``engine.py``. Free functions taking the
-``Migrator`` instance as their first argument; the class keeps thin delegating
+``MigrationEngine`` instance as their first argument; the class keeps thin delegating
 methods, so its public surface and patch targets are unchanged. Cross-method
 calls go through ``migrator.<method>()`` (the delegators) so existing test
 seams that mock those methods on the instance keep working. Pure refactor.
@@ -31,7 +31,7 @@ from confiture.exceptions import MigrationError
 from confiture.models.migration import Migration
 
 if TYPE_CHECKING:
-    from confiture.core._migrator.engine import Migrator
+    from confiture.core._migrator.engine import MigrationEngine
 from datetime import datetime
 
 from confiture.core import connection as _core_connection
@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 def apply(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     migration: Migration,
     force: bool = False,
     migration_file: Path | None = None,
@@ -51,7 +51,7 @@ def apply(
 ) -> None:
     """Apply a migration and record it in the tracking table.
 
-    See :meth:`Migrator.apply` for the full contract.
+    See :meth:`MigrationEngine.apply` for the full contract.
     """
     already_applied = migrator._is_applied(migration.version)
 
@@ -100,7 +100,7 @@ def apply(
 
 
 def validate_preconditions(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     migration: Migration,
     direction: str,
     preconditions: list,
@@ -132,7 +132,7 @@ def validate_preconditions(
 
 
 def apply_transactional(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     migration: Migration,
     already_applied: bool,
     migration_file: Path | None = None,
@@ -142,7 +142,7 @@ def apply_transactional(
 ) -> None:
     """Apply migration within a transaction using savepoints.
 
-    See :meth:`Migrator._apply_transactional` for the full contract.
+    See :meth:`MigrationEngine._apply_transactional` for the full contract.
     """
     savepoint_name = f"migration_{migration.version}"
     execution_time_ms = 0
@@ -255,7 +255,7 @@ def apply_transactional(
 
 
 def apply_non_transactional(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     migration: Migration,
     already_applied: bool,
     migration_file: Path | None = None,
@@ -357,22 +357,22 @@ def apply_non_transactional(
         migrator.connection.autocommit = original_autocommit
 
 
-def create_savepoint(migrator: Migrator, name: str) -> None:
+def create_savepoint(migrator: MigrationEngine, name: str) -> None:
     """Create a savepoint for transaction rollback."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(pgsql.SQL("SAVEPOINT {}").format(pgsql.Identifier(name)))
 
 
-def release_savepoint(migrator: Migrator, name: str) -> None:
+def release_savepoint(migrator: MigrationEngine, name: str) -> None:
     """Release a savepoint (commit nested transaction)."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(name)))
 
 
-def rollback_to_savepoint(migrator: Migrator, name: str, *, commit: bool = True) -> None:
+def rollback_to_savepoint(migrator: MigrationEngine, name: str, *, commit: bool = True) -> None:
     """Rollback to a savepoint (undo nested transaction).
 
-    See :meth:`Migrator._rollback_to_savepoint` for the ``commit`` semantics.
+    See :meth:`MigrationEngine._rollback_to_savepoint` for the ``commit`` semantics.
     """
     try:
         with migrator.connection.cursor() as cursor:
@@ -388,7 +388,7 @@ def rollback_to_savepoint(migrator: Migrator, name: str, *, commit: bool = True)
 
 
 def record_migration(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     *,
     version: str,
     name: str,
@@ -424,7 +424,7 @@ def record_migration(
 
 
 def record_applied(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     migration: Migration,
     execution_time_ms: int,
     migration_file: Path | None = None,
@@ -447,13 +447,13 @@ def record_applied(
 
 
 def mark_applied(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     migration_file: Path,
     reason: str = "baseline",
 ) -> str:
     """Mark a migration as applied without executing it.
 
-    See :meth:`Migrator.mark_applied` for the full contract.
+    See :meth:`MigrationEngine.mark_applied` for the full contract.
     """
 
     # Load the migration class to get version and name
@@ -519,10 +519,10 @@ def warn_mixed_transactional_modes(migration_files: list[Path]) -> None:
         )
 
 
-def dry_run(migrator: Migrator, migration: Migration) -> DryRunResult:
+def dry_run(migrator: MigrationEngine, migration: Migration) -> DryRunResult:
     """Test a migration without making permanent changes.
 
-    See :meth:`Migrator.dry_run` for the full contract.
+    See :meth:`MigrationEngine.dry_run` for the full contract.
     """
     statements = migration.get_up_sql_statements()
     if not statements:
@@ -544,13 +544,13 @@ def dry_run(migrator: Migrator, migration: Migration) -> DryRunResult:
 
 
 def check_preconditions(
-    migrator: Migrator,
+    migrator: MigrationEngine,
     migration: Migration,
     direction: str = "up",
 ) -> tuple[bool, list[tuple[Any, str]]]:
     """Check migration preconditions without running the migration.
 
-    See :meth:`Migrator.check_preconditions` for the full contract.
+    See :meth:`MigrationEngine.check_preconditions` for the full contract.
     """
     preconditions = (
         migration.up_preconditions if direction == "up" else migration.down_preconditions

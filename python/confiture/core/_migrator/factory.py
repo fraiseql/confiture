@@ -1,22 +1,19 @@
 """``Migrator.from_config`` factory (peeled from engine.py).
 
 A free function that builds a managed :class:`MigratorSession` from an
-``Environment`` / config path. ``MigratorSession`` is imported lazily inside the
-function so this module carries no import-time dependency on ``session`` (which
-imports the engine) — keeping the package free of an import cycle.
+``Environment`` / config path.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from confiture.core._migrator.session import MigratorSession
 import yaml
 
 from confiture.config.environment import Environment
+from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
 
 
@@ -36,8 +33,6 @@ def from_config(
     Raises:
         ConfigurationError: If the config file cannot be found or is invalid.
     """
-    # Reason: import cycle (the module is partially initialised when this import runs at module level)
-    from confiture.core._migrator.session import MigratorSession
 
     if isinstance(config, Environment):
         env = config

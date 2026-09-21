@@ -11,8 +11,8 @@ import asyncio
 
 import pytest
 
-from confiture.core._migrator.engine import Migrator
 from confiture.core.hooks import Hook, HookError, HookPhase, HookResult
+from confiture.core.migrator import Migrator
 from confiture.models.migration import Migration
 from tests.unit._doubles import connection_double
 

@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from confiture.core._migrator.engine import Migrator
+from confiture.core.migrator import Migrator
 
 
 def test_warns_about_a_mixed_batch_with_a_sql_file(tmp_path: Path, caplog) -> None:
