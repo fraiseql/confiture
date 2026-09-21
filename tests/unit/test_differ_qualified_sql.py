@@ -12,28 +12,36 @@ assertion cannot see one.
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import ClassVar, TypeVar
 
 import pglast
 
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
-from confiture.models.schema import SchemaChange
+from confiture.core.schema_change import (
+    ColumnAdded,
+    ForeignKeyAdded,
+    IndexAdded,
+    SchemaChange,
+    TableRenamed,
+)
+
+_Change = TypeVar("_Change")
 
 
 def _changes(old: str, new: str) -> list[SchemaChange]:
     return SchemaDiffer().compare(old, new).changes
 
 
-def _by_type(changes: list[SchemaChange], change_type: str) -> SchemaChange:
-    return next(c for c in changes if c.type == change_type)
+def _by_type(changes: list[SchemaChange], kind: type[_Change]) -> _Change:
+    return next(c for c in changes if isinstance(c, kind))
 
 
 class TestAChangeCarriesTheSpellingTheAuthorWrote:
     def test_add_column_names_the_qualified_table(self) -> None:
         change = _by_type(
             _changes("CREATE TABLE tenant.t (id INT);", "CREATE TABLE tenant.t (id INT, x TEXT);"),
-            "ADD_COLUMN",
+            ColumnAdded,
         )
         assert change.table == "tenant.t"
 
@@ -43,7 +51,7 @@ class TestAChangeCarriesTheSpellingTheAuthorWrote:
                 "CREATE TABLE tenant.t (id INT, x TEXT);",
                 "CREATE TABLE tenant.t (id INT, x TEXT);\nCREATE INDEX ix ON tenant.t (x);",
             ),
-            "ADD_INDEX",
+            IndexAdded,
         )
         assert change.table == "tenant.t"
 
@@ -54,9 +62,9 @@ class TestAChangeCarriesTheSpellingTheAuthorWrote:
             "CREATE TABLE a.child (pid INT, CONSTRAINT fk_c FOREIGN KEY (pid)"
             " REFERENCES b.parent(id));"
         )
-        change = _by_type(_changes(old, new), "ADD_FOREIGN_KEY")
+        change = _by_type(_changes(old, new), ForeignKeyAdded)
         assert change.table == "a.child"
-        assert (change.details or {})["ref_table"] == "b.parent"
+        assert change.constraint.ref_table == "b.parent"
 
     def test_an_unqualified_tree_is_unchanged(self) -> None:
         old = "CREATE TABLE tb_post (id INT);"
@@ -171,7 +179,7 @@ class TestBothGeneratorsEmitWhatParses:
                 except NotImplementedError:
                     continue  # a kind with no generator writes nothing, and that parses
                 if sql:
-                    emitted.append((change.type, sql))
+                    emitted.append((change.to_wire().type, sql))
         return emitted
 
     def test_only_the_excused_kinds_fail_to_parse(self, tmp_path) -> None:
@@ -202,7 +210,7 @@ class TestBothGeneratorsEmitWhatParses:
     def test_rename_table_generates_a_qualified_source_and_a_bare_target(self, tmp_path) -> None:
         from confiture.core.migration_generator import MigrationGenerator
 
-        change = _by_type(_changes(self.OLD, self.NEW), "RENAME_TABLE")
+        change = _by_type(_changes(self.OLD, self.NEW), TableRenamed)
         generator = MigrationGenerator(tmp_path)
         up = generator._change_to_up_sql(change)
         down = generator._change_to_down_sql(change)
@@ -216,7 +224,7 @@ class TestBothGeneratorsEmitWhatParses:
 
         change = _by_type(
             _changes("CREATE TABLE tb_a (id INT);", "CREATE TABLE tb_b (id INT);"),
-            "RENAME_TABLE",
+            TableRenamed,
         )
         generator = MigrationGenerator(tmp_path)
         assert generator._change_to_up_sql(change) == "ALTER TABLE tb_a RENAME TO tb_b"

@@ -1,0 +1,706 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 6,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "tb_comment",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null,
+              "identity": "by default"
+            },
+            {
+              "name": "pk_comment",
+              "type": "UUID",
+              "nullable": false,
+              "default": "gen_random_uuid()"
+            },
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "fk_post",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "fk_user",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "fk_parent_comment",
+              "type": "UUID",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "content",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "is_edited",
+              "type": "BOOLEAN",
+              "nullable": false,
+              "default": "false"
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "fk_tb_comment_post",
+              "columns": [
+                "fk_post"
+              ],
+              "ref_table": "tb_post",
+              "ref_columns": [
+                "pk_post"
+              ],
+              "on_delete": "CASCADE",
+              "on_update": null
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "fk_tb_comment_user",
+              "columns": [
+                "fk_user"
+              ],
+              "ref_table": "tb_user",
+              "ref_columns": [
+                "pk_user"
+              ],
+              "on_delete": "CASCADE",
+              "on_update": null
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "fk_tb_comment_parent",
+              "columns": [
+                "fk_parent_comment"
+              ],
+              "ref_table": "tb_comment",
+              "ref_columns": [
+                "pk_comment"
+              ],
+              "on_delete": "CASCADE",
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "uq_tb_comment_pk",
+              "columns": [
+                "pk_comment"
+              ]
+            },
+            {
+              "kind": "CHECK",
+              "name": "ck_tb_comment_content_length",
+              "expression": "length(content) >= 1"
+            },
+            {
+              "kind": "CHECK",
+              "name": "ck_tb_comment_not_self_parent",
+              "expression": "pk_comment <> fk_parent_comment"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "tb_post",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null,
+              "identity": "by default"
+            },
+            {
+              "name": "pk_post",
+              "type": "UUID",
+              "nullable": false,
+              "default": "gen_random_uuid()"
+            },
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "fk_user",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "title",
+              "type": "VARCHAR(500)",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "slug",
+              "type": "VARCHAR(500)",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "content",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "excerpt",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "tags",
+              "type": "text[]",
+              "nullable": true,
+              "default": "CAST(ARRAY[] AS text[])"
+            },
+            {
+              "name": "is_published",
+              "type": "BOOLEAN",
+              "nullable": false,
+              "default": "false"
+            },
+            {
+              "name": "published_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "view_count",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": "0"
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "fk_tb_post_user",
+              "columns": [
+                "fk_user"
+              ],
+              "ref_table": "tb_user",
+              "ref_columns": [
+                "pk_user"
+              ],
+              "on_delete": "CASCADE",
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "uq_tb_post_pk",
+              "columns": [
+                "pk_post"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "uq_tb_post_slug",
+              "columns": [
+                "slug"
+              ]
+            },
+            {
+              "kind": "CHECK",
+              "name": "ck_tb_post_title_length",
+              "expression": "length(title) >= 1"
+            },
+            {
+              "kind": "CHECK",
+              "name": "ck_tb_post_slug_format",
+              "expression": "slug ~ '^[a-z0-9-]+$'"
+            },
+            {
+              "kind": "CHECK",
+              "name": "ck_tb_post_view_count",
+              "expression": "view_count >= 0"
+            },
+            {
+              "kind": "CHECK",
+              "name": "ck_tb_post_published_at",
+              "expression": "(is_published = FALSE AND published_at IS NULL) OR (is_published = TRUE AND published_at IS NOT NULL)"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "tb_user",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null,
+              "identity": "by default"
+            },
+            {
+              "name": "pk_user",
+              "type": "UUID",
+              "nullable": false,
+              "default": "gen_random_uuid()"
+            },
+            {
+              "name": "identifier",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "username",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "full_name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "bio",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "avatar_url",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "is_active",
+              "type": "BOOLEAN",
+              "nullable": false,
+              "default": "true"
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "uq_tb_user_pk",
+              "columns": [
+                "pk_user"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "uq_tb_user_email",
+              "columns": [
+                "email"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "uq_tb_user_username",
+              "columns": [
+                "username"
+              ]
+            },
+            {
+              "kind": "CHECK",
+              "name": "ck_tb_user_email_format",
+              "expression": "email LIKE '%@%'"
+            },
+            {
+              "kind": "CHECK",
+              "name": "ck_tb_user_username_length",
+              "expression": "length(username) >= 3 AND length(username) <= 30"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "tv_comment",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "data",
+              "type": "JSONB",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "post_id",
+              "type": "UUID",
+              "nullable": true,
+              "default": null,
+              "generated": "CAST(data ->> 'postId' AS uuid)",
+              "generated_kind": "stored"
+            },
+            {
+              "name": "author_id",
+              "type": "UUID",
+              "nullable": true,
+              "default": null,
+              "generated": "CAST((data -> 'author') ->> 'id' AS uuid)",
+              "generated_kind": "stored"
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "tv_post",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "data",
+              "type": "JSONB",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null,
+              "generated": "data ->> 'slug'",
+              "generated_kind": "stored"
+            },
+            {
+              "name": "is_published",
+              "type": "BOOLEAN",
+              "nullable": true,
+              "default": null,
+              "generated": "CAST(data ->> 'isPublished' AS boolean)",
+              "generated_kind": "stored"
+            },
+            {
+              "name": "view_count",
+              "type": "INTEGER",
+              "nullable": true,
+              "default": null,
+              "generated": "CAST(data ->> 'viewCount' AS integer)",
+              "generated_kind": "stored"
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "tv_user",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "data",
+              "type": "JSONB",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null,
+              "generated": "data ->> 'email'",
+              "generated_kind": "stored"
+            },
+            {
+              "name": "username",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null,
+              "generated": "data ->> 'username'",
+              "generated_kind": "stored"
+            },
+            {
+              "name": "is_active",
+              "type": "BOOLEAN",
+              "nullable": true,
+              "default": null,
+              "generated": "CAST(data ->> 'isActive' AS boolean)",
+              "generated_kind": "stored"
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "btree_gist",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION btree_gist",
+        "details": {
+          "kind": "extension",
+          "name": "btree_gist",
+          "keyword": "EXTENSION"
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "pg_trgm",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION pg_trgm",
+        "details": {
+          "kind": "extension",
+          "name": "pg_trgm",
+          "keyword": "EXTENSION"
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "unaccent",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION unaccent",
+        "details": {
+          "kind": "extension",
+          "name": "unaccent",
+          "keyword": "EXTENSION"
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "uuid-ossp",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION \"uuid-ossp\"",
+        "details": {
+          "kind": "extension",
+          "name": "uuid-ossp",
+          "keyword": "EXTENSION"
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "update_updated_at_column()",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS trigger AS $$\nBEGIN\n    NEW.updated_at = NOW();\n    RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql",
+        "details": {
+          "kind": "function",
+          "name": "update_updated_at_column()",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "table": "tb_comment.trigger_tb_comment_updated_at",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE TRIGGER trigger_tb_comment_updated_at BEFORE UPDATE ON tb_comment FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "details": {
+          "kind": "trigger",
+          "name": "tb_comment.trigger_tb_comment_updated_at",
+          "keyword": "TRIGGER"
+        }
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "table": "tb_post.trigger_tb_post_updated_at",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE TRIGGER trigger_tb_post_updated_at BEFORE UPDATE ON tb_post FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "details": {
+          "kind": "trigger",
+          "name": "tb_post.trigger_tb_post_updated_at",
+          "keyword": "TRIGGER"
+        }
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "table": "tb_user.trigger_tb_user_updated_at",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE TRIGGER trigger_tb_user_updated_at BEFORE UPDATE ON tb_user FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "details": {
+          "kind": "trigger",
+          "name": "tb_user.trigger_tb_user_updated_at",
+          "keyword": "TRIGGER"
+        }
+      }
+    ]
+  }
+}

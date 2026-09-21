@@ -75,7 +75,7 @@ def validate_git_drift(
                     "column": c.column,
                     "details": c.details,
                 }
-                for c in diff.changes
+                for c in diff.wire()
             ],
             "base_ref": base_ref,
             "target_ref": target_ref,

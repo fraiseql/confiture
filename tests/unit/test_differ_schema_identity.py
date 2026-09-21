@@ -237,7 +237,7 @@ class TestRenamesStayInsideOneSchema:
         """The control that fails if the fix is "stop detecting renames"."""
         old = "CREATE TABLE tenant.tb_a (id INT);"
         new = "CREATE TABLE tenant.tb_b (id INT);"
-        (change,) = SchemaDiffer().compare(old, new).changes
+        (change,) = SchemaDiffer().compare(old, new).wire()
         assert change.type == "RENAME_TABLE"
         assert (change.old_value, change.new_value) == ("tenant.tb_a", "tenant.tb_b")
         assert change.details == {"old_name": "tb_a", "new_name": "tb_b"}
@@ -246,7 +246,7 @@ class TestRenamesStayInsideOneSchema:
         (change,) = (
             SchemaDiffer()
             .compare("CREATE TABLE tb_a (id INT);", "CREATE TABLE tb_b (id INT);")
-            .changes
+            .wire()
         )
         assert (change.type, change.old_value, change.new_value) == (
             "RENAME_TABLE",
@@ -267,7 +267,7 @@ class TestEnumsAndSequencesUseTheSchemaTheyCarry:
     def test_a_value_added_to_one_of_two_colliding_enums(self) -> None:
         old = "CREATE TYPE a.status AS ENUM ('x'); CREATE TYPE b.status AS ENUM ('p','q');"
         new = "CREATE TYPE a.status AS ENUM ('x','y'); CREATE TYPE b.status AS ENUM ('p','q');"
-        (change,) = SchemaDiffer().compare(old, new).changes
+        (change,) = SchemaDiffer().compare(old, new).wire()
         assert str(change) == "CHANGE ENUM VALUES a.status"
         assert change.details == {"added_values": ["y"], "removed_values": []}
 

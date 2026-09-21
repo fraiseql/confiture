@@ -1,0 +1,69 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 0,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 1,
+      "columns_dropped": 0,
+      "indexes_added": 2,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "RENAME_COLUMN",
+        "table": "users",
+        "column": null,
+        "old_value": "full_name",
+        "new_value": "first_name",
+        "details": null
+      },
+      {
+        "type": "ADD_COLUMN",
+        "table": "users",
+        "column": "last_name",
+        "old_value": null,
+        "new_value": "TEXT NOT NULL",
+        "details": null
+      },
+      {
+        "type": "ADD_INDEX",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "idx_users_first_name",
+          "columns": [
+            "first_name"
+          ],
+          "unique": false
+        }
+      },
+      {
+        "type": "ADD_INDEX",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "idx_users_last_name",
+          "columns": [
+            "last_name"
+          ],
+          "unique": false
+        }
+      }
+    ]
+  }
+}

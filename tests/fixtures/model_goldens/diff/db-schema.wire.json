@@ -1,0 +1,127 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 1,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "tb_confiture",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": "gen_random_uuid()"
+            },
+            {
+              "name": "pk_confiture",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null,
+              "identity": "always"
+            },
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "version",
+              "type": "VARCHAR(255)",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": "VARCHAR(255)",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "applied_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "execution_time_ms",
+              "type": "INTEGER",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "checksum",
+              "type": "VARCHAR(64)",
+              "nullable": true,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "pk_confiture"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "slug"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "version"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "uuid-ossp",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION \"uuid-ossp\"",
+        "details": {
+          "kind": "extension",
+          "name": "uuid-ossp",
+          "keyword": "EXTENSION"
+        }
+      }
+    ]
+  }
+}

@@ -11,8 +11,8 @@ from typing import Any
 from confiture.core.builder import SchemaBuilder
 from confiture.core.differ import SchemaDiffer
 from confiture.core.git import GitRepository, validate_ref
+from confiture.core.schema_change import SchemaDiff
 from confiture.exceptions import GitError
-from confiture.models.schema import SchemaDiff
 
 
 class GitSchemaBuilder:

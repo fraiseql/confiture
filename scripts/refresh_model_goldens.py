@@ -108,6 +108,10 @@ TREES: tuple[Tree, ...] = (
     ),
     Tree("07-comment-validation", "examples/07-comment-validation", "local"),
     Tree("basic", "examples/basic", "local"),
+    # A pair whose diff is every kind of schema change, once each: what the
+    # other trees, almost all additions, cannot show of the wire.
+    Tree("every-change.old", files=("tests/fixtures/every_change/old.sql",), drift=False),
+    Tree("every-change.new", files=("tests/fixtures/every_change/new.sql",), drift=False),
 )
 
 PAIRS: tuple[tuple[str, str, str], ...] = (
@@ -116,6 +120,7 @@ PAIRS: tuple[tuple[str, str, str], ...] = (
         "03-zero-downtime-migration.old",
         "03-zero-downtime-migration.new",
     ),
+    ("every-change", "every-change.old", "every-change.new"),
 )
 
 _VERSION = re.compile(r"\b\d{14}(?=_golden\b)|(?<=-- Version: )\d{14}\b")
@@ -174,6 +179,15 @@ def _record_diff(before: Path, after: Path, work: Path) -> dict[str, str]:
     replacements = {str(before): "<from>", str(after): "<to>", str(work): "<work>"}
     payload = {"exit_code": result.returncode, "stdout": json.loads(result.stdout)}
     recorded = {".json": _normalise(json.dumps(payload, indent=2) + "\n", replacements)}
+    # ``confiture diff`` prints every change's full wire form — type, table,
+    # column, old and new value, details — which ``migrate diff`` summarises
+    # into one line; the typed change union must serialise to it byte for byte.
+    wire = _run("diff", "--from", str(before), "--to", str(after), "--format", "json")
+    recorded[".wire.json"] = _normalise(
+        json.dumps({"exit_code": wire.returncode, "stdout": json.loads(wire.stdout)}, indent=2)
+        + "\n",
+        replacements,
+    )
     for suffix in (".up.sql", ".down.sql"):
         generated = sorted(migrations.glob(f"*{suffix}"))
         if generated:

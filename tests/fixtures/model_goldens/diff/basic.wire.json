@@ -1,0 +1,332 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 3,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "comments",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null,
+              "identity": "always"
+            },
+            {
+              "name": "pk_comment",
+              "type": "UUID",
+              "nullable": false,
+              "default": "uuid_generate_v4()"
+            },
+            {
+              "name": "post_id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "user_id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "content",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "post_id"
+              ],
+              "ref_table": "posts",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": "CASCADE",
+              "on_update": null
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "user_id"
+              ],
+              "ref_table": "users",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": "CASCADE",
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "pk_comment"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "posts",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null,
+              "identity": "always"
+            },
+            {
+              "name": "pk_post",
+              "type": "UUID",
+              "nullable": false,
+              "default": "uuid_generate_v4()"
+            },
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "user_id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "title",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "content",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "published_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "user_id"
+              ],
+              "ref_table": "users",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": "CASCADE",
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "pk_post"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "slug"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null,
+              "identity": "always"
+            },
+            {
+              "name": "pk_user",
+              "type": "UUID",
+              "nullable": false,
+              "default": "uuid_generate_v4()"
+            },
+            {
+              "name": "slug",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "username",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "bio",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "pk_user"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "slug"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "username"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "email"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "table": "uuid-ossp",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE EXTENSION \"uuid-ossp\"",
+        "details": {
+          "kind": "extension",
+          "name": "uuid-ossp",
+          "keyword": "EXTENSION"
+        }
+      }
+    ]
+  }
+}

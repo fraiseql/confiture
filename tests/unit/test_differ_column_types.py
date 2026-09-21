@@ -24,6 +24,14 @@ import pytest
 
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
+from confiture.core.schema_change import (
+    CheckConstraintDropped,
+    ColumnAdded,
+    ForeignKeyDropped,
+    IndexDropped,
+    SchemaChange,
+    UniqueConstraintDropped,
+)
 from confiture.core.schema_model import Column
 
 
@@ -34,7 +42,7 @@ def _column(sql: str, name: str) -> Column:
 
 
 def _changes(old: str, new: str) -> list[tuple[str, str | None, str | None]]:
-    return [(c.type, c.old_value, c.new_value) for c in SchemaDiffer().compare(old, new).changes]
+    return [(c.type, c.old_value, c.new_value) for c in SchemaDiffer().compare(old, new).wire()]
 
 
 class TestTheTypmodSurvivesParsing:
@@ -126,7 +134,7 @@ class TestTheTypmodReachesGeneratedDDL:
             for c in SchemaDiffer()
             .compare("CREATE TABLE t (id INT);", "CREATE TABLE t (id INT, a VARCHAR(50));")
             .changes
-            if c.type == "ADD_COLUMN"
+            if isinstance(c, ColumnAdded)
         )
         sql = DifferSQLGenerator().generate_up(change)
         pglast.parse_sql(sql)
@@ -179,28 +187,28 @@ class TestEveryDropHasTheDownItCanDerive:
     )
     NEW = "CREATE TABLE b.parent (id INT PRIMARY KEY);\nCREATE TABLE a.t (id INT, u INT, x INT);\n"
 
-    def _down(self, change_type: str) -> str:
+    def _down(self, kind: type[SchemaChange]) -> str:
         change = next(
-            c for c in SchemaDiffer().compare(self.OLD, self.NEW).changes if c.type == change_type
+            c for c in SchemaDiffer().compare(self.OLD, self.NEW).changes if isinstance(c, kind)
         )
         sql = DifferSQLGenerator(force_destructive=True).generate_down(change)
         pglast.parse_sql("\n".join(line.split("--")[0] for line in sql.splitlines()))
         return sql
 
     def test_a_dropped_foreign_key_comes_back_with_its_action(self) -> None:
-        down = self._down("DROP_FOREIGN_KEY")
+        down = self._down(ForeignKeyDropped)
         assert (
             "ADD CONSTRAINT fk FOREIGN KEY (id) REFERENCES b.parent (id) ON DELETE CASCADE" in down
         )
 
     def test_a_dropped_check_comes_back_with_its_expression(self) -> None:
-        assert "ADD CONSTRAINT ck CHECK (id > 0)" in self._down("DROP_CHECK_CONSTRAINT")
+        assert "ADD CONSTRAINT ck CHECK (id > 0)" in self._down(CheckConstraintDropped)
 
     def test_a_dropped_unique_constraint_comes_back(self) -> None:
-        assert "ADD CONSTRAINT uq UNIQUE (u)" in self._down("DROP_UNIQUE_CONSTRAINT")
+        assert "ADD CONSTRAINT uq UNIQUE (u)" in self._down(UniqueConstraintDropped)
 
     def test_a_dropped_index_comes_back(self) -> None:
-        assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix ON a.t (x)" in self._down("DROP_INDEX")
+        assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix ON a.t (x)" in self._down(IndexDropped)
 
 
 class TestTheIdentityDecidesTheType:

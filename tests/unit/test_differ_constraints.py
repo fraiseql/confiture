@@ -212,14 +212,14 @@ class TestAnUnnamedConstraintIsIdentifiedByWhatItSays:
             "CREATE TABLE b.p (id INT PRIMARY KEY);\n"
             "CREATE TABLE t (a INT REFERENCES b.p(id), z INT REFERENCES b.p(id));"
         )
-        added = [c for c in SchemaDiffer().compare(old, new).changes if c.type == "ADD_FOREIGN_KEY"]
+        added = [c for c in SchemaDiffer().compare(old, new).wire() if c.type == "ADD_FOREIGN_KEY"]
         assert sorted((c.details or {})["columns"][0] for c in added) == ["a", "z"]
 
     def test_two_unnamed_unique_constraints_are_two_changes(self) -> None:
         old = "CREATE TABLE t (a INT, z INT);"
         new = "CREATE TABLE t (a INT UNIQUE, z INT UNIQUE);"
         added = [
-            c for c in SchemaDiffer().compare(old, new).changes if c.type == "ADD_UNIQUE_CONSTRAINT"
+            c for c in SchemaDiffer().compare(old, new).wire() if c.type == "ADD_UNIQUE_CONSTRAINT"
         ]
         assert sorted((c.details or {})["columns"][0] for c in added) == ["a", "z"]
 
@@ -227,14 +227,14 @@ class TestAnUnnamedConstraintIsIdentifiedByWhatItSays:
         old = "CREATE TABLE t (a INT, z INT);"
         new = "CREATE TABLE t (a INT CHECK (a > 0), z INT CHECK (z > 0));"
         added = [
-            c for c in SchemaDiffer().compare(old, new).changes if c.type == "ADD_CHECK_CONSTRAINT"
+            c for c in SchemaDiffer().compare(old, new).wire() if c.type == "ADD_CHECK_CONSTRAINT"
         ]
         assert sorted((c.details or {})["expression"] for c in added) == ["a > 0", "z > 0"]
 
     def test_two_unnamed_indexes_are_two_changes(self) -> None:
         old = "CREATE TABLE t (a INT, z INT);"
         new = "CREATE TABLE t (a INT, z INT);\nCREATE INDEX ON t (a);\nCREATE INDEX ON t (z);"
-        added = [c for c in SchemaDiffer().compare(old, new).changes if c.type == "ADD_INDEX"]
+        added = [c for c in SchemaDiffer().compare(old, new).wire() if c.type == "ADD_INDEX"]
         assert sorted((c.details or {})["columns"][0] for c in added) == ["a", "z"]
 
 
@@ -247,12 +247,13 @@ class TestACheckThatChangedIsAChange:
             "CREATE TABLE tenant.t (id INT, CONSTRAINT ck CHECK (id > 0));",
             "CREATE TABLE tenant.t (id INT, CONSTRAINT ck CHECK (id > 5));",
         )
-        assert [c.type for c in diff.changes] == [
+        wire = diff.wire()
+        assert [c.type for c in wire] == [
             "DROP_CHECK_CONSTRAINT",
             "ADD_CHECK_CONSTRAINT",
         ]
-        assert (diff.changes[0].details or {})["expression"] == "id > 0"
-        assert (diff.changes[1].details or {})["expression"] == "id > 5"
+        assert (wire[0].details or {})["expression"] == "id > 0"
+        assert (wire[1].details or {})["expression"] == "id > 5"
 
     def test_respelling_one_predicate_is_not_a_change(self) -> None:
         """The expression comes from the parser, so whitespace and redundant

@@ -13,8 +13,7 @@ from typing import Any
 
 import pglast
 
-from confiture.core.ddl_objects import OBJECT_KEYWORD, objects_in, pair_definitions
-from confiture.core.differ_sql import column_body
+from confiture.core.ddl_objects import objects_in, pair_definitions
 from confiture.core.linting.duplicates import WINS_TEXT, CreateFlags, wins
 from confiture.core.linting.inventory import (
     Inventory,
@@ -23,10 +22,38 @@ from confiture.core.linting.inventory import (
     group_definitions,
     schema_model,
 )
+from confiture.core.schema_change import (
+    CheckConstraintAdded,
+    CheckConstraintDropped,
+    ColumnAdded,
+    ColumnDefaultChanged,
+    ColumnDropped,
+    ColumnNullabilityChanged,
+    ColumnRenamed,
+    ColumnTypeChanged,
+    EnumTypeAdded,
+    EnumTypeDropped,
+    EnumValuesChanged,
+    ForeignKeyAdded,
+    ForeignKeyDropped,
+    IndexAdded,
+    IndexDropped,
+    ObjectAdded,
+    ObjectDropped,
+    ObjectReplaced,
+    SchemaChange,
+    SchemaDiff,
+    SequenceAdded,
+    SequenceDropped,
+    TableAdded,
+    TableDropped,
+    TableRenamed,
+    UniqueConstraintAdded,
+    UniqueConstraintDropped,
+)
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import (
     Column,
-    Constraint,
     EnumType,
     Sequence,
     Table,
@@ -34,7 +61,6 @@ from confiture.core.schema_model import (
 )
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.core.type_lattice import same_type
-from confiture.models.schema import SchemaChange, SchemaDiff
 from confiture.models.warnings import BuildWarning
 
 logger = logging.getLogger(__name__)
@@ -134,13 +160,8 @@ def _merged_warnings(old_schema: ParsedSchema, new_schema: ParsedSchema) -> list
 
 
 # ---------------------------------------------------------------------------
-# The model constraint, landed on this module's own ``Table``
+# When two of a table's own objects, or two column types, are one
 # ---------------------------------------------------------------------------
-#
-# ``ddl_walk.read_constraint`` is the one reader of a ``Constraint`` node (#315,
-# #316) and returns what the node declares. This module still compares its own
-# ``models.schema`` types, so a returned value is applied to them here; nothing
-# below decides what a node means.
 
 
 def _object_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
@@ -179,128 +200,9 @@ def _types_differ(old: Column, new: Column) -> bool:
     return not same_type(old.type_key, new.type_key)
 
 
-#: What a column with no written type is called in a change — none from a parse.
-_UNKNOWN_TYPE = "UNKNOWN"
-
-
-def _written(column: Column) -> str:
-    """The column's type as generated DDL writes it."""
-    return column.raw_sql_type or column.type_key or _UNKNOWN_TYPE
-
-
-def _column_detail(column: Column) -> dict[str, Any]:
-    """One column in the shape ``DifferSQLGenerator`` renders it from.
-
-    Identity and generation are present only on a column that has them, so an
-    ordinary column's details read exactly as they always have.
-    """
-    detail: dict[str, Any] = {
-        "name": column.folded,
-        "type": _written(column),
-        "nullable": not column.not_null,
-        "default": column.default,
-    }
-    if column.identity is not None:
-        detail["identity"] = column.identity
-    if column.generated is not None:
-        detail["generated"] = column.generated
-        detail["generated_kind"] = column.generated_kind
-    return detail
-
-
-def _column_definition(column: Column) -> str:
-    """The column's definition without its name — what ``ADD COLUMN`` takes after the name."""
-    return column_body(_column_detail(column))
-
-
-def _column_details(table: Table) -> list[dict[str, Any]]:
-    """The columns of ``table`` in the shape ``DifferSQLGenerator`` renders a ``CREATE TABLE`` from."""
-    return [_column_detail(column) for column in table.columns]
-
-
-def _constraint_details(table: Table) -> list[dict[str, Any]]:
-    """The table's own constraints, in the shape the generator renders a clause from.
-
-    :func:`_column_details`' sibling. ``_up_add_table`` rendered the columns and
-    nothing else, so a new table's foreign keys, CHECKs, UNIQUEs and primary key
-    were dropped from the generated ``CREATE TABLE`` — for every spelling, which
-    is why this outlived #315's parse fix rather than being caused by it.
-
-    The primary key is emitted at table level rather than on the column so that a
-    composite one has somewhere to go.
-    """
-    details: list[dict[str, Any]] = [
-        {
-            "kind": "PRIMARY KEY",
-            "name": "",
-            "columns": [column.folded for column in table.columns if column.primary_key],
-        }
-    ]
-    details.extend(_foreign_key_detail(fk) for fk in table.constraints_of("foreign_key"))
-    details.extend(_unique_detail(uc) for uc in table.constraints_of("unique"))
-    details.extend(_check_detail(cc) for cc in table.constraints_of("check"))
-    return [detail for detail in details if detail.get("columns") or detail.get("expression")]
-
-
-def _foreign_key_detail(fk: Constraint) -> dict[str, Any]:
-    return {
-        "kind": "FOREIGN KEY",
-        "name": fk.name,
-        "columns": list(fk.columns),
-        "ref_table": fk.ref_table or "",
-        "ref_columns": list(fk.ref_columns),
-        "on_delete": fk.on_delete,
-        "on_update": fk.on_update,
-    }
-
-
-def _unique_detail(uc: Constraint) -> dict[str, Any]:
-    return {"kind": "UNIQUE", "name": uc.name, "columns": list(uc.columns)}
-
-
-def _check_detail(cc: Constraint) -> dict[str, Any]:
-    return {"kind": "CHECK", "name": cc.name, "expression": cc.expression}
-
-
 def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
     """A stable order for object changes: kind, then schema, then name."""
     return (ref.kind, ref.schema, ref.name, str(ref.signature))
-
-
-def _object_details(ref: Any) -> dict[str, Any]:
-    return {
-        "kind": ref.kind,
-        "name": ref.qualified,
-        "keyword": OBJECT_KEYWORD.get(ref.kind, ref.kind.replace("_", " ").upper()),
-    }
-
-
-def _added_change(ref: Any, obj: Any) -> SchemaChange:
-    return SchemaChange(
-        type=f"ADD_{ref.kind.upper()}",
-        table=ref.qualified,
-        new_value=obj.create_sql,
-        details=_object_details(ref),
-    )
-
-
-def _dropped_change(ref: Any, obj: Any) -> SchemaChange:
-    return SchemaChange(
-        type=f"DROP_{ref.kind.upper()}",
-        table=ref.qualified,
-        old_value=obj.create_sql,
-        details=_object_details(ref),
-    )
-
-
-def _replaced_change(ref: Any, before: Any, after: Any) -> SchemaChange:
-    return SchemaChange(
-        type=f"REPLACE_{ref.kind.upper()}",
-        table=ref.qualified,
-        old_value=before.create_sql,
-        new_value=after.create_sql,
-        details=_object_details(ref),
-    )
 
 
 class SchemaDiffer:
@@ -425,48 +327,12 @@ class SchemaDiffer:
 
         for old_key, new_key in self._renamed_tables(old_only, new_only).items():
             old_table, new_table = old_map[old_key], new_map[new_key]
-            changes.append(
-                SchemaChange(
-                    type="RENAME_TABLE",
-                    table=old_table.qualified,
-                    old_value=old_table.qualified,
-                    new_value=new_table.qualified,
-                    # `ALTER TABLE a.t RENAME TO a.t2` is a syntax error — the
-                    # target of a RENAME is a bare name. Both spellings travel so
-                    # the up and the down each have the two they need without
-                    # taking a qualifier apart.
-                    details={"old_name": old_table.name, "new_name": new_table.name},
-                )
-            )
+            changes.append(TableRenamed(old_table, new_table))
             old_only.discard(old_key)
             new_only.discard(new_key)
 
-        changes.extend(
-            SchemaChange(
-                type="DROP_TABLE",
-                table=old_map[key].qualified,
-                # The constraints travel too: a ``DROP_TABLE`` down recreates the
-                # table from exactly these details, so a table that came back
-                # without its foreign keys was a table that came back wrong.
-                details={
-                    "columns": _column_details(old_map[key]),
-                    "constraints": _constraint_details(old_map[key]),
-                },
-            )
-            for key in sorted(old_only)
-        )
-
-        changes.extend(
-            SchemaChange(
-                type="ADD_TABLE",
-                table=new_map[key].qualified,
-                details={
-                    "columns": _column_details(new_map[key]),
-                    "constraints": _constraint_details(new_map[key]),
-                },
-            )
-            for key in sorted(new_only)
-        )
+        changes.extend(TableDropped(old_map[key]) for key in sorted(old_only))
+        changes.extend(TableAdded(new_map[key]) for key in sorted(new_only))
 
         for key in sorted(set(old_map) & set(new_map)):
             old_table = old_map[key]
@@ -532,10 +398,10 @@ class SchemaDiffer:
             pairs, dropped, added = pair_definitions(
                 old_objects.get(ref, []), new_objects.get(ref, [])
             )
-            changes.extend(_added_change(ref, obj) for obj in added)
-            changes.extend(_dropped_change(ref, obj) for obj in dropped)
+            changes.extend(ObjectAdded(ref, obj) for obj in added)
+            changes.extend(ObjectDropped(ref, obj) for obj in dropped)
             changes.extend(
-                _replaced_change(ref, before, after)
+                ObjectReplaced(ref, before, after)
                 for before, after in pairs
                 if before.definition != after.definition
             )
@@ -574,34 +440,16 @@ class SchemaDiffer:
         )
 
         for old_name, new_name in renamed_columns.items():
-            changes.append(
-                SchemaChange(
-                    type="RENAME_COLUMN",
-                    table=table,
-                    old_value=old_name,
-                    new_value=new_name,
-                )
-            )
+            changes.append(ColumnRenamed(table, old_name, new_name))
             old_col_names.discard(old_name)
             new_col_names.discard(new_name)
 
         changes.extend(
-            SchemaChange(
-                type="DROP_COLUMN",
-                table=table,
-                column=col_name,
-                old_value=_column_definition(old_col_map[col_name]),
-            )
+            ColumnDropped(table, old_col_map[col_name])
             for col_name in sorted(old_col_names - new_col_names)
         )
-
         changes.extend(
-            SchemaChange(
-                type="ADD_COLUMN",
-                table=table,
-                column=col_name,
-                new_value=_column_definition(new_col_map[col_name]),
-            )
+            ColumnAdded(table, new_col_map[col_name])
             for col_name in sorted(new_col_names - old_col_names)
         )
 
@@ -638,36 +486,16 @@ class SchemaDiffer:
         # Type change, typmod included: a `varchar(50)` widened to `varchar(100)`
         # is a change, and was reported as nothing at all.
         if _types_differ(old_col, new_col):
-            changes.append(
-                SchemaChange(
-                    type="CHANGE_COLUMN_TYPE",
-                    table=table,
-                    column=old_col.folded,
-                    old_value=_written(old_col),
-                    new_value=_written(new_col),
-                )
-            )
+            changes.append(ColumnTypeChanged(table, old_col, new_col))
 
         if old_col.not_null != new_col.not_null:
             changes.append(
-                SchemaChange(
-                    type="CHANGE_COLUMN_NULLABLE",
-                    table=table,
-                    column=old_col.folded,
-                    old_value="false" if old_col.not_null else "true",
-                    new_value="false" if new_col.not_null else "true",
-                )
+                ColumnNullabilityChanged(table, old_col.folded, nullable=not new_col.not_null)
             )
 
         if old_col.default != new_col.default:
             changes.append(
-                SchemaChange(
-                    type="CHANGE_COLUMN_DEFAULT",
-                    table=table,
-                    column=old_col.folded,
-                    old_value=str(old_col.default) if old_col.default else None,
-                    new_value=str(new_col.default) if new_col.default else None,
-                )
+                ColumnDefaultChanged(table, old_col.folded, old_col.default, new_col.default)
             )
 
         return changes
@@ -679,23 +507,17 @@ class SchemaDiffer:
     def _compare_indexes(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped indexes.
 
-        Every ``detail_fn`` below emits the object's own name under ``name``,
-        which is the key ``differ_sql`` and ``_CHANGE_TEMPLATES`` read. Indexes
-        were the one kind spelled ``index_name`` on this side of the seam, so
-        every generator read took its fallback and created ``idx_{table}``
-        instead of the index the author declared.
+        The variant carries the ``Index`` itself. Indexes were once the one kind
+        whose name travelled as ``index_name`` on this side of the seam, so every
+        generator read took its fallback and created ``idx_{table}`` instead of
+        the index the author declared — a key two modules had to spell alike.
         """
         return self._compare_named_objects(
             old=list(old_table.indexes),
             new=list(new_table.indexes),
-            add_type="ADD_INDEX",
-            drop_type="DROP_INDEX",
+            added=IndexAdded,
+            dropped=IndexDropped,
             table=old_table.qualified,
-            detail_fn=lambda obj: {
-                "name": obj.name,
-                "columns": list(obj.columns),
-                "unique": obj.unique,
-            },
             # The access method is part of what an index *is*: a btree and a hash
             # index on one column are two indexes, and were one to this module
             # while it never read `USING`.
@@ -708,12 +530,9 @@ class SchemaDiffer:
         return self._compare_named_objects(
             old=list(old_table.constraints_of("foreign_key")),
             new=list(new_table.constraints_of("foreign_key")),
-            add_type="ADD_FOREIGN_KEY",
-            drop_type="DROP_FOREIGN_KEY",
+            added=ForeignKeyAdded,
+            dropped=ForeignKeyDropped,
             table=old_table.qualified,
-            detail_fn=lambda obj: {
-                key: value for key, value in _foreign_key_detail(obj).items() if key != "kind"
-            },
             identity=("columns", "ref_table", "ref_columns"),
         )
 
@@ -722,10 +541,9 @@ class SchemaDiffer:
         return self._compare_named_objects(
             old=list(old_table.constraints_of("check")),
             new=list(new_table.constraints_of("check")),
-            add_type="ADD_CHECK_CONSTRAINT",
-            drop_type="DROP_CHECK_CONSTRAINT",
+            added=CheckConstraintAdded,
+            dropped=CheckConstraintDropped,
             table=old_table.qualified,
-            detail_fn=lambda obj: {"name": obj.name, "expression": obj.expression},
             identity=("expression",),
             # The one kind whose body is compared, and the only one that can be:
             # the expression is `RawStream`'s rendering of the parsed predicate, so
@@ -742,10 +560,9 @@ class SchemaDiffer:
         return self._compare_named_objects(
             old=list(old_table.constraints_of("unique")),
             new=list(new_table.constraints_of("unique")),
-            add_type="ADD_UNIQUE_CONSTRAINT",
-            drop_type="DROP_UNIQUE_CONSTRAINT",
+            added=UniqueConstraintAdded,
+            dropped=UniqueConstraintDropped,
             table=old_table.qualified,
-            detail_fn=lambda obj: {"name": obj.name, "columns": list(obj.columns)},
             identity=("columns",),
         )
 
@@ -757,28 +574,21 @@ class SchemaDiffer:
         old_map = {_identity(e.schema, e.name): e for e in old_enums}
         new_map = {_identity(e.schema, e.name): e for e in new_enums}
 
-        changes.extend(
-            SchemaChange(type="ADD_ENUM_TYPE", table=new_map[key].qualified)
-            for key in set(new_map) - set(old_map)
-        )
+        # By identity, as tables are: a `set` iterates in hash order, and a `str`
+        # hash is randomised per process, so the same two trees listed their enum
+        # types in a different order on every run.
+        changes.extend(EnumTypeAdded(new_map[key]) for key in sorted(set(new_map) - set(old_map)))
+        changes.extend(EnumTypeDropped(old_map[key]) for key in sorted(set(old_map) - set(new_map)))
 
-        changes.extend(
-            SchemaChange(type="DROP_ENUM_TYPE", table=old_map[key].qualified)
-            for key in set(old_map) - set(new_map)
-        )
-
-        for key in set(old_map) & set(new_map):
+        for key in sorted(set(old_map) & set(new_map)):
             old_vals = set(old_map[key].values)
             new_vals = set(new_map[key].values)
             if old_vals != new_vals:
                 changes.append(
-                    SchemaChange(
-                        type="CHANGE_ENUM_VALUES",
-                        table=old_map[key].qualified,
-                        details={
-                            "added_values": sorted(new_vals - old_vals),
-                            "removed_values": sorted(old_vals - new_vals),
-                        },
+                    EnumValuesChanged(
+                        old_map[key].qualified,
+                        added=tuple(sorted(new_vals - old_vals)),
+                        removed=tuple(sorted(old_vals - new_vals)),
                     )
                 )
 
@@ -792,15 +602,8 @@ class SchemaDiffer:
         old_map = {_identity(s.schema, s.name): s for s in old_seqs}
         new_map = {_identity(s.schema, s.name): s for s in new_seqs}
 
-        changes.extend(
-            SchemaChange(type="ADD_SEQUENCE", table=new_map[key].qualified)
-            for key in set(new_map) - set(old_map)
-        )
-
-        changes.extend(
-            SchemaChange(type="DROP_SEQUENCE", table=old_map[key].qualified)
-            for key in set(old_map) - set(new_map)
-        )
+        changes.extend(SequenceAdded(new_map[key]) for key in sorted(set(new_map) - set(old_map)))
+        changes.extend(SequenceDropped(old_map[key]) for key in sorted(set(old_map) - set(new_map)))
 
         return changes
 
@@ -809,10 +612,9 @@ class SchemaDiffer:
         *,
         old: list[Any],
         new: list[Any],
-        add_type: str,
-        drop_type: str,
+        added: Callable[[str, Any], SchemaChange],
+        dropped: Callable[[str, Any], SchemaChange],
         table: str,
-        detail_fn: object,
         identity: tuple[str, ...],
         compared: tuple[str, ...] = (),
     ) -> list[SchemaChange]:
@@ -827,29 +629,22 @@ class SchemaDiffer:
         precedes its add: PostgreSQL has no ``ALTER CONSTRAINT``, so replacing one
         *is* the pair, and the pair is only valid in that order.
         """
-        detail_fn_typed: Callable = detail_fn  # ty: ignore[invalid-assignment]
         changes: list[SchemaChange] = []
         old_map = {_object_identity(obj, identity): obj for obj in old}
         new_map = {_object_identity(obj, identity): obj for obj in new}
 
         changes.extend(
-            SchemaChange(type=add_type, table=table, details=detail_fn_typed(new_map[key]))
-            for key in sorted(set(new_map) - set(old_map), key=str)
+            added(table, new_map[key]) for key in sorted(set(new_map) - set(old_map), key=str)
         )
         changes.extend(
-            SchemaChange(type=drop_type, table=table, details=detail_fn_typed(old_map[key]))
-            for key in sorted(set(old_map) - set(new_map), key=str)
+            dropped(table, old_map[key]) for key in sorted(set(old_map) - set(new_map), key=str)
         )
 
         for key in sorted(set(old_map) & set(new_map), key=str):
             before, after = old_map[key], new_map[key]
             if any(getattr(before, field) != getattr(after, field) for field in compared):
-                changes.append(
-                    SchemaChange(type=drop_type, table=table, details=detail_fn_typed(before))
-                )
-                changes.append(
-                    SchemaChange(type=add_type, table=table, details=detail_fn_typed(after))
-                )
+                changes.append(dropped(table, before))
+                changes.append(added(table, after))
 
         return changes
 

@@ -1,0 +1,288 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 5,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 2,
+      "enum_types_dropped": 0,
+      "sequences_added": 1,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "legacy",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "parent",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "people",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "full_name",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "legacy_flag",
+              "type": "BOOLEAN",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "size",
+              "type": "VARCHAR(50)",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "note",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "status",
+              "type": "TEXT",
+              "nullable": true,
+              "default": "'new'"
+            },
+            {
+              "name": "pid",
+              "type": "INTEGER",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "code",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "qty",
+              "type": "INTEGER",
+              "nullable": true,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "things_old_fk",
+              "columns": [
+                "pid"
+              ],
+              "ref_table": "parent",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "things_old_uq",
+              "columns": [
+                "code"
+              ]
+            },
+            {
+              "kind": "CHECK",
+              "name": "things_old_ck",
+              "expression": "qty > 0"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "ren.tb_orders_archive",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_ENUM_TYPE",
+        "table": "mood",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": null
+      },
+      {
+        "type": "ADD_ENUM_TYPE",
+        "table": "retired_status",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": null
+      },
+      {
+        "type": "ADD_SEQUENCE",
+        "table": "retired_seq",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": null
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "table": "ren",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE SCHEMA ren",
+        "details": {
+          "kind": "schema",
+          "name": "ren",
+          "keyword": "SCHEMA"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "v_retired",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW v_retired AS SELECT 1 AS one",
+        "details": {
+          "kind": "view",
+          "name": "v_retired",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "v_things",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW v_things AS SELECT id FROM things",
+        "details": {
+          "kind": "view",
+          "name": "v_things",
+          "keyword": "VIEW"
+        }
+      }
+    ]
+  }
+}

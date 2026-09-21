@@ -1,0 +1,112 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 1,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "BIGSERIAL",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "email",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "full_name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "bio",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            },
+            {
+              "name": "updated_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "email"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "update_updated_at_column()",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS trigger AS $$\nBEGIN\n    NEW.updated_at = NOW();\n    RETURN NEW;\nEND;\n$$ LANGUAGE plpgsql",
+        "details": {
+          "kind": "function",
+          "name": "update_updated_at_column()",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "table": "users.trigger_users_updated_at",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE TRIGGER trigger_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "details": {
+          "kind": "trigger",
+          "name": "users.trigger_users_updated_at",
+          "keyword": "TRIGGER"
+        }
+      }
+    ]
+  }
+}

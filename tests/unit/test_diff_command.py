@@ -6,8 +6,20 @@ import tempfile
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.core.schema_change import (
+    ColumnAdded,
+    ColumnRenamed,
+    EnumTypeAdded,
+    IndexAdded,
+    SchemaDiff,
+    SequenceAdded,
+    TableDropped,
+    TableRenamed,
+)
+from confiture.core.schema_model import EnumType, Sequence
 from confiture.models.results import DiffResult
-from confiture.models.schema import SchemaChange, SchemaDiff
+from tests.unit._schema_changes import spelled
+from tests.unit._schema_models import index, table
 
 runner = CliRunner()
 
@@ -34,7 +46,7 @@ class TestDiffResult:
         assert data["changes"] == []
 
     def test_diff_result_with_changes(self):
-        diff = SchemaDiff(changes=[SchemaChange(type="ADD_COLUMN", table="users", column="bio")])
+        diff = SchemaDiff(changes=[ColumnAdded("users", spelled("bio", "TEXT"))])
         result = DiffResult.from_schema_diff(diff)
         assert result.has_changes is True
         data = result.to_dict()
@@ -45,8 +57,8 @@ class TestDiffResult:
     def test_diff_result_summary_counts(self):
         diff = SchemaDiff(
             changes=[
-                SchemaChange(type="ADD_COLUMN", table="users", column="bio"),
-                SchemaChange(type="DROP_TABLE", table="legacy"),
+                ColumnAdded("users", spelled("bio", "TEXT")),
+                TableDropped(table("legacy", spelled("id", "INTEGER", nullable=False))),
             ]
         )
         result = DiffResult.from_schema_diff(diff)
@@ -146,12 +158,10 @@ class TestDiffResultNullFields:
     """Gap G — DiffResult.to_dict() with None fields on changes."""
 
     def test_diff_result_to_dict_null_fields(self):
-        from confiture.models.schema import SchemaChange, SchemaDiff
-
         diff = SchemaDiff(
             changes=[
-                SchemaChange(type="ADD_SEQUENCE", table="order_seq"),
-                SchemaChange(type="ADD_ENUM_TYPE", table="status"),
+                SequenceAdded(Sequence("order_seq")),
+                EnumTypeAdded(EnumType("status")),
             ]
         )
         data = DiffResult.from_schema_diff(diff).to_dict()
@@ -163,19 +173,11 @@ class TestDiffResultNullFields:
         assert seq_change["new_value"] is None
 
     def test_diff_result_to_dict_details_field_present(self):
-        diff = SchemaDiff(
-            changes=[
-                SchemaChange(
-                    type="ADD_INDEX",
-                    table="users",
-                    details={"index_name": "idx_email", "columns": ["email"]},
-                ),
-            ]
-        )
+        diff = SchemaDiff(changes=[IndexAdded("users", index("idx_email", "users", "email"))])
         data = DiffResult.from_schema_diff(diff).to_dict()
         change = data["changes"][0]
         assert change["details"] is not None
-        assert change["details"]["index_name"] == "idx_email"
+        assert change["details"]["name"] == "idx_email"
 
 
 class TestDiffResultSummaryRenames:
@@ -184,8 +186,8 @@ class TestDiffResultSummaryRenames:
     def test_diff_result_summary_does_not_count_renames(self):
         diff = SchemaDiff(
             changes=[
-                SchemaChange(type="RENAME_TABLE", old_value="old", new_value="new"),
-                SchemaChange(type="RENAME_COLUMN", table="t", old_value="a", new_value="b"),
+                TableRenamed(table("old"), table("new")),
+                ColumnRenamed("t", "a", "b"),
             ]
         )
         data = DiffResult.from_schema_diff(diff).to_dict()
@@ -194,11 +196,7 @@ class TestDiffResultSummaryRenames:
         assert non_rename_sum == 0
 
     def test_diff_result_summary_tables_renamed_is_counted(self):
-        diff = SchemaDiff(
-            changes=[
-                SchemaChange(type="RENAME_TABLE", old_value="old", new_value="new"),
-            ]
-        )
+        diff = SchemaDiff(changes=[TableRenamed(table("old"), table("new"))])
         data = DiffResult.from_schema_diff(diff).to_dict()
         assert data["summary"]["tables_renamed"] == 1
 
@@ -264,17 +262,11 @@ class TestDiffTextRenameOutput:
 
         from confiture.cli.formatters.diff_formatter import print_diff_text
         from confiture.models.results import DiffResult
-        from confiture.models.schema import SchemaChange, SchemaDiff
 
         diff = SchemaDiff(
             changes=[
-                SchemaChange(
-                    type="RENAME_COLUMN",
-                    table="users",
-                    old_value="email",
-                    new_value="email_address",
-                ),
-                SchemaChange(type="RENAME_TABLE", old_value="users", new_value="accounts"),
+                ColumnRenamed("users", "email", "email_address"),
+                TableRenamed(table("users"), table("accounts")),
             ]
         )
         result_obj = DiffResult.from_schema_diff(diff)

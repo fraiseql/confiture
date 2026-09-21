@@ -10,13 +10,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
+from confiture.models.schema import WireChange, WireDiff
 from confiture.models.warnings import BuildWarning
 from confiture.url_redaction import redact_url
-
-if TYPE_CHECKING:
-    from confiture.models.schema import SchemaChange, SchemaDiff
 
 
 class MigrationStatus:
@@ -774,12 +772,12 @@ class DiffResult:
     """Result of a schema diff operation."""
 
     has_changes: bool
-    changes: list[SchemaChange]
+    changes: list[WireChange]
 
     @classmethod
-    def from_schema_diff(cls, diff: SchemaDiff) -> DiffResult:
-        """Construct from a SchemaDiff object."""
-        return cls(has_changes=diff.has_changes(), changes=diff.changes)
+    def from_schema_diff(cls, diff: WireDiff) -> DiffResult:
+        """Construct from a ``SchemaDiff``: its changes, as the wire carries them."""
+        return cls(has_changes=diff.has_changes(), changes=diff.wire())
 
     def _build_summary(self) -> dict[str, int]:
         changes = self.changes

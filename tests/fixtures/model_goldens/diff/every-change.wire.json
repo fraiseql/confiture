@@ -1,0 +1,339 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 1,
+      "tables_dropped": 1,
+      "tables_renamed": 1,
+      "columns_added": 1,
+      "columns_dropped": 1,
+      "indexes_added": 1,
+      "indexes_dropped": 1,
+      "foreign_keys_added": 1,
+      "foreign_keys_dropped": 1,
+      "constraints_added": 2,
+      "constraints_dropped": 2,
+      "enum_types_added": 1,
+      "enum_types_dropped": 1,
+      "sequences_added": 1,
+      "sequences_dropped": 1
+    },
+    "changes": [
+      {
+        "type": "RENAME_TABLE",
+        "table": "ren.tb_orders_archive",
+        "column": null,
+        "old_value": "ren.tb_orders_archive",
+        "new_value": "ren.tb_orders_history",
+        "details": {
+          "old_name": "tb_orders_archive",
+          "new_name": "tb_orders_history"
+        }
+      },
+      {
+        "type": "DROP_TABLE",
+        "table": "legacy",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "audit",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "RENAME_COLUMN",
+        "table": "people",
+        "column": null,
+        "old_value": "full_name",
+        "new_value": "display_name",
+        "details": null
+      },
+      {
+        "type": "DROP_COLUMN",
+        "table": "things",
+        "column": "legacy_flag",
+        "old_value": "BOOLEAN",
+        "new_value": null,
+        "details": null
+      },
+      {
+        "type": "ADD_COLUMN",
+        "table": "things",
+        "column": "created_at",
+        "old_value": null,
+        "new_value": "TIMESTAMPTZ",
+        "details": null
+      },
+      {
+        "type": "CHANGE_COLUMN_NULLABLE",
+        "table": "things",
+        "column": "note",
+        "old_value": "false",
+        "new_value": "true",
+        "details": null
+      },
+      {
+        "type": "CHANGE_COLUMN_TYPE",
+        "table": "things",
+        "column": "size",
+        "old_value": "VARCHAR(50)",
+        "new_value": "VARCHAR(100)",
+        "details": null
+      },
+      {
+        "type": "CHANGE_COLUMN_DEFAULT",
+        "table": "things",
+        "column": "status",
+        "old_value": "'new'",
+        "new_value": "'open'",
+        "details": null
+      },
+      {
+        "type": "ADD_INDEX",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_new_ix",
+          "columns": [
+            "code",
+            "qty"
+          ],
+          "unique": false
+        }
+      },
+      {
+        "type": "DROP_INDEX",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_old_ix",
+          "columns": [
+            "code"
+          ],
+          "unique": false
+        }
+      },
+      {
+        "type": "ADD_FOREIGN_KEY",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_new_fk",
+          "columns": [
+            "pid"
+          ],
+          "ref_table": "parent",
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": "CASCADE",
+          "on_update": null
+        }
+      },
+      {
+        "type": "DROP_FOREIGN_KEY",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_old_fk",
+          "columns": [
+            "pid"
+          ],
+          "ref_table": "parent",
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": null,
+          "on_update": null
+        }
+      },
+      {
+        "type": "ADD_CHECK_CONSTRAINT",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_new_ck",
+          "expression": "qty >= 0"
+        }
+      },
+      {
+        "type": "DROP_CHECK_CONSTRAINT",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_old_ck",
+          "expression": "qty > 0"
+        }
+      },
+      {
+        "type": "ADD_UNIQUE_CONSTRAINT",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_new_uq",
+          "columns": [
+            "code",
+            "qty"
+          ]
+        }
+      },
+      {
+        "type": "DROP_UNIQUE_CONSTRAINT",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_old_uq",
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      {
+        "type": "ADD_ENUM_TYPE",
+        "table": "new_status",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": null
+      },
+      {
+        "type": "DROP_ENUM_TYPE",
+        "table": "retired_status",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": null
+      },
+      {
+        "type": "CHANGE_ENUM_VALUES",
+        "table": "mood",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "added_values": [
+            "happy"
+          ],
+          "removed_values": []
+        }
+      },
+      {
+        "type": "ADD_SEQUENCE",
+        "table": "new_seq",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": null
+      },
+      {
+        "type": "DROP_SEQUENCE",
+        "table": "retired_seq",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "v_added",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW v_added AS SELECT 2 AS two",
+        "details": {
+          "kind": "view",
+          "name": "v_added",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "DROP_VIEW",
+        "table": "v_retired",
+        "column": null,
+        "old_value": "CREATE OR REPLACE VIEW v_retired AS SELECT 1 AS one",
+        "new_value": null,
+        "details": {
+          "kind": "view",
+          "name": "v_retired",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "REPLACE_VIEW",
+        "table": "v_things",
+        "column": null,
+        "old_value": "CREATE OR REPLACE VIEW v_things AS SELECT id FROM things",
+        "new_value": "CREATE OR REPLACE VIEW v_things AS SELECT id, code FROM things",
+        "details": {
+          "kind": "view",
+          "name": "v_things",
+          "keyword": "VIEW"
+        }
+      }
+    ]
+  }
+}
