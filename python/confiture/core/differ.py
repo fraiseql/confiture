@@ -8,6 +8,7 @@ This module provides functionality to:
 
 import logging
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
 from typing import Any
 
 import pglast
@@ -33,10 +34,30 @@ from confiture.core.schema_model import (
 )
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.core.type_lattice import same_type
-from confiture.models.schema import ParsedSchema, SchemaChange, SchemaDiff
+from confiture.models.schema import SchemaChange, SchemaDiff
 from confiture.models.warnings import BuildWarning
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ParsedSchema:
+    """One side of a comparison: the schema model's objects, and what the parse had to say.
+
+    ``tables``, ``enum_types`` and ``sequences`` are the model's, in the order the
+    tree declared them. ``objects`` are the ones compared by definition rather than
+    by structure (#288) — views, routines, triggers and the rest — keyed by
+    ``ObjectRef``; the value carries the definition, so a redefinition in place is
+    visible. ``warnings`` is what the parse has to say that is not a change: two
+    definitions of one object, resolved the way ``confiture build`` resolves it
+    (#313) — always present, empty when there is nothing to report.
+    """
+
+    tables: list[Table] = field(default_factory=list)
+    enum_types: list[EnumType] = field(default_factory=list)
+    sequences: list[Sequence] = field(default_factory=list)
+    objects: dict[Any, Any] = field(default_factory=dict)
+    warnings: list[BuildWarning] = field(default_factory=list)
 
 
 def _identity(schema: str | None, name: str) -> tuple[str, str]:
@@ -150,18 +171,12 @@ def _object_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
 def _types_differ(old: Column, new: Column) -> bool:
     """Whether two columns declare different types, typmod included.
 
-    ``type_lattice.same_type`` is the predicate, and says so itself: *a column
-    type must keep [typmods] or ``varchar(50)`` and ``varchar(100)`` compare
-    equal*. Deciding that ``int4`` and ``integer`` are one type is the lattice's
-    job too, which is why this compares the written spellings rather than adding
-    a second alias table beside ``_COLUMN_TYPE_MAP``.
-
-    A column with no written type — none from a parse, but a model built by
-    hand — compares by its canonical type alone.
+    By identity (``type_key``), through ``type_lattice.same_type`` — the one
+    canonicaliser, whose own docstring states this case: *a column type must keep
+    [typmods] or ``varchar(50)`` and ``varchar(100)`` compare equal*. Never by the
+    spellings: ``int4`` and ``integer`` are one type whichever side wrote which.
     """
-    if old.raw_sql_type and new.raw_sql_type:
-        return not same_type(old.raw_sql_type, new.raw_sql_type)
-    return old.type_key != new.type_key or old.raw_sql_type != new.raw_sql_type
+    return not same_type(old.type_key, new.type_key)
 
 
 #: What a column with no written type is called in a change — none from a parse.

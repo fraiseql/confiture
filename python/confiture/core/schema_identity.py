@@ -12,7 +12,7 @@ module that decides object identity but which also imports pglast; modules that
 only need to resolve a bare relation name for a catalogue query — a batched
 backfill, an idempotency suggestion — were paying a parser to learn one word, so
 they wrote the word instead. The identity is the fold; the *spelling* an object
-prints is :func:`~confiture.models.schema.qualified_name`, which never invents a
+prints is :func:`~confiture.core.schema_model.qualified_name`, which never invents a
 qualifier the author did not write.
 """
 

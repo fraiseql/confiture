@@ -201,3 +201,18 @@ class TestEveryDropHasTheDownItCanDerive:
 
     def test_a_dropped_index_comes_back(self) -> None:
         assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS ix ON a.t (x)" in self._down("DROP_INDEX")
+
+
+class TestTheIdentityDecidesTheType:
+    def test_two_spellings_of_one_identity_are_one_type_without_a_written_type(self) -> None:
+        """A column the model holds with no written spelling compares by ``type_key``.
+
+        Through the lattice, never by string equality: ``int4`` and ``integer``
+        are one type whichever side carries which spelling.
+        """
+        from confiture.core.differ import _types_differ
+
+        old = Column(name="a", folded="a", line=1, type_key="int4")
+        new = Column(name="a", folded="a", line=1, type_key="integer")
+        assert not _types_differ(old, new)
+        assert _types_differ(old, Column(name="a", folded="a", line=1, type_key="bigint"))

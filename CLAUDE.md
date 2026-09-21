@@ -743,7 +743,7 @@ confiture/
 │   │   ├── pgtap_models.py       # Data models for pgTAP test scaffold generation
 │   │   ├── preflight.py          # Models for the preflight dependent-objects check
 │   │   ├── results.py            # Command result models for structured output
-│   │   ├── schema.py             # Data models for schema representation
+│   │   ├── schema.py             # The change set ``migrate diff`` produces: :class:`SchemaChange` and :cl…
 │   │   ├── sql_file_migration.py # SQL file-based migrations
 │   │   ├── stub_models.py        # Data models for Python stub generation from PostgreSQL functions
 │   │   ├── unified_lint.py       # Models for unified SQL linting results
