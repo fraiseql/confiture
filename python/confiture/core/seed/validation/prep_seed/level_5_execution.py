@@ -12,16 +12,20 @@ import contextlib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import psycopg
 from psycopg import sql
 
+from confiture.core import live_catalog
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
     ViolationSeverity,
 )
+
+if TYPE_CHECKING:
+    from confiture.core.schema_model import Column, Constraint, ConstraintKind
 
 
 @contextmanager
@@ -161,17 +165,27 @@ class Level5ExecutionValidator:
     def _relation(self, table: str) -> sql.Identifier:
         return sql.Identifier(self.catalog_schema, table)
 
-    def _columns(self, connection: Any, table: str, where: str, *args: Any) -> list[str]:
-        """Column names of ``catalog.<table>`` matching an extra predicate."""
-        query = f"""
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_schema = %s AND table_name = %s AND {where}
-            ORDER BY ordinal_position
-        """
+    def _columns(self, connection: Any, table: str) -> tuple[Column, ...]:
+        """The columns of ``catalog.<table>``, in order; none for a table that is not there."""
         with _probe(connection):
-            rows = connection.execute(query, (self.catalog_schema, table, *args)).fetchall()
-        return [row[0] for row in rows]
+            return live_catalog.columns(connection, self.catalog_schema, table)
+
+    def _constraints(self, connection: Any, table: str, kind: ConstraintKind) -> list[Constraint]:
+        """The constraints of one kind on ``catalog.<table>``, by name."""
+        with _probe(connection):
+            found = live_catalog.constraints(connection, self.catalog_schema, table)
+        return [constraint for constraint in found if constraint.kind == kind]
+
+    @staticmethod
+    def _referenced(constraint: Constraint) -> tuple[sql.Identifier, str]:
+        """The relation a foreign key references, and its name for a message.
+
+        ``pg_get_constraintdef`` qualifies the referenced table only when
+        ``search_path`` would not find it, so an unqualified one is named
+        unqualified on this same connection — and reaches the same table.
+        """
+        schema, _, name = (constraint.ref_table or "").rpartition(".")
+        return (sql.Identifier(schema, name) if schema else sql.Identifier(name)), name
 
     def _count(self, connection: Any, table: str, predicate: sql.Composable) -> int:
         """How many rows of ``catalog.<table>`` satisfy *predicate*."""
@@ -202,10 +216,8 @@ class Level5ExecutionValidator:
 
         for table in tables:
             try:
-                # The pattern is a parameter, not inlined: psycopg reads a literal
-                # `%` in a query that also carries placeholders as a placeholder.
-                columns = self._columns(connection, table, "column_name LIKE %s", r"fk\_%")
-                for column in columns:
+                columns = [c.name for c in self._columns(connection, table)]
+                for column in (name for name in columns if name.startswith("fk_")):
                     null_count = self._count(
                         connection,
                         table,
@@ -304,7 +316,7 @@ class Level5ExecutionValidator:
 
         for table in tables:
             try:
-                columns = self._columns(connection, table, "is_nullable = 'NO'")
+                columns = [c.name for c in self._columns(connection, table) if c.not_null]
                 for column in columns:
                     null_count = self._count(
                         connection,
@@ -353,20 +365,8 @@ class Level5ExecutionValidator:
 
         for table in tables:
             try:
-                with _probe(connection):
-                    constraints = connection.execute(
-                        """
-                        SELECT c.conname, pg_get_expr(c.conbin, c.conrelid)
-                        FROM pg_constraint c
-                        JOIN pg_class t ON t.oid = c.conrelid
-                        JOIN pg_namespace n ON n.oid = t.relnamespace
-                        WHERE c.contype = 'c' AND n.nspname = %s AND t.relname = %s
-                        ORDER BY c.conname
-                        """,
-                        (self.catalog_schema, table),
-                    ).fetchall()
-
-                for name, expression in constraints:
+                for check in self._constraints(connection, table, "check"):
+                    name, expression = check.name, check.expression
                     if not expression:
                         continue
                     violation_count = self._count(
@@ -401,8 +401,9 @@ class Level5ExecutionValidator:
         The previous query named ``information_schema.referential_constraints.
         column_name``, which is not a column of that view, so it raised on every
         call and the error was swallowed: this detector had never reported
-        anything. Referencing columns come from ``pg_constraint`` instead, and
-        the orphans are counted with a ``NOT EXISTS`` against the parent.
+        anything. The foreign keys come from ``core/live_catalog``'s constraint
+        reader instead, and the orphans are counted with a ``NOT EXISTS``
+        against the parent.
 
         Args:
             connection: Database connection
@@ -415,35 +416,11 @@ class Level5ExecutionValidator:
 
         for table in tables:
             try:
-                with _probe(connection):
-                    constraints = connection.execute(
-                        """
-                        SELECT c.conname,
-                               parent_ns.nspname,
-                               parent.relname,
-                               (SELECT array_agg(a.attname ORDER BY k.ord)
-                                FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
-                                JOIN pg_attribute a
-                                  ON a.attrelid = c.conrelid AND a.attnum = k.attnum),
-                               (SELECT array_agg(a.attname ORDER BY k.ord)
-                                FROM unnest(c.confkey) WITH ORDINALITY AS k(attnum, ord)
-                                JOIN pg_attribute a
-                                  ON a.attrelid = c.confrelid AND a.attnum = k.attnum)
-                        FROM pg_constraint c
-                        JOIN pg_class child ON child.oid = c.conrelid
-                        JOIN pg_namespace child_ns ON child_ns.oid = child.relnamespace
-                        JOIN pg_class parent ON parent.oid = c.confrelid
-                        JOIN pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
-                        WHERE c.contype = 'f'
-                          AND child_ns.nspname = %s AND child.relname = %s
-                        ORDER BY c.conname
-                        """,
-                        (self.catalog_schema, table),
-                    ).fetchall()
-
-                for _name, parent_schema, parent_table, child_cols, parent_cols in constraints:
+                for fk in self._constraints(connection, table, "foreign_key"):
+                    child_cols, parent_cols = fk.columns, fk.ref_columns
                     if not child_cols or not parent_cols:
                         continue
+                    parent, parent_table = self._referenced(fk)
                     joins = sql.SQL(" AND ").join(
                         sql.SQL("parent.{} = child.{}").format(
                             sql.Identifier(parent_col), sql.Identifier(child_col)
@@ -460,7 +437,7 @@ class Level5ExecutionValidator:
                         "SELECT 1 FROM {parent} AS parent WHERE {joins})"
                     ).format(
                         child=self._relation(table),
-                        parent=sql.Identifier(parent_schema, parent_table),
+                        parent=parent,
                         set_cols=set_cols,
                         joins=joins,
                     )

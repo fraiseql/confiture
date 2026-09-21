@@ -19,8 +19,6 @@ import ast
 import re
 from pathlib import Path
 
-import pytest
-
 import confiture
 
 PACKAGE = Path(confiture.__file__).resolve().parent
@@ -32,7 +30,52 @@ CATALOG = re.compile(
 )
 
 #: Module -> the question it asks of the catalog that is not a schema fact.
-ALLOWED: dict[str, str] = {}
+ALLOWED: dict[str, str] = {
+    "core/bootstrap.py": (
+        "which schemas hold a relation the `postgres` role owns (`relowner`), so "
+        "bootstrap can hand them to the application's owner: ownership"
+    ),
+    "core/dependent_objects.py": (
+        "which views and routines depend on an object preflight is about to replace, "
+        "through `pg_depend` and `pg_rewrite`: the dependency graph"
+    ),
+    "core/drift.py": (
+        "the ACL and ownership passes: the tables a grant expectation covers, the "
+        "privileges each role holds on them, and the role that owns each relation"
+    ),
+    "core/idempotency/suggestion_templates.py": (
+        "guard clauses a finding suggests the user write into a migration: text "
+        "confiture prints, never a query it runs"
+    ),
+    "core/large_tables.py": (
+        "whether an index build left the index invalid (`indisvalid`) and the "
+        "planner's row estimate (`reltuples`): operational state"
+    ),
+    "core/ledger.py": (
+        "where confiture's own ledger table is, as `search_path` resolves its name: "
+        "confiture's bookkeeping, not the project's schema"
+    ),
+    "core/linting/bodies.py": (
+        "plpgsql_check's diagnosis of each routine body, and the schema that extension "
+        "is installed in: an analysis engine asked about resolved types (#245)"
+    ),
+    "core/view_manager.py": (
+        "the views that depend on a table's columns, saved whole — definition, "
+        "indexes, comment, grants — to drop and recreate around ALTER COLUMN TYPE"
+    ),
+    "integrations/pggit/client.py": (
+        "whether pgGit's own bookkeeping tables are installed: a tool's installation "
+        "state, not the project's schema"
+    ),
+    "integrations/pggit/detection.py": (
+        "whether pgGit is installed and initialised, and what it installed: a tool's "
+        "installation state, not the project's schema"
+    ),
+    "testing/fixtures/data_validator.py": (
+        "how many foreign keys PostgreSQL has not validated against the rows already "
+        "there (`convalidated`): whether the data was checked, not what is declared"
+    ),
+}
 
 
 #: What makes a string a query rather than a sentence that names a catalog: SQL's
@@ -101,11 +144,6 @@ def f(conn):
     assert catalog_lines(source) == [7]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the map for the reader families still moving onto live_catalog; strict, so the "
-    "day the last one moves this XPASSes and the mark has to go",
-)
 def test_no_second_live_reader() -> None:
     offenders = sorted(f"{m}:{lines}" for m, lines in _sweep().items() if m not in ALLOWED)
     assert offenders == [], "catalog SQL outside core/live_catalog.py:\n  " + "\n  ".join(offenders)
@@ -115,3 +153,7 @@ def test_the_allow_list_is_current() -> None:
     present = set(_sweep())
     stale = sorted(m for m in ALLOWED if m not in present)
     assert stale == [], f"allow-list entries with nothing left to allow: {stale}"
+
+
+def test_every_allowed_module_states_its_question() -> None:
+    assert all(reason.strip() for reason in ALLOWED.values())

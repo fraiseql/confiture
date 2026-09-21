@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
+from confiture.core import live_catalog
 from confiture.core.rollback_generator import (
     RollbackSuggestion,
     RollbackTester,
@@ -12,6 +13,7 @@ from confiture.core.rollback_generator import (
     generate_rollback_script,
     suggest_backup_for_destructive_operations,
 )
+from confiture.core.schema_model import Index, ref_for
 
 
 class TestRollbackSuggestion:
@@ -222,6 +224,9 @@ class TestGenerateRollbackScript:
 class TestRollbackTester:
     """Tests for RollbackTester class."""
 
+    # The tester reads the schema through `live_catalog`'s `relations` and
+    # `indexes`; what is tested here is what it makes of a before and an after.
+
     @pytest.fixture
     def mock_connection(self):
         """Create mock connection."""
@@ -229,19 +234,34 @@ class TestRollbackTester:
         cursor = MagicMock()
         conn.cursor.return_value.__enter__ = Mock(return_value=cursor)
         conn.cursor.return_value.__exit__ = Mock(return_value=False)
-        cursor.fetchall.return_value = [("users",)]
         return conn, cursor
 
-    def test_test_migration_success(self, mock_connection):
+    @staticmethod
+    def _catalog(monkeypatch, tables: list[list[str]], indexes: list[list[str]]) -> None:
+        """Answer each capture in turn: before, then after."""
+        table_answers = iter(tables)
+        index_answers = iter(indexes)
+        monkeypatch.setattr(
+            live_catalog,
+            "relations",
+            lambda *_a, **_k: [("public", name) for name in next(table_answers)],
+        )
+        monkeypatch.setattr(
+            live_catalog,
+            "indexes",
+            lambda *_a, **_k: {
+                ref_for("table", "public", "t"): tuple(
+                    Index(name=name, table="public.t", columns=("c",))
+                    for name in next(index_answers)
+                )
+            },
+        )
+
+    def test_test_migration_success(self, mock_connection, monkeypatch):
         """Test successful migration rollback test."""
-        conn, cursor = mock_connection
+        conn, _cursor = mock_connection
         # Return same tables before and after
-        cursor.fetchall.side_effect = [
-            [("users",)],  # tables before
-            [("idx_users",)],  # indexes before
-            [("users",)],  # tables after
-            [("idx_users",)],  # indexes after
-        ]
+        self._catalog(monkeypatch, [["users"], ["users"]], [["idx_users"], ["idx_users"]])
 
         migration = Mock()
         migration.version = "001"
@@ -257,10 +277,10 @@ class TestRollbackTester:
         assert migration.up.called
         assert migration.down.called
 
-    def test_test_migration_no_down_method(self, mock_connection):
+    def test_test_migration_no_down_method(self, mock_connection, monkeypatch):
         """Test migration without down() method."""
-        conn, cursor = mock_connection
-        cursor.fetchall.return_value = []
+        conn, _cursor = mock_connection
+        self._catalog(monkeypatch, [[]], [[]])
 
         migration = Mock(spec=["version", "name", "up"])
         migration.version = "001"
@@ -272,16 +292,11 @@ class TestRollbackTester:
         assert not result.is_successful
         assert "no down() method" in result.error
 
-    def test_test_migration_dirty_state(self, mock_connection):
+    def test_test_migration_dirty_state(self, mock_connection, monkeypatch):
         """Test migration that leaves dirty state."""
-        conn, cursor = mock_connection
-        # Return different tables after rollback
-        cursor.fetchall.side_effect = [
-            [("users",)],  # tables before
-            [],  # indexes before
-            [("users",), ("leftover",)],  # tables after (extra table!)
-            [],  # indexes after
-        ]
+        conn, _cursor = mock_connection
+        # Return different tables after rollback (an extra table!)
+        self._catalog(monkeypatch, [["users"], ["users", "leftover"]], [[], []])
 
         migration = Mock()
         migration.version = "001"
@@ -297,10 +312,10 @@ class TestRollbackTester:
         assert result.error is not None
         assert "leftover" in result.error
 
-    def test_test_migration_exception(self, mock_connection):
+    def test_test_migration_exception(self, mock_connection, monkeypatch):
         """Test migration that throws exception."""
-        conn, cursor = mock_connection
-        cursor.fetchall.return_value = []
+        conn, _cursor = mock_connection
+        self._catalog(monkeypatch, [[]], [[]])
 
         migration = Mock()
         migration.version = "001"

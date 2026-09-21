@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from confiture.core import live_catalog
 from confiture.core.restorer import (
     DatabaseRestorer,
     RestoreOptions,
@@ -444,29 +445,47 @@ class TestValidateTableCount:
         defaults.update(kwargs)
         return RestoreOptions(**defaults)
 
-    def test_passes_when_count_meets_minimum(self):
-        mock_conn, _ = _make_db_mock((350,))
+    # The count comes from `live_catalog.relations`; what is tested here is the
+    # gate. What the catalog lists on a real server is
+    # tests/integration/test_live_catalog_listings.py.
+
+    @staticmethod
+    def _tables(monkeypatch: pytest.MonkeyPatch, count: int) -> list[tuple]:
+        asked: list[tuple] = []
+
+        def relations(_conn, schemas, kinds):
+            asked.append((schemas, kinds))
+            return [("public", f"t{i}") for i in range(count)]
+
+        monkeypatch.setattr(live_catalog, "relations", relations)
+        return asked
+
+    def test_passes_when_count_meets_minimum(self, monkeypatch):
+        self._tables(monkeypatch, 350)
+        mock_conn, _ = _make_db_mock((0,))
         with patch("psycopg.connect", return_value=mock_conn):
             result = DatabaseRestorer()._validate_table_count(self._opts(min_tables=300))
         assert result.success is True
         assert result.table_count == 350
 
-    def test_fails_when_count_below_minimum(self):
-        mock_conn, _ = _make_db_mock((50,))
+    def test_fails_when_count_below_minimum(self, monkeypatch):
+        self._tables(monkeypatch, 50)
+        mock_conn, _ = _make_db_mock((0,))
         with patch("psycopg.connect", return_value=mock_conn):
             result = DatabaseRestorer()._validate_table_count(self._opts(min_tables=300))
         assert result.success is False
         assert "50" in result.errors[0]
         assert "300" in result.errors[0]
 
-    def test_uses_schema_from_options(self):
-        mock_conn, mock_cursor = _make_db_mock((10,))
+    def test_uses_schema_from_options(self, monkeypatch):
+        asked = self._tables(monkeypatch, 10)
+        mock_conn, _ = _make_db_mock((0,))
         with patch("psycopg.connect", return_value=mock_conn):
             DatabaseRestorer()._validate_table_count(
                 self._opts(min_tables=5, min_tables_schema="myschema")
             )
-        call_args = mock_cursor.execute.call_args
-        assert call_args[0][1] == ("myschema",)
+        # Ordinary tables, a partition included — what the count has always counted.
+        assert asked == [(["myschema"], ("r",))]
 
     def test_connection_error_raises_restore_error(self):
         import psycopg as _psycopg
@@ -1135,8 +1154,9 @@ class TestPasswordReachesTheSubprocess:
             DatabaseRestorer()._run_section("pre-data", self._opts(password=None), parallel=False)
         assert "PGPASSWORD" not in popen.call_args.kwargs["env"]
 
-    def test_table_count_validation_connects_with_the_password(self):
+    def test_table_count_validation_connects_with_the_password(self, monkeypatch):
         """--min-tables opens its own psycopg connection; it needs the credential too."""
+        monkeypatch.setattr(live_catalog, "relations", lambda *_a, **_k: [])
         mock_conn, _ = _make_db_mock((7,))
         with patch("psycopg.connect", return_value=mock_conn) as connect:
             DatabaseRestorer()._validate_table_count(self._opts(min_tables=1))

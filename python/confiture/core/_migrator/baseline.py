@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 import psycopg
 from psycopg import sql as pgsql
 
+from confiture.core import live_catalog
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.ledger import VALID_TABLE_RE, table_identifier
 from confiture.exceptions import MigrationError
@@ -235,18 +236,8 @@ def reinit(
 
 
 def discover_user_schemas(migrator: Migrator) -> list[str]:
-    """Query all user-created schemas, excluding system schemas."""
-    with migrator.connection.cursor() as cursor:
-        cursor.execute("SELECT schema_name FROM information_schema.schemata")
-        rows = cursor.fetchall()
-
-    return [
-        row[0]
-        for row in rows
-        if row[0] not in migrator._SYSTEM_SCHEMAS
-        and not row[0].startswith("pg_temp_")
-        and not row[0].startswith("pg_toast_temp_")
-    ]
+    """Every user-created schema the role can use, excluding system schemas."""
+    return live_catalog.user_schemas(migrator.connection)
 
 
 def drop_user_schemas(migrator: Migrator, schemas: list[str]) -> list[str]:

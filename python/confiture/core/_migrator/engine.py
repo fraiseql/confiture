@@ -521,14 +521,6 @@ class Migrator:
     # Rebuild helpers
     # ------------------------------------------------------------------
 
-    _SYSTEM_SCHEMAS = frozenset(
-        {
-            "pg_catalog",
-            "information_schema",
-            "pg_toast",
-        }
-    )
-
     def _discover_user_schemas(self) -> list[str]:
         """Query all user-created schemas, excluding system schemas."""
         return baseline_impl.discover_user_schemas(self)
