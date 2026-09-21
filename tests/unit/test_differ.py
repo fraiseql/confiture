@@ -1,7 +1,7 @@
 """Unit tests for SchemaDiffer (Milestone 1.9-1.10)."""
 
 from confiture.core.differ import SchemaDiffer
-from confiture.models.schema import ColumnType, ParsedSchema
+from confiture.models.schema import ParsedSchema
 
 
 class TestSQLParser:
@@ -21,13 +21,13 @@ class TestSQLParser:
         # Check first column
         id_col = tables[0].columns[0]
         assert id_col.name == "id"
-        assert id_col.type == ColumnType.INTEGER
+        assert id_col.type_key == "integer"
         assert id_col.primary_key is True
 
         # Check second column
         name_col = tables[0].columns[1]
         assert name_col.name == "name"
-        assert name_col.type == ColumnType.TEXT
+        assert name_col.type_key == "text"
 
     def test_parse_create_table_with_not_null(self):
         """Should parse NOT NULL constraints."""
@@ -47,16 +47,16 @@ class TestSQLParser:
         assert table.name == "posts"
 
         # title should be NOT NULL
-        title_col = table.get_column("title")
+        title_col = table.column("title")
         assert title_col is not None
-        assert title_col.nullable is False
-        assert title_col.type == ColumnType.VARCHAR
-        assert title_col.length == 255
+        assert title_col.not_null is True
+        assert title_col.type_key == "varchar(255)"
+        assert title_col.raw_sql_type == "VARCHAR(255)"
 
         # content should be nullable (default)
-        content_col = table.get_column("content")
+        content_col = table.column("content")
         assert content_col is not None
-        assert content_col.nullable is True
+        assert content_col.not_null is False
 
     def test_parse_multiple_tables(self):
         """Should parse multiple CREATE TABLE statements."""
@@ -94,12 +94,12 @@ class TestSQLParser:
         tables = differ.parse_sql(sql)
 
         table = tables[0]
-        enabled_col = table.get_column("enabled")
+        enabled_col = table.column("enabled")
         assert enabled_col is not None
         assert enabled_col.default is not None
         assert "TRUE" in enabled_col.default.upper()
 
-        created_at_col = table.get_column("created_at")
+        created_at_col = table.column("created_at")
         assert created_at_col is not None
         assert created_at_col.default is not None
         assert "NOW" in created_at_col.default.upper()
@@ -407,9 +407,9 @@ class TestParseSchema:
         )
         result = differ.parse_schema(sql)
         orders = next(t for t in result.tables if t.name == "orders")
-        assert len(orders.foreign_keys) == 1
-        assert orders.foreign_keys[0].name == "fk_orders_user"
-        assert orders.foreign_keys[0].ref_table == "users"
+        assert len(orders.constraints_of("foreign_key")) == 1
+        assert orders.constraints_of("foreign_key")[0].name == "fk_orders_user"
+        assert orders.constraints_of("foreign_key")[0].ref_table == "users"
 
 
 class TestIndexDiff:
@@ -610,8 +610,8 @@ class TestInlineConstraintParsing:
         """
         result = differ.parse_schema(sql)
         orders = next(t for t in result.tables if t.name == "orders")
-        assert len(orders.foreign_keys) == 1
-        assert orders.foreign_keys[0].name == "fk_orders_user"
+        assert len(orders.constraints_of("foreign_key")) == 1
+        assert orders.constraints_of("foreign_key")[0].name == "fk_orders_user"
 
     def test_parse_schema_extracts_inline_check(self):
         differ = SchemaDiffer()
@@ -623,8 +623,8 @@ class TestInlineConstraintParsing:
         );
         """
         result = differ.parse_schema(sql)
-        assert len(result.tables[0].check_constraints) == 1
-        assert result.tables[0].check_constraints[0].name == "chk_price"
+        assert len(result.tables[0].constraints_of("check")) == 1
+        assert result.tables[0].constraints_of("check")[0].name == "chk_price"
 
     def test_parse_schema_extracts_inline_unique(self):
         differ = SchemaDiffer()
@@ -636,5 +636,5 @@ class TestInlineConstraintParsing:
         );
         """
         result = differ.parse_schema(sql)
-        assert len(result.tables[0].unique_constraints) == 1
-        assert result.tables[0].unique_constraints[0].name == "uq_email"
+        assert len(result.tables[0].constraints_of("unique")) == 1
+        assert result.tables[0].constraints_of("unique")[0].name == "uq_email"

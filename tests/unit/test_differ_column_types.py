@@ -17,16 +17,18 @@ own docstring: *a column type must keep [typmods] or ``varchar(50)`` and
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pglast
 import pytest
 
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
-from confiture.models.schema import Column
+from confiture.core.schema_model import Column
 
 
 def _column(sql: str, name: str) -> Column:
-    column = SchemaDiffer().parse_schema(sql).tables[0].get_column(name)
+    column = SchemaDiffer().parse_schema(sql).tables[0].column(name)
     assert column is not None
     return column
 
@@ -136,7 +138,15 @@ class TestTheTypmodReachesGeneratedDDL:
         sql = DifferSQLGenerator().generate_up(change)
         pglast.parse_sql(sql)
         regenerated = SchemaDiffer().parse_schema(sql).tables[0]
-        assert regenerated.columns == SchemaDiffer().parse_schema(declared).tables[0].columns
+
+        # `line` and `type_text` are where and how each file wrote the column, not
+        # what it declares: `CHAR(2)` regenerates as `bpchar(2)`, one type.
+        def declared_facts(columns):
+            return [replace(c, line=0, type_text=None) for c in columns]
+
+        assert declared_facts(regenerated.columns) == declared_facts(
+            SchemaDiffer().parse_schema(declared).tables[0].columns
+        )
 
     def test_an_altered_type_carries_the_length_into_the_statement(self) -> None:
         change = (

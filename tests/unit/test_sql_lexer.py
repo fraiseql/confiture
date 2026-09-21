@@ -91,8 +91,8 @@ CREATE TABLE t (id INT PRIMARY KEY, a INT);
 -- ALTER TABLE t ADD CONSTRAINT ck_gone CHECK (a > 0);
 """
     parsed = SchemaDiffer().parse_schema(sql)
-    assert parsed.tables[0].indexes == []
-    assert parsed.tables[0].check_constraints == []
+    assert parsed.tables[0].indexes == ()
+    assert parsed.tables[0].constraints_of("check") == ()
     assert parsed.enum_types == []
     assert parsed.sequences == []
 
@@ -112,25 +112,25 @@ ALTER TABLE s.t ADD CONSTRAINT uq_t UNIQUE (a, b);
     (idx,) = table.indexes
     assert (idx.name, idx.columns, idx.unique, idx.where) == (
         "idx_t_a",
-        ["a", "lower(b)"],
+        ("a", "lower(b)"),
         True,
         "a > 1",
     )
-    (fk,) = table.foreign_keys
+    (fk,) = table.constraints_of("foreign_key")
     # `ref_table` carries the schema the statement wrote: `REFERENCES t(id)` and
     # `REFERENCES s.t(id)` generate different DDL, and a migration that drops the
     # qualifier resolves through `search_path` wherever it is applied (#313).
     assert (fk.name, fk.columns, fk.ref_table, fk.ref_columns, fk.on_delete) == (
         "fk_t",
-        ["a"],
+        ("a",),
         "s.t",
-        ["id"],
+        ("id",),
         "CASCADE",
     )
-    assert [(c.name, c.expression) for c in table.check_constraints] == [("ck_t", "a > 0")]
-    assert [(u.name, u.columns) for u in table.unique_constraints] == [("uq_t", ["a", "b"])]
+    assert [(c.name, c.expression) for c in table.constraints_of("check")] == [("ck_t", "a > 0")]
+    assert [(u.name, u.columns) for u in table.constraints_of("unique")] == [("uq_t", ("a", "b"))]
     assert [(e.schema, e.name, e.values) for e in parsed.enum_types] == [
-        ("s", "mood", ["sad", "ok"])
+        ("s", "mood", ("sad", "ok"))
     ]
     (seq,) = parsed.sequences
     assert (seq.schema, seq.name, seq.start, seq.increment, seq.min_value, seq.max_value) == (

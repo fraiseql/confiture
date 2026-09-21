@@ -16,6 +16,7 @@ import psycopg
 from confiture.core.connection import create_connection
 from confiture.core.differ import SchemaDiffer
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_model import Table
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )
@@ -38,7 +39,6 @@ from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedViolation,
     ViolationSeverity,
 )
-from confiture.models.schema import Table
 
 
 @dataclass
@@ -566,7 +566,7 @@ class PrepSeedOrchestrator:
         side[key] = TableDefinition(
             name=table.name,
             schema=schema,
-            columns={col.name: str(col.type) for col in table.columns},
+            columns={col.folded: col.raw_sql_type or col.type_key or "" for col in table.columns},
         )
 
     def _nothing_to_compare(self, tables: SchemaTables) -> list[PrepSeedViolation]:

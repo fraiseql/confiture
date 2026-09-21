@@ -60,6 +60,22 @@ comparisons say today, are now tests in its own suite.
 
 ### Changed
 
+- **`migrate diff` compares the schema model; it no longer parses.**
+  `SchemaDiffer.parse_schema` hands its one `pglast.parse_sql` to the lint inventory,
+  which reads a tree whole, and compares the `core/schema_model` types it builds —
+  about 450 lines of the differ's own parse are gone. Its JSON and its generated DDL
+  are byte-identical for every example tree and this repository's schema (the model
+  goldens). ⚠️ For a library caller, `parse_schema(...).tables` now holds
+  `schema_model.Table`s: `constraints_of("foreign_key" | "unique" | "check")`,
+  `column(name)`, `Column.not_null`, `Column.type_key`. Two deliberate behaviour
+  changes:
+  - **An index's access method is part of what it is.** `USING hash` and a btree on
+    the same column are two indexes, and a named index whose method changes is a
+    drop and an add; the differ never read `USING`.
+  - **A second `ADD COLUMN a` keeps the first.** With `IF NOT EXISTS` PostgreSQL skips
+    it, and without it the build fails at that statement, so a database built from the
+    tree holds the column declared first. The differ let the second overwrite it, and
+    the lint inventory kept both.
 - **`models/` imports one way.** `BuildWarning` moves to `models/warnings.py` (still
   importable from `models.results`) and `VerifyResult` to `models/results.py` (still
   importable from `core.migration_verifier`): `models/schema` imported `models/results`
@@ -91,6 +107,10 @@ comparisons say today, are now tests in its own suite.
 
 ### Fixed
 
+- **Reading a large schema is no longer quadratic in its size.** Every object and
+  column asked for its line by counting newlines from the start of the text — a
+  2.9 MB tree spent 5 of its 11 seconds there. `confiture lint` always paid it;
+  `migrate diff` now reads through the same inventory and pays it no longer.
 - **`confiture drift` and `migrate validate --check-live-drift` no longer report an
   identity column, or a column whose primary key is declared at table level, as
   nullable.** The expected side read `NOT NULL` from the column's own clauses only,
@@ -105,6 +125,9 @@ comparisons say today, are now tests in its own suite.
 
 ### Known, not fixed
 
+- A generated `CREATE INDEX` writes neither `USING`, nor a partial index's `WHERE`, nor
+  an operator class: a gin, hash or partial index is generated as a plain btree.
+  The model now carries the method and the predicate; the renderer does not read them yet.
 - A generated `CREATE TABLE` sequence is ordered by name, not by foreign key, and an
   `ADD EXTENSION` change derives no SQL — so the generated up-migration for
   `examples/02-fraiseql-integration` and `examples/basic` does not apply to an empty

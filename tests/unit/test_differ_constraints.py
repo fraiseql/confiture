@@ -14,7 +14,7 @@ produces the *same* model.
 from __future__ import annotations
 
 from confiture.core.differ import SchemaDiffer
-from confiture.models.schema import Table
+from confiture.core.schema_model import Table
 
 PARENT = "CREATE TABLE b.parent (id INT PRIMARY KEY);\n"
 
@@ -29,13 +29,13 @@ class TestAColumnLevelConstraintIsATableConstraint:
 
     def test_a_column_level_reference_is_a_foreign_key(self) -> None:
         table = _table(PARENT + "CREATE TABLE a.child (pid INT REFERENCES b.parent(id));")
-        assert len(table.foreign_keys) == 1
-        fk = table.foreign_keys[0]
-        assert (fk.table, fk.columns, fk.ref_table, fk.ref_columns) == (
+        assert len(table.constraints_of("foreign_key")) == 1
+        fk = table.constraints_of("foreign_key")[0]
+        assert (table.qualified, fk.columns, fk.ref_table, fk.ref_columns) == (
             "a.child",
-            ["pid"],
+            ("pid",),
             "b.parent",
-            ["id"],
+            ("id",),
         )
 
     def test_the_two_spellings_of_one_foreign_key_agree(self) -> None:
@@ -46,32 +46,31 @@ class TestAColumnLevelConstraintIsATableConstraint:
             PARENT + "CREATE TABLE a.child (pid INT,"
             " CONSTRAINT fk_c FOREIGN KEY (pid) REFERENCES b.parent(id));"
         )
-        assert column_level.foreign_keys == table_level.foreign_keys
+        assert column_level.constraints_of("foreign_key") == table_level.constraints_of(
+            "foreign_key"
+        )
 
     def test_an_unnamed_constraint_keeps_no_name(self) -> None:
         """PostgreSQL generates ``child_pid_fkey`` at apply time. It is not
         confiture's to write, here or in generated DDL."""
         table = _table(PARENT + "CREATE TABLE a.child (pid INT REFERENCES b.parent(id));")
-        assert table.foreign_keys[0].name == ""
+        assert table.constraints_of("foreign_key")[0].name == ""
 
     def test_a_reference_with_no_column_list_is_still_a_foreign_key(self) -> None:
         """``REFERENCES b.parent`` means the parent's primary key."""
         table = _table(PARENT + "CREATE TABLE a.child (pid INT REFERENCES b.parent);")
-        assert len(table.foreign_keys) == 1
-        assert table.foreign_keys[0].ref_columns == []
+        assert len(table.constraints_of("foreign_key")) == 1
+        assert table.constraints_of("foreign_key")[0].ref_columns == ()
 
     def test_a_column_level_unique_is_a_unique_constraint(self) -> None:
         table = _table("CREATE TABLE tenant.t (u INT UNIQUE);")
-        assert len(table.unique_constraints) == 1
-        assert (table.unique_constraints[0].table, table.unique_constraints[0].columns) == (
-            "tenant.t",
-            ["u"],
-        )
+        assert len(table.constraints_of("unique")) == 1
+        assert (table.qualified, table.constraints_of("unique")[0].columns) == ("tenant.t", ("u",))
 
     def test_a_column_level_check_is_a_check_constraint(self) -> None:
         table = _table("CREATE TABLE tenant.t (c INT CHECK (c > 0));")
-        assert len(table.check_constraints) == 1
-        assert table.check_constraints[0].table == "tenant.t"
+        assert len(table.constraints_of("check")) == 1
+        assert table.qualified == "tenant.t"
 
     def test_two_unnamed_column_level_foreign_keys_are_two_foreign_keys(self) -> None:
         """Both are unnamed, so a model keyed by name would keep one."""
@@ -79,7 +78,7 @@ class TestAColumnLevelConstraintIsATableConstraint:
             PARENT + "CREATE TABLE a.child (a INT REFERENCES b.parent(id),"
             " z INT REFERENCES b.parent(id));"
         )
-        assert [fk.columns for fk in table.foreign_keys] == [["a"], ["z"]]
+        assert [fk.columns for fk in table.constraints_of("foreign_key")] == [("a",), ("z",)]
 
     def test_a_generated_column_is_not_a_check_constraint(self) -> None:
         """``CONSTR_GENERATED`` carries a ``raw_expr`` too, and it is not a CHECK.
@@ -88,7 +87,7 @@ class TestAColumnLevelConstraintIsATableConstraint:
         would turn every generated column into a CHECK constraint.
         """
         table = _table("CREATE TABLE tenant.t (c INT, g INT GENERATED ALWAYS AS (c * 2) STORED);")
-        assert table.check_constraints == []
+        assert table.constraints_of("check") == ()
 
 
 class TestOneCheckConstraintHasOneExpression:
@@ -97,7 +96,7 @@ class TestOneCheckConstraintHasOneExpression:
 
     def test_a_check_expression_is_the_expression(self) -> None:
         table = _table("CREATE TABLE tenant.t (id INT, CONSTRAINT ck CHECK (id > 0));")
-        assert table.check_constraints[0].expression == "id > 0"
+        assert table.constraints_of("check")[0].expression == "id > 0"
 
     def test_the_two_spellings_of_one_check_agree(self) -> None:
         in_create = _table("CREATE TABLE tenant.t (id INT, CONSTRAINT ck CHECK (id > 0));")
@@ -105,7 +104,7 @@ class TestOneCheckConstraintHasOneExpression:
             "CREATE TABLE tenant.t (id INT);\n"
             "ALTER TABLE tenant.t ADD CONSTRAINT ck CHECK (id > 0);"
         )
-        assert in_create.check_constraints == in_alter.check_constraints
+        assert in_create.constraints_of("check") == in_alter.constraints_of("check")
 
 
 class TestReferentialActionsSurvive:
@@ -116,7 +115,7 @@ class TestReferentialActionsSurvive:
             PARENT + "CREATE TABLE a.child (pid INT REFERENCES b.parent(id)"
             " ON DELETE CASCADE ON UPDATE RESTRICT);"
         )
-        fk = table.foreign_keys[0]
+        fk = table.constraints_of("foreign_key")[0]
         assert (fk.on_delete, fk.on_update) == ("CASCADE", "RESTRICT")
 
     def test_on_delete_and_on_update_are_read_from_the_table_form(self) -> None:
@@ -124,7 +123,7 @@ class TestReferentialActionsSurvive:
             PARENT + "CREATE TABLE a.child (pid INT, CONSTRAINT fk_c FOREIGN KEY (pid)"
             " REFERENCES b.parent(id) ON DELETE SET NULL ON UPDATE CASCADE);"
         )
-        fk = table.foreign_keys[0]
+        fk = table.constraints_of("foreign_key")[0]
         assert (fk.on_delete, fk.on_update) == ("SET NULL", "CASCADE")
 
     def test_on_delete_and_on_update_are_read_from_the_alter_form(self) -> None:
@@ -133,13 +132,13 @@ class TestReferentialActionsSurvive:
             "ALTER TABLE a.child ADD CONSTRAINT fk_c FOREIGN KEY (pid)"
             " REFERENCES b.parent(id) ON DELETE CASCADE ON UPDATE SET DEFAULT;"
         )
-        fk = table.foreign_keys[0]
+        fk = table.constraints_of("foreign_key")[0]
         assert (fk.on_delete, fk.on_update) == ("CASCADE", "SET DEFAULT")
 
     def test_no_action_is_reported_as_no_clause(self) -> None:
         """``NO ACTION`` is PostgreSQL's default; generated DDL writes no clause."""
         table = _table(PARENT + "CREATE TABLE a.child (pid INT REFERENCES b.parent(id));")
-        fk = table.foreign_keys[0]
+        fk = table.constraints_of("foreign_key")[0]
         assert (fk.on_delete, fk.on_update) == (None, None)
 
 
@@ -163,10 +162,10 @@ class TestTableLevelPrimaryKeyReachesItsColumns:
 
     def test_a_composite_primary_key_marks_every_column(self) -> None:
         table = _table("CREATE TABLE t (a INT, b INT, c INT, PRIMARY KEY (a, b));")
-        assert [(c.name, c.primary_key, c.nullable) for c in table.columns] == [
-            ("a", True, False),
-            ("b", True, False),
-            ("c", False, True),
+        assert [(c.name, c.primary_key, c.not_null) for c in table.columns] == [
+            ("a", True, True),
+            ("b", True, True),
+            ("c", False, False),
         ]
 
 
@@ -178,22 +177,24 @@ class TestAnAddedColumnBringsItsConstraints:
         table = _table(
             "CREATE TABLE t (id INT);\nALTER TABLE t ADD COLUMN x INT NOT NULL DEFAULT 5;"
         )
-        added = table.get_column("x")
+        added = table.column("x")
         assert added is not None
-        assert (added.nullable, added.default) == (False, "5")
+        assert (added.not_null, added.default) == (True, "5")
 
     def test_an_added_column_brings_its_foreign_key(self) -> None:
         table = _table(
             PARENT + "CREATE TABLE a.child (id INT);\n"
             "ALTER TABLE a.child ADD COLUMN pid INT REFERENCES b.parent(id);"
         )
-        assert [(fk.columns, fk.ref_table) for fk in table.foreign_keys] == [(["pid"], "b.parent")]
+        assert [(fk.columns, fk.ref_table) for fk in table.constraints_of("foreign_key")] == [
+            (("pid",), "b.parent")
+        ]
 
     def test_an_added_column_can_be_the_primary_key(self) -> None:
         table = _table("CREATE TABLE t (a INT);\nALTER TABLE t ADD COLUMN pk INT PRIMARY KEY;")
-        added = table.get_column("pk")
+        added = table.column("pk")
         assert added is not None
-        assert (added.primary_key, added.nullable) == (True, False)
+        assert (added.primary_key, added.not_null) == (True, True)
 
 
 class TestAnUnnamedConstraintIsIdentifiedByWhatItSays:

@@ -150,7 +150,7 @@ class TestAnUnnamedConstraintIsGeneratedUnnamed:
         parsed = SchemaDiffer().parse_schema(
             PARENT + "CREATE TABLE a.child (pid INT);\n" + _without_comments(sql)
         )
-        assert [fk.name for fk in parsed.tables[1].foreign_keys] == [""]
+        assert [fk.name for fk in parsed.tables[1].constraints_of("foreign_key")] == [""]
 
     def test_it_says_why_it_is_not_validated_separately(self) -> None:
         """``NOT VALID`` is only useful with a matching ``VALIDATE CONSTRAINT``,
@@ -231,20 +231,20 @@ class TestANewTableIsGeneratedWhole:
 
     def test_the_foreign_keys_round_trip(self) -> None:
         declared, regenerated = self._regenerated()
-        assert regenerated.foreign_keys == declared.foreign_keys  # ty: ignore[unresolved-attribute]
+        assert regenerated.constraints_of("foreign_key") == declared.constraints_of("foreign_key")  # ty: ignore[unresolved-attribute]
 
     def test_the_check_constraints_round_trip(self) -> None:
         declared, regenerated = self._regenerated()
         assert (
-            regenerated.check_constraints  # ty: ignore[unresolved-attribute]
-            == declared.check_constraints  # ty: ignore[unresolved-attribute]
+            regenerated.constraints_of("check")  # ty: ignore[unresolved-attribute]
+            == declared.constraints_of("check")  # ty: ignore[unresolved-attribute]
         )
 
     def test_the_unique_constraints_round_trip(self) -> None:
         declared, regenerated = self._regenerated()
         assert (
-            regenerated.unique_constraints  # ty: ignore[unresolved-attribute]
-            == declared.unique_constraints  # ty: ignore[unresolved-attribute]
+            regenerated.constraints_of("unique")  # ty: ignore[unresolved-attribute]
+            == declared.constraints_of("unique")  # ty: ignore[unresolved-attribute]
         )
 
     def test_a_table_with_no_constraints_is_unchanged(self) -> None:

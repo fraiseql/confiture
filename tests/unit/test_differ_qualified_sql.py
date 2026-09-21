@@ -80,8 +80,9 @@ class TestTheConstraintModelsKeepTheSchema:
             "CREATE TABLE a.child (pid INT, CONSTRAINT fk_c FOREIGN KEY (pid)"
             " REFERENCES b.parent(id));"
         )
-        fk = parsed.tables[1].foreign_keys[0]
-        assert (fk.table, fk.ref_table) == ("a.child", "b.parent")
+        child = parsed.tables[1]
+        fk = child.constraints_of("foreign_key")[0]
+        assert (child.qualified, fk.ref_table) == ("a.child", "b.parent")
 
     def test_an_alter_table_foreign_key_carries_the_referenced_schema(self) -> None:
         parsed = SchemaDiffer().parse_schema(
@@ -89,8 +90,9 @@ class TestTheConstraintModelsKeepTheSchema:
             "CREATE TABLE a.child (pid INT);\n"
             "ALTER TABLE a.child ADD CONSTRAINT fk_c FOREIGN KEY (pid) REFERENCES b.parent(id);"
         )
-        fk = parsed.tables[1].foreign_keys[0]
-        assert (fk.table, fk.ref_table) == ("a.child", "b.parent")
+        child = parsed.tables[1]
+        fk = child.constraints_of("foreign_key")[0]
+        assert (child.qualified, fk.ref_table) == ("a.child", "b.parent")
 
     def test_check_and_unique_constraints_carry_the_qualified_table(self) -> None:
         parsed = SchemaDiffer().parse_schema(
@@ -98,14 +100,15 @@ class TestTheConstraintModelsKeepTheSchema:
             " CONSTRAINT uq UNIQUE (id));"
         )
         table = parsed.tables[0]
-        assert table.check_constraints[0].table == "tenant.t"
-        assert table.unique_constraints[0].table == "tenant.t"
+        assert table.qualified == "tenant.t"
+        assert [c.kind for c in table.constraints] == ["check", "unique"]
 
     def test_an_unqualified_table_keeps_a_bare_constraint_table(self) -> None:
         parsed = SchemaDiffer().parse_schema(
             "CREATE TABLE t (id INT, CONSTRAINT uq UNIQUE (id));\nCREATE INDEX ix ON t (id);"
         )
-        assert parsed.tables[0].unique_constraints[0].table == "t"
+        assert parsed.tables[0].qualified == "t"
+        assert parsed.tables[0].constraints_of("unique")
         assert parsed.tables[0].indexes[0].table == "t"
 
 

@@ -124,20 +124,20 @@ BODY_KINDS: frozenset[str] = frozenset({"function", "procedure", "aggregate"})
 #: that says only *where* a kind is modelled cannot catch that.
 MODELLED_ELSEWHERE: dict[str, str] = {
     "CreateStmt": (
-        "ParsedSchema.tables, compared column by column and keyed by "
-        "(schema, name) with DEFAULT_SCHEMA folded in — differ._identity, which "
-        "is object_key's middle term"
+        "the schema model's tables (core/schema_model.py), read whole by the lint "
+        "inventory and keyed by ObjectRef — (schema, name) with DEFAULT_SCHEMA "
+        "folded in — then compared column by column and constraint by constraint"
     ),
     "CreateEnumStmt": (
-        "ParsedSchema.enum_types, compared value by value and keyed by "
-        "differ._identity. The inventory calls an enum a 'type', the same kind "
-        "it gives a composite, so tracking it here would report every enum "
-        "twice — once as ADD_TYPE and once as ADD_ENUM_TYPE."
+        "the schema model's enum types, keyed by ObjectRef and compared value by "
+        "value. The inventory calls an enum a 'type', the same kind it gives a "
+        "composite, so tracking it here would report every enum twice — once as "
+        "ADD_TYPE and once as ADD_ENUM_TYPE."
     ),
-    "CreateSeqStmt": "ParsedSchema.sequences, keyed by differ._identity",
+    "CreateSeqStmt": "the schema model's sequences, keyed by ObjectRef",
     "IndexStmt": (
-        "Table.indexes, keyed by bare name — correctly, because the comparison "
-        "is already scoped to one table, which is itself keyed by identity"
+        "the schema model's Table.indexes, keyed by bare name — correctly, because "
+        "the comparison is already scoped to one table, itself keyed by ObjectRef"
     ),
 }
 
