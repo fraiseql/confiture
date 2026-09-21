@@ -1523,5 +1523,22 @@
       "volatility": "volatile"
     }
   ],
-  "views": []
+  "views": [],
+  "triggers": [
+    {
+      "name": "trigger_tb_comment_updated_at",
+      "table": "tb_comment",
+      "schema": null
+    },
+    {
+      "name": "trigger_tb_post_updated_at",
+      "table": "tb_post",
+      "schema": null
+    },
+    {
+      "name": "trigger_tb_user_updated_at",
+      "table": "tb_user",
+      "schema": null
+    }
+  ]
 }

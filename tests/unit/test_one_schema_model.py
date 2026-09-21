@@ -64,14 +64,8 @@ _SNAPSHOT = (
     "entry point's surface and shaped for its users' assertions"
 )
 
-_RETIRING = (
-    "a routine or view as a reader held it before the model had routines and views; "
-    "it retires as its readers move onto the model"
-)
-
 #: ``module:Class`` -> the different question that class answers.
 ALLOWED: dict[str, str] = {
-    "core/live_objects.py:LiveObject": _RETIRING,
     "core/live_catalog.py:RoutineRow": (
         "a pg_proc row with what the introspector's FunctionInfo needs and the model "
         "does not hold — every argument's name and mode, the cost, the comment, the oid"

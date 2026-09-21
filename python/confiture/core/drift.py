@@ -7,32 +7,37 @@ to detect unauthorized changes or migration mishaps.
 import fnmatch
 import logging
 import time
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, get_args
 
 import pglast
 import psycopg
 
 from confiture.core import live_catalog
-from confiture.core.ddl_objects import DDLObject, ObjectRef, objects_in
+from confiture.core.ddl_objects import declared_triggers, objects_in
 from confiture.core.ddl_walk import canonical_default
 from confiture.core.desired_state import load_desired_state
-from confiture.core.linting.inventory import Inventory, schema_model, signature_bucket
-from confiture.core.live_objects import LiveObject, LiveObjectCatalog, LiveObjects
+from confiture.core.linting.inventory import Inventory, schema_model
 from confiture.core.locking import LOCK_HOLDER_TABLE
 from confiture.core.schema_analyzer import SchemaAnalyzer
 from confiture.core.schema_model import (
     Column,
     Constraint,
     Index,
+    ObjectRef,
+    RoutineKind,
     SchemaModel,
+    Signature,
     Table,
     identity_of,
     ref_for,
+    routine_ref,
+    trigger_ref,
 )
-from confiture.core.type_lattice import same_type
+from confiture.core.type_lattice import same_type, signatures_match
 from confiture.exceptions import ConfigurationError, SchemaError
 
 if TYPE_CHECKING:
@@ -175,95 +180,122 @@ class DriftReport:
         }
 
 
-#: Which pair of drift types reports a kind's existence. A function, a procedure
-#: and an aggregate share one pair: the object's own name says which it is, and
-#: three more members of a published enum would say nothing new.
+#: Which pair of drift types reports a kind's existence: every kind the schema
+#: model holds beside a table. A function, a procedure and an aggregate share one
+#: pair: the object's own name says which it is, and three more members of a
+#: published enum would say nothing new.
 _OBJECT_DRIFT_TYPES: dict[str, tuple[DriftType, DriftType]] = {
     "view": (DriftType.MISSING_VIEW, DriftType.EXTRA_VIEW),
     "matview": (DriftType.MISSING_MATVIEW, DriftType.EXTRA_MATVIEW),
     "trigger": (DriftType.MISSING_TRIGGER, DriftType.EXTRA_TRIGGER),
-    "function": (DriftType.MISSING_ROUTINE, DriftType.EXTRA_ROUTINE),
-    "procedure": (DriftType.MISSING_ROUTINE, DriftType.EXTRA_ROUTINE),
-    "aggregate": (DriftType.MISSING_ROUTINE, DriftType.EXTRA_ROUTINE),
+    **dict.fromkeys(get_args(RoutineKind), (DriftType.MISSING_ROUTINE, DriftType.EXTRA_ROUTINE)),
 }
 
 
-def _live_key(obj: "LiveObject") -> tuple[str, str, str, tuple[str, ...] | None]:
-    """A live object in the bucket an :class:`ObjectRef` uses.
+@dataclass(frozen=True)
+class _Object:
+    """A view, routine or trigger as the existence comparison reads it.
 
-    ``signature_bucket`` drops each argument's own schema, which is what makes
-    ``fn(bigint)`` in a tree and ``fn(int8)`` in a database one routine (#275).
-    Keying on the spelling reported a drop and an add for one respelled routine.
+    ``ref`` is its bucket and ``signature`` a routine's key, compared inside it
+    (#275, #302). ``written`` is how a *missing* one is named — as the tree wrote
+    it — and ``catalogued`` how an *extra* one is: as the database spells it.
     """
-    return (obj.kind, obj.schema.lower(), obj.name.lower(), signature_bucket(obj.signature))
+
+    ref: ObjectRef
+    signature: Signature | None
+    written: str
+    catalogued: str
 
 
-def _live_display(obj: "LiveObject") -> str:
-    """How an extra object is named: the spelling the database gave it."""
-    if obj.signature is None:
-        return f"{obj.schema}.{obj.name}"
-    arguments = ", ".join(name for _schema, name in obj.signature)
-    return f"{obj.schema}.{obj.name}({arguments})"
+def _objects(model: SchemaModel) -> list[_Object]:
+    found = [
+        _Object(ref, None, view.qualified, f"{view.schema}.{view.name}")
+        for ref, view in model.views.items()
+    ]
+    found += [
+        _Object(
+            ref,
+            routine.signature_key,
+            routine.identity,
+            f"{routine.schema}.{routine.name}"
+            f"({', '.join(name for _schema, name in routine.signature_key)})",
+        )
+        for ref, overloads in model.routines.items()
+        for routine in overloads
+    ]
+    found += [
+        _Object(ref, None, trigger.qualified, f"{trigger.schema}.{trigger.table}.{trigger.name}")
+        for ref, trigger in model.triggers.items()
+    ]
+    return found
 
 
-def compare_objects(
-    expected: "dict[ObjectRef, list[DDLObject]]",
-    live: "LiveObjects",
-) -> list[DriftItem]:
+def _order(obj: _Object) -> str:
+    return str((obj.ref.kind, obj.ref.schema, obj.ref.name.lower(), obj.ref.signature))
+
+
+def _compare_objects(expected: SchemaModel, actual: SchemaModel) -> list[DriftItem]:
     """Views, matviews, triggers and routines: what the tree declares against what exists.
+
+    Paired by :class:`ObjectRef` and, inside a routine's bucket, by
+    ``signatures_match`` — so ``fn(bigint)`` in a tree and ``fn(int8)`` in a
+    database are one routine, and ``app.f(app.t)`` / ``app.f(other.t)`` two.
 
     A **missing** object is CRITICAL, by analogy with ``missing_column``: the DDL
     declares it and the database has not got it, which is what a deploy gate is
     for. An **extra** object is INFO, and only for a kind the tree declares at
-    least one of, in a schema it declares — because "this project does not manage
-    views here" and "this project has lost all its views" are indistinguishable
-    from an empty expected set, and a live database legitimately carries objects
-    no DDL tree declares.
-
-    A kind the catalogue did not read yields nothing at all: silence from a
-    question nobody asked is not evidence of absence.
+    least one of, in a schema it declares one in — because "this project does not
+    manage views here" and "this project has lost all its views" are
+    indistinguishable from an empty expected set, and a live database
+    legitimately carries objects no DDL tree declares.
     """
-    comparable = {kind for kind in _OBJECT_DRIFT_TYPES if kind in live.kinds_read}
-    expected_by_key = {
-        (ref.kind, ref.schema.lower(), ref.name.lower(), ref.signature): ref
-        for ref in expected
-        if ref.kind in comparable
-    }
-    live_by_key = {_live_key(obj): obj for obj in live.objects if obj.kind in comparable}
+    declared = _objects(expected)
+    unclaimed: dict[ObjectRef, list[_Object]] = defaultdict(list)
+    for obj in _objects(actual):
+        unclaimed[obj.ref].append(obj)
 
-    declared_kinds = {ref.kind for ref in expected}
-    declared_schemas = {ref.schema.lower() for ref in expected}
+    missing: list[_Object] = []
+    for obj in declared:
+        candidates = unclaimed.get(obj.ref, [])
+        twin = next((c for c in candidates if signatures_match(obj.signature, c.signature)), None)
+        if twin is None:
+            missing.append(obj)
+        else:
+            candidates.remove(twin)
 
-    items: list[DriftItem] = []
-    for key in sorted(expected_by_key.keys() - live_by_key.keys(), key=str):
-        ref = expected_by_key[key]
-        missing, _extra = _OBJECT_DRIFT_TYPES[ref.kind]
-        items.append(
-            DriftItem(
-                drift_type=missing,
-                severity=DriftSeverity.CRITICAL,
-                object_name=ref.display,
-                expected=ref.display,
-                actual=None,
-                message=f"{ref.kind.capitalize()} '{ref.display}' is missing from database",
-            )
+    declared_kinds = {obj.ref.kind for obj in declared}
+    declared_schemas = {obj.ref.schema for obj in declared}
+    extra = [
+        obj
+        for found in unclaimed.values()
+        for obj in found
+        if obj.ref.kind in declared_kinds and obj.ref.schema in declared_schemas
+    ]
+
+    items = [
+        DriftItem(
+            drift_type=_OBJECT_DRIFT_TYPES[obj.ref.kind][0],
+            severity=DriftSeverity.CRITICAL,
+            object_name=obj.written,
+            expected=obj.written,
+            actual=None,
+            message=f"{obj.ref.kind.capitalize()} '{obj.written}' is missing from database",
         )
-    for key in sorted(live_by_key.keys() - expected_by_key.keys(), key=str):
-        obj = live_by_key[key]
-        if obj.kind not in declared_kinds or obj.schema.lower() not in declared_schemas:
-            continue
-        _missing, extra = _OBJECT_DRIFT_TYPES[obj.kind]
-        display = _live_display(obj)
-        items.append(
-            DriftItem(
-                drift_type=extra,
-                severity=DriftSeverity.INFO,
-                object_name=display,
-                expected=None,
-                actual=display,
-                message=f"{obj.kind.capitalize()} '{display}' exists but is not in expected schema",
-            )
+        for obj in sorted(missing, key=_order)
+    ]
+    items += [
+        DriftItem(
+            drift_type=_OBJECT_DRIFT_TYPES[obj.ref.kind][1],
+            severity=DriftSeverity.INFO,
+            object_name=obj.catalogued,
+            expected=None,
+            actual=obj.catalogued,
+            message=(
+                f"{obj.ref.kind.capitalize()} '{obj.catalogued}' exists but is not in expected schema"
+            ),
         )
+        for obj in sorted(extra, key=_order)
+    ]
     return items
 
 
@@ -272,16 +304,10 @@ DEFAULT_SCHEMA = "public"
 
 @dataclass
 class ExpectedSchema:
-    """What a schema file declares: the schema model, the schemas it names, its objects.
-
-    ``objects`` is ``ddl_objects.objects_in``'s answer — the views, matviews,
-    triggers and routines the tree defines, compared by existence (#303) until they
-    are model kinds of their own.
-    """
+    """What a schema file declares: the schema model and the schemas it names."""
 
     model: SchemaModel
     schemas: frozenset[str]
-    objects: dict[ObjectRef, list[DDLObject]] = field(default_factory=dict)
 
 
 def _inherit_partition_columns(inventory: Inventory) -> None:
@@ -295,12 +321,23 @@ def _inherit_partition_columns(inventory: Inventory) -> None:
 
 
 def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
-    """*model* with every unqualified object placed in *default_schema* (#227)."""
+    """*model* with every unqualified object placed in *default_schema* (#227).
+
+    A view, routine or trigger is *keyed* in *default_schema* and keeps the
+    spelling the tree wrote, which is how a finding names one that is missing.
+    """
 
     def placed(obj: Any) -> Any:
         return replace(obj, schema=obj.schema or default_schema)
 
     return SchemaModel(
+        routines={
+            routine_ref(placed(overloads[0])): overloads for overloads in model.routines.values()
+        },
+        views={
+            ref_for(v.kind, v.schema or default_schema, v.name): v for v in model.views.values()
+        },
+        triggers={trigger_ref(placed(t)): t for t in model.triggers.values()},
         tables={
             ref_for("table", t.schema or default_schema, t.name): placed(t)
             for t in model.tables.values()
@@ -342,10 +379,11 @@ def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> Exp
         ) from exc
 
     _inherit_partition_columns(inventory)
-    model = _in_schema(schema_model(inventory), default_schema)
+    triggers = {trigger_ref(t): t for t in declared_triggers(objects)}
+    model = _in_schema(replace(schema_model(inventory), triggers=triggers), default_schema)
     schemas = {default_schema} | {t.schema for t in model.tables.values() if t.schema}
     schemas |= {declared.name for declared in inventory.schemas}
-    return ExpectedSchema(model=model, schemas=frozenset(schemas), objects=objects)
+    return ExpectedSchema(model=model, schemas=frozenset(schemas))
 
 
 #: The pseudo-types a column may be declared with and PostgreSQL never stores; the
@@ -529,8 +567,8 @@ class SchemaDriftDetector:
         self,
         expected: SchemaModel,
         actual: SchemaModel,
-        expected_objects: dict[ObjectRef, list[DDLObject]] | None = None,
-        live_objects: LiveObjects | None = None,
+        *,
+        objects: bool = False,
     ) -> DriftReport:
         """Compare two schema models: the expected one from DDL, the actual one live.
 
@@ -541,11 +579,9 @@ class SchemaDriftDetector:
         Args:
             expected: Expected schema state
             actual: Actual (live) schema state
-            expected_objects: Views, matviews, triggers and routines the tree
-                declares (``ddl_objects.objects_in``). ``None`` skips that
-                comparison.
-            live_objects: The same kinds read from the database
-                (:class:`~confiture.core.live_objects.LiveObjectCatalog`).
+            objects: Also compare the views, matviews, triggers and routines both
+                models hold (#303). Off unless *actual* read them: silence from a
+                kind nobody asked the catalogue about is not evidence of absence.
 
         Returns:
             DriftReport with differences
@@ -600,10 +636,10 @@ class SchemaDriftDetector:
 
         # Compare object existence: a view, matview, trigger or routine the tree
         # declares and the database has not got was exit 0 before this (#303).
-        if expected_objects is not None and live_objects is not None:
-            report.drift_items.extend(compare_objects(expected_objects, live_objects))
-            report.objects_checked = sum(
-                1 for ref in expected_objects if ref.kind in live_objects.kinds_read
+        if objects:
+            report.drift_items.extend(_compare_objects(expected, actual))
+            report.objects_checked = (
+                len(expected.views) + len(expected.routines) + len(expected.triggers)
             )
 
         report.detection_time_ms = int((time.perf_counter() - start_time) * 1000)
@@ -829,10 +865,25 @@ class SchemaDriftDetector:
                 )
             )
 
-    def get_live_schema(self, schemas: Iterable[str] | None = None) -> SchemaModel:
-        """The live schema in *schemas* (``public`` when none are named), as the model."""
+    def get_live_schema(
+        self, schemas: Iterable[str] | None = None, *, objects: bool = False
+    ) -> SchemaModel:
+        """The live schema in *schemas* (``public`` when none are named), as the model.
+
+        *objects* reads the views, matviews, triggers and routines too, through the
+        detector's own connection — the one that honours ``--ssh``. An extension's
+        own are the extension's, not the tree's: ``citext`` alone installs a dozen
+        functions, so without leaving them out a pristine database reports dozens
+        of extra routines.
+        """
         wanted = sorted(set(schemas)) if schemas is not None else [DEFAULT_SCHEMA]
-        return live_catalog.read(self.connection, schemas=wanted)
+        return live_catalog.read(
+            self.connection,
+            schemas=wanted,
+            routines=objects,
+            views=objects,
+            triggers=objects,
+        )
 
     def compare_with_expected(self, expected: SchemaModel) -> DriftReport:
         """Compare the live database with an expected schema model.
@@ -867,23 +918,10 @@ class SchemaDriftDetector:
 
         sql = load_desired_state(schema_file_path).read()
         expected = parse_expected_schema(sql, default_schema=default_schema)
-        actual = self.get_live_schema(expected.schemas)
-        report = self.compare_schemas(
-            expected.model,
-            actual,
-            expected_objects=expected.objects,
-            live_objects=self.get_live_objects(expected.schemas),
-        )
+        actual = self.get_live_schema(expected.schemas, objects=True)
+        report = self.compare_schemas(expected.model, actual, objects=True)
         report.expected_schema_source = f"file:{schema_file_path}"
         return report
-
-    def get_live_objects(self, schemas: Iterable[str]) -> LiveObjects:
-        """The views, matviews, triggers and routines the database holds.
-
-        Read through the detector's own connection — the one that honours
-        ``--ssh`` — rather than opening a second one.
-        """
-        return LiveObjectCatalog(self.connection).read(sorted(set(schemas)))
 
     def _get_database_name(self) -> str:
         """Get current database name."""

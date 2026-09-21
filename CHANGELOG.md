@@ -132,6 +132,21 @@ comparisons say today, are now tests in its own suite.
   `tests/fixtures/model_goldens/routines/`, recorded before the change; what moved is
   listed under **Fixed**.
 
+- **Drift compares a view, routine or trigger in the one comparison.** `confiture drift`
+  and `--check-live-drift` read views, matviews, routines and triggers into the schema
+  model on both sides — `schema_model.Trigger` joins `Routine` and `View`, read from
+  DDL through `ddl_objects` and live by `live_catalog.read(…, triggers=True)` — and
+  `compare_schemas(…, objects=True)` reports their existence, pairing a routine
+  inside its bucket by `signatures_match`. `core/live_objects.py` is deleted; its
+  three queries were already `live_catalog`'s. The drift goldens do not move, their
+  `objects_checked` included; the model goldens gain a `triggers` section.
+  ⚠️ For a library caller: `compare_schemas` takes `objects=True` in place of
+  `expected_objects` / `live_objects`; `drift.compare_objects`,
+  `SchemaDriftDetector.get_live_objects`, `ExpectedSchema.objects`, `LiveObject`,
+  `LiveObjects` and `LiveObjectCatalog` are gone; `get_live_schema(…, objects=True)`
+  reads the objects; `live_catalog.triggers()` returns `schema_model.Trigger`s
+  (`TriggerRow` is gone).
+
 ### Changed
 
 - **One live reader, enforced.** Every schema fact confiture reads from a live database
@@ -215,6 +230,12 @@ comparisons say today, are now tests in its own suite.
 
 ### Fixed
 
+- **An extra view, routine or trigger is reported in a schema the tree declares one
+  in.** A `CREATE SCHEMA`, an extension, a domain or a type used to count as declaring
+  its schema — and a `CREATE SCHEMA` counted as declaring `public`, so a tree whose
+  views all live in `core` reported an extra `public` view as `extra_view`. Now only
+  a declared view, routine or trigger does, and routines pair across a type schema
+  written on one side only (#302), as `--check-signatures` does.
 - **A routine is no longer a stale overload of itself.** `--check-signatures` keyed
   the declared side's argument types through one alias table and the live side's
   through another, and they disagreed on `timestamp`, `time`, `timetz`, `char(n)`

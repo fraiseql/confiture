@@ -208,5 +208,6 @@
       "volatility": "volatile"
     }
   ],
-  "views": []
+  "views": [],
+  "triggers": []
 }

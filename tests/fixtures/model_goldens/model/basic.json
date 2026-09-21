@@ -699,5 +699,6 @@
   "enum_types": [],
   "sequences": [],
   "routines": [],
-  "views": []
+  "views": [],
+  "triggers": []
 }

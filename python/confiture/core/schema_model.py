@@ -303,6 +303,24 @@ class View:
         return qualified_name(self.schema, self.name)
 
 
+@dataclass(frozen=True)
+class Trigger:
+    """A trigger a user created, named with the table it fires on.
+
+    A trigger's name is unique per *table*, not per schema, so its identity is
+    ``(schema, table, name)``: two tables may each carry a ``trg_touch``.
+    """
+
+    name: str
+    table: str
+    schema: str | None = None
+
+    @property
+    def qualified(self) -> str:
+        """``schema.table.trigger``, the schema only where it was written."""
+        return f"{qualified_name(self.schema, self.table)}.{self.name}"
+
+
 def routine_ref(routine: Routine) -> ObjectRef:
     """The bucket of a routine: its kind, folded schema, name and argument type names."""
     return ObjectRef(
@@ -319,6 +337,11 @@ def view_ref(view: View) -> ObjectRef:
     return ref_for(view.kind, view.schema, view.name)
 
 
+def trigger_ref(trigger: Trigger) -> ObjectRef:
+    """The bucket of a trigger: its schema, and its table and name together."""
+    return ref_for("trigger", trigger.schema, f"{trigger.table}.{trigger.name}")
+
+
 @dataclass(frozen=True)
 class SchemaModel:
     """Everything one schema declares, each object under its :class:`ObjectRef`.
@@ -332,6 +355,7 @@ class SchemaModel:
     sequences: Mapping[ObjectRef, Sequence] = field(default_factory=dict)
     routines: Mapping[ObjectRef, tuple[Routine, ...]] = field(default_factory=dict)
     views: Mapping[ObjectRef, View] = field(default_factory=dict)
+    triggers: Mapping[ObjectRef, Trigger] = field(default_factory=dict)
 
     def all_routines(self) -> list[Routine]:
         """Every routine, overloads included, in identity order."""
@@ -349,6 +373,7 @@ class SchemaModel:
             "sequences": section(self.sequences),
             "routines": [asdict(routine) for routine in self.all_routines()],
             "views": section(self.views),
+            "triggers": section(self.triggers),
         }
 
 
@@ -535,4 +560,8 @@ def normalise_for_parity(model: SchemaModel) -> SchemaModel:
             ref: tuple(_parity_routine(r) for r in found) for ref, found in model.routines.items()
         },
         views={ref: _parity_view(v) for ref, v in model.views.items()},
+        triggers={
+            ref: replace(t, schema=(t.schema or DEFAULT_SCHEMA).lower())
+            for ref, t in model.triggers.items()
+        },
     )

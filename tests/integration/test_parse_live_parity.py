@@ -40,6 +40,7 @@ def _schemas(model: SchemaModel) -> list[str]:
             *model.sequences,
             *model.routines,
             *model.views,
+            *model.triggers,
         )
     }
     return sorted(declared | {DEFAULT_SCHEMA})
@@ -56,7 +57,7 @@ def _parity_of(sql: str, make_database: Callable[[str], str]) -> tuple[dict, dic
     parsed = build_model(sql)
     with psycopg.connect(make_database("confiture_parity"), autocommit=True) as conn:
         conn.execute(sql)
-        live = read(conn, schemas=_schemas(parsed), routines=True, views=True)
+        live = read(conn, schemas=_schemas(parsed), routines=True, views=True, triggers=True)
     return (
         normalise_for_parity(parsed).to_dict(),
         normalise_for_parity(live).to_dict(),
@@ -97,4 +98,5 @@ def test_every_routine_and_view_shape_reads_back_as_itself(
     sql += "\nCREATE UNIQUE INDEX mv_things_id ON public.mv_things (id);\n"
     parsed, live = _parity_of(sql, fresh_database_factory)
     assert len(parsed["routines"]) == 10 and len(parsed["views"]) == 3, parsed
+    assert len(parsed["triggers"]) == 1, parsed
     assert live == parsed, _explain(parsed, live)

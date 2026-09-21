@@ -813,5 +813,32 @@
       "definition": "SELECT u.id AS user_id, u.email, u.display_name, count(DISTINCT p.id) AS total_projects, count(DISTINCT p.id) FILTER (WHERE p.status = 'active') AS active_projects, count(DISTINCT p.id) FILTER (WHERE p.status = 'archived') AS archived_projects, count(DISTINCT t.id) AS total_tasks, count(DISTINCT t.id) FILTER (WHERE t.status = 'done') AS completed_tasks, u.created_at FROM users AS u LEFT JOIN projects AS p ON p.owner_id = u.id LEFT JOIN tasks AS t ON t.project_id = p.id GROUP BY u.id, u.email, u.display_name, u.created_at",
       "indexes": []
     }
+  ],
+  "triggers": [
+    {
+      "name": "prevent_delete_project_with_tasks_trigger",
+      "table": "projects",
+      "schema": null
+    },
+    {
+      "name": "update_projects_updated_at",
+      "table": "projects",
+      "schema": null
+    },
+    {
+      "name": "set_task_completed_at_trigger",
+      "table": "tasks",
+      "schema": null
+    },
+    {
+      "name": "update_tasks_updated_at",
+      "table": "tasks",
+      "schema": null
+    },
+    {
+      "name": "update_users_updated_at",
+      "table": "users",
+      "schema": null
+    }
   ]
 }

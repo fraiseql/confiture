@@ -208,5 +208,12 @@
       "volatility": "volatile"
     }
   ],
-  "views": []
+  "views": [],
+  "triggers": [
+    {
+      "name": "trigger_users_updated_at",
+      "table": "users",
+      "schema": null
+    }
+  ]
 }

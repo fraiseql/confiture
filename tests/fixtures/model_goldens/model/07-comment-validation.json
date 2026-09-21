@@ -230,5 +230,6 @@
       "definition": "SELECT u.id, u.username, count(p.id) AS post_count, max(p.created_at) AS last_post_date FROM users AS u LEFT JOIN posts AS p ON u.id = p.user_id GROUP BY u.id, u.username",
       "indexes": []
     }
-  ]
+  ],
+  "triggers": []
 }

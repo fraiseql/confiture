@@ -27,11 +27,11 @@ Deliberately not read, each for a stated reason:
 
 That list is :func:`read`'s, the model a tree is compared with. The listings
 below it answer narrower questions — which relations, which schemas, every index
-a table carries — and each docstring says what it keeps. Routines and views are
-read into the model too (:func:`read` with ``routines`` / ``views``,
-:func:`routine_of`, :func:`views`): a routine's argument types through the one
-signature canonicaliser, so a routine read live and read from DDL are one routine
-by the same rule. :class:`RoutineRow` is the catalog row the introspector also
+a table carries — and each docstring says what it keeps. Routines, views and
+triggers are read into the model too (:func:`read` with ``routines`` / ``views``
+/ ``triggers``, :func:`routine_of`, :func:`views`, :func:`triggers`): a routine's
+argument types through the one signature canonicaliser, so a routine read live
+and read from DDL are one routine by the same rule. :class:`RoutineRow` is the catalog row the introspector also
 needs — argument names and modes, cost, comment — which the model does not hold.
 A listing says whether an extension owns an object, or leaves it out on request,
 because the callers disagree on purpose — a drift check asks what the *tree*
@@ -62,11 +62,13 @@ from confiture.core.schema_model import (
     RoutineKind,
     SchemaModel,
     Table,
+    Trigger,
     View,
     Volatility,
     qualified_name,
     ref_for,
     routine_ref,
+    trigger_ref,
     view_ref,
 )
 from confiture.core.schema_model import Sequence as SequenceModel
@@ -266,6 +268,7 @@ def read(
     kinds: Sequence[str] = TABLE_KINDS,
     routines: bool = False,
     views: bool = False,
+    triggers: bool = False,
 ) -> SchemaModel:
     """The schema the database holds in *schemas*, in the model DDL is read into.
 
@@ -274,9 +277,9 @@ def read(
     caller that has always meant something else by "a table" says so —
     ``introspect`` reads ``('r',)``, the plugin's snapshot :data:`TABLE_LIKE`.
 
-    *routines* and *views* read those too — each a query, and a view's a deparse
-    per view — for the callers that compare them. An extension's own are left
-    out, as its tables are.
+    *routines*, *views* and *triggers* read those too — each a query, and a
+    view's a deparse per view — for the callers that compare them. An
+    extension's own routines and views are left out, as its tables are.
     """
     wanted = list(schemas)
     enum_types = {
@@ -313,6 +316,7 @@ def read(
         sequences=sequences,
         routines={ref: tuple(found) for ref, found in routine_models.items()},
         views=view_models,
+        triggers=({trigger_ref(t): t for t in _triggers(conn, wanted)} if triggers else {}),
     )
 
 
@@ -527,15 +531,6 @@ def indexes(conn: psycopg.Connection, schemas: Sequence[str]) -> dict[ObjectRef,
 
 
 @dataclass(frozen=True)
-class TriggerRow:
-    """A trigger a user created, named with the table it fires on."""
-
-    schema: str
-    table: str
-    name: str
-
-
-@dataclass(frozen=True)
 class RoutineRow:
     """A ``pg_proc`` row, the catalog's letters kept as the catalog writes them.
 
@@ -747,9 +742,16 @@ def _views(
     ]
 
 
-def triggers(conn: psycopg.Connection, schemas: Sequence[str]) -> list[TriggerRow]:
+def triggers(conn: psycopg.Connection, schemas: Sequence[str]) -> list[Trigger]:
     """Every trigger a user created on a relation in *schemas*."""
-    return [TriggerRow(*row) for row in conn.execute(_TRIGGERS, (list(schemas),)).fetchall()]
+    return _triggers(conn, schemas)
+
+
+def _triggers(conn: psycopg.Connection, schemas: Sequence[str]) -> list[Trigger]:
+    return [
+        Trigger(name=name, table=table, schema=schema)
+        for schema, table, name in conn.execute(_TRIGGERS, (list(schemas),)).fetchall()
+    ]
 
 
 def routines(
