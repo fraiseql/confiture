@@ -22,13 +22,12 @@ from typing import Any
 import psycopg
 from psycopg import sql as pgsql
 
-from confiture.core._migrator.apply import record_migration
 from confiture.core._migrator.discovery import discover_migration_files, parse_migration_filename
 from confiture.core._migrator.events import UpObserver, emit
 from confiture.core.backfill import BackfillExecutor, BackfillSettings
 from confiture.core.checksum import compute_checksum
 from confiture.core.expand_contract import BackfillSpec, StagedPlan, plannable
-from confiture.core.ledger import table_identifier
+from confiture.core.ledger import LedgerRow, record_migration, table_identifier
 from confiture.core.schema_facts import server_major
 from confiture.exceptions import ConfiturError, MigrationError, ValidationError
 
@@ -272,11 +271,14 @@ def resume(
         )
     _, name = parse_migration_filename(up_file.name)
     record_migration(
-        migrator,
-        version=version,
-        name=name,
-        execution_time_ms=int((time.perf_counter() - started) * 1000),
-        checksum=compute_checksum(up_file),
+        migrator.connection,
+        migrator._table_ident,
+        LedgerRow(
+            version=version,
+            name=name,
+            execution_time_ms=int((time.perf_counter() - started) * 1000),
+            checksum=compute_checksum(up_file),
+        ),
     )
     migrator.connection.commit()
     return store.records(version)

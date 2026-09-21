@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from confiture.core._migrator import online as _online
 from confiture.core._migrator import policy as _policy
+from confiture.core._migrator.apply import Online
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.events import UpObserver, emit
 from confiture.core.backfill import BackfillSettings
@@ -377,13 +378,17 @@ def _apply_one(
     force: bool,
     online: RunOptions | None,
 ) -> None:
-    """Apply one migration: as expand/contract stages when asked and possible, else the classic way."""
+    """Apply one migration: as expand/contract stages when asked and possible, else as it declares."""
     assert session._migrator is not None
     plans = _online.online_plans(migration_file, session._conn) if online is not None else None
-    if plans:
-        _online.apply_online(session._migrator, migration, migration_file, plans, online)
-        return
-    session._migrator.apply(migration, force=force, migration_file=migration_file)
+    strategy = (
+        Online(tuple(plans), online, str(session._migrator.migration_table))
+        if plans and online is not None
+        else None
+    )
+    session._migrator.apply(
+        migration, force=force, migration_file=migration_file, strategy=strategy
+    )
 
 
 def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResult:
