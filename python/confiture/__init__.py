@@ -34,9 +34,7 @@ __all__ = [
     "BatchProgress",
     # Large table operations
     "BatchedMigration",
-    "BlueGreenConfig",
     # Blue-green orchestration (library API)
-    "BlueGreenOrchestrator",
     "ConfigurationError",
     # Exceptions
     "ConfiturError",
@@ -66,7 +64,6 @@ __all__ = [
     "GrantAccompanimentChecker",
     "GrantAccompanimentError",
     "GrantAccompanimentReport",
-    "HealthCheckResult",
     "HookPhase",
     "IntrospectedColumn",
     "IntrospectedTable",
@@ -82,9 +79,7 @@ __all__ = [
     "MigrationInfo",
     # Locking
     "MigrationLock",
-    "MigrationPhase",
     "MigrationPreflightInfo",
-    "MigrationState",
     # Result models
     "MigrationStatus",
     # Migration verification
@@ -93,8 +88,6 @@ __all__ = [
     "Migrator",
     "MigratorSession",
     "OnlineIndexBuilder",
-    "PGFeature",
-    "PGVersionInfo",
     "PreconditionError",
     "PreconditionValidationError",
     "PreflightAgainstMigration",
@@ -106,9 +99,6 @@ __all__ = [
     "RebuildError",
     "RestoreError",
     "RollbackError",
-    "RollbackSuggestion",
-    "RollbackTestResult",
-    "RollbackTester",
     "SQLError",
     "SchemaBuilder",
     # Drift detection
@@ -128,35 +118,24 @@ __all__ = [
     "StrategyConfig",
     "StrategyRegistry",
     "TableSizeEstimator",
-    "TrafficController",
     "TypeMapper",
     "VerifyAllResult",
     "VerifyFileError",
     "VerifyResult",
-    "VersionAwareSQL",
     "__author__",
     "__email__",
     "__version__",
-    "check_version_compatibility",
     # PostgreSQL version detection / feature gating (library API)
-    "detect_version",
     "export_all",
-    # Rollback generation (library API)
-    "generate_rollback",
-    "generate_rollback_script",
     # Schema export
     "generate_schema",
-    "get_recommended_settings",
-    "parse_version_string",
     "register_strategy",
-    "suggest_backup_for_destructive_operations",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Core
     "SchemaBuilder": ("confiture.core.builder", "SchemaBuilder"),
     "Migrator": ("confiture.core.migrator", "Migrator"),
-    # The four mediums are a set in the documentation and in CLAUDE.md;
     # two of them were importable from the top level and two were not (#287).
     "ProductionSyncer": ("confiture.core.syncer", "ProductionSyncer"),
     "SchemaToSchemaMigrator": ("confiture.core.schema_to_schema", "SchemaToSchemaMigrator"),
@@ -250,38 +229,12 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Scaffold / generate tree
     "EmittedFunction": ("confiture.core.scaffold.emitter", "EmittedFunction"),
     "ConfitureEmitter": ("confiture.core.scaffold.emitter", "ConfitureEmitter"),
-    # Blue-green orchestration (library API)
-    "BlueGreenOrchestrator": ("confiture.core.blue_green", "BlueGreenOrchestrator"),
-    "BlueGreenConfig": ("confiture.core.blue_green", "BlueGreenConfig"),
-    "TrafficController": ("confiture.core.blue_green", "TrafficController"),
-    "MigrationPhase": ("confiture.core.blue_green", "MigrationPhase"),
-    "MigrationState": ("confiture.core.blue_green", "MigrationState"),
-    "HealthCheckResult": ("confiture.core.blue_green", "HealthCheckResult"),
-    # PostgreSQL version detection / feature gating (library API)
-    "detect_version": ("confiture.core.pg_version", "detect_version"),
-    "parse_version_string": ("confiture.core.pg_version", "parse_version_string"),
-    "check_version_compatibility": ("confiture.core.pg_version", "check_version_compatibility"),
-    "get_recommended_settings": ("confiture.core.pg_version", "get_recommended_settings"),
-    "PGVersionInfo": ("confiture.core.pg_version", "PGVersionInfo"),
-    "PGFeature": ("confiture.core.pg_version", "PGFeature"),
-    "VersionAwareSQL": ("confiture.core.pg_version", "VersionAwareSQL"),
-    # Rollback generation (library API)
-    "generate_rollback": ("confiture.core.rollback_generator", "generate_rollback"),
-    "generate_rollback_script": ("confiture.core.rollback_generator", "generate_rollback_script"),
-    "suggest_backup_for_destructive_operations": (
-        "confiture.core.rollback_generator",
-        "suggest_backup_for_destructive_operations",
-    ),
-    "RollbackSuggestion": ("confiture.core.rollback_generator", "RollbackSuggestion"),
-    "RollbackTester": ("confiture.core.rollback_generator", "RollbackTester"),
-    "RollbackTestResult": ("confiture.core.rollback_generator", "RollbackTestResult"),
     # Built-in migration lifecycle hooks (opt-in via Migrator.register_hook)
     "AuditHook": ("confiture.core.hooks.builtin.audit_hook", "AuditHook"),
     "AuditConfig": ("confiture.core.hooks.builtin.audit_hook", "AuditConfig"),
     "BackupHook": ("confiture.core.hooks.builtin.backup_hook", "BackupHook"),
     "BackupConfig": ("confiture.core.hooks.builtin.backup_hook", "BackupConfig"),
     "HookPhase": ("confiture.core.hooks.phases", "HookPhase"),
-    # PII anonymization framework (library API). Imported from the package
     # facade so the built-in strategies are registered on first access.
     "AnonymizationStrategy": ("confiture.core.anonymization", "AnonymizationStrategy"),
     "StrategyConfig": ("confiture.core.anonymization", "StrategyConfig"),

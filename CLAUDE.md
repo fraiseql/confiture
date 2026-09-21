@@ -647,7 +647,7 @@ confiture/
 │   │   ├── prep_seed_formatter.py # Formatter for prep-seed validation reports
 │   │   ├── schema_to_schema.py   # ``confiture migrate schema-to-schema`` — Medium 4 (FDW) CLI (issue ARCH…
 │   │   ├── seed.py               # CLI commands for seed data validation
-│   │   ├── seed_copy.py          # ``confiture seed convert`` and ``seed benchmark``: the COPY-format tools
+│   │   ├── seed_copy.py          # ``confiture seed convert``: the COPY-format tool
 │   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
 │   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
 │   │   ├── commands/             # CLI command modules for Confiture (34 modules)
@@ -661,7 +661,6 @@ confiture/
 │   │   ├── _pglast_enums.py      # Name-resolved PostgreSQL parse-node enum members (issue #192)
 │   │   ├── backfill.py           # The batched backfill between expand and contract: bounded, observable,…
 │   │   ├── baseline_detector.py  # Baseline detector for auto-detecting migration level from a live databa…
-│   │   ├── blue_green.py         # Blue-green migration orchestration
 │   │   ├── bootstrap.py          # ``confiture bootstrap`` planner and executor (issue #137 part 1)
 │   │   ├── builder.py            # Schema builder - builds PostgreSQL schemas from DDL files
 │   │   ├── checksum.py           # Migration file checksum computation and verification
@@ -710,7 +709,6 @@ confiture/
 │   │   ├── ownership_fixer.py    # Auto-fixer for ownership coverage gaps in migration files (issue #124)
 │   │   ├── parser_info.py        # What parses the SQL: pglast's version and the PostgreSQL grammar it emb…
 │   │   ├── path_globs.py         # The one path matcher: does this path, relative to its include directory…
-│   │   ├── pg_version.py         # PostgreSQL version detection and feature flags
 │   │   ├── pgtap_generator.py    # Generate pgTAP test scaffolds from PostgreSQL functions
 │   │   ├── plpgsql_parse.py      # Compiling a PL/pgSQL body with a compiler that has no catalogue (issues…
 │   │   ├── preconditions.py      # Migration preconditions for fail-fast validation
@@ -719,7 +717,6 @@ confiture/
 │   │   ├── psql_applier.py       # Shared COPY-aware SQL applier backed by ``psql``
 │   │   ├── restorer.py           # Three-phase pg_restore orchestrator
 │   │   ├── risk_tier.py          # Risk-tier taxonomy for the migration-adapter seam (issue #197)
-│   │   ├── rollback_generator.py # Auto-generate rollback SQL for simple operations
 │   │   ├── schema_analyzer.py    # Schema analysis and validation for dry-run mode
 │   │   ├── schema_artifact.py    # Cacheable schema-artifact dumper (Medium 1, CI provisioning)
 │   │   ├── schema_change.py      # What changed between two schema trees: one variant per kind, closed, an…
@@ -751,11 +748,11 @@ confiture/
 │   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (5 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
 │   │   ├── idempotency/          # Idempotency validation for SQL migrations (19 modules)
-│   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (6 modules)
+│   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (5 modules)
 │   │   ├── linting/              # Rule Library System (37 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
-│   │   ├── seed/                 # Seed data management and optimization (24 modules)
+│   │   ├── seed/                 # Seed data management and optimization (23 modules)
 │   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (16 modules)
 │   ├── models/                   # Confiture migration models
 │   │   ├── __init__.py           # Confiture migration models

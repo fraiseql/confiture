@@ -82,22 +82,19 @@ confiture seed convert --input db/seeds --batch --output db/seeds_copy
 confiture seed convert --input seeds.sql
 ```
 
-### 3. Benchmark Performance
+### 3. Decide from Row Counts
 
-See how much faster COPY is for your data:
+Choose the format from how many rows your seeds hold: above roughly 50,000 rows
+in total, load with `--copy-format` (see the [decision tree](#decision-tree-when-to-use-copy)
+below and the [Seed Loading Decision Tree](seed-loading-decision-tree.md)).
+`--copy-format` converts each file of `--copy-threshold` rows or more (default
+1000) to COPY as it applies it, so small files still load as VALUES.
+
+Confiture does not compare the two formats. To see what a load costs on your
+data, time it:
 
 ```bash
-# Compare VALUES vs COPY performance
-confiture seed benchmark --seeds-dir db/seeds
-
-# Output:
-# COPY Format Performance Benchmark
-# ════════════════════════════════════
-# Total rows: 45,230
-# VALUES format: 2,345ms
-# COPY format:   245ms
-# Speedup:       9.6x faster
-# Time saved:    2,100ms
+time confiture seed apply --copy-format --env test
 ```
 
 ### 4. Full Integration with Build
@@ -224,13 +221,13 @@ confiture seed apply \
 - Flexible (continue-on-error)
 - Tracked (JSON output available)
 
-### 4. Performance Analysis
+### 4. Timing a Load
 
 ```bash
-# Compare current vs optimized approach
-confiture seed benchmark --seeds-dir db/seeds
+# Time the load against a freshly built test database
+time confiture seed apply --copy-format --env test
 
-# If showing < 5x speedup, increase threshold
+# A higher threshold leaves more files as VALUES; a lower one converts more
 confiture seed apply \
   --copy-format \
   --copy-threshold 2000
@@ -271,9 +268,6 @@ seed:
 
   # Row threshold for auto COPY selection
   copy_threshold: 1000
-
-  # Show performance metrics
-  benchmark: true
 
   # Continue on error (sequential only)
   continue_on_error: false
@@ -383,10 +377,11 @@ INSERT INTO posts (user_id) SELECT id FROM user_ids;
 
 **Solution:**
 ```bash
-# Check what format is being used
-confiture seed benchmark --seeds-dir db/seeds
+# Time the load both ways, each against a freshly built database
+time confiture seed apply --copy-format --env test
+time confiture seed apply --env test
 
-# If no speedup, stick with VALUES
+# If COPY brings no gain, stick with VALUES
 confiture seed apply --env local
 ```
 
@@ -422,18 +417,18 @@ confiture seed apply \
 
 ### Monitor Performance
 
+Confiture does not report a speedup; time the load yourself, each run against a
+freshly built test database so both start from the same state:
+
 ```bash
-# Before optimization
-confiture seed benchmark --seeds-dir db/seeds
-# OUTPUT: COPY 3.2x faster
+# The current load
+time confiture seed apply --copy-format --env test
 
-# Adjust threshold to catch more tables
-confiture seed apply \
+# Lower the threshold to convert smaller files too, then time it again
+time confiture seed apply \
   --copy-format \
-  --copy-threshold 500
-# OUTPUT: COPY 7.5x faster
-
-# Measure improvement
+  --copy-threshold 500 \
+  --env test
 ```
 
 ### Batch Size Tuning
@@ -519,7 +514,6 @@ jobs:
 
 - **`confiture seed apply`** - Load seeds with optional COPY format
 - **`confiture seed convert`** - Transform INSERT to COPY format
-- **`confiture seed benchmark`** - Compare VALUES vs COPY performance
 - **`confiture seed validate`** - Check seed data quality
 - **`confiture build`** - Build schema and apply seeds with COPY support
 

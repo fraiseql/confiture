@@ -398,8 +398,8 @@ groups:
 
 ## Benchmarking
 
-There is no `benchmark` command. Two real ones answer the two questions
-people bring to one:
+There is no `benchmark` command. The questions people bring to one are
+answered by preflight, by row counts, and by timing the run yourself:
 
 ### Is this migration big enough to need `--batched`?
 
@@ -416,12 +416,16 @@ the tables `migrate up --batched` is worth it for.
 
 ### Should these seeds load as VALUES or COPY?
 
-```bash
-confiture seed benchmark --seeds-dir db/seeds
-```
+Decide from the row counts: above roughly 50,000 rows in total, load with
+`--copy-format` ([Seed Loading Decision Tree](../guides/seed-loading-decision-tree.md)).
+`confiture seed apply --copy-format` converts each file of `--copy-threshold` rows
+or more (default 1000) to COPY as it applies it; `confiture seed convert` rewrites
+INSERT files as COPY once, ahead of time. Confiture does not compare the two
+formats, so to see what a load costs on your data, time it:
 
-Loads the seed files both ways and reports the speedup, the time saved and the
-per-table numbers.
+```bash
+time confiture seed apply --copy-format --env test
+```
 
 ### Timing a migration run
 

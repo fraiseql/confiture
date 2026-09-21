@@ -70,7 +70,7 @@ class TestSeedApplyCommand:
     def test_seed_apply_rejects_removed_benchmark_flag(
         self, cli_runner: CliRunner, temp_seed_file: Path
     ) -> None:
-        """``--benchmark`` was a dead option; `confiture seed benchmark` is the command."""
+        """``--benchmark`` was a dead option, and the command it pointed at measured nothing."""
         result = cli_runner.invoke(
             seed_app,
             ["apply", "--seeds-dir", str(temp_seed_file.parent), "--benchmark"],
@@ -234,36 +234,6 @@ class TestSeedConvertCommand:
         assert "success" in result.stdout.lower() or "converted" in result.stdout.lower()
 
 
-class TestSeedBenchmarkCommand:
-    """Test seed benchmark command."""
-
-    def test_seed_benchmark_command_exists(self, cli_runner: CliRunner) -> None:
-        """Test that seed benchmark command is available."""
-        result = cli_runner.invoke(seed_app, ["benchmark", "--help"])
-        assert result.exit_code == 0
-
-    def test_seed_benchmark_accepts_seeds_dir(
-        self, cli_runner: CliRunner, temp_seed_file: Path
-    ) -> None:
-        """Test that benchmark command accepts seeds directory."""
-        result = cli_runner.invoke(
-            seed_app, ["benchmark", "--seeds-dir", str(temp_seed_file.parent)]
-        )
-        # Should accept the input
-        assert "unrecognized arguments" not in result.stdout
-
-    def test_seed_benchmark_output_shows_speedup(
-        self, cli_runner: CliRunner, temp_seed_file: Path
-    ) -> None:
-        """Test that benchmark output shows speedup factor."""
-        result = cli_runner.invoke(
-            seed_app, ["benchmark", "--seeds-dir", str(temp_seed_file.parent)]
-        )
-        if result.exit_code == 0:
-            # Should show performance metrics
-            assert "speedup" in result.stdout.lower() or "faster" in result.stdout.lower()
-
-
 class TestSeedApplyOutput:
     """Test output formatting of seed apply command."""
 
@@ -305,3 +275,11 @@ class TestSeedCliConfiguration:
         )
         # Help should show the default value
         assert "1000" in result.stdout or result.exit_code == 0
+
+
+def test_seed_benchmark_is_gone(cli_runner: CliRunner) -> None:
+    """It printed a fixed 10:1 ratio over line counts, always "10.0x" (#346)."""
+    result = cli_runner.invoke(seed_app, ["benchmark", "--help"])
+
+    assert result.exit_code == 2
+    assert "No such command" in result.output

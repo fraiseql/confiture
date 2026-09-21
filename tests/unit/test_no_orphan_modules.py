@@ -12,15 +12,13 @@ first. Two root sets walk it:
   is not a call. A module only this set misses is offered and never used.
 
 Each ``*_EXEMPT`` table names a module the walk cannot see used, with the reason; an
-entry that stops matching fails. The tests are a map while they are ``xfail``.
+entry that stops matching fails.
 """
 
 from __future__ import annotations
 
 import ast
 from pathlib import Path
-
-import pytest
 
 import confiture
 
@@ -33,8 +31,30 @@ CALLED_EXEMPT: dict[str, str] = {
     "confiture.core.schema_exporter": "scripts/gen_schemas.py publishes the JSON schemas from it in CI",
     "confiture.schemas": "the published JSON schemas' package, read by schema_exporter",
     "confiture.testing.pytest_plugin": "loaded by pytest through the pytest11 entry point",
+    **dict.fromkeys(
+        (
+            "confiture.core.hooks.builtin",
+            "confiture.core.hooks.builtin.audit_hook",
+            "confiture.core.hooks.builtin.backup_hook",
+        ),
+        "fraisier's floor probe checks `confiture.core.hooks.builtin.BackupHook` by "
+        "module path (tests/contract/test_consumer_symbols.py); a user registers "
+        "these hooks, confiture never does",
+    ),
 }
-EXPORTED_EXEMPT: dict[str, str] = {}
+#: Named by a string outside the package, or read before any caller exists.
+EXPORTED_EXEMPT: dict[str, str] = {
+    "confiture.core.change_set.diff_tiers": (
+        "the risk tier each SchemaChange kind declares (owner decision 6), held by "
+        "tests/unit/test_schema_change_tiers.py until the platform seam reads it"
+    ),
+    "confiture.testing.pytest": (
+        'a plugin user names it in `pytest_plugins = ["confiture.testing.pytest"]` for '
+        "the `migration_test` decorator; pytest imports it by that string"
+    ),
+}
+for _name, _reason in EXPORTED_EXEMPT.items():
+    CALLED_EXEMPT.setdefault(_name, _reason)
 
 
 def _module(path: Path) -> str:
@@ -133,13 +153,11 @@ def test_exemptions_state_a_reason_and_name_a_module() -> None:
         assert set(table) <= set(MODULES), set(table) - set(MODULES)
 
 
-@pytest.mark.xfail(strict=True, reason="a map of the modules nothing exports yet")
 def test_nothing_is_dead() -> None:
     orphans = sorted(set(MODULES) - _reach(set(EXPORTED_ROOTS)) - set(EXPORTED_EXEMPT))
     assert orphans == [], "reached by no entry point:\n  " + "\n  ".join(orphans)
 
 
-@pytest.mark.xfail(strict=True, reason="a map of the modules offered and never used yet")
 def test_nothing_is_offered_and_never_used() -> None:
     called = _reach(
         {"confiture.cli.main"} | _database_suites(), not_through=frozenset({"confiture"})

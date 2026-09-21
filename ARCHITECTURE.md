@@ -122,7 +122,6 @@ CLI module reaches into a `_private` attribute of a core object (`tests/unit/cli
 | `migrator.py` | `Migrator` + `MigratorSession` — core migration engine; tracks state in configurable tracking table (default `public.tb_confiture`); timestamp-based versioning (`YYYYMMDDHHMMSS`) |
 | `migration_generator.py` | `MigrationGenerator` — generates migration files; supports external generators via subprocess |
 | `migration_verifier.py` | `MigrationVerifier` + `VerifyResult` — runs `.verify.sql` queries post-migration |
-| `rollback_generator.py` | Generates rollback SQL for migrations |
 | `baseline_detector.py` | `BaselineDetector` — fuzzy schema matching (85% threshold) to find the right baseline snapshot for `--auto-detect-baseline` |
 
 #### 2.3 Introspection Layer (`introspection/`)
@@ -134,7 +133,6 @@ A package providing PostgreSQL introspection beyond tables and columns, used as 
 | `introspection/functions.py` | `FunctionIntrospector` — queries `pg_catalog` to retrieve function/procedure definitions, parameters, volatility, language, and source |
 | `introspection/type_mapping.py` | `TypeMapper` — maps PostgreSQL types to Python/GraphQL types |
 | `introspection/dependency_graph.py` | `DependencyGraph` + `DependencyOrder` — tracks function/view dependencies for safe drop/recreate ordering |
-| `introspection/sql_ast.py` | `CTENode`, `JSONBKey` — lightweight SQL AST nodes for structured query analysis |
 | `introspector.py` | `SchemaIntrospector` — existing table/column/FK introspection via `pg_catalog` |
 
 #### 2.4 Database Operations
@@ -167,7 +165,6 @@ A package providing PostgreSQL introspection beyond tables and columns, used as 
 | `seed/`, `seed_executor.py`, `seed_applier.py`, `seed_validation/` | 5-level seed validation system with SAVEPOINT isolation |
 | `locking.py` | PostgreSQL advisory locking for safe concurrent operations |
 | `hooks/` | Migration lifecycle hooks (pre/post migration) |
-| `blue_green.py` | Blue-green deployment support |
 | `error_codes.py` | `ErrorCodeDefinition`, `ErrorCodeRegistry` — structured error codes with exit codes |
 | `error_handler.py`, `error_context.py` | Error handling utilities |
 
@@ -394,7 +391,7 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
 
 ### Decision 7: Introspection Layer as Shared Foundation
 
-**Choice**: `core/introspection/` provides `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`, and `sql_ast` as a reusable package.
+**Choice**: `core/introspection/` provides `FunctionIntrospector`, `TypeMapper` and `DependencyGraph` as a reusable package.
 
 **Rationale**: Multiple CLI commands (`migrate introspect`, code generation features) need PostgreSQL function and type metadata. A shared layer avoids duplicating `pg_catalog` queries and provides a stable API for future code generation features (GraphQL resolver stubs, type-safe wrappers, etc.).
 

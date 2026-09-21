@@ -26,10 +26,6 @@ SILENT = {
     "generate pgtap": "its stdout is the pgTAP SQL it generates",
     "generate stubs": "its stdout is the Python it generates; --format names that code's style",
     "hooks test": "its stdout is the notification it renders, through StdoutTransport",
-    "seed benchmark": (
-        "its figures are a fixed 10:1 ratio over line counts, not measurements; JSON "
-        "would hand them to a script as data (tracked in #346)"
-    ),
 }
 
 

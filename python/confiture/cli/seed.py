@@ -17,7 +17,7 @@ from confiture.cli.formatters.seed_formatter import format_apply_result
 from confiture.cli.helpers import connect, emit, error_console, is_json
 from confiture.cli.options import database_url_option, env_option, format_option, output_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
-from confiture.cli.seed_copy import DEFAULT_SEEDS_DIR, benchmark, convert
+from confiture.cli.seed_copy import DEFAULT_SEEDS_DIR, convert
 from confiture.config.environment import Environment
 from confiture.core.connection import DatabaseError
 from confiture.core.progress import ProgressManager
@@ -237,7 +237,6 @@ def _render_seed_validation(
         console.print("[green]✓ All seed files are valid![/green]")
         console.print("\n💡 Next steps:")
         console.print("  • Load data: confiture seed apply")
-        console.print("  • Show performance: confiture seed benchmark")
         console.print("  • Convert format: confiture seed convert")
 
 
@@ -285,7 +284,6 @@ def validate(
     RELATED COMMANDS:
       confiture seed apply     - Load seeds into database
       confiture seed convert   - Transform INSERT to COPY format
-      confiture seed benchmark - Compare VALUES vs COPY performance
       confiture build          - Build schema with optional validation
 
     DOCUMENTATION:
@@ -415,12 +413,10 @@ def apply(
 
     PERFORMANCE TIPS:
       • Use --copy-format if total rows > 50,000
-      • Use `confiture seed benchmark` to compare VALUES vs COPY
 
     RELATED COMMANDS:
       confiture seed validate   - Check seed data quality
       confiture seed convert    - Transform INSERT to COPY format
-      confiture seed benchmark  - Compare VALUES vs COPY performance
       confiture build           - Build schema, optionally apply seeds
 
     DOCUMENTATION:
@@ -546,7 +542,6 @@ def apply(
 
 
 seed_app.command("convert")(convert)
-seed_app.command("benchmark")(benchmark)
 
 
 @seed_app.command("generate")

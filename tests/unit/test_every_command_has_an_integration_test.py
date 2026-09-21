@@ -9,15 +9,12 @@ Invoking the *library* under a command does not count, and that is the point:
 ``confiture branch`` look covered while no test has ever typed it.
 
 ``NOT_RUN`` holds the leaves no such test runs, each with the reason it is allowed to
-stay that way; it is empty, so every leaf is a hole until a test runs it or an entry
-says why not. The test is a map while it is ``xfail``: its failure lists the holes.
+stay that way. It is empty: every command confiture ships is run by its command line.
 """
 
 from __future__ import annotations
 
 import ast
-
-import pytest
 
 from tests.unit.docs.command_truth import REPO_ROOT, resolve, root
 
@@ -83,7 +80,6 @@ def test_not_run_entries_state_a_reason_and_name_a_leaf() -> None:
     assert set(NOT_RUN) <= LEAVES, set(NOT_RUN) - LEAVES
 
 
-@pytest.mark.xfail(strict=True, reason="a map of the commands no test runs by argv yet")
 def test_every_command_is_run_by_its_command_line() -> None:
     run = _run_leaves([path.read_text(encoding="utf-8") for path in RUNNERS], LEAVES)
     holes = sorted(LEAVES - run - set(NOT_RUN))
