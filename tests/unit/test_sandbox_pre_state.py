@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
+from confiture.core import live_catalog
+from confiture.core.schema_model import Column
 from confiture.testing.sandbox import MigrationSandbox, PreStateSimulationError
 
 # =============================================================================
@@ -179,73 +181,50 @@ class TestInPreStateContextManager:
 class TestSandboxHelperMethods:
     """Tests for sandbox helper methods (table_exists, column_exists, etc.)."""
 
-    def test_table_exists_returns_true_when_found(self, mock_connection):
+    # `table_exists` / `column_exists` ask `core/live_catalog`'s probes; what is
+    # tested here is what the sandbox does with the answer. What the probes answer
+    # on a real server is tests/integration/test_schema_snapshotter_live.py.
+
+    @staticmethod
+    def _sandbox(mock_connection) -> MigrationSandbox:
+        sandbox = MigrationSandbox(connection=mock_connection)
+        sandbox._active = True
+        sandbox.connection = mock_connection
+        return sandbox
+
+    def test_table_exists_returns_true_when_found(self, mock_connection, monkeypatch):
         """table_exists should return True when table is found."""
-        mock_cursor = mock_connection.cursor.return_value.__enter__.return_value
-        mock_cursor.fetchone.return_value = [True]
+        monkeypatch.setattr(live_catalog, "relation_exists", lambda *_a, **_k: True)
+        assert self._sandbox(mock_connection).table_exists("users") is True
 
-        sandbox = MigrationSandbox(connection=mock_connection)
-        sandbox._active = True
-        sandbox.connection = mock_connection
-
-        result = sandbox.table_exists("users")
-
-        assert result is True
-
-    def test_table_exists_returns_false_when_not_found(self, mock_connection):
+    def test_table_exists_returns_false_when_not_found(self, mock_connection, monkeypatch):
         """table_exists should return False when table is not found."""
-        mock_cursor = mock_connection.cursor.return_value.__enter__.return_value
-        mock_cursor.fetchone.return_value = [False]
+        monkeypatch.setattr(live_catalog, "relation_exists", lambda *_a, **_k: False)
+        assert self._sandbox(mock_connection).table_exists("nonexistent") is False
 
-        sandbox = MigrationSandbox(connection=mock_connection)
-        sandbox._active = True
-        sandbox.connection = mock_connection
-
-        result = sandbox.table_exists("nonexistent")
-
-        assert result is False
-
-    def test_table_exists_supports_custom_schema(self, mock_connection):
+    def test_table_exists_supports_custom_schema(self, mock_connection, monkeypatch):
         """table_exists should support custom schema parameter."""
-        mock_cursor = mock_connection.cursor.return_value.__enter__.return_value
-        mock_cursor.fetchone.return_value = [True]
+        asked: list[tuple] = []
 
-        sandbox = MigrationSandbox(connection=mock_connection)
-        sandbox._active = True
-        sandbox.connection = mock_connection
+        def relation_exists(_conn, schema, name, kinds):
+            asked.append((schema, name, kinds))
+            return True
 
-        result = sandbox.table_exists("products", schema="catalog")
+        monkeypatch.setattr(live_catalog, "relation_exists", relation_exists)
+        assert self._sandbox(mock_connection).table_exists("products", schema="catalog") is True
+        # A view or a foreign table counts, as `information_schema.tables` counted it.
+        assert asked == [("catalog", "products", live_catalog.TABLE_LIKE)]
 
-        assert result is True
-        # Verify the schema was passed to the query
-        call_args = mock_cursor.execute.call_args
-        assert "catalog" in call_args[0][1]
-
-    def test_column_exists_returns_true_when_found(self, mock_connection):
+    def test_column_exists_returns_true_when_found(self, mock_connection, monkeypatch):
         """column_exists should return True when column is found."""
-        mock_cursor = mock_connection.cursor.return_value.__enter__.return_value
-        mock_cursor.fetchone.return_value = [True]
+        found = Column(name="email", folded="email", line=0)
+        monkeypatch.setattr(live_catalog, "column", lambda *_a, **_k: found)
+        assert self._sandbox(mock_connection).column_exists("users", "email") is True
 
-        sandbox = MigrationSandbox(connection=mock_connection)
-        sandbox._active = True
-        sandbox.connection = mock_connection
-
-        result = sandbox.column_exists("users", "email")
-
-        assert result is True
-
-    def test_column_exists_returns_false_when_not_found(self, mock_connection):
+    def test_column_exists_returns_false_when_not_found(self, mock_connection, monkeypatch):
         """column_exists should return False when column is not found."""
-        mock_cursor = mock_connection.cursor.return_value.__enter__.return_value
-        mock_cursor.fetchone.return_value = [False]
-
-        sandbox = MigrationSandbox(connection=mock_connection)
-        sandbox._active = True
-        sandbox.connection = mock_connection
-
-        result = sandbox.column_exists("users", "nonexistent")
-
-        assert result is False
+        monkeypatch.setattr(live_catalog, "column", lambda *_a, **_k: None)
+        assert self._sandbox(mock_connection).column_exists("users", "nonexistent") is False
 
     def test_get_row_count_returns_count(self, mock_connection):
         """get_row_count should return the row count."""

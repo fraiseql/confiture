@@ -195,35 +195,17 @@ class DataValidator:
     def check_foreign_key_integrity(self, table_name: str, _fk_column: str) -> bool:
         """Check if foreign key values in a column all have valid references.
 
+        A placeholder: it reads neither the data nor the schema and answers
+        ``True``. It looked the table's foreign key up and discarded the answer,
+        so no caller has ever seen anything else; ``constraints_valid()`` is the
+        check that asks PostgreSQL.
+
         Args:
             table_name: Table to check (schema.table format)
-            _fk_column: Foreign key column name (unused in simplified implementation)
+            _fk_column: Foreign key column name
 
         Returns:
-            True if all FK values are valid, False otherwise
+            True
         """
-        try:
-            with self.connection.cursor() as cur:
-                # Get the table and column info
-                cur.execute(
-                    """
-                    SELECT constraint_name, confrelid::regclass, confkey
-                    FROM pg_constraint
-                    WHERE contype = 'f'
-                      AND conrelid = %s::regclass
-                    """,
-                    (table_name,),
-                )
-                fk_info = cur.fetchone()
-
-                if not fk_info:
-                    # No foreign key constraint found
-                    return True
-
-                # Simple check: just verify the constraint is valid
-                # More detailed check would require analyzing actual data
-                return True
-
-        except psycopg.Error:
-            # If validation fails, assume it's valid (prefer false negatives)
-            return True
+        del table_name  # kept in the signature: callers pass it by keyword
+        return True
