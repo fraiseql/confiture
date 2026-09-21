@@ -6,11 +6,40 @@ Useful for pre-commit hooks and CI/CD pipelines.
 
 import re
 from pathlib import Path
+from typing import assert_never
 
 from confiture.core.ddl_objects import BODY_KINDS
 from confiture.core.function_signature_checker import FunctionSignatureChecker
 from confiture.core.git import GitRepository
 from confiture.core.git_schema import GitSchemaDiffer
+from confiture.core.schema_change import (
+    CheckConstraintAdded,
+    CheckConstraintDropped,
+    ColumnAdded,
+    ColumnDefaultChanged,
+    ColumnDropped,
+    ColumnNullabilityChanged,
+    ColumnRenamed,
+    ColumnTypeChanged,
+    EnumTypeAdded,
+    EnumTypeDropped,
+    EnumValuesChanged,
+    ForeignKeyAdded,
+    ForeignKeyDropped,
+    IndexAdded,
+    IndexDropped,
+    ObjectAdded,
+    ObjectDropped,
+    ObjectReplaced,
+    SchemaChange,
+    SequenceAdded,
+    SequenceDropped,
+    TableAdded,
+    TableDropped,
+    TableRenamed,
+    UniqueConstraintAdded,
+    UniqueConstraintDropped,
+)
 from confiture.exceptions import GitError
 from confiture.models.git import MigrationAccompanimentReport
 
@@ -19,18 +48,58 @@ _FUNC_CONTENT_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
-#: The change types that are a routine redefined in place — a *body* edit by
-#: another name. ``--require-migration-bodies`` (#178) reports these and is off
-#: by default, so the gate drops them unless that flag is on: reporting them
-#: unconditionally would turn a deliberate opt-in into an always-on check.
-#: Adding and dropping a routine are not here. They are the object's
-#: *existence*, which nothing else in this gate reports, and which #288 is about.
-_BODY_CHANGE_TYPES = frozenset(f"REPLACE_{kind.upper()}" for kind in BODY_KINDS)
+
+def is_body_change(change: SchemaChange) -> bool:
+    """Whether *change* is a routine redefined in place — a *body* edit by another name.
+
+    ``--require-migration-bodies`` (#178) reports these and is off by default, so
+    the gate drops them unless that flag is on: reporting them unconditionally
+    would turn a deliberate opt-in into an always-on check. Adding and dropping a
+    routine are not body changes. They are the object's *existence*, which nothing
+    else in this gate reports, and which #288 is about.
+    """
+    match change:
+        case ObjectReplaced(ref=ref):
+            return ref.kind in BODY_KINDS
+        case ObjectAdded() | ObjectDropped():
+            return False
+        case TableAdded() | TableDropped() | TableRenamed():
+            return False
+        case (
+            ColumnAdded()
+            | ColumnDropped()
+            | ColumnRenamed()
+            | ColumnTypeChanged()
+            | ColumnNullabilityChanged()
+            | ColumnDefaultChanged()
+        ):
+            return False
+        case (
+            IndexAdded()
+            | IndexDropped()
+            | ForeignKeyAdded()
+            | ForeignKeyDropped()
+            | CheckConstraintAdded()
+            | CheckConstraintDropped()
+            | UniqueConstraintAdded()
+            | UniqueConstraintDropped()
+        ):
+            return False
+        case (
+            EnumTypeAdded()
+            | EnumTypeDropped()
+            | EnumValuesChanged()
+            | SequenceAdded()
+            | SequenceDropped()
+        ):
+            return False
+        case _:
+            assert_never(change)
 
 
-def _without_body_changes(changes: list) -> list:
+def _without_body_changes(changes: list[SchemaChange]) -> list[SchemaChange]:
     """The changes the gate acts on when ``--require-migration-bodies`` is off."""
-    return [change for change in changes if change.to_wire().type not in _BODY_CHANGE_TYPES]
+    return [change for change in changes if not is_body_change(change)]
 
 
 class MigrationAccompanimentChecker:

@@ -98,14 +98,14 @@ class TestMigrationGeneratorEdgeCases:
         # Test DROP_COLUMN (reverse is ADD, from the definition the change carries)
         change = ColumnDropped("users", spelled("old_field", "TEXT", nullable=False))
         sql = generator._change_to_down_sql(change)
-        assert sql == "ALTER TABLE users ADD COLUMN old_field TEXT NOT NULL"
+        assert sql == "ALTER TABLE users ADD COLUMN old_field TEXT NOT NULL;"
 
         # Test RENAME_COLUMN (reverse names)
         change = ColumnRenamed("users", "full_name", "display_name")
         sql = generator._change_to_down_sql(change)
         assert "RENAME COLUMN display_name TO full_name" in sql
 
-        # Test DROP_TABLE (reverse is warning)
+        # Test DROP_TABLE (reverse needs the columns)
         change = TableDropped(table("old_table"))
         sql = generator._change_to_down_sql(change)
         assert sql is None  # nothing to recreate from without the columns

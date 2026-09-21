@@ -22,9 +22,9 @@ if TYPE_CHECKING:
 from confiture.core.change_set.models import (
     _ALTER_COLUMN_TYPE_DETAIL,
     _DEFAULT_SCHEMA,
-    _TIER_BY_DIRECTION,
     _TIER_BY_KIND,
     ChangeEntry,
+    tier_for_type_change,
 )
 
 
@@ -116,10 +116,7 @@ class _Context:
                 lock=lock,
             )
         rewrite_note = "rewrites the table" if lock.rewrites_table else "no rewrite"
-        tier = _TIER_BY_DIRECTION[direction]
-        if tier is RiskTier.REVERSIBLE and lock.rewrites_table:
-            # Safe for the data, but an ACCESS EXCLUSIVE heap rewrite all the same.
-            tier = RiskTier.LOCK_RISKY
+        tier = tier_for_type_change(direction, rewrites_table=lock.rewrites_table)
         return ChangeEntry(
             kind="alter_column_type",
             object=target or self.source or "unknown",

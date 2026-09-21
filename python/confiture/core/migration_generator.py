@@ -16,11 +16,10 @@ from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core.change_set import classify_statements
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.risk_tier import RiskTier, worst_tier
-from confiture.core.schema_change import SchemaChange, SchemaDiff, TableAdded, TableDropped
+from confiture.core.schema_change import SchemaChange, SchemaDiff
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX
 from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.exceptions import DifferError, ExternalGeneratorError, UnsafeOperationError
-from confiture.models.schema import WireChange
 
 
 def _execute_call(sql: str) -> str:
@@ -28,13 +27,6 @@ def _execute_call(sql: str) -> str:
     if "\n" in sql or '"' in sql:
         return f'        self.execute("""{sql}""")'
     return f'        self.execute("{sql}")'
-
-
-def _restore_column(change: WireChange) -> str | None:
-    """``ADD COLUMN`` with the definition the differ captured, or nothing to restore from."""
-    if not change.old_value:
-        return None
-    return f"ALTER TABLE {change.table} ADD COLUMN {change.column} {change.old_value}"
 
 
 def _tier_of(statement: str) -> RiskTier | None:
@@ -55,24 +47,6 @@ def _with_tier(statement: str, *, floor: RiskTier | None = None) -> str:
     if tier is None:
         return statement
     return f"-- {DIRECTIVE_PREFIX}tier {tier.value}\n{statement}"
-
-
-def _rename_target(change: WireChange, key: str) -> str:
-    """The bare half of a ``RENAME_TABLE`` — what ``RENAME TO`` will accept.
-
-    ``ALTER TABLE a.t RENAME TO a.t2`` is a syntax error: PostgreSQL's
-    ``RENAME TO`` takes a bare name, and the operation that moves a table
-    between schemas is ``SET SCHEMA``. The differ pairs renames within one
-    schema (there is no other kind) and carries both bare names in ``details``
-    beside the qualified spellings, so neither direction has to take a
-    qualifier apart.
-
-    *key* is ``new_name`` going up and ``old_name`` coming down. A change built
-    by hand carries no ``details`` and falls back to the value itself, which for
-    an unqualified schema is the same string.
-    """
-    fallback = change.new_value if key == "new_name" else change.old_value
-    return (change.details or {}).get(key) or fallback or ""
 
 
 def _terminated(sql: str) -> str:
@@ -464,102 +438,17 @@ class {class_name}(Migration):
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
-    # Change types delegated to DifferSQLGenerator (destructive ops emit warning comments)
-    _DELEGATED_UP_TYPES = frozenset(
-        {
-            "ADD_TABLE",
-            "ADD_INDEX",
-            "DROP_INDEX",
-            "ADD_FOREIGN_KEY",
-            "DROP_FOREIGN_KEY",
-            "ADD_CHECK_CONSTRAINT",
-            "DROP_CHECK_CONSTRAINT",
-            "ADD_UNIQUE_CONSTRAINT",
-            "DROP_UNIQUE_CONSTRAINT",
-            "ADD_ENUM_TYPE",
-            "DROP_ENUM_TYPE",
-            "CHANGE_ENUM_VALUES",
-            "ADD_SEQUENCE",
-            "DROP_SEQUENCE",
-            # Objects carried as whole definitions (#288). Without these the
-            # generator writes `-- WARNING: no SQL derived` for a view whose
-            # entire definition the differ is holding.
-            "ADD_VIEW",
-            "DROP_VIEW",
-            "REPLACE_VIEW",
-            "ADD_MATVIEW",
-            "DROP_MATVIEW",
-            "REPLACE_MATVIEW",
-            "ADD_FUNCTION",
-            "DROP_FUNCTION",
-            "REPLACE_FUNCTION",
-            "ADD_PROCEDURE",
-            "DROP_PROCEDURE",
-            "REPLACE_PROCEDURE",
-            "ADD_AGGREGATE",
-            "DROP_AGGREGATE",
-            "REPLACE_AGGREGATE",
-            "ADD_DOMAIN",
-            "DROP_DOMAIN",
-            "ADD_TYPE",
-            "DROP_TYPE",
-            # REPLACE_DOMAIN and REPLACE_TYPE are deliberately absent. Neither
-            # has a single statement in PostgreSQL — a domain's constraints and
-            # a composite's attributes are altered one at a time, and dropping
-            # either takes every column that uses it. `_up_statements` writes
-            # `-- WARNING: no SQL derived for: …` for them, which is the
-            # generator's existing way of saying "this changed, you write it".
-        }
-    )
-
     def _change_to_up_sql(self, change: SchemaChange) -> str | None:
-        """Convert schema change to SQL for up migration.
+        """The statement *change* is, or ``None`` when none is derived.
 
-        Args:
-            change: Schema change
-
-        Returns:
-            SQL string or None if not applicable
+        A drop the renderer will not write unforced comes back as the warning that
+        says so, which is where a destructive change is left to the author.
         """
-        wire = change.to_wire()
-        if wire.type == "DROP_TABLE":
-            return f"DROP TABLE {wire.table}"
-
-        elif wire.type == "RENAME_TABLE":
-            return f"ALTER TABLE {wire.old_value} RENAME TO {_rename_target(wire, 'new_name')}"
-
-        elif wire.type == "ADD_COLUMN":
-            col_def = wire.new_value if wire.new_value else "TEXT"
-            return f"ALTER TABLE {wire.table} ADD COLUMN {wire.column} {col_def}"
-
-        elif wire.type == "DROP_COLUMN":
-            return f"ALTER TABLE {wire.table} DROP COLUMN {wire.column}"
-
-        elif wire.type == "RENAME_COLUMN":
-            return f"ALTER TABLE {wire.table} RENAME COLUMN {wire.old_value} TO {wire.new_value}"
-
-        elif wire.type == "CHANGE_COLUMN_TYPE":
-            return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} TYPE {wire.new_value}"
-
-        elif wire.type == "CHANGE_COLUMN_NULLABLE":
-            if wire.new_value == "false":
-                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} SET NOT NULL"
-            else:
-                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} DROP NOT NULL"
-
-        elif wire.type == "CHANGE_COLUMN_DEFAULT":
-            if wire.new_value:
-                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} SET DEFAULT {wire.new_value}"
-            else:
-                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} DROP DEFAULT"
-
-        elif wire.type in self._DELEGATED_UP_TYPES:
-            try:
-                return self._sql_gen.generate_up(change).rstrip("\n")
-            except UnsafeOperationError as exc:
-                return f"-- WARNING: {exc}"
-
-        return None
+        try:
+            sql = self._sql_gen.generate_up(change)
+        except UnsafeOperationError as exc:
+            return f"-- WARNING: {exc}"
+        return None if sql is None else sql.rstrip("\n")
 
     def run_external_generator(
         self,
@@ -643,62 +532,11 @@ class {class_name}(Migration):
 
         return (resolved, output_path)
 
-    def _recreate_table(self, change: SchemaChange) -> str | None:
-        """``CREATE TABLE`` from the table the differ captured, or nothing to recreate from."""
-        if not isinstance(change, TableDropped) or not change.table.columns:
-            return None
-        return self._sql_gen.generate_up(TableAdded(change.table)).rstrip("\n")
-
     def _change_to_down_sql(self, change: SchemaChange) -> str | None:
-        """Convert schema change to SQL for down migration (reverse).
+        """The statement that undoes *change*, or ``None`` when no rollback is derived."""
+        sql = self._sql_gen.generate_down(change)
+        return sql.rstrip("\n") if sql else None
 
-        Args:
-            change: Schema change
-
-        Returns:
-            SQL string or None if not applicable
-        """
-        wire = change.to_wire()
-        if wire.type == "ADD_TABLE":
-            return f"DROP TABLE {wire.table}"
-
-        elif wire.type == "DROP_TABLE":
-            return self._recreate_table(change)
-
-        elif wire.type == "RENAME_TABLE":
-            return f"ALTER TABLE {wire.new_value} RENAME TO {_rename_target(wire, 'old_name')}"
-
-        elif wire.type == "ADD_COLUMN":
-            return f"ALTER TABLE {wire.table} DROP COLUMN {wire.column}"
-
-        elif wire.type == "DROP_COLUMN":
-            return _restore_column(wire)
-
-        elif wire.type == "RENAME_COLUMN":
-            return f"ALTER TABLE {wire.table} RENAME COLUMN {wire.new_value} TO {wire.old_value}"
-
-        elif wire.type == "CHANGE_COLUMN_TYPE":
-            return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} TYPE {wire.old_value}"
-
-        elif wire.type == "CHANGE_COLUMN_NULLABLE":
-            if wire.old_value == "false":
-                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} SET NOT NULL"
-            else:
-                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} DROP NOT NULL"
-
-        elif wire.type == "CHANGE_COLUMN_DEFAULT":
-            if wire.old_value:
-                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} SET DEFAULT {wire.old_value}"
-            else:
-                return f"ALTER TABLE {wire.table} ALTER COLUMN {wire.column} DROP DEFAULT"
-
-        elif wire.type in self._DELEGATED_UP_TYPES:
-            sql = self._sql_gen.generate_down(change).rstrip("\n")
-            return sql if sql else None
-
-        return None
-
-    # Public spellings: the CLI must not reach into private names.
     def check_name_conflict(self, name: str) -> list[Path]:
         """Public spelling of :meth:`_check_name_conflict`."""
         return self._check_name_conflict(name)

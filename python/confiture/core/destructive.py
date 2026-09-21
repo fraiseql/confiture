@@ -17,14 +17,39 @@ ordering picks the worst of a set, policy maps each tier to an action.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import Literal, assert_never
 
 from confiture.core.risk_tier import RiskTier
+from confiture.core.schema_change import (
+    CheckConstraintAdded,
+    CheckConstraintDropped,
+    ColumnAdded,
+    ColumnDefaultChanged,
+    ColumnDropped,
+    ColumnNullabilityChanged,
+    ColumnRenamed,
+    ColumnTypeChanged,
+    EnumTypeAdded,
+    EnumTypeDropped,
+    EnumValuesChanged,
+    ForeignKeyAdded,
+    ForeignKeyDropped,
+    IndexAdded,
+    IndexDropped,
+    ObjectAdded,
+    ObjectDropped,
+    ObjectReplaced,
+    SchemaChange,
+    SequenceAdded,
+    SequenceDropped,
+    TableAdded,
+    TableDropped,
+    TableRenamed,
+    UniqueConstraintAdded,
+    UniqueConstraintDropped,
+)
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX, directives
 from confiture.exceptions import ValidationError
-
-if TYPE_CHECKING:
-    from confiture.core.schema_change import SchemaChange
 
 Policy = Literal["gated", "allow", "forbid"]
 
@@ -64,7 +89,6 @@ def is_gated(sql: str) -> bool:
 
 
 IRREVERSIBLE_DIRECTIVE = "irreversible"
-DATA_LOSS_TYPES = frozenset({"DROP_TABLE", "DROP_COLUMN"})
 
 
 def irreversible_line(reason: str) -> str:
@@ -93,8 +117,47 @@ def irreversible_reason(change: SchemaChange, *, has_down: bool) -> str | None:
 
 
 def data_loss_reason(change: SchemaChange) -> str | None:
-    """``data`` for a change whose rows no down file can bring back; ``None`` otherwise."""
-    return "data" if change.to_wire().type in DATA_LOSS_TYPES else None
+    """``data`` for a change whose rows no down file can bring back; ``None`` otherwise.
+
+    A dropped table or column is recreated by its down file, never its rows. Every
+    other kind says so here, one arm per group, so a new kind is a decision.
+    """
+    match change:
+        case TableDropped() | ColumnDropped():
+            return "data"
+        case TableAdded() | TableRenamed():
+            return None
+        case (
+            ColumnAdded()
+            | ColumnRenamed()
+            | ColumnTypeChanged()
+            | ColumnNullabilityChanged()
+            | ColumnDefaultChanged()
+        ):
+            return None
+        case (
+            IndexAdded()
+            | IndexDropped()
+            | ForeignKeyAdded()
+            | ForeignKeyDropped()
+            | CheckConstraintAdded()
+            | CheckConstraintDropped()
+            | UniqueConstraintAdded()
+            | UniqueConstraintDropped()
+        ):
+            return None
+        case (
+            EnumTypeAdded()
+            | EnumTypeDropped()
+            | EnumValuesChanged()
+            | SequenceAdded()
+            | SequenceDropped()
+        ):
+            return None
+        case ObjectAdded() | ObjectDropped() | ObjectReplaced():
+            return None
+        case _:
+            assert_never(change)
 
 
 def irreversible_reasons(sql: str) -> list[str]:

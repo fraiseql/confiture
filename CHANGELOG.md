@@ -162,6 +162,20 @@ comparisons say today, are now tests in its own suite.
   in the model goldens (`*.wire.json`) for every tree and for a new fixture pair,
   `tests/fixtures/every_change/`, whose diff is every kind once.
 
+- **Every kind of schema change is answered for, and declares its risk tier**
+  (owner decision 6). `change_set.diff_tiers.tier_of(change)` reads the change set's own
+  table and rules — `tier_for_add_column`, `tier_for_add_constraint`,
+  `tier_for_create_index`, and `tier_for_type_change`, extracted from
+  `alter_column_type` so both callers share it — for a difference between two trees.
+  `ChangeEntry` and its `CONTRACT_VERSION` are untouched; fraisier-core sees what it saw.
+  `tests/unit/test_schema_change_tiers.py` holds each tier equal to the one the change
+  set gives the SQL confiture writes for the change, except where the difference knows
+  more than the statement, declared and measured: a type change's source type, and an
+  addition written `CREATE OR REPLACE`. `tests/unit/test_schema_change_is_exhaustive.py`
+  fails on a kind without an up rendering, a down rendering, a destructive verdict, an
+  accompaniment class or a tier; on a `match` over the union without `case _:
+  assert_never(change)`; and on a wire `type` string spelled outside the serialiser.
+
 ### Changed
 
 - **One live reader, enforced.** Every schema fact confiture reads from a live database
@@ -250,6 +264,22 @@ comparisons say today, are now tests in its own suite.
   `DiffResult.changes` and `MigrationAccompanimentReport.ddl_changes` now hold — the
   same six attributes, so a caller reading `change.type` there reads what it always did.
 
+- **One renderer.** `core/differ_sql.py` renders every kind, up and down, with a
+  `match` per group; `MigrationGenerator` writes the files and renders nothing. It used
+  to write eight kinds itself while `differ_sql` kept renderings of those eight that no
+  migration ever reached — `DROP TABLE IF EXISTS … CASCADE` refused without `force`,
+  `ADD COLUMN IF NOT EXISTS`, a `USING` cast — and those are gone. `generate_up` /
+  `generate_down` return `None` for *no SQL derived* / *no rollback derived* rather
+  than raising `NotImplementedError`, and a generic trigger/extension/schema/policy
+  rendering only `DifferSQLGenerator` could reach is gone with them: a migration never
+  carried it. `.sql` migrations are byte-identical; a `.py` migration's
+  `self.execute("…")` now ends its statement with `;` for those eight kinds.
+- **A column and a constraint become text in one place**, `core/ddl_clauses.py`, which
+  takes the model's own `Column` and `Constraint`.
+- **`confiture diff`'s `summary` is the diff's own** (`SchemaDiff.summary()`, counting
+  variants); `DiffResult` carries it. Its text output colours an added or dropped view,
+  routine or trigger as it colours a table, where they were yellow.
+
 ### Fixed
 
 - **An extra view, routine or trigger is reported in a schema the tree declares one
@@ -322,8 +352,22 @@ comparisons say today, are now tests in its own suite.
   tables already were (`tests/unit/test_differ_order_is_stable.py` runs eight hash
   seeds).
 
+- **An added enum type is created with its labels.** Every one was generated as
+  `CREATE TYPE mood AS ENUM ()` — valid, applied cleanly, and a type holding nothing —
+  because the renderer read the labels from a key the differ never wrote; the only test
+  of it built that key by hand. A label holding a quote is now escaped, there and in
+  `ALTER TYPE … ADD VALUE`.
+
 ### Known, not fixed
 
+- What `migrate diff --generate` writes still has gaps the typed renderer makes
+  visible, each unchanged by this release (#335): the down of an added foreign key,
+  CHECK or UNIQUE is a `-- WARNING:` line, not a `DROP CONSTRAINT`; a dropped enum type
+  or sequence is not recreated by its down, and an added sequence loses its options; an
+  `ALTER COLUMN … TYPE` carries no `USING`, so `text` → `integer` fails at apply; a
+  dropped view, type or sequence is refused with "Re-run with --force", a flag
+  `migrate diff` does not have, whatever `--allow-destructive` says; and a trigger,
+  extension, schema or policy derives no SQL at all.
 - Prep-seed level 5's NOT NULL check reads `attnotnull`, as drift does, and so no longer
   sees a NOT NULL that a column has only through its **domain** type.
 - `testing/fixtures/data_validator.validate_indexes` tests `indexdef ~ 'INVALID'`, which

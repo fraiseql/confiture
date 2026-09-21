@@ -315,7 +315,6 @@ max-returns = 8
 "python/confiture/core/linting/libraries/sox.py" = ["PLR2004"]
 "python/confiture/core/linting/schema_linter.py" = ["PLR0913", "PLR2004"]
 "python/confiture/core/lock_profile.py" = ["PLR0911"]
-"python/confiture/core/migration_generator.py" = ["PLR0911"]
 "python/confiture/core/migration_grant_extractor.py" = ["PLR0913", "PLR2004"]
 "python/confiture/core/psql_applier.py" = ["PLR2004"]
 "python/confiture/core/replica/classifier.py" = ["PLR0911"]

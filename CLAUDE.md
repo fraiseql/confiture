@@ -440,11 +440,12 @@ an integration test pins, because that is what makes omitting it safe rather tha
 lossy. `NOT VALID` + `VALIDATE CONSTRAINT` needs the name, so an unnamed foreign
 key is added in one statement carrying the module's `-- review:` idiom.
 
-`_constraint_body` is the one clause builder: the text after `ADD` in an `ALTER`
-and the element in a `CREATE TABLE` are the same text. Writing it twice is how
-the reader came to disagree with itself. `differ_sql.column_body` is its sibling
+`ddl_clauses.constraint_body` is the one clause builder: the text after `ADD` in an
+`ALTER` and the element in a `CREATE TABLE` are the same text. Writing it twice is
+how the reader came to disagree with itself. `ddl_clauses.column_body` is its sibling
 for a column — `CREATE TABLE`, `ADD COLUMN` and a dropped column's declaration —
-and writes an identity and a generated expression as the schema declared them.
+and writes an identity and a generated expression as the schema declared them. Both
+take the model's own `Constraint` and `Column`.
 
 **A column's type has a spelling too** (since 1.14.0). `Column.type` is the
 canonical `ColumnType` — the identity — and `Column.raw_sql_type` is **the type
@@ -496,8 +497,22 @@ The wire is `to_wire()` → `models.schema.WireChange`, the six fields and one l
 JSON payload has always carried, byte for byte (the `*.wire.json` model goldens, over
 every tree and over `tests/fixtures/every_change/`, a pair whose diff is every kind
 once). The wire's `type` strings (`"ADD_COLUMN"`) are a serialisation: read the variant,
-not the string. A renderer reads the wire only at its boundary until it matches on the
-variant.
+not the string.
+
+Every reader of a change `match`es on the variant, one function per group
+(`TableChange`, `ColumnChange`, `TableObjectChange`, `EnumOrSequenceChange`,
+`DefinitionChange` — a 25-arm `match` is past the complexity budget), each ending in
+`case _: assert_never(change)`. `core/differ_sql.py` is the **one renderer**, up and
+down; `MigrationGenerator` writes the files and renders nothing. The destructive
+verdict is `destructive.data_loss_reason`, the accompaniment class
+`git_accompaniment.is_body_change`, and the risk tier `change_set.diff_tiers.tier_of` —
+the change set's own table and rules read for a difference, with `ChangeEntry` and its
+`CONTRACT_VERSION` untouched (owner decision 6). `tests/unit/test_schema_change_is_exhaustive.py`
+fails on a kind any of them does not answer, on a `match` over the union without the
+`assert_never` arm, and on a wire `type` string spelled outside the serialiser;
+`test_schema_change_tiers.py` holds each tier equal to what the change set says about
+the SQL confiture writes for it, except two declared, measured disagreements (a type
+change's source type; an addition written `CREATE OR REPLACE`).
 
 Prep-seed level 2 reads the qualifier too (1.14.0, #317): `SchemaTables` keys
 `(schema, name)` and routes on `Table.schema`, not on
@@ -655,13 +670,14 @@ confiture/
 │   │   ├── cor_extractor.py      # Extract CREATE OR REPLACE targets from pending migrations
 │   │   ├── cte_debugger.py       # CTE step-through debugger: execute each CTE in isolation to find failur…
 │   │   ├── data_assertions.py    # A `RAISE EXCEPTION` guarded on data inside a migration, which `migrate…
+│   │   ├── ddl_clauses.py        # Where a column and a constraint become DDL text: one clause each, every…
 │   │   ├── ddl_objects.py        # The schema objects a DDL tree defines, and what makes two of them the s…
 │   │   ├── ddl_walk.py           # Helpers shared by the AST walkers that read DDL, and what a statement m…
 │   │   ├── dependent_objects.py  # Live dependent-objects checker for ``migrate preflight``
 │   │   ├── desired_state.py      # Where ``migrate diff`` reads its desired state from (issue #196)
 │   │   ├── destructive.py        # The destructive gate: who may generate, and who may apply, a migration…
 │   │   ├── differ.py             # Schema differ for detecting database schema changes
-│   │   ├── differ_sql.py         # Generate DDL SQL from a schema change: the up and the down each variant…
+│   │   ├── differ_sql.py         # Render a schema change as DDL: the up and the down each variant is, in…
 │   │   ├── drift.py              # Schema drift detection for Confiture
 │   │   ├── dry_run.py            # SAVEPOINT-based dry-run execution with guaranteed rollback
 │   │   ├── error_context.py      # Enhanced error context system for user-friendly error messages
@@ -732,7 +748,7 @@ confiture/
 │   │   ├── view_manager.py       # View dependency manager for ALTER COLUMN TYPE migrations
 │   │   ├── _migrator/            # (19 modules)
 │   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
-│   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (4 modules)
+│   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (5 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
 │   │   ├── idempotency/          # Idempotency validation for SQL migrations (17 modules)
 │   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (6 modules)

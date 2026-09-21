@@ -81,7 +81,7 @@ class TestMigrationGenerator:
 
         assert 'self.execute("""CREATE TABLE IF NOT EXISTS users (' in content
         assert "id integer NOT NULL" in content and "email text" in content
-        assert 'self.execute("DROP TABLE users")' in content
+        assert 'self.execute("DROP TABLE users;")' in content
 
     def test_generate_migration_for_drop_table(self, tmp_path):
         """Should generate correct SQL for DROP_TABLE."""

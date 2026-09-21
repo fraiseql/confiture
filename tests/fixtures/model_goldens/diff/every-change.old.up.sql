@@ -43,10 +43,10 @@ CREATE TABLE IF NOT EXISTS ren.tb_orders_archive (
 );
 
 -- confiture:tier additive
-CREATE TYPE mood AS ENUM ();
+CREATE TYPE mood AS ENUM ('sad', 'ok');
 
 -- confiture:tier additive
-CREATE TYPE retired_status AS ENUM ();
+CREATE TYPE retired_status AS ENUM ('a', 'b');
 
 -- confiture:tier additive
 CREATE SEQUENCE IF NOT EXISTS retired_seq;

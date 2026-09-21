@@ -773,41 +773,19 @@ class DiffResult:
 
     has_changes: bool
     changes: list[WireChange]
+    #: How many changes of each counted kind, as the diff adds itself up.
+    summary: dict[str, int] = field(default_factory=dict)
 
     @classmethod
     def from_schema_diff(cls, diff: WireDiff) -> DiffResult:
-        """Construct from a ``SchemaDiff``: its changes, as the wire carries them."""
-        return cls(has_changes=diff.has_changes(), changes=diff.wire())
-
-    def _build_summary(self) -> dict[str, int]:
-        changes = self.changes
-        return {
-            "tables_added": sum(1 for c in changes if c.type == "ADD_TABLE"),
-            "tables_dropped": sum(1 for c in changes if c.type == "DROP_TABLE"),
-            "tables_renamed": sum(1 for c in changes if c.type == "RENAME_TABLE"),
-            "columns_added": sum(1 for c in changes if c.type == "ADD_COLUMN"),
-            "columns_dropped": sum(1 for c in changes if c.type == "DROP_COLUMN"),
-            "indexes_added": sum(1 for c in changes if c.type == "ADD_INDEX"),
-            "indexes_dropped": sum(1 for c in changes if c.type == "DROP_INDEX"),
-            "foreign_keys_added": sum(1 for c in changes if c.type == "ADD_FOREIGN_KEY"),
-            "foreign_keys_dropped": sum(1 for c in changes if c.type == "DROP_FOREIGN_KEY"),
-            "constraints_added": sum(
-                1 for c in changes if c.type in ("ADD_CHECK_CONSTRAINT", "ADD_UNIQUE_CONSTRAINT")
-            ),
-            "constraints_dropped": sum(
-                1 for c in changes if c.type in ("DROP_CHECK_CONSTRAINT", "DROP_UNIQUE_CONSTRAINT")
-            ),
-            "enum_types_added": sum(1 for c in changes if c.type == "ADD_ENUM_TYPE"),
-            "enum_types_dropped": sum(1 for c in changes if c.type == "DROP_ENUM_TYPE"),
-            "sequences_added": sum(1 for c in changes if c.type == "ADD_SEQUENCE"),
-            "sequences_dropped": sum(1 for c in changes if c.type == "DROP_SEQUENCE"),
-        }
+        """Construct from a ``SchemaDiff``: its changes as the wire carries them, and its summary."""
+        return cls(has_changes=diff.has_changes(), changes=diff.wire(), summary=diff.summary())
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to dict for JSON output."""
         return {
             "has_changes": self.has_changes,
-            "summary": self._build_summary(),
+            "summary": self.summary,
             "changes": [
                 {
                     "type": c.type,
