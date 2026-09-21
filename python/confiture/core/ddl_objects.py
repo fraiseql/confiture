@@ -25,7 +25,7 @@ not what the object is.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from pglast.stream import RawStream
@@ -41,6 +41,9 @@ from confiture.core.linting.inventory import (
     signatures_match,
     split_names,
 )
+
+# Defined with the rest of the model; re-exported for the callers that name it here.
+from confiture.core.schema_model import ObjectRef
 
 #: Which parse nodes this module turns into objects, and why each one that
 #: creates something is absent. A node that is neither tracked nor named here
@@ -254,42 +257,6 @@ _IDEMPOTENT_ATTR: dict[str, str] = {
     "CreateTableAsStmt": "if_not_exists",
     "CreateFunctionStmt": "replace",
 }
-
-
-@dataclass(frozen=True)
-class ObjectRef:
-    """A **bucket**: what makes two ``CREATE`` statements *candidates* for one object.
-
-    ``schema`` is folded and defaulted, so an unqualified ``CREATE VIEW v`` and
-    ``CREATE VIEW public.v`` are one object — what
-    :data:`~confiture.core.linting.inventory.DEFAULT_SCHEMA` is for. ``name`` is
-    folded for the same reason; :attr:`display` keeps the spelling a change
-    prints.
-
-    ``signature`` is the inventory's :func:`~confiture.core.linting.inventory.signature_bucket`
-    — the canonical *names* of a routine's input parameter types, without their
-    own schemas. It is deliberately not the full signature: a dict key cannot
-    express "a type schema written on one side and left off the other still
-    matches", so ``fn(bigint)`` and ``fn(int8)`` must land in one bucket and
-    :func:`~confiture.core.linting.inventory.signatures_match` decides inside it.
-    Keying on the full signature reported an added and a dropped function where
-    one routine had been respelled (CLAUDE.md, #275).
-    """
-
-    kind: str
-    schema: str
-    name: str
-    signature: tuple[str, ...] | None
-    #: The spelling a change prints. Out of the key deliberately: it carries the
-    #: *signature as written*, and ``fn(bigint)`` and ``fn(int8)`` are one
-    #: routine written two ways (#275). Keying on it reported a dropped and an
-    #: added function where a type had merely been respelled.
-    display: str = field(compare=False)
-
-    @property
-    def qualified(self) -> str:
-        """How a change names the object: the spelling the author wrote."""
-        return self.display
 
 
 @dataclass(frozen=True)
