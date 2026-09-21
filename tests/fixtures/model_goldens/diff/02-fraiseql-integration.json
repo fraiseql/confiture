@@ -84,6 +84,12 @@
       "path": "<to>"
     },
     "destructive_gate": "gated",
-    "warnings": []
+    "warnings": [],
+    "ok": true,
+    "command": "migrate diff",
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
   }
 }

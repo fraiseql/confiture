@@ -19,6 +19,8 @@
       }
     ],
     "count": 2,
+    "ok": true,
+    "command": "migrate validate",
     "parser": {
       "pglast": "8.4",
       "pg_major": 18

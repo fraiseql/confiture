@@ -24,6 +24,8 @@
       }
     ],
     "body_drift_missing_source": [],
+    "ok": true,
+    "command": "migrate fix-signatures",
     "parser": {
       "pglast": "8.4",
       "pg_major": 18

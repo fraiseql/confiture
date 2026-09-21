@@ -12,6 +12,8 @@
         "create_sql": "-- Live, a second overload taking integer is left behind (a stale overload).\nCREATE FUNCTION public.fn_stale(p_id bigint) RETURNS bigint\nLANGUAGE sql AS $$ SELECT p_id $$"
       }
     ],
+    "ok": true,
+    "command": "migrate fix-signatures",
     "parser": {
       "pglast": "8.4",
       "pg_major": 18

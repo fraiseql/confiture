@@ -157,10 +157,10 @@ def fail(
         typer.Exit: always, with ``ConfiturError.exit_code``.
     """
     # Reason: import cycle (the module is partially initialised when this import runs at module level)
-    from confiture.cli.helpers import _output_json
+    from confiture.cli.helpers import console as default_console
 
     # Reason: import cycle (the module is partially initialised when this import runs at module level)
-    from confiture.cli.helpers import console as default_console
+    from confiture.cli.helpers import emit
 
     # Reason: import cycle (the module is partially initialised when this import runs at module level)
     from confiture.cli.helpers import error_console as default_error_console
@@ -168,7 +168,7 @@ def fail(
     err = coerce_to_confiture_error(error)
 
     if json_mode:
-        _output_json(emit_error_json(err), output_file, console or default_console)
+        emit(emit_error_json(err), output_file, console or default_console)
     else:
         print_error_to_console(err, error_console or default_error_console)
 

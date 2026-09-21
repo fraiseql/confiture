@@ -8,11 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from confiture.cli.dry_run import print_json_report, save_json_report, save_text_report
-from confiture.cli.helpers import (
-    console,
-    error_console,
-)
+from confiture.cli.dry_run import save_text_report
+from confiture.cli.helpers import console, emit, error_console
 
 
 def _render_dry_run_analysis(
@@ -38,11 +35,7 @@ def _render_dry_run_analysis(
         estimate_rows=estimate_rows,
     )
     if format_output == "json":
-        if output_file:
-            save_json_report(summary, output_file)
-            error_console.print(f"\n[green]✅ Report saved to: {output_file.absolute()}[/green]")
-        else:
-            print_json_report(summary)
+        emit(summary, output_file, error_console)
         return
 
     text = render_dry_run_text(summary, rollback=rollback)

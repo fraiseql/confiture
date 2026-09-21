@@ -35,7 +35,7 @@ import typer
 import yaml
 
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import _output_json, console, error_console, is_json
+from confiture.cli.helpers import console, emit, error_console, is_json
 from confiture.cli.options import format_option
 from confiture.config.environment import DatabaseConfig, Environment
 from confiture.core.syncer import AnonymizationRule, ProductionSyncer, SyncConfig, TableSelection
@@ -201,7 +201,7 @@ def sync(
 
     total = sum(results.values())
     if json_mode:
-        _output_json(
+        emit(
             SyncResult(
                 anonymized=anonymize, tables=dict(results), warnings=list(warnings)
             ).to_dict(),

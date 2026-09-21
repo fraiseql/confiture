@@ -327,6 +327,12 @@
           "keyword": "EXTENSION"
         }
       }
-    ]
+    ],
+    "ok": true,
+    "command": "diff",
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
   }
 }

@@ -26,14 +26,13 @@ Run during a maintenance window.  See ``docs/guides/bootstrap.md``.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import psycopg
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import console, is_json
+from confiture.cli.helpers import console, emit, is_json
 from confiture.cli.options import format_option
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
@@ -216,14 +215,12 @@ def bootstrap(
 
 def _render_check(plan, output_format: str) -> None:
     if output_format == "json":
-        print(
-            json.dumps(
-                {
-                    "mode": "check",
-                    "drift": not plan.is_empty,
-                    "plan": plan.to_dict(),
-                }
-            )
+        emit(
+            {
+                "mode": "check",
+                "drift": not plan.is_empty,
+                "plan": plan.to_dict(),
+            }
         )
         return
     if plan.is_empty:
@@ -239,7 +236,7 @@ def _render_check(plan, output_format: str) -> None:
 
 def _render_dry_run(plan, output_format: str) -> None:
     if output_format == "json":
-        print(json.dumps({"mode": "dry-run", "plan": plan.to_dict()}))
+        emit({"mode": "dry-run", "plan": plan.to_dict()})
         return
     if plan.is_empty:
         console.print("[green]✅ Nothing to do — the plan is empty.[/green]")
@@ -252,7 +249,7 @@ def _render_dry_run(plan, output_format: str) -> None:
 
 def _render_apply(result, output_format: str) -> None:
     if output_format == "json":
-        print(json.dumps({"mode": "apply", **result.to_dict()}))
+        emit({"mode": "apply", **result.to_dict()})
         return
     if not result.applied_steps:
         console.print("[green]✅ Bootstrap is already up to date.[/green]")

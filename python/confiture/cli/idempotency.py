@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from confiture.cli.helpers import _emit_hint, _output_json, console
+from confiture.cli.helpers import _emit_hint, console, emit
 from confiture.core.git import GitRepository
 from confiture.core.idempotency import IdempotencyFixer, IdempotencyValidator
 from confiture.core.idempotency.models import IdempotencyReport
@@ -662,7 +662,7 @@ def _fix_idempotency(
                 "files": [],
                 "hints": [],
             }
-            _output_json(result, output_file, console)
+            emit(result, output_file, console)
         else:
             console.print("[green]✅ No migration files found to fix[/green]")
         return
@@ -693,7 +693,7 @@ def _fix_idempotency(
         }
         if manual_report.has_warnings:
             result["warnings"] = manual_report.to_dict()["warnings"]
-        _output_json(result, output_file, console)
+        emit(result, output_file, console)
         return
 
     _render_fix_text(

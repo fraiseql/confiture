@@ -31,9 +31,11 @@ The asymmetry is the point, not an oversight.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import psycopg
@@ -473,3 +475,17 @@ def record_migration(connection: Any, table: pgsql.Composable, row: LedgerRow) -
                 applied_by,
             ),
         )
+
+
+def write_backup(rows: Any, table: str, directory: Path | None = None) -> Path:
+    """Write the ledger's *rows* to a JSON file in *directory* (the cwd), named after *table*.
+
+    A file called ``tb_confiture_backup_*.json`` holding ``audit.tb_migrations``
+    rows is actively misleading during a restore (#190), so the name is the
+    table's; ``.`` is not portable in a filename component, so a qualified name
+    is flattened.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = (directory or Path()) / f"{table.replace('.', '_')}_backup_{timestamp}.json"
+    path.write_text(json.dumps(rows, indent=2, default=str))
+    return path

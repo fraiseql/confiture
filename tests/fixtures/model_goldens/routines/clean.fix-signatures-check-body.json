@@ -5,6 +5,8 @@
     "message": "No signature or body drift detected.",
     "fixes_applied": 0,
     "body_drift_fixes_planned": 0,
+    "ok": true,
+    "command": "migrate fix-signatures",
     "parser": {
       "pglast": "8.4",
       "pg_major": 18

@@ -16,13 +16,12 @@ than the default migrator.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import _get_tracking_table, connect, console, is_json
+from confiture.cli.helpers import _get_tracking_table, connect, console, emit, is_json
 from confiture.cli.options import format_option
 from confiture.config._env_vars import expand_env_vars
 from confiture.core import migrator as _core_migrator
@@ -159,15 +158,13 @@ def migrate_apply_as(
         fail(exc, json_mode=json_mode)
 
     if output_format == "json":
-        print(
-            json.dumps(
-                {
-                    "success": True,
-                    "version": applied.version,
-                    "name": applied.name,
-                    "applied_by": role,
-                }
-            )
+        emit(
+            {
+                "success": True,
+                "version": applied.version,
+                "name": applied.name,
+                "applied_by": role,
+            }
         )
     else:
         console.print(

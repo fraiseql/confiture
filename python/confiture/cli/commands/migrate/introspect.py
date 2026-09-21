@@ -5,14 +5,13 @@ Split out of the monolithic migrate command modules.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import typer
 
 from confiture.cli.error_json import cli_boundary
-from confiture.cli.helpers import _get_tracking_table, console, is_json, open_connection
+from confiture.cli.helpers import _get_tracking_table, console, emit, is_json, open_connection
 from confiture.cli.options import format_option
 from confiture.core import baseline_detector as _core_baseline_detector
 from confiture.core import connection as _core_connection
@@ -85,14 +84,11 @@ def migrate_introspect(
 
         if not snapshots_dir.exists():
             if format_output == "json":
-                print(
-                    json.dumps(
-                        _introspect_payload(
-                            tb_present,
-                            detected_version=None,
-                            error="snapshots_dir not found",
-                        ),
-                        indent=2,
+                emit(
+                    _introspect_payload(
+                        tb_present,
+                        detected_version=None,
+                        error="snapshots_dir not found",
                     )
                 )
             else:
@@ -118,16 +114,13 @@ def migrate_introspect(
             break
 
         if format_output == "json":
-            print(
-                json.dumps(
-                    _introspect_payload(
-                        tb_present,
-                        detected_version=detected_version,
-                        detected_migration_name=detected_name,
-                        confidence="exact",
-                        recommendation=(f"confiture migrate baseline --through {detected_version}"),
-                    ),
-                    indent=2,
+            emit(
+                _introspect_payload(
+                    tb_present,
+                    detected_version=detected_version,
+                    detected_migration_name=detected_name,
+                    confidence="exact",
+                    recommendation=(f"confiture migrate baseline --through {detected_version}"),
                 )
             )
         else:
@@ -147,7 +140,7 @@ def migrate_introspect(
             if closest:
                 result["closest_version"] = closest[0]
                 result["closest_similarity"] = round(closest[1], 4)
-            print(json.dumps(result, indent=2))
+            emit(result)
         else:
             console.print("  [yellow]✗ No matching snapshot found[/yellow]")
             if closest:

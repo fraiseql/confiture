@@ -3,7 +3,6 @@
 Tests the dry-run mode helpers for CLI integration.
 """
 
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -11,8 +10,6 @@ from unittest.mock import Mock, patch
 from confiture.cli.dry_run import (
     ask_dry_run_execute_confirmation,
     display_dry_run_header,
-    print_json_report,
-    save_json_report,
     save_text_report,
     show_report_summary,
 )
@@ -76,112 +73,6 @@ class TestSaveTextReport:
 
             assert filepath.exists()
             assert filepath.read_text() == ""
-
-
-class TestSaveJsonReport:
-    """Test save_json_report function."""
-
-    def test_save_json_report_basic(self):
-        """Test saving basic JSON report."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filepath = Path(tmpdir) / "report.json"
-            data = {"key": "value", "number": 42}
-
-            save_json_report(data, filepath)
-
-            assert filepath.exists()
-            loaded = json.loads(filepath.read_text())
-            assert loaded == data
-
-    def test_save_json_report_nested(self):
-        """Test saving nested JSON report."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filepath = Path(tmpdir) / "report.json"
-            data = {
-                "metadata": {
-                    "version": "1.0",
-                    "timestamp": "2024-01-01",
-                },
-                "results": [1, 2, 3],
-            }
-
-            save_json_report(data, filepath)
-
-            loaded = json.loads(filepath.read_text())
-            assert loaded["metadata"]["version"] == "1.0"
-            assert loaded["results"] == [1, 2, 3]
-
-    def test_save_json_report_creates_parent_dirs(self):
-        """Test that parent directories are created."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filepath = Path(tmpdir) / "reports" / "dry_run" / "report.json"
-            data = {"test": True}
-
-            save_json_report(data, filepath)
-
-            assert filepath.exists()
-            assert filepath.parent.exists()
-
-    def test_save_json_report_formatting(self):
-        """Test that JSON is formatted with indentation."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filepath = Path(tmpdir) / "report.json"
-            data = {"nested": {"data": "here"}}
-
-            save_json_report(data, filepath)
-
-            content = filepath.read_text()
-            # Check for indentation (formatted JSON)
-            assert "  " in content or "\n" in content
-
-    def test_save_json_report_empty_dict(self):
-        """Test saving empty dictionary."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filepath = Path(tmpdir) / "report.json"
-
-            save_json_report({}, filepath)
-
-            loaded = json.loads(filepath.read_text())
-            assert loaded == {}
-
-    def test_save_json_report_arrays(self):
-        """Test saving JSON with arrays."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filepath = Path(tmpdir) / "report.json"
-            data = {"items": [1, 2, 3, 4, 5]}
-
-            save_json_report(data, filepath)
-
-            loaded = json.loads(filepath.read_text())
-            assert loaded["items"] == [1, 2, 3, 4, 5]
-
-
-class TestPrintJsonReport:
-    """Test print_json_report function."""
-
-    def test_print_json_report_basic(self):
-        """Test printing basic JSON report."""
-        data = {"key": "value"}
-
-        with patch("confiture.cli.dry_run.console") as mock_console:
-            print_json_report(data)
-            mock_console.print_json.assert_called_once()
-            _args, kwargs = mock_console.print_json.call_args
-            assert kwargs["data"] == data
-
-    def test_print_json_report_nested(self):
-        """Test printing nested JSON report."""
-        data = {"level1": {"level2": {"value": 42}}}
-
-        with patch("confiture.cli.dry_run.console") as mock_console:
-            print_json_report(data)
-            mock_console.print_json.assert_called_once_with(data=data)
-
-    def test_print_json_report_empty(self):
-        """Test printing empty JSON report."""
-        with patch("confiture.cli.dry_run.console") as mock_console:
-            print_json_report({})
-            mock_console.print_json.assert_called_once_with(data={})
 
 
 class TestShowReportSummary:
@@ -311,35 +202,3 @@ class TestDryRunIntegration:
             read_text = filepath.read_text()
 
             assert read_text == original_text
-
-    def test_save_and_read_json_report(self):
-        """Test saving and reading JSON report."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filepath = Path(tmpdir) / "report.json"
-            original_data = {
-                "status": "completed",
-                "unsafe_count": 0,
-                "time_ms": 150,
-            }
-
-            save_json_report(original_data, filepath)
-            read_data = json.loads(filepath.read_text())
-
-            assert read_data == original_data
-
-    def test_multiple_reports_same_directory(self):
-        """Test saving multiple reports to same directory."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            text_file = Path(tmpdir) / "report.txt"
-            json_file = Path(tmpdir) / "report.json"
-
-            text_data = "Text report"
-            json_data = {"type": "json"}
-
-            save_text_report(text_data, text_file)
-            save_json_report(json_data, json_file)
-
-            assert text_file.exists()
-            assert json_file.exists()
-            assert text_file.read_text() == text_data
-            assert json.loads(json_file.read_text()) == json_data

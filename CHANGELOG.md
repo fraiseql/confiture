@@ -14,8 +14,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Every command's JSON carries one envelope: `ok`, `command` and `parser`.** The
+  error path has been one writer since #145; the success path was 33 `json.dumps(`
+  sites in 18 modules, each choosing its indentation, its stream and whether to name
+  the parser. `cli/helpers.emit` is the one writer now. It adds `ok: true` (the command
+  produced its report — what the report *found* stays in its own fields, and a payload
+  that already carries an `ok`, as `migrate preflight`, `migrate verify` and
+  `verify-checksums` do, keeps its own), `command` (`migrate up`, `lint`) and
+  `parser`, each only when the payload lacks it and after every key it has: nothing is
+  renamed, nested or reordered. With `--output` the JSON goes to the file and one
+  human line to stdout, as before. `migrate diff`, `diff`, `lint-unified`, `bootstrap`,
+  `apply-as`, `schema-to-schema`, `seed`, `generate` and `debug cte` gain `parser`
+  with the rest. `tests/unit/test_one_success_envelope.py` fails on a `json.dump`,
+  `json.dumps` or `print_json` under `cli/` outside the emitter; the pgGit modules and
+  `migrate estimate`, whose payload is a top-level array, are exempt by reason.
+- **The published schemas declare the envelope.** Twenty of them closed their root
+  with `additionalProperties: false`, so a key the emitter adds and the schema lacks
+  makes the schema reject the payload it describes. All 28 payload schemas declare
+  `ok`, `command` and `parser` — in every `oneOf` branch — as optional properties, and
+  `tests/unit/json_schemas/test_envelope_is_declared.py` holds that. The model goldens
+  (`diff`, `drift`, `routines`) are refreshed for the three added keys and nothing
+  else.
+
 ### Changed
 
+- **A JSON report is written once, not wrapped by Rich.** `seed validate`,
+  `seed generate`, `seed validate --prep-seed`'s formatter, `migrate up --dry-run`
+  and `debug cte` printed their JSON through the Rich console, which wraps a long
+  line at the terminal width and breaks the payload;
+  `formatters/common.save_json` / `print_json` and `dry_run.save_json_report` /
+  `print_json_report` are deleted, and `lint --format json` no longer goes through a
+  formatter of its own. `migrate rebuild --backup-tracking`'s ledger backup file is
+  written by `core.ledger.write_backup`.
 - **No part of the migrator names the engine or the session it serves.** Ten modules
   — the engine's `state`, `apply`, `rollback`, `baseline`, `discovery` and `policy`, and
   the session's `apply_loop`, `rollback_loop`, `replay` and `reporting` — took their host

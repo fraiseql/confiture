@@ -26,10 +26,10 @@ from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     _emit_hint,
     _get_tracking_table,
-    _output_json,
     _resolve_config,
     connect,
     console,
+    emit,
     error_console,
     is_json,
     open_connection,
@@ -652,7 +652,7 @@ def migrate_preflight(
         payload = _preflight_payload(all_issues, summary, change_set, exit_code)
         if dependent_report is not None:
             payload["dependent_analysis"] = dependent_report.to_dict()
-        _output_json(payload, output_file, console)
+        emit(payload, output_file, console)
     else:
         _display_against_result(run.result, format_type, console)
         _display_change_set(change_set, console)
@@ -734,7 +734,7 @@ def _static_preflight(
                 "has_blocking": False,
                 "skip_reason": "no_preflight_db",
             }
-        _output_json(payload, output_file, console)
+        emit(payload, output_file, console)
     else:
         _render_static_preflight(result, summary, change_set, all_issues, check_dependents)
     if exit_code:

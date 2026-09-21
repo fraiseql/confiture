@@ -1,13 +1,12 @@
 """Top-level diff command: compare two SQL schema files."""
 
-import json
 from pathlib import Path
 
 import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.diff_formatter import print_diff_text
-from confiture.cli.helpers import console, is_json
+from confiture.cli.helpers import console, emit, is_json
 from confiture.cli.options import format_option
 from confiture.core.differ import SchemaDiffer
 from confiture.exceptions import DifferError, SchemaError
@@ -67,7 +66,7 @@ def schema_diff(
     result = DiffResult.from_schema_diff(diff)
 
     if format_type == "json":
-        print(json.dumps(result.to_dict(), indent=2))
+        emit(result.to_dict())
     else:
         print_diff_text(result, console)
 

@@ -6,6 +6,8 @@
   "type": "object",
   "required": ["ok", "window_safe", "summary", "issues"],
   "properties": {
+    "command": {"type": "string", "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture` (`migrate up`, `lint`)."},
+    "parser": {"type": "object", "additionalProperties": false, "required": ["pglast", "pg_major"], "description": "What parsed the SQL behind this payload: the installed pglast release and the PostgreSQL grammar major it embeds. In the envelope since 1.16.0.", "properties": {"pglast": {"type": "string"}, "pg_major": {"type": "integer"}}},
     "ok": {
       "type": "boolean",
       "description": "False if any error-severity issue (e.g. a failed replay), or — under --strict — any warning."

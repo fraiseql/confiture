@@ -206,31 +206,9 @@ def save_text_report(report_text: str, filepath: Path) -> None:
     """
 ```
 
-### Function: save_json_report
-
-```python
-def save_json_report(report_data: dict, filepath: Path) -> None:
-    """Save JSON report to file.
-
-    Args:
-        report_data: Report dictionary to save
-        filepath: Path to save report to
-
-    Raises:
-        IOError: If file write fails
-    """
-```
-
-### Function: print_json_report
-
-```python
-def print_json_report(report_data: dict) -> None:
-    """Print JSON report to console.
-
-    Args:
-        report_data: Report dictionary to print
-    """
-```
+A JSON report has no helper of its own: every command writes machine output
+through `confiture.cli.helpers.emit(payload, output_file)`, which adds the
+envelope (`ok`, `command`, `parser`) and writes to the file or to stdout.
 
 ### Function: show_report_summary
 
@@ -303,7 +281,6 @@ with psycopg.connect("postgresql://localhost/mydb") as conn:
 from pathlib import Path
 from confiture.cli.dry_run import (
     save_text_report,
-    save_json_report,
     display_dry_run_header,
     ask_dry_run_execute_confirmation,
 )
@@ -316,7 +293,6 @@ display_dry_run_header("testing")
 
 # Save reports
 save_text_report("Migration analysis results...", Path("reports/analysis.txt"))
-save_json_report({"success": True, "time_ms": 250}, Path("reports/analysis.json"))
 
 # Ask for confirmation before real execution
 if ask_dry_run_execute_confirmation():

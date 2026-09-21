@@ -5,8 +5,6 @@ Split out of the monolithic migrate command modules.
 
 from __future__ import annotations
 
-import json as json_module
-from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -17,6 +15,7 @@ from confiture.cli.formatters.migrate_formatter import format_rebuild_result
 from confiture.cli.helpers import console, is_json
 from confiture.cli.options import format_option
 from confiture.core import migrator as _core_migrator
+from confiture.core.ledger import write_backup
 from confiture.core.migrator import find_duplicate_migration_versions
 from confiture.exceptions import ConfigurationError, MigrationError
 
@@ -83,13 +82,7 @@ def _rebuild_preconditions(
 
 def _write_tracking_backup(rows: Any, tracking_table: str, format_output: str) -> None:
     """Dump the ledger rows next to the cwd, named after the table they came from (#190)."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # A file called tb_confiture_backup_*.json containing audit.tb_migrations
-    # rows is actively misleading during a restore. "." is not portable in a
-    # filename component, so a qualified name is flattened.
-    ledger_name = tracking_table.replace(".", "_")
-    backup_path = Path(f"{ledger_name}_backup_{timestamp}.json")
-    backup_path.write_text(json_module.dumps(rows, indent=2, default=str))
+    backup_path = write_backup(rows, tracking_table)
     if format_output == "text":
         console.print(f"[cyan]📦 Tracking table backed up to {backup_path}[/cyan]\n")
 

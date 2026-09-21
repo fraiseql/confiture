@@ -27,10 +27,10 @@ from confiture.cli.helpers import (
     _emit_hint,
     _find_orphaned_sql_files,
     _get_tracking_table,
-    _output_json,
     _print_duplicate_versions_warning,
     _print_orphaned_files_warning,
     console,
+    emit,
     error_console,
     open_connection,
 )
@@ -240,7 +240,7 @@ def _report_missing_migrations_dir(
     if output_format == "json":
         # The status payload shape, empty, with the situation as its warning —
         # not a hand-built error envelope (exit 0: nothing is wrong with the DB).
-        _output_json(
+        emit(
             {
                 "tracking_table": None,
                 "resolved_table": None,
@@ -275,7 +275,7 @@ def _report_no_migrations(
         }
         if orphaned:
             result["orphaned_migrations"] = [f.name for f in orphaned]
-        _output_json(result, output_file, console)
+        emit(result, output_file, console)
     else:
         console.print("[yellow]No migrations found.[/yellow]")
         if orphaned:
@@ -468,7 +468,7 @@ def _render_status_json(
     if rebuild_reasons:
         result["rebuild_recommended"] = True
         result["rebuild_reasons"] = rebuild_reasons
-    _output_json(result, output_file, console)
+    emit(result, output_file, console)
 
 
 def _render_status_table(

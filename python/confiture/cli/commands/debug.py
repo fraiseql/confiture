@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import psycopg
@@ -10,7 +9,7 @@ import typer
 from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
-from confiture.cli.helpers import console, is_json
+from confiture.cli.helpers import console, emit, is_json
 from confiture.cli.options import format_option
 from confiture.core.cte_debugger import CTEDebugger
 from confiture.exceptions import ConfigurationError
@@ -93,7 +92,7 @@ def debug_cte(
         conn.close()
 
     if format_type == "json":
-        console.print(json.dumps(session.to_dict(), indent=2, default=str))
+        emit(session.to_dict())
         if not session.all_succeeded:
             # success-signal: the debug session ran fine and is reporting that a
             # CTE in the user's query failed — not a confiture-domain error.

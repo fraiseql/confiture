@@ -6,7 +6,6 @@ These commands validate seed files for consistency and correctness.
 from __future__ import annotations
 
 import asyncio
-import json
 import sys
 from pathlib import Path
 from typing import Annotated, Any
@@ -18,7 +17,7 @@ from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.seed_formatter import format_apply_result
-from confiture.cli.helpers import connect, is_json
+from confiture.cli.helpers import connect, emit, is_json
 from confiture.cli.options import format_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.config.environment import Environment
@@ -121,18 +120,8 @@ def _validate_prep_seed(
         orchestrator = PrepSeedOrchestrator(config)
         report = orchestrator.run()
 
-        # For JSON format, bypass Rich console to avoid color codes
         if format_ == "json":
-            report_dict = report.to_dict()
-            json_output = json.dumps(report_dict, indent=2)
-
-            if output:
-                output.write_text(json_output)
-                console.print(f"[green]✓ Report saved to {output}[/green]")
-            else:
-                # Use print() directly to avoid Rich color codes
-
-                print(json_output, file=sys.stdout)
+            emit(report.to_dict(), output, console)
         else:
             # Use formatter for text and CSV
             format_prep_seed_report(report, format_, output, console)
@@ -260,13 +249,7 @@ def _render_seed_validation(
             "files_scanned": len(all_files),
             "has_violations": len(all_violations) > 0,
         }
-        json_output = json.dumps(report_dict, indent=2)
-
-        if output:
-            output.write_text(json_output)
-            console.print(f"[green]✓ Report saved to {output}[/green]")
-        else:
-            console.print(json_output)
+        emit(report_dict, output, console)
         return
 
     # Text format (default)
@@ -963,7 +946,7 @@ def seed_generate(
         )
 
     if format_type == "json":
-        console.print(json.dumps(result.to_dict(), indent=2))
+        emit(result.to_dict())
     elif result.success:
         console.print(f"[green]Seed stub generated: {result.output_path}[/green]")
         console.print(

@@ -7,7 +7,6 @@ severity-based grouping.
 from __future__ import annotations
 
 import csv
-import json
 from io import StringIO
 from pathlib import Path
 
@@ -15,6 +14,7 @@ from rich.console import Console
 from rich.console import Console as _Console
 from rich.table import Table
 
+from confiture.cli.helpers import emit
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedReport,
     ViolationSeverity,
@@ -132,16 +132,7 @@ def output_json(
         output: Optional file path to write JSON
         console: Rich console for output
     """
-    report_dict = report.to_dict()
-    json_output = json.dumps(report_dict, indent=2)
-
-    if output:
-        output.write_text(json_output)
-        console.print(f"[green]✓ Report saved to {output}[/green]")
-    else:
-        # Use console.print with no_color to output raw JSON
-        # without ANSI codes
-        console.print(json_output, soft_wrap=False)
+    emit(report.to_dict(), output, console)
 
 
 def output_csv(

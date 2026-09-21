@@ -61,6 +61,15 @@
           "type": "integer"
         }
       }
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. What the report found is in its own fields; a command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture` (`migrate up`, `lint`)."
     }
   }
 }

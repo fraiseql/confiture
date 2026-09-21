@@ -163,6 +163,8 @@ def test_single_git_check_json_envelope_is_unchanged(
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert set(payload.pop("parser")) == {"pglast", "pg_major"}  # additive since 0.50.0
+    assert payload.pop("ok") is True  # the envelope, additive since 1.16.0
+    assert payload.pop("command") == "migrate validate"
     assert payload == {"status": "passed", "checks": ["drift"]}
 
 
