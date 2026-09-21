@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import psycopg
 import typer
@@ -32,6 +32,9 @@ from confiture.core.function_signature_drift import (
     schemas_to_scan,
 )
 from confiture.core.sql_lexer import split_statements
+
+if TYPE_CHECKING:
+    from confiture.core.schema_model import Routine
 
 
 def _extract_function_source(sql: str, schema: str, name: str) -> str | None:
@@ -330,8 +333,8 @@ def _plan_signature_fixes(
 
 def _plan_body_fixes(
     check_body: bool,
-    declared: list[Any],
-    live: list[Any],
+    declared: list[Routine],
+    live: list[Routine],
     source_sql: str,
     fix_blocks: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[str]]:
