@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from confiture.models.results import BuildWarning
+from confiture.models.warnings import BuildWarning
 
 
 def qualified_name(schema: str | None, name: str) -> str:

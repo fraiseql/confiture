@@ -77,8 +77,9 @@ from confiture.core.unified_linter import UnifiedLinter
 from confiture.core.validation.config_loaders import load_security_lint as _lsl
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError
 from confiture.models.lint import LintSeverity
-from confiture.models.results import BuildResult, BuildWarning
+from confiture.models.results import BuildResult
 from confiture.models.unified_lint import UnifiedLintIssue, UnifiedLintResult
+from confiture.models.warnings import BuildWarning
 
 # Valid output formats for linting (re-exported so main.py can keep LINT_FORMATS there)
 LINT_FORMATS = ("table", "json", "csv")

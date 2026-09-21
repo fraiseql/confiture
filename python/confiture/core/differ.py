@@ -33,7 +33,6 @@ from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import Constraint
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.core.type_lattice import same_type
-from confiture.models.results import BuildWarning
 from confiture.models.schema import (
     CheckConstraint,
     Column,
@@ -49,6 +48,7 @@ from confiture.models.schema import (
     UniqueConstraint,
     qualified_name,
 )
+from confiture.models.warnings import BuildWarning
 
 # ---------------------------------------------------------------------------
 # Module-level constants: compiled once for performance

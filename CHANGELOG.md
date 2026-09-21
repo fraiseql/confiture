@@ -60,6 +60,11 @@ comparisons say today, are now tests in its own suite.
 
 ### Changed
 
+- **`models/` imports one way.** `BuildWarning` moves to `models/warnings.py` (still
+  importable from `models.results`) and `VerifyResult` to `models/results.py` (still
+  importable from `core.migration_verifier`): `models/schema` imported `models/results`
+  while `results` annotated with `schema`, and `results` annotated with a `core` module —
+  the back-edges that put the leaf package inside a 40-module cycle.
 - **`migrate diff --generate` writes an identity column and a generated column as the
   schema declared them.** `id BIGINT GENERATED ALWAYS AS IDENTITY` generated
   `id BIGINT`, and `slug TEXT GENERATED ALWAYS AS (data ->> 'slug') STORED` generated
