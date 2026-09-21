@@ -87,11 +87,6 @@ class OrchestrationConfig:
     level_5_mode: str = "standard"
 
 
-#: What ``information_schema.tables`` lists, which is what "a table exists" meant
-#: here: a table, a partitioned table, a view, a foreign table.
-_TABLE_LIKE = ("r", "p", "v", "f")
-
-
 class PrepSeedOrchestrator:
     """Orchestrates 5-level prep-seed validation with progressive execution.
 
@@ -291,7 +286,7 @@ class PrepSeedOrchestrator:
             def table_exists(schema: str, table: str) -> bool:
                 try:
                     return live_catalog.relation_exists(
-                        connection, schema, table, kinds=_TABLE_LIKE
+                        connection, schema, table, kinds=live_catalog.TABLE_LIKE
                     )
                 except psycopg.Error:
                     return False

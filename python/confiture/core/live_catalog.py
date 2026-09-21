@@ -277,9 +277,21 @@ SELECT EXISTS (
 
 _INDEX_EXISTS = """
 SELECT EXISTS (
-    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = %s AND c.relname = %s AND c.relkind IN ('i', 'I')
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_index i ON i.indexrelid = c.oid
+    JOIN pg_class t ON t.oid = i.indrelid
+    WHERE n.nspname = %s AND c.relname = %s AND (%s::text IS NULL OR t.relname = %s::text)
 )
+"""
+
+_CONSTRAINTS_OF = """
+SELECT k.conname, pg_get_constraintdef(k.oid)
+FROM pg_constraint k
+JOIN pg_class c ON c.oid = k.conrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = %s AND c.relname = %s AND k.contype IN ('p', 'u', 'c', 'f')
+ORDER BY k.conname
 """
 
 #: Every relation a column can belong to: tables, views, matviews, foreign tables.
@@ -297,6 +309,10 @@ WHERE a.attnum > 0
 
 #: The ``relkind`` letters of a table, partitioned or not.
 TABLE_KINDS = ("r", "p")
+
+#: What ``information_schema.tables`` lists, which is what "a table exists" has
+#: meant to its callers: a table, a partitioned table, a view, a foreign table.
+TABLE_LIKE = ("r", "p", "v", "f")
 
 #: ``pg_constraint.contype`` by the model's constraint kind.
 _CONTYPE = {"primary_key": "p", "unique": "u", "check": "c", "foreign_key": "f"}
@@ -328,8 +344,20 @@ def constraint_exists(
     return bool(_scalar(conn, _CONSTRAINT_EXISTS, (schema, table, name, contype, contype)))
 
 
-def index_exists(conn: psycopg.Connection, schema: str, name: str) -> bool:
-    return bool(_scalar(conn, _INDEX_EXISTS, (schema, name)))
+def index_exists(
+    conn: psycopg.Connection, schema: str, name: str, table: str | None = None
+) -> bool:
+    """Whether an index called *name* exists in *schema*, on *table* if given."""
+    return bool(_scalar(conn, _INDEX_EXISTS, (schema, name, table, table)))
+
+
+def constraints(conn: psycopg.Connection, schema: str, table: str) -> tuple[Constraint, ...]:
+    """One table's constraints, read the way :func:`read` reads them."""
+    with conn.cursor() as cursor:
+        cursor.execute(_CONSTRAINTS_OF, (schema, table))
+        rows = cursor.fetchall()
+    read_back = (_constraint(name, definition) for name, definition in rows)
+    return tuple(c for c in read_back if c is not None)
 
 
 def columns(conn: psycopg.Connection, schema: str, table: str) -> tuple[Column, ...]:

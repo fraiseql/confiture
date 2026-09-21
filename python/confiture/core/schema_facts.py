@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
 __all__ = ["SchemaFacts", "collect_schema_facts"]
 
+
 @dataclass(frozen=True)
 class SchemaFacts:
     """Facts read from a live database, all optional.

@@ -149,6 +149,12 @@ def parse_type(raw: str | None) -> SqlType | None:
         # PostgreSQL's own default, and what `format_type` reports back.
         precision = 1
     scale = int(match.group("s")) if match.group("s") else None
+    if written == "float":
+        # SQL's `float(p)` is a precision in *bits*: up to 24 is `real`, and a bare
+        # `float` or anything wider is `double precision` — PostgreSQL's rule. The
+        # parser folds it for DDL; text a person writes (a precondition) does not.
+        narrow = precision is not None and precision <= _FLOAT_WIDTHS["real"]
+        name, precision = ("real" if narrow else "double precision"), None
     return SqlType(
         name=name,
         precision=precision,
