@@ -459,7 +459,7 @@ def user_schemas(conn: psycopg.Connection) -> list[str]:
 
 
 #: Every index on a table, a partitioned table or a materialized view — the ones
-#: backing a constraint included, which :func:`read` leaves out. This is the set
+#: backing a constraint included, which :func:`read` flags. This is the set
 #: ``pg_indexes`` lists.
 _ALL_INDEXES = """
 SELECT n.nspname, t.relname, pg_get_indexdef(i.indexrelid)
