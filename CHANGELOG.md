@@ -74,6 +74,16 @@ comparisons say today, are now tests in its own suite.
   measured in `test_parity_normalisations_are_measured.py`, which fails the day the
   disagreement stops existing. All eight trees are equal.
 
+- **Drift reports a lost constraint and a changed default** (#308, #309). The three
+  `DriftType` members published and never emitted are delivered: `missing_constraint`
+  (warning) and `extra_constraint` (info) — matched by name where the DDL named the
+  constraint and by what it says where PostgreSQL named it — and `default_mismatch`
+  (warning). A default is compared as a **parse tree**, not as text: PostgreSQL stores
+  `'x'` as `'x'::text`, `-7` as `'-7'::integer`, `lower('ABC')` as
+  `lower('ABC'::text)`. Measured over 23 defaults on PostgreSQL 18.4, text agrees on
+  10 and the parse tree on all 23 — so no throwaway database is built on the server
+  drift inspects.
+
 ### Changed
 
 - **One live reader, enforced.** Every schema fact confiture reads from a live database
@@ -94,6 +104,15 @@ comparisons say today, are now tests in its own suite.
 - **⚠️ An extension's own tables are no longer read as the project's** by `introspect`,
   the plugin's snapshot, a `TableExists` precondition, restore's `--min-tables` count,
   the rollback tester, or `sync`'s table list.
+- **Drift compares the schema model with itself.** `confiture drift` and
+  `migrate validate --check-live-drift` read the expected side into the schema model
+  (the lint inventory) and the live side into the same model (`live_catalog`), and
+  compare values. ⚠️ For a library caller: `SchemaDriftDetector.compare_schemas` takes two
+  `SchemaModel`s, `compare_with_expected` takes a `SchemaModel` and names tables
+  `schema.table`, and `schema_analyzer.SchemaInfo` / `get_schema_info` are gone — the
+  dict-of-dicts that was the only place the two sides met. `ExpectedSchema.info` is
+  `ExpectedSchema.model`. The model golden gains `Index.backs_constraint`, the one fact
+  only the catalog knows (an index PostgreSQL created for a PRIMARY KEY or UNIQUE).
 - **`migrate diff` compares the schema model; it no longer parses.**
   `SchemaDiffer.parse_schema` hands its one `pglast.parse_sql` to the lint inventory,
   which reads a tree whole, and compares the `core/schema_model` types it builds —
@@ -148,6 +167,9 @@ comparisons say today, are now tests in its own suite.
 
 ### Fixed
 
+- **An index the DDL left unnamed is no longer reported missing and extra at once.**
+  Drift keyed it `None` and reported PostgreSQL's generated name as an extra index; it
+  now matches by keys, uniqueness and method.
 - **Reading a large schema is no longer quadratic in its size.** Every object and
   column asked for its line by counting newlines from the start of the text — a
   2.9 MB tree spent 5 of its 11 seconds there. `confiture lint` always paid it;

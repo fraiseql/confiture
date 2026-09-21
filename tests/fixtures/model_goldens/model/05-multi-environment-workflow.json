@@ -178,7 +178,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_projects_status",
@@ -188,7 +189,8 @@
           ],
           "unique": false,
           "where": "status <> 'deleted'",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_projects_owner_status",
@@ -199,7 +201,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_projects_created_at",
@@ -209,7 +212,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     },
@@ -470,7 +474,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tasks_assigned_to",
@@ -480,7 +485,8 @@
           ],
           "unique": false,
           "where": "assigned_to IS NOT NULL",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tasks_status",
@@ -490,7 +496,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tasks_priority",
@@ -500,7 +507,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tasks_due_date",
@@ -510,7 +518,8 @@
           ],
           "unique": false,
           "where": "due_date IS NOT NULL",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tasks_project_status",
@@ -521,7 +530,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tasks_assignee_status",
@@ -532,7 +542,8 @@
           ],
           "unique": false,
           "where": "assigned_to IS NOT NULL",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     },
@@ -709,7 +720,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_users_created_at",
@@ -719,7 +731,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_users_display_name_trgm",
@@ -729,7 +742,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "gin"
+          "method": "gin",
+          "backs_constraint": false
         }
       ]
     }

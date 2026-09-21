@@ -249,7 +249,8 @@
           ],
           "unique": true,
           "where": "identifier IS NOT NULL",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_comment_post",
@@ -259,7 +260,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_comment_user",
@@ -269,7 +271,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_comment_parent",
@@ -279,7 +282,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_comment_created",
@@ -289,7 +293,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_comment_post_created",
@@ -300,7 +305,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_comment_user_created",
@@ -311,7 +317,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_comment_top_level",
@@ -322,7 +329,8 @@
           ],
           "unique": false,
           "where": "fk_parent_comment IS NULL",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     },
@@ -636,7 +644,8 @@
           ],
           "unique": true,
           "where": "identifier IS NOT NULL",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_post_user",
@@ -646,7 +655,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_post_slug",
@@ -656,7 +666,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_post_published",
@@ -666,7 +677,8 @@
           ],
           "unique": false,
           "where": "is_published = TRUE",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_post_created",
@@ -676,7 +688,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_post_tags",
@@ -686,7 +699,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "gin"
+          "method": "gin",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_post_user_published",
@@ -697,7 +711,8 @@
           ],
           "unique": false,
           "where": "is_published = TRUE",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_post_published_created",
@@ -708,7 +723,8 @@
           ],
           "unique": false,
           "where": "is_published = TRUE",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_post_unpublished",
@@ -719,7 +735,8 @@
           ],
           "unique": false,
           "where": "is_published = FALSE",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     },
@@ -967,7 +984,8 @@
           ],
           "unique": true,
           "where": "identifier IS NOT NULL",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_user_email",
@@ -977,7 +995,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_user_username",
@@ -987,7 +1006,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_user_active",
@@ -997,7 +1017,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_user_created",
@@ -1007,7 +1028,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tb_user_active_username",
@@ -1017,7 +1039,8 @@
           ],
           "unique": false,
           "where": "is_active = TRUE",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     },
@@ -1120,7 +1143,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_comment_author",
@@ -1130,7 +1154,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     },
@@ -1247,7 +1272,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_post_published",
@@ -1257,7 +1283,8 @@
           ],
           "unique": false,
           "where": "is_published = TRUE",
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_post_created",
@@ -1267,7 +1294,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_post_content_search",
@@ -1277,7 +1305,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "gin"
+          "method": "gin",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_post_title_search",
@@ -1287,7 +1316,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "gin"
+          "method": "gin",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_post_title_trgm",
@@ -1297,7 +1327,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "gin"
+          "method": "gin",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_post_list",
@@ -1307,7 +1338,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     },
@@ -1424,7 +1456,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_user_username",
@@ -1434,7 +1467,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_user_active",
@@ -1444,7 +1478,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_user_username_trgm",
@@ -1454,7 +1489,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "gin"
+          "method": "gin",
+          "backs_constraint": false
         },
         {
           "name": "idx_tv_user_list",
@@ -1464,7 +1500,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     }

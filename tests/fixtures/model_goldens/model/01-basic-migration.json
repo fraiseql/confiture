@@ -126,7 +126,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_users_created_at",
@@ -136,7 +137,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         },
         {
           "name": "idx_users_display_name",
@@ -146,7 +148,8 @@
           ],
           "unique": false,
           "where": null,
-          "method": "btree"
+          "method": "btree",
+          "backs_constraint": false
         }
       ]
     }
