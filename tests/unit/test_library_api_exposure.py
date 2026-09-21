@@ -15,15 +15,6 @@ import confiture
 from confiture import _LAZY_IMPORTS
 
 # Names promoted to the public library surface.
-_PG_VERSION = (
-    "detect_version",
-    "parse_version_string",
-    "check_version_compatibility",
-    "get_recommended_settings",
-    "PGVersionInfo",
-    "PGFeature",
-    "VersionAwareSQL",
-)
 _ROLLBACK_GEN = (
     "generate_rollback",
     "generate_rollback_script",
@@ -48,7 +39,7 @@ _ANONYMIZATION = (
     "register_strategy",
     "AnonymizationProfile",
 )
-_NEWLY_EXPOSED = _PG_VERSION + _ROLLBACK_GEN + _BUILTIN_HOOKS + _ANONYMIZATION
+_NEWLY_EXPOSED = _ROLLBACK_GEN + _BUILTIN_HOOKS + _ANONYMIZATION
 
 
 def test_newly_exposed_symbols_resolve() -> None:
@@ -56,12 +47,6 @@ def test_newly_exposed_symbols_resolve() -> None:
     for name in _NEWLY_EXPOSED:
         assert name in confiture.__all__, f"{name} missing from __all__"
         assert getattr(confiture, name) is not None
-
-
-def test_pg_version_detect_is_callable() -> None:
-    from confiture import detect_version
-
-    assert callable(detect_version)
 
 
 def test_rollback_generator_is_callable() -> None:
