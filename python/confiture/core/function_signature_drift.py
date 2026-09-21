@@ -30,7 +30,9 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any
 
-from confiture.core import live_catalog
+import pglast
+
+from confiture.core import ddl_objects, live_catalog
 from confiture.core.linting.inventory import build_model
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.type_lattice import catalog_spelling, signatures_match
@@ -38,7 +40,7 @@ from confiture.core.type_lattice import catalog_spelling, signatures_match
 if TYPE_CHECKING:
     import psycopg
 
-    from confiture.core.schema_model import Routine
+    from confiture.core.schema_model import Routine, RoutineKind
 
 #: The routine kinds a signature comparison reads: what ``CREATE FUNCTION`` and
 #: ``CREATE PROCEDURE`` define, on both sides. An aggregate is created otherwise.
@@ -96,6 +98,47 @@ def printed_signature(routine: Routine) -> str:
     return f"{function_key(routine)}({','.join(printed_arguments(routine))})"
 
 
+#: ``function_key`` → each definition *sql* holds for that routine name, in source
+#: order: its canonical signature and the statement that (re)creates it.
+Definitions = dict[str, list[tuple[Any, str]]]
+
+
+def replacing_definitions(sql: str) -> Definitions:
+    """Every function and procedure *sql* defines, as a statement that may run twice.
+
+    The statement is ``ddl_objects``' re-appliable rendering — ``CREATE OR
+    REPLACE``, the body verbatim — and not the author's text. ``fix-signatures``
+    creates an overload beside ones that exist and replaces a drifted body in
+    place, and a ``CREATE FUNCTION`` as written fails on a routine that exists:
+    every plan the routine goldens recorded before 1.16 did.
+
+    Raises:
+        pglast.parser.ParseError: pglast rejects *sql*.
+    """
+    found: Definitions = defaultdict(list)
+    for ref, objects in ddl_objects.objects_in(sql, pglast.parse_sql(sql) or []).items():
+        if ref.kind in _SIGNATURE_KINDS:
+            found[f"{ref.schema}.{ref.name}"].extend(
+                (obj.signature, obj.create_sql) for obj in objects
+            )
+    return found
+
+
+def definition_of(definitions: Definitions, routine: Routine) -> str | None:
+    """The statement that creates *routine* as its tree last defines it, or ``None``.
+
+    The last, because a tree that redefines a routine builds the last definition.
+    """
+    return next(
+        (
+            create
+            for signature, create in reversed(definitions.get(function_key(routine), []))
+            if signatures_match(signature, routine.signature_key)
+        ),
+        None,
+    )
+
+
 def by_function(routines: Iterable[Routine]) -> dict[str, list[Routine]]:
     """*routines* grouped by :func:`function_key`, each group in the order given."""
     grouped: dict[str, list[Routine]] = defaultdict(list)
@@ -125,17 +168,20 @@ class StaleOverload:
         name: Function name
         stale_signature: Canonical form of the stale overload, e.g. "public.f(integer)"
         source_signatures: All signatures that source defines for this (schema, name)
+        kind: What the live routine is — ``DROP FUNCTION`` refuses a procedure
     """
 
     schema: str
     name: str
     stale_signature: str
     source_signatures: list[str]
+    kind: RoutineKind = "function"
 
     @property
     def drop_sql(self) -> str:
-        """DROP FUNCTION statement to remove this stale overload."""
-        return f"DROP FUNCTION {self.stale_signature};"
+        """``DROP FUNCTION`` or ``DROP PROCEDURE``, whichever removes this overload."""
+        keyword = "PROCEDURE" if self.kind == "procedure" else "FUNCTION"
+        return f"DROP {keyword} {self.stale_signature};"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -290,6 +336,7 @@ class FunctionSignatureDriftDetector:
                 name=routine.name,
                 stale_signature=printed_signature(routine),
                 source_signatures=sorted(printed_signature(r) for r in declared),
+                kind=routine.kind,
             )
             for fn_key, declared in source_by_fn.items()
             for routine in sorted(

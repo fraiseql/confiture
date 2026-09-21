@@ -307,7 +307,9 @@ class TestFixSignaturesApply:
                 ],
             )
         assert result.exit_code == 1
-        failing_conn.rollback.assert_called_once()
+        # One rollback ends the drift reads' transaction, the other undoes the fix.
+        assert failing_conn.rollback.call_count == 2
+        failing_conn.commit.assert_not_called()
 
 
 class TestFixSignaturesMissingConfig:

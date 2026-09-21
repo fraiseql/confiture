@@ -1,5 +1,7 @@
 """Unit tests for FunctionSignatureDriftDetector and related models."""
 
+import dataclasses
+
 from confiture.core.function_signature_drift import (
     FunctionSignatureDriftDetector,
     StaleOverload,
@@ -180,6 +182,15 @@ class TestStaleOverload:
         assert d["name"] == "f"
         assert d["stale_signature"] == "public.f(integer)"
         assert d["drop_sql"] == "DROP FUNCTION public.f(integer);"
+
+    def test_a_stale_procedure_is_dropped_as_a_procedure(self):
+        """``DROP FUNCTION`` on a procedure is an error: "… is not a function"."""
+        stale = dataclasses.replace(routine("touch", "integer"), kind="procedure")
+        source = [dataclasses.replace(routine("touch", "bigint"), kind="procedure")]
+
+        (overload,) = FunctionSignatureDriftDetector().compare(source, [stale]).stale_overloads
+
+        assert overload.drop_sql == "DROP PROCEDURE public.touch(integer);"
 
 
 class TestTriggerFunctionsOnTheLiveSide:

@@ -104,7 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   idempotency verdict — status, pass, exit — and the report collector
   (`core/idempotency/verdict.py`, `collect.py`), `lint`'s rule selection and the
   rules that read a file tree (`core/linting/selection.py`), `fix-signatures`'
-  routine lookup (`core.linting.inventory.routine_source`) and `init`'s project
+  routine lookup (`core.function_signature_drift.replacing_definitions`) and `init`'s project
   files, now templates under `core/scaffold/templates/` written by
   `core.scaffold.project.scaffold`.
 - **`cli/` imports no database driver and no parser.** Twelve modules imported
@@ -205,11 +205,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `migrate rebuild --seed --format json` each printed the applier's per-file lines
   and summary ahead of the payload on standard output. The applier's own console is
   standard error unless a caller gives it one.
+- **`migrate fix-signatures --mode apply` runs.** It failed on every database with
+  "can't change 'autocommit' now": the drift reads opened a transaction and the fix
+  switched the connection's mode inside it. The unit tests handed it a connection
+  already in autocommit, which no real one is. It ends the read transaction first.
+- **`migrate fix-signatures` plans SQL that applies.** Three shapes failed, all of them
+  in the routine goldens it was recorded against:
+  - a stale overload beside the current one — the shape a deploy leaves, a
+    migration's `CREATE OR REPLACE f(bigint)` beside `f(integer)` — re-ran the
+    source's `CREATE FUNCTION f(bigint)`, "already exists". A fix now creates only the
+    source overloads the database lacks, each once; when it has them all, the drop is
+    the whole fix and `create_sql` is empty.
+  - a body fix re-ran the author's `CREATE FUNCTION` over a routine that exists. The
+    statement is now `ddl_objects`' re-appliable rendering — `CREATE OR REPLACE`, the
+    body verbatim, the author's leading comments no longer carried — and for a routine
+    the tree defines twice it is the last definition, the one the build leaves.
+  - a stale **procedure** was dropped with `DROP FUNCTION` ("… is not a function"); it
+    is `DROP PROCEDURE` now, in `migrate validate --check-signatures`'
+    `remediation_sql` too.
+
+  `tests/integration/test_fix_signatures.py` runs `--mode apply` against a database.
+  The routine goldens' plans change accordingly (`drift.fix-signatures*.json`).
 - **`migrate fix-signatures` finds a routine by its identity.** It matched
   `CREATE … FUNCTION [schema.]name(` with a regex, so an unqualified definition
   matched a stale overload in any schema; it now asks the inventory, where an
-  unqualified name lives in the default schema (#313). The statement it executes is
-  still the author's text.
+  unqualified name lives in the default schema (#313).
 - **`seed apply` without `--sequential` names the environment in its hint.** It
   printed `--env {env}`.
 - **`confiture init`'s `local.yaml` names `confiture install-helpers`.** It said
