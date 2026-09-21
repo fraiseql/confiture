@@ -97,6 +97,7 @@ def _hints(cls: type) -> dict[str, Any]:
 FIELD_SAMPLES: dict[tuple[str, str], Any] = {
     ("PreflightIssue", "severity"): "warning",
     ("BuildWarning", "severity"): "warning",
+    ("Violation", "finding_class"): "temp_table",
     ("LintReport", "baseline"): {
         "new": ["doc_001:table:tb_d"],
         "fixed": ["doc_001:table:tb_c"],

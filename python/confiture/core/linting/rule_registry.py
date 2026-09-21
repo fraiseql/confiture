@@ -44,6 +44,20 @@ DEFAULT_SELECTOR = "default"
 #: cannot import the other without a cycle.
 UNPARSEABLE_RULE_ID = "UNPARSEABLE"
 
+#: The code each class of ``plpgsql_check`` finding is reported under (#354).
+#: ``body_001`` keeps "the body raises on its first call"; each artefact of how the
+#: analysis is done is a code of its own, so a baseline entry for one never absorbs
+#: the other and ``--select`` / ``--ignore`` choose between them.
+BODY_CLASS_CODES: dict[str, str] = {
+    "real": "body_001",
+    "temp_table": "body_003",
+    "record": "body_004",
+    "dblink": "body_005",
+}
+
+#: The ``body`` codes that are artefacts rather than failures.
+ARTEFACT_CODES = frozenset(BODY_CLASS_CODES.values()) - {BODY_CLASS_CODES["real"]}
+
 LEGACY_CODE_ALIASES: dict[str, str] = {
     "gen001": "tree_001",
     "gen002": "tree_002",
@@ -344,6 +358,33 @@ LINT_RULES: tuple[LintRule, ...] = (
         code="body_001",
         family="body",
         title="A plpgsql body resolves against the schema it is built into",
+        severity="warning",
+        default_on=False,
+        requires_config="a writable maintenance server carrying plpgsql_check (--server-url)",
+        requires_db=True,
+    ),
+    LintRule(
+        code="body_003",
+        family="body",
+        title="Analysis artefact: a body names a TEMP table only a running body creates",
+        severity="warning",
+        default_on=False,
+        requires_config="a writable maintenance server carrying plpgsql_check (--server-url)",
+        requires_db=True,
+    ),
+    LintRule(
+        code="body_004",
+        family="body",
+        title="Analysis artefact: plpgsql_check cannot follow a RECORD variable's assignment",
+        severity="warning",
+        default_on=False,
+        requires_config="a writable maintenance server carrying plpgsql_check (--server-url)",
+        requires_db=True,
+    ),
+    LintRule(
+        code="body_005",
+        family="body",
+        title="Analysis artefact: a body calls dblink, which the analysed database lacks",
         severity="warning",
         default_on=False,
         requires_config="a writable maintenance server carrying plpgsql_check (--server-url)",

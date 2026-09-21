@@ -77,6 +77,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- ⚠️ **A `plpgsql_check` finding says what it is** (#354, owner decision 11). Most of
+  what the analyser reports on a real tree is an artefact of analysing statically — on
+  one FraiseQL project 132 of 177 findings — and a baseline keyed per routine let an
+  artefact entry absorb every later *real* error on the same routine. `body_001` keeps
+  "the body raises on its first call"; each artefact class is a `body` code of its own,
+  read from the diagnosis: `body_003` (`42P01` on an unqualified relation some analysed
+  body creates `TEMP` — `references.temp_relations`), `body_004` (`55000`, a RECORD the
+  analyser cannot see assigned) and `body_005` (`42883` on a `dblink` routine, the
+  extension absent from the scratch database). Each violation's JSON carries an
+  additive `class` (`real`, `temp_table`, `record`, `dblink`), which
+  `lint.schema.json` declares. Selection is the registry's (`--select body_001`); no
+  flag was added. **A baseline taken before 1.16 carries its artefacts under
+  `body_001`: they move to their codes once**, and a project that selected `body_001`
+  alone stops seeing them.
 - **The `confiture.plugins` entry-point group.** A distribution that declares
   `[project.entry-points."confiture.plugins"] name = "module:register"` has
   `register(app)` called with the root Typer app before the command tree is built

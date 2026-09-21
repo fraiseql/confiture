@@ -60,6 +60,9 @@ class TestRegistryContents:
             "tree_007",
             "tree_008",
             "body_001",
+            "body_003",
+            "body_004",
+            "body_005",
             "body_002",
         }
 

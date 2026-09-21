@@ -215,6 +215,40 @@ FIXTURES: dict[str, Fixture] = {
             "$$;\n"
         }
     ),
+    # The three artefact classes (#354), each the shape the issue measured.
+    "body_003": Fixture(
+        {
+            "010.sql": "CREATE FUNCTION fn_load() RETURNS void LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    CREATE TEMP TABLE tmp_orders (id INT);\n"
+            "END;\n"
+            "$$;\n"
+            "CREATE FUNCTION fn_read() RETURNS bigint LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    RETURN (SELECT count(*) FROM tmp_orders);\n"
+            "END;\n"
+            "$$;\n"
+        }
+    ),
+    "body_004": Fixture(
+        {
+            "010.sql": "CREATE FUNCTION fn_record() RETURNS int LANGUAGE plpgsql AS $$\n"
+            "DECLARE r record;\n"
+            "BEGIN\n"
+            "    RETURN r.id;\n"
+            "END;\n"
+            "$$;\n"
+        }
+    ),
+    "body_005": Fixture(
+        {
+            "010.sql": "CREATE FUNCTION fn_remote() RETURNS void LANGUAGE plpgsql AS $$\n"
+            "BEGIN\n"
+            "    PERFORM dblink_exec('dbname=elsewhere', 'SELECT 1');\n"
+            "END;\n"
+            "$$;\n"
+        }
+    ),
     "body_002": Fixture(
         {
             "010.sql": "CREATE FUNCTION fn_unused() RETURNS void LANGUAGE plpgsql AS $$\n"

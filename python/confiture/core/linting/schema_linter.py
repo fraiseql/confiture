@@ -70,6 +70,9 @@ class LintViolation:
     file_path: str | None = None
     line_number: int | None = None
     suggested_fix: str | None = None
+    #: What kind of finding a ``body`` code is (``real`` or an artefact class, #354);
+    #: ``None`` for every other rule.
+    finding_class: str | None = None
 
     def __str__(self) -> str:
         """String representation of violation."""
@@ -175,6 +178,7 @@ class LintConfig:
         check_references: bool = True,
         check_bodies: bool = False,
         check_body_warnings: bool = False,
+        check_body_classes: frozenset[str] = frozenset(),
         server_url: str | None = None,
     ):
         """Initialize linting configuration.
@@ -213,6 +217,9 @@ class LintConfig:
             check_body_warnings: Report the same analyser's opinions about a
                 body that works — an unused variable, a shadowed declaration
                 (``body_002``). Off by default and separately selectable.
+            check_body_classes: The artefact codes to report (``body_003`` a TEMP
+                table, ``body_004`` a RECORD, ``body_005`` dblink, #354): what the
+                analysis cannot see rather than what the body does. Off by default.
             server_url: The writable maintenance server the ``body`` family
                 builds its scratch database on (``--server-url``). ``None``
                 falls back to the environment's own URL, whose *database* is
@@ -235,6 +242,7 @@ class LintConfig:
         self.check_references = check_references
         self.check_bodies = check_bodies
         self.check_body_warnings = check_body_warnings
+        self.check_body_classes = check_body_classes
         self.server_url = server_url
 
 
@@ -385,7 +393,9 @@ class SchemaLinter:
             ),
             (self.config.check_references, self._check_references, "build"),
             (
-                self.config.check_bodies or self.config.check_body_warnings,
+                self.config.check_bodies
+                or self.config.check_body_warnings
+                or bool(self.config.check_body_classes),
                 self._check_bodies,
                 None,
             ),
@@ -633,7 +643,7 @@ class SchemaLinter:
         finding list that reads like a clean bill of health.
         """
         # Reason: CLI start-up: the rules are opt-in, so their import is deferred until one is selected
-        from confiture.core.linting import bodies
+        from confiture.core.linting import bodies, references
 
         server = self._maintenance_server()
         reason = bodies.unavailable(server)
@@ -651,7 +661,8 @@ class SchemaLinter:
             return
         wanted = set(self._selected_body_rules())
         where = bodies.locations(self._sources())
-        for violation in bodies.findings(diagnoses, where):
+        temp = references.temp_relations(self._schema_sql or "")
+        for violation in bodies.findings(diagnoses, where, temp=temp):
             if violation.rule_id in wanted:
                 report.add_violation(violation)
 
@@ -683,7 +694,7 @@ class SchemaLinter:
                 (bodies.WARNING_RULE_ID, self.config.check_body_warnings),
             )
             if wanted
-        ]
+        ] + sorted(self.config.check_body_classes)
 
     def _after_live_tier(
         self,
