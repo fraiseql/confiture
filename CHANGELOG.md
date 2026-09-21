@@ -16,6 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- ⚠️ **`seed benchmark` is gone** (owner decision 15, #346). It measured nothing: it
+  printed a fixed 10:1 ratio computed from line counts, always "10.0x", from
+  `core/seed/performance_benchmark.py`, which goes with it. The COPY guides decide
+  from row counts, and `seed apply --copy-format` converts on the fly.
+- ⚠️ **Three exported modules no code called leave the package** (owner decision
+  16), each a duplicate of machinery confiture now has: `core/blue_green.py`
+  (`BlueGreenOrchestrator`, `BlueGreenConfig`, `TrafficController`,
+  `MigrationPhase`, `MigrationState`, `HealthCheckResult` — the online
+  expand/contract runner is how confiture migrates without downtime),
+  `core/pg_version.py` (`detect_version`, `parse_version_string`,
+  `check_version_compatibility`, `get_recommended_settings`, `PGVersionInfo`,
+  `PGFeature`, `VersionAwareSQL` — `schema_facts.server_major` is the version a check
+  reads) and `core/rollback_generator.py` (`generate_rollback`,
+  `generate_rollback_script`, `suggest_backup_for_destructive_operations`,
+  `RollbackSuggestion`, `RollbackTester`, `RollbackTestResult` — `differ_sql` renders a
+  migration's down). Their API pages go too. `core/introspection/sql_ast.py`, which
+  nothing imported, is deleted. The built-in hooks stay: fraisier's floor probe checks
+  `confiture.core.hooks.builtin.BackupHook`.
 - ⚠️ **pgGit is a plugin: `branch`, `coordinate` and `generate from-branch | preview |
   diff` leave the package** (owner decisions 1 and 7). They live in
   `plugins/fraiseql-confiture-pggit/`, a distribution of their own in this repository

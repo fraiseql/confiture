@@ -95,15 +95,15 @@ confiture build --sequential \
 # Testing (add COPY for speed)
 confiture seed apply --copy-format \
   --database-url postgresql://localhost/ecommerce_test
+```
 
-# See performance improvement
-confiture seed benchmark --seeds-dir db/seeds
-# Output:
-# COPY Format Performance Benchmark
-# Total rows: 77,500
-# VALUES: 12,345ms
-# COPY: 1,234ms
-# Speedup: 10x faster ✅
+These seeds hold 77,500 rows in total, above the ~50,000-row line, so load them
+with `--copy-format`. The four files of 1,000 rows or more are converted to COPY
+as they are applied; `02_categories.sql` (500 rows) stays as VALUES. To see what
+the load costs on your machine, time it:
+
+```bash
+time confiture seed apply --copy-format --env test
 ```
 
 ### Configuration
@@ -116,7 +116,6 @@ seed:
   execution_mode: sequential
   use_copy_format: true
   copy_threshold: 1000
-  benchmark: true
 ```
 
 ### Makefile Integration
@@ -140,7 +139,7 @@ db-reset:
 
 ### Result
 ✅ Reliable (sequential handles > 650 rows)
-✅ Fast (COPY format, 10x improvement)
+✅ Fast (COPY format for the large files)
 ✅ Easy development workflow
 
 ---
@@ -496,16 +495,11 @@ docker run -d \
 Single seed file with 100K rows takes too long
 
 ### Analysis
-```bash
-# Check current performance
-confiture seed benchmark --seeds-dir db/seeds
+At 100,000 rows the file is well above the ~50,000-row line, so load it with
+`--copy-format`, and time the load to see what it costs on your data:
 
-# Output:
-# Seed Performance Analysis
-# seeds/products.sql: 100,000 rows
-#   VALUES format: 45.2s
-#   COPY format:  4.8s
-#   Speedup: 9.4x faster
+```bash
+time confiture seed apply --copy-format --env test
 ```
 
 ### Solution: Split Files
@@ -527,7 +521,7 @@ confiture seed apply --copy-format \
 # ✓ 03_products_a.sql (COPY) 10,000 rows - 1.1s
 # ✓ 03_products_b.sql (COPY) 10,000 rows - 1.1s
 # ✓ 03_products_c.sql (COPY) 10,000 rows - 1.0s
-# Total: 100,000 rows in 3.2s (14x faster than original!)
+# Total: 100,000 rows in 3.2s
 ```
 
 ### Result
@@ -543,10 +537,8 @@ confiture seed apply --copy-format \
 | Scenario | Approach | Time | Speedup |
 |----------|----------|------|---------|
 | **Small Project** | Concatenate | 0.3s | Baseline |
-| **Growing Project** | Sequential + COPY | 1.2s | 10x faster than VALUES |
 | **CI/CD** | Sequential + COPY | 2.8s | 7x faster |
 | **Production (500K)** | Pre-converted | 8.3s | 20x faster |
-| **Large File** | Split + COPY | 3.2s | 14x faster |
 
 ---
 
@@ -575,10 +567,10 @@ confiture seed apply --copy-format \
 
 ### Issue: "Slow performance"
 ```bash
-# Check what format is being used
-confiture seed benchmark --seeds-dir db/seeds
+# Time the load as it runs today
+time confiture seed apply --copy-format --env test
 
-# If not fast enough, try higher threshold
+# If not fast enough, lower the threshold so smaller files convert too
 confiture seed apply --copy-format \
   --copy-threshold 500 \
   --database-url postgresql://localhost/myapp

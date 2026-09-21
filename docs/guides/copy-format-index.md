@@ -36,7 +36,7 @@ This documentation provides everything you need to understand and use PostgreSQL
   - Overview and philosophy
   - Quick start (3 approaches)
   - How it works (format conversion, escaping, transaction safety)
-  - Use cases (fresh DB, large files, CI/CD, format conversion, performance analysis)
+  - Use cases (fresh DB, large files, CI/CD, timing a load, format conversion)
   - Advanced configuration
   - Converting INSERT to COPY
   - Troubleshooting
@@ -138,19 +138,6 @@ confiture seed convert --input seeds.sql --output seeds_copy.sql
 - Converting seeds: [COPY Format Loading](copy-format-loading.md#converting-insert-to-copy)
 - Example scenarios: [Practical Examples → Scenario 4](copy-format-examples.md)
 
-### `confiture seed benchmark`
-
-**What it does:** Compare VALUES vs COPY performance
-
-```bash
-confiture seed benchmark --seeds-dir db/seeds
-```
-
-**Documentation:**
-- Quick start: [COPY Format Loading](copy-format-loading.md#3-benchmark-performance)
-- Performance analysis: [Seed Loading Decision Tree](seed-loading-decision-tree.md#performance-expectations)
-- Example output: [Practical Examples → Scenario 2](copy-format-examples.md)
-
 ### `confiture build` then `confiture seed apply --copy-format`
 
 **What it does:** Build the schema, then load its seeds as COPY. `build` applies
@@ -192,7 +179,8 @@ How many rows total? ───────────────────�
 | **COPY (sequential)** | **2-10x faster** | **Production, > 50K rows** |
 | COPY (pre-converted) | **3-10x faster** | **CI/CD, very large data** |
 
-👉 See actual numbers in [Practical Examples](copy-format-examples.md)
+👉 Choose from the row counts: above ~50,000 rows in total, load with
+`--copy-format` ([Decide from Row Counts](copy-format-loading.md#3-decide-from-row-counts)).
 
 ---
 
@@ -201,11 +189,7 @@ How many rows total? ───────────────────�
 - [ ] **Read** [COPY Format Loading](copy-format-loading.md) (15 min)
 - [ ] **Review** [Decision Tree](seed-loading-decision-tree.md) (10 min)
 - [ ] **Pick your strategy** based on data size
-- [ ] **Try it out:**
-  ```bash
-  confiture seed benchmark --seeds-dir db/seeds
-  ```
-- [ ] **If faster, use it:**
+- [ ] **Above ~50,000 total rows, load with `--copy-format`:**
   ```bash
   confiture seed apply --copy-format --env local
   ```
@@ -260,7 +244,6 @@ All commands have built-in help:
 ```bash
 confiture seed apply --help
 confiture seed convert --help
-confiture seed benchmark --help
 confiture build --help
 ```
 
@@ -286,7 +269,7 @@ Found a typo or confusing section?
 
 ### Path 1: Quick Implementation
 1. [COPY Format Loading](copy-format-loading.md#quick-start) - 5 min
-2. Try a command: `confiture seed benchmark`
+2. Try a command: `confiture seed apply --copy-format --env local`
 3. [Practical Examples](copy-format-examples.md) - 10 min
 
 **Result:** Can use COPY format in 15 minutes

@@ -109,7 +109,7 @@
     "python/confiture/cli/error_json.py": 1,
     "python/confiture/cli/plugins.py": 1,
     "python/confiture/cli/seed.py": 4,
-    "python/confiture/cli/seed_copy.py": 2,
+    "python/confiture/cli/seed_copy.py": 1,
     "python/confiture/core/_migrator/apply.py": 1,
     "python/confiture/core/_migrator/apply_loop.py": 3,
     "python/confiture/core/_migrator/baseline.py": 1,

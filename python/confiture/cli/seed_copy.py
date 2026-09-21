@@ -1,11 +1,9 @@
-"""``confiture seed convert`` and ``seed benchmark``: the COPY-format tools."""
+"""``confiture seed convert``: the COPY-format tool."""
 
 from __future__ import annotations
 
-import asyncio
 import sys
 from pathlib import Path
-from typing import Any
 
 import typer
 from rich.table import Table
@@ -14,38 +12,11 @@ from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console
 from confiture.cli.options import output_option
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
-from confiture.core.seed.performance_benchmark import PerformanceBenchmark
 from confiture.error_codes import FINDINGS, SUCCESS
 from confiture.exceptions import ConfigurationError, ConfiturError, SeedError
 
 #: Where the seed files are, unless a command is told otherwise.
 DEFAULT_SEEDS_DIR = Path("db/seeds")
-
-
-def _format_benchmark_output(result: Any) -> None:
-    """Format and display benchmark results.
-
-    Args:
-        result: BenchmarkResult object with performance metrics
-    """
-    console.print("\n[bold]COPY Format Performance Benchmark[/bold]")
-    console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    console.print(f"Total rows: {result.total_rows}")
-    console.print(f"\n[yellow]VALUES format:[/yellow] {result.values_time_ms:.2f}ms")
-    console.print(f"[cyan]COPY format:  [/cyan] {result.copy_time_ms:.2f}ms")
-    console.print(f"[green]Speedup:      [/green] {result.speedup_factor:.1f}x faster")
-    console.print(f"[green]Time saved:   [/green] {result.time_saved_ms:.2f}ms")
-
-    if result.table_metrics:
-        console.print("\n[bold]Per-Table Metrics:[/bold]")
-        for table, metrics in result.table_metrics.items():
-            console.print(f"  {table}: {metrics['rows']} rows")
-            console.print(
-                f"    VALUES: {metrics['values_time_ms']:.2f}ms, "
-                f"COPY: {metrics['copy_time_ms']:.2f}ms"
-            )
-
-    console.print(f"\n[green]✓ Benchmark complete: {result.get_summary()}[/green]")
 
 
 @cli_boundary
@@ -94,7 +65,6 @@ def convert(
     RELATED COMMANDS:
       confiture seed apply     - Load seeds with COPY format
       confiture seed validate  - Check seed data quality
-      confiture seed benchmark - Show performance comparison
 
     DOCUMENTATION:
       📖 COPY Format Guide: docs/guides/copy-format-loading.md
@@ -233,103 +203,3 @@ def convert(
     # Reason: text-only command: the message names the operation that failed, whatever failed
     except Exception as e:
         fail(SeedError(f"Conversion failed: {e!s}"), json_mode=False)
-
-
-@cli_boundary
-def benchmark(
-    seeds_dir: Path = typer.Option(
-        DEFAULT_SEEDS_DIR,
-        "--seeds-dir",
-        help="Directory containing seed files (default: db/seeds)",
-    ),
-) -> None:
-    """Compare VALUES vs COPY format performance.
-
-    PROCESS:
-      Analyzes seed files and benchmarks loading performance in both formats.
-      Shows estimated speedup, time savings, and per-table metrics to help
-      optimize seed data loading strategy.
-
-    WHEN TO USE:
-      ✓ Deciding between VALUES and COPY format
-      ✓ Estimating time savings from conversion
-      ✓ Analyzing per-table performance
-      ✓ Optimizing CI/CD pipeline speed
-
-    EXAMPLE OUTPUT:
-      COPY Format Performance Benchmark
-      ════════════════════════════════════
-      Total rows: 120,000
-
-      VALUES format:  12.5s
-      COPY format:    1.3s
-      Speedup:        9.6x faster
-      Time saved:     11.2s
-
-      Per-Table Metrics:
-        users (2,000 rows):      0.08s → 0.01s (8.0x)
-        products (15,000 rows):  0.45s → 0.04s (11.2x)
-        orders (103,000 rows):   11.97s → 1.26s (9.5x)
-
-    NEXT STEPS:
-      If speedup >= 5x:
-        confiture seed apply --copy-format
-
-      If speedup < 5x:
-        confiture seed apply
-        (VALUES format is fast enough)
-
-    RELATED COMMANDS:
-      confiture seed apply   - Load seeds with --copy-format
-      confiture seed convert - Transform INSERT to COPY format
-      confiture build        - Build schema with optional seed apply
-
-    DOCUMENTATION:
-      📖 COPY Format Guide: docs/guides/copy-format-loading.md
-      📖 Decision Tree: docs/guides/seed-loading-decision-tree.md
-      📖 Examples: docs/guides/copy-format-examples.md
-
-    USAGE:
-      Basic benchmark:
-        $ confiture seed benchmark
-
-      Specific directory:
-        $ confiture seed benchmark --seeds-dir db/seeds/test
-    """
-    try:
-        if not seeds_dir.exists():
-            fail(
-                ConfigurationError(
-                    f"Seeds directory not found: {seeds_dir}",
-                    error_code="CONFIG_004",
-                ),
-                json_mode=False,
-            )
-
-        # Collect seed data
-        seed_data: dict[str, list[dict]] = {}
-
-        for seed_file in sorted(seeds_dir.glob("*.sql")):
-            console.print(f"[blue]Analyzing {seed_file.name}...[/blue]")
-            # Basic parsing - just count lines as a proxy for row count
-            content = seed_file.read_text()
-            line_count = len(content.split("\n"))
-            seed_data[seed_file.stem] = [{"row": i} for i in range(line_count)]
-
-        if not seed_data:
-            console.print("[yellow]No seed files found[/yellow]")
-            raise typer.Exit(SUCCESS)
-
-        # Run benchmark
-        benchmark_runner = PerformanceBenchmark()
-        result = asyncio.run(benchmark_runner.compare(seed_data))
-
-        # Display results using helper
-        _format_benchmark_output(result)
-        raise typer.Exit(SUCCESS)  # success-signal: benchmark complete
-
-    except typer.Exit:
-        raise
-    # Reason: text-only command: the message names the operation that failed, whatever failed
-    except Exception as e:
-        fail(SeedError(f"Benchmark failed: {e}"), json_mode=False)

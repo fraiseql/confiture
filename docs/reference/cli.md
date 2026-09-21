@@ -3564,26 +3564,6 @@ confiture seed apply [OPTIONS]
 
 <!-- END GENERATED: cli confiture seed apply -->
 
-### `confiture seed benchmark`
-
-Compare VALUES vs COPY format performance.
-
-<!-- BEGIN GENERATED: cli confiture seed benchmark -->
-
-**Usage**
-
-```bash
-confiture seed benchmark [OPTIONS]
-```
-
-**Options**
-
-| Option | Short | Type | Default | Description |
-|---|---|---|---|---|
-| `--seeds-dir` | - | path | `db/seeds` | Directory containing seed files (default: db/seeds) |
-
-<!-- END GENERATED: cli confiture seed benchmark -->
-
 ### `confiture seed convert`
 
 Transform INSERT statements to COPY format (2-10x faster).
