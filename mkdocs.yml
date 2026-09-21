@@ -149,7 +149,6 @@ nav:
       - 'SchemaBuilder API': api/builder.md
       - 'Hook API Reference': api/hooks.md
       - 'Migrator API': api/migrator.md
-      - 'Rollback Generation API Reference': api/rollback-generator.md
       - 'SchemaToSchemaMigrator API': api/schema-to-schema.md
       - 'ProductionSyncer API': api/syncer.md
   - 'Features':

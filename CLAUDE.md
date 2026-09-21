@@ -717,7 +717,6 @@ confiture/
 │   │   ├── psql_applier.py       # Shared COPY-aware SQL applier backed by ``psql``
 │   │   ├── restorer.py           # Three-phase pg_restore orchestrator
 │   │   ├── risk_tier.py          # Risk-tier taxonomy for the migration-adapter seam (issue #197)
-│   │   ├── rollback_generator.py # Auto-generate rollback SQL for simple operations
 │   │   ├── schema_analyzer.py    # Schema analysis and validation for dry-run mode
 │   │   ├── schema_artifact.py    # Cacheable schema-artifact dumper (Medium 1, CI provisioning)
 │   │   ├── schema_change.py      # What changed between two schema trees: one variant per kind, closed, an…

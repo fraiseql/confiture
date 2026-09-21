@@ -122,7 +122,6 @@ CLI module reaches into a `_private` attribute of a core object (`tests/unit/cli
 | `migrator.py` | `Migrator` + `MigratorSession` — core migration engine; tracks state in configurable tracking table (default `public.tb_confiture`); timestamp-based versioning (`YYYYMMDDHHMMSS`) |
 | `migration_generator.py` | `MigrationGenerator` — generates migration files; supports external generators via subprocess |
 | `migration_verifier.py` | `MigrationVerifier` + `VerifyResult` — runs `.verify.sql` queries post-migration |
-| `rollback_generator.py` | Generates rollback SQL for migrations |
 | `baseline_detector.py` | `BaselineDetector` — fuzzy schema matching (85% threshold) to find the right baseline snapshot for `--auto-detect-baseline` |
 
 #### 2.3 Introspection Layer (`introspection/`)

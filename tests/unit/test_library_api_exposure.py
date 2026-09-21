@@ -1,12 +1,11 @@
 """Public-API exposure + no-limbo consistency guard.
 
-Three previously-orphaned modules were promoted (blue_green, pg_version,
-rollback_generator) to the documented library surface. These tests pin that
-they are reachable via ``import confiture`` and, more importantly, add the
-comprehensive consistency check the per-feature tests lacked: every name in
-``__all__`` resolves, and every ``_LAZY_IMPORTS`` key is advertised in
-``__all__`` — so a future orphan can't be half-exposed (in one but not the
-other) and slip back into "tested-but-unreachable" limbo.
+The built-in hooks and the anonymization framework are reachable via ``import
+confiture``; ``blue_green``, ``pg_version`` and ``rollback_generator``, promoted here
+once, left in 1.16 having never gained a caller. The consistency check is what
+matters: every name in ``__all__`` resolves, and every ``_LAZY_IMPORTS`` key is
+advertised in ``__all__`` — so a future orphan can't be half-exposed (in one but
+not the other) and slip back into "tested-but-unreachable" limbo.
 """
 
 from __future__ import annotations
@@ -15,14 +14,6 @@ import confiture
 from confiture import _LAZY_IMPORTS
 
 # Names promoted to the public library surface.
-_ROLLBACK_GEN = (
-    "generate_rollback",
-    "generate_rollback_script",
-    "suggest_backup_for_destructive_operations",
-    "RollbackSuggestion",
-    "RollbackTester",
-    "RollbackTestResult",
-)
 # Built-in migration lifecycle hooks (opt-in via Migrator.register_hook).
 _BUILTIN_HOOKS = (
     "AuditHook",
@@ -39,7 +30,7 @@ _ANONYMIZATION = (
     "register_strategy",
     "AnonymizationProfile",
 )
-_NEWLY_EXPOSED = _ROLLBACK_GEN + _BUILTIN_HOOKS + _ANONYMIZATION
+_NEWLY_EXPOSED = _BUILTIN_HOOKS + _ANONYMIZATION
 
 
 def test_newly_exposed_symbols_resolve() -> None:
@@ -47,12 +38,6 @@ def test_newly_exposed_symbols_resolve() -> None:
     for name in _NEWLY_EXPOSED:
         assert name in confiture.__all__, f"{name} missing from __all__"
         assert getattr(confiture, name) is not None
-
-
-def test_rollback_generator_is_callable() -> None:
-    from confiture import generate_rollback
-
-    assert callable(generate_rollback)
 
 
 def test_builtin_hooks_are_real() -> None:

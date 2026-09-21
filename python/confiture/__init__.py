@@ -99,9 +99,6 @@ __all__ = [
     "RebuildError",
     "RestoreError",
     "RollbackError",
-    "RollbackSuggestion",
-    "RollbackTestResult",
-    "RollbackTester",
     "SQLError",
     "SchemaBuilder",
     # Drift detection
@@ -130,13 +127,9 @@ __all__ = [
     "__version__",
     # PostgreSQL version detection / feature gating (library API)
     "export_all",
-    # Rollback generation (library API)
-    "generate_rollback",
-    "generate_rollback_script",
     # Schema export
     "generate_schema",
     "register_strategy",
-    "suggest_backup_for_destructive_operations",
 ]
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
@@ -236,16 +229,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Scaffold / generate tree
     "EmittedFunction": ("confiture.core.scaffold.emitter", "EmittedFunction"),
     "ConfitureEmitter": ("confiture.core.scaffold.emitter", "ConfitureEmitter"),
-    # Rollback generation (library API)
-    "generate_rollback": ("confiture.core.rollback_generator", "generate_rollback"),
-    "generate_rollback_script": ("confiture.core.rollback_generator", "generate_rollback_script"),
-    "suggest_backup_for_destructive_operations": (
-        "confiture.core.rollback_generator",
-        "suggest_backup_for_destructive_operations",
-    ),
-    "RollbackSuggestion": ("confiture.core.rollback_generator", "RollbackSuggestion"),
-    "RollbackTester": ("confiture.core.rollback_generator", "RollbackTester"),
-    "RollbackTestResult": ("confiture.core.rollback_generator", "RollbackTestResult"),
     # Built-in migration lifecycle hooks (opt-in via Migrator.register_hook)
     "AuditHook": ("confiture.core.hooks.builtin.audit_hook", "AuditHook"),
     "AuditConfig": ("confiture.core.hooks.builtin.audit_hook", "AuditConfig"),
