@@ -32,6 +32,7 @@ from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import connect, emit
+from confiture.cli.options import config_option, database_url_option, output_option
 from confiture.core.git import GitRepository
 from confiture.core.pgtap_generator import PgTAPGenerator
 from confiture.core.scaffold.emitter import EmittedFunction
@@ -399,11 +400,8 @@ def generate_from_branch(
         "-b",
         help="Base branch to compare against (default: main)",
     ),
-    output: Path = typer.Option(
-        Path("db/migrations"),
-        "--output",
-        "-o",
-        help="Output directory for migration files (default: db/migrations)",
+    output: Path = output_option(
+        Path("db/migrations"), help="Output directory for migration files (default: db/migrations)"
     ),
     combined: bool = typer.Option(
         False,
@@ -411,11 +409,7 @@ def generate_from_branch(
         "-c",
         help="Generate single combined migration (default: off)",
     ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
+    config: Path = config_option(short=False),
 ) -> None:
     """Generate migrations from a pgGit branch.
 
@@ -471,11 +465,7 @@ def preview_generation(
         "-b",
         help="Base branch to compare against (default: main)",
     ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
+    config: Path = config_option(),
 ) -> None:
     """Preview what migrations would be generated.
 
@@ -553,11 +543,7 @@ def show_diff(
         "-s",
         help="Show the actual SQL for each change (default: off)",
     ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
+    config: Path = config_option(),
 ) -> None:
     """Show detailed diff between branches.
 
@@ -618,9 +604,9 @@ def show_diff(
 @generate_app.command("pgtap")
 @cli_boundary
 def generate_pgtap(
-    database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
+    database_url: str = database_url_option(...),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema to introspect"),
-    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    output: Path | None = output_option(),
     include: str | None = typer.Option(
         None, "--include", help="SQL LIKE pattern to filter functions"
     ),
@@ -665,9 +651,9 @@ def generate_pgtap(
 @generate_app.command("stubs")
 @cli_boundary
 def generate_stubs(
-    database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
+    database_url: str = database_url_option(...),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema to introspect"),
-    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
+    output: Path | None = output_option(),
     output_format: str = typer.Option(
         "pydantic",
         "--format",

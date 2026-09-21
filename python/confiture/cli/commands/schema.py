@@ -26,7 +26,13 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.lint_formatter import format_lint_report, save_report
-from confiture.cli.options import format_option
+from confiture.cli.options import (
+    database_url_option,
+    env_option,
+    format_option,
+    migrations_dir_option,
+    output_option,
+)
 from confiture.config.environment import DEFAULT_STATUS_WORDS, Environment
 from confiture.core import builder as _core_builder
 from confiture.core import linting as _core_linting
@@ -244,13 +250,6 @@ Documentation: https://github.com/evoludigit/confiture
         raise typer.Exit(handle_cli_error(e)) from e
 
 
-EnvOpt = Annotated[str, typer.Option("--env", "-e", help="Environment to build (default: local)")]
-OutputOpt = Annotated[
-    Path | None,
-    typer.Option(
-        "--output", "-o", help="Output file path (default: db/generated/schema_{env}.sql)"
-    ),
-]
 ProjectDirOpt = Annotated[
     Path, typer.Option("--project-dir", help="Project directory (default: current directory)")
 ]
@@ -305,13 +304,6 @@ SeparatorTemplateOpt = Annotated[
 SequentialOpt = Annotated[
     bool,
     typer.Option("--sequential", help="Apply seed files sequentially after build (default: off)"),
-]
-DatabaseUrlOpt = Annotated[
-    str | None,
-    typer.Option(
-        "--database-url",
-        help="Database connection URL (required for --sequential, default: from config)",
-    ),
 ]
 ContinueOnErrorOpt = Annotated[
     bool,
@@ -378,8 +370,10 @@ SeedProfileOpt = Annotated[
 
 @cli_boundary
 def build(
-    env: EnvOpt = "local",
-    output: OutputOpt = None,
+    env: str = env_option(),
+    output: Path | None = output_option(
+        help="Output file path (default: db/generated/schema_{env}.sql)"
+    ),
     project_dir: ProjectDirOpt = Path(),
     show_hash: ShowHashOpt = False,
     schema_only: SchemaOnlyOpt = False,
@@ -390,7 +384,9 @@ def build(
     separator_style: SeparatorStyleOpt = None,
     separator_template: SeparatorTemplateOpt = None,
     sequential: SequentialOpt = False,
-    database_url: DatabaseUrlOpt = None,
+    database_url: str | None = database_url_option(
+        help="Database connection URL (required for --sequential, default: from config)"
+    ),
     continue_on_error: ContinueOnErrorOpt = False,
     warn_duplicates: WarnDuplicatesOpt = False,
     fail_on_duplicates: FailOnDuplicatesOpt = False,
@@ -872,13 +868,8 @@ def _write_dump_artifact(
     return path_str, artifact_result.artifact_hash
 
 
-EnvOpt = Annotated[str, typer.Option("--env", "-e", help="Environment to lint (default: local)")]
 ProjectDirOpt = Annotated[
     Path, typer.Option("--project-dir", help="Project directory (default: current directory)")
-]
-OutputOpt = Annotated[
-    Path | None,
-    typer.Option("--output", "-o", help="Output file path (default: stdout, only with json/csv)"),
 ]
 FailOnOpt = Annotated[
     str | None,
@@ -948,14 +939,6 @@ ReplicaSafeOpt = Annotated[
         "supported; new rules register instead of adding a flag.",
     ),
 ]
-MigrationsDirOpt = Annotated[
-    Path,
-    typer.Option(
-        "--migrations-dir",
-        help="Migrations directory the migration-tree rules read — replica_001, "
-        "own_001, own_002 (default: db/migrations)",
-    ),
-]
 OverridesDirOpt = Annotated[
     Path | None,
     typer.Option(
@@ -999,10 +982,12 @@ CheckSecurityDefinerOpt = Annotated[
 @cli_boundary
 def lint(
     ctx: typer.Context,
-    env: EnvOpt = "local",
+    env: str = env_option(),
     project_dir: ProjectDirOpt = Path(),
     format_type: str = format_option("table", "json", "csv"),
-    output: OutputOpt = None,
+    output: Path | None = output_option(
+        help="Output file path (default: stdout, only with json/csv)"
+    ),
     fail_on: FailOnOpt = None,
     fail_on_error: FailOnErrorOpt = True,
     fail_on_warning: FailOnWarningOpt = False,
@@ -1012,7 +997,10 @@ def lint(
     write_baseline: WriteBaselineOpt = False,
     list_rules: ListRulesOpt = False,
     replica_safe: ReplicaSafeOpt = False,
-    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    migrations_dir: Path = migrations_dir_option(
+        help="Migrations directory the migration-tree rules read — replica_001, "
+        "own_001, own_002 (default: db/migrations)"
+    ),
     overrides_dir: OverridesDirOpt = None,
     server_url: ServerUrlOpt = None,
     check_tenant_isolation: CheckTenantIsolationOpt = False,
@@ -1654,12 +1642,7 @@ def lint_unified(
         "--git-diff",
         help="Only lint files changed in the current git diff (default: off)",
     ),
-    env: str = typer.Option(
-        "local",
-        "--env",
-        "-e",
-        help="Environment for schema lint (default: local)",
-    ),
+    env: str = env_option(),
     schema_dir: Path | None = typer.Option(
         None,
         "--schema-dir",
@@ -1781,12 +1764,7 @@ def introspect(
         "--hints/--no-hints",
         help="Include naming-convention hints block (default: on)",
     ),
-    output: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Write output to file instead of stdout",
-    ),
+    output: Path | None = output_option(),
 ) -> None:
     """Introspect a PostgreSQL database and export its schema as structured JSON.
 

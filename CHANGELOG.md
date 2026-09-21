@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The six options most commands take are declared once each.** `--config` was
+  declared 38 times in four spellings with three defaults, `--output` 20 times and
+  twice without `-o`. `cli/options.py` has `config_option`, `env_option`,
+  `database_url_option`, `migrations_dir_option`, `output_option` and
+  `verbose_option`, and `tests/unit/test_common_options_have_one_factory.py` fails on
+  any other declaration of their flags — including one Typer names after the
+  parameter. A factory fixes the flag, its short form and its help; it takes the
+  command's own default, because a default is a lookup a caller relies on
+  (`migrate validate` reads `./confiture.yaml`, `migrate up`
+  `db/environments/local.yaml`, `migrate status` none). Every command that takes one
+  of these flags now also takes its short form: `-c`, `-e`, `-d`, `-o`. The guard
+  also fails on a command that gives one option string to two options.
 - **Every exit a command takes is named.** Sixty `typer.Exit(<integer>)` sites
   under `cli/` said `1`, `2` or `3` without saying which meaning of it they
   meant. Each is now one of four named outcomes in `confiture.error_codes` —
@@ -130,6 +142,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- ⚠️ **`seed generate --env` is `--seed-env`.** It never named an environment: it
+  names the directory under `db/seeds/` the stub is written to. `--env` and `-e`
+  are gone from this command, with no alias.
+- **`debug cte -f` meant `--format`, never `--file`.** Both options claimed `-f`,
+  and Click keeps the last, so `debug cte -f query.sql` was refused as an unknown
+  format. `--file` has no short form now; `-f` is `--format`, as it was in practice.
 - **`migrate baseline --from-db` no longer prints the source DSN's password.** The
   "Baseline from …" line printed the DSN as given; it is redacted now, as every other
   printed URL is.

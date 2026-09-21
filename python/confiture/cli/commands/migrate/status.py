@@ -34,7 +34,13 @@ from confiture.cli.helpers import (
     error_console,
     open_connection,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import (
+    config_option,
+    database_url_option,
+    format_option,
+    migrations_dir_option,
+    output_option,
+)
 from confiture.core import connection as _core_connection
 from confiture.core import ledger as _core_ledger
 from confiture.core import migrator as _core_migrator
@@ -53,35 +59,21 @@ from confiture.exceptions import ConfiturError
 @cli_boundary
 def migrate_status(
     ctx: typer.Context,
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
-    config: Path = typer.Option(
+    migrations_dir: Path = migrations_dir_option(),
+    config: Path = config_option(
         None,
-        "--config",
-        "-c",
         help="Config file for database connection. Must appear after 'status': "
         "confiture migrate status -c config.yaml",
     ),
-    database_url: str = typer.Option(
-        None,
-        "--database-url",
-        "-d",
-        help=DATABASE_URL_OPTION_HELP,
-    ),
+    database_url: str = database_url_option(help=DATABASE_URL_OPTION_HELP),
     no_config: bool = typer.Option(
         False,
         "--no-config",
         help=NO_CONFIG_OPTION_HELP,
     ),
     output_format: str = format_option("table", "json", "csv"),
-    output_file: Path = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save output to file (default: stdout, useful with json/csv)",
+    output_file: Path = output_option(
+        help="Save output to file (default: stdout, useful with json/csv)"
     ),
     check_rebuild: bool = typer.Option(
         False,

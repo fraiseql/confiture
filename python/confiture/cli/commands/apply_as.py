@@ -22,7 +22,13 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _get_tracking_table, connect, console, emit, is_json
-from confiture.cli.options import format_option
+from confiture.cli.options import (
+    CONFITURE_YAML,
+    config_option,
+    env_option,
+    format_option,
+    migrations_dir_option,
+)
 from confiture.config._env_vars import expand_env_vars
 from confiture.core import migrator as _core_migrator
 from confiture.core.connection import load_config
@@ -42,25 +48,9 @@ def migrate_apply_as(
         ...,
         help="Migration version to apply (e.g. 20260528120000).",
     ),
-    config: Path = typer.Option(
-        Path("confiture.yaml"),
-        "-c",
-        "--config",
-        help="Config file path. Use --env as a shortcut for db/environments/{name}.yaml.",
-    ),
-    env: str | None = typer.Option(
-        None,
-        "--env",
-        help=(
-            "Environment name — shortcut for --config db/environments/{name}.yaml. "
-            "Cannot be combined with --config."
-        ),
-    ),
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations).",
-    ),
+    config: Path = config_option(CONFITURE_YAML),
+    env: str | None = env_option(None),
+    migrations_dir: Path = migrations_dir_option(),
     output_format: str = format_option("text", "json"),
 ) -> None:
     """Apply exactly one migration as an explicit PostgreSQL role.

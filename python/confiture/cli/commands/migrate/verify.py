@@ -27,7 +27,13 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import (
+    config_option,
+    database_url_option,
+    format_option,
+    migrations_dir_option,
+    output_option,
+)
 from confiture.core import connection as _core_connection
 from confiture.core import migration_verifier as _core_migration_verifier
 from confiture.core import migrator as _core_migrator
@@ -39,23 +45,9 @@ from confiture.models.results import VerifyAllResult
 @cli_boundary
 def migrate_verify(
     ctx: typer.Context,
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
-    config: Path | None = typer.Option(
-        None,
-        "--config",
-        "-c",
-        help="Configuration file path",
-    ),
-    database_url: str | None = typer.Option(
-        None,
-        "--database-url",
-        "-d",
-        help=DATABASE_URL_OPTION_HELP,
-    ),
+    migrations_dir: Path = migrations_dir_option(),
+    config: Path | None = config_option(None),
+    database_url: str | None = database_url_option(help=DATABASE_URL_OPTION_HELP),
     no_config: bool = typer.Option(
         False,
         "--no-config",
@@ -67,12 +59,7 @@ def migrate_verify(
         help="Verify a single migration version (default: verify all applied)",
     ),
     format_output: str = format_option("text", "json"),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save output to file (default: stdout)",
-    ),
+    output_file: Path | None = output_option(),
     allow_uninitialized: bool = typer.Option(
         False,
         "--allow-uninitialized",

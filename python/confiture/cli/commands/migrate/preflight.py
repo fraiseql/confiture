@@ -34,7 +34,14 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import (
+    config_option,
+    database_url_option,
+    env_option,
+    format_option,
+    migrations_dir_option,
+    output_option,
+)
 from confiture.config.environment import Environment
 from confiture.core import connection as _core_connection
 from confiture.core import ledger as _core_ledger
@@ -393,12 +400,6 @@ def _display_dependent_analysis(report: Any, cons: Any) -> None:
             cons.print(f"      - {dep.kind} [cyan]{dep.schema}.{dep.name}[/cyan]{cols}")
 
 
-MigrationsDirOpt = Annotated[
-    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
-]
-OutputFileOpt = Annotated[
-    Path | None, typer.Option("--output", "-o", help="Save output to file (default: stdout)")
-]
 AgainstOpt = Annotated[
     str | None,
     typer.Option(
@@ -406,32 +407,6 @@ AgainstOpt = Annotated[
         help="PostgreSQL URL of the preflight database to test migrations against. "
         "Typically seeded from pg_dump --schema-only. "
         "Migrations are executed inside a transaction that is always rolled back.",
-    ),
-]
-ConfigOpt = Annotated[
-    Path | None,
-    typer.Option(
-        "--config",
-        "-c",
-        help="Config file for pending-migration detection. "
-        "Connects to the configured database to read the tracking table.",
-    ),
-]
-DatabaseUrlOpt = Annotated[
-    str | None,
-    typer.Option(
-        "--database-url",
-        "-d",
-        help="PostgreSQL DSN of the tracking database for pending-migration "
-        "detection (distinct from --against, which is the throwaway target). "
-        "Takes precedence over --config / --env and the CONFITURE_DATABASE_URL "
-        "/ DATABASE_URL env vars.",
-    ),
-]
-EnvOpt = Annotated[
-    str | None,
-    typer.Option(
-        "--env", help="Environment shortcut — db/environments/{name}.yaml (e.g. --env production)."
     ),
 ]
 NoConfigOpt = Annotated[bool, typer.Option("--no-config", help=NO_CONFIG_OPTION_HELP)]
@@ -474,13 +449,22 @@ StrictOpt = Annotated[
 @cli_boundary
 def migrate_preflight(
     ctx: typer.Context,
-    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    migrations_dir: Path = migrations_dir_option(),
     format_type: str = format_option("table", "json"),
-    output_file: OutputFileOpt = None,
+    output_file: Path | None = output_option(),
     against: AgainstOpt = None,
-    config: ConfigOpt = None,
-    database_url: DatabaseUrlOpt = None,
-    env: EnvOpt = None,
+    config: Path | None = config_option(
+        None,
+        help="Config file for pending-migration detection. "
+        "Connects to the configured database to read the tracking table.",
+    ),
+    database_url: str | None = database_url_option(
+        help="PostgreSQL DSN of the tracking database for pending-migration "
+        "detection (distinct from --against, which is the throwaway target). "
+        "Takes precedence over --config / --env and the CONFITURE_DATABASE_URL "
+        "/ DATABASE_URL env vars."
+    ),
+    env: str | None = env_option(None),
     no_config: NoConfigOpt = False,
     since: SinceOpt = None,
     allow_non_transactional: AllowNonTransactionalOpt = False,

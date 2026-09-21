@@ -7,6 +7,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console
+from confiture.cli.options import database_url_option
 from confiture.core.mcp_server import MCPServer
 from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -15,7 +16,7 @@ mcp_app = typer.Typer(help="Run confiture as an MCP server.", no_args_is_help=Tr
 
 @mcp_app.callback(invoke_without_command=True)
 def mcp_server(
-    database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
+    database_url: str = database_url_option(...),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema to expose"),
     stdio: bool = typer.Option(False, "--stdio", help="Run in stdio mode (for Claude Code)"),
     include: str | None = typer.Option(None, "--include", help="LIKE pattern to filter functions"),

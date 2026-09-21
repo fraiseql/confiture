@@ -10,7 +10,7 @@ from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, is_json
-from confiture.cli.options import format_option
+from confiture.cli.options import database_url_option, format_option
 from confiture.core.cte_debugger import CTEDebugger
 from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError
@@ -24,9 +24,9 @@ debug_app = typer.Typer(
 @debug_app.command("cte")
 @cli_boundary
 def debug_cte(
-    database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
+    database_url: str = database_url_option(...),
     sql: str | None = typer.Option(None, "--sql", "-s", help="SQL query to debug"),
-    file: Path | None = typer.Option(None, "--file", "-f", help="SQL file to debug"),
+    file: Path | None = typer.Option(None, "--file", help="SQL file to debug"),
     max_rows: int = typer.Option(
         20, "--max-rows", "-n", help="Max rows per CTE step (default: 20)"
     ),

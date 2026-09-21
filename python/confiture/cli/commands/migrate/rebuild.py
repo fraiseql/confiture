@@ -13,19 +13,12 @@ import typer
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.migrate_formatter import format_rebuild_result
 from confiture.cli.helpers import console, is_json
-from confiture.cli.options import format_option
+from confiture.cli.options import config_option, format_option, migrations_dir_option
 from confiture.core import migrator as _core_migrator
 from confiture.core.ledger import write_backup
 from confiture.core.migrator import find_duplicate_migration_versions
 from confiture.exceptions import ConfigurationError, MigrationError
 
-ConfigOpt = Annotated[
-    Path,
-    typer.Option("--config", "-c", help="Configuration file (default: db/environments/local.yaml)"),
-]
-MigrationsDirOpt = Annotated[
-    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
-]
 DropSchemasOpt = Annotated[
     bool, typer.Option("--drop-schemas", help="Drop all user schemas before rebuild")
 ]
@@ -89,8 +82,8 @@ def _write_tracking_backup(rows: Any, tracking_table: str, format_output: str) -
 
 @cli_boundary
 def migrate_rebuild(
-    config: ConfigOpt = Path("db/environments/local.yaml"),
-    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    config: Path = config_option(),
+    migrations_dir: Path = migrations_dir_option(),
     drop_schemas: DropSchemasOpt = False,
     seed: SeedOpt = False,
     backup_tracking: BackupTrackingOpt = False,

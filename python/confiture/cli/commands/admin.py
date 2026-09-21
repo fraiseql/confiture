@@ -17,7 +17,13 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import (
+    config_option,
+    database_url_option,
+    env_option,
+    format_option,
+    migrations_dir_option,
+)
 from confiture.config.environment import Environment
 from confiture.core import checksum as _core_checksum
 from confiture.core import connection as _core_connection
@@ -167,18 +173,8 @@ def _print_install_outcome(outcome: dict[str, Any]) -> None:
 
 @cli_boundary
 def install_helpers(
-    config: Path = typer.Option(
-        None,
-        "--config",
-        "-c",
-        help="Configuration file (YAML)",
-    ),
-    env: str = typer.Option(
-        "local",
-        "--env",
-        "-e",
-        help="Environment name (default: local)",
-    ),
+    config: Path = config_option(None),
+    env: str = env_option(),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",
@@ -416,17 +412,8 @@ def _print_mismatches(mismatches: list, *, fixed: int | None) -> None:
 
 @cli_boundary
 def verify_checksums(
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory",
-    ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file",
-    ),
+    migrations_dir: Path = migrations_dir_option(),
+    config: Path = config_option(),
     fix: bool = typer.Option(
         False,
         "--fix",
@@ -558,18 +545,10 @@ def verify_checksums(
 
 @cli_boundary
 def validate_config(
-    config: Path = typer.Option(
-        None,
-        "--config",
-        "-c",
-        help="Configuration file to validate (default: db/environments/local.yaml)",
+    config: Path = config_option(
+        None, help="Configuration file to validate (default: db/environments/local.yaml)"
     ),
-    database_url: str = typer.Option(
-        None,
-        "--database-url",
-        "-d",
-        help=DATABASE_URL_OPTION_HELP,
-    ),
+    database_url: str = database_url_option(help=DATABASE_URL_OPTION_HELP),
     migrations_path: Path = typer.Option(
         Path("db/migrations"),
         "--migrations-path",

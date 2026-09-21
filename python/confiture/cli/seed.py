@@ -18,7 +18,7 @@ from rich.table import Table
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.seed_formatter import format_apply_result
 from confiture.cli.helpers import connect, emit, is_json
-from confiture.cli.options import format_option
+from confiture.cli.options import database_url_option, env_option, format_option, output_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.config.environment import Environment
 from confiture.core.progress import ProgressManager
@@ -143,20 +143,7 @@ def _validate_prep_seed(
 SeedsDirOpt = Annotated[
     Path, typer.Option("--seeds-dir", help="Directory containing seed files (default: db/seeds)")
 ]
-EnvOpt = Annotated[
-    str | None,
-    typer.Option("--env", help="Environment name for multi-env validation (default: none)"),
-]
 AllEnvsOpt = Annotated[bool, typer.Option("--all", help="Validate all environments (default: off)")]
-DatabaseUrlOpt = Annotated[
-    str | None,
-    typer.Option(
-        "--database-url", help="Database URL for database mode validation (default: none)"
-    ),
-]
-OutputOpt = Annotated[
-    Path | None, typer.Option("--output", help="Output file path (default: stdout)")
-]
 FixOpt = Annotated[
     bool, typer.Option("--fix", help="Automatically fix issues where possible (default: off)")
 ]
@@ -288,11 +275,13 @@ def _render_seed_validation(
 @cli_boundary
 def validate(
     seeds_dir: SeedsDirOpt = Path("db/seeds"),
-    env: EnvOpt = None,
+    env: str | None = env_option(None),
     all_envs: AllEnvsOpt = False,
-    database_url: DatabaseUrlOpt = None,
+    database_url: str | None = database_url_option(
+        help="Database URL for database mode validation (default: none)"
+    ),
     format_: str = format_option("text", "json", "csv"),
-    output: OutputOpt = None,
+    output: Path | None = output_option(),
     fix: FixOpt = False,
     dry_run: DryRunOpt = False,
     prep_seed: PrepSeedOpt = False,
@@ -390,9 +379,6 @@ def validate(
         fail(e, json_mode=is_json(format_), output_file=output)
 
 
-ApplyEnvOpt = Annotated[
-    str, typer.Option("--env", help="Environment name for database URL lookup (default: local)")
-]
 SequentialOpt = Annotated[
     bool,
     typer.Option("--sequential", help="Apply files sequentially, solves 650+ row parser limits"),
@@ -403,9 +389,6 @@ ContinueOnErrorOpt = Annotated[
         "--continue-on-error", help="Continue if file fails (--sequential only, useful for CI/CD)"
     ),
 ]
-ApplyDatabaseUrlOpt = Annotated[
-    str | None, typer.Option("--database-url", help="Database URL (overrides environment config)")
-]
 CopyFormatOpt = Annotated[
     bool, typer.Option("--copy-format", help="Use COPY format (2-10x faster for large datasets)")
 ]
@@ -414,16 +397,6 @@ CopyThresholdOpt = Annotated[
     typer.Option(
         "--copy-threshold",
         help=f"Row threshold for auto COPY (default: {DEFAULT_COPY_THRESHOLD}, use >1000 rows)",
-    ),
-]
-ReportOutputOpt = Annotated[
-    Path | None,
-    typer.Option(
-        "--output",
-        "-o",
-        "--report",
-        help="Save structured output (JSON/CSV) to file. --report is a "
-        "back-compat alias for --output/-o (DOCS-M2).",
     ),
 ]
 ProfileOpt = Annotated[
@@ -438,14 +411,21 @@ ProfileOpt = Annotated[
 @cli_boundary
 def apply(
     seeds_dir: SeedsDirOpt = DEFAULT_SEEDS_DIR,
-    env: ApplyEnvOpt = DEFAULT_ENV,
+    env: str = env_option(DEFAULT_ENV),
     sequential: SequentialOpt = False,
     continue_on_error: ContinueOnErrorOpt = False,
-    database_url: ApplyDatabaseUrlOpt = None,
+    database_url: str | None = database_url_option(
+        help="Database URL (overrides environment config)"
+    ),
     copy_format: CopyFormatOpt = False,
     copy_threshold: CopyThresholdOpt = DEFAULT_COPY_THRESHOLD,
     format_type: str = format_option("text", "json", "csv"),
-    report_output: ReportOutputOpt = None,
+    report_output: Path | None = output_option(
+        None,
+        "--report",
+        help="Save structured output (JSON/CSV) to file. --report is a "
+        "back-compat alias for --output/-o (DOCS-M2).",
+    ),
     profile: ProfileOpt = None,
 ) -> None:
     """Load seed data into the database.
@@ -609,11 +589,7 @@ def convert(
         "--input",
         help="Input file with INSERT statements (required)",
     ),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        help="Output file for COPY format (default: stdout)",
-    ),
+    output_file: Path | None = output_option(help="Output file for COPY format (default: stdout)"),
     batch: bool = typer.Option(
         False,
         "--batch",
@@ -901,9 +877,13 @@ def benchmark(
 @cli_boundary
 def seed_generate(
     table: str = typer.Argument(..., help="Table name to generate seed data for"),
-    database_url: str = typer.Option(..., "--database-url", "-d", help="PostgreSQL connection URL"),
+    database_url: str = database_url_option(...),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema name (default: public)"),
-    env: str = typer.Option("development", "--env", "-e", help="Seed environment directory"),
+    seed_env: str = typer.Option(
+        "development",
+        "--seed-env",
+        help="Seed directory under db/seeds/ to write into (default: development)",
+    ),
     output_dir: Path = typer.Option(
         Path("db/seeds"), "--output-dir", "-o", help="Seeds output directory (default: db/seeds)"
     ),
@@ -922,7 +902,7 @@ def seed_generate(
       confiture seed generate users --database-url $DATABASE_URL
         ↳ Generate seed stub for the users table
 
-      confiture seed generate bookings -d $DATABASE_URL --rows 5 --env test
+      confiture seed generate bookings -d $DATABASE_URL --rows 5 --seed-env test
         ↳ Generate 5-row stub for bookings in the test environment
     """
 
@@ -931,7 +911,7 @@ def seed_generate(
         schema=schema,
         row_count=row_count,
         output_dir=output_dir,
-        env=env,
+        env=seed_env,
         overwrite=overwrite,
     )
 

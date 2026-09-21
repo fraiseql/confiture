@@ -9,7 +9,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _get_tracking_table, console, emit, is_json
-from confiture.cli.options import format_option
+from confiture.cli.options import config_option, format_option, migrations_dir_option, output_option
 from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
@@ -17,10 +17,6 @@ from confiture.core import step_runner
 from confiture.core.backfill import BackfillSettings
 from confiture.models.results import MigrateStepsResult
 
-ConfigOpt = Annotated[Path, typer.Option("--config", "-c", help="Path to environment config file")]
-MigrationsDirOpt = Annotated[
-    Path, typer.Option("--migrations-dir", help="Directory containing migration files")
-]
 ResumeOpt = Annotated[
     str | None,
     typer.Option(
@@ -46,13 +42,13 @@ AllowDestructiveOpt = Annotated[
 
 @cli_boundary
 def migrate_steps(
-    config: ConfigOpt = Path("db/environments/local.yaml"),
-    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    config: Path = config_option(),
+    migrations_dir: Path = migrations_dir_option(),
     resume: ResumeOpt = None,
     allow_destructive: AllowDestructiveOpt = False,
     max_lock_ms: MaxLockMsOpt = None,
     format_type: str = format_option("table", "json"),
-    output_file: Path | None = typer.Option(None, "--output", "-o", help="Write output to file"),
+    output_file: Path | None = output_option(),
 ) -> None:
     """List the online runner's checkpoints, or resume an online migration from them.
 

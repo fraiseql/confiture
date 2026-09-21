@@ -12,7 +12,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, is_json
-from confiture.cli.options import format_option
+from confiture.cli.options import config_option, format_option, migrations_dir_option
 from confiture.core import migrator as _core_migrator
 from confiture.core.migrator import find_duplicate_migration_versions, parse_migration_filename
 from confiture.exceptions import ConfigurationError, MigrationError
@@ -117,17 +117,8 @@ def migrate_reinit(
         "-t",
         help="Mark migrations as applied through this version (default: all files on disk)",
     ),
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
+    migrations_dir: Path = migrations_dir_option(),
+    config: Path = config_option(),
     dry_run: bool = typer.Option(
         False,
         "--dry-run",

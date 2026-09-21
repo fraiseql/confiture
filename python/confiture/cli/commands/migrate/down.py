@@ -29,7 +29,14 @@ from confiture.cli.helpers import (
     error_console,
     is_json,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import (
+    config_option,
+    database_url_option,
+    format_option,
+    migrations_dir_option,
+    output_option,
+    verbose_option,
+)
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.error_handler import print_error_to_console
@@ -40,23 +47,9 @@ from confiture.error_codes import exit_code_of
 @cli_boundary
 def migrate_down(
     ctx: typer.Context,
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
-    database_url: str = typer.Option(
-        None,
-        "--database-url",
-        "-d",
-        help=DATABASE_URL_OPTION_HELP,
-    ),
+    migrations_dir: Path = migrations_dir_option(),
+    config: Path = config_option(),
+    database_url: str = database_url_option(help=DATABASE_URL_OPTION_HELP),
     no_config: bool = typer.Option(
         False,
         "--no-config",
@@ -83,19 +76,9 @@ def migrate_down(
         "--no-lock",
         help="Disable migration locking (default: migration.locking.enabled; DANGEROUS in multi-pod)",
     ),
-    verbose: bool = typer.Option(
-        False,
-        "--verbose",
-        "-v",
-        help="Show detailed analysis in dry-run (default: off)",
-    ),
+    verbose: bool = verbose_option(help="Show detailed analysis in dry-run (default: off)"),
     format_output: str = format_option("text", "json"),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save report to file (default: stdout)",
-    ),
+    output_file: Path | None = output_option(),
 ) -> None:
     """Rollback previously applied migrations.
 
@@ -199,23 +182,9 @@ def migrate_down_to(
         ...,
         help="Target revision to roll back to (stays applied). Use 'migrate current' to find it.",
     ),
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
-    database_url: str = typer.Option(
-        None,
-        "--database-url",
-        "-d",
-        help=DATABASE_URL_OPTION_HELP,
-    ),
+    migrations_dir: Path = migrations_dir_option(),
+    config: Path = config_option(),
+    database_url: str = database_url_option(help=DATABASE_URL_OPTION_HELP),
     no_config: bool = typer.Option(
         False,
         "--no-config",
@@ -227,12 +196,7 @@ def migrate_down_to(
         help="Print the rollback plan and exit 0 without applying anything.",
     ),
     format_output: str = format_option("text", "json"),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save output to file (default: stdout)",
-    ),
+    output_file: Path | None = output_option(),
 ) -> None:
     """Roll back every migration newer than <revision> (absolute rollback).
 
