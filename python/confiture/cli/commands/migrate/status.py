@@ -46,6 +46,7 @@ from confiture.core.migrator import (
     find_duplicate_migration_versions as _status_find,
 )
 from confiture.core.strategy import find_rebuild_strategy_files
+from confiture.error_codes import FINDINGS, NO_LEDGER_ERROR_CODE, exit_code_of
 from confiture.exceptions import ConfiturError
 
 
@@ -198,15 +199,15 @@ def migrate_status(
     # Reason: documented: a probe failure of any kind is status's exit 3 with its own rendering
     except Exception as e:
         _render_status_error(e, output_format, output_file)
-        raise typer.Exit(3) from e
+        raise typer.Exit(exit_code_of("CONFIG_006")) from e
 
     # Exit flags after output is written (avoids raising inside the try).
     if facts.db_source and facts.db_error:
-        raise typer.Exit(3)
+        raise typer.Exit(exit_code_of("CONFIG_006"))
     if facts.tracking_table_absent and output_format != "csv":
-        raise typer.Exit(2)
+        raise typer.Exit(exit_code_of(NO_LEDGER_ERROR_CODE))
     if facts.db_source and not facts.db_error and not facts.tracking_table_absent and rows.pending:
-        raise typer.Exit(1)
+        raise typer.Exit(FINDINGS)
 
 
 @dataclass(frozen=True)

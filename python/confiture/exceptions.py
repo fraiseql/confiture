@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from confiture.error_codes import ERROR_CODE_REGISTRY
+from confiture.error_codes import ERROR_CODE_REGISTRY, FAILURE
 from confiture.models.error import ErrorSeverity
 
 if TYPE_CHECKING:
@@ -157,7 +157,7 @@ class ConfiturError(Exception):
         if self.error_code:
             definition = ERROR_CODE_REGISTRY.get(self.error_code)
             return definition.exit_code
-        return 1
+        return FAILURE
 
 
 def base_message(error: BaseException) -> str:

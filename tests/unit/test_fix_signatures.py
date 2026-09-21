@@ -1,5 +1,6 @@
 """Unit tests for confiture migrate fix-signatures command."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import psycopg
@@ -352,7 +353,8 @@ class TestFixSignaturesApply:
 
 
 class TestFixSignaturesMissingConfig:
-    def test_exits_2_when_config_missing(self, tmp_path):
+    def test_a_missing_config_is_config_004_as_everywhere(self, tmp_path):
+        """Exit 5, as every other command's missing config (exit 2 through 1.15)."""
         result = runner.invoke(
             app,
             [
@@ -362,9 +364,12 @@ class TestFixSignaturesMissingConfig:
                 str(tmp_path / "missing.yaml"),
                 "--schema",
                 str(tmp_path / "schema.sql"),
+                "--format",
+                "json",
             ],
         )
-        assert result.exit_code == 2
+        assert result.exit_code == 5
+        assert json.loads(result.stdout)["error"]["code"] == "CONFIG_004"
 
     def test_exits_2_when_no_source_and_no_schema(self, tmp_path):
         config = tmp_path / "confiture.yaml"

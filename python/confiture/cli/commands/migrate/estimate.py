@@ -12,15 +12,18 @@ from typing import Any
 import typer
 from rich.table import Table
 
-from confiture.cli.error_json import cli_boundary
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     console,
     error_console,
+    is_json,
     open_connection,
 )
 from confiture.cli.options import format_option
 from confiture.core import connection as _core_connection
 from confiture.core import large_tables as _core_large_tables
+from confiture.error_codes import FAILURE
+from confiture.exceptions import ConfigurationError
 
 
 @cli_boundary
@@ -57,8 +60,14 @@ def migrate_estimate(
 
     try:
         if not config.exists():
-            error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-            raise typer.Exit(2)
+            fail(
+                ConfigurationError(
+                    f"Config file not found: {config}",
+                    error_code="CONFIG_004",
+                    resolution_hint="Specify config with --config path/to/config.yaml.",
+                ),
+                json_mode=is_json(format_output),
+            )
 
         config_data = _core_connection.load_config(config)
         with open_connection(config_data) as conn:
@@ -105,4 +114,4 @@ def migrate_estimate(
     # Reason: legacy text-only command: every failure is printed and exits 1
     except Exception as e:
         error_console.print(f"[red]❌ Error: {e}[/red]")
-        raise typer.Exit(1) from e
+        raise typer.Exit(FAILURE) from e

@@ -23,6 +23,7 @@ from confiture.core.destructive import data_loss_reason, resolve_policy
 from confiture.core.differ import SchemaDiffer
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.temp_database import clean_pg_dump_output, pg_dump_schema
+from confiture.error_codes import FAILURE
 from confiture.exceptions import DifferError, ValidationError
 from confiture.models.results import MigrateDiffChange, MigrateDiffResult
 
@@ -195,7 +196,7 @@ def migrate_diff(
             error=str(e),
         )
         format_migrate_diff_result(result, format_type, report_file, console)
-        raise typer.Exit(1) from e
+        raise typer.Exit(FAILURE) from e
 
 
 def _resolve_sides(

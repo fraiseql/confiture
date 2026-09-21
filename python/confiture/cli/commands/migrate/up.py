@@ -20,7 +20,12 @@ from confiture.cli.dsn import (
     config_is_explicit,
     resolve_database_url,
 )
-from confiture.cli.error_json import cli_boundary, fail, lock_error_to_confiture
+from confiture.cli.error_json import (
+    cli_boundary,
+    coerce_to_confiture_error,
+    fail,
+    lock_error_to_confiture,
+)
 from confiture.cli.formatters.migrate_formatter import (
     format_migrate_up_result,
     show_migration_error_details,
@@ -44,6 +49,7 @@ from confiture.core.error_handler import print_error_to_console
 from confiture.core.large_tables import BatchConfig
 from confiture.core.locking import LockAcquisitionError, resolve_lock_settings
 from confiture.core.migrator import find_duplicate_migration_versions
+from confiture.error_codes import FINDINGS, USAGE, exit_code_of
 from confiture.exceptions import MigrationConflictError
 
 MigrationsDirOpt = Annotated[
@@ -312,7 +318,7 @@ def migrate_up(
                 error_console.print(
                     "\n[red]❌ Strict mode enabled: Aborting due to orphaned files[/red]"
                 )
-                raise typer.Exit(1)
+                raise typer.Exit(FINDINGS)
 
         reporter = _UpReporter(live=not is_json(format_output), force=force)
         options: dict[str, Any] = {
@@ -377,17 +383,17 @@ def _validate_up_flags(
     """Flag combinations that make no sense exit 2 before anything runs."""
     if dry_run and dry_run_execute:
         error_console.print("[red]❌ Error: Cannot use both --dry-run and --dry-run-execute[/red]")
-        raise typer.Exit(2)
+        raise typer.Exit(USAGE)
     if (dry_run or dry_run_execute) and force:
         error_console.print("[red]❌ Error: Cannot use --dry-run with --force[/red]")
-        raise typer.Exit(2)
+        raise typer.Exit(USAGE)
     valid_mismatch_behaviors = ("fail", "warn", "ignore")
     if on_checksum_mismatch not in valid_mismatch_behaviors:
         error_console.print(
             f"[red]❌ Error: Invalid --on-checksum-mismatch '{on_checksum_mismatch}'. "
             f"Use one of: {', '.join(valid_mismatch_behaviors)}[/red]"
         )
-        raise typer.Exit(2)
+        raise typer.Exit(USAGE)
 
 
 def _refuse_duplicate_versions(
@@ -412,7 +418,7 @@ def _refuse_duplicate_versions(
     error_console.print(
         "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
     )
-    raise typer.Exit(3)
+    raise typer.Exit(exit_code_of("MIGR_106"))
 
 
 def _print_mode_warnings(say: Any, *, force: bool, no_lock: bool) -> None:
@@ -441,7 +447,7 @@ def _report_checksum_failure(error: Any, format_output: str, output_file: Path |
         "\n[yellow]💡 Tip: Use 'confiture verify-checksums --fix' to update checksums, "
         "or --no-verify-checksums to skip[/yellow]"
     )
-    raise typer.Exit(1) from error
+    raise typer.Exit(coerce_to_confiture_error(error).exit_code) from error
 
 
 def _report_lock_failure(
@@ -459,7 +465,7 @@ def _report_lock_failure(
         error_console.print(
             "[yellow]💡 Tip: Check if another migration is running, or use --no-lock (dangerous)[/yellow]"
         )
-    raise typer.Exit(6) from error
+    raise typer.Exit(lock_error_to_confiture(error).exit_code) from error
 
 
 # Live lines that carry nothing from the event but its kind.
@@ -557,7 +563,7 @@ def _render_up_result(
         # the reporter already printed the recovery hint in text mode.
         if not text:
             format_migrate_up_result(result, format_output, output_file, console)
-        raise typer.Exit(1)
+        raise typer.Exit(FINDINGS)
 
     if not result.success:
         if text:
@@ -572,7 +578,7 @@ def _render_up_result(
             )
         else:
             format_migrate_up_result(result, format_output, output_file, console)
-        raise typer.Exit(3)
+        raise typer.Exit(exit_code_of("MIGR_001"))
 
     if not result.dry_run and not result.migrations_applied and text:
         if force:

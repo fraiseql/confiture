@@ -59,6 +59,26 @@ reference from the CLI with `confiture --exit-codes`.
 > code; the convention test (`tests/unit/test_exit_code_convention.py`) fails if
 > the registry and the hand-authored table disagree.
 
+## Every exit is named (1.16.0)
+
+A command exits with one of four named outcomes from `confiture.error_codes`, or
+with the registered code of the error it hit — never with an integer written at
+the call site. `tests/unit/test_exit_codes_are_named.py` fails on `typer.Exit(2)`,
+`typer.Exit(code=2)`, `SystemExit(2)` or `sys.exit(2)` anywhere under `cli/`.
+
+| Name | Exit | Meaning |
+|------|------|---------|
+| `SUCCESS` | 0 | Did what was asked; nothing to report. |
+| `FINDINGS` | 1 | Ran to the end, and its report says something needs attention: drift, lint violations, a checksum or row-count mismatch, a pending or skipped migration, a hook that failed. A gate's answer — no error envelope. |
+| `USAGE` | 2 | The flags make no sense together. Click exits 2 for its own usage errors. |
+| `FAILURE` | 1 | An error with no registered code — what `ConfiturError` exits with when it carries none. |
+
+An error is named by its symbolic code: `fail(error)` exits with
+`error.exit_code`, and a site that has printed its own rendering writes
+`typer.Exit(exit_code_of("PRECON_1001"))`, which reads the same table. None of
+these names adds an integer or a symbolic code, so `confiture --exit-codes-json`
+is unchanged.
+
 ## Per-code carve-outs
 
 A few codes deliberately differ from their family's default number. During any

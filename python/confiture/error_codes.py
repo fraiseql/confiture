@@ -29,6 +29,7 @@ docs/reference/exit-codes.md and CANONICAL_EXIT_CODES below for the contract):
 
 import json
 from dataclasses import dataclass
+from typing import Final
 
 from confiture.error_code_table import ERROR_CODE_DEFINITIONS
 from confiture.models.error import ErrorSeverity
@@ -294,6 +295,31 @@ EXIT_CODE_SEMANTIC_CLASS: dict[int, str] = {
     7: "git_error",
     8: "irreversible_rollback",
 }
+
+# The exits that are not errors, so have no symbolic code and write no envelope. A
+# command that fails exits with its error's registered code instead:
+# ``exit_code_of("PRECON_1001")``, or ``fail(error)``, which reads the same registry.
+#: The command did what was asked and found nothing to report.
+SUCCESS: Final = 0
+#: The command ran to the end and its report says something needs attention — drift,
+#: violations, a checksum or row-count mismatch, a pending or skipped migration, a
+#: hook that failed. A gate's answer, not confiture's failure (#146).
+FINDINGS: Final = 1
+#: The flags make no sense together. Click exits 2 for its own usage errors; so do we.
+USAGE: Final = 2
+#: An error with no registered code: the exit a ``ConfiturError`` that carries none
+#: takes, and so the exit of any exception ``fail()`` has to wrap.
+FAILURE: Final = 1
+
+
+def exit_code_of(code: str) -> int:
+    """The exit integer the registry assigns *code* (``CANONICAL_EXIT_CODES``).
+
+    For a site that has printed its own rendering of an error and must not print
+    the envelope too; everywhere else ``fail(error)`` exits with the same integer.
+    """
+    return CANONICAL_EXIT_CODES[code]
+
 
 # The symbolic error code (exit 2) for a reachable-but-uninitialised database — no
 # migration ledger. It is the one code a consumer keys on to recognise "no ledger"

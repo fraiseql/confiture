@@ -20,6 +20,7 @@ from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
 from confiture.core.seed.applier import apply_profile_filter
 from confiture.core.test_db import RamSetupResult, TemplateState, TestDbProvisioner
+from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError
 
 test_db_app = typer.Typer(help="Provision isolated template/clone test databases for parallel CI.")
@@ -290,7 +291,7 @@ def status(
         console.print(f"Template '{template}': [bold]{result.state.value}[/bold]")
 
     if result.state is not TemplateState.CURRENT:
-        raise typer.Exit(1)
+        raise typer.Exit(FINDINGS)
 
 
 @test_db_app.command("list")

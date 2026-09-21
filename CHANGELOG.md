@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Every exit a command takes is named.** Sixty `typer.Exit(<integer>)` sites
+  under `cli/` said `1`, `2` or `3` without saying which meaning of it they
+  meant. Each is now one of four named outcomes in `confiture.error_codes` —
+  `SUCCESS`, `FINDINGS` (the report says something needs attention), `USAGE`
+  (the flags make no sense together) and `FAILURE` (an error with no registered
+  code) — or its error's registered code, `exit_code_of("PRECON_1001")`.
+  `tests/unit/test_exit_codes_are_named.py` fails on an integer literal in any
+  exit spelling and on a name the registry does not know; it replaces the
+  per-module ratchet in `test_no_raw_exit_convention.py`, whose every entry is now
+  zero. `helpers.FINDINGS_EXIT_CODE` and `USAGE_EXIT_CODE` move to
+  `error_codes.FINDINGS` / `USAGE`. No integer and no symbolic code is added:
+  `confiture --exit-codes-json` is byte-identical.
 - **Every command's JSON carries one envelope: `ok`, `command` and `parser`.** The
   error path has been one writer since #145; the success path was 33 writers in 16
   modules, each choosing its indentation, its stream and whether to name the parser. `cli/helpers.emit` is the one writer now. It adds `ok: true` (the command
@@ -121,6 +133,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`migrate baseline --from-db` no longer prints the source DSN's password.** The
   "Baseline from …" line printed the DSN as given; it is redacted now, as every other
   printed URL is.
+- ⚠️ **A missing config file exits 5 in `migrate fix-signatures` and
+  `migrate estimate`, as in every other command.** Both exited 2 — the "no
+  ledger" integer — and printed a line of their own; they now raise `CONFIG_004`
+  through the error boundary, which also gives them the JSON envelope under
+  `--format json`. `fix-signatures`' catch-all failure exits 1 (was 2). Neither
+  command has a known caller.
+- **`seed generate --format json` exits 1 when generation failed.** The text
+  format did; the JSON format emitted `success: false` and exited 0.
 - **`--dry-run-execute` stops where `up` stops.** The copied loop never looked at
   `requires_superuser`, so the rehearsal ran a migration the real run halts before, and
   never named the `migrate apply-as` the real run asks for. It halts at it, reports it

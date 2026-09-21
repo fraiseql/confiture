@@ -28,6 +28,7 @@ from confiture.core.migrator import (
 from confiture.core.migrator import (
     parse_migration_filename,
 )
+from confiture.error_codes import SUCCESS, USAGE, exit_code_of
 from confiture.exceptions import ExternalGeneratorError, ValidationError
 
 # A migration name becomes a filename and a class name. snake_case only: a `/`
@@ -162,7 +163,7 @@ def migrate_generate(
             config=config,
             dry_run=dry_run,
         )
-        raise typer.Exit(0)
+        raise typer.Exit(SUCCESS)
 
     migrations_dir.mkdir(parents=True, exist_ok=True)
     generator_instance = MigrationGenerator(migrations_dir=migrations_dir)
@@ -350,13 +351,13 @@ def _run_external_generator(
         error_console.print(
             "[red]❌ Error: --from and --to are required when --generator is used[/red]"
         )
-        raise typer.Exit(2)
+        raise typer.Exit(USAGE)
     env_config = _load_environment_if_present(config)
     if env_config is None or generator not in env_config.migration.migration_generators:
         error_console.print(
             f"[red]❌ Error: Generator '{generator}' not found in migration_generators config[/red]"
         )
-        raise typer.Exit(2)
+        raise typer.Exit(USAGE)
     gen_config = env_config.migration.migration_generators[generator]
     migrations_dir.mkdir(parents=True, exist_ok=True)
     gen_instance = MigrationGenerator(migrations_dir=migrations_dir)
@@ -370,10 +371,10 @@ def _run_external_generator(
         )
     except FileNotFoundError as exc:
         error_console.print(f"[red]❌ Error: {exc}[/red]")
-        raise typer.Exit(2) from exc
+        raise typer.Exit(USAGE) from exc
     except ExternalGeneratorError as exc:
         error_console.print(f"[red]❌ Generator error: {exc}[/red]")
-        raise typer.Exit(3) from exc
+        raise typer.Exit(exit_code_of("GEN_001")) from exc
     if dry_run:
         console.print(f"[dim]Resolved command:[/] {resolved_cmd}")
         console.print(f"[dim]Target file:      [/] {up_sql_path}")

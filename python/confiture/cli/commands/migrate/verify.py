@@ -31,6 +31,7 @@ from confiture.cli.options import format_option
 from confiture.core import connection as _core_connection
 from confiture.core import migration_verifier as _core_migration_verifier
 from confiture.core import migrator as _core_migrator
+from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError, DatabaseNotInitializedError
 from confiture.models.results import VerifyAllResult
 
@@ -184,4 +185,4 @@ def migrate_verify(
             format_verify_results(verify_result, console)
 
         if verify_result.failed_count > 0:
-            raise typer.Exit(1)
+            raise typer.Exit(FINDINGS)

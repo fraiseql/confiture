@@ -12,6 +12,7 @@ from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, is_json
 from confiture.cli.options import format_option
 from confiture.core.cte_debugger import CTEDebugger
+from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError
 
 debug_app = typer.Typer(
@@ -96,7 +97,7 @@ def debug_cte(
         if not session.all_succeeded:
             # success-signal: the debug session ran fine and is reporting that a
             # CTE in the user's query failed — not a confiture-domain error.
-            raise typer.Exit(1)
+            raise typer.Exit(FINDINGS)
         return
 
     # Table output
@@ -129,4 +130,4 @@ def debug_cte(
         console.print(f"[red]Failed at CTE: {session.failed_at}[/red]")
         # success-signal: a CTE in the user's query failed (see above) — the
         # debug command itself succeeded.
-        raise typer.Exit(1)
+        raise typer.Exit(FINDINGS)

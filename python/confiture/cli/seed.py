@@ -31,6 +31,7 @@ from confiture.core.seed.validation.prep_seed import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )
+from confiture.error_codes import FAILURE, FINDINGS, SUCCESS
 from confiture.exceptions import ConfigurationError, ConfiturError, SeedError
 
 # Create Rich console for pretty output
@@ -128,9 +129,9 @@ def _validate_prep_seed(
 
         # Exit with appropriate code
         if report.has_violations:
-            raise typer.Exit(1)  # success-signal: validation found violations
+            raise typer.Exit(FINDINGS)  # success-signal: validation found violations
         else:
-            raise typer.Exit(0)  # success-signal: clean
+            raise typer.Exit(SUCCESS)  # success-signal: clean
 
     except typer.Exit:
         raise
@@ -378,9 +379,9 @@ def validate(
 
         # Exit with appropriate code
         if all_violations:
-            raise typer.Exit(1)  # success-signal: validation found violations
+            raise typer.Exit(FINDINGS)  # success-signal: validation found violations
         else:
-            raise typer.Exit(0)  # success-signal: clean
+            raise typer.Exit(SUCCESS)  # success-signal: clean
 
     except typer.Exit:
         raise
@@ -497,7 +498,7 @@ def apply(
     if not sequential:
         console.print("[yellow]ℹ Use --sequential for files with 500+ rows[/yellow]")
         console.print("[yellow]  confiture seed apply --sequential --env {env}[/yellow]")
-        raise typer.Exit(0)  # success-signal: advisory, nothing applied
+        raise typer.Exit(SUCCESS)  # success-signal: advisory, nothing applied
 
     # Verify seeds directory exists
     if not seeds_dir.exists():
@@ -583,9 +584,9 @@ def apply(
 
         # Exit with error if files failed and not continuing
         if result.failed > 0 and not continue_on_error:
-            raise typer.Exit(1)  # success-signal: some seed files failed
+            raise typer.Exit(FINDINGS)  # success-signal: some seed files failed
 
-        raise typer.Exit(0)  # success-signal: all applied
+        raise typer.Exit(SUCCESS)  # success-signal: all applied
 
     except typer.Exit:
         connection.close()
@@ -712,7 +713,7 @@ def convert(
             sql_files = sorted(input_file.glob("*.sql"))
             if not sql_files:
                 console.print(f"[yellow]⚠ No .sql files found in {input_file}[/yellow]")
-                raise typer.Exit(0)
+                raise typer.Exit(SUCCESS)
 
             console.print(f"[bold]Processing {len(sql_files)} files...[/bold]\n")
 
@@ -754,7 +755,7 @@ def convert(
             if report.successful > 0:
                 console.print(f"\n[green]✓ Results saved to: {output_file}[/green]")
 
-            raise typer.Exit(0)
+            raise typer.Exit(SUCCESS)
 
         # Single file mode
         sql_content = input_file.read_text()
@@ -769,7 +770,7 @@ def convert(
                 "cannot be converted to COPY format. You can still use\n"
                 "the original INSERT format for this file.[/dim]"
             )
-            raise typer.Exit(1)
+            raise typer.Exit(FINDINGS)
 
         # Output result
         if output_file:
@@ -781,7 +782,7 @@ def convert(
         else:
             sys.stdout.write(result.copy_format or "")
 
-        raise typer.Exit(0)
+        raise typer.Exit(SUCCESS)
 
     except typer.Exit:
         raise
@@ -879,7 +880,7 @@ def benchmark(
 
         if not seed_data:
             console.print("[yellow]No seed files found[/yellow]")
-            raise typer.Exit(0)
+            raise typer.Exit(SUCCESS)
 
         # Run benchmark
         benchmark_runner = PerformanceBenchmark()
@@ -887,7 +888,7 @@ def benchmark(
 
         # Display results using helper
         _format_benchmark_output(result)
-        raise typer.Exit(0)  # success-signal: benchmark complete
+        raise typer.Exit(SUCCESS)  # success-signal: benchmark complete
 
     except typer.Exit:
         raise
@@ -954,4 +955,6 @@ def seed_generate(
         )
     else:
         console.print(f"[red]Error: {result.error}[/red]")
-        raise typer.Exit(1)
+    if not result.success:
+        # The result carries the failure in either format; the exit says so in both.
+        raise typer.Exit(FAILURE)

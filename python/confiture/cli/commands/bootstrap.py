@@ -38,6 +38,7 @@ from confiture.config._env_vars import expand_env_vars
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
 from confiture.core.connection import load_config
 from confiture.core.validation.config_loaders import load_ownership_expectation
+from confiture.error_codes import FINDINGS, SUCCESS
 from confiture.exceptions import BootstrapError, BootstrapScopeError, ConfigurationError
 
 
@@ -193,12 +194,12 @@ def bootstrap(
         if mode == "check":
             _render_check(plan, output_format)
             if plan.is_empty:
-                raise typer.Exit(0)  # success-signal: no drift
-            raise typer.Exit(1)  # success-signal: drift detected
+                raise typer.Exit(SUCCESS)  # success-signal: no drift
+            raise typer.Exit(FINDINGS)  # success-signal: drift detected
 
         if mode == "dry-run":
             _render_dry_run(plan, output_format)
-            raise typer.Exit(0)  # success-signal: plan rendered, no side effects
+            raise typer.Exit(SUCCESS)  # success-signal: plan rendered, no side effects
 
         # Otherwise the mode is "apply".
         executor = BootstrapExecutor()
@@ -208,7 +209,7 @@ def bootstrap(
             fail(exc, json_mode=json_mode)
 
         _render_apply(result, output_format)
-        raise typer.Exit(0)  # success-signal: applied
+        raise typer.Exit(SUCCESS)  # success-signal: applied
     finally:
         conn.close()
 

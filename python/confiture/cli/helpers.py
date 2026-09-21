@@ -299,15 +299,6 @@ def _get_tracking_table(config_data: Any) -> str:
         ) from e
 
 
-#: The success-signal exit for a gate that ran and found something — lint
-#: violations, duplicate definitions. Not an error: no envelope, exit 1 (#146).
-FINDINGS_EXIT_CODE = 1
-
-#: Flag combinations that make no sense exit 2 before anything runs
-#: CLI contract) — a usage error, not a failure envelope.
-USAGE_EXIT_CODE = 2
-
-
 def _command_path() -> str | None:
     """The running command's path — ``migrate up`` — from the Click context, if one is live."""
     context = _current_context(silent=True)
