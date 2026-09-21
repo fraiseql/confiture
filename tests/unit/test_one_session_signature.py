@@ -40,11 +40,13 @@ from __future__ import annotations
 import ast
 import inspect
 import re
+from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
 import confiture
 from confiture.core._migrator import apply_loop, replay, reporting, rollback_loop
+from confiture.core._migrator.options import UpOptions
 from confiture.core._migrator.session import MigratorSession
 from confiture.core.migrator import Migrator
 
@@ -73,6 +75,11 @@ NOT_DELEGATING: dict[str, str] = {
     "is_locked": "builds a `MigrationLock` on the session's connection and asks it directly",
     "get_lock_holder": "as `is_locked` — a lock query, not a migration verb",
 }
+
+# A value a verb builds from its keywords and hands the delegate whole. The
+# agreements read through it: the verb's keywords must reach its fields, and every
+# field must be given one — ``up()`` forwards its seventeen as one ``UpOptions``.
+OPTIONS_OBJECTS: dict[str, type] = {"UpOptions": UpOptions}
 
 # Delegate parameters the facade deliberately does not surface, with the reason.
 # An entry that stops matching fails, as in the one-lexer guard.  Empty: the two
@@ -153,6 +160,29 @@ def _forwarding(call: ast.Call, delegate_params: list[str]) -> tuple[dict[str, s
     return bound, names
 
 
+def _options_call(call: ast.Call) -> ast.Call | None:
+    """The options object a delegate call hands over whole, if it hands one."""
+    for arg in [*call.args, *(keyword.value for keyword in call.keywords)]:
+        if (
+            isinstance(arg, ast.Call)
+            and isinstance(arg.func, ast.Name)
+            and arg.func.id in OPTIONS_OBJECTS
+        ):
+            return arg
+    return None
+
+
+def _agreements(name: str, fn: ast.FunctionDef) -> tuple[list[str], dict[str, str], set[str]]:
+    """What the verb forwards to: the delegate's parameters, or an options object's fields."""
+    call = _delegate_call(fn)
+    options = _options_call(call)
+    if options is None:
+        params = _delegate_params(DELEGATES[name])
+        return (params, *_forwarding(call, params))
+    fields_of = [field.name for field in fields(OPTIONS_OBJECTS[options.func.id])]  # type: ignore[union-attr]
+    return (fields_of, *_forwarding(options, fields_of))
+
+
 def _is_accessor(fn: ast.FunctionDef) -> bool:
     """A property, a setter, a classmethod or a staticmethod — not a verb."""
     for decorator in fn.decorator_list:
@@ -228,8 +258,7 @@ def test_the_guard_reaches_its_subject() -> None:
 def test_every_declared_parameter_reaches_the_delegate() -> None:
     """Agreement 1: nothing a verb accepts is dropped on the way to the delegate."""
     for name, fn in _delegating_methods().items():
-        params = _delegate_params(DELEGATES[name])
-        _, forwarded = _forwarding(_delegate_call(fn), params)
+        _, _, forwarded = _agreements(name, fn)
         dropped = [p for p in _declared(fn) if p not in forwarded]
         assert not dropped, (
             f"MigratorSession.{name} accepts {dropped} but never forwards them — a caller "
@@ -240,8 +269,7 @@ def test_every_declared_parameter_reaches_the_delegate() -> None:
 def test_every_forwarded_name_is_a_delegate_parameter() -> None:
     """Agreement 2: the delegate accepts everything the facade hands it."""
     for name, fn in _delegating_methods().items():
-        params = _delegate_params(DELEGATES[name])
-        bound, _ = _forwarding(_delegate_call(fn), params)
+        params, bound, _ = _agreements(name, fn)
         unknown = [p for p in bound if p not in params]
         assert not unknown, (
             f"MigratorSession.{name} forwards {unknown}, which "
@@ -252,8 +280,7 @@ def test_every_forwarded_name_is_a_delegate_parameter() -> None:
 def test_every_delegate_parameter_receives_an_argument() -> None:
     """Agreement 3: a delegate that grows a parameter cannot silently default it."""
     for name, fn in _delegating_methods().items():
-        params = _delegate_params(DELEGATES[name])
-        bound, _ = _forwarding(_delegate_call(fn), params)
+        params, bound, _ = _agreements(name, fn)
         missing = [p for p in params if p not in bound and (name, p) not in NOT_SURFACED]
         assert not missing, (
             f"{DELEGATES[name].__qualname__} declares {missing}, which "
@@ -270,8 +297,7 @@ def test_not_surfaced_entries_still_match() -> None:
         if name not in DELEGATES:
             stale.append((name, param))
             continue
-        params = _delegate_params(DELEGATES[name])
-        bound, _ = _forwarding(_delegate_call(_delegating_methods()[name]), params)
+        params, bound, _ = _agreements(name, _delegating_methods()[name])
         if param not in params or param in bound:
             stale.append((name, param))
     assert not stale, f"NOT_SURFACED entries that no longer match anything: {stale}"
@@ -371,3 +397,21 @@ def test_no_documented_parameter_has_gone() -> None:
         declared = set(_declared(fn))
         ghosts = sorted(documented - declared)
         assert not ghosts, f"MigratorSession.{name} documents {ghosts}, which it does not accept"
+
+
+def test_an_options_object_is_all_its_delegate_takes() -> None:
+    """``up()`` hands ``apply_loop.up`` one ``UpOptions`` and nothing beside it."""
+    assert _delegate_params(apply_loop.up) == ["options"]
+    call = _delegate_call(_delegating_methods()["up"])
+    assert _options_call(call) is not None
+    assert len(call.args) + len(call.keywords) == 2  # the session, and the options
+
+
+def test_the_agreements_read_through_an_options_object() -> None:
+    """The guard, seen red: a keyword left out of the ``UpOptions`` it builds is caught."""
+    call = ast.parse("f(self, UpOptions(target=target))").body[0].value  # type: ignore[attr-defined]
+    options = _options_call(call)
+    assert options is not None
+    fields_of = [field.name for field in fields(UpOptions)]
+    bound, _ = _forwarding(options, fields_of)
+    assert [f for f in fields_of if f not in bound][:2] == ["dry_run", "dry_run_execute"]

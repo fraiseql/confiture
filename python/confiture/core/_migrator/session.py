@@ -50,6 +50,7 @@ from confiture.core._migrator import rollback_loop as _rollback_loop
 from confiture.core._migrator.engine import MigrationEngine
 from confiture.core._migrator.events import UpObserver
 from confiture.core._migrator.loader import load_migration_class
+from confiture.core._migrator.options import UpOptions
 from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_settings
 from confiture.exceptions import ConfigurationError
 
@@ -409,23 +410,25 @@ class MigratorSession:
         lock_timeout, no_lock = self._lock_settings(lock_timeout, no_lock)
         return _apply_loop.up(
             self,
-            target=target,
-            dry_run=dry_run,
-            dry_run_execute=dry_run_execute,
-            verify_checksums=verify_checksums,
-            on_checksum_mismatch=on_checksum_mismatch,
-            force=force,
-            lock_timeout=lock_timeout,
-            no_lock=no_lock,
-            require_reversible=require_reversible,
-            allow_destructive=allow_destructive,
-            online=online,
-            backfill=backfill,
-            strict_mode=strict_mode,
-            auto_baseline=auto_baseline,
-            install_view_helpers=install_view_helpers,
-            on_event=on_event,
-            batch=batch,
+            UpOptions(
+                target=target,
+                dry_run=dry_run,
+                dry_run_execute=dry_run_execute,
+                verify_checksums=verify_checksums,
+                on_checksum_mismatch=on_checksum_mismatch,
+                force=force,
+                lock_timeout=lock_timeout,
+                no_lock=no_lock,
+                require_reversible=require_reversible,
+                allow_destructive=allow_destructive,
+                online=online,
+                backfill=backfill,
+                strict_mode=strict_mode,
+                auto_baseline=auto_baseline,
+                install_view_helpers=install_view_helpers,
+                on_event=on_event,
+                batch=batch,
+            ),
         )
 
     def apply_one(

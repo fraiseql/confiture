@@ -16,7 +16,7 @@ from confiture.core._migrator import policy as _policy
 from confiture.core._migrator.apply import Online
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.events import UpObserver, emit
-from confiture.core.backfill import BackfillSettings
+from confiture.core._migrator.options import UpOptions
 from confiture.core.checksum import (
     ChecksumConfig,
     ChecksumMismatchBehavior,
@@ -118,72 +118,33 @@ class _Applied:
     halted: bool = False
 
 
-def _up_under_lock(
-    session: MigratorSession,
-    *,
-    allow_destructive: bool,
-    online: RunOptions | None,
-    target: str | None,
-    dry_run: bool,
-    dry_run_execute: bool,
-    verify_checksums: bool,
-    on_checksum_mismatch: str,
-    force: bool,
-    require_reversible: bool,
-    strict_mode: bool | None = None,
-    auto_baseline: Path | None = None,
-    install_view_helpers: bool | None = None,
-    on_event: UpObserver | None = None,
-    batch: Any | None = None,
-) -> MigrateUpResult:
+def _up_under_lock(session: MigratorSession, options: UpOptions) -> MigrateUpResult:
     """The body of :meth:`MigratorSession.up`, run while the migration lock is held."""
-    plan = _plan(
-        session,
-        force=force,
-        verify_checksums=verify_checksums,
-        on_checksum_mismatch=on_checksum_mismatch,
-        strict_mode=strict_mode,
-        auto_baseline=auto_baseline,
-        install_view_helpers=install_view_helpers,
-        on_event=on_event,
-    )
-    early = _before_apply(
-        session,
-        plan,
-        dry_run=dry_run,
-        require_reversible=require_reversible,
-        allow_destructive=allow_destructive,
-        target=target,
-    )
+    plan = _plan(session, options)
+    early = _before_apply(session, plan, options)
     if early is not None:
         return early
-    if dry_run_execute:
-        return _rehearse(session, plan, target=target, force=force, on_event=on_event, batch=batch)
-    applied = _apply_pending(
-        session,
-        plan,
-        target=target,
-        force=force,
-        on_event=on_event,
-        batch=batch,
-        online=online,
+    if options.dry_run_execute:
+        return _rehearse(session, plan, options)
+    applied = _apply_pending(session, plan, options, online=_run_options(options))
+    return _up_result(plan, applied, force=options.force)
+
+
+def _run_options(options: UpOptions) -> RunOptions | None:
+    """How the step runner applies an ``--online`` migration, or ``None`` when not asked to."""
+    if not options.online:
+        return None
+    return RunOptions(
+        allow_destructive=options.allow_destructive,
+        on_event=options.on_event,
+        settings=options.backfill,
     )
-    return _up_result(plan, applied, force=force)
 
 
-def _plan(
-    session: MigratorSession,
-    *,
-    force: bool,
-    verify_checksums: bool,
-    on_checksum_mismatch: str,
-    strict_mode: bool | None,
-    auto_baseline: Path | None,
-    install_view_helpers: bool | None,
-    on_event: UpObserver | None,
-) -> _Plan:
+def _plan(session: MigratorSession, options: UpOptions) -> _Plan:
     """Baseline, plan, view helpers, checksums and strict mode — the lock is held."""
     assert session._migrator is not None
+    force, on_event, auto_baseline = options.force, options.on_event, options.auto_baseline
     if auto_baseline is not None:
         _policy.auto_baseline(
             conn=session._conn,
@@ -193,10 +154,12 @@ def _plan(
             on_event=on_event,
         )
     pending_files, skipped_versions = _plan_under_lock(session, force=force)
-    if _policy.wants_view_helpers(install_view_helpers, session._config):
+    if _policy.wants_view_helpers(options.install_view_helpers, session._config):
         _policy.install_view_helpers(session._conn, on_event)
     checksums_verified, checksum_warnings = _verify_checksums(
-        session, enabled=verify_checksums and not force, on_mismatch=on_checksum_mismatch
+        session,
+        enabled=options.verify_checksums and not force,
+        on_mismatch=options.on_checksum_mismatch,
     )
     if checksums_verified:
         emit(on_event, "checksums_verified")
@@ -211,20 +174,16 @@ def _plan(
         pending_versions=pending_versions,
         checksums_verified=checksums_verified,
         checksum_warnings=checksum_warnings,
-        strict=_policy.resolve_strict_mode(strict_mode, session._config),
+        strict=_policy.resolve_strict_mode(options.strict_mode, session._config),
     )
 
 
 def _before_apply(
-    session: MigratorSession,
-    plan: _Plan,
-    *,
-    dry_run: bool,
-    require_reversible: bool,
-    allow_destructive: bool = False,
-    target: str | None = None,
+    session: MigratorSession, plan: _Plan, options: UpOptions
 ) -> MigrateUpResult | None:
     """The result ``up`` returns without applying anything, or ``None`` to go on."""
+    dry_run, target = options.dry_run, options.target
+    require_reversible, allow_destructive = options.require_reversible, options.allow_destructive
     if dry_run:
         return MigrateUpResult(
             success=True,
@@ -283,11 +242,8 @@ def _before_apply(
 def _apply_pending(
     session: MigratorSession,
     plan: _Plan,
+    options: UpOptions,
     *,
-    target: str | None,
-    force: bool,
-    on_event: UpObserver | None,
-    batch: Any | None,
     online: RunOptions | None = None,
     rehearsal: bool = False,
 ) -> _Applied:
@@ -296,6 +252,7 @@ def _apply_pending(
     A *rehearsal* (``--dry-run-execute``) runs inside its caller's SAVEPOINT: nothing
     commits, and a body that would commit as it goes is skipped.
     """
+    target, force, on_event, batch = options.target, options.force, options.on_event, options.batch
     assert session._migrator is not None
     applied = _Applied()
     try:
@@ -433,15 +390,7 @@ def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResul
     )
 
 
-def _rehearse(
-    session: MigratorSession,
-    plan: _Plan,
-    *,
-    target: str | None,
-    force: bool,
-    on_event: UpObserver | None = None,
-    batch: Any | None = None,
-) -> MigrateUpResult:
+def _rehearse(session: MigratorSession, plan: _Plan, options: UpOptions) -> MigrateUpResult:
     """``--dry-run-execute``: the apply loop itself, inside a SAVEPOINT that is rolled back.
 
     Real SQL errors — syntax, constraints, type mismatches — surface without
@@ -454,15 +403,7 @@ def _rehearse(
     try:
         session._conn.execute("SAVEPOINT dry_run_execute")
         try:
-            applied = _apply_pending(
-                session,
-                plan,
-                target=target,
-                force=force,
-                on_event=on_event,
-                batch=batch,
-                rehearsal=True,
-            )
+            applied = _apply_pending(session, plan, options, rehearsal=True)
         finally:
             session._conn.execute("ROLLBACK TO SAVEPOINT dry_run_execute")
             session._conn.execute("RELEASE SAVEPOINT dry_run_execute")
@@ -524,28 +465,9 @@ def _apply_strict_mode(migration: Any, strict: bool) -> None:
         migration.strict_mode = True
 
 
-def up(
-    session: MigratorSession,
-    *,
-    target: str | None = None,
-    dry_run: bool = False,
-    dry_run_execute: bool = False,
-    verify_checksums: bool = True,
-    on_checksum_mismatch: str = "fail",
-    force: bool = False,
-    lock_timeout: int = 30000,
-    no_lock: bool = False,
-    require_reversible: bool = False,
-    allow_destructive: bool = False,
-    strict_mode: bool | None = None,
-    auto_baseline: Path | None = None,
-    install_view_helpers: bool | None = None,
-    on_event: UpObserver | None = None,
-    batch: Any | None = None,
-    online: bool = False,
-    backfill: BackfillSettings | None = None,
-) -> MigrateUpResult:
+def up(session: MigratorSession, options: UpOptions) -> MigrateUpResult:
     """See :meth:`MigratorSession.up`."""
+    dry_run, dry_run_execute = options.dry_run, options.dry_run_execute
     if session._migrator is None:
         raise ConfigurationError(
             "MigratorSession must be used as a context manager",
@@ -569,33 +491,11 @@ def up(
     # deployer that waited for the lock finds nothing left to apply instead
     # of failing on what the first one just recorded — and two first-run
     # deployers cannot race the ledger CREATE.
-    lock = session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout)
+    lock = session._migration_lock(no_lock=options.no_lock, lock_timeout=options.lock_timeout)
     with lock.acquire():
-        if not no_lock:
-            emit(on_event, "lock_acquired")
-        return _up_under_lock(
-            session,
-            allow_destructive=allow_destructive,
-            online=(
-                RunOptions(
-                    allow_destructive=allow_destructive, on_event=on_event, settings=backfill
-                )
-                if online
-                else None
-            ),
-            target=target,
-            dry_run=dry_run,
-            dry_run_execute=dry_run_execute,
-            verify_checksums=verify_checksums,
-            on_checksum_mismatch=on_checksum_mismatch,
-            force=force,
-            require_reversible=require_reversible,
-            strict_mode=strict_mode,
-            auto_baseline=auto_baseline,
-            install_view_helpers=install_view_helpers,
-            on_event=on_event,
-            batch=batch,
-        )
+        if not options.no_lock:
+            emit(options.on_event, "lock_acquired")
+        return _up_under_lock(session, options)
 
 
 def apply_one(
