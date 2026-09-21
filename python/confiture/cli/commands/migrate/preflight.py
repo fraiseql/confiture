@@ -44,6 +44,7 @@ from confiture.core.dependent_objects import DependentObjectsChecker
 from confiture.core.ledger import table_identifier
 from confiture.core.migrator import Migrator, MigratorSession, parse_migration_filename
 from confiture.core.schema_facts import SchemaFacts, collect_schema_facts
+from confiture.error_codes import FINDINGS, USAGE
 from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.models.preflight import DependentAnalysisReport
 from confiture.url_redaction import redact_url
@@ -570,7 +571,7 @@ def migrate_preflight(
             f"[red]❌ Invalid --check-dependents value: {check_dependents!r}. "
             "Must be one of 'off', 'fail', 'warn'.[/red]"
         )
-        raise typer.Exit(2)
+        raise typer.Exit(USAGE)
 
     result = run_preflight(migrations_dir)
 
@@ -661,7 +662,7 @@ def migrate_preflight(
     if exit_code:
         raise typer.Exit(exit_code)
     if dependent_report is not None and dependent_report.has_blocking():
-        raise typer.Exit(1)
+        raise typer.Exit(FINDINGS)
 
 
 def _preflight_summary(all_issues: list[Any], **counts: Any) -> dict[str, Any]:

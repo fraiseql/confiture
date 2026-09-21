@@ -34,6 +34,7 @@ from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.error_handler import print_error_to_console
 from confiture.core.locking import LockAcquisitionError, resolve_lock_settings
+from confiture.error_codes import exit_code_of
 
 
 @cli_boundary
@@ -188,7 +189,7 @@ def migrate_down(
         if is_json(format_output):
             fail(lock_error_to_confiture(e), json_mode=True, output_file=output_file)
         print_error_to_console(e, error_console)
-        raise typer.Exit(6) from e
+        raise typer.Exit(exit_code_of("LOCK_1300")) from e
 
 
 @cli_boundary

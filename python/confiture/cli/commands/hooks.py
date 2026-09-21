@@ -30,6 +30,7 @@ from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.notifications.config import load_notifications_config
 from confiture.core.hooks.notifications.factory import from_config
 from confiture.core.hooks.notifications.transport import StdoutTransport
+from confiture.error_codes import FINDINGS, SUCCESS
 from confiture.exceptions import ConfigurationError
 
 hooks_app = typer.Typer(
@@ -180,8 +181,8 @@ def hooks_test(
 
     if result.success:
         console.print(f"[green]✅ Hook {chosen.id!r} executed successfully.[/green]")
-        raise typer.Exit(0)  # success-signal: clean pass
+        raise typer.Exit(SUCCESS)  # success-signal: clean pass
     console.print(f"[red]❌ Hook {chosen.id!r} failed: {result.error}[/red]")
     # success-signal: the test ran and is reporting that the configured hook
     # failed — the diagnostic result the user asked for, not a confiture error.
-    raise typer.Exit(1)
+    raise typer.Exit(FINDINGS)

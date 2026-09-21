@@ -32,6 +32,7 @@ import yaml
 
 from confiture.core import connection as _core_connection
 from confiture.core.schema_to_schema import SchemaToSchemaMigrator
+from confiture.error_codes import FINDINGS
 
 schema_to_schema_app = typer.Typer(
     help="Medium 4: zero-downtime schema migration via Foreign Data Wrapper (FDW).",
@@ -277,7 +278,7 @@ def s2s_verify(
             else:
                 console.print("[green]✅ All tables match[/green]")
         if mismatches:
-            raise typer.Exit(1)  # success-signal: verification found a mismatch
+            raise typer.Exit(FINDINGS)  # success-signal: verification found a mismatch
     finally:
         _close(m)
 

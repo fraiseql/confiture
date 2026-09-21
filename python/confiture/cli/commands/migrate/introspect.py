@@ -17,6 +17,7 @@ from confiture.core import baseline_detector as _core_baseline_detector
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.migrator import parse_migration_filename
+from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError
 
 
@@ -96,7 +97,7 @@ def migrate_introspect(
                 console.print(
                     "  Run 'confiture migrate generate' to start building snapshot history."
                 )
-            raise typer.Exit(1)
+            raise typer.Exit(FINDINGS)
 
         detector = _core_baseline_detector.BaselineDetector(snapshots_dir)
 

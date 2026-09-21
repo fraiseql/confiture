@@ -28,6 +28,7 @@ from confiture.core.ledger import notable_resolution
 from confiture.core.restorer import DatabaseRestorer, RestoreOptions
 from confiture.core.validation.config_validator import ConfigValidator
 from confiture.core.view_manager import ViewManager
+from confiture.error_codes import FINDINGS
 from confiture.exceptions import (
     ConfigurationError,
     ConfiturError,
@@ -552,7 +553,7 @@ def verify_checksums(
     if not fix:
         # success-signal: verification ran and found mismatches (the CI gate
         # this command exists to trip) — not a confiture-domain error.
-        raise typer.Exit(1)
+        raise typer.Exit(FINDINGS)
 
 
 @cli_boundary

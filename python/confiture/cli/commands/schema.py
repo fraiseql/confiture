@@ -17,8 +17,6 @@ from confiture.cli.formatters.build_formatter import (
     format_selection_report,
 )
 from confiture.cli.helpers import (
-    FINDINGS_EXIT_CODE,
-    USAGE_EXIT_CODE,
     _convert_linter_report,
     _output_yaml,
     connect,
@@ -74,6 +72,7 @@ from confiture.core.seed.paths import is_seed_path
 from confiture.core.seed.sequencer import apply_seed_files
 from confiture.core.unified_linter import UnifiedLinter
 from confiture.core.validation.config_loaders import load_security_lint as _lsl
+from confiture.error_codes import FINDINGS, USAGE
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError
 from confiture.models.lint import LintSeverity
 from confiture.models.results import BuildResult
@@ -612,7 +611,7 @@ def _duplicate_gate(
             error=f"{len(duplicates)} duplicate definition(s); nothing was built",
         )
         format_build_result(result, "json" if json_mode else "text", report_output, console)
-        raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: the duplicate gate tripped
+        raise typer.Exit(FINDINGS)  # success-signal: the duplicate gate tripped
     return payload, warnings
 
 
@@ -1098,7 +1097,7 @@ def lint(
             return
         if write_baseline and baseline is None:
             error_console.print("[red]❌ Error: --write-baseline requires --baseline <file>[/red]")
-            raise typer.Exit(USAGE_EXIT_CODE)
+            raise typer.Exit(USAGE)
         threshold = _resolve_threshold(
             ctx, fail_on=fail_on, fail_on_error=fail_on_error, fail_on_warning=fail_on_warning
         )
@@ -1164,7 +1163,7 @@ def lint(
         # the gate reads the severity its registry entry declares (#245).
         unrun = unrun_reaches([s.code for s in linter_report.skipped], threshold)
         if should_fail(found, threshold) or new_since_baseline or unrun:
-            raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found violations
+            raise typer.Exit(FINDINGS)  # success-signal: lint found violations
     except typer.Exit:
         raise
     except FileNotFoundError as e:
@@ -1217,7 +1216,7 @@ def _resolve_threshold(
             f"[red]❌ Error: --fail-on and {', '.join(given_aliases)} both set the gate; "
             "pass one[/red]"
         )
-        raise typer.Exit(USAGE_EXIT_CODE)
+        raise typer.Exit(USAGE)
     return parse_threshold(fail_on)
 
 
@@ -1756,7 +1755,7 @@ def lint_unified(
                 console.print(f"  [{sev}]{rule} {loc}: {issue.message}", markup=False)
 
     if fail_on_error and unified_result.has_errors:
-        raise typer.Exit(FINDINGS_EXIT_CODE)  # success-signal: lint found errors
+        raise typer.Exit(FINDINGS)  # success-signal: lint found errors
 
 
 @cli_boundary

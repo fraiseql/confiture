@@ -24,6 +24,7 @@ from confiture.core.validation.config_loaders import (
     load_acl_expectations,
     load_ownership_expectation,
 )
+from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError, SchemaError
 
 
@@ -99,10 +100,10 @@ def _run_drift(
     _render_drift(drift_report, format_output)
 
     if drift_report.has_critical_drift:
-        raise typer.Exit(1)  # success-signal: drift detected
+        raise typer.Exit(FINDINGS)  # success-signal: drift detected
 
     if request.fail_on_warning and drift_report.has_drift:
-        raise typer.Exit(1)  # success-signal: drift detected (warnings)
+        raise typer.Exit(FINDINGS)  # success-signal: drift detected (warnings)
 
 
 def _merge(report: DriftReport | None, other: DriftReport) -> DriftReport:

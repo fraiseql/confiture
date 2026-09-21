@@ -39,6 +39,7 @@ from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator
 from confiture.core.stub_generator import StubGenerator
 from confiture.core.tree_allocator import TreeAllocator
 from confiture.core.tree_renumber import TreeRenumber
+from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.integrations.pggit import (
     MigrationGenerator,
@@ -343,7 +344,7 @@ def renumber_path(
         # result (incl. dangling_refs); exit 1 flags "completed with unresolved
         # refs" the way diff/lint do. Routing through fail() here would emit a
         # second JSON object after the result.
-        raise typer.Exit(1)
+        raise typer.Exit(FINDINGS)
 
 
 def _get_generator(config_path: Path):

@@ -12,12 +12,13 @@ from typing import TYPE_CHECKING, Annotated, Any
 import psycopg
 import typer
 
-from confiture.cli.error_json import cli_boundary
+from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
     _resolve_config,
     console,
     emit,
     error_console,
+    is_json,
     open_connection,
 )
 from confiture.cli.options import CheckSignatureSchemasOpt, format_option
@@ -32,6 +33,8 @@ from confiture.core.function_signature_drift import (
     schemas_to_scan,
 )
 from confiture.core.sql_lexer import split_statements
+from confiture.error_codes import FINDINGS, USAGE, exit_code_of
+from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
     from confiture.core.schema_model import Routine
@@ -142,8 +145,14 @@ def migrate_fix_signatures(
     try:
         config = _resolve_config(config, env)
         if not config.exists():
-            error_console.print(f"[red]❌ Config file not found: {config}[/red]")
-            raise typer.Exit(2)
+            fail(
+                ConfigurationError(
+                    f"Config file not found: {config}",
+                    error_code="CONFIG_004",
+                    resolution_hint="Specify config with --config path/to/config.yaml.",
+                ),
+                json_mode=is_json(format_output),
+            )
         config_data = load_config(config)
         source_sql = _resolve_source_sql(schema_file, config_data, format_output)
 
@@ -172,7 +181,7 @@ def migrate_fix_signatures(
                     "[red]❌ No fixable overloads found "
                     "(source definitions missing for all stale overloads).[/red]"
                 )
-                raise typer.Exit(1)
+                raise typer.Exit(FINDINGS)
             body_fix_blocks, body_missing_source = _plan_body_fixes(
                 check_body, declared, live, source_sql, fix_blocks
             )
@@ -220,13 +229,12 @@ def migrate_fix_signatures(
             output_file=output_file,
         )
         if has_residual:
-            raise typer.Exit(1)
+            raise typer.Exit(FINDINGS)
     except typer.Exit:
         raise
-    # Reason: text-only command: every failure is printed with its context and exits 2
+    # Reason: any failure below the config check is one error, rendered by the boundary
     except Exception as e:
-        error_console.print(f"[red]❌ fix-signatures failed: {e}[/red]")
-        raise typer.Exit(2) from e
+        fail(ConfiturError(f"fix-signatures failed: {e}"), json_mode=is_json(format_output))
 
 
 def _resolve_source_sql(schema_file: Path | None, config_data: Any, format_output: str) -> str:
@@ -253,7 +261,7 @@ def _resolve_source_sql(schema_file: Path | None, config_data: Any, format_outpu
             f"[red]❌ --schema not provided and auto-build failed: {build_exc}[/red]\n"
             "  Either run 'confiture build' first or pass --schema explicitly."
         )
-        raise typer.Exit(2) from build_exc
+        raise typer.Exit(USAGE) from build_exc
 
 
 def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> Any:
@@ -423,7 +431,7 @@ def _apply_fix_blocks(
     except psycopg.Error as apply_exc:
         conn.rollback()
         error_console.print(f"[red]❌ Fix failed (rolled back): {apply_exc}[/red]")
-        raise typer.Exit(1) from apply_exc
+        raise typer.Exit(exit_code_of("SQL_001")) from apply_exc
 
 
 def _render_fix_applied(
