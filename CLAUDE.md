@@ -750,13 +750,13 @@ confiture/
 │   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
 │   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (5 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
-│   │   ├── idempotency/          # Idempotency validation for SQL migrations (17 modules)
+│   │   ├── idempotency/          # Idempotency validation for SQL migrations (19 modules)
 │   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (6 modules)
-│   │   ├── linting/              # Rule Library System (36 modules)
+│   │   ├── linting/              # Rule Library System (37 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
-│   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (3 modules)
+│   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
 │   │   ├── seed/                 # Seed data management and optimization (24 modules)
-│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (15 modules)
+│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (16 modules)
 │   ├── integrations/
 │   │   ├── __init__.py
 │   │   └── pggit/                # pgGit integration module for Confiture (9 modules)

@@ -92,6 +92,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **What the commands decided, `core` decides.** Five pieces of logic lived in
+  `cli/`: git scoping for `--idempotent` (`core/validation/scope.py`), the
+  idempotency verdict — status, pass, exit — and the report collector
+  (`core/idempotency/verdict.py`, `collect.py`), `lint`'s rule selection and the
+  rules that read a file tree (`core/linting/selection.py`), `fix-signatures`'
+  routine lookup (`core.linting.inventory.routine_source`) and `init`'s project
+  files, now templates under `core/scaffold/templates/` written by
+  `core.scaffold.project.scaffold`.
 - **`cli/` imports no database driver and no parser.** Twelve modules imported
   `psycopg`: to open a connection from a DSN, to catch its error class, and — in
   three — to run SQL of their own. `core.connection.connect_url(url)` and
@@ -169,6 +177,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`migrate fix-signatures` finds a routine by its identity.** It matched
+  `CREATE … FUNCTION [schema.]name(` with a regex, so an unqualified definition
+  matched a stale overload in any schema; it now asks the inventory, where an
+  unqualified name lives in the default schema (#313). The statement it executes is
+  still the author's text.
+- **`confiture init`'s `local.yaml` names `confiture install-helpers`.** It said
+  `confiture admin install-helpers`, a command that does not exist.
 - ⚠️ **`seed generate --env` is `--seed-env`.** It never named an environment: it
   names the directory under `db/seeds/` the stub is written to. `--env` and `-e`
   are gone from this command, with no alias.

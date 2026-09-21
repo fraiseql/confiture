@@ -24,10 +24,10 @@ from __future__ import annotations
 
 import inspect
 
-from confiture.cli.commands.schema import _linter_config
 from confiture.core.linting.gate import Threshold
 from confiture.core.linting.rule_registry import LINT_RULES
 from confiture.core.linting.schema_linter import LintConfig
+from confiture.core.linting.selection import linter_config as _linter_config
 
 
 def _switches() -> list[str]:
@@ -81,7 +81,7 @@ def test_every_rule_that_runs_through_the_linter_turns_on_a_switch() -> None:
     to switch off — `--ignore UNPARSEABLE` is how a project with a deliberately
     non-SQL file silences it (#274).
     """
-    from confiture.cli.commands.schema import TREE_RULE_CODES
+    from confiture.core.linting.libraries.generate import TREE_RULE_CODES
     from confiture.core.linting.rule_registry import UNPARSEABLE_RULE_ID
 
     no_switch = {

@@ -28,10 +28,10 @@ from pathlib import Path
 
 import pytest
 
-from confiture.cli.commands.schema import _linter_config
 from confiture.core.linting.gate import Threshold
 from confiture.core.linting.rule_registry import resolve_selection
 from confiture.core.linting.schema_linter import SchemaLinter
+from confiture.core.linting.selection import linter_config as _linter_config
 
 _ENV = "database_url: postgresql://127.0.0.1:1/x\ninclude_dirs:\n  - path: db/schema\n"
 _TABLES = """CREATE SCHEMA IF NOT EXISTS app;

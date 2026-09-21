@@ -6,56 +6,11 @@ from unittest.mock import MagicMock, patch
 import psycopg
 from typer.testing import CliRunner
 
-from confiture.cli.commands.migrate.fix_signatures import _extract_function_source
 from confiture.cli.main import app
 from confiture.core.function_signature_drift import FunctionSignatureDriftReport, StaleOverload
 from tests._helpers import strip_ansi as _strip_ansi
 
 runner = CliRunner()
-
-
-# ---------------------------------------------------------------------------
-# _extract_function_source unit tests
-# ---------------------------------------------------------------------------
-
-
-class TestExtractFunctionSource:
-    _SQL = """
-CREATE TABLE users (id bigint);
-
-CREATE OR REPLACE FUNCTION public.get_user(user_id bigint)
-RETURNS TABLE(id bigint, name text) AS $$
-  SELECT id, name FROM users WHERE id = user_id;
-$$ LANGUAGE sql;
-
-CREATE OR REPLACE FUNCTION public.set_status(user_id integer, status text)
-RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;
-"""
-
-    def test_finds_qualified_name(self):
-        result = _extract_function_source(self._SQL, "public", "get_user")
-        assert result is not None
-        assert "get_user" in result
-        assert "bigint" in result
-
-    def test_finds_second_function(self):
-        result = _extract_function_source(self._SQL, "public", "set_status")
-        assert result is not None
-        assert "set_status" in result
-
-    def test_returns_none_when_not_found(self):
-        result = _extract_function_source(self._SQL, "public", "no_such_fn")
-        assert result is None
-
-    def test_returns_none_on_empty_sql(self):
-        result = _extract_function_source("", "public", "get_user")
-        assert result is None
-
-    def test_matches_unqualified_name(self):
-        sql = "CREATE FUNCTION get_user(id bigint) RETURNS void AS $$ $$ LANGUAGE sql;"
-        result = _extract_function_source(sql, "public", "get_user")
-        assert result is not None
-        assert "get_user" in result
 
 
 # ---------------------------------------------------------------------------

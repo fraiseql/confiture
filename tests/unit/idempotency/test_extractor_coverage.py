@@ -124,8 +124,8 @@ def test_library_api_sees_what_the_cli_sees(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`IdempotencyValidator.validate_directory` and the CLI's collector agree on the fixtures."""
-    from confiture.cli.idempotency import _collect_idempotency_report
     from confiture.core.idempotency import IdempotencyValidator
+    from confiture.core.idempotency.collect import collect_report as _collect_idempotency_report
 
     monkeypatch.chdir(tmp_path)
     migrations = sorted(p for p in MIGRATIONS.glob("*.py") if is_migration_file(p))

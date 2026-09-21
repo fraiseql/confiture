@@ -5,189 +5,17 @@ from pathlib import Path
 from typing import Any
 
 from confiture.cli.helpers import _emit_hint, console, emit
-from confiture.core.git import GitRepository
 from confiture.core.idempotency import IdempotencyFixer, IdempotencyValidator
-from confiture.core.idempotency.models import IdempotencyReport
-from confiture.core.idempotency.python_migration_extractor import (
-    ExtractionWarning,
-    extract_sql_from_python_migration,
-    extract_sql_from_python_source,
-)
+from confiture.core.idempotency.collect import collect_report
 from confiture.core.idempotency.python_migration_extractor import (
     is_migration_file as _is_migration_file,
 )
-from confiture.core.sql_path import find_project_root
-from confiture.exceptions import ConfigurationError, NotAGitRepositoryError
+from confiture.core.idempotency.verdict import judge
+from confiture.core.validation.scope import read_staged_content, scope_to_git
+from confiture.error_codes import FINDINGS
 from confiture.url_redaction import (
     redact_url as redact_url,  # noqa: PLC0414 — explicit re-export (layering)
 )
-
-
-def _repo_root_for(path: Path) -> Path:
-    """Resolve the project root that owns ``path``, for extractor boundaries.
-
-    Delegates to the extractor's own anchor search so a staged ``.py``
-    migration analyzed from a temp file gets the same ``execute_file``
-    boundary it would have had on disk.
-    """
-
-    return find_project_root(path)
-
-
-def _collect_idempotency_report(
-    sql_files: list[Path],
-    py_files: list[Path],
-    validator: Any,
-    project_root: Path | None = None,
-    staged_content: dict[Path, str] | None = None,
-) -> Any:
-    """Run the idempotency validator against .sql files and Python migrations.
-
-    Returns a merged :class:`IdempotencyReport`. Python-origin violations
-    carry the ``source_line`` of the originating ``self.execute()`` call;
-    extractor warnings ride on the report's ``warnings`` list.
-
-    ``project_root`` is forwarded to the extractor for ``execute_file``
-    path-boundary checking; passing ``None`` lets the extractor auto-detect
-    the root (the nearest ancestor with ``pyproject.toml``, ``.git``, or
-    ``db/``).
-
-    ``staged_content`` maps a path to its **staging-index** blob. When a path
-    is present there, that content is analyzed instead of the working tree —
-    the two differ when a file is staged and then edited further, and a
-    pre-commit gate must judge what is about to be committed (#181). The
-    blob is analyzed *as the file at that path*: ``Path(__file__)`` and
-    migration-relative reads resolve where the migration lives, not in a
-    temp directory (0.46.0).
-    """
-
-    combined = IdempotencyReport()
-    staged_content = staged_content or {}
-
-    for sql_path in sorted(sql_files):
-        if sql_path in staged_content:
-            file_report = validator.validate_sql(staged_content[sql_path], file_path=str(sql_path))
-        elif sql_path.is_file():
-            file_report = validator.validate_file(sql_path)
-        else:
-            continue
-        for scanned in file_report.scanned_files:
-            combined.add_file_scanned(scanned)
-        for violation in file_report.violations:
-            combined.add_violation(violation)
-        combined.warnings.extend(file_report.warnings)
-
-    for py_path in sorted(py_files):
-        if py_path in staged_content:
-            extraction = extract_sql_from_python_source(
-                staged_content[py_path],
-                path=py_path,
-                project_root=project_root or _repo_root_for(py_path),
-            )
-        else:
-            extraction = extract_sql_from_python_migration(py_path, project_root=project_root)
-        combined.add_file_scanned(str(py_path))
-        combined.warnings.extend(extraction.warnings)
-        for snippet in extraction.snippets:
-            snippet_report = validator.validate_sql(snippet.sql, file_path=str(py_path))
-            for violation in snippet_report.violations:
-                violation.source_line = snippet.source_line
-                combined.add_violation(violation)
-            for warning in snippet_report.warnings:
-                combined.warnings.append(
-                    ExtractionWarning(
-                        kind=warning.kind,
-                        source_file=py_path,
-                        source_line=snippet.source_line,
-                        message=warning.message,
-                        reason_code=warning.reason_code,
-                        remedy=warning.remedy,
-                    )
-                )
-
-    combined.scanned_files.sort()
-    return combined
-
-
-def _scope_files_to_git(
-    candidates: list[Path],
-    migrations_dir: Path,
-    *,
-    base_ref: str | None,
-    staged: bool,
-) -> tuple[list[Path], dict[str, Any]]:
-    """Narrow ``candidates`` to the files changed on this branch or staged (#181).
-
-    Intersects **glob ∩ diff** rather than iterating the diff, which makes
-    deletions safe by construction: a deleted migration appears in the diff but
-    not in the glob, so it is never handed to the analyzer.
-
-    Args:
-        candidates: The full globbed file set (already on disk).
-        migrations_dir: The directory those files were globbed from.
-        base_ref: Git ref to scope against, or None when ``staged``.
-        staged: Scope to the staging index instead of a ref comparison.
-
-    Returns:
-        ``(selected_files, scope_meta)``.
-
-    Raises:
-        GitError: ``GIT_003`` when the base ref is unreachable in this
-            checkout, or the diff cannot be computed.
-        NotAGitRepositoryError: ``GIT_002`` when not in a git repository.
-        ConfigurationError: When ``migrations_dir`` lies outside the repository,
-            where the intersection could only ever be empty.
-    """
-
-    repo = GitRepository()
-    if not repo.is_git_repo():
-        raise NotAGitRepositoryError(
-            f"Not a git repository: {Path.cwd()}",
-            resolution_hint=(
-                "--base-ref/--since/--staged scope against git history. Run from "
-                "inside a repository, or drop the flag to scan every migration."
-            ),
-        )
-
-    # `git diff --name-only` reports paths relative to the repository ROOT
-    # regardless of the directory git runs in, so they must be resolved against
-    # the root — not against cwd. Getting this wrong yields an empty
-    # intersection and a green gate that scanned nothing.
-    repo_root = repo.get_repo_root().resolve()
-
-    resolved_dir = migrations_dir.resolve()
-    if not resolved_dir.is_relative_to(repo_root):
-        raise ConfigurationError(
-            f"Cannot scope by git: migrations directory {resolved_dir} is outside "
-            f"the repository at {repo_root}",
-            error_code="CONFIG_004",
-            resolution_hint=(
-                "Point --migrations-dir at a directory inside the repository, or "
-                "drop --base-ref/--since/--staged to scan every migration."
-            ),
-        )
-
-    scope_meta: dict[str, Any]
-    if staged or base_ref is None:
-        changed = repo.get_staged_files()
-        scope_meta = {"mode": "staged"}
-    else:
-        # Preflight the ref so an unfetched origin/main names its own remedy
-        # rather than surfacing git's wording.
-        repo.require_ref(base_ref)
-        # Merge-base + two-dot rather than three-dot: equivalent whenever a
-        # merge base exists, and survives shallow clones, where three-dot fails
-        # with "no merge base". get_merge_base already degrades to base_ref.
-        anchor = repo.get_merge_base(base_ref, "HEAD") or base_ref
-        changed = repo.get_changed_files_two_dot(anchor, "HEAD")
-        scope_meta = {"mode": "base-ref", "base_ref": base_ref}
-
-    changed_abs = {(repo_root / path).resolve() for path in changed}
-    selected = [path for path in candidates if path.resolve() in changed_abs]
-
-    scope_meta["files_selected"] = len(selected)
-    scope_meta["files_skipped"] = len(candidates) - len(selected)
-    return selected, scope_meta
 
 
 def _idempotent_backend_banner(format_output: str) -> dict[str, Any]:
@@ -207,26 +35,6 @@ def _idempotent_backend_banner(format_output: str) -> dict[str, Any]:
     if format_output == "text":
         console.print("[green]✓ AST backend (pglast)[/green]")
     return {"backend": "ast"}
-
-
-def _read_staged_content(paths: list[Path]) -> dict[Path, str]:
-    """Read each path's blob from the staging index (``git show :<path>``).
-
-    The index blob is what is about to be committed; it differs from the
-    working tree whenever a file was staged and then edited further. A
-    pre-commit gate must judge the former.
-    """
-
-    repo = GitRepository()
-    repo_root = repo.get_repo_root().resolve()
-
-    content: dict[Path, str] = {}
-    for path in paths:
-        rel = path.resolve().relative_to(repo_root)
-        blob = repo.get_staged_file_content(rel)
-        if blob is not None:
-            content[path] = blob
-    return content
 
 
 def _report_empty_scope(
@@ -271,9 +79,6 @@ def _report_empty_scope(
     return None
 
 
-UNANALYZABLE_EXIT_CODE = 1
-
-
 @dataclass(frozen=True)
 class IdempotencyOutcome:
     """What one ``--idempotent`` run decided, for the check registry to compose.
@@ -288,7 +93,7 @@ class IdempotencyOutcome:
 
     passed: bool
     payload: dict[str, Any] | None
-    exit_code: int = 1
+    exit_code: int = FINDINGS
 
 
 def _validate_idempotency(
@@ -310,7 +115,7 @@ def _validate_idempotency(
             don't fail the gate).
         fail_on_unanalyzable: If True, a run that could not read every
             ``execute``/``execute_file`` call fails with
-            :data:`UNANALYZABLE_EXIT_CODE` (default False — the verdict says
+            ``FINDINGS`` (default False — the verdict says
             *unverified* but the exit code stays 0, #213).
         base_ref: Scope to migrations changed since this git ref. ``None``
             means scan everything — the caller must pass ``None`` unless the
@@ -343,7 +148,7 @@ def _validate_idempotency(
     staged_content: dict[Path, str] = {}
     if staged or base_ref is not None:
         candidates = sql_files + py_files
-        selected, scope_meta = _scope_files_to_git(
+        selected, scope_meta = scope_to_git(
             candidates, migrations_dir, base_ref=base_ref, staged=staged
         )
         meta["scope"] = scope_meta
@@ -352,7 +157,7 @@ def _validate_idempotency(
         py_files = [p for p in py_files if p.resolve() in selected_set]
 
         if staged:
-            staged_content = _read_staged_content(selected)
+            staged_content = read_staged_content(selected)
 
         if not sql_files and not py_files:
             return IdempotencyOutcome(
@@ -396,30 +201,18 @@ def _validate_idempotency(
         console.print("[green]✅ No migration files found to validate[/green]")
         return IdempotencyOutcome(True, None)
 
-    combined_report = _collect_idempotency_report(
-        sql_files, py_files, validator, staged_content=staged_content
+    combined_report = collect_report(sql_files, py_files, validator, staged_content=staged_content)
+    verdict = judge(
+        combined_report, strict_cor=strict_cor, fail_on_unanalyzable=fail_on_unanalyzable
     )
-    violation_fail = (
-        combined_report.has_violations if strict_cor else combined_report.has_blocking_violations
-    )
-    unverified_fail = fail_on_unanalyzable and not combined_report.analysis_complete
-    fail = violation_fail or unverified_fail
-    exit_code = UNANALYZABLE_EXIT_CODE if unverified_fail and not violation_fail else 1
+    fail = not verdict.passed
 
     if format_output == "json":
         result = combined_report.to_dict()
-        # Violations win; then "could not check" is its own answer, distinct
-        # from "checked and clean" (#213). The flag changes the exit code,
-        # never the status — the status says what was found.
-        if combined_report.has_violations:
-            result["status"] = "issues_found"
-        elif combined_report.analysis_complete:
-            result["status"] = "ok"
-        else:
-            result["status"] = "unverified"
+        result["status"] = verdict.status
         result["meta"] = meta
         result["hints"] = []
-        return IdempotencyOutcome(not fail, result, exit_code)
+        return IdempotencyOutcome(verdict.passed, result, verdict.exit_code)
 
     blocking = [v for v in combined_report.violations if v.severity == "error"]
     info = [v for v in combined_report.violations if v.severity == "info"]
@@ -447,7 +240,7 @@ def _validate_idempotency(
         )
         console.print("[cyan]For .py migrations, edit them manually.[/cyan]")
 
-    return IdempotencyOutcome(not fail, None, exit_code)
+    return IdempotencyOutcome(verdict.passed, None, verdict.exit_code)
 
 
 def _unverified_summary(report: Any) -> str:
@@ -670,7 +463,7 @@ def _fix_idempotency(
     files_changed = _fix_sql_files(sql_files, fixer, dry_run=dry_run)
 
     # Surface .py violations without rewriting the source.
-    manual_report = _collect_idempotency_report([], py_files, validator)
+    manual_report = collect_report([], py_files, validator)
     py_violations_by_file: dict[str, list[Any]] = {}
     for violation in manual_report.violations:
         py_violations_by_file.setdefault(violation.file_path, []).append(violation)
