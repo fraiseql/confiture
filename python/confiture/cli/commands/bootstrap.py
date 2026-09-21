@@ -33,7 +33,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, is_json
-from confiture.cli.options import format_option
+from confiture.cli.options import CONFITURE_YAML, config_option, env_option, format_option
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.bootstrap import BootstrapExecutor, BootstrapPlanner
 from confiture.core.connection import load_config
@@ -44,20 +44,8 @@ from confiture.exceptions import BootstrapError, BootstrapScopeError, Configurat
 
 @cli_boundary
 def bootstrap(
-    config: Path = typer.Option(
-        Path("confiture.yaml"),
-        "-c",
-        "--config",
-        help="Config file path. Use --env as a shortcut for db/environments/{name}.yaml.",
-    ),
-    env: str | None = typer.Option(
-        None,
-        "--env",
-        help=(
-            "Environment name — shortcut for --config db/environments/{name}.yaml "
-            "(e.g. --env production). Cannot be combined with --config."
-        ),
-    ),
+    config: Path = config_option(CONFITURE_YAML),
+    env: str | None = env_option(None),
     check: bool = typer.Option(
         True,
         "--check/--no-check",

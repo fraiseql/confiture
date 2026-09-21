@@ -39,7 +39,14 @@ from confiture.cli.helpers import (
     error_console,
     is_json,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import (
+    config_option,
+    database_url_option,
+    format_option,
+    migrations_dir_option,
+    output_option,
+    verbose_option,
+)
 from confiture.config.environment import BackfillConfig
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
@@ -52,16 +59,6 @@ from confiture.core.migrator import find_duplicate_migration_versions
 from confiture.error_codes import FINDINGS, USAGE, exit_code_of
 from confiture.exceptions import MigrationConflictError
 
-MigrationsDirOpt = Annotated[
-    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
-]
-ConfigOpt = Annotated[
-    Path,
-    typer.Option("--config", "-c", help="Configuration file (default: db/environments/local.yaml)"),
-]
-DatabaseUrlOpt = Annotated[
-    str | None, typer.Option("--database-url", "-d", help=DATABASE_URL_OPTION_HELP)
-]
 NoConfigOpt = Annotated[bool, typer.Option("--no-config", help=NO_CONFIG_OPTION_HELP)]
 TargetOpt = Annotated[
     str | None,
@@ -110,12 +107,6 @@ OnChecksumMismatchOpt = Annotated[
         "--on-checksum-mismatch",
         help="Checksum mismatch behavior: fail, warn, ignore (default: fail)",
     ),
-]
-VerboseOpt = Annotated[
-    bool, typer.Option("--verbose", "-v", help="Show detailed analysis in dry-run (default: off)")
-]
-OutputFileOpt = Annotated[
-    Path | None, typer.Option("--output", "-o", help="Save report to file (default: stdout)")
 ]
 AutoDetectBaselineOpt = Annotated[
     bool,
@@ -187,9 +178,9 @@ YesOpt = Annotated[
 @cli_boundary
 def migrate_up(
     ctx: typer.Context,
-    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
-    config: ConfigOpt = Path("db/environments/local.yaml"),
-    database_url: DatabaseUrlOpt = None,
+    migrations_dir: Path = migrations_dir_option(),
+    config: Path = config_option(),
+    database_url: str | None = database_url_option(help=DATABASE_URL_OPTION_HELP),
     no_config: NoConfigOpt = False,
     target: TargetOpt = None,
     strict: StrictOpt = False,
@@ -200,9 +191,9 @@ def migrate_up(
     dry_run_execute: DryRunExecuteOpt = False,
     verify_checksums: VerifyChecksumsOpt = True,
     on_checksum_mismatch: OnChecksumMismatchOpt = "fail",
-    verbose: VerboseOpt = False,
+    verbose: bool = verbose_option(help="Show detailed analysis in dry-run (default: off)"),
     format_output: str = format_option("text", "json"),
-    output_file: OutputFileOpt = None,
+    output_file: Path | None = output_option(),
     auto_detect_baseline: AutoDetectBaselineOpt = False,
     snapshots_dir_up: SnapshotsDirUpOpt = None,
     require_reversible: RequireReversibleOpt = False,

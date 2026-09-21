@@ -15,7 +15,7 @@ from confiture.cli.helpers import (
     console,
     is_json,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import config_option, format_option, migrations_dir_option
 from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
 from confiture.core.desired_state import DesiredStateSource, load_desired_state
@@ -48,11 +48,8 @@ def migrate_diff(
             "emit-ddl option writes), or '-' for stdin (default: the second positional)"
         ),
     ),
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Environment config, read for `--from db` (default: db/environments/local.yaml)",
+    config: Path = config_option(
+        help="Environment config, read for `--from db` (default: db/environments/local.yaml)"
     ),
     generate: bool = typer.Option(
         False,
@@ -64,11 +61,7 @@ def migrate_diff(
         "--name",
         help="Migration name (default: none, required with --generate)",
     ),
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
+    migrations_dir: Path = migrations_dir_option(),
     format_type: str = format_option("text", "json", "csv"),
     allow_destructive: bool = typer.Option(
         False,

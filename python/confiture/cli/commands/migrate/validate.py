@@ -19,7 +19,15 @@ from confiture.cli.commands.validate_checks import (
 from confiture.cli.dsn import param_is_explicit, require_readable_config
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _resolve_config, console, emit, is_json
-from confiture.cli.options import CheckSignatureSchemasOpt, format_option
+from confiture.cli.options import (
+    CONFITURE_YAML,
+    CheckSignatureSchemasOpt,
+    config_option,
+    env_option,
+    format_option,
+    migrations_dir_option,
+    output_option,
+)
 from confiture.core.idempotency.patterns import list_patterns
 from confiture.core.validation.context import ValidationContext
 from confiture.core.validation.registry import (
@@ -73,9 +81,6 @@ def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:
     return None
 
 
-MigrationsDirOpt = Annotated[
-    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
-]
 FixNamingOpt = Annotated[
     bool,
     typer.Option(
@@ -378,22 +383,6 @@ DdlDirOpt = Annotated[
         "Defaults to `db/schema` if not provided.",
     ),
 ]
-ConfigOpt = Annotated[
-    Path,
-    typer.Option(
-        "-c",
-        "--config",
-        help="Config file path. Use --env as a shortcut for db/environments/{name}.yaml.",
-    ),
-]
-EnvOpt = Annotated[
-    str | None,
-    typer.Option(
-        "--env",
-        help="Environment name — shortcut for --config db/environments/{name}.yaml "
-        "(e.g. --env production). Cannot be combined with --config.",
-    ),
-]
 SshViaOpt = Annotated[
     str | None,
     typer.Option(
@@ -411,15 +400,12 @@ SchemaFileOpt = Annotated[
         "If omitted with --check-signatures, schema is auto-built from DDL files.",
     ),
 ]
-OutputFileOpt = Annotated[
-    Path | None, typer.Option("--output", "-o", help="Save output to file (default: stdout)")
-]
 
 
 @cli_boundary
 def migrate_validate(
     ctx: typer.Context,
-    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    migrations_dir: Path = migrations_dir_option(),
     fix_naming: FixNamingOpt = False,
     idempotent: IdempotentOpt = False,
     list_patterns: ListPatternsOpt = False,
@@ -454,12 +440,12 @@ def migrate_validate(
     emit_remediation: EmitRemediationOpt = None,
     ddl_dir: DdlDirOpt = None,
     check_signature_schemas: CheckSignatureSchemasOpt = None,
-    config: ConfigOpt = Path("confiture.yaml"),
-    env: EnvOpt = None,
+    config: Path = config_option(CONFITURE_YAML),
+    env: str | None = env_option(None),
     ssh_via: SshViaOpt = None,
     schema_file: SchemaFileOpt = None,
     format_output: str = format_option("text", "json", "csv"),
-    output_file: OutputFileOpt = None,
+    output_file: Path | None = output_option(),
 ) -> None:
     """Validate migration files follow naming and quality conventions.
 

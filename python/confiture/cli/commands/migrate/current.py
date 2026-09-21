@@ -23,7 +23,7 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import config_option, database_url_option, format_option, output_option
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.exceptions import DatabaseNotInitializedError
@@ -33,30 +33,15 @@ from confiture.models.results import CurrentRevision
 @cli_boundary
 def migrate_current(
     ctx: typer.Context,
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
-    database_url: str = typer.Option(
-        None,
-        "--database-url",
-        "-d",
-        help=DATABASE_URL_OPTION_HELP,
-    ),
+    config: Path = config_option(),
+    database_url: str = database_url_option(help=DATABASE_URL_OPTION_HELP),
     no_config: bool = typer.Option(
         False,
         "--no-config",
         help=NO_CONFIG_OPTION_HELP,
     ),
     output_format: str = format_option("text", "json"),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save output to file (default: stdout)",
-    ),
+    output_file: Path | None = output_option(),
 ) -> None:
     """Print the current (latest applied) migration revision.
 

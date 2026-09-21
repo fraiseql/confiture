@@ -8,7 +8,7 @@ import typer
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.common import display_drift_report
 from confiture.cli.helpers import console, emit, is_json, open_connection
-from confiture.cli.options import format_option
+from confiture.cli.options import CONFITURE_YAML, config_option, format_option
 from confiture.config.environment import AclExpectation, OwnershipExpectation
 from confiture.core.connection import load_config
 from confiture.core.drift import (
@@ -136,12 +136,7 @@ def _demote_missing_grant_warnings(report: DriftReport) -> None:
 
 @cli_boundary
 def drift(
-    config: Path = typer.Option(
-        Path("confiture.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: confiture.yaml)",
-    ),
+    config: Path = config_option(CONFITURE_YAML),
     schema: Path | None = typer.Option(
         None,
         "--schema",

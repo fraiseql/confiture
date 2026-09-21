@@ -19,7 +19,7 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import config_option, format_option
 from confiture.core import connection as _core_connection
 from confiture.core import large_tables as _core_large_tables
 from confiture.error_codes import FAILURE
@@ -28,12 +28,7 @@ from confiture.exceptions import ConfigurationError
 
 @cli_boundary
 def migrate_estimate(
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
+    config: Path = config_option(),
     tables: list[str] = typer.Option(
         [],
         "--table",

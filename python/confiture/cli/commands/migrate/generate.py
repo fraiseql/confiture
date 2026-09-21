@@ -19,7 +19,12 @@ from confiture.cli.helpers import (
     error_console,
     is_json,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import (
+    config_option,
+    format_option,
+    migrations_dir_option,
+    verbose_option,
+)
 from confiture.core import schema_snapshot as _core_schema_snapshot
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.migrator import (
@@ -37,18 +42,12 @@ from confiture.exceptions import ExternalGeneratorError, ValidationError
 _MIGRATION_NAME_RE = re.compile(r"^[a-z0-9_]+$")
 
 
-MigrationsDirOpt = Annotated[
-    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
-]
 ForceOpt = Annotated[
     bool, typer.Option("--force", help="Overwrite existing migration file (default: off)")
 ]
 DryRunOpt = Annotated[
     bool,
     typer.Option("--dry-run", help="Show what would be generated without creating (default: off)"),
-]
-VerboseOpt = Annotated[
-    bool, typer.Option("--verbose", "-v", help="Show version calculation details (default: off)")
 ]
 FromSchemaOpt = Annotated[
     Path | None, typer.Option("--from", help="Old schema file path (required with --generator)")
@@ -59,12 +58,6 @@ ToSchemaOpt = Annotated[
 GeneratorOpt = Annotated[
     str | None,
     typer.Option("--generator", help="Named external generator from migration_generators config"),
-]
-ConfigOpt = Annotated[
-    Path,
-    typer.Option(
-        "--config", "-c", help="Environment config file (default: db/environments/local.yaml)"
-    ),
 ]
 SnapshotOpt = Annotated[
     bool | None,
@@ -104,15 +97,15 @@ VerifySidecarOpt = Annotated[
 @cli_boundary
 def migrate_generate(
     name: str = typer.Argument(..., help="Migration name (snake_case)"),
-    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
+    migrations_dir: Path = migrations_dir_option(),
     format_output: str = format_option("text", "json"),
     force: ForceOpt = False,
     dry_run: DryRunOpt = False,
-    verbose: VerboseOpt = False,
+    verbose: bool = verbose_option(help="Show version calculation details (default: off)"),
     from_schema: FromSchemaOpt = None,
     to_schema: ToSchemaOpt = None,
     generator: GeneratorOpt = None,
-    config: ConfigOpt = Path("db/environments/local.yaml"),
+    config: Path = config_option(),
     snapshot: SnapshotOpt = None,
     snapshots_dir: SnapshotsDirOpt = None,
     live_snapshot: LiveSnapshotOpt = None,

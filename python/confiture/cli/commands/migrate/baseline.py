@@ -19,7 +19,7 @@ from confiture.cli.helpers import (
     open_connection,
     redact_url,
 )
-from confiture.cli.options import format_option
+from confiture.cli.options import config_option, format_option, migrations_dir_option
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.migrator import (
@@ -126,13 +126,6 @@ SourceTableOpt = Annotated[
         "from the target (default: same as target).",
     ),
 ]
-MigrationsDirOpt = Annotated[
-    Path, typer.Option("--migrations-dir", help="Migrations directory (default: db/migrations)")
-]
-ConfigOpt = Annotated[
-    Path,
-    typer.Option("--config", "-c", help="Configuration file (default: db/environments/local.yaml)"),
-]
 DryRunOpt = Annotated[
     bool,
     typer.Option(
@@ -146,8 +139,8 @@ def migrate_baseline(
     through: ThroughOpt = None,
     from_db: FromDbOpt = None,
     source_table: SourceTableOpt = None,
-    migrations_dir: MigrationsDirOpt = Path("db/migrations"),
-    config: ConfigOpt = Path("db/environments/local.yaml"),
+    migrations_dir: Path = migrations_dir_option(),
+    config: Path = config_option(),
     dry_run: DryRunOpt = False,
     format_output: str = format_option("text", "json"),
 ) -> None:

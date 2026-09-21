@@ -21,7 +21,14 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.options import CheckSignatureSchemasOpt, format_option
+from confiture.cli.options import (
+    CONFITURE_YAML,
+    CheckSignatureSchemasOpt,
+    config_option,
+    env_option,
+    format_option,
+    output_option,
+)
 from confiture.config.environment import SshTunnelConfig
 from confiture.core import builder as _core_builder
 from confiture.core.connection import load_config
@@ -59,20 +66,6 @@ def _extract_function_source(sql: str, schema: str, name: str) -> str | None:
     return None
 
 
-ConfigOpt = Annotated[
-    Path,
-    typer.Option(
-        "-c",
-        "--config",
-        help="Config file path. Use --env as a shortcut for db/environments/{name}.yaml.",
-    ),
-]
-EnvOpt = Annotated[
-    str | None,
-    typer.Option(
-        "--env", help="Environment name — shortcut for --config db/environments/{name}.yaml."
-    ),
-]
 SchemaFileOpt = Annotated[
     Path | None,
     typer.Option(
@@ -97,9 +90,6 @@ ApplyOpt = Annotated[
         "Default is dry-run: print the SQL and exit without changing the DB.",
     ),
 ]
-OutputFileOpt = Annotated[
-    Path | None, typer.Option("--output", "-o", help="Save output to file (default: stdout).")
-]
 CheckBodyOpt = Annotated[
     bool,
     typer.Option(
@@ -112,14 +102,14 @@ CheckBodyOpt = Annotated[
 
 @cli_boundary
 def migrate_fix_signatures(
-    config: ConfigOpt = Path("confiture.yaml"),
-    env: EnvOpt = None,
+    config: Path = config_option(CONFITURE_YAML),
+    env: str | None = env_option(None),
     schema_file: SchemaFileOpt = None,
     check_signature_schemas: CheckSignatureSchemasOpt = None,
     ssh_via: SshViaOpt = None,
     apply: ApplyOpt = False,
     format_output: str = format_option("text", "json"),
-    output_file: OutputFileOpt = None,
+    output_file: Path | None = output_option(),
     check_body: CheckBodyOpt = False,
 ) -> None:
     """Fix stale function overloads: DROP old signature + re-apply source definition.

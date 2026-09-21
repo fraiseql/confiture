@@ -12,7 +12,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _get_tracking_table, console, emit, is_json, open_connection
-from confiture.cli.options import format_option
+from confiture.cli.options import config_option, format_option
 from confiture.core import baseline_detector as _core_baseline_detector
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
@@ -23,12 +23,7 @@ from confiture.exceptions import ConfigurationError
 
 @cli_boundary
 def migrate_introspect(
-    config: Path = typer.Option(
-        Path("db/environments/local.yaml"),
-        "--config",
-        "-c",
-        help="Configuration file (default: db/environments/local.yaml)",
-    ),
+    config: Path = config_option(),
     snapshots_dir: Path = typer.Option(
         Path("db/schema_history"),
         "--snapshots-dir",

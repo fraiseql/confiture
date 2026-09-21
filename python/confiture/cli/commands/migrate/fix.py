@@ -12,7 +12,7 @@ import typer
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import console, is_json
 from confiture.cli.idempotency import _fix_idempotency
-from confiture.cli.options import format_option
+from confiture.cli.options import config_option, format_option, migrations_dir_option, output_option
 from confiture.cli.ownership import _fix_ownership
 from confiture.core.connection import load_config
 from confiture.exceptions import ConfigurationError
@@ -25,11 +25,7 @@ DEFAULT_CONFIG_PATH = Path("confiture.yaml")
 
 @cli_boundary
 def migrate_fix(
-    migrations_dir: Path = typer.Option(
-        Path("db/migrations"),
-        "--migrations-dir",
-        help="Migrations directory (default: db/migrations)",
-    ),
+    migrations_dir: Path = migrations_dir_option(),
     idempotent: bool = typer.Option(
         False,
         "--idempotent",
@@ -44,16 +40,8 @@ def migrate_fix(
             "config."
         ),
     ),
-    config_path: Path | None = typer.Option(
-        # None, not Path("confiture.yaml"), so the body can tell a path the
-        # operator typed from the documented default and read the former even
-        # when this run has nothing to do with it (#284). The alternative — a
-        # `ctx: typer.Context` and `config_is_explicit` — is a ninth parameter,
-        # which `tests/budgets.json` refuses: its numbers only go down.
-        None,
-        "-c",
-        "--config",
-        help="Config file (needed for --ownership; defaults to confiture.yaml)",
+    config_path: Path | None = config_option(
+        None, help="Config file (needed for --ownership; defaults to confiture.yaml)"
     ),
     force: bool = typer.Option(
         False,
@@ -70,12 +58,7 @@ def migrate_fix(
         help="Preview changes without modifying files (default: off)",
     ),
     format_output: str = format_option("text", "json"),
-    output_file: Path | None = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Save output to file (default: stdout)",
-    ),
+    output_file: Path | None = output_option(),
 ) -> None:
     """Auto-fix non-idempotent SQL in migrations.
 

@@ -15,7 +15,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import console, emit, is_json, redact_url
-from confiture.cli.options import format_option
+from confiture.cli.options import database_url_option, env_option, format_option
 from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
 from confiture.core.seed.applier import apply_profile_filter
@@ -108,7 +108,7 @@ def _print_ram_setup_text(result: RamSetupResult, guided_command: str | None) ->
 @cli_boundary
 def provision_template(
     template: str = typer.Option(..., "--template", help="Template database name."),
-    env: str = typer.Option("local", "--env", "-e", help="Environment to build."),
+    env: str = env_option(),
     project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
     from_artifact: Path = typer.Option(
         None,
@@ -123,9 +123,7 @@ def provision_template(
     force: bool = typer.Option(
         False, "--force", help="Replace a same-named database even if not confiture-managed."
     ),
-    database_url: str = typer.Option(
-        None, "--database-url", help="PG server URL (default: from env config)."
-    ),
+    database_url: str = database_url_option(help="PG server URL (default: from env config)."),
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Build (or restore) a template database and stamp its db/ content hash."""
@@ -163,9 +161,9 @@ def provision_template(
 def clone(
     template: str = typer.Option(..., "--template", help="Source template database."),
     target: str = typer.Option(..., "--target", help="Clone database name to create."),
-    env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
+    env: str = env_option(),
     project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
-    database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
+    database_url: str = database_url_option(help="PG server URL."),
     sync_commit_off: bool = typer.Option(
         True,
         "--sync-commit-off/--no-sync-commit-off",
@@ -210,9 +208,9 @@ def ram_setup(
         "--force",
         help="Drop non-managed DBs in the tablespace and bypass the tmpfs-root allowlist.",
     ),
-    env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
+    env: str = env_option(),
     project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
-    database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
+    database_url: str = database_url_option(help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Create or idempotently reset a tmpfs-backed tablespace for RAM clones.
@@ -253,9 +251,9 @@ def drop(
     force: bool = typer.Option(
         False, "--force", help="Drop even if not confiture-managed (use with care)."
     ),
-    env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
+    env: str = env_option(),
     project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
-    database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
+    database_url: str = database_url_option(help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Drop a confiture-managed clone or template (terminating its backends)."""
@@ -273,9 +271,9 @@ def drop(
 @cli_boundary
 def status(
     template: str = typer.Option(..., "--template", help="Template database name."),
-    env: str = typer.Option("local", "--env", "-e", help="Environment to hash."),
+    env: str = env_option(),
     project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
-    database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
+    database_url: str = database_url_option(help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Report template staleness vs the current db/ hash (exit 0 current, 1 stale/absent)."""
@@ -297,9 +295,9 @@ def status(
 @test_db_app.command("list")
 @cli_boundary
 def list_databases(
-    env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
+    env: str = env_option(),
     project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
-    database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
+    database_url: str = database_url_option(help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:
     """List confiture-managed templates and clones on the server."""
@@ -318,9 +316,9 @@ def list_databases(
 @cli_boundary
 def prune(
     template: str = typer.Option(..., "--template", help="Template whose clones to drop."),
-    env: str = typer.Option("local", "--env", "-e", help="Environment (for server URL)."),
+    env: str = env_option(),
     project_dir: Path = typer.Option(Path(), "--project-dir", help="Project directory."),
-    database_url: str = typer.Option(None, "--database-url", help="PG server URL."),
+    database_url: str = database_url_option(help="PG server URL."),
     format_type: str = format_option("text", "json"),
 ) -> None:
     """Drop every clone of a template (reaps clones leaked by crashed workers)."""

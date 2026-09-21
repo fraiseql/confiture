@@ -26,6 +26,7 @@ import yaml
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _resolve_config, console
+from confiture.cli.options import CONFITURE_YAML, config_option, env_option
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.notifications.config import load_notifications_config
 from confiture.core.hooks.notifications.factory import from_config
@@ -94,18 +95,8 @@ def _synthetic_execution_context() -> ExecutionContext:
 @hooks_app.command("test")
 @cli_boundary
 def hooks_test(
-    config: Path = typer.Option(
-        Path("confiture.yaml"),
-        "--config",
-        "-c",
-        help="Path to environment config (default: confiture.yaml)",
-    ),
-    env: str | None = typer.Option(
-        None,
-        "--env",
-        "-e",
-        help="Environment name — shortcut for db/environments/{env}.yaml",
-    ),
+    config: Path = config_option(CONFITURE_YAML),
+    env: str | None = env_option(None),
     hook_id: str | None = typer.Option(
         None,
         "--id",
