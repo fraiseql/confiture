@@ -317,6 +317,42 @@ ROUTINE_COMMANDS: dict[str, tuple[str, ...]] = {
 #: Which scenarios apply ``live_changes.sql`` after the tree.
 ROUTINE_SCENARIOS: dict[str, bool] = {"clean": False, "drift": True}
 
+#: The commands whose output carries ``pg_get_viewdef``'s text. PostgreSQL 16
+#: stopped qualifying a column of a single-relation view (``tb_thing.id`` became
+#: ``id``), so these print one thing on the CI server (15) and another on 16 and
+#: later — the definitions *and* the hashes taken of them. Their goldens are kept
+#: per deparse generation, each recorded on a server of that generation;
+#: ``test_routine_goldens.py`` measures the difference so the split cannot
+#: outlive its cause.
+VIEW_DEPARSE_COMMANDS: frozenset[str] = frozenset(
+    {"check-body-views", "check-body-views-show-diff"}
+)
+_GENERATION = re.compile(r"\.(pg1[0-9]+)\.json$")
+
+
+def deparse_generation(server_version_num: int) -> str:
+    """``pg15`` below PostgreSQL 16, where a view's columns are deparsed qualified."""
+    return "pg15" if server_version_num < 160000 else "pg16"
+
+
+def _server_generation(database_url: str) -> str:
+    import psycopg
+
+    with psycopg.connect(database_url) as conn:
+        row = conn.execute("SHOW server_version_num").fetchone()
+    assert row is not None
+    return deparse_generation(int(row[0]))
+
+
+def of_generation(goldens: dict[str, str], generation: str) -> dict[str, str]:
+    """The goldens that apply on a server of *generation*: shared ones and its own."""
+    return {
+        rel: text
+        for rel, text in goldens.items()
+        if (match := _GENERATION.search(rel)) is None or match.group(1) == generation
+    }
+
+
 #: Timings are the one field that is never the same twice.
 _TIMING = re.compile(r'("[a-z_]*_ms": )[0-9.]+')
 
@@ -354,11 +390,13 @@ def _record_scenario(scenario: str, database_url: str, work: Path) -> dict[str, 
     config.write_text(f"name: golden\ndatabase_url: {database_url}\ninclude_dirs: []\n")
     database = urlparse(database_url).path.lstrip("/")
     replacements = {str(work): "<work>", str(schema): "<schema>", database: "<database>"}
+    generation = _server_generation(database_url)
     recorded_texts: dict[str, str] = {}
     for name, command in ROUTINE_COMMANDS.items():
         argv = tuple(part.format(migrations=migrations) for part in command)
         argv += ("-c", str(config), "--schema", str(schema), "--format", "json")
-        recorded_texts[f"routines/{scenario}.{name}.json"] = _record_command(
+        suffix = f".{generation}.json" if name in VIEW_DEPARSE_COMMANDS else ".json"
+        recorded_texts[f"routines/{scenario}.{name}{suffix}"] = _record_command(
             argv, replacements, work
         )
     return recorded_texts
@@ -460,17 +498,19 @@ def main() -> int:
     args = parser.parse_args()
 
     stale: list[str] = []
+    generation = _server_generation(args.server_url)
     for kind, live in _collect(args.only, args.server_url).items():
         if args.write:
             directory = GOLDENS / kind
             directory.mkdir(parents=True, exist_ok=True)
-            for old in directory.glob("*"):
-                old.unlink()
+            # Another generation's goldens were recorded on another server.
+            for old in of_generation(recorded(kind), generation):
+                (GOLDENS / old).unlink()
             for rel, text in live.items():
                 (GOLDENS / rel).write_text(text)
             print(f"wrote {len(live)} {kind} goldens")
         else:
-            on_disk = recorded(kind)
+            on_disk = of_generation(recorded(kind), generation)
             stale.extend(
                 k for k in sorted(set(live) | set(on_disk)) if live.get(k) != on_disk.get(k)
             )

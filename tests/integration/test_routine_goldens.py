@@ -27,6 +27,12 @@ from psycopg import sql
 from test_diff_goldens import _explain, goldens
 
 
+def _server_version(conn: psycopg.Connection) -> int:
+    row = conn.execute("SHOW server_version_num").fetchone()
+    assert row is not None
+    return int(row[0])
+
+
 def test_routine_goldens_are_recorded() -> None:
     assert goldens.recorded("routines"), (
         "tests/fixtures/model_goldens/routines/ is empty; record it with "
@@ -34,13 +40,30 @@ def test_routine_goldens_are_recorded() -> None:
     )
 
 
-def test_every_command_is_recorded_for_every_scenario() -> None:
+def test_every_command_is_recorded_for_every_scenario_and_generation() -> None:
     expected = {
-        f"routines/{scenario}.{command}.json"
+        f"routines/{scenario}.{command}{suffix}"
         for scenario in goldens.ROUTINE_SCENARIOS
         for command in goldens.ROUTINE_COMMANDS
+        for suffix in (
+            (".pg15.json", ".pg16.json") if command in goldens.VIEW_DEPARSE_COMMANDS else (".json",)
+        )
     }
     assert expected <= set(goldens.recorded("routines"))
+
+
+def test_a_view_is_deparsed_by_generation(maintenance_connection: psycopg.Connection) -> None:
+    """Why the view goldens are recorded twice: the deparse, measured on this server."""
+    server = _server_version(maintenance_connection)
+    maintenance_connection.execute(
+        "CREATE OR REPLACE TEMP VIEW deparse_probe AS SELECT oid FROM pg_class"
+    )
+    deparsed = maintenance_connection.execute(
+        "SELECT pg_get_viewdef('deparse_probe'::regclass)"
+    ).fetchone()
+    assert deparsed is not None
+    qualified = "pg_class.oid" in str(deparsed[0])
+    assert (goldens.deparse_generation(server), qualified) in {("pg15", True), ("pg16", False)}
 
 
 def test_the_routine_checks_match_their_goldens(
@@ -58,7 +81,10 @@ def test_the_routine_checks_match_their_goldens(
             )
 
     live = goldens.routine_goldens(fresh)
-    on_disk = goldens.recorded("routines")
+    server = _server_version(maintenance_connection)
+    on_disk = goldens.of_generation(
+        goldens.recorded("routines"), goldens.deparse_generation(server)
+    )
     assert live == on_disk, (
         "a routine or view check printed something else. If deliberate, run "
         "`uv run python scripts/refresh_model_goldens.py --write --only routines` and "

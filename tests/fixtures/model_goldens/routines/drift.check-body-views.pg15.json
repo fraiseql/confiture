@@ -1,0 +1,29 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "check": "view_body_drift",
+    "has_drift": true,
+    "body_drifts": [
+      {
+        "schema": "public",
+        "name": "mv_things",
+        "relkind": "m",
+        "source_hash": "a9b623996a05",
+        "db_hash": "786651f80ace"
+      },
+      {
+        "schema": "public",
+        "name": "v_things",
+        "relkind": "v",
+        "source_hash": "1cbc808c1b25",
+        "db_hash": "fb356688a244"
+      }
+    ],
+    "views_checked": 3,
+    "detection_time_ms": 0,
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}
