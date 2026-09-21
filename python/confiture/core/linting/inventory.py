@@ -45,7 +45,16 @@ from confiture.core.ddl_walk import type_name as ddl_type_name
 # The fold lives in its own module so a reader that needs it but not a parser
 # can have it; imported here because this is where object identity is decided.
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.schema_model import Column, Constraint
+from confiture.core.schema_model import (
+    Column,
+    Constraint,
+    EnumType,
+    Index,
+    SchemaModel,
+    Table,
+    ref_for,
+)
+from confiture.core.schema_model import Sequence as SequenceModel
 from confiture.core.type_lattice import canonical_type, parse_type
 
 _T = TypeVar("_T")
@@ -144,6 +153,13 @@ class SchemaObject:
     #: grammar allowed them to be written — on a column, at table level, or in a
     #: later ``ALTER TABLE … ADD CONSTRAINT``.
     constraints: list[Constraint] = field(default_factory=list)
+    #: A table's indexes, folded on from their own ``CREATE INDEX`` statements.
+    indexes: list[Index] = field(default_factory=list)
+    #: An enum's labels in declaration order; ``None`` for every other kind,
+    #: a composite type included.
+    enum_values: tuple[str, ...] | None = None
+    #: A sequence's numeric options as written (``start``, ``increment``, …).
+    sequence_options: dict[str, int | None] = field(default_factory=dict)
     has_primary_key: bool = False
     is_partition: bool = False
     is_temporary: bool = False
@@ -628,7 +644,8 @@ def _composite_type_from_create(sql: str, stmt: Any, offset: int) -> SchemaObjec
 
 def _enum_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     schema, name = split_names(stmt.typeName)
-    return _object("type", schema, name, _line_of(sql, offset), offset)
+    labels = tuple(value.sval for value in stmt.vals or ())
+    return _object("type", schema, name, _line_of(sql, offset), offset, enum_values=labels)
 
 
 def _domain_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
@@ -637,7 +654,12 @@ def _domain_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
 
 
 def _sequence_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
-    return _relation_object(sql, "sequence", stmt.sequence, offset)
+    sequence = _relation_object(sql, "sequence", stmt.sequence, offset)
+    for option in stmt.options or ():
+        arg = getattr(option, "arg", None)
+        sequence.sequence_options[option.defname] = getattr(arg, "ival", None)
+    sequence.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
+    return sequence
 
 
 #: Which builder reads which parse node. A statement whose node is absent here
@@ -826,6 +848,38 @@ def _targets(inventory: Inventory, edit: ObjectEdit, offset: int) -> list[Schema
     return [obj for obj in candidates if obj.offset < offset]
 
 
+def _apply_index(stmt: Any, inventory: Inventory) -> None:
+    """Fold a ``CREATE INDEX`` onto the table the tree declared.
+
+    ``accessMethod`` is always set: PostgreSQL's grammar fills in ``btree`` when
+    the statement writes no ``USING``, which is also what the catalog reports.
+    """
+    relation = stmt.relation
+    table = inventory.find(relation.schemaname, relation.relname)
+    if table is None:
+        return
+    table.indexes.append(
+        Index(
+            name=stmt.idxname,
+            table=table.qualified,
+            columns=tuple(
+                elem.name if elem.name else RawStream()(elem.expr)
+                for elem in stmt.indexParams or ()
+            ),
+            unique=bool(stmt.unique),
+            where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
+            method=stmt.accessMethod,
+        )
+    )
+
+
+def _drop_index(inventory: Inventory, edit: ObjectEdit) -> None:
+    """``DROP INDEX``: an index name is unique per schema, and the statement names no table."""
+    for table in inventory.tables:
+        if edit.schema is None or table.folded_schema in (None, edit.schema):
+            table.indexes = [ix for ix in table.indexes if ix.name != edit.name]
+
+
 def _apply_object_edit(inventory: Inventory, edit: ObjectEdit, offset: int) -> None:
     """Fold one statement's edit into the objects the tree has declared so far.
 
@@ -833,6 +887,10 @@ def _apply_object_edit(inventory: Inventory, edit: ObjectEdit, offset: int) -> N
     rule ``_apply_alter`` follows for the same reason: it belongs to a schema
     built elsewhere.
     """
+    if edit.object_kind == "index":
+        if edit.kind == "drop":
+            _drop_index(inventory, edit)
+        return
     targets = _targets(inventory, edit, offset)
     if not targets:
         return
@@ -899,6 +957,8 @@ def build_inventory(sql: str) -> Inventory:
         kind = type(stmt).__name__
         if kind == "AlterTableStmt":
             _apply_alter(sql, stmt, inventory)
+        elif kind == "IndexStmt":
+            _apply_index(stmt, inventory)
         elif kind == "CommentStmt":
             _apply_comment(stmt, inventory)
         else:
@@ -909,6 +969,62 @@ def build_inventory(sql: str) -> Inventory:
             for edit in edits:
                 _apply_object_edit(inventory, edit, offset)
     return inventory
+
+
+def _model_ref(obj: SchemaObject) -> Any:
+    return ref_for(obj.kind, obj.folded_schema, obj.folded_name)
+
+
+def _model_table(obj: SchemaObject) -> Table:
+    qualified = f"{obj.folded_schema}.{obj.folded_name}" if obj.folded_schema else obj.folded_name
+    return Table(
+        name=obj.folded_name,
+        schema=obj.folded_schema,
+        columns=tuple(obj.columns),
+        constraints=tuple(obj.constraints),
+        indexes=tuple(replace(ix, table=qualified) for ix in obj.indexes),
+    )
+
+
+def _model_sequence(obj: SchemaObject) -> SequenceModel:
+    """Start and increment default to 1, as PostgreSQL defaults an ascending sequence."""
+    options = obj.sequence_options
+    start, increment = options.get("start"), options.get("increment")
+    return SequenceModel(
+        name=obj.folded_name,
+        schema=obj.folded_schema,
+        start=1 if start is None else start,
+        increment=1 if increment is None else increment,
+        min_value=options.get("minvalue"),
+        max_value=options.get("maxvalue"),
+    )
+
+
+def schema_model(inventory: Inventory) -> SchemaModel:
+    """The schema *inventory* declares, each object under its identity.
+
+    The first definition of an object is the one the model holds, because it is
+    the one a build keeps: a later ``IF NOT EXISTS`` is a no-op and a later plain
+    ``CREATE`` fails the build at that statement. ``build_001`` reports the rest.
+    """
+    tables: dict[Any, Table] = {}
+    enum_types: dict[Any, EnumType] = {}
+    sequences: dict[Any, SequenceModel] = {}
+    for obj in distinct(inventory.objects):
+        if obj.kind == "table":
+            tables[_model_ref(obj)] = _model_table(obj)
+        elif obj.kind == "type" and obj.enum_values is not None:
+            enum_types[_model_ref(obj)] = EnumType(
+                name=obj.folded_name, schema=obj.folded_schema, values=obj.enum_values
+            )
+        elif obj.kind == "sequence":
+            sequences[_model_ref(obj)] = _model_sequence(obj)
+    return SchemaModel(tables=tables, enum_types=enum_types, sequences=sequences)
+
+
+def build_model(sql: str) -> SchemaModel:
+    """Parse ``sql`` into the schema model. Raises ``pglast.parser.ParseError``."""
+    return schema_model(build_inventory(sql))
 
 
 def label_for(path: Path, root: Path | None) -> str:
