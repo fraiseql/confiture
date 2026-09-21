@@ -46,6 +46,18 @@ comparisons say today, are now tests in its own suite.
   grow; exit codes stay `0..8`; a withdrawn release is yanked as a tag, never reverted
   on `main`.
 
+- **`core/schema_model.py`**, the one model of what a schema declares — `Table`,
+  `Column`, `Constraint`, `Index`, `EnumType`, `Sequence`, keyed by `ObjectRef` in a
+  `SchemaModel` — and `inventory.build_model()`, which reads a DDL tree into it: every
+  column with its type as identity (`type_key`, typmod kept) and as spelling
+  (`raw_sql_type`), its identity and generation, every constraint wherever it was
+  written, every index with its access method, enum labels and sequence options. The
+  module imports no parser and no driver. Its output for every example tree is pinned
+  in `tests/fixtures/model_goldens/model/`.
+- **`tests/unit/test_one_schema_model.py`** fails on a class outside the model module
+  that is named like one of its types or carries the fields of one; the fourteen that
+  exist are listed with the different question each answers.
+
 ### Changed
 
 - **`migrate diff --generate` writes an identity column and a generated column as the
@@ -61,6 +73,12 @@ comparisons say today, are now tests in its own suite.
   generated columns and deferrability; `EXCLUDE` (#322) and PostgreSQL 18's
   `NOT ENFORCED` stay declined, with their reasons. `ALTER TABLE … ALTER CONSTRAINT`
   is no longer read as a *new* constraint: only `ADD CONSTRAINT` adds one.
+- **The `pglast-matrix` CI leg runs the DDL guards** — the constraint, `ALTER` and
+  object exhaustiveness guards, the one-model guard and the model's reader tests — on
+  pglast 6 and 8. `test_alter_subtypes_are_exhaustive` had never run on 6 or 7 and
+  failed there: `AT_CheckNotNull` (removed by PostgreSQL 18) had no decision, and
+  `AT_SetExpression` (added by 17) read as stale. Both are now named as members only
+  part of the supported range defines.
 - **`confiture.core`'s public names resolve on first use.** Its `__init__` imported the
   dry-run executor, the hook system and the preconditions eagerly, so every
   `confiture.core.*` module paid psycopg on import. `from confiture.core import X`

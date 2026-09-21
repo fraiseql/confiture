@@ -319,6 +319,15 @@ jobs:
           tests/unit/test_pglast_enum_binding.py \
           tests/unit/test_plpgsql_parse.py \
           tests/unit/linting/test_build_003_references.py \
+          tests/unit/test_constraint_reader_is_exhaustive.py \
+          tests/unit/test_alter_subtypes_are_exhaustive.py \
+          tests/unit/test_ddl_objects_are_exhaustive.py \
+          tests/unit/test_ddl_statement_kinds_are_exhaustive.py \
+          tests/unit/test_one_alter_folder.py \
+          tests/unit/test_one_schema_model.py \
+          tests/unit/test_ddl_walk_read_constraint.py \
+          tests/unit/linting/test_inventory_reads_columns_whole.py \
+          tests/unit/linting/test_inventory_builds_the_model.py \
           -q
 
   plpgsql-check:

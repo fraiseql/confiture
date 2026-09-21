@@ -224,25 +224,30 @@ _NOT_A_FACT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "AT_ReAddDomainConstraint",
             "AT_ReAddComment",
             "AT_ReAddStatistics",
+            # PostgreSQL 16 and 17 only (pglast 6 and 7); 18 removed it.
+            "AT_CheckNotNull",
         ),
     ),
     (
-        "constraints are read from the live database and never compared: the expected "
-        "side has no constraint reader at all, so folding a constraint change would "
-        "change nothing anything asks for. If that comparison lands, this group moves",
+        "the model reads a constraint where it is declared — on a column, at table level "
+        "and in `ADD CONSTRAINT` — but nothing compares constraints against a live "
+        "database yet, so dropping, altering or validating one would change nothing "
+        "anything asks for. When that comparison lands, this group moves",
         ("AT_DropConstraint", "AT_AlterConstraint", "AT_ValidateConstraint"),
     ),
     (
-        "a generated column's expression is modelled on neither side — PostgreSQL "
-        "keeps it in `attgenerated`, and what a column records here is the text of a "
-        "*default*, which a generated expression is not",
+        "the model reads a generated column's expression where `CREATE TABLE` or "
+        "`ADD COLUMN` declares it, but nothing compares it against a live database "
+        "yet — PostgreSQL keeps it in `attgenerated`, not as a *default* — so an "
+        "`ALTER` that sets or drops it changes nothing anything asks for",
         ("AT_SetExpression", "AT_DropExpression"),
     ),
     (
         "an identity is not a default: measured on PostgreSQL 18.4, an identity column "
         "has `attidentity` set, **no** `pg_attrdef` row and a NULL "
-        "`information_schema.column_default`, where a `serial` has `nextval(…)`. So "
-        "there is no default fact to fold, and defaults are not compared in any case",
+        "`information_schema.column_default`, where a `serial` has `nextval(…)`. The "
+        "model reads an identity where `CREATE TABLE` or `ADD COLUMN` declares it; "
+        "nothing compares it against a live database yet, so the `ALTER` forms wait",
         ("AT_AddIdentity", "AT_SetIdentity", "AT_DropIdentity"),
     ),
     (
