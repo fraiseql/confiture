@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import psycopg
 
 from confiture.core.sql_lexer import split_statements
+from confiture.core.sql_path import find_project_root, resolve_sql_file
 
 if TYPE_CHECKING:
     from confiture.core.hooks import Hook
@@ -278,9 +279,6 @@ class Migration(ABC):
             ...     def down(self):
             ...         pass
         """
-        # Reason: import cycle: confiture.core (its __init__ imports core.dry_run) -> exceptions -> error_codes -> models.error -> models/__init__ -> models.migration
-        from confiture.core.sql_path import find_project_root, resolve_sql_file
-
         source = _source_file_of(type(self))
         resolution = resolve_sql_file(
             path,

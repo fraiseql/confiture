@@ -14,6 +14,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The migrator, the models, the config and the exceptions take part in no import
+  cycle.** Over the imports that run — at module level *and* inside functions — two
+  strongly connected components reached them: 23 modules through `_migrator/`
+  (the session, the apply and rollback loops, the engine, `core.migrator`,
+  `preflight`, `expected_db`, `ddl_objects` and thirteen `core/linting` modules), and
+  `error_codes ↔ exceptions ↔ models.error`. Eleven function-local
+  `# Reason: import cycle` imports kept them from failing at start-up. None remains:
+  `tests/unit/test_import_graph_has_no_scc.py` and
+  `test_no_cycle_deferral_remains.py` fail on one, and
+  `test_scope_modules_import_first.py` imports every module of that scope first, in a
+  fresh interpreter.
+- **A session is injected, not patched.** `MigratorSession.default_engine` and
+  `default_lock` join `default_connection_factory` and `default_migration_loader`:
+  the session looked `Migrator`, `MigrationLock` and `LockConfig` up through
+  `confiture.core.migrator` at call time so a test could patch a module name. ⚠️ For
+  an embedder or a test: patching `confiture.core.migrator.MigrationLock` or
+  `.Migrator` no longer reaches a session — set the class attribute; eight of this
+  repository's own tests had kept passing against a patch that reached nothing.
+- **The engine knows no session.** The operations are
+  `confiture.core._migrator.engine.MigrationEngine`; `confiture.core.migrator.Migrator`
+  — the name `confiture.Migrator` and fraisier import — is that engine with the two
+  ways into a session, `from_config` and `migrate_up`, defined above both.
+- ⚠️ **`ExpectedSchemaDB.from_base_plus_migrations` takes the replay**
+  (`replay=confiture.core.migrator.replay_migrations` is `migrate up`). A scratch
+  database knowing the migrator is what tied the linter into the migrator's cycle.
+- **`confiture.models` resolves its names on first use**, as `confiture.core` does,
+  and `ErrorSeverity` is defined in `confiture.models.error` (still importable from
+  `confiture.exceptions`), so importing an error model no longer runs the migration
+  runtime.
+
 ## [1.15.0] - 2026-09-21
 
 **One model.** The parse side and the live side of a schema produce the same model,

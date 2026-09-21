@@ -763,7 +763,7 @@ confiture/
 │   ├── models/                   # Confiture migration models
 │   │   ├── __init__.py           # Confiture migration models
 │   │   ├── debug_models.py       # Data models for CTE step-through debugging
-│   │   ├── error.py              # Error models for structured error handling
+│   │   ├── error.py              # Error models for structured error handling: the severity every error an…
 │   │   ├── function_info.py      # Data models for PostgreSQL function/procedure introspection
 │   │   ├── git.py                # Data models for git-based validation reports
 │   │   ├── introspection.py      # Data models for schema introspection output

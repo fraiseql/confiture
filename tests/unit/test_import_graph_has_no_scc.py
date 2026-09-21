@@ -21,8 +21,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 import confiture
 
 PACKAGE = Path(confiture.__file__).resolve().parent
@@ -135,9 +133,6 @@ def test_the_graph_reader_sees_a_function_local_cycle() -> None:
     assert [sorted(c) for c in _components(graph) if len(c) > 1] == [["a", "b"]]
 
 
-@pytest.mark.xfail(
-    strict=True, reason="a map of the cycles still to remove; the mark goes with the last one"
-)
 def test_no_import_cycle_reaches_the_migrator_models_config_or_exceptions() -> None:
     cycles = _cycles_reaching_the_scope()
     assert cycles == [], "import cycles through the scope:\n" + "\n".join(

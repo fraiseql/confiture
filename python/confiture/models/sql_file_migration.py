@@ -39,7 +39,27 @@ import psycopg
 import yaml
 
 from confiture.core._migrator.discovery import parse_migration_filename
-from confiture.core.preconditions import Precondition
+from confiture.core.destructive import is_gated
+from confiture.core.migration_analyzer import MigrationAnalyzer
+from confiture.core.preconditions import (
+    ColumnExists,
+    ColumnNotExists,
+    ColumnType,
+    ConstraintExists,
+    ConstraintNotExists,
+    CustomSQL,
+    ForeignKeyExists,
+    IndexExists,
+    IndexNotExists,
+    Precondition,
+    RowCountEquals,
+    RowCountGreaterThan,
+    SchemaExists,
+    SchemaNotExists,
+    TableExists,
+    TableIsEmpty,
+    TableNotExists,
+)
 from confiture.core.sql_lexer import split_statements
 from confiture.core.sql_utils import strip_transaction_wrappers
 from confiture.models.migration import Migration
@@ -54,9 +74,6 @@ def _down_for(up_file: Path) -> Path:
 
 def _detect_destructive(up_file: Path) -> bool:
     """Whether the ``.up.sql`` carries the ``-- confiture:destructive`` gate directive."""
-    # Reason: import cycle — confiture.core.__init__ → _migrator.session → this module
-    from confiture.core.destructive import is_gated
-
     return is_gated(up_file.read_text(encoding="utf-8"))
 
 
@@ -75,9 +92,6 @@ def _detect_transactional(up_file: Path) -> bool:
     Any read or analysis failure degrades to ``True`` (transactional), the
     historical default; the real error surfaces when the migration executes.
     """
-    # Reason: import cycle: confiture.core (its __init__ imports core.dry_run) -> exceptions -> error_codes -> models.error -> models/__init__ -> this module
-    from confiture.core.migration_analyzer import MigrationAnalyzer
-
     try:
         sql = up_file.read_text(encoding="utf-8")
         try:
@@ -350,26 +364,6 @@ def load_preconditions_from_yaml(
         ValueError: If precondition type is unknown or required fields are missing
         FileNotFoundError: If YAML file doesn't exist
     """
-
-    # Reason: import cycle: confiture.core (its __init__ imports core.dry_run) -> exceptions -> error_codes -> models.error -> models/__init__ -> this module
-    from confiture.core.preconditions import (
-        ColumnExists,
-        ColumnNotExists,
-        ColumnType,
-        ConstraintExists,
-        ConstraintNotExists,
-        CustomSQL,
-        ForeignKeyExists,
-        IndexExists,
-        IndexNotExists,
-        RowCountEquals,
-        RowCountGreaterThan,
-        SchemaExists,
-        SchemaNotExists,
-        TableExists,
-        TableIsEmpty,
-        TableNotExists,
-    )
 
     # Mapping of type names to classes
     PRECONDITION_TYPES: dict[str, type] = {
