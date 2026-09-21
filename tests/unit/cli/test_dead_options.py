@@ -87,11 +87,11 @@ def test_verbose_turns_on_debug_logging(project: Path) -> None:
         logger.setLevel(before)
 
 
-def test_bootstrap_no_check_alone_is_refused(project: Path) -> None:
+def test_bootstrap_refuses_a_mode_it_has_not_got(project: Path) -> None:
     (project / "cfg.yaml").write_text("name: x\ndatabase_url: postgresql://x/y\n")
-    result = runner.invoke(app, ["bootstrap", "--no-check", "--config", "cfg.yaml"])
+    result = runner.invoke(app, ["bootstrap", "--mode", "dry-run", "--config", "cfg.yaml"])
     assert result.exit_code == 5, result.output
-    assert "--dry-run" in result.output  # the hint names the modes that do something
+    assert "'check', 'plan', 'apply'" in result.output  # the error names the modes there are
 
 
 def test_seed_apply_copy_options_reach_the_applier(project: Path) -> None:

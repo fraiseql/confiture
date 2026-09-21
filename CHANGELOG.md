@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- ⚠️ **"Do not act" has one spelling; a command that previews by default takes
+  `--mode`.** Six spellings asked for a preview. A command now either acts by default
+  and takes `--dry-run`, or previews by default and takes `--mode`, whose default only
+  looks — never both (`tests/unit/test_dry_run_is_one_flag.py`). Removed with no
+  alias (owner decisions 3 and 10):
+  - `bootstrap --check/--no-check`, `--dry-run`, `--apply` → `--mode check|plan|apply`
+    (default `check`). `--format json` still reports `"mode": "dry-run"` for `plan`.
+  - `migrate fix-signatures --apply` → `--mode apply` (default `plan`: prints the
+    `DROP FUNCTION` + `CREATE` and changes nothing).
+  - `hooks test --no-dry-run` → `--mode send` (default `plan`: renders to stdout,
+    contacts nothing).
+
+  `--dry-run-execute` on `migrate up` keeps its name: it executes inside a SAVEPOINT
+  and rolls back, which is neither spelling. The bootstrap guide's exit codes are
+  corrected on the way: a bootstrap error exits 5, not 2.
+
 ### Added
 
 - **The six options most commands take are declared once each.** `--config` was

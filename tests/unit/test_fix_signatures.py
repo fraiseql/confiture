@@ -106,7 +106,7 @@ def _make_conn_mock() -> MagicMock:
 class TestFixSignaturesHelp:
     def test_fix_signatures_flag_exists(self):
         result = runner.invoke(app, ["migrate", "fix-signatures", "--help"])
-        assert "--apply" in _strip_ansi(result.output)
+        assert "--mode" in _strip_ansi(result.output)
         assert "--schema" in _strip_ansi(result.output)
 
 
@@ -183,7 +183,7 @@ class TestFixSignaturesDryRun:
         assert result.exit_code == 0
         plain = _strip_ansi(result.output)
         assert "DROP FUNCTION" in plain
-        assert "dry" in plain.lower() or "planned" in plain.lower()
+        assert "pass --mode apply to execute" in plain  # the plan names how to act
 
     def test_dry_run_json_output(self, tmp_path):
         import json
@@ -261,7 +261,8 @@ class TestFixSignaturesApply:
                     str(config),
                     "--schema",
                     str(schema),
-                    "--apply",
+                    "--mode",
+                    "apply",
                 ],
             )
         assert result.exit_code == 0
@@ -299,7 +300,8 @@ class TestFixSignaturesApply:
                     str(config),
                     "--schema",
                     str(schema),
-                    "--apply",
+                    "--mode",
+                    "apply",
                 ],
             )
         assert result.exit_code == 1
@@ -345,7 +347,8 @@ class TestFixSignaturesApply:
                     str(config),
                     "--schema",
                     str(schema),
-                    "--apply",
+                    "--mode",
+                    "apply",
                 ],
             )
         assert result.exit_code == 1

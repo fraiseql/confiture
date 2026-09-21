@@ -726,7 +726,7 @@ class OwnershipExpectation(BaseModel):
         lint_enabled: Master switch for the static ``own_001`` rule.
         bootstrap_connection_url: Optional superuser URL used by
             ``confiture bootstrap`` (issue #137).  Required for
-            ``--apply`` because ``CREATE ROLE`` and ``REASSIGN OWNED``
+            ``--mode apply`` because ``CREATE ROLE`` and ``REASSIGN OWNED``
             both need superuser.  Falls back to the env's main URL
             only when the user passes the explicit override; we never
             guess.  Supports ``${VAR}`` expansion at load time.

@@ -5,7 +5,7 @@ Pins:
 - Default to ``--dry-run`` (swap the configured transport for
   :class:`StdoutTransport`, never call the real service).
 - ``--id`` is required when more than one hook is configured.
-- ``--no-dry-run`` is the only switch that lets the command call the real
+- ``--mode send`` is the only switch that lets the command call the real
   transport.
 """
 
@@ -200,15 +200,15 @@ class TestIdSelection:
 
 
 # ---------------------------------------------------------------------------
-# --no-dry-run gates real transport calls.
+# --mode send gates real transport calls.
 # ---------------------------------------------------------------------------
 
 
-class TestNoDryRunFlag:
-    """Only ``--no-dry-run`` lets the command call the real transport."""
+class TestModeSend:
+    """Only ``--mode send`` lets the command call the real transport."""
 
-    def test_no_dry_run_invokes_real_transport(self, tmp_path: Path, monkeypatch) -> None:
-        """With ``--no-dry-run`` the real ``HttpTransport.send`` is called."""
+    def test_mode_send_invokes_real_transport(self, tmp_path: Path, monkeypatch) -> None:
+        """With ``--mode send`` the real ``HttpTransport.send`` is called."""
         from confiture.core.hooks.notifications import transport as tx_module
 
         called: list[str] = []
@@ -238,7 +238,7 @@ class TestNoDryRunFlag:
             ),
         )
         runner = CliRunner()
-        result = runner.invoke(app, ["hooks", "test", "--config", str(cfg), "--no-dry-run"])
+        result = runner.invoke(app, ["hooks", "test", "--config", str(cfg), "--mode", "send"])
         assert result.exit_code == 0, result.output
         assert called == ["https://example.com/real"]
 

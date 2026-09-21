@@ -369,7 +369,7 @@ def _display_body_drift_report(report: Any, *, show_diff: bool = False) -> None:
             _print_unified_diff(drift.unified_diff)
         console.print(
             "    Hint: function body differs — run "
-            "[bold]fix-signatures --apply[/bold] to re-apply from source"
+            "[bold]fix-signatures --mode apply[/bold] to re-apply from source"
         )
 
 

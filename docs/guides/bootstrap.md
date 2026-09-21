@@ -28,18 +28,22 @@ The fix is operational, not in-migration: **bootstrap the environment as superus
 ## The command
 
 ```bash
-confiture bootstrap --check --env production       # report drift
-confiture bootstrap --dry-run --env production     # show the SQL
-confiture bootstrap --apply  --env production      # execute
+confiture bootstrap --env production                # report drift (--mode check)
+confiture bootstrap --mode plan --env production    # show the SQL
+confiture bootstrap --mode apply --env production   # execute
 ```
 
-Three modes:
+Three modes, chosen with `--mode` (1.16.0; before it, `--check`, `--dry-run` and
+`--apply`):
 
-| Mode | Side effects | Exit codes |
+| `--mode` | Side effects | Exit codes |
 |------|--------------|------------|
-| `--check` (default) | Read-only | `0` no drift, `1` drift, `2` config error |
-| `--dry-run` | None | `0` always (prints SQL) |
-| `--apply` | Creates role, runs `REASSIGN OWNED`, sets default privileges | `0` success, `2` config or runtime error |
+| `check` (default) | Read-only | `0` no drift, `1` drift, `5` config error |
+| `plan` | None | `0` (prints SQL) |
+| `apply` | Creates role, runs `REASSIGN OWNED`, sets default privileges | `0` success, `5` config or runtime error |
+
+`--format json` reports `"mode": "check"`, `"dry-run"` or `"apply"`: the `plan` mode's
+payload keeps the value it carried before the flag was renamed.
 
 All three modes connect with `ownership.bootstrap_connection_url` (see below) — which must be a superuser URL.
 
@@ -77,7 +81,7 @@ Privilege keywords are validated against the standard set: `SELECT`, `INSERT`, `
 
 ---
 
-## What `--apply` actually runs
+## What `--mode apply` actually runs
 
 ```sql
 -- Step 1: CREATE ROLE (only if absent from pg_roles)
@@ -124,7 +128,7 @@ Every step is a no-op on already-correct state:
 - `REASSIGN OWNED` only runs when `pg_class` has postgres-owned objects.
 - `ALTER DEFAULT PRIVILEGES` is itself idempotent at the SQL level (re-granting an existing privilege does nothing).
 
-`bootstrap --check` after a successful `bootstrap --apply` exits `0`.  Re-running `--apply` is safe; the second run produces an empty plan for the role and reassign steps.
+`bootstrap` (`--mode check`) after a successful `bootstrap --mode apply` exits `0`.  Re-running `--mode apply` is safe; the second run produces an empty plan for the role and reassign steps.
 
 ---
 
@@ -153,10 +157,10 @@ The plan is transactional, so partial failure rolls back cleanly.  After a failu
 
 1. Read the error message — it names the step that failed.
 2. Fix the underlying issue (permissions, network, role membership).
-3. Re-run `confiture bootstrap --check` to see what remains.
-4. Re-run `confiture bootstrap --apply` once `--check` shows a non-empty plan.
+3. Re-run `confiture bootstrap` (`--mode check`) to see what remains.
+4. Re-run `confiture bootstrap --mode apply` once the check shows a non-empty plan.
 
-The `BootstrapError` exit code is `2` (configuration-class error); inspect stderr for the detailed message and the resolution hint.
+The `BootstrapError` exit code is `5` (configuration-class error); inspect stderr for the detailed message and the resolution hint.
 
 ---
 
@@ -171,7 +175,7 @@ The `BootstrapError` exit code is `2` (configuration-class error); inspect stder
     BOOTSTRAP_DATABASE_URL: ${{ secrets.PROD_SUPERUSER_DATABASE_URL }}
   run: |
     confiture bootstrap \
-      --check \
+      --mode check \
       --env production \
       --format json > bootstrap.json
 - uses: actions/upload-artifact@v4
@@ -180,7 +184,7 @@ The `BootstrapError` exit code is `2` (configuration-class error); inspect stder
     path: bootstrap.json
 ```
 
-`--check` exits `1` on drift, which fails the gate.  Periodic check runs against production catch the case where someone manually `CREATE TABLE`d as `postgres` and forgot to flip ownership.
+`--mode check` exits `1` on drift, which fails the gate.  Periodic check runs against production catch the case where someone manually `CREATE TABLE`d as `postgres` and forgot to flip ownership.
 
 ---
 

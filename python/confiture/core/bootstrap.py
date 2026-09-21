@@ -74,10 +74,10 @@ class BootstrapStep:
 
 @dataclass(frozen=True)
 class BootstrapPlan:
-    """Frozen snapshot of what ``--apply`` would do.
+    """Frozen snapshot of what ``--mode apply`` would do.
 
     Empty plan ⇒ the environment is already in the desired shape; a
-    second ``--apply`` is a no-op.
+    second ``--mode apply`` is a no-op.
     """
 
     steps: tuple[BootstrapStep, ...] = ()
@@ -286,8 +286,8 @@ class BootstrapExecutor:
     step.
 
     The executor never builds its own plan — callers pass in the
-    pre-computed :class:`BootstrapPlan`.  This makes ``--dry-run`` and
-    ``--apply`` share the same plan object so dry-run output and the
+    pre-computed :class:`BootstrapPlan`.  This makes ``--mode plan`` and
+    ``--mode apply`` share the same plan object so plan output and the
     actual statements can never drift.
     """
 
@@ -314,7 +314,7 @@ class BootstrapExecutor:
                 f"Bootstrap failed during step {applied[-1] if applied else '<role check>'}: {exc}",
                 resolution_hint=(
                     "Inspect the database state, fix the underlying issue, "
-                    "and re-run `confiture bootstrap --check` to see what "
+                    "and re-run `confiture bootstrap` (`--mode check`) to see what "
                     "remains."
                 ),
             ) from exc

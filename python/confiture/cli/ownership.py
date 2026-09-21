@@ -88,7 +88,7 @@ def _fix_ownership(
 
     Loads ``ownership:`` from *config_path* and uses
     :class:`~confiture.core.ownership_fixer.OwnershipFixer` to rewrite
-    files in place.  In ``--apply`` mode (i.e. not ``--dry-run``), the
+    files in place.  Unless ``--dry-run`` is given, the
     helper first probes the local tracking table — any file whose
     version is already recorded gets refused unless ``--force`` is also
     set.

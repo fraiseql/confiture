@@ -139,6 +139,40 @@ def format_option(*allowed: str, default: str | None = None, help: str | None = 
     )
 
 
+#: The modes that only look. A command whose ``--mode`` defaults to anything else
+#: would act when run bare, which is what ``--mode`` exists to prevent.
+PREVIEW_MODES = frozenset({"check", "plan"})
+
+
+def mode_option(*modes: str, help: str) -> Any:
+    """``--mode`` for a command that previews unless told to act; the first mode is the default.
+
+    A command that acts by default takes ``--dry-run`` to preview instead. The two
+    never meet on one command (``tests/unit/test_dry_run_is_one_flag.py``), and the
+    first mode — the default — must be one of :data:`PREVIEW_MODES`: running
+    ``migrate fix-signatures`` bare prints the ``DROP FUNCTION`` it would run, it
+    does not run it (owner decision 10).
+    """
+    if not modes or modes[0] not in PREVIEW_MODES:
+        raise ValueError(f"mode_option's default {modes[:1]} is not a preview mode")
+    choices = ", ".join(f"'{mode}'" for mode in modes)
+
+    def _validate(value: str) -> str:
+        if value not in modes:
+            fail(
+                ValidationError(
+                    f"Invalid --mode {value!r}: use {choices}.",
+                    context={"mode": value, "allowed": list(modes)},
+                ),
+                json_mode=False,
+            )
+        return value
+
+    return typer.Option(
+        modes[0], "--mode", callback=_validate, help=f"{help} (default: {modes[0]})"
+    )
+
+
 #: ``--schemas`` for the signature checks. ``None`` means "each reader's own
 #: default": the schemas the parsed source declares for ``--check-signatures``
 #: and ``migrate fix-signatures``, and ``public`` for the three other checks that
