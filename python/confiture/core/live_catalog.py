@@ -238,3 +238,144 @@ def read(conn: psycopg.Connection, *, schemas: Sequence[str]) -> SchemaModel:
         ).fetchall()
     }
     return SchemaModel(tables=_tables(conn, wanted), enum_types=enum_types, sequences=sequences)
+
+
+# ---------------------------------------------------------------------------
+# Probes: one fact about one object, for a caller that needs no whole model
+# ---------------------------------------------------------------------------
+
+_RELATION_EXISTS = f"""
+SELECT EXISTS (
+    SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = %s AND c.relname = %s AND c.relkind = ANY(%s)
+      AND {_NOT_EXTENSION_OWNED.format(catalog="pg_class", oid="c.oid")}
+)
+"""
+
+_SCHEMA_EXISTS = "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = %s)"
+
+_COLUMNS_OF = """
+SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull,
+       pg_get_expr(d.adbin, d.adrelid), a.attidentity, a.attgenerated
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+WHERE n.nspname = %s AND c.relname = %s AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY a.attnum
+"""
+
+_CONSTRAINT_EXISTS = """
+SELECT EXISTS (
+    SELECT 1 FROM pg_constraint k
+    JOIN pg_class c ON c.oid = k.conrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = %s AND c.relname = %s AND k.conname = %s
+      AND (%s::text IS NULL OR k.contype = %s::"char")
+)
+"""
+
+_INDEX_EXISTS = """
+SELECT EXISTS (
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    JOIN pg_index i ON i.indexrelid = c.oid
+    JOIN pg_class t ON t.oid = i.indrelid
+    WHERE n.nspname = %s AND c.relname = %s AND (%s::text IS NULL OR t.relname = %s::text)
+)
+"""
+
+_CONSTRAINTS_OF = """
+SELECT k.conname, pg_get_constraintdef(k.oid)
+FROM pg_constraint k
+JOIN pg_class c ON c.oid = k.conrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = %s AND c.relname = %s AND k.contype IN ('p', 'u', 'c', 'f')
+ORDER BY k.conname
+"""
+
+#: Every relation a column can belong to: tables, views, matviews, foreign tables.
+_COLUMN_TYPES = """
+SELECT n.nspname, c.relname, a.attname, format_type(a.atttypid, a.atttypmod)
+FROM pg_attribute a
+JOIN pg_class c ON c.oid = a.attrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE a.attnum > 0
+  AND NOT a.attisdropped
+  AND c.relkind IN ('r', 'p', 'm', 'v', 'f')
+  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+  AND n.nspname NOT LIKE 'pg_toast%'
+"""
+
+#: The ``relkind`` letters of a table, partitioned or not.
+TABLE_KINDS = ("r", "p")
+
+#: What ``information_schema.tables`` lists, which is what "a table exists" has
+#: meant to its callers: a table, a partitioned table, a view, a foreign table.
+TABLE_LIKE = ("r", "p", "v", "f")
+
+#: ``pg_constraint.contype`` by the model's constraint kind.
+_CONTYPE = {"primary_key": "p", "unique": "u", "check": "c", "foreign_key": "f"}
+
+
+def _scalar(conn: psycopg.Connection, sql: str, params: tuple[Any, ...]) -> Any:
+    with conn.cursor() as cursor:
+        cursor.execute(sql, params)
+        row = cursor.fetchone()
+    return row[0] if row else None
+
+
+def relation_exists(
+    conn: psycopg.Connection, schema: str, name: str, kinds: Sequence[str] = TABLE_KINDS
+) -> bool:
+    """Whether *schema.name* exists as one of the ``relkind`` letters *kinds*."""
+    return bool(_scalar(conn, _RELATION_EXISTS, (schema, name, list(kinds))))
+
+
+def schema_exists(conn: psycopg.Connection, schema: str) -> bool:
+    return bool(_scalar(conn, _SCHEMA_EXISTS, (schema,)))
+
+
+def constraint_exists(
+    conn: psycopg.Connection, schema: str, table: str, name: str, kind: str | None = None
+) -> bool:
+    """Whether *table* carries a constraint called *name*, of the model *kind* if given."""
+    contype = _CONTYPE[kind] if kind is not None else None
+    return bool(_scalar(conn, _CONSTRAINT_EXISTS, (schema, table, name, contype, contype)))
+
+
+def index_exists(
+    conn: psycopg.Connection, schema: str, name: str, table: str | None = None
+) -> bool:
+    """Whether an index called *name* exists in *schema*, on *table* if given."""
+    return bool(_scalar(conn, _INDEX_EXISTS, (schema, name, table, table)))
+
+
+def constraints(conn: psycopg.Connection, schema: str, table: str) -> tuple[Constraint, ...]:
+    """One table's constraints, read the way :func:`read` reads them."""
+    with conn.cursor() as cursor:
+        cursor.execute(_CONSTRAINTS_OF, (schema, table))
+        rows = cursor.fetchall()
+    read_back = (_constraint(name, definition) for name, definition in rows)
+    return tuple(c for c in read_back if c is not None)
+
+
+def columns(conn: psycopg.Connection, schema: str, table: str) -> tuple[Column, ...]:
+    """The columns of one relation, in order, read the way :func:`read` reads them."""
+    with conn.cursor() as cursor:
+        cursor.execute(_COLUMNS_OF, (schema, table))
+        rows = cursor.fetchall()
+    nodes = _type_nodes([row[1] for row in rows])
+    return tuple(_column((None, *row), node) for row, node in zip(rows, nodes, strict=True))
+
+
+def column(conn: psycopg.Connection, schema: str, table: str, name: str) -> Column | None:
+    return next((c for c in columns(conn, schema, table) if c.folded == name), None)
+
+
+def column_types(conn: psycopg.Connection) -> dict[str, str]:
+    """``schema.table.column`` (case-folded) → ``format_type``, for every user relation."""
+    with conn.cursor() as cursor:
+        cursor.execute(_COLUMN_TYPES)
+        rows = cursor.fetchall()
+    return {f"{s}.{t}.{c}".lower(): spelled for s, t, c, spelled in rows}

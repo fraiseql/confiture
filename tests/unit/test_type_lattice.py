@@ -15,9 +15,11 @@ import pytest
 
 from confiture.core.type_lattice import (
     TypeChange,
+    canonical_type,
     changes_rewrite_table,
     compare_types,
     parse_type,
+    same_type,
 )
 
 
@@ -143,3 +145,18 @@ def test_old_type_is_absent_from_sql() -> None:
     [op] = OperationClassifier().classify("ALTER TABLE t ALTER COLUMN c TYPE bigint;")
     assert op.old_type is None
     assert compare_types(op.old_type, op.new_type) is TypeChange.UNKNOWN
+
+
+class TestFloatIsAPrecisionInBits:
+    """``float`` is ``double precision``; ``float(p)`` is ``real`` up to 24 bits."""
+
+    def test_a_bare_float_is_double_precision(self) -> None:
+        assert canonical_type("float") == "double precision"
+
+    def test_a_narrow_float_is_real(self) -> None:
+        assert canonical_type("float(24)") == "real"
+        assert canonical_type("float(25)") == "double precision"
+
+    def test_float_is_one_type_with_its_canonical_spelling(self) -> None:
+        assert same_type("float", "double precision")
+        assert same_type("float(10)", "real")

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
+from confiture.core import live_catalog
 from confiture.core.preconditions import (
     ColumnExists,
     ColumnNotExists,
@@ -29,6 +30,8 @@ from confiture.core.preconditions import (
     TableIsEmpty,
     TableNotExists,
 )
+from confiture.core.schema_model import Column
+from confiture.core.type_lattice import canonical_type
 
 # =============================================================================
 # Helper to create mock connections with specific query results
@@ -62,6 +65,25 @@ def create_mock_connection(query_results: dict[str, list]) -> MagicMock:
     return mock_conn
 
 
+def stub_catalog(monkeypatch: pytest.MonkeyPatch, **answers: object) -> MagicMock:
+    """Answer the ``live_catalog`` probes a precondition asks, without a database.
+
+    Preconditions read the catalog through ``core/live_catalog``'s probes; what is
+    tested here is what each precondition *does* with the answer. What the
+    probes answer on a real server is ``tests/integration/test_preconditions_live.py``.
+    """
+    for name, value in answers.items():
+        monkeypatch.setattr(live_catalog, name, lambda *_args, _value=value, **_kwargs: _value)
+    return MagicMock()
+
+
+def typed_column(type_text: str) -> Column:
+    """A column as ``live_catalog`` reads it, of the type ``format_type`` spells."""
+    return Column(
+        name="c", folded="c", line=0, type_text=type_text, type_key=canonical_type(type_text)
+    )
+
+
 # =============================================================================
 # Table Preconditions Tests
 # =============================================================================
@@ -70,9 +92,9 @@ def create_mock_connection(query_results: dict[str, list]) -> MagicMock:
 class TestTableExists:
     """Tests for TableExists precondition."""
 
-    def test_table_exists_passes_when_table_found(self):
+    def test_table_exists_passes_when_table_found(self, monkeypatch: pytest.MonkeyPatch):
         """TableExists should pass when table is found in database."""
-        mock_conn = create_mock_connection({"information_schema.tables": [True]})
+        mock_conn = stub_catalog(monkeypatch, relation_exists=True)
         precondition = TableExists("users", schema="public")
 
         passed, message = precondition.check(mock_conn)
@@ -80,9 +102,9 @@ class TestTableExists:
         assert passed is True
         assert "exists" in message.lower()
 
-    def test_table_exists_fails_when_table_not_found(self):
+    def test_table_exists_fails_when_table_not_found(self, monkeypatch: pytest.MonkeyPatch):
         """TableExists should fail when table is not found."""
-        mock_conn = create_mock_connection({"information_schema.tables": [False]})
+        mock_conn = stub_catalog(monkeypatch, relation_exists=False)
         precondition = TableExists("users", schema="public")
 
         passed, _message = precondition.check(mock_conn)
@@ -103,11 +125,9 @@ class TestTableExists:
 class TestTableNotExists:
     """Tests for TableNotExists precondition."""
 
-    def test_table_not_exists_passes_when_table_missing(self):
+    def test_table_not_exists_passes_when_table_missing(self, monkeypatch: pytest.MonkeyPatch):
         """TableNotExists should pass when table is not found."""
-        mock_conn = create_mock_connection(
-            {"information_schema.tables": [True]}
-        )  # NOT EXISTS returns True
+        mock_conn = stub_catalog(monkeypatch, relation_exists=False)
         precondition = TableNotExists("users_backup")
 
         passed, message = precondition.check(mock_conn)
@@ -115,11 +135,9 @@ class TestTableNotExists:
         assert passed is True
         assert "does not exist" in message.lower()
 
-    def test_table_not_exists_fails_when_table_found(self):
+    def test_table_not_exists_fails_when_table_found(self, monkeypatch: pytest.MonkeyPatch):
         """TableNotExists should fail when table exists."""
-        mock_conn = create_mock_connection(
-            {"information_schema.tables": [False]}
-        )  # NOT EXISTS returns False
+        mock_conn = stub_catalog(monkeypatch, relation_exists=True)
         precondition = TableNotExists("users")
 
         passed, _message = precondition.check(mock_conn)
@@ -135,18 +153,18 @@ class TestTableNotExists:
 class TestColumnExists:
     """Tests for ColumnExists precondition."""
 
-    def test_column_exists_passes_when_column_found(self):
+    def test_column_exists_passes_when_column_found(self, monkeypatch: pytest.MonkeyPatch):
         """ColumnExists should pass when column is found."""
-        mock_conn = create_mock_connection({"information_schema.columns": [True]})
+        mock_conn = stub_catalog(monkeypatch, column=typed_column("text"))
         precondition = ColumnExists("users", "email")
 
         passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
-    def test_column_exists_fails_when_column_missing(self):
+    def test_column_exists_fails_when_column_missing(self, monkeypatch: pytest.MonkeyPatch):
         """ColumnExists should fail when column is not found."""
-        mock_conn = create_mock_connection({"information_schema.columns": [False]})
+        mock_conn = stub_catalog(monkeypatch, column=None)
         precondition = ColumnExists("users", "legacy_field")
 
         passed, _message = precondition.check(mock_conn)
@@ -162,18 +180,18 @@ class TestColumnExists:
 class TestColumnNotExists:
     """Tests for ColumnNotExists precondition."""
 
-    def test_column_not_exists_passes_when_column_missing(self):
+    def test_column_not_exists_passes_when_column_missing(self, monkeypatch: pytest.MonkeyPatch):
         """ColumnNotExists should pass when column is not found."""
-        mock_conn = create_mock_connection({"information_schema.columns": [True]})
+        mock_conn = stub_catalog(monkeypatch, column=None)
         precondition = ColumnNotExists("users", "legacy_field")
 
         passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
-    def test_column_not_exists_fails_when_column_found(self):
+    def test_column_not_exists_fails_when_column_found(self, monkeypatch: pytest.MonkeyPatch):
         """ColumnNotExists should fail when column exists."""
-        mock_conn = create_mock_connection({"information_schema.columns": [False]})
+        mock_conn = stub_catalog(monkeypatch, column=typed_column("text"))
         precondition = ColumnNotExists("users", "email")
 
         passed, _message = precondition.check(mock_conn)
@@ -184,18 +202,18 @@ class TestColumnNotExists:
 class TestColumnType:
     """Tests for ColumnType precondition."""
 
-    def test_column_type_passes_when_type_matches(self):
+    def test_column_type_passes_when_type_matches(self, monkeypatch: pytest.MonkeyPatch):
         """ColumnType should pass when column has expected type."""
-        mock_conn = create_mock_connection({"information_schema.columns": ["uuid"]})
+        mock_conn = stub_catalog(monkeypatch, column=typed_column("uuid"))
         precondition = ColumnType("users", "id", "uuid")
 
         passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
-    def test_column_type_fails_when_type_mismatch(self):
+    def test_column_type_fails_when_type_mismatch(self, monkeypatch: pytest.MonkeyPatch):
         """ColumnType should fail when column has different type."""
-        mock_conn = create_mock_connection({"information_schema.columns": ["integer"]})
+        mock_conn = stub_catalog(monkeypatch, column=typed_column("integer"))
         precondition = ColumnType("users", "id", "uuid")
 
         passed, message = precondition.check(mock_conn)
@@ -204,9 +222,9 @@ class TestColumnType:
         assert "uuid" in message.lower()
         assert "integer" in message.lower()
 
-    def test_column_type_handles_aliases(self):
+    def test_column_type_handles_aliases(self, monkeypatch: pytest.MonkeyPatch):
         """ColumnType should handle PostgreSQL type aliases."""
-        mock_conn = create_mock_connection({"information_schema.columns": ["integer"]})
+        mock_conn = stub_catalog(monkeypatch, column=typed_column("integer"))
         precondition = ColumnType("users", "count", "int")
 
         passed, _message = precondition.check(mock_conn)
@@ -214,9 +232,9 @@ class TestColumnType:
         # 'int' should be recognized as 'integer'
         assert passed is True
 
-    def test_column_type_handles_varchar(self):
+    def test_column_type_handles_varchar(self, monkeypatch: pytest.MonkeyPatch):
         """ColumnType should handle varchar -> character varying alias."""
-        mock_conn = create_mock_connection({"information_schema.columns": ["character varying"]})
+        mock_conn = stub_catalog(monkeypatch, column=typed_column("character varying"))
         precondition = ColumnType("users", "name", "varchar")
 
         passed, _message = precondition.check(mock_conn)
@@ -232,18 +250,18 @@ class TestColumnType:
 class TestConstraintExists:
     """Tests for ConstraintExists precondition."""
 
-    def test_constraint_exists_passes_when_found(self):
+    def test_constraint_exists_passes_when_found(self, monkeypatch: pytest.MonkeyPatch):
         """ConstraintExists should pass when constraint is found."""
-        mock_conn = create_mock_connection({"table_constraints": [True]})
+        mock_conn = stub_catalog(monkeypatch, constraint_exists=True)
         precondition = ConstraintExists("users", "users_pkey")
 
         passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
-    def test_constraint_exists_fails_when_missing(self):
+    def test_constraint_exists_fails_when_missing(self, monkeypatch: pytest.MonkeyPatch):
         """ConstraintExists should fail when constraint is not found."""
-        mock_conn = create_mock_connection({"table_constraints": [False]})
+        mock_conn = stub_catalog(monkeypatch, constraint_exists=False)
         precondition = ConstraintExists("users", "fk_nonexistent")
 
         passed, _message = precondition.check(mock_conn)
@@ -254,9 +272,9 @@ class TestConstraintExists:
 class TestConstraintNotExists:
     """Tests for ConstraintNotExists precondition."""
 
-    def test_constraint_not_exists_passes_when_missing(self):
+    def test_constraint_not_exists_passes_when_missing(self, monkeypatch: pytest.MonkeyPatch):
         """ConstraintNotExists should pass when constraint is not found."""
-        mock_conn = create_mock_connection({"table_constraints": [True]})
+        mock_conn = stub_catalog(monkeypatch, constraint_exists=False)
         precondition = ConstraintNotExists("users", "old_constraint")
 
         passed, _message = precondition.check(mock_conn)
@@ -272,18 +290,18 @@ class TestConstraintNotExists:
 class TestIndexExists:
     """Tests for IndexExists precondition."""
 
-    def test_index_exists_passes_when_found(self):
+    def test_index_exists_passes_when_found(self, monkeypatch: pytest.MonkeyPatch):
         """IndexExists should pass when index is found."""
-        mock_conn = create_mock_connection({"pg_indexes": [True]})
+        mock_conn = stub_catalog(monkeypatch, index_exists=True)
         precondition = IndexExists("users", "idx_users_email")
 
         passed, _message = precondition.check(mock_conn)
 
         assert passed is True
 
-    def test_index_exists_fails_when_missing(self):
+    def test_index_exists_fails_when_missing(self, monkeypatch: pytest.MonkeyPatch):
         """IndexExists should fail when index is not found."""
-        mock_conn = create_mock_connection({"pg_indexes": [False]})
+        mock_conn = stub_catalog(monkeypatch, index_exists=False)
         precondition = IndexExists("users", "idx_nonexistent")
 
         passed, _message = precondition.check(mock_conn)
@@ -294,9 +312,9 @@ class TestIndexExists:
 class TestIndexNotExists:
     """Tests for IndexNotExists precondition."""
 
-    def test_index_not_exists_passes_when_missing(self):
+    def test_index_not_exists_passes_when_missing(self, monkeypatch: pytest.MonkeyPatch):
         """IndexNotExists should pass when index is not found."""
-        mock_conn = create_mock_connection({"pg_indexes": [True]})
+        mock_conn = stub_catalog(monkeypatch, index_exists=False)
         precondition = IndexNotExists("users", "idx_old")
 
         passed, _message = precondition.check(mock_conn)
@@ -312,9 +330,9 @@ class TestIndexNotExists:
 class TestSchemaExists:
     """Tests for SchemaExists precondition."""
 
-    def test_schema_exists_passes_when_found(self):
+    def test_schema_exists_passes_when_found(self, monkeypatch: pytest.MonkeyPatch):
         """SchemaExists should pass when schema is found."""
-        mock_conn = create_mock_connection({"information_schema.schemata": [True]})
+        mock_conn = stub_catalog(monkeypatch, schema_exists=True)
         precondition = SchemaExists("tenant")
 
         passed, _message = precondition.check(mock_conn)
@@ -330,9 +348,9 @@ class TestSchemaExists:
 class TestSchemaNotExists:
     """Tests for SchemaNotExists precondition."""
 
-    def test_schema_not_exists_passes_when_missing(self):
+    def test_schema_not_exists_passes_when_missing(self, monkeypatch: pytest.MonkeyPatch):
         """SchemaNotExists should pass when schema is not found."""
-        mock_conn = create_mock_connection({"information_schema.schemata": [True]})
+        mock_conn = stub_catalog(monkeypatch, schema_exists=False)
         precondition = SchemaNotExists("legacy_schema")
 
         passed, _message = precondition.check(mock_conn)
@@ -484,14 +502,9 @@ class TestCustomSQL:
 class TestPreconditionValidator:
     """Tests for the PreconditionValidator class."""
 
-    def test_check_returns_all_passed_when_all_pass(self):
+    def test_check_returns_all_passed_when_all_pass(self, monkeypatch: pytest.MonkeyPatch):
         """Validator check() should return (True, []) when all pass."""
-        mock_conn = create_mock_connection(
-            {
-                "information_schema.tables": [True],
-                "information_schema.columns": [True],
-            }
-        )
+        mock_conn = stub_catalog(monkeypatch, relation_exists=True, column=typed_column("text"))
         validator = PreconditionValidator(mock_conn)
 
         preconditions = [
@@ -528,9 +541,9 @@ class TestPreconditionValidator:
         assert len(failures) == 1
         assert isinstance(failures[0][0], ColumnExists)
 
-    def test_validate_raises_on_failure(self):
+    def test_validate_raises_on_failure(self, monkeypatch: pytest.MonkeyPatch):
         """Validator validate() should raise PreconditionValidationError."""
-        mock_conn = create_mock_connection({"information_schema.tables": [False]})
+        mock_conn = stub_catalog(monkeypatch, relation_exists=False)
         validator = PreconditionValidator(mock_conn)
 
         preconditions = [TableExists("nonexistent_table")]
@@ -541,17 +554,17 @@ class TestPreconditionValidator:
         assert "preconditions failed" in str(exc_info.value).lower()
         assert len(exc_info.value.failures) == 1
 
-    def test_validate_passes_silently_on_success(self):
+    def test_validate_passes_silently_on_success(self, monkeypatch: pytest.MonkeyPatch):
         """Validator validate() should not raise when all pass."""
-        mock_conn = create_mock_connection({"information_schema.tables": [True]})
+        mock_conn = stub_catalog(monkeypatch, relation_exists=True)
         validator = PreconditionValidator(mock_conn)
 
         preconditions = [TableExists("users")]
         assert validator.validate(preconditions) is None
 
-    def test_validate_single_raises_precondition_error(self):
+    def test_validate_single_raises_precondition_error(self, monkeypatch: pytest.MonkeyPatch):
         """Validator validate_single() should raise PreconditionError."""
-        mock_conn = create_mock_connection({"information_schema.tables": [False]})
+        mock_conn = stub_catalog(monkeypatch, relation_exists=False)
         validator = PreconditionValidator(mock_conn)
 
         precondition = TableExists("nonexistent")

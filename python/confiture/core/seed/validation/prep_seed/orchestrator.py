@@ -13,6 +13,7 @@ from pathlib import Path
 import pglast.parser
 import psycopg
 
+from confiture.core import live_catalog
 from confiture.core.connection import create_connection
 from confiture.core.differ import SchemaDiffer
 from confiture.core.schema_identity import DEFAULT_SCHEMA
@@ -284,38 +285,18 @@ class PrepSeedOrchestrator:
             # Define callbacks for table/column lookups
             def table_exists(schema: str, table: str) -> bool:
                 try:
-                    cursor = connection.cursor()
-                    cursor.execute(
-                        """
-                        SELECT EXISTS(
-                            SELECT 1 FROM information_schema.tables
-                            WHERE table_schema = %s AND table_name = %s
-                        )
-                        """,
-                        (schema, table),
+                    return live_catalog.relation_exists(
+                        connection, schema, table, kinds=live_catalog.TABLE_LIKE
                     )
-                    result = cursor.fetchone()
-                    cursor.close()
-                    return result[0] if result else False
                 except psycopg.Error:
                     return False
 
             def get_column_type(schema: str, table: str, column: str) -> str | None:
                 try:
-                    cursor = connection.cursor()
-                    cursor.execute(
-                        """
-                        SELECT data_type FROM information_schema.columns
-                        WHERE table_schema = %s AND table_name = %s
-                        AND column_name = %s
-                        """,
-                        (schema, table, column),
-                    )
-                    result = cursor.fetchone()
-                    cursor.close()
-                    return result[0] if result else None
+                    found = live_catalog.column(connection, schema, table, column)
                 except psycopg.Error:
                     return None
+                return found.type_text if found is not None else None
 
             # Create validator with callbacks
             validator = Level4RuntimeValidator(

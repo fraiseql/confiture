@@ -25,19 +25,6 @@ if TYPE_CHECKING:
 
 __all__ = ["SchemaFacts", "collect_schema_facts"]
 
-# Columns of interest live in user schemas; the catalogs never do.
-_COLUMN_TYPE_SQL = """
-SELECT n.nspname, c.relname, a.attname, format_type(a.atttypid, a.atttypmod)
-FROM pg_attribute a
-JOIN pg_class c ON c.oid = a.attrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE a.attnum > 0
-  AND NOT a.attisdropped
-  AND c.relkind IN ('r', 'p', 'm', 'v', 'f')
-  AND n.nspname NOT IN ('pg_catalog', 'information_schema')
-  AND n.nspname NOT LIKE 'pg_toast%'
-"""
-
 
 @dataclass(frozen=True)
 class SchemaFacts:
@@ -102,21 +89,14 @@ def _server_version(conn: Any) -> int | None:
 
 
 def _column_types(conn: Any) -> dict[str, str]:
+    """Every user column's current type, as ``live_catalog`` reads it."""
+    # Reason: start-up — the no-database path never reads the catalog, and live_catalog imports pglast
+    from confiture.core import live_catalog
+
     try:
-        with conn.cursor() as cur:
-            cur.execute(_COLUMN_TYPE_SQL)
-            rows = cur.fetchall()
+        return live_catalog.column_types(conn)
     except Exception:  # Reason: schema facts are advisory; any failure to read them means 'unknown', never a preflight error
         return {}
-    types: dict[str, str] = {}
-    for row in rows or ():
-        try:
-            schema, table, column, data_type = row[0], row[1], row[2], row[3]
-        except (IndexError, TypeError):
-            continue
-        if schema and table and column and data_type:
-            types[f"{schema}.{table}.{column}".lower()] = str(data_type)
-    return types
 
 
 def _scalar(conn: Any, sql: str) -> object | None:

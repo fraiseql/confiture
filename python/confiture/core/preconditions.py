@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING
 
 from psycopg import sql as pgsql
 
+from confiture.core import live_catalog
+from confiture.core.type_lattice import canonical_type, parse_type
 from confiture.exceptions import PreconditionError, PreconditionValidationError
 
 if TYPE_CHECKING:
@@ -37,6 +39,22 @@ if TYPE_CHECKING:
 # PreconditionError and PreconditionValidationError live in confiture.exceptions
 # ; re-exported here
 # for `from confiture.core.preconditions import …`.
+
+
+def _base_type(canonical: str | None) -> str | None:
+    """A canonical type's name with its array dimensions and without its typmod."""
+    parsed = parse_type(canonical)
+    return parsed.name + "[]" * parsed.dimensions if parsed is not None else canonical
+
+
+def _names(reference: str | None, schema: str, table: str) -> bool:
+    """Whether ``pg_get_constraintdef``'s ``REFERENCES`` target is *schema.table*.
+
+    PostgreSQL leaves a referenced table unqualified when ``search_path`` finds
+    it, so an unqualified reference matches on its name alone.
+    """
+    ref_schema, _, ref_table = (reference or "").rpartition(".")
+    return ref_table == table and (not ref_schema or ref_schema == schema)
 
 
 @dataclass
@@ -99,19 +117,10 @@ class TableExists(Precondition):
     schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.tables
-                    WHERE table_schema = %s AND table_name = %s
-                )
-                """,
-                (self.schema, self.table),
-            )
-            result = cursor.fetchone()
-            exists = result[0] if result else False
-            return (exists, f"Table {self.schema}.{self.table} exists")
+        exists = live_catalog.relation_exists(
+            connection, self.schema, self.table, kinds=live_catalog.TABLE_LIKE
+        )
+        return (exists, f"Table {self.schema}.{self.table} exists")
 
     def __str__(self) -> str:
         return f"TableExists({self.schema}.{self.table})"
@@ -132,19 +141,10 @@ class TableNotExists(Precondition):
     schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT NOT EXISTS (
-                    SELECT 1 FROM information_schema.tables
-                    WHERE table_schema = %s AND table_name = %s
-                )
-                """,
-                (self.schema, self.table),
-            )
-            result = cursor.fetchone()
-            not_exists = result[0] if result else False
-            return (not_exists, f"Table {self.schema}.{self.table} does not exist")
+        not_exists = not live_catalog.relation_exists(
+            connection, self.schema, self.table, kinds=live_catalog.TABLE_LIKE
+        )
+        return (not_exists, f"Table {self.schema}.{self.table} does not exist")
 
     def __str__(self) -> str:
         return f"TableNotExists({self.schema}.{self.table})"
@@ -169,21 +169,8 @@ class ColumnExists(Precondition):
     schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_schema = %s
-                      AND table_name = %s
-                      AND column_name = %s
-                )
-                """,
-                (self.schema, self.table, self.column),
-            )
-            result = cursor.fetchone()
-            exists = result[0] if result else False
-            return (exists, f"Column {self.schema}.{self.table}.{self.column} exists")
+        exists = live_catalog.column(connection, self.schema, self.table, self.column) is not None
+        return (exists, f"Column {self.schema}.{self.table}.{self.column} exists")
 
     def __str__(self) -> str:
         return f"ColumnExists({self.schema}.{self.table}.{self.column})"
@@ -202,24 +189,11 @@ class ColumnNotExists(Precondition):
     schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT NOT EXISTS (
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_schema = %s
-                      AND table_name = %s
-                      AND column_name = %s
-                )
-                """,
-                (self.schema, self.table, self.column),
-            )
-            result = cursor.fetchone()
-            not_exists = result[0] if result else False
-            return (
-                not_exists,
-                f"Column {self.schema}.{self.table}.{self.column} does not exist",
-            )
+        not_exists = live_catalog.column(connection, self.schema, self.table, self.column) is None
+        return (
+            not_exists,
+            f"Column {self.schema}.{self.table}.{self.column} does not exist",
+        )
 
     def __str__(self) -> str:
         return f"ColumnNotExists({self.schema}.{self.table}.{self.column})"
@@ -240,48 +214,18 @@ class ColumnType(Precondition):
     schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT data_type FROM information_schema.columns
-                WHERE table_schema = %s
-                  AND table_name = %s
-                  AND column_name = %s
-                """,
-                (self.schema, self.table, self.column),
-            )
-            result = cursor.fetchone()
-            if result is None:
-                return (False, f"Column {self.schema}.{self.table}.{self.column} not found")
-
-            actual_type = result[0].lower()
-            expected_lower = self.expected_type.lower()
-
-            # Handle common type aliases
-            type_aliases = {
-                "int": "integer",
-                "int4": "integer",
-                "int8": "bigint",
-                "serial": "integer",
-                "bigserial": "bigint",
-                "varchar": "character varying",
-                "char": "character",
-                "bool": "boolean",
-                "float": "double precision",
-                "float8": "double precision",
-                "float4": "real",
-            }
-
-            expected_normalized = type_aliases.get(expected_lower, expected_lower)
-            actual_normalized = type_aliases.get(actual_type, actual_type)
-
-            matches = actual_normalized == expected_normalized or actual_type.startswith(
-                expected_lower
-            )
-            return (
-                matches,
-                f"Column {self.schema}.{self.table}.{self.column} type is {self.expected_type} (actual: {actual_type})",
-            )
+        found = live_catalog.column(connection, self.schema, self.table, self.column)
+        if found is None:
+            return (False, f"Column {self.schema}.{self.table}.{self.column} not found")
+        actual_type = (found.type_text or "").lower()
+        # The type's name, arrays included, typmod not: `ColumnType(..., "varchar")`
+        # holds for a `character varying(255)` column. Which spellings name one type
+        # is `type_lattice`'s answer — there was a second alias table here.
+        matches = _base_type(found.type_key) == _base_type(canonical_type(self.expected_type))
+        return (
+            matches,
+            f"Column {self.schema}.{self.table}.{self.column} type is {self.expected_type} (actual: {actual_type})",
+        )
 
     def __str__(self) -> str:
         return f"ColumnType({self.schema}.{self.table}.{self.column}={self.expected_type})"
@@ -306,24 +250,13 @@ class ConstraintExists(Precondition):
     schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.table_constraints
-                    WHERE table_schema = %s
-                      AND table_name = %s
-                      AND constraint_name = %s
-                )
-                """,
-                (self.schema, self.table, self.constraint),
-            )
-            result = cursor.fetchone()
-            exists = result[0] if result else False
-            return (
-                exists,
-                f"Constraint {self.constraint} on {self.schema}.{self.table} exists",
-            )
+        exists = live_catalog.constraint_exists(
+            connection, self.schema, self.table, self.constraint
+        )
+        return (
+            exists,
+            f"Constraint {self.constraint} on {self.schema}.{self.table} exists",
+        )
 
     def __str__(self) -> str:
         return f"ConstraintExists({self.schema}.{self.table}.{self.constraint})"
@@ -342,24 +275,13 @@ class ConstraintNotExists(Precondition):
     schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT NOT EXISTS (
-                    SELECT 1 FROM information_schema.table_constraints
-                    WHERE table_schema = %s
-                      AND table_name = %s
-                      AND constraint_name = %s
-                )
-                """,
-                (self.schema, self.table, self.constraint),
-            )
-            result = cursor.fetchone()
-            not_exists = result[0] if result else False
-            return (
-                not_exists,
-                f"Constraint {self.constraint} on {self.schema}.{self.table} does not exist",
-            )
+        not_exists = not live_catalog.constraint_exists(
+            connection, self.schema, self.table, self.constraint
+        )
+        return (
+            not_exists,
+            f"Constraint {self.constraint} on {self.schema}.{self.table} does not exist",
+        )
 
     def __str__(self) -> str:
         return f"ConstraintNotExists({self.schema}.{self.table}.{self.constraint})"
@@ -381,42 +303,18 @@ class ForeignKeyExists(Precondition):
     references_schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.key_column_usage kcu
-                    JOIN information_schema.referential_constraints rc
-                        ON kcu.constraint_name = rc.constraint_name
-                        AND kcu.constraint_schema = rc.constraint_schema
-                    JOIN information_schema.key_column_usage kcu2
-                        ON rc.unique_constraint_name = kcu2.constraint_name
-                        AND rc.unique_constraint_schema = kcu2.constraint_schema
-                    WHERE kcu.table_schema = %s
-                      AND kcu.table_name = %s
-                      AND kcu.column_name = %s
-                      AND kcu2.table_schema = %s
-                      AND kcu2.table_name = %s
-                      AND kcu2.column_name = %s
-                )
-                """,
-                (
-                    self.schema,
-                    self.table,
-                    self.column,
-                    self.references_schema,
-                    self.references_table,
-                    self.references_column,
-                ),
-            )
-            result = cursor.fetchone()
-            exists = result[0] if result else False
-            return (
-                exists,
-                f"FK {self.schema}.{self.table}.{self.column} -> "
-                f"{self.references_schema}.{self.references_table}.{self.references_column}",
-            )
+        exists = any(
+            self.column in fk.columns
+            and self.references_column in fk.ref_columns
+            and _names(fk.ref_table, self.references_schema, self.references_table)
+            for fk in live_catalog.constraints(connection, self.schema, self.table)
+            if fk.kind == "foreign_key"
+        )
+        return (
+            exists,
+            f"FK {self.schema}.{self.table}.{self.column} -> "
+            f"{self.references_schema}.{self.references_table}.{self.references_column}",
+        )
 
     def __str__(self) -> str:
         return (
@@ -443,21 +341,8 @@ class IndexExists(Precondition):
     schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1 FROM pg_indexes
-                    WHERE schemaname = %s
-                      AND tablename = %s
-                      AND indexname = %s
-                )
-                """,
-                (self.schema, self.table, self.index),
-            )
-            result = cursor.fetchone()
-            exists = result[0] if result else False
-            return (exists, f"Index {self.index} on {self.schema}.{self.table} exists")
+        exists = live_catalog.index_exists(connection, self.schema, self.index, self.table)
+        return (exists, f"Index {self.index} on {self.schema}.{self.table} exists")
 
     def __str__(self) -> str:
         return f"IndexExists({self.schema}.{self.table}.{self.index})"
@@ -476,24 +361,11 @@ class IndexNotExists(Precondition):
     schema: str = "public"
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT NOT EXISTS (
-                    SELECT 1 FROM pg_indexes
-                    WHERE schemaname = %s
-                      AND tablename = %s
-                      AND indexname = %s
-                )
-                """,
-                (self.schema, self.table, self.index),
-            )
-            result = cursor.fetchone()
-            not_exists = result[0] if result else False
-            return (
-                not_exists,
-                f"Index {self.index} on {self.schema}.{self.table} does not exist",
-            )
+        not_exists = not live_catalog.index_exists(connection, self.schema, self.index, self.table)
+        return (
+            not_exists,
+            f"Index {self.index} on {self.schema}.{self.table} does not exist",
+        )
 
     def __str__(self) -> str:
         return f"IndexNotExists({self.schema}.{self.table}.{self.index})"
@@ -516,19 +388,8 @@ class SchemaExists(Precondition):
     schema: str
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT EXISTS (
-                    SELECT 1 FROM information_schema.schemata
-                    WHERE schema_name = %s
-                )
-                """,
-                (self.schema,),
-            )
-            result = cursor.fetchone()
-            exists = result[0] if result else False
-            return (exists, f"Schema {self.schema} exists")
+        exists = live_catalog.schema_exists(connection, self.schema)
+        return (exists, f"Schema {self.schema} exists")
 
     def __str__(self) -> str:
         return f"SchemaExists({self.schema})"
@@ -545,19 +406,8 @@ class SchemaNotExists(Precondition):
     schema: str
 
     def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT NOT EXISTS (
-                    SELECT 1 FROM information_schema.schemata
-                    WHERE schema_name = %s
-                )
-                """,
-                (self.schema,),
-            )
-            result = cursor.fetchone()
-            not_exists = result[0] if result else False
-            return (not_exists, f"Schema {self.schema} does not exist")
+        not_exists = not live_catalog.schema_exists(connection, self.schema)
+        return (not_exists, f"Schema {self.schema} does not exist")
 
     def __str__(self) -> str:
         return f"SchemaNotExists({self.schema})"
