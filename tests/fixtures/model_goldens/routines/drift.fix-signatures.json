@@ -1,0 +1,25 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "status": "dry_run",
+    "fixes_planned": 2,
+    "missing_source": [],
+    "sql": "DROP FUNCTION public.fn_stale(integer);\n-- Live, a second overload taking integer is left behind (a stale overload).\nCREATE FUNCTION public.fn_stale(p_id bigint) RETURNS bigint\nLANGUAGE sql AS $$ SELECT p_id $$\n\nDROP FUNCTION public.fn_spellings(character varying,timestamp with time zone,timestamp without time zone,character,double precision);\n-- Types PostgreSQL spells differently from how they are written.\nCREATE FUNCTION public.fn_spellings(\n    p_label varchar(20), p_at timestamptz, p_local timestamp, p_code char(2), p_ratio float\n) RETURNS text\nLANGUAGE sql AS $$ SELECT p_label $$",
+    "blocks": [
+      {
+        "stale_signature": "public.fn_stale(integer)",
+        "drop_sql": "DROP FUNCTION public.fn_stale(integer);",
+        "create_sql": "-- Live, a second overload taking integer is left behind (a stale overload).\nCREATE FUNCTION public.fn_stale(p_id bigint) RETURNS bigint\nLANGUAGE sql AS $$ SELECT p_id $$"
+      },
+      {
+        "stale_signature": "public.fn_spellings(character varying,timestamp with time zone,timestamp without time zone,character,double precision)",
+        "drop_sql": "DROP FUNCTION public.fn_spellings(character varying,timestamp with time zone,timestamp without time zone,character,double precision);",
+        "create_sql": "-- Types PostgreSQL spells differently from how they are written.\nCREATE FUNCTION public.fn_spellings(\n    p_label varchar(20), p_at timestamptz, p_local timestamp, p_code char(2), p_ratio float\n) RETURNS text\nLANGUAGE sql AS $$ SELECT p_label $$"
+      }
+    ],
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

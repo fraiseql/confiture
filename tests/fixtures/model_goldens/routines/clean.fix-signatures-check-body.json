@@ -1,0 +1,23 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "status": "dry_run",
+    "fixes_planned": 1,
+    "missing_source": [],
+    "sql": "DROP FUNCTION public.fn_spellings(character varying,timestamp with time zone,timestamp without time zone,character,double precision);\n-- Types PostgreSQL spells differently from how they are written.\nCREATE FUNCTION public.fn_spellings(\n    p_label varchar(20), p_at timestamptz, p_local timestamp, p_code char(2), p_ratio float\n) RETURNS text\nLANGUAGE sql AS $$ SELECT p_label $$",
+    "blocks": [
+      {
+        "stale_signature": "public.fn_spellings(character varying,timestamp with time zone,timestamp without time zone,character,double precision)",
+        "drop_sql": "DROP FUNCTION public.fn_spellings(character varying,timestamp with time zone,timestamp without time zone,character,double precision);",
+        "create_sql": "-- Types PostgreSQL spells differently from how they are written.\nCREATE FUNCTION public.fn_spellings(\n    p_label varchar(20), p_at timestamptz, p_local timestamp, p_code char(2), p_ratio float\n) RETURNS text\nLANGUAGE sql AS $$ SELECT p_label $$"
+      }
+    ],
+    "body_drift_fixes_planned": 0,
+    "body_drift_blocks": [],
+    "body_drift_missing_source": [],
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

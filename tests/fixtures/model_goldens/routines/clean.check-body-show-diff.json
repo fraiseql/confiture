@@ -1,0 +1,43 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "check": "function_signature_drift",
+    "has_drift": true,
+    "has_critical_drift": true,
+    "remediation_sql": [
+      "DROP FUNCTION public.fn_spellings(character varying,timestamp with time zone,timestamp without time zone,character,double precision);"
+    ],
+    "stale_overloads": [
+      {
+        "schema": "public",
+        "name": "fn_spellings",
+        "stale_signature": "public.fn_spellings(character varying,timestamp with time zone,timestamp without time zone,character,double precision)",
+        "source_signatures": [
+          "public.fn_spellings(character varying,timestamp with time zone,timestamp,bpchar,double precision)"
+        ],
+        "drop_sql": "DROP FUNCTION public.fn_spellings(character varying,timestamp with time zone,timestamp without time zone,character,double precision);"
+      }
+    ],
+    "missing_from_db": [
+      "public.fn_spellings(character varying,timestamp with time zone,timestamp,bpchar,double precision)"
+    ],
+    "has_undeployed": true,
+    "missing_is_drift": false,
+    "schemas_checked": [
+      "app",
+      "public"
+    ],
+    "functions_checked": 10,
+    "detection_time_ms": 0,
+    "body_drift": {
+      "has_drift": false,
+      "body_drifts": [],
+      "functions_checked": 9,
+      "detection_time_ms": 0
+    },
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

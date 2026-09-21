@@ -1,0 +1,126 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "status": "failed",
+    "check": "accompaniment",
+    "is_valid": false,
+    "was_skipped": false,
+    "has_ddl_changes": true,
+    "has_new_migrations": true,
+    "ddl_changes": [
+      {
+        "type": "REPLACE_FUNCTION",
+        "table": "app.fn_array(bigint[])",
+        "column": null,
+        "details": {
+          "kind": "function",
+          "name": "app.fn_array(bigint[])",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "REPLACE_FUNCTION",
+        "table": "public.fn_body(integer)",
+        "column": null,
+        "details": {
+          "kind": "function",
+          "name": "public.fn_body(integer)",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "REPLACE_FUNCTION",
+        "table": "public.fn_carried(integer)",
+        "column": null,
+        "details": {
+          "kind": "function",
+          "name": "public.fn_carried(integer)",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "public.fn_retype(varchar, bigint)",
+        "column": null,
+        "details": {
+          "kind": "function",
+          "name": "public.fn_retype(varchar, bigint)",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "DROP_FUNCTION",
+        "table": "public.fn_retype(varchar, integer)",
+        "column": null,
+        "details": {
+          "kind": "function",
+          "name": "public.fn_retype(varchar, integer)",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "public.fn_when(timestamp, bigint)",
+        "column": null,
+        "details": {
+          "kind": "function",
+          "name": "public.fn_when(timestamp, bigint)",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "DROP_FUNCTION",
+        "table": "public.fn_when(timestamp, integer)",
+        "column": null,
+        "details": {
+          "kind": "function",
+          "name": "public.fn_when(timestamp, integer)",
+          "keyword": "FUNCTION"
+        }
+      }
+    ],
+    "new_migration_files": [
+      "db/migrations/002_carried.up.sql"
+    ],
+    "migration_error": null,
+    "base_ref": "HEAD~1",
+    "target_ref": "HEAD",
+    "signature_violations": [
+      {
+        "function_key": "public.fn_retype",
+        "old_signature": "public.fn_retype(character varying,integer)",
+        "new_signature": "public.fn_retype(character varying,bigint)",
+        "migration_file": null,
+        "message": "Parameter type change for public.fn_retype detected (('character varying', 'integer') -> ('character varying', 'bigint')) but no DROP FUNCTION public.fn_retype(character varying,integer) found in migrations."
+      },
+      {
+        "function_key": "public.fn_when",
+        "old_signature": "public.fn_when(timestamp,integer)",
+        "new_signature": "public.fn_when(timestamp,bigint)",
+        "migration_file": null,
+        "message": "Parameter type change for public.fn_when detected (('timestamp', 'integer') -> ('timestamp', 'bigint')) but no DROP FUNCTION public.fn_when(timestamp,integer) found in migrations."
+      }
+    ],
+    "body_violations": [
+      {
+        "function_key": "public.fn_body",
+        "signature_key": "public.fn_body(integer)",
+        "migration_file": null,
+        "message": "Function body change for public.fn_body(integer) detected between refs but no migration re-defines it. Migrate-only environments (staging/production) will keep running the old body. Add a migration with CREATE OR REPLACE FUNCTION public.fn_body(...).",
+        "unified_diff": "--- public.fn_body(integer) (committed)\n+++ public.fn_body(integer) (working)\n@@ -1 +1 @@\n-select p_id + 1\n+select p_id + 2"
+      },
+      {
+        "function_key": "app.fn_array",
+        "signature_key": "app.fn_array(bigint[])",
+        "migration_file": null,
+        "message": "Function body change for app.fn_array(bigint[]) detected between refs but no migration re-defines it. Migrate-only environments (staging/production) will keep running the old body. Add a migration with CREATE OR REPLACE FUNCTION app.fn_array(...).",
+        "unified_diff": "--- app.fn_array(bigint[]) (committed)\n+++ app.fn_array(bigint[]) (working)\n@@ -1 +1 @@\n-select cardinality(p_ids)\n+select coalesce(cardinality(p_ids), 0)"
+      }
+    ],
+    "warnings": [],
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}
