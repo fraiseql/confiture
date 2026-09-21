@@ -41,6 +41,8 @@ from confiture.core.ddl_walk import (
     read_constraint,
     read_index,
     render_default,
+    routine_body,
+    routine_options,
     written_type,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
@@ -53,12 +55,25 @@ from confiture.core.schema_model import (
     Constraint,
     EnumType,
     Index,
+    ObjectRef,
+    Routine,
+    RoutineKind,
     SchemaModel,
+    Signature,
     Table,
+    View,
     ref_for,
+    routine_ref,
+    trigger_ref,
+    view_ref,
 )
 from confiture.core.schema_model import Sequence as SequenceModel
-from confiture.core.type_lattice import canonical_type, parse_type
+from confiture.core.type_lattice import (
+    canonical_type,
+    signature_from_type_names,
+    signature_type,
+    signatures_match,
+)
 
 _T = TypeVar("_T")
 
@@ -109,16 +124,13 @@ KIND_KEYWORD: dict[str, str] = {
 _INPUT_MODES = frozenset({"d", "i", "b", "v"})
 #: The schema pglast attaches to a type written in SQL-standard keyword form.
 _CATALOG_SCHEMA = "pg_catalog"
+#: Languages whose ``AS`` clause names a compiled symbol rather than holding a body.
+_SYMBOL_LANGUAGES = frozenset({"c", "internal"})
 
 
 #: A column, whole: the one model of it (``core/schema_model.py``). The name is
 #: kept because the rules and ``drift.py`` have always read ``SchemaColumn``.
 SchemaColumn = Column
-
-
-#: A routine's input parameter types, each as ``(schema, canonical name)``.
-#: ``None`` for every kind that is not a routine.
-Signature = tuple[tuple[str | None, str], ...]
 
 
 @dataclass
@@ -175,6 +187,11 @@ class SchemaObject:
     if_not_exists: bool = False
     parent: str | None = None
     statement_line: int = 1
+    #: What a routine or a view *is*, beyond its identity — a body, a language,
+    #: a query. Its name, schema and signature are this object's own, which an
+    #: ``ALTER … RENAME`` edits; :func:`schema_model` puts the two together.
+    routine: Routine | None = None
+    view: View | None = None
 
     @property
     def documented(self) -> bool:
@@ -477,60 +494,7 @@ def type_key(type_name: Any) -> tuple[str | None, str]:
     bare.typmods = None
     rendered = ddl_type_name(bare) or ""
     schema, _, name = rendered.rpartition(".")
-    return (schema or None), (canonical_type(name) or name)
-
-
-def signature_from_type_names(written: Iterable[str]) -> Signature:
-    """A routine's signature from argument types spelled as *text*.
-
-    :func:`type_key` answers this for a parse node, and this is the only other
-    way in. A ``DROP FUNCTION f(bigint)`` names its arguments as text, and so
-    does a live catalogue; canonicalising them anywhere else would be a second
-    idea of what makes two routines the same routine, which is exactly what
-    ``signature`` and ``signature_key`` exist to keep apart (#275).
-
-    Typmods are dropped for :func:`type_key`'s reason: PostgreSQL ignores them
-    in a signature, and ``char`` carries an implicit one that ``bpchar`` does not.
-    """
-    return tuple(_type_key_from_text(name) for name in written)
-
-
-def _type_key_from_text(written: str) -> tuple[str | None, str]:
-    schema, _, name = written.rpartition(".")
-    parsed = parse_type(name)
-    bare = parsed.name + "[]" * parsed.dimensions if parsed is not None else name
-    return (
-        None if not schema or schema == _CATALOG_SCHEMA else schema,
-        canonical_type(bare) or bare,
-    )
-
-
-def types_match(a: tuple[str | None, str], b: tuple[str | None, str]) -> bool:
-    """Whether two argument types, as each side spelled them, are one type.
-
-    The names must agree exactly — they are canonical by then, and the array
-    suffix is part of the name — but a schema written on one side and left off
-    the other matches, because PostgreSQL resolves the bare spelling through
-    ``search_path`` and lands on the same type. Two schemas that are both
-    present and disagree never match: ``app.custom_t`` and ``other.custom_t``
-    are two types (D9).
-    """
-    if a[1] != b[1]:
-        return False
-    return a[0] is None or b[0] is None or a[0] == b[0]
-
-
-def signatures_match(a: Signature | None, b: Signature | None) -> bool:
-    """Whether two canonical signatures name one routine, argument by argument.
-
-    ``None`` is not a signature but the absence of one — every kind that is not
-    a routine — so it matches only itself and never an empty argument list.
-    """
-    if a is None or b is None:
-        return a is None and b is None
-    if len(a) != len(b):
-        return False
-    return all(types_match(x, y) for x, y in zip(a, b, strict=True))
+    return (schema or None), signature_type(name)
 
 
 def _signature(parameters: Any) -> str:
@@ -611,8 +575,11 @@ def _parent_name(stmt: Any) -> str | None:
 
 def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     schema, name = split_names(stmt.funcname)
+    language, body = routine_body(stmt)
+    options = routine_options(stmt)
+    kind: RoutineKind = "procedure" if stmt.is_procedure else "function"
     return _object(
-        "procedure" if stmt.is_procedure else "function",
+        kind,
         schema,
         name,
         _line_of(sql, offset),
@@ -620,6 +587,17 @@ def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         signature=_signature(stmt.parameters),
         signature_key=_signature_key(stmt.parameters),
         replace=bool(getattr(stmt, "replace", False)),
+        routine=Routine(
+            name=name,
+            kind=kind,
+            returns=RawStream()(stmt.returnType) if stmt.returnType is not None else None,
+            language=language,
+            # A C or internal routine's AS clause names a symbol, not a body.
+            body=None if language in _SYMBOL_LANGUAGES else body,
+            security_definer=options.security_definer,
+            search_path_pinned=options.search_path_pinned,
+            volatility=options.volatility,
+        ),
     )
 
 
@@ -644,6 +622,7 @@ def _aggregate_from_define(sql: str, stmt: Any, offset: int) -> SchemaObject | N
         offset,
         signature=_signature(args[0] if args else None),
         signature_key=_signature_key(args[0] if args else None),
+        routine=Routine(name=name, kind="aggregate"),
     )
 
 
@@ -654,6 +633,7 @@ def _relation_object(sql: str, kind: str, rv: Any, offset: int) -> SchemaObject:
 def _view_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     view = _relation_object(sql, "view", stmt.view, offset)
     view.replace = bool(getattr(stmt, "replace", False))
+    view.view = View(name=view.name, definition=RawStream()(stmt.query))
     return view
 
 
@@ -663,6 +643,7 @@ def _matview_from_create_table_as(sql: str, stmt: Any, offset: int) -> SchemaObj
         return None
     matview = _relation_object(sql, "matview", stmt.into.rel, offset)
     matview.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
+    matview.view = View(name=matview.name, materialized=True, definition=RawStream()(stmt.query))
     return matview
 
 
@@ -876,20 +857,27 @@ def _targets(inventory: Inventory, edit: ObjectEdit, offset: int) -> list[Schema
     return [obj for obj in candidates if obj.offset < offset]
 
 
+#: The kinds an index can be built on.
+_INDEXED_KINDS = ("table", "matview")
+
+
 def _apply_index(stmt: Any, inventory: Inventory) -> None:
-    """Fold a ``CREATE INDEX`` onto the table the tree declared."""
+    """Fold a ``CREATE INDEX`` onto the table — or materialized view — the tree declared."""
     relation = stmt.relation
-    table = inventory.find(relation.schemaname, relation.relname)
-    if table is None:
+    found = inventory.find_all(_INDEXED_KINDS, relation.schemaname, relation.relname)
+    if not found:
         return
-    table.indexes.append(read_index(stmt, table=table.qualified))
+    target = found[0]
+    target.indexes.append(read_index(stmt, table=target.qualified))
 
 
 def _drop_index(inventory: Inventory, edit: ObjectEdit) -> None:
     """``DROP INDEX``: an index name is unique per schema, and the statement names no table."""
-    for table in inventory.tables:
-        if edit.schema is None or table.folded_schema in (None, edit.schema):
-            table.indexes = [ix for ix in table.indexes if ix.name != edit.name]
+    for target in inventory.objects:
+        if target.kind not in _INDEXED_KINDS:
+            continue
+        if edit.schema is None or target.folded_schema in (None, edit.schema):
+            target.indexes = [ix for ix in target.indexes if ix.name != edit.name]
 
 
 def _apply_object_edit(inventory: Inventory, edit: ObjectEdit, offset: int) -> None:
@@ -1016,17 +1004,48 @@ def _model_sequence(obj: SchemaObject) -> SequenceModel:
     )
 
 
+def _model_routine(obj: SchemaObject, routine: Routine) -> Routine:
+    return replace(
+        routine,
+        name=obj.folded_name,
+        schema=obj.folded_schema,
+        signature=obj.signature or "",
+        signature_key=obj.signature_key or (),
+    )
+
+
+def _model_view(obj: SchemaObject, view: View) -> View:
+    qualified = f"{obj.folded_schema}.{obj.folded_name}" if obj.folded_schema else obj.folded_name
+    return replace(
+        view,
+        name=obj.folded_name,
+        schema=obj.folded_schema,
+        indexes=tuple(replace(ix, table=qualified) for ix in obj.indexes),
+    )
+
+
+def _kept(group: list[SchemaObject]) -> SchemaObject:
+    """The definition of one object a build keeps (``duplicates.wins``)."""
+    # Reason: import cycle (duplicates reads SchemaObject from this module)
+    from confiture.core.linting.duplicates import wins
+
+    return group[-1] if len(group) > 1 and wins(group) == "last" else group[0]
+
+
 def schema_model(inventory: Inventory) -> SchemaModel:
     """The schema *inventory* declares, each object under its identity.
 
-    The first definition of an object is the one the model holds, because it is
-    the one a build keeps: a later ``IF NOT EXISTS`` is a no-op and a later plain
-    ``CREATE`` fails the build at that statement. ``build_001`` reports the rest.
+    The definition a build keeps is the one the model holds: the last when every
+    later one is ``CREATE OR REPLACE``, and otherwise the first — a later
+    ``IF NOT EXISTS`` is a no-op and a later plain ``CREATE`` fails the build at
+    that statement. ``build_001`` reports the rest.
     """
     tables: dict[Any, Table] = {}
     enum_types: dict[Any, EnumType] = {}
     sequences: dict[Any, SequenceModel] = {}
-    for obj in distinct(inventory.objects):
+    routines: dict[ObjectRef, list[Routine]] = {}
+    views: dict[ObjectRef, View] = {}
+    for obj in (_kept(group) for group in group_definitions(inventory.objects)):
         if obj.kind == "table":
             tables[_model_ref(obj)] = _model_table(obj)
         elif obj.kind == "type" and obj.enum_values is not None:
@@ -1035,12 +1054,39 @@ def schema_model(inventory: Inventory) -> SchemaModel:
             )
         elif obj.kind == "sequence":
             sequences[_model_ref(obj)] = _model_sequence(obj)
-    return SchemaModel(tables=tables, enum_types=enum_types, sequences=sequences)
+        elif obj.routine is not None:
+            routine = _model_routine(obj, obj.routine)
+            routines.setdefault(routine_ref(routine), []).append(routine)
+        elif obj.view is not None:
+            view = _model_view(obj, obj.view)
+            views[view_ref(view)] = view
+    return SchemaModel(
+        tables=tables,
+        enum_types=enum_types,
+        sequences=sequences,
+        routines={ref: tuple(found) for ref, found in routines.items()},
+        views=views,
+    )
 
 
 def build_model(sql: str) -> SchemaModel:
-    """Parse ``sql`` into the schema model. Raises ``pglast.parser.ParseError``."""
-    return schema_model(build_inventory(sql))
+    """Parse ``sql`` into the schema model. Raises ``pglast.parser.ParseError``.
+
+    Triggers are ``ddl_objects``' answer — the one list of what a statement
+    defines, the kinds this inventory does not model among them — read from the
+    same parse.
+    """
+    raws = list(pglast.parse_sql(sql) or [])
+    return with_triggers(schema_model(build_inventory(sql, raws)), sql, raws)
+
+
+def with_triggers(model: SchemaModel, sql: str, raws: Sequence[Any]) -> SchemaModel:
+    """*model* with the triggers *sql* declares, read from its statements *raws*."""
+    # Reason: import cycle (ddl_objects reads object identity from this module)
+    from confiture.core.ddl_objects import declared_triggers, objects_in
+
+    triggers = declared_triggers(objects_in(sql, list(raws)))
+    return replace(model, triggers={trigger_ref(t): t for t in triggers})
 
 
 def label_for(path: Path, root: Path | None) -> str:
@@ -1063,7 +1109,7 @@ def label_for(path: Path, root: Path | None) -> str:
 #: canonical *names* of its input parameter types. A dict key cannot express a
 #: wildcard, so the types' own schemas are left out of it and
 #: :func:`group_definitions` decides which entries in a bucket really are one
-#: object; see :func:`types_match`.
+#: object; see :func:`~confiture.core.type_lattice.types_match`.
 ObjectKey = tuple[str, str | None, str, tuple[str, ...] | None]
 
 

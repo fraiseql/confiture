@@ -1,10 +1,15 @@
-"""Unit tests for FunctionBodyDriftDetector and FunctionBodyDriftReport."""
+"""Unit tests for FunctionBodyDriftDetector and FunctionBodyDriftReport.
+
+Each side is a list of the schema model's routines; ``routines`` builds them from
+``{"schema.name(type,…)": body}``, the shape these cases have always stated.
+"""
 
 from confiture.core.function_body_drift import (
     FunctionBodyDrift,
     FunctionBodyDriftDetector,
     FunctionBodyDriftReport,
 )
+from tests._helpers import routines
 
 # ---------------------------------------------------------------------------
 # Cycle 1: No drift cases
@@ -14,7 +19,7 @@ from confiture.core.function_body_drift import (
 def test_no_drift_identical_bodies():
     source = {"public.foo(integer)": "SELECT $1 + 1;"}
     live = {"public.foo(integer)": "SELECT $1 + 1;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
     assert report.body_drifts == []
     assert report.functions_checked == 1
@@ -24,7 +29,7 @@ def test_no_drift_whitespace_difference():
     """Whitespace-only difference must not produce drift."""
     source = {"public.foo(integer)": "SELECT   $1  +  1;"}
     live = {"public.foo(integer)": "SELECT $1 + 1;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
 
 
@@ -32,7 +37,7 @@ def test_no_drift_comment_difference():
     """Comment-only difference must not produce drift."""
     source = {"public.foo(integer)": "-- returns n+1\nSELECT $1 + 1;"}
     live = {"public.foo(integer)": "SELECT $1 + 1;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
 
 
@@ -40,7 +45,7 @@ def test_no_drift_case_difference():
     """Case-only difference must not produce drift."""
     source = {"public.foo(integer)": "SELECT $1 + 1;"}
     live = {"public.foo(integer)": "select $1 + 1;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
 
 
@@ -52,7 +57,7 @@ def test_no_drift_case_difference():
 def test_drift_detected_different_logic():
     source = {"public.foo(integer)": "SELECT $1 + 1;"}
     live = {"public.foo(integer)": "SELECT $1 + 2;"}  # +2 vs +1
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert report.has_drift
     assert len(report.body_drifts) == 1
     drift = report.body_drifts[0]
@@ -73,7 +78,7 @@ def test_drift_detected_only_changed_functions_listed():
         "public.foo(integer)": "SELECT $1 + 99;",  # drifted
         "public.bar(text)": "SELECT upper($1);",  # unchanged
     }
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert report.has_drift
     assert len(report.body_drifts) == 1
     assert report.body_drifts[0].name == "foo"
@@ -89,7 +94,7 @@ def test_drift_record_includes_bodies_and_unified_diff():
     """A drifted function exposes both raw bodies and a line-oriented diff."""
     source = {"public.foo(integer)": "SELECT $1 + 1;"}
     live = {"public.foo(integer)": "SELECT $1 + 2;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
 
     assert report.has_drift
     drift = report.body_drifts[0]
@@ -105,7 +110,7 @@ def test_unified_diff_is_line_oriented_not_collapsed():
     """Multi-line bodies produce a per-line diff, not one collapsed line."""
     source = {"public.f()": "SELECT a\nFROM t\nWHERE x = 1;"}
     live = {"public.f()": "SELECT a\nFROM t\nWHERE x = 2;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
 
     drift = report.body_drifts[0]
     # Only the WHERE line changed; the unchanged lines must not appear as +/-.
@@ -119,7 +124,7 @@ def test_no_drift_produces_no_record_with_bodies():
     """A non-drifted function still yields no record (bodies not surfaced)."""
     source = {"public.foo(integer)": "SELECT $1 + 1;  -- comment"}
     live = {"public.foo(integer)": "select $1 + 1;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
     assert report.body_drifts == []
 
@@ -128,7 +133,7 @@ def test_drift_to_dict_hash_only_by_default():
     """to_dict() omits bodies/diff unless include_bodies=True (back-compat)."""
     source = {"public.foo(integer)": "SELECT $1 + 1;"}
     live = {"public.foo(integer)": "SELECT $1 + 2;"}
-    drift = FunctionBodyDriftDetector().compare(source, live).body_drifts[0]
+    drift = FunctionBodyDriftDetector().compare(routines(source), routines(live)).body_drifts[0]
 
     terse = drift.to_dict()
     assert set(terse) == {"schema", "name", "signature_key", "source_hash", "db_hash"}
@@ -143,7 +148,7 @@ def test_report_to_dict_matches_inline_shape():
     """FunctionBodyDriftReport.to_dict() reproduces the historical JSON keys."""
     source = {"public.foo(integer)": "SELECT $1 + 1;"}
     live = {"public.foo(integer)": "SELECT $1 + 2;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
 
     payload = report.to_dict()
     assert payload["has_drift"] is True
@@ -166,7 +171,7 @@ def test_none_source_body_skipped():
     """C/internal functions with no extractable source body are skipped."""
     source = {"public.foo(cstring)": None}
     live = {"public.foo(cstring)": "int4in"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
     assert report.functions_checked == 1  # counted, not drifted
 
@@ -174,7 +179,7 @@ def test_none_source_body_skipped():
 def test_none_db_body_skipped():
     source = {"public.foo(cstring)": "SELECT 1;"}
     live = {"public.foo(cstring)": None}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
     assert report.functions_checked == 1
 
@@ -182,7 +187,7 @@ def test_none_db_body_skipped():
 def test_both_none_skipped():
     source = {"public.foo(cstring)": None}
     live = {"public.foo(cstring)": None}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
     assert report.functions_checked == 1
 
@@ -199,7 +204,7 @@ def test_source_only_key_not_compared():
         "public.ghost(text)": "SELECT $1;",  # not in live
     }
     live = {"public.foo(integer)": "SELECT $1 + 1;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
     assert report.functions_checked == 1  # only the intersection
 
@@ -210,7 +215,7 @@ def test_live_only_key_not_compared():
         "public.foo(integer)": "SELECT $1 + 1;",
         "public.extra(text)": "SELECT $1;",  # not in source
     }
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert not report.has_drift
     assert report.functions_checked == 1
 
@@ -223,7 +228,7 @@ def test_live_only_key_not_compared():
 def test_report_detection_time_is_positive():
     source = {"public.foo(integer)": "SELECT 1;"}
     live = {"public.foo(integer)": "SELECT 1;"}
-    report = FunctionBodyDriftDetector().compare(source, live)
+    report = FunctionBodyDriftDetector().compare(routines(source), routines(live))
     assert report.detection_time_ms >= 0
 
 

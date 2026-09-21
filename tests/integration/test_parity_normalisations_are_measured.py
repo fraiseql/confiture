@@ -22,7 +22,10 @@ Measured on PostgreSQL 15 (CI) and 18.4 (local), 2026-09-21:
    column owns — none of which the tree wrote;
 7. a sequence's unset bounds read back as the type's own bounds;
 8. a relation's schema is always known to the catalog, and ``pg_get_indexdef`` /
-   ``pg_get_constraintdef`` spell it only when ``search_path`` would not find it.
+   ``pg_get_constraintdef`` spell it only when ``search_path`` would not find it;
+9. a routine's argument and result types are ``format_type``'s spelling, not the
+   file's (``int8`` reads back ``bigint``);
+10. a view's query is stored as a parse tree and read back deparsed.
 
 And one the first draft of the plan listed that does **not** exist: an index whose
 statement writes no ``USING`` is ``btree`` on both sides, because PostgreSQL's
@@ -170,3 +173,20 @@ def test_an_index_expression_and_predicate_are_stored_analysed(conn: psycopg.Con
     stored = str(_one(conn, "SELECT pg_get_indexdef('ix'::regclass)"))
     assert "'k'::text" in stored
     assert "'x'::text" in stored
+
+
+def test_a_routines_types_read_back_in_format_types_spelling(conn: psycopg.Connection) -> None:
+    conn.execute("CREATE FUNCTION f(a int8) RETURNS int4 LANGUAGE sql AS $$ SELECT 1 $$")
+    arguments, result = conn.execute(
+        "SELECT pg_get_function_identity_arguments(oid), pg_get_function_result(oid)"
+        " FROM pg_proc WHERE proname = 'f'"
+    ).fetchone()
+    assert (arguments, result) == ("a bigint", "integer")
+
+
+def test_a_views_query_reads_back_deparsed(conn: psycopg.Connection) -> None:
+    conn.execute("CREATE TABLE t (id INT); CREATE VIEW v AS SELECT * FROM t")
+    deparsed = str(_one(conn, "SELECT pg_get_viewdef('v'::regclass, true)"))
+    # `*` is expanded; PostgreSQL 15 also qualifies the column (`t.id`), 16 on does not.
+    assert "*" not in deparsed
+    assert "id" in deparsed

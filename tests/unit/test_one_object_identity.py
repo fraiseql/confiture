@@ -64,12 +64,11 @@ MODELS = frozenset(
         "Sequence",
         "SchemaObject",
         "ObjectRef",
-        "LiveObject",
         "DDLObject",
-        # The schema model's routine and view, named here before they exist so
-        # the guard covers them the day they do.
+        # The schema model's routine, view and trigger.
         "Routine",
         "View",
+        "Trigger",
     }
 )
 

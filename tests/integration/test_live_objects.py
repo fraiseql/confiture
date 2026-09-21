@@ -1,6 +1,8 @@
 """What a live database holds, in the kinds a DDL tree declares (#303).
 
-The traps this reads around, each measured rather than assumed:
+``live_catalog.read(…, routines=True, views=True, triggers=True)`` reads them
+into the schema model — ``confiture drift``'s live side. The traps this reads
+around, each measured rather than assumed:
 
 * a ``FOREIGN KEY`` creates **internal** triggers on both tables, so without
   ``NOT tgisinternal`` every FK in a schema is two extra triggers;
@@ -17,11 +19,16 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from confiture.core.live_objects import LiveObjectCatalog
+from confiture.core import live_catalog
 from confiture.core.psql_applier import apply_sql_via_psql
+from confiture.core.schema_model import SchemaModel
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "live_drift_corpus"
 FILES = ("010_schema.sql", "020_tables.sql", "030_types.sql", "040_indexes.sql", "050_objects.sql")
+
+
+def _read(conn: psycopg.Connection, schemas: list[str]) -> SchemaModel:
+    return live_catalog.read(conn, schemas=schemas, routines=True, views=True, triggers=True)
 
 
 @pytest.fixture
@@ -38,11 +45,18 @@ def objects(fresh_database: str):
     """
     apply_sql_via_psql(fresh_database, sql=extra)
     with psycopg.connect(fresh_database) as conn:
-        yield LiveObjectCatalog(conn).read(["core", "public"])
+        yield _read(conn, ["core", "public"])
 
 
-def names(objects, kind: str) -> set[str]:
-    return {f"{obj.schema}.{obj.name}" for obj in objects.of_kind(kind)}
+def names(model: SchemaModel, kind: str) -> set[str]:
+    views = {f"{v.schema}.{v.name}" for v in model.views.values() if v.kind == kind}
+    routines = {f"{r.schema}.{r.name}" for r in model.all_routines() if r.kind == kind}
+    triggers = {t.qualified for t in model.triggers.values()} if kind == "trigger" else set()
+    return views | routines | triggers
+
+
+def routine(model: SchemaModel, name: str):
+    return next(r for r in model.all_routines() if r.name == name)
 
 
 def test_views_and_matviews(objects) -> None:
@@ -57,8 +71,7 @@ def test_a_trigger_is_keyed_table_first(objects) -> None:
 def test_the_internal_triggers_of_a_foreign_key_are_not_objects(objects) -> None:
     """A FK creates one internal trigger per side; reporting them would put two
     extra items on every foreign key in the schema."""
-    assert not any("RI_Constraint" in obj.name for obj in objects.of_kind("trigger"))
-    assert len(objects.of_kind("trigger")) == 1
+    assert len(objects.triggers) == 1
 
 
 def test_routines(objects) -> None:
@@ -68,53 +81,41 @@ def test_routines(objects) -> None:
 
 def test_a_routine_carries_its_input_types_only(objects) -> None:
     """`OUT` parameters are not part of a signature, and neither are names."""
-    out = next(obj for obj in objects.of_kind("function") if obj.name == "fn_out")
-    assert out.signature == ((None, "integer"),)
+    assert routine(objects, "fn_out").signature_key == ((None, "integer"),)
 
 
 def test_a_signature_is_canonical(objects) -> None:
     """`timestamptz` and `timestamp with time zone` are one type (#275)."""
-    seen = next(obj for obj in objects.of_kind("function") if obj.name == "fn_seen")
-    assert seen.signature == ((None, "timestamptz"),)
-    gone = next(obj for obj in objects.of_kind("function") if obj.name == "fn_gone")
-    assert gone.signature == ((None, "bigint"),)
+    assert routine(objects, "fn_seen").signature_key == ((None, "timestamptz"),)
+    assert routine(objects, "fn_gone").signature_key == ((None, "bigint"),)
 
 
 def test_a_trigger_function_is_read(objects) -> None:
-    """The source parser has no trigger filter, so neither has this."""
+    """The DDL side has no trigger filter, so neither has this."""
     assert "core.fn_touch" in names(objects, "function")
 
 
 def test_an_extension_owned_routine_is_not_an_object(objects) -> None:
     """`citext` installs a dozen functions into `public`; none of them is the
     tree's, and reporting them would drown every real finding."""
-    public_functions = {obj.name for obj in objects.of_kind("function") if obj.schema == "public"}
-    assert public_functions == set(), sorted(public_functions)
-
-
-def test_the_catalog_reads_only_the_kinds_something_compares(fresh_database: str) -> None:
-    """An extension is not among them, on purpose.
-
-    ``ddl_objects`` tracks ``CREATE EXTENSION``, so the expected side is there for
-    the taking — and the comparison does not exist. Reading a fact nothing
-    compares is what published three drift types confiture cannot emit.
-    """
-    with psycopg.connect(fresh_database) as conn:
-        catalog = LiveObjectCatalog(conn)
-    assert set(catalog.KINDS) == {
-        "view",
-        "matview",
-        "trigger",
-        "function",
-        "procedure",
-        "aggregate",
-    }
-    assert not hasattr(catalog, "extensions")
+    public = {r.name for r in objects.all_routines() if r.schema == "public"}
+    assert public == set(), sorted(public)
 
 
 def test_a_schema_the_tree_does_not_declare_is_not_read(fresh_database: str) -> None:
     sql = "\n".join((CORPUS / name).read_text(encoding="utf-8") for name in FILES)
     apply_sql_via_psql(fresh_database, sql=sql)
     with psycopg.connect(fresh_database) as conn:
-        found = LiveObjectCatalog(conn).read(["public"])
-    assert found.objects == []
+        found = _read(conn, ["public"])
+    assert (found.routines, found.views, found.triggers) == ({}, {}, {})
+
+
+def test_nothing_is_read_that_nobody_asked_for(fresh_database: str) -> None:
+    """Silence from a kind nobody asked the catalogue about is not evidence of absence,
+    so a model read without them holds none — and ``compare_schemas`` compares them
+    only when told they were read."""
+    sql = "\n".join((CORPUS / name).read_text(encoding="utf-8") for name in FILES)
+    apply_sql_via_psql(fresh_database, sql=sql)
+    with psycopg.connect(fresh_database) as conn:
+        found = live_catalog.read(conn, schemas=["core"])
+    assert (found.routines, found.views, found.triggers) == ({}, {}, {})

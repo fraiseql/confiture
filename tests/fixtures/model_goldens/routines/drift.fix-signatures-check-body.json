@@ -1,0 +1,32 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "status": "dry_run",
+    "fixes_planned": 1,
+    "missing_source": [],
+    "sql": "DROP FUNCTION public.fn_stale(integer);\n-- Live, a second overload taking integer is left behind (a stale overload).\nCREATE FUNCTION public.fn_stale(p_id bigint) RETURNS bigint\nLANGUAGE sql AS $$ SELECT p_id $$",
+    "blocks": [
+      {
+        "stale_signature": "public.fn_stale(integer)",
+        "drop_sql": "DROP FUNCTION public.fn_stale(integer);",
+        "create_sql": "-- Live, a second overload taking integer is left behind (a stale overload).\nCREATE FUNCTION public.fn_stale(p_id bigint) RETURNS bigint\nLANGUAGE sql AS $$ SELECT p_id $$"
+      }
+    ],
+    "body_drift_fixes_planned": 2,
+    "body_drift_blocks": [
+      {
+        "signature_key": "public.fn_body(integer)",
+        "create_sql": "-- Live, its body is hot-patched.\nCREATE FUNCTION public.fn_body(p_id integer) RETURNS integer\nLANGUAGE sql AS $$ SELECT p_id + 1 $$"
+      },
+      {
+        "signature_key": "public.fn_touch()",
+        "create_sql": "-- A trigger function, read only through the PL/pgSQL compiler (#272).\nCREATE FUNCTION public.fn_touch() RETURNS trigger\nLANGUAGE plpgsql AS $$\nBEGIN\n    NEW.created_at := now();\n    RETURN NEW;\nEND\n$$"
+      }
+    ],
+    "body_drift_missing_source": [],
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

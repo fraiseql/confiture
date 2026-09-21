@@ -5,16 +5,16 @@ view definitions (``pg_get_viewdef`` output from both the scratch/expected DB an
 the live DB), so the inputs here are the pg-normalised strings the catalog yields.
 """
 
+from confiture.core.schema_model import View
 from confiture.core.view_body_drift import (
     ViewBodyDrift,
     ViewBodyDriftDetector,
     ViewBodyDriftReport,
-    ViewDefinition,
 )
 
 
-def _v(schema: str, name: str, relkind: str, definition: str) -> ViewDefinition:
-    return ViewDefinition(schema=schema, name=name, relkind=relkind, definition=definition)
+def _v(schema: str, name: str, relkind: str, definition: str) -> View:
+    return View(name=name, schema=schema, materialized=relkind == "m", definition=definition)
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ def _v(schema: str, name: str, relkind: str, definition: str) -> ViewDefinition:
 def test_no_drift_identical_definitions():
     src = {"public.v": _v("public", "v", "v", "SELECT a\n   FROM t;")}
     live = {"public.v": _v("public", "v", "v", "SELECT a\n   FROM t;")}
-    report = ViewBodyDriftDetector().compare(src, live)
+    report = ViewBodyDriftDetector().compare(src.values(), live.values())
     assert not report.has_drift
     assert report.body_drifts == []
     assert report.views_checked == 1
@@ -35,7 +35,7 @@ def test_no_drift_trailing_whitespace_only():
     """Trailing whitespace per line must not register as drift."""
     src = {"public.v": _v("public", "v", "v", "SELECT a  \nFROM t;   ")}
     live = {"public.v": _v("public", "v", "v", "SELECT a\nFROM t;")}
-    report = ViewBodyDriftDetector().compare(src, live)
+    report = ViewBodyDriftDetector().compare(src.values(), live.values())
     assert not report.has_drift
 
 
@@ -47,7 +47,7 @@ def test_no_drift_trailing_whitespace_only():
 def test_drift_detected_changed_predicate():
     src = {"public.v": _v("public", "v", "v", "SELECT a\nFROM t\nWHERE x > y;")}
     live = {"public.v": _v("public", "v", "v", "SELECT a\nFROM t\nWHERE x > (y + 1);")}
-    report = ViewBodyDriftDetector().compare(src, live)
+    report = ViewBodyDriftDetector().compare(src.values(), live.values())
     assert report.has_drift
     assert len(report.body_drifts) == 1
     drift = report.body_drifts[0]
@@ -62,7 +62,7 @@ def test_drift_detected_changed_predicate():
 def test_drift_record_carries_defs_and_unified_diff():
     src = {"public.v": _v("public", "v", "v", "SELECT a\nFROM t\nWHERE x > y;")}
     live = {"public.v": _v("public", "v", "v", "SELECT a\nFROM t\nWHERE x > (y + 1);")}
-    drift = ViewBodyDriftDetector().compare(src, live).body_drifts[0]
+    drift = ViewBodyDriftDetector().compare(src.values(), live.values()).body_drifts[0]
     assert drift.expected_def == "SELECT a\nFROM t\nWHERE x > y;"
     assert drift.live_def == "SELECT a\nFROM t\nWHERE x > (y + 1);"
     assert "-WHERE x > y;" in drift.unified_diff
@@ -80,7 +80,7 @@ def test_only_changed_views_listed():
         "public.v1": _v("public", "v1", "v", "SELECT 1;"),
         "public.v2": _v("public", "v2", "v", "SELECT 99;"),
     }
-    report = ViewBodyDriftDetector().compare(src, live)
+    report = ViewBodyDriftDetector().compare(src.values(), live.values())
     assert len(report.body_drifts) == 1
     assert report.body_drifts[0].name == "v2"
     assert report.views_checked == 2
@@ -89,7 +89,7 @@ def test_only_changed_views_listed():
 def test_materialized_view_covered():
     src = {"public.mv": _v("public", "mv", "m", "SELECT sum(x) AS s\nFROM t;")}
     live = {"public.mv": _v("public", "mv", "m", "SELECT avg(x) AS s\nFROM t;")}
-    report = ViewBodyDriftDetector().compare(src, live)
+    report = ViewBodyDriftDetector().compare(src.values(), live.values())
     assert report.has_drift
     assert report.body_drifts[0].relkind == "m"
 
@@ -105,7 +105,7 @@ def test_source_only_view_not_compared():
         "public.ghost": _v("public", "ghost", "v", "SELECT 2;"),
     }
     live = {"public.v": _v("public", "v", "v", "SELECT 1;")}
-    report = ViewBodyDriftDetector().compare(src, live)
+    report = ViewBodyDriftDetector().compare(src.values(), live.values())
     assert not report.has_drift
     assert report.views_checked == 1
 
@@ -116,7 +116,7 @@ def test_live_only_view_not_compared():
         "public.v": _v("public", "v", "v", "SELECT 1;"),
         "public.extra": _v("public", "extra", "v", "SELECT 2;"),
     }
-    report = ViewBodyDriftDetector().compare(src, live)
+    report = ViewBodyDriftDetector().compare(src.values(), live.values())
     assert not report.has_drift
     assert report.views_checked == 1
 
@@ -129,7 +129,7 @@ def test_live_only_view_not_compared():
 def test_drift_to_dict_hash_only_by_default():
     src = {"public.v": _v("public", "v", "v", "SELECT a\nWHERE x > y;")}
     live = {"public.v": _v("public", "v", "v", "SELECT a\nWHERE x > (y + 1);")}
-    drift = ViewBodyDriftDetector().compare(src, live).body_drifts[0]
+    drift = ViewBodyDriftDetector().compare(src.values(), live.values()).body_drifts[0]
     terse = drift.to_dict()
     assert set(terse) == {"schema", "name", "relkind", "source_hash", "db_hash"}
     verbose = drift.to_dict(include_defs=True)
@@ -141,7 +141,7 @@ def test_drift_to_dict_hash_only_by_default():
 def test_report_to_dict_shape():
     src = {"public.v": _v("public", "v", "v", "SELECT a\nWHERE x > y;")}
     live = {"public.v": _v("public", "v", "v", "SELECT a\nWHERE x > (y + 1);")}
-    report = ViewBodyDriftDetector().compare(src, live)
+    report = ViewBodyDriftDetector().compare(src.values(), live.values())
     payload = report.to_dict()
     assert payload["has_drift"] is True
     assert payload["views_checked"] == 1

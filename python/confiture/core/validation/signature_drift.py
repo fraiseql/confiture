@@ -1,8 +1,11 @@
 """``migrate validate --check-signatures`` (+ ``--check-body``) logic.
 
-Compares function signatures (and optionally bodies) declared in the source
-schema against the live database, detecting stale overloads left behind by
-``CREATE OR REPLACE`` with changed parameter types.
+Compares the routines the source schema declares — the schema model, read by
+the lint inventory — against the ones the live database holds, read by
+``core/live_catalog``: their signatures, detecting stale overloads left behind
+by ``CREATE OR REPLACE`` with changed parameter types, and optionally their
+bodies. ``--check-body-replay`` asks the same body question of another expected
+side, a migration replay (:mod:`confiture.core.validation.replay_drift`).
 
 ``load_config`` / ``open_connection`` are imported at module scope so tests can
 patch them on this module.
@@ -21,10 +24,10 @@ from confiture.core.connection import load_config, open_connection
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
 from confiture.core.function_signature_drift import (
     FunctionSignatureDriftDetector,
+    declared_routines,
+    live_routines,
     schemas_to_scan,
 )
-from confiture.core.function_signature_parser import FunctionSignatureParser
-from confiture.core.live_function_catalog import LiveFunctionCatalog
 from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
@@ -146,8 +149,8 @@ def check_signature_drift(
     config_data = ctx.config_data if ctx is not None else load_config(config_path)
 
     source_sql, auto_built = _resolve_source_sql(config_data, schema_file)
-    source_sigs = FunctionSignatureParser().parse(source_sql)
-    schema_list = schemas_to_scan(schemas, source_sigs)
+    declared = declared_routines(source_sql)
+    schema_list = schemas_to_scan(schemas, declared)
 
     effective_config: Any = config_data
     if ssh_via:
@@ -157,23 +160,11 @@ def check_signature_drift(
         nullcontext(ctx.connection()) if ctx is not None else open_connection(effective_config)
     )
     with conn_cm as conn:
-        live_catalog = LiveFunctionCatalog(conn)
-        live_sigs = live_catalog.get_signatures(schemas=schema_list)
-        drift_report = FunctionSignatureDriftDetector().compare(
-            source_sigs,
-            live_sigs,
-            schemas_checked=schema_list,
-            missing_is_drift=missing_is_drift,
-        )
-
-        body_report = None
-        if check_body:
-            source_with_bodies = FunctionSignatureParser().parse_with_bodies(source_sql)
-            source_bodies: dict[str, str | None] = {
-                sig.signature_key(): body for sig, body in source_with_bodies
-            }
-            live_bodies = live_catalog.get_bodies(schemas=schema_list, sig_keys=set(source_bodies))
-            body_report = FunctionBodyDriftDetector().compare(source_bodies, live_bodies)
+        live = live_routines(conn, schema_list)
+    drift_report = FunctionSignatureDriftDetector().compare(
+        declared, live, schemas_checked=schema_list, missing_is_drift=missing_is_drift
+    )
+    body_report = FunctionBodyDriftDetector().compare(declared, live) if check_body else None
 
     return SignatureDriftResult(
         drift_report=drift_report,

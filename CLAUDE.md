@@ -242,16 +242,17 @@ type, and `core/ddl_walk.type_name` is its reader for a pglast `TypeName` — it
 drops the `pg_catalog` qualifier the parser adds, keeps the array suffix, and
 leaves the internal spelling for the lattice to alias. There were **six** such
 tables resolving in **three** directions; `tests/unit/test_one_type_canonicaliser.py`
-deleted the two under `core/linting/` and allow-lists the remaining **two** with
-the reason each is a different question (`core/ddl_walk.py` writes upper-case column
-types into a migration, `core/function_signature_parser.py` resolves the
-*opposite* way for what `--check-signatures` prints). The third,
-`core/drift.py`'s `_types_compatible`, is gone since 1.11.0: `same_type` in the
-lattice answers it, carrying the schema wildcard `inventory.types_match` applies
-to a routine's arguments, because `format_type` omits a schema that
-`search_path` makes visible (#302). An allow-list entry that no longer matches
-anything fails, as in the one-lexer guard — which is what forced that second
-edit.
+deleted the two under `core/linting/` and allow-lists the remaining **one** with
+the reason it is a different question (`core/ddl_walk.py` writes upper-case column
+types into a migration). `core/drift.py`'s `_types_compatible` is gone since
+1.11.0: `same_type` in the lattice answers it, carrying the schema wildcard
+`type_lattice.types_match` applies to a routine's arguments, because `format_type`
+omits a schema that `search_path` makes visible (#302). The signature parser's
+`_TYPE_ALIASES` is gone with the parser: a routine's argument types are keyed by
+the lattice on both sides of `--check-signatures`, and the catalogue's spelling a
+report prints (`character varying`) is `type_lattice.catalog_spelling`, the
+lattice's own table read the other way. An allow-list entry that no longer matches
+anything fails, as in the one-lexer guard — which is what forced each edit.
 
 A type's *identity* and its *spelling* are two fields, deliberately:
 `SchemaObject.signature` is the arguments as the author wrote them, because it is
@@ -657,8 +658,7 @@ confiture/
 │   │   ├── function_body_drift.py # Function body drift detection
 │   │   ├── function_body_normalizer.py # Normalise PostgreSQL function bodies for drift comparison
 │   │   ├── function_signature_checker.py # Check that function parameter type changes include DROP FUNCTION for ol…
-│   │   ├── function_signature_drift.py # Detect stale function overloads by comparing source signatures against…
-│   │   ├── function_signature_parser.py # Parse PostgreSQL function/procedure signatures from SQL text
+│   │   ├── function_signature_drift.py # Detect stale function overloads by comparing the routines a tree declar…
 │   │   ├── git.py                # Git integration for schema validation
 │   │   ├── git_accompaniment.py  # Migration accompaniment validation
 │   │   ├── git_schema.py         # Schema building and comparison from git refs
@@ -667,9 +667,6 @@ confiture/
 │   │   ├── large_tables.py       # Large table migration patterns
 │   │   ├── ledger.py             # Migration ledger existence probe
 │   │   ├── live_catalog.py       # The one reader of a live database's schema: ``pg_catalog`` in, the sche…
-│   │   ├── live_function_catalog.py # Adapter that converts FunctionIntrospector results to FunctionSignature…
-│   │   ├── live_objects.py       # The views, matviews, triggers and routines a live database holds (issue…
-│   │   ├── live_view_catalog.py  # Query live view (and materialized-view) definitions from a database
 │   │   ├── lock_profile.py       # What lock a DDL operation takes, and whether it rewrites the heap (issu…
 │   │   ├── locking.py            # Distributed locking for migration coordination
 │   │   ├── mcp_http.py           # HTTP transport adapter for MCPServer using FastAPI
@@ -697,7 +694,7 @@ confiture/
 │   │   ├── schema_exporter.py    # The JSON schemas confiture publishes, and the one place they come from
 │   │   ├── schema_facts.py       # What a live database can tell preflight that migration files cannot (is…
 │   │   ├── schema_identity.py    # Where an unqualified schema object lands: the one default schema
-│   │   ├── schema_model.py       # The one model of what a schema declares: tables, columns, constraints,…
+│   │   ├── schema_model.py       # The one model of what a schema declares: tables, types, sequences, rout…
 │   │   ├── schema_snapshot.py    # Schema history snapshot writer
 │   │   ├── schema_to_schema.py   # Schema-to-Schema Migration using Foreign Data Wrapper (FDW)
 │   │   ├── sql_lexer.py          # The one SQL lexer: libpg_query's scanner and parser, nothing hand-writt…

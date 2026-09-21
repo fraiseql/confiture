@@ -43,7 +43,7 @@ from confiture.core.linting.inventory import (
 )
 
 # Defined with the rest of the model; re-exported for the callers that name it here.
-from confiture.core.schema_model import ObjectRef
+from confiture.core.schema_model import ObjectRef, Trigger
 
 #: Which parse nodes this module turns into objects, and why each one that
 #: creates something is absent. A node that is neither tracked nor named here
@@ -276,6 +276,8 @@ class DDLObject:
     definition: str
     create_sql: str
     signature: Signature | None = None
+    #: A trigger, as the schema model holds one; ``None`` for every other kind.
+    trigger: Trigger | None = None
 
 
 def _rendered_with(stmt: Any, wanted: dict[str, bool]) -> str:
@@ -400,7 +402,18 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
         definition=_canonical_definition(stmt),
         create_sql=_creating_statement(stmt),
         signature=signature,
+        trigger=_trigger(stmt) if ref.kind == "trigger" else None,
     )
+
+
+def _trigger(stmt: Any) -> Trigger:
+    relation = stmt.relation
+    return Trigger(name=stmt.trigname, table=relation.relname, schema=relation.schemaname)
+
+
+def declared_triggers(objects: dict[ObjectRef, list[DDLObject]]) -> list[Trigger]:
+    """The triggers a tree still declares, from :func:`objects_in`'s answer."""
+    return [obj.trigger for found in objects.values() for obj in found if obj.trigger is not None]
 
 
 def _matches(ref: ObjectRef, edit: ObjectEdit) -> bool:

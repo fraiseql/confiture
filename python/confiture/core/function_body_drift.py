@@ -1,9 +1,14 @@
 """Function body drift detection.
 
-Compares normalised function bodies between source SQL files and the live
-database (pg_proc.prosrc) to detect cases where a function was modified
-directly in the database (e.g. via an ad-hoc CREATE OR REPLACE) without
-updating the corresponding source file.
+Compares normalised function bodies between two sets of the schema model's
+:class:`~confiture.core.schema_model.Routine` — the source DDL's and the live
+database's (``pg_proc.prosrc``), or a migration replay's and the live
+database's — to detect a function modified directly in the database (e.g. via
+an ad-hoc CREATE OR REPLACE) without updating the corresponding source.
+
+The two sides are paired by ``schema.name`` and ``signature_key``, through the
+one signature canonicaliser; a body is the text between the ``AS`` quotes on
+both, so a comparison needs no PL/pgSQL compiler.
 """
 
 from __future__ import annotations
@@ -11,11 +16,20 @@ from __future__ import annotations
 import dataclasses
 import difflib
 import time
-from typing import Any
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any
 
 from confiture.core.function_body_normalizer import FunctionBodyNormalizer
+from confiture.core.function_signature_drift import (
+    by_function,
+    function_key,
+    matching,
+    printed_signature,
+)
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 
-_NO_BODY_LANGUAGES = frozenset({"c", "internal"})
+if TYPE_CHECKING:
+    from confiture.core.schema_model import Routine
 
 
 @dataclasses.dataclass(frozen=True)
@@ -75,8 +89,8 @@ class FunctionBodyDriftReport:
 
     Attributes:
         body_drifts: Functions whose normalised body hash differs.
-        functions_checked: Number of signatures compared (intersection of
-            source and live keys; includes skipped None-body functions).
+        functions_checked: Number of routines compared (those both sides hold,
+            bodiless ones included).
         has_drift: ``True`` iff at least one body drift was detected.
         detection_time_ms: Wall-clock time of the comparison in milliseconds.
     """
@@ -101,11 +115,15 @@ class FunctionBodyDriftReport:
         }
 
 
-def _parse_schema_name(key: str) -> tuple[str, str]:
-    """Extract (schema, name) from a signature_key like 'public.foo(integer)'."""
-    schema, rest = key.split(".", 1)
-    name = rest.split("(", 1)[0]
-    return schema, name
+def paired(source: Iterable[Routine], live: Iterable[Routine]) -> list[tuple[Routine, Routine]]:
+    """Every source routine the live side also holds, with its live twin."""
+    live_by_fn = by_function(live)
+    pairs: list[tuple[Routine, Routine]] = []
+    for routine in source:
+        twin = matching(routine, live_by_fn.get(function_key(routine), []))
+        if twin is not None:
+            pairs.append((routine, twin))
+    return pairs
 
 
 class FunctionBodyDriftDetector:
@@ -114,7 +132,7 @@ class FunctionBodyDriftDetector:
     Usage::
 
         detector = FunctionBodyDriftDetector()
-        report = detector.compare(source_bodies, live_bodies)
+        report = detector.compare(declared_routines(sql), live_routines(conn, schemas))
         if report.has_drift:
             for drift in report.body_drifts:
                 print(drift.signature_key, drift.source_hash, drift.db_hash)
@@ -125,44 +143,41 @@ class FunctionBodyDriftDetector:
 
     def compare(
         self,
-        source_bodies: dict[str, str | None],
-        live_bodies: dict[str, str | None],
+        source: Iterable[Routine],
+        live: Iterable[Routine],
     ) -> FunctionBodyDriftReport:
-        """Detect body drift for all signatures present in both dicts.
+        """Detect body drift for every routine both sides hold.
 
-        Only the *intersection* of keys is compared.  Keys present only in
-        ``source_bodies`` are already handled by the signature drift detector
-        (``missing_from_db``).  Keys present only in ``live_bodies`` are extra
-        DB functions not in source — also outside this detector's scope.
+        Only routines present on *both* sides are compared. One the source
+        declares and the database has not got is the signature detector's
+        (``missing_from_db``); one only the database holds is not in source —
+        also outside this detector's scope.
 
-        Functions with ``None`` body on either side are counted in
-        ``functions_checked`` but never reported as drift (e.g. LANGUAGE C
-        functions have no extractable SQL body).
+        A routine with no body on either side is counted in ``functions_checked``
+        but never reported as drift (a LANGUAGE C function's ``AS`` clause is a
+        symbol, not a body).
 
         Args:
-            source_bodies: Mapping of signature_key → raw body from source SQL
-                           (or None for non-SQL functions).
-            live_bodies: Mapping of signature_key → raw prosrc from live DB
-                         (or None for C/internal functions).
+            source: The expected routines — the DDL's, or a migration replay's.
+            live: The live database's routines.
 
         Returns:
             A :class:`FunctionBodyDriftReport` with drift details and timing.
         """
         start = time.monotonic()
-        common_keys = set(source_bodies) & set(live_bodies)
+        pairs = sorted(paired(source, live), key=lambda pair: printed_signature(pair[1]))
         drifts: list[FunctionBodyDrift] = []
 
-        for key in sorted(common_keys):
-            src = source_bodies[key]
-            live = live_bodies[key]
-            if src is None or live is None:
+        for expected, actual in pairs:
+            src, live_body = expected.body, actual.body
+            if src is None or live_body is None:
                 continue  # cannot compare C/internal functions
             src_hash = self._normalizer.hash_body(src)
-            live_hash = self._normalizer.hash_body(live)
+            live_hash = self._normalizer.hash_body(live_body)
             if src_hash != live_hash:
-                schema, name = _parse_schema_name(key)
+                key = printed_signature(actual)
                 exp_norm = self._normalizer.normalize_for_diff(src)
-                live_norm = self._normalizer.normalize_for_diff(live)
+                live_norm = self._normalizer.normalize_for_diff(live_body)
                 unified = "\n".join(
                     difflib.unified_diff(
                         exp_norm.splitlines(),
@@ -174,13 +189,13 @@ class FunctionBodyDriftDetector:
                 )
                 drifts.append(
                     FunctionBodyDrift(
-                        schema=schema,
-                        name=name,
+                        schema=actual.schema or DEFAULT_SCHEMA,
+                        name=actual.name,
                         signature_key=key,
                         source_hash=src_hash,
                         db_hash=live_hash,
                         expected_body=src,
-                        live_body=live,
+                        live_body=live_body,
                         expected_normalized=exp_norm,
                         live_normalized=live_norm,
                         unified_diff=unified,
@@ -190,7 +205,7 @@ class FunctionBodyDriftDetector:
         elapsed = (time.monotonic() - start) * 1000
         return FunctionBodyDriftReport(
             body_drifts=drifts,
-            functions_checked=len(common_keys),
+            functions_checked=len(pairs),
             has_drift=len(drifts) > 0,
             detection_time_ms=elapsed,
         )

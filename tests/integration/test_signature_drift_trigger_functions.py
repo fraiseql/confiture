@@ -17,7 +17,7 @@ Two independent causes, both structural:
   `public` was reported missing, always;
 * **trigger functions** — `FunctionIntrospector` filters
   `pg_get_function_result(p.oid) IS DISTINCT FROM 'trigger'` unless asked
-  otherwise, and `LiveFunctionCatalog` never asked. The *source* parser has no
+  otherwise, and the live reader never asked. The *source* parser has no
   such filter, so a `RETURNS TRIGGER` function was permanently missing from a
   database that has it.
 
@@ -32,9 +32,11 @@ from pathlib import Path
 import psycopg
 import pytest
 
-from confiture.core.function_signature_drift import FunctionSignatureDriftDetector
-from confiture.core.function_signature_parser import FunctionSignatureParser
-from confiture.core.live_function_catalog import LiveFunctionCatalog
+from confiture.core.function_signature_drift import (
+    FunctionSignatureDriftDetector,
+    declared_routines,
+    live_routines,
+)
 from confiture.core.psql_applier import apply_sql_via_psql
 
 CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "live_drift_corpus"
@@ -54,9 +56,9 @@ def routines_database(fresh_database: str) -> str:
 
 
 def report(url: str, schemas: list[str]):
-    source = FunctionSignatureParser().parse(corpus_sql())
+    source = declared_routines(corpus_sql())
     with psycopg.connect(url) as conn:
-        live = LiveFunctionCatalog(conn).get_signatures(schemas)
+        live = live_routines(conn, schemas)
     return FunctionSignatureDriftDetector().compare(source, live)
 
 
@@ -68,14 +70,14 @@ def test_a_pristine_database_is_missing_nothing(routines_database: str) -> None:
 def test_a_trigger_function_is_on_both_sides(routines_database: str) -> None:
     """`core.fn_touch()` returns trigger, and the live side used to filter it out."""
     with psycopg.connect(routines_database) as conn:
-        live = LiveFunctionCatalog(conn).get_signatures(["core"])
+        live = live_routines(conn, ["core"])
     assert "fn_touch" in {signature.name for signature in live}
 
 
 def test_a_procedure_is_on_both_sides(routines_database: str) -> None:
     """`prokind IN ('f','p')` — a procedure is a routine the source declares too."""
     with psycopg.connect(routines_database) as conn:
-        live = LiveFunctionCatalog(conn).get_signatures(["core"])
+        live = live_routines(conn, ["core"])
     assert "pr_noop" in {signature.name for signature in live}
 
 

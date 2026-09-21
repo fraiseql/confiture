@@ -1,0 +1,13 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "status": "clean",
+    "message": "No signature or body drift detected.",
+    "fixes_applied": 0,
+    "body_drift_fixes_planned": 0,
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

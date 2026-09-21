@@ -1,4 +1,4 @@
-"""The one model of what a schema declares: tables, columns, constraints, indexes, types.
+"""The one model of what a schema declares: tables, types, sequences, routines and views.
 
 Every reader of a DDL tree answers in these types, and each is defined here once.
 There were six models of a table in this package, and a column's nullability was
@@ -21,6 +21,15 @@ the author wrote it — which is what a finding prints.
 Identity is ``(schema, name)`` with a missing qualifier folded to
 :data:`~confiture.core.schema_identity.DEFAULT_SCHEMA` (#313). The spelling never
 invents a qualifier: :attr:`Table.qualified` prints what the author wrote.
+
+A routine's identity adds its input argument types, and they are two fields for
+the same reason a column's type is: :attr:`Routine.signature` is the spelling a
+finding prints, :attr:`Routine.signature_key` the ``(schema, canonical type)`` per
+argument that decides whether two routines are one. Compare keys through
+``inventory.signatures_match``: a type schema written on one side and left off the
+other still matches (#302), which no dict key can express — so a routine's
+:class:`ObjectRef` is a bucket, and :attr:`SchemaModel.routines` holds every
+overload that falls in it.
 """
 
 from __future__ import annotations
@@ -44,6 +53,16 @@ Deferral = Literal["immediate", "deferred"]
 #: How a generated column holds its value. ``virtual`` arrived with PostgreSQL 18,
 #: where it is also what ``GENERATED ALWAYS AS (…)`` with neither keyword means.
 GeneratedKind = Literal["stored", "virtual"]
+
+#: What ``CREATE FUNCTION``, ``CREATE PROCEDURE`` and ``CREATE AGGREGATE`` define.
+RoutineKind = Literal["function", "procedure", "aggregate"]
+
+#: What PostgreSQL records a routine may do; ``volatile`` when nothing is written.
+Volatility = Literal["immutable", "stable", "volatile"]
+
+#: A routine's input argument types, each as ``(schema, canonical name)``: the
+#: schema is ``None`` where the argument named none, which matches any (#302).
+Signature = tuple[tuple[str | None, str], ...]
 
 
 @dataclass(frozen=True)
@@ -222,25 +241,147 @@ class Sequence:
 
 
 @dataclass(frozen=True)
+class Routine:
+    """One routine — a function, a procedure or an aggregate — and one overload of it.
+
+    ``signature`` is the input argument types as the reader found them written —
+    the DDL's own words, or ``format_type``'s — and ``signature_key`` the same
+    types canonicalised, which is what makes two routines one. ``OUT`` and
+    ``TABLE`` parameters are in neither: PostgreSQL does not resolve a call by them.
+
+    ``body`` is the text between the ``AS`` quotes, as written, and ``None`` where
+    that text is not SQL (``LANGUAGE c`` / ``internal``: a symbol). ``returns`` is
+    the result type as the reader spells it, ``None`` for a procedure.
+    ``security_definer``, ``search_path_pinned`` and ``volatility`` are what
+    PostgreSQL records — invoker, unpinned and ``volatile`` when nothing is written.
+    """
+
+    name: str
+    schema: str | None = None
+    kind: RoutineKind = "function"
+    signature: str = ""
+    signature_key: Signature = ()
+    returns: str | None = None
+    language: str | None = None
+    body: str | None = None
+    security_definer: bool = False
+    search_path_pinned: bool = False
+    volatility: Volatility = "volatile"
+
+    @property
+    def qualified(self) -> str:
+        return qualified_name(self.schema, self.name)
+
+    @property
+    def identity(self) -> str:
+        """``schema.name(arguments)``, spelled as the reader found it."""
+        return f"{self.qualified}({self.signature})"
+
+
+@dataclass(frozen=True)
+class View:
+    """A view or a materialized view.
+
+    ``definition`` is the query as the reader holds it: the DDL's ``SELECT``
+    rendered, or ``pg_get_viewdef``'s deparse — two spellings of one query, which
+    is why a definition is compared through one deparser or not at all.
+    ``indexes`` are a materialized view's; a view has none.
+    """
+
+    name: str
+    schema: str | None = None
+    materialized: bool = False
+    definition: str | None = None
+    indexes: tuple[Index, ...] = ()
+
+    @property
+    def kind(self) -> str:
+        return "matview" if self.materialized else "view"
+
+    @property
+    def qualified(self) -> str:
+        return qualified_name(self.schema, self.name)
+
+
+@dataclass(frozen=True)
+class Trigger:
+    """A trigger a user created, named with the table it fires on.
+
+    A trigger's name is unique per *table*, not per schema, so its identity is
+    ``(schema, table, name)``: two tables may each carry a ``trg_touch``.
+    """
+
+    name: str
+    table: str
+    schema: str | None = None
+
+    @property
+    def qualified(self) -> str:
+        """``schema.table.trigger``, the schema only where it was written."""
+        return f"{qualified_name(self.schema, self.table)}.{self.name}"
+
+
+def routine_ref(routine: Routine) -> ObjectRef:
+    """The bucket of a routine: its kind, folded schema, name and argument type names."""
+    return ObjectRef(
+        kind=routine.kind,
+        schema=(routine.schema or DEFAULT_SCHEMA).lower(),
+        name=routine.name,
+        signature=tuple(name for _schema, name in routine.signature_key),
+        display=routine.identity,
+    )
+
+
+def view_ref(view: View) -> ObjectRef:
+    """The bucket of a view or a materialized view."""
+    return ref_for(view.kind, view.schema, view.name)
+
+
+def trigger_ref(trigger: Trigger) -> ObjectRef:
+    """The bucket of a trigger: its schema, and its table and name together."""
+    return ref_for("trigger", trigger.schema, f"{trigger.table}.{trigger.name}")
+
+
+@dataclass(frozen=True)
 class SchemaModel:
-    """Everything one schema declares, each object under its :class:`ObjectRef`."""
+    """Everything one schema declares, each object under its :class:`ObjectRef`.
+
+    A routine's reference is a bucket (see :func:`routine_ref`), so
+    :attr:`routines` maps it to every overload in it, in declaration order.
+    """
 
     tables: Mapping[ObjectRef, Table] = field(default_factory=dict)
     enum_types: Mapping[ObjectRef, EnumType] = field(default_factory=dict)
     sequences: Mapping[ObjectRef, Sequence] = field(default_factory=dict)
+    routines: Mapping[ObjectRef, tuple[Routine, ...]] = field(default_factory=dict)
+    views: Mapping[ObjectRef, View] = field(default_factory=dict)
+    triggers: Mapping[ObjectRef, Trigger] = field(default_factory=dict)
+
+    def all_routines(self) -> list[Routine]:
+        """Every routine, overloads included, in identity order."""
+        return [routine for _, found in _ordered(self.routines) for routine in found]
 
     def to_dict(self) -> dict[str, Any]:
         """A JSON-ready rendering, objects in identity order, for goldens and dumps."""
 
         def section(objects: Mapping[ObjectRef, Any]) -> list[dict[str, Any]]:
-            ordered = sorted(objects.items(), key=lambda item: (item[0].schema, item[0].name))
-            return [asdict(obj) for _, obj in ordered]
+            return [asdict(obj) for _, obj in _ordered(objects)]
 
         return {
             "tables": section(self.tables),
             "enum_types": section(self.enum_types),
             "sequences": section(self.sequences),
+            "routines": [asdict(routine) for routine in self.all_routines()],
+            "views": section(self.views),
+            "triggers": section(self.triggers),
         }
+
+
+def _ordered(objects: Mapping[ObjectRef, Any]) -> list[tuple[ObjectRef, Any]]:
+    return sorted(
+        objects.items(),
+        key=lambda item: (item[0].schema, item[0].name, item[0].kind, item[0].signature or ()),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -285,6 +426,17 @@ PARITY_NORMALISATIONS: dict[str, str] = {
     "declaration_order": (
         "the catalog lists a table's constraints and indexes by name, a tree by where "
         "it declared them; which exist is the fact, not their order"
+    ),
+    "routine_spellings": (
+        "a routine's argument and result types as a file wrote them (`int8`, "
+        "`RETURNS int4`) are spelling; the catalog knows format_type's (`bigint`, "
+        "`integer`). signature_key is the identity compared"
+    ),
+    "view_definitions": (
+        "a view's query is stored as a parse tree and read back through "
+        "pg_get_viewdef's deparse — qualified, reparenthesised, `*` expanded — so what "
+        "is compared is that one exists; comparing two through one deparser is "
+        "--check-body-views' question"
     ),
 }
 
@@ -341,21 +493,40 @@ def _parity_constraint(table: str, constraint: Constraint) -> Constraint:
 
 def _parity_table(table: Table) -> Table:
     constraints = [_parity_constraint(table.name, c) for c in table.constraints]
-    indexes = [
-        replace(
-            ix,
-            table=identity_of(ix.table) or ix.table,
-            columns=tuple(key if _COLUMN_KEY.fullmatch(key) else _EXPRESSION for key in ix.columns),
-            where=None if ix.where is None else _EXPRESSION,
-        )
-        for ix in table.indexes
-        if not ix.backs_constraint
-    ]
+    indexes = [_parity_index(ix) for ix in table.indexes if not ix.backs_constraint]
     return replace(
         table,
         schema=(table.schema or DEFAULT_SCHEMA).lower(),
         columns=tuple(_parity_column(c) for c in table.columns),
         constraints=tuple(sorted(constraints, key=repr)),
+        indexes=tuple(sorted(indexes, key=repr)),
+    )
+
+
+def _parity_index(index: Index) -> Index:
+    return replace(
+        index,
+        table=identity_of(index.table) or index.table,
+        columns=tuple(key if _COLUMN_KEY.fullmatch(key) else _EXPRESSION for key in index.columns),
+        where=None if index.where is None else _EXPRESSION,
+    )
+
+
+def _parity_routine(routine: Routine) -> Routine:
+    return replace(
+        routine,
+        schema=(routine.schema or DEFAULT_SCHEMA).lower(),
+        signature="",
+        returns=None,
+    )
+
+
+def _parity_view(view: View) -> View:
+    indexes = [_parity_index(ix) for ix in view.indexes if not ix.backs_constraint]
+    return replace(
+        view,
+        schema=(view.schema or DEFAULT_SCHEMA).lower(),
+        definition=None if view.definition is None else _EXPRESSION,
         indexes=tuple(sorted(indexes, key=repr)),
     )
 
@@ -385,4 +556,12 @@ def normalise_for_parity(model: SchemaModel) -> SchemaModel:
             for ref, e in model.enum_types.items()
         },
         sequences={ref: _parity_sequence(s) for ref, s in model.sequences.items()},
+        routines={
+            ref: tuple(_parity_routine(r) for r in found) for ref, found in model.routines.items()
+        },
+        views={ref: _parity_view(v) for ref, v in model.views.items()},
+        triggers={
+            ref: replace(t, schema=(t.schema or DEFAULT_SCHEMA).lower())
+            for ref, t in model.triggers.items()
+        },
     )

@@ -157,8 +157,6 @@
     "python/confiture/cli/commands/migrate/fix_signatures.py": 1,
     "python/confiture/core/baseline_detector.py": 2,
     "python/confiture/core/fk_extractor.py": 1,
-    "python/confiture/core/function_signature_checker.py": 1,
-    "python/confiture/core/function_signature_parser.py": 3,
     "python/confiture/core/git_accompaniment.py": 1,
     "python/confiture/core/idempotency/_captures.py": 11,
     "python/confiture/core/idempotency/fixer.py": 20,

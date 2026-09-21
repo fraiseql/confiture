@@ -15,7 +15,8 @@ The fix (see :mod:`confiture.core.expected_db`): build the expected views into a
 scratch database and run the **same** ``pg_get_viewdef(oid, true)`` there, then
 compare the two deparsed strings. Both sides pass through pg's identical deparser,
 so string equality is semantic equality. This detector therefore takes the
-already-deparsed definitions from both sides and needs only trivial
+schema model's :class:`~confiture.core.schema_model.View` from both sides, each
+read by ``live_catalog.views(…, definitions=True)``, and needs only trivial
 normalisation (trailing-whitespace trim) before comparing — aggressive
 normalisation is unnecessary and could mask real drift.
 """
@@ -26,29 +27,13 @@ import dataclasses
 import difflib
 import hashlib
 import time
-from typing import Any
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any
 
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 
-@dataclasses.dataclass(frozen=True)
-class ViewDefinition:
-    """A deparsed view definition, from either the scratch or the live DB.
-
-    Attributes:
-        schema: PostgreSQL schema name.
-        name: View (or materialized view) name.
-        relkind: ``'v'`` for a regular view, ``'m'`` for a materialized view.
-        definition: ``pg_get_viewdef(oid, true)`` output (pretty-printed).
-    """
-
-    schema: str
-    name: str
-    relkind: str
-    definition: str
-
-    @property
-    def view_key(self) -> str:
-        """Canonical key — ``"schema.name"``."""
-        return f"{self.schema}.{self.name}"
+if TYPE_CHECKING:
+    from confiture.core.schema_model import View
 
 
 @dataclasses.dataclass(frozen=True)
@@ -140,44 +125,47 @@ def _hash_viewdef(definition: str) -> str:
     return hashlib.sha256(_normalize_viewdef(definition).encode()).hexdigest()[:12]
 
 
+def _view_key(view: View) -> str:
+    """``schema.name`` — how both sides key a view."""
+    return f"{view.schema or DEFAULT_SCHEMA}.{view.name}"
+
+
 class ViewBodyDriftDetector:
     """Compare deparsed view definitions between the expected and live schema.
 
     Usage::
 
         detector = ViewBodyDriftDetector()
-        report = detector.compare(source_defs, live_defs)
+        report = detector.compare(expected_views, live_views)
         for drift in report.body_drifts:
             print(f"{drift.schema}.{drift.name}", drift.unified_diff)
     """
 
-    def compare(
-        self,
-        source_defs: dict[str, ViewDefinition],
-        live_defs: dict[str, ViewDefinition],
-    ) -> ViewBodyDriftReport:
-        """Detect definition drift for all views present in both dicts.
+    def compare(self, source: Iterable[View], live: Iterable[View]) -> ViewBodyDriftReport:
+        """Detect definition drift for every view both sides hold.
 
-        Only the *intersection* of keys is compared. Views present only on one
-        side (added/removed) are outside this detector's scope.
+        Only views present on *both* sides are compared: one present on one side
+        only is ``confiture drift``'s ``missing_view`` / ``extra_view``.
 
         Args:
-            source_defs: Mapping of ``view_key`` → expected :class:`ViewDefinition`
-                (read back from the scratch DB, deparsed).
-            live_defs: Mapping of ``view_key`` → live :class:`ViewDefinition`.
+            source: The expected views, read back deparsed from the scratch DB.
+            live: The live database's views, deparsed.
 
         Returns:
             A :class:`ViewBodyDriftReport` with drift details and timing.
         """
         start = time.monotonic()
+        source_defs = {_view_key(view): view for view in source}
+        live_defs = {_view_key(view): view for view in live}
         common_keys = set(source_defs) & set(live_defs)
         drifts: list[ViewBodyDrift] = []
 
         for key in sorted(common_keys):
             src = source_defs[key]
-            live = live_defs[key]
-            src_norm = _normalize_viewdef(src.definition)
-            live_norm = _normalize_viewdef(live.definition)
+            live_view = live_defs[key]
+            src_def, live_def = src.definition or "", live_view.definition or ""
+            src_norm = _normalize_viewdef(src_def)
+            live_norm = _normalize_viewdef(live_def)
             if src_norm != live_norm:
                 unified = "\n".join(
                     difflib.unified_diff(
@@ -190,13 +178,13 @@ class ViewBodyDriftDetector:
                 )
                 drifts.append(
                     ViewBodyDrift(
-                        schema=live.schema,
-                        name=live.name,
-                        relkind=live.relkind,
-                        source_hash=_hash_viewdef(src.definition),
-                        db_hash=_hash_viewdef(live.definition),
-                        expected_def=src.definition,
-                        live_def=live.definition,
+                        schema=live_view.schema or DEFAULT_SCHEMA,
+                        name=live_view.name,
+                        relkind="m" if live_view.materialized else "v",
+                        source_hash=_hash_viewdef(src_def),
+                        db_hash=_hash_viewdef(live_def),
+                        expected_def=src_def,
+                        live_def=live_def,
                         unified_diff=unified,
                     )
                 )

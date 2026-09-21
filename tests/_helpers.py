@@ -7,6 +7,9 @@ import re
 
 import psycopg
 
+from confiture.core.schema_model import Routine
+from confiture.core.type_lattice import signature_from_type_names
+
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
 #: The extension the ``body`` lint family needs. No stock PostgreSQL carries it.
@@ -49,3 +52,29 @@ def _probe(url: str | None) -> str | None:
     except (psycopg.Error, OSError):
         return None
     return url if available else None
+
+
+def routine(name: str, *types: str, schema: str = "public", body: str | None = None) -> Routine:
+    """A ``schema_model.Routine`` with its arguments spelled as a catalogue spells them.
+
+    The detectors read routines from the model on both sides; a test that states a
+    routine's arguments as text is stating them the way ``format_type`` would.
+    """
+    return Routine(
+        name=name,
+        schema=schema,
+        signature=", ".join(types),
+        signature_key=signature_from_type_names(types),
+        body=body,
+    )
+
+
+def routines(bodies: dict[str, str | None]) -> list[Routine]:
+    """``{"schema.name(type,…)": body}`` as routines — the shape body-drift tests state."""
+    found: list[Routine] = []
+    for key, body in bodies.items():
+        qualified, _, arguments = key.partition("(")
+        schema, _, name = qualified.rpartition(".")
+        types = [t for t in arguments.rstrip(")").split(",") if t]
+        found.append(routine(name, *types, schema=schema or "public", body=body))
+    return found

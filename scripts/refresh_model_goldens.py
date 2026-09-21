@@ -16,7 +16,14 @@ Each tree is built the way its example builds it (``confiture build --env …
 - ``drift/<tree>.json`` — ``confiture drift --format json`` against a database
   built from the tree (needs PostgreSQL);
 - ``model/<tree>.json`` — the schema model the tree declares
-  (``inventory.build_model``), the one representation every comparison reads.
+  (``inventory.build_model``), the one representation every comparison reads;
+- ``routines/<scenario>.<command>.json`` — what the routine and view checks
+  (``migrate validate --check-signatures`` / ``--check-body`` /
+  ``--check-body-views`` / ``--check-body-replay`` / ``--require-migration-bodies``
+  and ``migrate fix-signatures``) print about ``tests/fixtures/routine_drift``,
+  on a database built from it (``clean``) and on one changed behind its back
+  (``drift``). Consumers key alert state on the signature strings these print
+  (needs PostgreSQL).
 
 A deliberate change to either output is refreshed with ``--write`` and named, with
 its reason, in ``CHANGELOG.md`` under ``## [Unreleased]``.
@@ -24,7 +31,7 @@ its reason, in ``CHANGELOG.md`` under ``## [Unreleased]``.
 Usage::
 
     uv run python scripts/refresh_model_goldens.py --check
-    uv run python scripts/refresh_model_goldens.py --write [--only diff|drift|model]
+    uv run python scripts/refresh_model_goldens.py --write [--only diff|drift|model|routines]
     uv run python scripts/refresh_model_goldens.py --write --server-url postgresql://…/postgres
 """
 
@@ -264,8 +271,199 @@ def drift_goldens(make_database: Callable[[], AbstractContextManager[str]]) -> d
             return {f"drift/{t.name}.json": text for t, text in zip(trees, texts, strict=True)}
 
 
+ROUTINE_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "routine_drift"
+
+#: The routine and view checks, each as the argv after ``confiture``. ``{config}``,
+#: ``{schema}`` and ``{migrations}`` are the scenario's own files.
+ROUTINE_COMMANDS: dict[str, tuple[str, ...]] = {
+    "check-signatures": ("migrate", "validate", "--check-signatures"),
+    "check-signatures-missing-is-drift": (
+        "migrate",
+        "validate",
+        "--check-signatures",
+        "--missing-is-drift",
+    ),
+    "check-body": ("migrate", "validate", "--check-signatures", "--check-body"),
+    "check-body-show-diff": (
+        "migrate",
+        "validate",
+        "--check-signatures",
+        "--check-body",
+        "--show-diff",
+    ),
+    "check-body-views": ("migrate", "validate", "--check-body-views", "--schemas", "public,app"),
+    "check-body-views-show-diff": (
+        "migrate",
+        "validate",
+        "--check-body-views",
+        "--schemas",
+        "public,app",
+        "--show-diff",
+    ),
+    "check-body-replay": (
+        "migrate",
+        "validate",
+        "--check-body-replay",
+        "--schemas",
+        "public,app",
+        "--migrations-dir",
+        "{migrations}",
+        "--show-diff",
+    ),
+    "fix-signatures": ("migrate", "fix-signatures"),
+    "fix-signatures-check-body": ("migrate", "fix-signatures", "--check-body"),
+}
+
+#: Which scenarios apply ``live_changes.sql`` after the tree.
+ROUTINE_SCENARIOS: dict[str, bool] = {"clean": False, "drift": True}
+
+#: The commands whose output carries ``pg_get_viewdef``'s text. PostgreSQL 16
+#: stopped qualifying a column of a single-relation view (``tb_thing.id`` became
+#: ``id``), so these print one thing on the CI server (15) and another on 16 and
+#: later — the definitions *and* the hashes taken of them. Their goldens are kept
+#: per deparse generation, each recorded on a server of that generation;
+#: ``test_routine_goldens.py`` measures the difference so the split cannot
+#: outlive its cause.
+VIEW_DEPARSE_COMMANDS: frozenset[str] = frozenset(
+    {"check-body-views", "check-body-views-show-diff"}
+)
+_GENERATION = re.compile(r"\.(pg1[0-9]+)\.json$")
+
+
+def deparse_generation(server_version_num: int) -> str:
+    """``pg15`` below PostgreSQL 16, where a view's columns are deparsed qualified."""
+    return "pg15" if server_version_num < 160000 else "pg16"
+
+
+def _server_generation(database_url: str) -> str:
+    import psycopg
+
+    with psycopg.connect(database_url) as conn:
+        row = conn.execute("SHOW server_version_num").fetchone()
+    assert row is not None
+    return deparse_generation(int(row[0]))
+
+
+def of_generation(goldens: dict[str, str], generation: str) -> dict[str, str]:
+    """The goldens that apply on a server of *generation*: shared ones and its own."""
+    return {
+        rel: text
+        for rel, text in goldens.items()
+        if (match := _GENERATION.search(rel)) is None or match.group(1) == generation
+    }
+
+
+#: Timings are the one field that is never the same twice.
+_TIMING = re.compile(r'("[a-z_]*_ms": )[0-9.]+')
+
+
+def _psql(database_url: str, path: Path) -> None:
+    subprocess.run(
+        ["psql", database_url, "-q", "-v", "ON_ERROR_STOP=1", "-f", str(path)],
+        check=True,
+        capture_output=True,
+    )
+
+
+def _record_command(argv: tuple[str, ...], replacements: dict[str, str], cwd: Path) -> str:
+    result = _run(*argv, cwd=cwd)
+    try:
+        stdout: object = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        stdout = result.stdout
+    payload = {"exit_code": result.returncode, "stdout": stdout}
+    text = _normalise(json.dumps(payload, indent=2) + "\n", replacements)
+    return _TIMING.sub(r"\g<1>0", text)
+
+
+def _record_scenario(scenario: str, database_url: str, work: Path) -> dict[str, str]:
+    """Every routine command against one database built from the fixture tree."""
+    schema = ROUTINE_FIXTURES / "schema.sql"
+    _psql(database_url, schema)
+    if ROUTINE_SCENARIOS[scenario]:
+        _psql(database_url, ROUTINE_FIXTURES / "live_changes.sql")
+    migrations = work / "migrations"
+    migrations.mkdir()
+    (migrations / "001_tree.up.sql").write_text(schema.read_text())
+    (migrations / "001_tree.down.sql").write_text("DROP SCHEMA app CASCADE;\n")
+    config = work / "confiture.yaml"
+    config.write_text(f"name: golden\ndatabase_url: {database_url}\ninclude_dirs: []\n")
+    database = urlparse(database_url).path.lstrip("/")
+    replacements = {str(work): "<work>", str(schema): "<schema>", database: "<database>"}
+    generation = _server_generation(database_url)
+    recorded_texts: dict[str, str] = {}
+    for name, command in ROUTINE_COMMANDS.items():
+        argv = tuple(part.format(migrations=migrations) for part in command)
+        argv += ("-c", str(config), "--schema", str(schema), "--format", "json")
+        suffix = f".{generation}.json" if name in VIEW_DEPARSE_COMMANDS else ".json"
+        recorded_texts[f"routines/{scenario}.{name}{suffix}"] = _record_command(
+            argv, replacements, work
+        )
+    return recorded_texts
+
+
+def _git(repo: Path, *argv: str) -> None:
+    subprocess.run(["git", *argv], cwd=repo, check=True, capture_output=True)
+
+
+def _record_accompaniment(work: Path) -> dict[str, str]:
+    """``--require-migration-bodies`` between two commits of a repository built here."""
+    repo = work / "repo"
+    (repo / "db" / "environments").mkdir(parents=True)
+    (repo / "db" / "schema").mkdir(parents=True)
+    (repo / "db" / "migrations").mkdir(parents=True)
+    (repo / "db" / "environments" / "local.yaml").write_text(
+        "name: local\ndatabase_url: postgresql://localhost/golden\n"
+        "include_dirs:\n  - path: db/schema\n    recursive: true\n"
+    )
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "golden@example.com")
+    _git(repo, "config", "user.name", "Golden")
+    routines = repo / "db" / "schema" / "10_routines.sql"
+    routines.write_text((ROUTINE_FIXTURES / "git" / "base.sql").read_text())
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    routines.write_text((ROUTINE_FIXTURES / "git" / "head.sql").read_text())
+    (repo / "db" / "migrations" / "002_carried.up.sql").write_text(
+        (ROUTINE_FIXTURES / "git" / "migration.sql").read_text()
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "head")
+    replacements = {str(repo): "<repo>"}
+    return {
+        f"routines/accompaniment.{name}.json": _record_command(
+            ("migrate", "validate", *flags, "--base-ref", "HEAD~1", "--format", "json"),
+            replacements,
+            repo,
+        )
+        for name, flags in (
+            ("require-migration-bodies", ("--require-migration-bodies",)),
+            ("list-unmigrated-bodies", ("--list-unmigrated-bodies",)),
+        )
+    }
+
+
+def routine_goldens(make_database: Callable[[], AbstractContextManager[str]]) -> dict[str, str]:
+    """Every routine golden; *make_database* is a context manager yielding a fresh URL."""
+    with tempfile.TemporaryDirectory(prefix="confiture-goldens-") as tmp:
+        root = Path(tmp)
+
+        def one(scenario: str) -> dict[str, str]:
+            work = root / scenario
+            work.mkdir()
+            with make_database() as url:
+                return _record_scenario(scenario, url, work)
+
+        with ThreadPoolExecutor() as pool:
+            found: dict[str, str] = {}
+            for texts in pool.map(one, ROUTINE_SCENARIOS):
+                found.update(texts)
+        found.update(_record_accompaniment(root))
+        return found
+
+
 def recorded(kind: str) -> dict[str, str]:
-    """The goldens on disk for *kind* (``diff``, ``drift`` or ``model``)."""
+    """The goldens on disk for *kind* (``diff``, ``drift``, ``model`` or ``routines``)."""
     return {
         str(path.relative_to(GOLDENS)): path.read_text()
         for path in sorted((GOLDENS / kind).glob("*"))
@@ -281,6 +479,8 @@ def _collect(only: str | None, server_url: str) -> dict[str, dict[str, str]]:
         kinds["drift"] = drift_goldens(lambda: scratch_database(server_url))
     if only in (None, "model"):
         kinds["model"] = model_goldens()
+    if only in (None, "routines"):
+        kinds["routines"] = routine_goldens(lambda: scratch_database(server_url))
     return kinds
 
 
@@ -289,7 +489,7 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true")
     mode.add_argument("--check", action="store_true")
-    parser.add_argument("--only", choices=("diff", "drift", "model"))
+    parser.add_argument("--only", choices=("diff", "drift", "model", "routines"))
     parser.add_argument(
         "--server-url",
         default=os.environ.get("CONFITURE_TEST_DB_URL", "postgresql://localhost/postgres"),
@@ -298,17 +498,19 @@ def main() -> int:
     args = parser.parse_args()
 
     stale: list[str] = []
+    generation = _server_generation(args.server_url)
     for kind, live in _collect(args.only, args.server_url).items():
         if args.write:
             directory = GOLDENS / kind
             directory.mkdir(parents=True, exist_ok=True)
-            for old in directory.glob("*"):
-                old.unlink()
+            # Another generation's goldens were recorded on another server.
+            for old in of_generation(recorded(kind), generation):
+                (GOLDENS / old).unlink()
             for rel, text in live.items():
                 (GOLDENS / rel).write_text(text)
             print(f"wrote {len(live)} {kind} goldens")
         else:
-            on_disk = recorded(kind)
+            on_disk = of_generation(recorded(kind), generation)
             stale.extend(
                 k for k in sorted(set(live) | set(on_disk)) if live.get(k) != on_disk.get(k)
             )

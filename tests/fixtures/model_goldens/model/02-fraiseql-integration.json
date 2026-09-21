@@ -1507,5 +1507,38 @@
     }
   ],
   "enum_types": [],
-  "sequences": []
+  "sequences": [],
+  "routines": [
+    {
+      "name": "update_updated_at_column",
+      "schema": null,
+      "kind": "function",
+      "signature": "",
+      "signature_key": [],
+      "returns": "trigger",
+      "language": "plpgsql",
+      "body": "\nBEGIN\n    NEW.updated_at = NOW();\n    RETURN NEW;\nEND;\n",
+      "security_definer": false,
+      "search_path_pinned": false,
+      "volatility": "volatile"
+    }
+  ],
+  "views": [],
+  "triggers": [
+    {
+      "name": "trigger_tb_comment_updated_at",
+      "table": "tb_comment",
+      "schema": null
+    },
+    {
+      "name": "trigger_tb_post_updated_at",
+      "table": "tb_post",
+      "schema": null
+    },
+    {
+      "name": "trigger_tb_user_updated_at",
+      "table": "tb_user",
+      "schema": null
+    }
+  ]
 }

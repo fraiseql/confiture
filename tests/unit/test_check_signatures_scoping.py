@@ -15,11 +15,12 @@ narrowing a caller may legitimately want.
 from __future__ import annotations
 
 from confiture.core.function_signature_drift import schemas_to_scan
-from confiture.core.function_signature_parser import FunctionSignature
+from confiture.core.schema_model import Routine
+from tests._helpers import routine
 
 
-def sig(schema: str, name: str = "f") -> FunctionSignature:
-    return FunctionSignature(schema=schema, name=name, param_types=())
+def sig(schema: str, name: str = "f") -> Routine:
+    return routine(name, schema=schema)
 
 
 def test_no_request_means_the_schemas_the_source_declares() -> None:

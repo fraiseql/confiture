@@ -329,6 +329,9 @@ jobs:
           tests/unit/linting/test_inventory_reads_columns_whole.py \
           tests/unit/linting/test_inventory_builds_the_model.py \
           tests/unit/test_live_catalog_reads_text_like_ddl.py \
+          tests/unit/test_routine_identity.py \
+          tests/unit/test_function_signature_checker.py \
+          tests/unit/test_function_body_checker.py \
           -q
 
   plpgsql-check:

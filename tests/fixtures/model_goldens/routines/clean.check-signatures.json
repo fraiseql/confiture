@@ -1,0 +1,23 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "check": "function_signature_drift",
+    "has_drift": false,
+    "has_critical_drift": false,
+    "remediation_sql": [],
+    "stale_overloads": [],
+    "missing_from_db": [],
+    "has_undeployed": false,
+    "missing_is_drift": false,
+    "schemas_checked": [
+      "app",
+      "public"
+    ],
+    "functions_checked": 10,
+    "detection_time_ms": 0,
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

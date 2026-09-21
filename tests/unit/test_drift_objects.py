@@ -6,9 +6,10 @@ the gate a deploy is failed by. The three body-drift checks do not cover it
 either: each compares only the **intersection** of source and live keys, by
 design.
 
-The expected side is `ddl_objects.objects_in`, which #288 already built and which
-models the kinds the lint inventory does not — a trigger among them. This is the
-comparison over the two.
+Both sides are the schema model — the expected one read from the DDL (a trigger
+through `ddl_objects`, which #288 built), the live one from `live_catalog` — and
+the comparison is `compare_schemas`', asked with `objects=True`: there is no
+second function, and no second model of a live object.
 
 Two rules decide what is reported, and both exist to keep a pristine database
 silent:
@@ -27,14 +28,23 @@ and three more members of a published enum would say nothing new.
 
 from __future__ import annotations
 
-import pglast
+import importlib
+from collections import defaultdict
+from unittest.mock import MagicMock
 
-from confiture.core.ddl_objects import objects_in
-from confiture.core.drift import compare_objects
-from confiture.core.linting.inventory import signature_from_type_names
-from confiture.core.live_objects import LiveObject, LiveObjects
+import pytest
 
-KINDS = frozenset({"view", "matview", "trigger", "function", "procedure", "aggregate"})
+from confiture.core.drift import SchemaDriftDetector, parse_expected_schema
+from confiture.core.schema_model import (
+    Routine,
+    SchemaModel,
+    Trigger,
+    View,
+    routine_ref,
+    trigger_ref,
+    view_ref,
+)
+from confiture.core.type_lattice import signature_from_type_names
 
 DECLARED = """
 CREATE SCHEMA core;
@@ -48,41 +58,78 @@ CREATE PROCEDURE core.pr_noop() LANGUAGE plpgsql AS $$ BEGIN NULL; END $$;
 """
 
 
-def expected(sql: str = DECLARED):
-    return objects_in(sql, list(pglast.parse_sql(sql) or []))
+def expected(sql: str = DECLARED) -> SchemaModel:
+    return parse_expected_schema(sql).model
 
 
-def live(*objects: LiveObject) -> LiveObjects:
-    return LiveObjects(objects=list(objects), kinds_read=KINDS)
-
-
-def routine(name: str, *types: str, kind: str = "function", schema: str = "core") -> LiveObject:
-    return LiveObject(
-        kind=kind, schema=schema, name=name, signature=signature_from_type_names(types)
+def live(*objects: View | Routine | Trigger) -> SchemaModel:
+    routines: dict = defaultdict(list)
+    for obj in objects:
+        if isinstance(obj, Routine):
+            routines[routine_ref(obj)].append(obj)
+    return SchemaModel(
+        views={view_ref(o): o for o in objects if isinstance(o, View)},
+        routines={ref: tuple(found) for ref, found in routines.items()},
+        triggers={trigger_ref(o): o for o in objects if isinstance(o, Trigger)},
     )
 
 
-def everything_live() -> LiveObjects:
-    return live(
-        LiveObject("view", "core", "v_widget"),
-        LiveObject("matview", "core", "mv_widget"),
-        LiveObject("trigger", "core", "tb_widget.trg_touch"),
+def view(schema: str, name: str, *, materialized: bool = False) -> View:
+    return View(name=name, schema=schema, materialized=materialized)
+
+
+def routine(name: str, *types: str, kind: str = "function", schema: str = "core") -> Routine:
+    return Routine(
+        name=name,
+        schema=schema,
+        kind=kind,  # type: ignore[arg-type]
+        signature=", ".join(types),
+        signature_key=signature_from_type_names(types),
+    )
+
+
+def everything() -> tuple[View | Routine | Trigger, ...]:
+    return (
+        view("core", "v_widget"),
+        view("core", "mv_widget", materialized=True),
+        Trigger(name="trg_touch", table="tb_widget", schema="core"),
         routine("fn_touch"),
         routine("fn_gone", "bigint"),
         routine("pr_noop", kind="procedure"),
     )
 
 
+def compare_objects(expected_model: SchemaModel, live_model: SchemaModel, *, objects: bool = True):
+    conn = MagicMock()
+    conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("db",)
+    detector = SchemaDriftDetector(conn)
+    return detector.compare_schemas(expected_model, live_model, objects=objects).drift_items
+
+
 def keys(items) -> list[tuple[str, str, str]]:
     return sorted((i.drift_type.value, i.severity.value, i.object_name) for i in items)
 
 
+def test_the_second_model_of_a_live_object_is_gone() -> None:
+    with pytest.raises(ImportError):
+        importlib.import_module("confiture.core.live_objects")
+
+
 def test_a_database_holding_everything_reports_nothing() -> None:
-    assert compare_objects(expected(), everything_live()) == []
+    assert compare_objects(expected(), live(*everything())) == []
+
+
+def test_the_objects_compared_are_counted() -> None:
+    conn = MagicMock()
+    conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("db",)
+    report = SchemaDriftDetector(conn).compare_schemas(
+        expected(), live(*everything()), objects=True
+    )
+    assert report.objects_checked == 6
 
 
 def test_a_missing_view_is_critical() -> None:
-    present = [o for o in everything_live().objects if o.name != "v_widget"]
+    present = [o for o in everything() if o.name != "v_widget"]
     assert keys(compare_objects(expected(), live(*present))) == [
         ("missing_view", "critical", "core.v_widget")
     ]
@@ -105,21 +152,19 @@ def test_a_routine_respelled_is_the_same_routine() -> None:
     Keying on the spelling reported a DROP and an ADD for one respelled routine,
     which #288 already paid for once (#275).
     """
-    live_objects = live(
-        LiveObject("view", "core", "v_widget"),
-        LiveObject("matview", "core", "mv_widget"),
-        LiveObject("trigger", "core", "tb_widget.trg_touch"),
+    live_model = live(
+        view("core", "v_widget"),
+        view("core", "mv_widget", materialized=True),
+        Trigger(name="trg_touch", table="tb_widget", schema="core"),
         routine("fn_touch"),
         routine("fn_gone", "int8"),
         routine("pr_noop", kind="procedure"),
     )
-    assert compare_objects(expected(), live_objects) == []
+    assert compare_objects(expected(), live_model) == []
 
 
 def test_an_extra_object_of_a_declared_kind_is_info() -> None:
-    items = compare_objects(
-        expected(), live(*everything_live().objects, LiveObject("view", "core", "v_surprise"))
-    )
+    items = compare_objects(expected(), live(*everything(), view("core", "v_surprise")))
     assert keys(items) == [("extra_view", "info", "core.v_surprise")]
 
 
@@ -129,19 +174,16 @@ def test_an_extra_object_of_a_kind_the_tree_does_not_declare_is_silent() -> None
     tree = "CREATE SCHEMA core;\nCREATE VIEW core.v AS SELECT 1;"
     items = compare_objects(
         expected(tree),
-        live(LiveObject("view", "core", "v"), LiveObject("matview", "core", "mv_nobody_declared")),
+        live(view("core", "v"), view("core", "mv_nobody_declared", materialized=True)),
     )
     assert items == []
 
 
 def test_an_extra_object_in_a_schema_the_tree_does_not_declare_is_silent() -> None:
-    items = compare_objects(
-        expected(), live(*everything_live().objects, LiveObject("view", "elsewhere", "v_theirs"))
-    )
+    items = compare_objects(expected(), live(*everything(), view("elsewhere", "v_theirs")))
     assert items == []
 
 
 def test_a_kind_the_catalog_did_not_read_is_never_missing() -> None:
     """Silence from a kind nobody asked about is not evidence of absence."""
-    read_nothing = LiveObjects(objects=[], kinds_read=frozenset())
-    assert compare_objects(expected(), read_nothing) == []
+    assert compare_objects(expected(), SchemaModel(), objects=False) == []

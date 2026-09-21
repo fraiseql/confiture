@@ -14,9 +14,12 @@ from __future__ import annotations
 import psycopg
 import pytest
 
-from confiture.core.function_signature_drift import FunctionSignatureDriftDetector
-from confiture.core.function_signature_parser import FunctionSignatureParser
-from confiture.core.live_function_catalog import LiveFunctionCatalog
+from confiture.core.function_signature_drift import (
+    FunctionSignatureDriftDetector,
+    declared_routines,
+    live_routines,
+    printed_signature,
+)
 
 # The pglast AST path is the production path and the one that dropped '[]'.
 pytest.importorskip("pglast")
@@ -52,8 +55,8 @@ def array_fn_db(clean_test_db: psycopg.Connection) -> psycopg.Connection:
 
 
 def test_array_functions_not_stale_against_live_db(array_fn_db: psycopg.Connection) -> None:
-    source_sigs = FunctionSignatureParser().parse(_DDL)
-    live_sigs = LiveFunctionCatalog(array_fn_db).get_signatures(schemas=["sig176"])
+    source_sigs = declared_routines(_DDL)
+    live_sigs = live_routines(array_fn_db, ["sig176"])
 
     report = FunctionSignatureDriftDetector().compare(
         source_sigs, live_sigs, schemas_checked=["sig176"]
@@ -66,8 +69,8 @@ def test_array_functions_not_stale_against_live_db(array_fn_db: psycopg.Connecti
 
 def test_live_array_signature_matches_source(array_fn_db: psycopg.Connection) -> None:
     """The live introspected signature keeps its array suffix and equals source."""
-    live_sigs = LiveFunctionCatalog(array_fn_db).get_signatures(schemas=["sig176"])
-    keys = {s.signature_key() for s in live_sigs}
+    live_sigs = live_routines(array_fn_db, ["sig176"])
+    keys = {printed_signature(s) for s in live_sigs}
 
     assert "sig176.merge_to_tenant_statistics(text,date[],bigint[],uuid[])" in keys, keys
     assert "sig176.build_response(text,text[])" in keys, keys

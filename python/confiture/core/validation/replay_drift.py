@@ -7,10 +7,11 @@ is exactly the definitions no migration produced — true out-of-band hot-patche
 
 Unlike ``--check-body`` (whose expected side is built from source DDL and is thus
 dominated by the build-vs-migrate backlog), this path builds the expected side
-from ``ExpectedSchemaDB.from_base_plus_migrations()``. Both sides are real
-databases introspected identically via :class:`LiveFunctionCatalog`, so the
-signature pairing is exact — this sidesteps the text-parse asymmetry class of bug
-(#176) entirely.
+from ``ExpectedSchemaDB.from_base_plus_migrations()``. The comparison is the same
+one: two sets of the schema model's routines and
+:class:`~confiture.core.function_body_drift.FunctionBodyDriftDetector` — the two
+checks differ only in where the expected routines come from, here a scratch
+database read by ``core/live_catalog`` exactly as the live one is.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from typing import TYPE_CHECKING
 from confiture.core.connection import load_config, open_connection
 from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.function_body_drift import FunctionBodyDriftDetector
-from confiture.core.live_function_catalog import LiveFunctionCatalog
+from confiture.core.function_signature_drift import live_routines
 from confiture.core.validation.signature_drift import _ssh_override
 from confiture.core.validation.view_drift import _config_database_url
 from confiture.exceptions import ConfigurationError
@@ -109,11 +110,11 @@ def check_replay_drift(
         nullcontext(ctx.connection()) if ctx is not None else open_connection(effective_config)
     )
     with conn_cm as live_conn:
-        live_bodies = LiveFunctionCatalog(live_conn).get_bodies(schemas=schema_list)
+        live = live_routines(live_conn, schema_list)
         with ExpectedSchemaDB(
             scratch, migrations_dir=migrations_dir
         ).from_base_plus_migrations() as scratch_conn:
-            replayed_bodies = LiveFunctionCatalog(scratch_conn).get_bodies(schemas=schema_list)
-        body_report = FunctionBodyDriftDetector().compare(replayed_bodies, live_bodies)
+            replayed = live_routines(scratch_conn, schema_list)
+    body_report = FunctionBodyDriftDetector().compare(replayed, live)
 
     return ReplayDriftResult(body_report=body_report, ssh_target=ssh_via)

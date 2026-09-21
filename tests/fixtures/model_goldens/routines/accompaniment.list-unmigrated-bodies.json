@@ -1,0 +1,27 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "check": "unmigrated_bodies",
+    "body_violations": [
+      {
+        "function_key": "public.fn_body",
+        "signature_key": "public.fn_body(integer)",
+        "migration_file": null,
+        "message": "Function body change for public.fn_body(integer) detected between refs but no migration re-defines it. Migrate-only environments (staging/production) will keep running the old body. Add a migration with CREATE OR REPLACE FUNCTION public.fn_body(...).",
+        "unified_diff": "--- public.fn_body(integer) (committed)\n+++ public.fn_body(integer) (working)\n@@ -1 +1 @@\n-select p_id + 1\n+select p_id + 2"
+      },
+      {
+        "function_key": "app.fn_array",
+        "signature_key": "app.fn_array(bigint[])",
+        "migration_file": null,
+        "message": "Function body change for app.fn_array(bigint[]) detected between refs but no migration re-defines it. Migrate-only environments (staging/production) will keep running the old body. Add a migration with CREATE OR REPLACE FUNCTION app.fn_array(...).",
+        "unified_diff": "--- app.fn_array(bigint[]) (committed)\n+++ app.fn_array(bigint[]) (working)\n@@ -1 +1 @@\n-select cardinality(p_ids)\n+select coalesce(cardinality(p_ids), 0)"
+      }
+    ],
+    "count": 2,
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

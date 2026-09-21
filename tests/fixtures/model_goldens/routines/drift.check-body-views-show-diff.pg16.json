@@ -1,0 +1,35 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "check": "view_body_drift",
+    "has_drift": true,
+    "body_drifts": [
+      {
+        "schema": "public",
+        "name": "mv_things",
+        "relkind": "m",
+        "source_hash": "9a533ecc9bba",
+        "db_hash": "eb9d3c99d861",
+        "expected_def": " SELECT id\n   FROM tb_thing;",
+        "live_def": " SELECT id\n   FROM tb_thing\n  WHERE id > 0;",
+        "unified_diff": "--- public.mv_things (expected)\n+++ public.mv_things (live)\n@@ -1,2 +1,3 @@\n SELECT id\n-   FROM tb_thing;\n+   FROM tb_thing\n+  WHERE id > 0;"
+      },
+      {
+        "schema": "public",
+        "name": "v_things",
+        "relkind": "v",
+        "source_hash": "6c9f286e6aa8",
+        "db_hash": "90c3535dd4d6",
+        "expected_def": " SELECT id,\n    label\n   FROM tb_thing;",
+        "live_def": " SELECT id,\n    label\n   FROM tb_thing\n  WHERE id > 10;",
+        "unified_diff": "--- public.v_things (expected)\n+++ public.v_things (live)\n@@ -1,3 +1,4 @@\n SELECT id,\n     label\n-   FROM tb_thing;\n+   FROM tb_thing\n+  WHERE id > 10;"
+      }
+    ],
+    "views_checked": 3,
+    "detection_time_ms": 0,
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

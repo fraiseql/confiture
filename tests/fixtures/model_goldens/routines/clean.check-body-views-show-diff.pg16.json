@@ -1,0 +1,14 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "check": "view_body_drift",
+    "has_drift": false,
+    "body_drifts": [],
+    "views_checked": 3,
+    "detection_time_ms": 0,
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

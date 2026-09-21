@@ -1,0 +1,20 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "status": "dry_run",
+    "fixes_planned": 1,
+    "missing_source": [],
+    "sql": "DROP FUNCTION public.fn_stale(integer);\n-- Live, a second overload taking integer is left behind (a stale overload).\nCREATE FUNCTION public.fn_stale(p_id bigint) RETURNS bigint\nLANGUAGE sql AS $$ SELECT p_id $$",
+    "blocks": [
+      {
+        "stale_signature": "public.fn_stale(integer)",
+        "drop_sql": "DROP FUNCTION public.fn_stale(integer);",
+        "create_sql": "-- Live, a second overload taking integer is left behind (a stale overload).\nCREATE FUNCTION public.fn_stale(p_id bigint) RETURNS bigint\nLANGUAGE sql AS $$ SELECT p_id $$"
+      }
+    ],
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

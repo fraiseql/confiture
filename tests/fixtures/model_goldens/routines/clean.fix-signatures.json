@@ -1,0 +1,12 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "status": "clean",
+    "message": "No stale function overloads detected (10 functions checked)",
+    "fixes_applied": 0,
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

@@ -32,7 +32,17 @@ TREES = {tree.name: tree for tree in goldens.TREES}
 
 
 def _schemas(model: SchemaModel) -> list[str]:
-    declared = {ref.schema for ref in (*model.tables, *model.enum_types, *model.sequences)}
+    declared = {
+        ref.schema
+        for ref in (
+            *model.tables,
+            *model.enum_types,
+            *model.sequences,
+            *model.routines,
+            *model.views,
+            *model.triggers,
+        )
+    }
     return sorted(declared | {DEFAULT_SCHEMA})
 
 
@@ -40,10 +50,14 @@ def _parity(
     tree_name: str, make_database: Callable[[str], str], tmp_path: Path
 ) -> tuple[dict, dict]:
     sql = goldens.build(TREES[tree_name], tmp_path / f"{tree_name}.sql").read_text()
+    return _parity_of(sql, make_database)
+
+
+def _parity_of(sql: str, make_database: Callable[[str], str]) -> tuple[dict, dict]:
     parsed = build_model(sql)
     with psycopg.connect(make_database("confiture_parity"), autocommit=True) as conn:
         conn.execute(sql)
-        live = read(conn, schemas=_schemas(parsed))
+        live = read(conn, schemas=_schemas(parsed), routines=True, views=True, triggers=True)
     return (
         normalise_for_parity(parsed).to_dict(),
         normalise_for_parity(live).to_dict(),
@@ -71,4 +85,18 @@ def test_a_database_built_from_a_tree_reads_back_as_the_tree(
     tree_name: str, fresh_database_factory: Callable[[str], str], tmp_path: Path
 ) -> None:
     parsed, live = _parity(tree_name, fresh_database_factory, tmp_path)
+    assert live == parsed, _explain(parsed, live)
+
+
+def test_every_routine_and_view_shape_reads_back_as_itself(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """The routine goldens' tree: a trigger function, a procedure, VARIADIC and OUT
+    arguments, arrays, a schema-qualified type, types PostgreSQL spells its own way,
+    a view in a second schema and a materialized view."""
+    sql = (goldens.ROUTINE_FIXTURES / "schema.sql").read_text()
+    sql += "\nCREATE UNIQUE INDEX mv_things_id ON public.mv_things (id);\n"
+    parsed, live = _parity_of(sql, fresh_database_factory)
+    assert len(parsed["routines"]) == 10 and len(parsed["views"]) == 3, parsed
+    assert len(parsed["triggers"]) == 1, parsed
     assert live == parsed, _explain(parsed, live)

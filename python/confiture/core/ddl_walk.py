@@ -36,6 +36,7 @@ from confiture.core.schema_model import (
     GeneratedKind,
     IdentityKind,
     Index,
+    Volatility,
     qualified_name,
 )
 from confiture.core.type_lattice import canonical_type, parse_type
@@ -49,6 +50,15 @@ _AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
 _AT_ALTER_COLUMN_TYPE = _pg_member("AlterTableType", "AT_AlterColumnType")
 _AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
 _CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
+
+#: The two ``SET search_path`` forms that pin it: ``= value`` and ``FROM CURRENT``.
+#: ``TO DEFAULT`` and ``RESET`` leave the caller's path in force.
+_SEARCH_PATH_PINS = frozenset(
+    {
+        _pg_member("VariableSetKind", "VAR_SET_VALUE"),
+        _pg_member("VariableSetKind", "VAR_SET_CURRENT"),
+    }
+)
 
 
 def walk_nodes(node: Any) -> Iterator[Any]:
@@ -695,6 +705,45 @@ def routine_body(stmt: Any) -> tuple[str | None, str | None]:
         elif opt.defname == "as":
             body = values[0] if values else None
     return language, body
+
+
+#: ``IMMUTABLE`` / ``STABLE`` / ``VOLATILE`` as the parser spells the option.
+_VOLATILITIES: dict[str, Volatility] = {
+    "immutable": "immutable",
+    "stable": "stable",
+    "volatile": "volatile",
+}
+
+
+@dataclass(frozen=True)
+class RoutineOptions:
+    """What a ``CREATE FUNCTION`` / ``PROCEDURE`` says about how the routine runs.
+
+    Each field is what PostgreSQL records when the statement writes nothing:
+    ``SECURITY INVOKER``, no pinned ``search_path``, ``VOLATILE``.
+    """
+
+    security_definer: bool = False
+    search_path_pinned: bool = False
+    volatility: Volatility = "volatile"
+
+
+def routine_options(stmt: Any) -> RoutineOptions:
+    """The ``SECURITY``, ``SET search_path`` and volatility clauses of a ``CreateFunctionStmt``."""
+    security_definer = False
+    pinned = False
+    volatility: Volatility = "volatile"
+    for opt in getattr(stmt, "options", None) or ():
+        arg = opt.arg
+        if opt.defname == "security":
+            security_definer = bool(getattr(arg, "boolval", False))
+        elif opt.defname == "volatility":
+            volatility = _VOLATILITIES.get(str(getattr(arg, "sval", "")).lower(), volatility)
+        elif opt.defname == "set" and getattr(arg, "name", None) == "search_path":
+            pinned = pinned or enum_int(getattr(arg, "kind", None)) in _SEARCH_PATH_PINS
+    return RoutineOptions(
+        security_definer=security_definer, search_path_pinned=pinned, volatility=volatility
+    )
 
 
 def enum_int(value: object) -> int | None:
