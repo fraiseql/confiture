@@ -1,0 +1,39 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "RENAME_COLUMN",
+        "details": "RENAME COLUMN users.full_name TO first_name",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_COLUMN",
+        "details": "ADD COLUMN users.last_name",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_INDEX",
+        "details": "ADD INDEX idx_users_first_name ON users",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_INDEX",
+        "details": "ADD INDEX idx_users_last_name ON users",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 4,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": []
+  }
+}

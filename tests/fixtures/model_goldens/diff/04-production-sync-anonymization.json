@@ -1,0 +1,64 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE audit_logs",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE employees",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE order_items",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE orders",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE payments",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE products",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE support_tickets",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE user_sessions",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE users",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 9,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": []
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE tb_comment",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE tb_post",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE tb_user",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE tv_comment",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE tv_post",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE tv_user",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION btree_gist",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION pg_trgm",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION unaccent",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION uuid-ossp",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "details": "ADD FUNCTION update_updated_at_column()",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "details": "ADD TRIGGER tb_comment.trigger_tb_comment_updated_at",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "details": "ADD TRIGGER tb_post.trigger_tb_post_updated_at",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "details": "ADD TRIGGER tb_user.trigger_tb_user_updated_at",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 14,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": []
+  }
+}

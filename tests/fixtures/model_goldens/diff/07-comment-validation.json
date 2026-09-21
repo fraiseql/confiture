@@ -1,0 +1,49 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE posts",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE users",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW v_recent_posts",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW v_recent_posts",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW v_user_stats",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW v_user_stats",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 6,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": []
+  }
+}

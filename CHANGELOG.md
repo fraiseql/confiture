@@ -12,6 +12,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `0.5.2`, `0.5.4`, `0.5.5`, `0.5.6`, `0.5.7`, `0.5.8`). From 0.12.0 on every tag has an entry and
 > every entry a tag; each release is a signed tag that the Publish workflow ships to PyPI.
 
+## [Unreleased]
+
+No change to what confiture does. What its comparisons say today is now a test in
+its own suite.
+
+### Added
+
+- **Model goldens** in `tests/fixtures/model_goldens/`, recorded from the CLI by
+  `scripts/refresh_model_goldens.py`: `migrate diff --format json --generate` for every
+  example schema tree, this repository's own, and the before/after pair
+  `examples/03-zero-downtime-migration` ships; and `confiture drift --format json`
+  against a database built from each tree. They are not all empty: a database applied
+  verbatim from `examples/02-fraiseql-integration` reports three `nullable_mismatch`
+  warnings, because an identity column whose primary key is declared at table level
+  reads as nullable. That is recorded, not hidden — a fix shows up as an edit to the
+  golden.
+
 ## [1.14.0] - 2026-09-20
 
 A constraint reaches the diff, and the DDL, whole. Closes [#315], [#316], [#317].

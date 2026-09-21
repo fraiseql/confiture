@@ -1,0 +1,109 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE projects",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE tasks",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE users",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION btree_gist",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION pg_trgm",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION pgcrypto",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_EXTENSION",
+        "details": "ADD EXTENSION uuid-ossp",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "details": "ADD FUNCTION public.prevent_delete_project_with_tasks()",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "details": "ADD FUNCTION public.set_task_completed_at()",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "details": "ADD FUNCTION public.update_updated_at_column()",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "details": "ADD TRIGGER projects.prevent_delete_project_with_tasks_trigger",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "details": "ADD TRIGGER projects.update_projects_updated_at",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "details": "ADD TRIGGER tasks.set_task_completed_at_trigger",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "details": "ADD TRIGGER tasks.update_tasks_updated_at",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TRIGGER",
+        "details": "ADD TRIGGER users.update_users_updated_at",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW active_user_dashboard",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW project_task_stats",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW user_project_summary",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 18,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": []
+  }
+}
