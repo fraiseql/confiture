@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The archaeology guard reads a phase in any case** (#310). Its patterns were
+  case-sensitive, so `phase 05` in a docstring or an xfail reason named the plan
+  invisibly; nine such lines shipped. Under `python/` and `tests/` a numbered phase or
+  cycle is now caught whatever its case, and those nine say what holds instead.
+  `docs/` keeps the case-sensitive forms, where a lower-case "phase 1" is a step of a
+  guide rather than a reference to the plan.
+
 ## [1.18.0] - 2026-09-22
 
 **Finalize.** The repository reads as if it had one model all along: nothing in the

@@ -1,4 +1,4 @@
-"""DB-refined preflight against a real database (issue #199, cycle 6).
+"""DB-refined preflight against a real database (issue #199).
 
 `ALTER TABLE … ALTER COLUMN … TYPE bigint` names the target and never the source,
 so the direction of a type change is knowable only from the database being

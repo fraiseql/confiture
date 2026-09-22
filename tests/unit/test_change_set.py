@@ -79,7 +79,7 @@ def test_alter_column_type_is_deliberately_unclassified() -> None:
 
     The contract's own `v1-missing-tier.json` fixture uses `alter_column_type`
     as its no-tier example. Guessing here would ship a confident wrong answer;
-    phase 10's type lattice is what resolves it.
+    the type lattice is what resolves it.
     """
     (entry,) = classify_statements("ALTER TABLE t ALTER COLUMN c TYPE bigint;")
     assert entry.kind == "alter_column_type"

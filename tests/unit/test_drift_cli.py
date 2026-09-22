@@ -320,7 +320,7 @@ class TestDriftCommand:
         assert result.exit_code == 5
 
     def test_drift_check_acls_propagates_unsupported_env_var_syntax(self, tmp_path, monkeypatch):
-        """``${VAR:-default}`` is rejected loudly (phase 05)."""
+        """``${VAR:-default}`` is rejected loudly."""
         config_file = tmp_path / "confiture.yaml"
         config_file.write_text(
             "database_url: postgresql://localhost/test\n"

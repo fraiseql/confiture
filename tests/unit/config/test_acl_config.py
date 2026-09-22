@@ -190,7 +190,7 @@ def test_acls_missing_env_var_fails_loud(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 # ---------------------------------------------------------------------------
-# ``acls.lint_enabled`` opt-in (phase 03 of post-review fixes)
+# ``acls.lint_enabled`` opt-in
 # ---------------------------------------------------------------------------
 
 
@@ -269,7 +269,7 @@ def test_acls_nested_shape_without_lint_enabled_defaults_false(tmp_path: Path) -
 
 
 # ---------------------------------------------------------------------------
-# ``AclExpectation`` → ``AclTableExpectation`` rename (phase 07)
+# ``AclExpectation`` → ``AclTableExpectation`` rename
 #
 # The new name lives in confiture.config.environment.  The old name keeps
 # working as a deprecated alias so existing imports don't break.

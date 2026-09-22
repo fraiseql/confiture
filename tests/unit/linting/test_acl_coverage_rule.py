@@ -325,9 +325,8 @@ def test_python_init_and_private_modules_are_skipped(tmp_path: Path) -> None:
 # Owner-only directive — per-table scoping
 #
 # The directive must apply only to the immediately-following CREATE TABLE.
-# Before phase 02 (issue #120) the implementation used substring containment
-# inside a 200-character tail window; that leaked to adjacent and
-# substring-prefix relnames.  The tests below pin the corrected scoping.
+# Substring containment inside a tail window would leak to adjacent and
+# substring-prefix relnames (issue #120). The tests below pin the scoping.
 # ---------------------------------------------------------------------------
 
 
