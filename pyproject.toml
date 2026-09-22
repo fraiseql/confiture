@@ -1,6 +1,6 @@
 [project]
 name = "fraiseql-confiture"
-version = "1.17.0"
+version = "1.18.0"
 description = "PostgreSQL migrations, sweetly done: build from DDL, migrate, preflight, sync 🍓"
 readme = "README.md"
 requires-python = ">=3.11"

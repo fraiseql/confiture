@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-09-22
+
+**Finalize.** The repository reads as if it had one model all along: nothing in the
+package, its tests or its documentation names the plan that produced it, its comments
+state what holds rather than how it came to hold, and the dead code the retired regex
+backends left is gone. The review the phase exists for found what no suite had: five
+sites composing SQL from names the catalog or a config gave them, an HTTP transport any
+web page could drive, a plugin able to replace `migrate`, a seam answering a typo with
+success — and, in the consumer checks, a scanner offset that made one French seed file
+enough to leave a whole schema tree unparseable.
+
 ### Security
 
 - **`ViewManager` composes view names as identifiers.** Schema and view names read from
