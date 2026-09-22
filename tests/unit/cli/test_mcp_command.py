@@ -8,6 +8,7 @@ token nobody chose is one nobody holds, and printing it would put it in a log.
 from __future__ import annotations
 
 import pytest
+from tests._helpers import strip_ansi
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -29,8 +30,9 @@ def test_http_mode_without_a_token_exits_2(served: list[dict[str, object]]) -> N
     result = runner.invoke(app, ["mcp", "-d", URL, "--port", "8080"], env={"COLUMNS": "200"})
 
     assert result.exit_code == 2, result.output
-    assert "--token" in result.output
-    assert "CONFITURE_MCP_TOKEN" in result.output
+    output = strip_ansi(result.output)
+    assert "--token" in output
+    assert "CONFITURE_MCP_TOKEN" in output
     assert served == []
 
 
