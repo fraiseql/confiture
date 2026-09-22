@@ -228,3 +228,30 @@ def test_the_plan_the_goldens_record_applies_and_leaves_no_drift(
 
     assert again.exit_code == 0, again.output
     assert json.loads(again.stdout)["status"] == "clean"
+
+
+def test_apply_drops_a_mixed_case_overload_and_not_its_lower_case_namesake(
+    project: Path, db: psycopg.Connection
+) -> None:
+    """``"MyFunc"(text)`` is stale; ``myfunc(text)`` is another routine, and it stays."""
+    _source(
+        project,
+        'CREATE OR REPLACE FUNCTION app."MyFunc"(p_a bigint) RETURNS bigint\n'
+        "LANGUAGE sql AS $$ SELECT p_a $$;\n",
+    )
+    db.execute(
+        'CREATE FUNCTION app."MyFunc"(p_a bigint) RETURNS bigint LANGUAGE sql AS $$ SELECT p_a $$'
+    )
+    db.execute(
+        'CREATE FUNCTION app."MyFunc"(p_a text) RETURNS text LANGUAGE sql AS $$ SELECT p_a $$'
+    )
+    db.execute("CREATE FUNCTION app.myfunc(p_a text) RETURNS text LANGUAGE sql AS $$ SELECT p_a $$")
+
+    code, payload, output = _fix("--mode", "apply")
+
+    assert (code, payload.get("status"), _overloads(db, "MyFunc"), _overloads(db, "myfunc")) == (
+        0,
+        "applied",
+        ['app."MyFunc"(bigint)'],
+        ["app.myfunc(text)"],
+    ), output

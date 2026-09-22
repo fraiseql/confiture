@@ -2,6 +2,8 @@
 
 import dataclasses
 
+import pglast
+
 from confiture.core.function_signature_drift import (
     FunctionSignatureDriftDetector,
     StaleOverload,
@@ -229,3 +231,39 @@ class TestTriggerFunctionsOnTheLiveSide:
         ]
         report = FunctionSignatureDriftDetector().compare(source, live)
         assert [o.stale_signature for o in report.stale_overloads] == ["core.fn_touch()"]
+
+
+class TestDropStatementNamesTheStaleOverload:
+    """``drop_sql`` is what ``fix-signatures --mode apply`` runs: it names that overload.
+
+    PostgreSQL folds an unquoted name to lower case, so ``DROP FUNCTION
+    public.MyFunc(text)`` names ``myfunc`` — another routine, when there is one.
+    """
+
+    @staticmethod
+    def _dropped(source: list[Routine], live: list[Routine]) -> tuple[object, ...]:
+        (overload,) = FunctionSignatureDriftDetector().compare(source, live).stale_overloads
+        (statement,) = pglast.parse_sql(overload.drop_sql)
+        (target,) = statement.stmt.objects
+        return (
+            tuple(part.sval for part in target.objname),
+            [tuple(part.sval for part in argument.names) for argument in target.objargs],
+        )
+
+    def test_a_mixed_case_name_is_dropped_as_the_catalogue_holds_it(self):
+        source = [_sig("MyFunc", ("bigint",))]
+        live = [*source, _sig("MyFunc", ("text",))]
+
+        assert self._dropped(source, live) == (("public", "MyFunc"), [("text",)])
+
+    def test_a_schema_that_is_not_a_bare_identifier_is_quoted(self):
+        source = [_sig("f", ("bigint",), schema="My App")]
+        live = [*source, _sig("f", ("text",), schema="My App")]
+
+        assert self._dropped(source, live) == (("My App", "f"), [("text",)])
+
+    def test_an_argument_type_is_dropped_as_the_catalogue_spells_it(self):
+        source = [_sig("f", ("bigint",), schema="app")]
+        live = [*source, _sig("f", ('app."MyType"',), schema="app")]
+
+        assert self._dropped(source, live) == (("app", "f"), [("app", "MyType")])
