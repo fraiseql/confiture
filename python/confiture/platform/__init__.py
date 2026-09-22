@@ -5,7 +5,9 @@ Read a schema into the model — from DDL (:func:`parse_schema`) or from a datab
 (:func:`tier_of`); order a model's tables by their foreign keys
 (:func:`dependency_order`); and ask which columns a writer supplies
 (:func:`writable_columns`) and what each must respect (:func:`column_facts`,
-:func:`naming_hints`). Nothing here is defined here: every name is confiture's
+:func:`naming_hints`); write seeds (:func:`write_copy_seed`,
+:func:`write_insert_seed`), apply them (:func:`apply_seeds`) and validate them
+(:func:`validate_seeds`). Nothing here is defined here: every name is confiture's
 own, re-exported so that a consumer depends on this list and nothing behind it.
 ``tests/contract/test_platform_surface.py`` pins the list, every signature and
 every field, and ``docs/guides/building-on-confiture.md`` is its guide.
@@ -65,10 +67,15 @@ from confiture.core.schema_model import (
     View,
 )
 from confiture.core.schema_sources import SchemaSource, diff, introspect, parse_schema
-from confiture.exceptions import SchemaError
+from confiture.core.seed.applier import ApplyResult, apply_seeds
+from confiture.core.seed.validation.prep_seed.models import PrepSeedReport
+from confiture.core.seed.validation.prep_seed.orchestrator import validate_seeds
+from confiture.core.seed.writer import SeedFile, write_copy_seed, write_insert_seed
+from confiture.exceptions import SchemaError, SeedError
 from confiture.models.introspection import TableHints
 
 __all__ = [
+    "ApplyResult",
     "CheckConstraintAdded",
     "CheckConstraintDropped",
     "Column",
@@ -96,6 +103,7 @@ __all__ = [
     "ObjectDropped",
     "ObjectRef",
     "ObjectReplaced",
+    "PrepSeedReport",
     "RiskTier",
     "Routine",
     "SchemaChange",
@@ -103,6 +111,8 @@ __all__ = [
     "SchemaError",
     "SchemaModel",
     "SchemaSource",
+    "SeedError",
+    "SeedFile",
     "Sequence",
     "SequenceAdded",
     "SequenceDropped",
@@ -115,6 +125,7 @@ __all__ = [
     "UniqueConstraintAdded",
     "UniqueConstraintDropped",
     "View",
+    "apply_seeds",
     "column_facts",
     "dependency_order",
     "diff",
@@ -122,5 +133,8 @@ __all__ = [
     "naming_hints",
     "parse_schema",
     "tier_of",
+    "validate_seeds",
     "writable_columns",
+    "write_copy_seed",
+    "write_insert_seed",
 ]

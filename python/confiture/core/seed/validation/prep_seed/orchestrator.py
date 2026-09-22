@@ -590,3 +590,33 @@ class PrepSeedOrchestrator:
         func_files = sorted(self.config.schema_dir.rglob("fn_resolve*.sql"))
 
         return [f.stem for f in func_files]
+
+
+def validate_seeds(
+    seeds_dir: Path,
+    *,
+    schema_dir: Path,
+    max_level: int = 3,
+    database_url: str | None = None,
+    prep_seed_schema: str = "prep_seed",
+    catalog_schema: str = "catalog",
+) -> PrepSeedReport:
+    """Run prep-seed validation levels 1 through *max_level* over *seeds_dir*.
+
+    Levels 1-3 read files and need no database; 4 and 5 load the seeds and run
+    the resolvers against *database_url*, in a transaction they roll back.
+    Nothing is printed: the report is the answer.
+
+    Raises:
+        ValueError: *max_level* of 4 or 5 without a *database_url*.
+    """
+    config = OrchestrationConfig(
+        max_level=max_level,
+        seeds_dir=seeds_dir,
+        schema_dir=schema_dir,
+        database_url=database_url,
+        show_progress=False,
+        prep_seed_schema=prep_seed_schema,
+        catalog_schema=catalog_schema,
+    )
+    return PrepSeedOrchestrator(config).run()
