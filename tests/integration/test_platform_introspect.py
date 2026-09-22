@@ -73,3 +73,18 @@ def test_the_introspected_wire_is_the_published_one(fresh_database: str) -> None
     validator = Draft202012Validator(load_schema("schema-model.schema.json"))
     assert list(validator.iter_errors(json.loads(model.to_json()))) == []
     assert platform.SchemaModel.from_json(model.to_json()) == model
+
+
+def test_an_introspected_model_orders_like_a_parsed_one(fresh_database: str) -> None:
+    """``pg_get_constraintdef`` spells a reference its own way; it resolves the same."""
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute(DDL)
+        conn.execute("CREATE TABLE public.root (id INT PRIMARY KEY)")
+        conn.execute("CREATE TABLE public.leaf (root_id INT REFERENCES root)")
+    live = platform.dependency_order(platform.introspect(fresh_database))
+    assert [f"{r.schema}.{r.name}" for r in live] == [
+        "app.parent",
+        "app.child",
+        "public.root",
+        "public.leaf",
+    ]

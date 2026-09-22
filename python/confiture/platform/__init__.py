@@ -2,7 +2,8 @@
 
 Read a schema into the model — from DDL (:func:`parse_schema`) or from a database
 (:func:`introspect`) — and compare two (:func:`diff`), each change typed and tiered
-(:func:`tier_of`). Nothing here is defined here: every name is confiture's own,
+(:func:`tier_of`); order a model's tables by their foreign keys
+(:func:`dependency_order`). Nothing here is defined here: every name is confiture's own,
 re-exported so that a consumer depends on this list and on nothing behind it.
 ``tests/contract/test_platform_surface.py`` pins the list, every signature and
 every field, and ``docs/guides/building-on-confiture.md`` is its guide.
@@ -14,6 +15,7 @@ connection does — whose transaction stays the caller's.
 
 from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.connection import Connection
+from confiture.core.introspection.dependency_graph import DependencyCycle, dependency_order
 from confiture.core.risk_tier import RiskTier
 from confiture.core.schema_change import (
     CheckConstraintAdded,
@@ -72,6 +74,7 @@ __all__ = [
     "ColumnTypeChanged",
     "Connection",
     "Constraint",
+    "DependencyCycle",
     "EnumType",
     "EnumTypeAdded",
     "EnumTypeDropped",
@@ -103,6 +106,7 @@ __all__ = [
     "UniqueConstraintAdded",
     "UniqueConstraintDropped",
     "View",
+    "dependency_order",
     "diff",
     "introspect",
     "parse_schema",

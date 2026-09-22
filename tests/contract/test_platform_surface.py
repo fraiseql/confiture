@@ -76,7 +76,10 @@ CHANGES = (
 #: Reading a schema, from DDL or from a database.
 READING = ("SchemaSource", "Connection", "parse_schema", "introspect", "diff", "SchemaError")
 
-EXPORTS = frozenset(MODEL + CHANGES + READING)
+#: Ordering tables by their foreign keys.
+ORDERING = ("dependency_order", "DependencyCycle")
+
+EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING)
 
 #: ``str(inspect.signature(...))`` of every callable the seam defines. Under
 #: ``from __future__ import annotations`` an annotation is its source text.
@@ -89,6 +92,10 @@ SIGNATURES: dict[str, str] = {
         "(database: 'str | Connection', *, schemas: 'Sequence[str] | None' = None) -> 'SchemaModel'"
     ),
     "diff": "(old: 'SchemaSource', new: 'SchemaSource') -> 'SchemaDiff'",
+    "dependency_order": (
+        "(model: 'SchemaModel', *, tables: 'Iterable[ObjectRef | str] | None' = None) "
+        "-> 'list[ObjectRef]'"
+    ),
     "tier_of": "(change: 'SchemaChange') -> 'RiskTier | None'",
     "SchemaModel.to_json": "(self) -> 'str'",
     "SchemaModel.from_json": "(text: 'str') -> 'SchemaModel'",
