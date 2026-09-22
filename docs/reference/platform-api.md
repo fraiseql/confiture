@@ -615,7 +615,7 @@ them to its value; `None` is NULL. A `dict` or `list` is JSON for a
 
 **Raises**
 
-- `SeedError`: a table or column the model does not hold, a column PostgreSQL fills, a row missing a column or carrying another, a value the column's type cannot take as given.
+- `SeedError`: a table or column the model does not hold, a column PostgreSQL fills, a row missing a column or carrying another, a value the column's type cannot take as given, a value holding a NUL.
 
 ### `write_insert_seed`
 

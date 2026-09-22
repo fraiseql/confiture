@@ -124,6 +124,35 @@ def test_a_row_missing_a_column_is_refused(tmp_path, model) -> None:
         )
 
 
+WRITERS = pytest.mark.parametrize(
+    "write", [platform.write_copy_seed, platform.write_insert_seed], ids=["copy", "insert"]
+)
+
+
+@WRITERS
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [("Label", "x\x00"), ("tags", ["a", "b\x00"]), ("payload", '{"k": "\x00"}')],
+    ids=["text", "array-element", "json-text"],
+)
+def test_writers_refuse_nul(tmp_path, model, write, column, value) -> None:
+    """psql ends a line at a NUL and reads the next as its rest: a row merged, or SQL run."""
+    row = {"id": "00000000-0000-4000-8000-000000000001", "Label": "x", column: value}
+    target = tmp_path / "nul.sql"
+    with pytest.raises(platform.SeedError, match="NUL"):
+        write(target, "app.item", list(row), [row], model=model)
+    assert not target.exists()
+
+
+@WRITERS
+def test_a_column_name_holding_a_nul_is_refused(tmp_path, model, write) -> None:
+    row = {"id": "00000000-0000-4000-8000-000000000001", "Label\x00": "x"}
+    target = tmp_path / "nul.sql"
+    with pytest.raises(platform.SeedError, match="has no column"):
+        write(target, "app.item", list(row), [row], model=model)
+    assert not target.exists()
+
+
 def test_seeds_written_for_the_prep_seed_example_pass_static_validation(tmp_path) -> None:
     model = platform.parse_schema(EX06 / "db" / "schema")
     seeds = tmp_path / "seeds"
