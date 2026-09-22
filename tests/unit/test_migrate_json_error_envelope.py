@@ -1,6 +1,6 @@
 """Issue #145: migrate-family --format json failure paths emit the envelope.
 
-Per .phases/.../test-conventions.md, these assert stdout *parses* as the
+These assert stdout *parses* as the
 envelope (CliRunner cannot reliably separate stdout/stderr); the boundary's
 stream separation is covered by test_cli_fail_boundary.py with capsys.
 """

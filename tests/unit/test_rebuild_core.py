@@ -13,7 +13,7 @@ from confiture.models.results import MigrateRebuildResult, MigrationApplied
 
 
 class TestDiscoverUserSchemas:
-    """Cycle 2.1: _discover_user_schemas.
+    """_discover_user_schemas.
 
     The schemas come from ``live_catalog.schemas``; what is tested here is which
     of them a rebuild drops. What the catalog lists on a real server is
@@ -41,7 +41,7 @@ class TestDiscoverUserSchemas:
 
 
 class TestDropUserSchemas:
-    """Cycle 2.2: _drop_user_schemas."""
+    """_drop_user_schemas."""
 
     def test_drops_schemas_and_recreates_public(self):
         from confiture.core.migrator import Migrator
@@ -108,7 +108,7 @@ class TestDropUserSchemas:
 
 
 class TestApplyDdlString:
-    """Cycle 2.3: _apply_ddl_string."""
+    """_apply_ddl_string."""
 
     def test_executes_multiple_statements(self):
         from confiture.core.migrator import Migrator
@@ -210,7 +210,7 @@ class TestApplyDdlString:
 
 
 class TestBackupTrackingTable:
-    """Cycle 2.4: _backup_tracking_table."""
+    """_backup_tracking_table."""
 
     def test_returns_rows_as_dicts(self):
         from confiture.core.migrator import Migrator
@@ -243,7 +243,7 @@ class TestBackupTrackingTable:
 
 
 class TestRebuildOrchestrator:
-    """Cycle 2.5: rebuild() method on Migrator."""
+    """Rebuild() method on Migrator."""
 
     def _make_migrator(self):
         from confiture.core.migrator import Migrator

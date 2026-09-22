@@ -1,6 +1,6 @@
 # Error Context Development Guide
 
-Guide for adding new error contexts to Confiture's enhanced error messaging system (Phase 2 M2).
+Guide for adding new error contexts to Confiture's enhanced error messaging system.
 
 ---
 

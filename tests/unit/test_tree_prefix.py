@@ -2,7 +2,7 @@
 
 The builder orders the tree, the tree rules judge it and ``generate alloc``
 writes it. Before 1.4.0 each had its own answer, so ``0a_x.sql`` was a number
-to two of them and a word to the third (LINT-07), and the base a prefix was
+to two of them and a word to the third, and the base a prefix was
 read in was a property of the filename rather than of the directory.
 """
 

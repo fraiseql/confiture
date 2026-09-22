@@ -76,7 +76,7 @@ def secdef_db(clean_test_db: psycopg.Connection) -> psycopg.Connection:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 2: live checker directly
+# Live checker directly
 # ---------------------------------------------------------------------------
 
 
@@ -213,7 +213,7 @@ def test_check_live_from_current_is_pinned(clean_test_db: psycopg.Connection) ->
 
 
 # ---------------------------------------------------------------------------
-# Cycle 3: CLI --against-db
+# CLI --against-db
 # ---------------------------------------------------------------------------
 
 

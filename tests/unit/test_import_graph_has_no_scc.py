@@ -10,8 +10,7 @@ names each such deferral.
 **The scope** is ``core/_migrator/**``, ``models/**``, ``config/**`` and
 ``exceptions.py``: no module there may sit in a strongly connected component of more
 than one module. Two cycles elsewhere are out of scope on purpose, and named so the
-scope is read rather than inferred — the ``core/idempotency`` cluster (the campaign's
-README puts idempotency out of scope), and ``core/linting``'s own deferrals, which
+scope is read rather than inferred — the ``core/idempotency`` cluster, and ``core/linting``'s own deferrals, which
 are the linter's and not the migrator's. They may remain SCCs among themselves; they
 may not reach into the scope.
 """

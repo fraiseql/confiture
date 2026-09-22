@@ -285,7 +285,6 @@ max-returns = 8
 "python/confiture/cli/formatters/migrate_formatter.py" = ["PLR2004"]
 "python/confiture/cli/idempotency.py" = ["PLR2004"]
 "python/confiture/cli/seed.py" = ["PLR0913", "PLR2004"]
-"python/confiture/cli/seed_copy.py" = ["PLR0915"]
 "python/confiture/cli/sync.py" = ["PLR0913"]
 "python/confiture/core/_migrator/apply.py" = ["PLR2004"]
 "python/confiture/core/_migrator/session.py" = ["PLR0913"]

@@ -110,7 +110,7 @@ def _iter_findings(
         try:
             ops = classifier.classify(text)
         except pglast.parser.ParseError as exc:
-            # What the parser rejects cannot be classified: say so (ANA-02).
+            # What the parser rejects cannot be classified: say so.
             yield UnparseableMigration(migration_file=migration, text=text, error=exc)
             continue
         for op in ops:

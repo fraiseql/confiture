@@ -1,6 +1,6 @@
 """Tests for Level 3 - Resolution function validation.
 
-Cycle 3-6: Resolution function validation to detect schema drift bug.
+Resolution function validation to detect the schema drift bug.
 
 This is the CRITICAL level that prevents the 360-test-failure incident
 where a table moved from tenant→catalog schema and the resolution

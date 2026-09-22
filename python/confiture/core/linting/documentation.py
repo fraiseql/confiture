@@ -103,7 +103,7 @@ def documentation_findings(inventory: Inventory) -> list[LintViolation]:
     """One ``doc_*`` finding per undocumented object, in source order.
 
     Per *object*, not per ``CREATE``: an object defined twice is one thing to
-    document and ``build_001``'s finding besides (LINT-10).
+    document and ``build_001``'s finding besides.
     """
     return [_finding(obj) for obj in distinct(inventory.objects) if _needs_comment(obj)]
 

@@ -52,7 +52,7 @@ def test_command_tree_is_non_trivial() -> None:
 
 
 def test_schema_to_schema_group_is_reachable() -> None:
-    """The Phase-04-wired Medium-4 group is present with all six subcommands."""
+    """The Medium-4 group is present with all six subcommands."""
     s2s = {p[2] for p in ALL_COMMAND_PATHS if p[:2] == ("migrate", "schema-to-schema")}
     assert s2s == {"setup", "analyze", "migrate", "migrate-table", "verify", "cleanup"}, s2s
 

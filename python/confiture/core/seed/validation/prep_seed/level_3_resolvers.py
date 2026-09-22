@@ -1,6 +1,6 @@
 """Level 3: Resolution function validation.
 
-Cycle 3-6: Validates that resolution functions correctly transform UUIDs to BIGINTs.
+Validates that resolution functions correctly transform UUIDs to BIGINTs.
 
 This is the CRITICAL level that detects:
 - Schema drift (functions referencing wrong schema)

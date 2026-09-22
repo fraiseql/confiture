@@ -1,4 +1,4 @@
-"""Test doubles for the core orchestration objects carry a spec (TST-04).
+"""Test doubles for the core orchestration objects carry a spec.
 
 ``patch("confiture.core.migrator.Migrator", autospec=True)`` with no spec hands the code under
 test a mock that answers *any* attribute with another mock. When the real

@@ -1,4 +1,4 @@
-"""Markers mean what they say (TST-04, Cycle 4).
+"""Markers mean what they say.
 
 Every collected test carries exactly one *layer* marker — ``unit``,
 ``integration``, ``e2e``, ``performance`` or ``contract`` — assigned from its

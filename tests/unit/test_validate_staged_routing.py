@@ -1,4 +1,4 @@
-"""ARCH-L1: pin where ``migrate validate --staged`` actually routes.
+"""Pin where ``migrate validate --staged`` actually routes.
 
 Before 0.42.0 the answer was "almost nowhere": drift and migration
 accompaniment received ``target_ref="HEAD"`` whether or not ``--staged`` was

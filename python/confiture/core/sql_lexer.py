@@ -1,8 +1,8 @@
 """The one SQL lexer: libpg_query's scanner and parser, nothing hand-written.
 
-Ten hand-written scanners once split statements, skipped comments and matched
-dollar tags across confiture, disagreeing on ``"a;b"`` identifiers, ``E'\\';'``
-literals and nested tags (ANA-05). Every consumer now goes through here:
+Every consumer that splits statements, skips comments or matches dollar tags goes
+through here, so ``"a;b"`` identifiers, ``E'\\';'`` literals and nested tags are
+read one way — PostgreSQL's:
 
 - :func:`split_statements` — top-level ``;`` boundaries from pglast's scanner,
   which tokenises anything (invalid SQL included) exactly as PostgreSQL would.

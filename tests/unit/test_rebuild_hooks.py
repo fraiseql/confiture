@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 class TestRebuildHookPhases:
-    """Cycle 4.1: Hook phases and context."""
+    """Hook phases and context."""
 
     def test_before_rebuild_phase(self):
         from confiture.core.hooks.phases import HookPhase

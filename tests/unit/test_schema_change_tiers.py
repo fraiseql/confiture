@@ -1,6 +1,6 @@
 """A schema change's tier is the change set's tier for the SQL confiture writes for it.
 
-Owner decision 6: a variant declares its tier (``change_set.diff_tiers.tier_of``)
+A variant declares its tier (``change_set.diff_tiers.tier_of``)
 from the one taxonomy the change set uses. This holds the two readings to each
 other — the tier a difference declares, and the worst tier ``classify_statements``
 (the classifier ``migrate preflight`` runs, and the one that writes each generated

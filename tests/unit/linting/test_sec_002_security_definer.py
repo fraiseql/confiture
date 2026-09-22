@@ -32,7 +32,7 @@ def _write(tmp_path: Path, name: str, sql: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 1: "pinned" predicate
+# "pinned" predicate
 # ---------------------------------------------------------------------------
 
 
@@ -138,7 +138,7 @@ def test_pinned_definer_not_flagged(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 2: statement extraction — procedure, OR REPLACE, line numbers
+# Statement extraction — procedure, OR REPLACE, line numbers
 # ---------------------------------------------------------------------------
 
 
@@ -233,7 +233,7 @@ def test_file_path_in_violation(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 3: scoping, directives, robustness
+# Scoping, directives, robustness
 # ---------------------------------------------------------------------------
 
 
@@ -339,7 +339,7 @@ def test_directive_only_suppresses_next_function(tmp_path: Path) -> None:
 
 
 def test_unparseable_file_is_reported_not_skipped(tmp_path: Path) -> None:
-    """Unparseable SQL is one UNPARSEABLE finding, never a clean result (ANA-02).
+    """Unparseable SQL is one UNPARSEABLE finding, never a clean result.
 
     At `error` since 1.9.0: a file this rule could not read is not an `info`
     about the files it could (#274, D10).
@@ -401,7 +401,7 @@ def test_message_references_cve(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 8: suggested_fix and emit_remediation
+# `suggested_fix` and `emit_remediation`
 # ---------------------------------------------------------------------------
 
 

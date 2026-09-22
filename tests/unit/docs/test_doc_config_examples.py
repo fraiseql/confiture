@@ -1,6 +1,6 @@
 """Executable guard: documentation config examples load through the real loader.
 
-DOCS-C1 anti-drift guard. The canonical "Complete Example" in
+Anti-drift guard. The canonical "Complete Example" in
 ``docs/reference/configuration.md`` must validate against the same
 ``Environment`` model that ``Migrator.from_config()`` uses — so a config a
 reader copies verbatim actually works. The legacy top-level ``migration_table``

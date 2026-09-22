@@ -6,8 +6,8 @@ older `fraiseql-confiture[ast]` still resolves. `tests/unit/test_single_parser.p
 already forbids the *code* from asking whether pglast is available: no
 availability flag, no probe function, no environment variable that forces a
 regex backend. (Naming those three identifiers here would fail that very
-guard — the third time in this campaign that corrective prose tripped the
-check it was correcting.)
+guard: corrective prose that names what it forbids trips the check it
+corrects.)
 
 Nothing was asking the same of the prose, and it had drifted for two releases:
 four guides told the reader to `pip install "fraiseql-confiture[ast]"` to enable

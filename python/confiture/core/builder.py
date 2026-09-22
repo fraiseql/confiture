@@ -326,7 +326,7 @@ class SchemaBuilder:
         Delegates to :mod:`confiture.core.tree_prefix`, the one answer the
         builder, the tree rules and ``generate alloc`` share: the run of hex
         digits before the first underscore, in either case, carrying at least
-        one decimal digit so that ``add_column.sql`` stays a word (LINT-07).
+        one decimal digit so that ``add_column.sql`` stays a word.
 
         Args:
             filename: Filename or stem to check

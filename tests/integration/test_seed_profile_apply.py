@@ -1,4 +1,4 @@
-"""Integration: a slim seed profile applies only its subset (P4, Cycle 4).
+"""Integration: a slim seed profile applies only its subset.
 
 Requires a reachable local PostgreSQL.
 """

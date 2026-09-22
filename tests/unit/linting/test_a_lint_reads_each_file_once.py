@@ -1,9 +1,8 @@
 """Adding a rule to the linter must not add a trip to disk.
 
-The campaign added six rules to a linter that already had fourteen, and each new
-one needs the files *as files* — a `build_003` body's line number, a `qual_001`
-statement's location, a `-- confiture:` directive — rather than the single string
-the build concatenates them into. Every one asked `_sources()` for that, and
+A rule that reads DDL often needs the files *as files* — a `build_003` body's
+line number, a `qual_001` statement's location, a `-- confiture:` directive —
+rather than the single string the build concatenates them into. Every one asked `_sources()` for that, and
 `_sources()` went to disk each time it was asked. A default lint opened every
 file **five** times on a schema tree that is routinely thousands of files.
 

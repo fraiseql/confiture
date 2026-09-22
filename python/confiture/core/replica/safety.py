@@ -186,7 +186,7 @@ def classify_replica_safety(op: DdlOperation) -> ReplicaVerdict:
     The lag window is the crux: a replica serving reads on the *old* schema
     while the primary already has the *new* one. ``ADD COLUMN NOT NULL`` /
     ``DEFAULT`` stays unsafe regardless of PG's fast-default optimization
-    (OD-13) — a reader on the old schema still errors on the new column.
+    — a reader on the old schema still errors on the new column.
     """
     for op_type, verdict in _VERDICTS:
         if isinstance(op, op_type):
@@ -195,7 +195,7 @@ def classify_replica_safety(op: DdlOperation) -> ReplicaVerdict:
 
 
 def replica_severity(verdict: ReplicaVerdict, *, has_replicas: bool, bypass: bool) -> str:
-    """Severity an unsafe verdict should carry, per OD-12 (owner-accepted).
+    """Severity an unsafe verdict should carry.
 
     Precedence: ``bypass`` always wins (downgrade to warning); otherwise replicas
     being declared decides error-vs-warning. ``depends`` is always a warning

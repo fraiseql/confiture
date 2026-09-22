@@ -1,4 +1,4 @@
-"""Integration tests for TestDbProvisioner (P2).
+"""Integration tests for TestDbProvisioner.
 
 Requires a reachable local PostgreSQL (CONFITURE_TEST_DB_URL or localhost).
 All databases created here use the ``confiture_p2_`` prefix and are dropped in

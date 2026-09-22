@@ -315,13 +315,13 @@ confiture/
 ├── python/confiture/          # Main package
 │   ├── cli/                   # Command-line interface
 │   │   ├── main.py           # Typer app entry point
-│   │   └── dry_run.py        # Phase 5: dry-run helpers
+│   │   └── dry_run.py        # dry-run helpers
 │   │
 │   ├── core/                  # Business logic
 │   │   ├── builder.py        # Medium 1: build from DDL
 │   │   ├── migrator.py       # Medium 2: incremental migrations
 │   │   ├── differ.py         # Schema diff detection
-│   │   ├── dry_run.py        # Phase 4: test migrations safely
+│   │   ├── dry_run.py        # test migrations safely
 │   │   ├── syncer.py         # Medium 3: production sync
 │   │   └── schema_to_schema.py # Medium 4: zero-downtime FDW
 │   │

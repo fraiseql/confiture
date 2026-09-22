@@ -15,7 +15,7 @@ below, and ``tests/unit/test_common_options_have_one_factory.py`` fails on any
 other declaration of their flags. A factory fixes the flag, its short form and its
 help; it takes the command's default, because a default is a lookup a caller relies
 on (``migrate validate`` reads ``./confiture.yaml``, ``migrate up`` reads
-``db/environments/local.yaml``, ``migrate status`` reads none — owner decision 8).
+``db/environments/local.yaml``, ``migrate status`` reads none).
 """
 
 from __future__ import annotations
@@ -151,7 +151,7 @@ def mode_option(*modes: str, help: str) -> Any:
     never meet on one command (``tests/unit/test_dry_run_is_one_flag.py``), and the
     first mode — the default — must be one of :data:`PREVIEW_MODES`: running
     ``migrate fix-signatures`` bare prints the ``DROP FUNCTION`` it would run, it
-    does not run it (owner decision 10).
+    does not run it.
     """
     if not modes or modes[0] not in PREVIEW_MODES:
         raise ValueError(f"mode_option's default {modes[:1]} is not a preview mode")

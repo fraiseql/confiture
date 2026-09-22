@@ -111,7 +111,7 @@ def bare_dir(tmp_path: Path) -> Path:
     return d
 
 
-# ── Cycle 1: unscoped behaviour is frozen by contract ────────────────────────
+# ── Unscoped behaviour is frozen by contract ────────────────────────
 
 
 class TestUnscopedBehaviourUnchanged:

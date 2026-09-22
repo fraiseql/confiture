@@ -1,7 +1,6 @@
 """Tests for the structured error envelope serializer (issue #145).
 
-The `error` object IS the unified inner issue object from
-.phases/.../shared-issue-schema.md: {severity, code, message, actionable,
+The `error` object IS the unified inner issue object: {severity, code, message, actionable,
 details, migration, file, line}. Required keys are always present (nullable).
 """
 

@@ -1,6 +1,6 @@
 """Executable guard: the preflight "structural diff" fiction can't return.
 
-DOCS-H1 anti-drift guard. `migrate preflight --against` does SAVEPOINT-replay
+Anti-drift guard. `migrate preflight --against` does SAVEPOINT-replay
 of pending migrations — it does NOT diff the result against `db/schema/`. The
 docs must not describe a structural-diff feature preflight doesn't have. (A real
 structural diff is `migrate diff <old.sql> <new.sql>`, which stays allowed.)

@@ -1,7 +1,7 @@
 """Tests for the JSON-aware CLI error boundary fail() (issue #145).
 
-Uses capsys for real FD-level stdout/stderr separation, per
-.phases/.../test-conventions.md (CliRunner cannot separate the streams).
+Uses capsys for real FD-level stdout/stderr separation (CliRunner cannot
+separate the streams).
 """
 
 from __future__ import annotations

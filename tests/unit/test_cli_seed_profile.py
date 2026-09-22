@@ -1,4 +1,4 @@
-"""Unit tests for seed-profile CLI surfaces (P4, Cycle 3).
+"""Unit tests for seed-profile CLI surfaces.
 
 Covers `seed apply --profile`, `build --seed-profile`, and
 `test-db provision-template --seed-profile`: profile resolution, the

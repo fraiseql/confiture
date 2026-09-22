@@ -1,4 +1,4 @@
-"""A database built from a tree, read live, is the tree — the campaign's central test.
+"""A database built from a tree, read live, is the tree.
 
 ``core/live_catalog.read`` reads ``pg_catalog`` into the schema model; the lint
 inventory reads the DDL into the same model. Applied verbatim, the two must be

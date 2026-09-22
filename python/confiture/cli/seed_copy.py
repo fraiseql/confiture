@@ -110,63 +110,8 @@ def convert(
 
         converter = InsertToCopyConverter()
 
-        # Batch mode: process all files in directory
         if batch:
-            if not input_file.is_dir():
-                raise ConfigurationError("For --batch mode, input must be a directory.")
-
-            if not output_file:
-                raise ConfigurationError("For --batch mode, --output is required.")
-
-            # Create output directory if it doesn't exist
-            output_file.mkdir(parents=True, exist_ok=True)
-
-            # Find all .sql files
-            sql_files = sorted(input_file.glob("*.sql"))
-            if not sql_files:
-                console.print(f"[yellow]⚠ No .sql files found in {input_file}[/yellow]")
-                raise typer.Exit(SUCCESS)
-
-            console.print(f"[bold]Processing {len(sql_files)} files...[/bold]\n")
-
-            # Process each file
-            files_content = {str(f.relative_to(input_file)): f.read_text() for f in sql_files}
-            report = converter.convert_batch(files_content)
-
-            # Display results
-            table = Table(title="Conversion Results")
-            table.add_column("File", style="cyan")
-            table.add_column("Status", style="green")
-            table.add_column("Rows/Reason", style="yellow")
-
-            for result in report.results:
-                if result.success:
-                    table.add_row(
-                        result.file_path,
-                        "[green]✓ Converted[/green]",
-                        str(result.rows_converted),
-                    )
-                    # Write converted file
-                    out_path = output_file / result.file_path
-                    out_path.parent.mkdir(parents=True, exist_ok=True)
-                    out_path.write_text(result.copy_format)
-                else:
-                    table.add_row(
-                        result.file_path,
-                        "[yellow]⚠ Skipped[/yellow]",
-                        result.reason,
-                    )
-
-            console.print(table)
-            console.print("\n[bold]Summary:[/bold]")
-            console.print(f"  Total: {report.total_files} files")
-            console.print(f"  [green]Converted: {report.successful}[/green]")
-            console.print(f"  [yellow]Skipped: {report.failed}[/yellow]")
-            console.print(f"  Success rate: {report.success_rate:.1f}%")
-
-            if report.successful > 0:
-                console.print(f"\n[green]✓ Results saved to: {output_file}[/green]")
-
+            _convert_directory(converter, input_file, output_file)
             raise typer.Exit(SUCCESS)
 
         # Single file mode
@@ -203,3 +148,47 @@ def convert(
     # Reason: text-only command: the message names the operation that failed, whatever failed
     except Exception as e:
         fail(SeedError(f"Conversion failed: {e!s}"), json_mode=False)
+
+
+def _convert_directory(
+    converter: InsertToCopyConverter, input_dir: Path, output_dir: Path | None
+) -> None:
+    """``--batch``: convert every ``*.sql`` directly in *input_dir* into *output_dir*."""
+    if not input_dir.is_dir():
+        raise ConfigurationError("For --batch mode, input must be a directory.")
+    if not output_dir:
+        raise ConfigurationError("For --batch mode, --output is required.")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    sql_files = sorted(input_dir.glob("*.sql"))
+    if not sql_files:
+        console.print(f"[yellow]⚠ No .sql files found in {input_dir}[/yellow]")
+        return
+
+    console.print(f"[bold]Processing {len(sql_files)} files...[/bold]\n")
+    files_content = {str(f.relative_to(input_dir)): f.read_text() for f in sql_files}
+    report = converter.convert_batch(files_content)
+
+    table = Table(title="Conversion Results")
+    table.add_column("File", style="cyan")
+    table.add_column("Status", style="green")
+    table.add_column("Rows/Reason", style="yellow")
+    for result in report.results:
+        if result.success:
+            table.add_row(
+                result.file_path, "[green]✓ Converted[/green]", str(result.rows_converted)
+            )
+            out_path = output_dir / result.file_path
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(result.copy_format)
+        else:
+            table.add_row(result.file_path, "[yellow]⚠ Skipped[/yellow]", result.reason)
+
+    console.print(table)
+    console.print("\n[bold]Summary:[/bold]")
+    console.print(f"  Total: {report.total_files} files")
+    console.print(f"  [green]Converted: {report.successful}[/green]")
+    console.print(f"  [yellow]Skipped: {report.failed}[/yellow]")
+    console.print(f"  Success rate: {report.success_rate:.1f}%")
+    if report.successful > 0:
+        console.print(f"\n[green]✓ Results saved to: {output_dir}[/green]")

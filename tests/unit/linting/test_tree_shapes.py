@@ -183,7 +183,7 @@ _EXCLUDED_ENV = (
 
 
 def test_a_directory_the_build_never_reads_is_judged_by_nothing(in_tmp: Path) -> None:
-    """LINT-08 holds for the four new rules: they read the build's file list.
+    """The four tree rules read the build's file list.
 
     Both exclusion mechanisms are exercised — the legacy ``exclude_dirs`` and a
     per-directory ``exclude`` glob — because a rule that walked the tree itself

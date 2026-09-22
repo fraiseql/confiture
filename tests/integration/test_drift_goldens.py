@@ -2,8 +2,8 @@
 
 A database applied verbatim from a tree has, by construction, no drift from that
 tree. Whatever these goldens record beyond that is a defect in the comparison,
-recorded rather than hidden: the campaign that makes drift compare one model to
-itself is the fix, and the fix is visible as an edit to these files.
+recorded rather than hidden, so a change to the comparison is visible as an edit
+to these files.
 
 Recorded by ``scripts/refresh_model_goldens.py``; refreshed with ``--write`` and a
 reason in ``CHANGELOG.md`` under ``## [Unreleased]``.

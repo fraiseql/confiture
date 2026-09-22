@@ -1,4 +1,4 @@
-"""Unit tests for `confiture build --dump` CLI wiring (P1, Cycle 3).
+"""Unit tests for `confiture build --dump` CLI wiring.
 
 The artifact orchestrator is mocked, so no real database or pg_dump is needed.
 """

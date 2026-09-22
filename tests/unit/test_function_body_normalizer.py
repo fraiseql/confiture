@@ -3,7 +3,7 @@
 from confiture.core.function_body_normalizer import FunctionBodyNormalizer
 
 # ---------------------------------------------------------------------------
-# Cycle 1: Line comment stripping
+# Line comment stripping
 # ---------------------------------------------------------------------------
 
 
@@ -26,7 +26,7 @@ def test_strip_line_comment_preserves_string_content():
 
 
 # ---------------------------------------------------------------------------
-# Cycle 2: Block comment stripping
+# Block comment stripping
 # ---------------------------------------------------------------------------
 
 
@@ -54,7 +54,7 @@ def test_strip_block_comment_multiline():
 
 
 # ---------------------------------------------------------------------------
-# Cycle 3: Hash determinism and collision resistance
+# Hash determinism and collision resistance
 # ---------------------------------------------------------------------------
 
 
@@ -100,7 +100,7 @@ def test_hash_body_same_with_case_variation():
 
 
 # ---------------------------------------------------------------------------
-# Cycle 4 (#177): normalize_for_diff — line-oriented normalisation
+# `normalize_for_diff` — line-oriented normalisation (#177)
 # ---------------------------------------------------------------------------
 
 

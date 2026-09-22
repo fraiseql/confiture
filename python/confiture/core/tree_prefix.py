@@ -2,20 +2,14 @@
 
 The DDL tree's numbering decides the build order, and the build order decides
 which definition of an object wins and which objects exist when a later file
-references them. Three modules used to answer "does this name carry a numeric
-prefix, and what is its value" differently:
-
-* :mod:`confiture.core.builder` demanded **upper case** — ``0A_x.sql`` was a
-  number, ``0a_x.sql`` was a word — and read every prefix in base 16;
-* :mod:`confiture.core.linting.libraries.generate`, which lints the tree,
-  accepted either case and read base 16 only when *that name* carried a hex
-  letter;
-* :class:`confiture.core.tree_allocator.TreeAllocator`, which *writes* the
-  names, formats hex with ``format(value, "0Nx")`` — lower case, i.e. a
-  numbering confiture generates itself that the builder did not recognise.
-
-So the linter could approve a numbering the builder ordered differently
-(LINT-07). This module is the one answer; the others import it.
+references them. Three modules ask "does this name carry a numeric prefix, and
+what is its value": :mod:`confiture.core.builder`, which orders the build;
+:mod:`confiture.core.linting.libraries.generate`, which lints the tree; and
+:class:`confiture.core.tree_allocator.TreeAllocator`, which *writes* the names,
+in lower-case hex. If they answered differently the linter could approve a
+numbering the builder orders differently, or the builder could fail to recognise
+a numbering confiture generated itself. This module is the one answer; the
+others import it.
 
 **What counts as a prefix.** The run of hex digits before the first ``_``,
 either case, carrying at least one *decimal* digit. Without that last clause
@@ -149,10 +143,10 @@ def sort_key(
 ) -> tuple[tuple[tuple[int, int, str], ...], tuple[str, ...]]:
     """A total order over paths that reads the number on **every** component.
 
-    Keying on the filename alone is what made the build order irreproducible
-    (LINT-06): ``confiture generate alloc`` restarts numbering in each
-    directory, so the ``00001_create.sql`` of one directory tied exactly with
-    the ``00001_create.sql`` of the next, and a tie under a stable sort keeps
+    Keying on the filename alone would make the build order irreproducible:
+    ``confiture generate alloc`` restarts numbering in each directory, so the
+    ``00001_create.sql`` of one directory ties exactly with the
+    ``00001_create.sql`` of the next, and a tie under a stable sort keeps
     whatever order ``Path.rglob`` returned — the filesystem's order, not the
     project's.
 

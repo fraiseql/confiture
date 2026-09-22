@@ -6,7 +6,7 @@ from confiture.models.results import MigrationInfo, StatusResult
 
 
 class TestStatusResultRebuildFields:
-    """Cycle 6.1: rebuild_recommended on StatusResult."""
+    """`rebuild_recommended` on StatusResult."""
 
     def test_default_rebuild_recommended_false(self):
         result = StatusResult(

@@ -7,7 +7,7 @@ knob that promises a check, and `check_indexes` was exactly that — on by
 default, dispatched on every lint, running two schema-wide regexes and
 discarding the result.
 
-The pair is what makes the campaign's first constraint real in both directions:
+The pair makes the registry's authority real in both directions:
 the registry is the single source of truth for a rule's existence, so a switch
 is a rule's switch or it is nothing.
 

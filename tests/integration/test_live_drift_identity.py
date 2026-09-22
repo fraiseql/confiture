@@ -1,7 +1,6 @@
-"""A database built from its own DDL has no drift — the campaign's control (#301, #302, #303).
+"""A database built from its own DDL has no drift — the control (#301, #302, #303).
 
-Every phase of the live-drift campaign is "make an item go away". Without a
-corpus that is red *for the right reasons today*, an item going away is
+Every fix to live drift is "make an item go away". Without a corpus that is red *for the right reasons today*, an item going away is
 indistinguishable from a comparison quietly switching itself off. So this module
 holds two things and nothing else:
 

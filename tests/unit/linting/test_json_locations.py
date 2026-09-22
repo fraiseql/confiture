@@ -2,11 +2,11 @@
 
 `LintViolation` has carried `file_path` and `line_number` since the linter was
 written; `_convert_linter_report` copied five fields and dropped both, so
-`lint --format json` described *what* was wrong and never *where*. Three of the
-rules this campaign adds are worth nothing without a location, so the plumbing
-is pinned here: the model carries the fields, the JSON payload publishes them,
-the CSV writer emits them, and an inventory-backed finding names its own source
-file rather than an offset into the concatenated build.
+`lint --format json` described *what* was wrong and never *where*. A tree rule's
+finding is worth nothing without a location, so the plumbing is pinned here: the
+model carries the fields, the JSON payload publishes them, the CSV writer emits
+them, and an inventory-backed finding names its own source file rather than an
+offset into the concatenated build.
 """
 
 from __future__ import annotations

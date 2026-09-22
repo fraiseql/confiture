@@ -1,4 +1,4 @@
-"""Database tests reach their server through the shared fixtures, never a literal DSN (TST-02).
+"""Database tests reach their server through the shared fixtures, never a literal DSN.
 
 A hard-coded ``postgresql://localhost/postgres`` works on a developer laptop
 with a trusting local server and nowhere else: in CI, where the role has a

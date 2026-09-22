@@ -1,4 +1,4 @@
-"""Conformance: Phase-02-converted commands emit the #145 error envelope.
+"""Conformance: the commands below emit the #145 error envelope.
 
 Every CLI failure path is routed through the single ``fail()`` boundary,
 so a command run with ``--format json`` must emit the published
@@ -8,7 +8,7 @@ newly-converted commands: a regression in any of them (reverting to a hand-rolle
 error dict, or printing Rich to stdout alongside the envelope) fails here.
 
 Mirrors ``test_error_envelope_schema.py`` (which covers ``migrate up``); these
-cases cover the build/seed/diff/drift/apply-as surface DOCS-M1 calls out.
+cases cover the build/seed/diff/drift/apply-as surface.
 """
 
 from __future__ import annotations

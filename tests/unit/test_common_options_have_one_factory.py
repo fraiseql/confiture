@@ -5,7 +5,7 @@ second) with three defaults; ``--output`` 20 times, twice without its ``-o``.
 A flag that is spelled per command drifts per command. Each of the six is now a
 factory in ``cli/options.py``, and a ``typer.Option`` naming one of their flags
 anywhere else fails here. A factory takes the command's default where the
-default is a different lookup (owner decision 8): what it fixes is the flag,
+default is a different lookup: what it fixes is the flag,
 its short form and its help.
 """
 

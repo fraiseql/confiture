@@ -290,7 +290,7 @@ def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:
     """Detect non-idempotent SQL patterns in the given SQL.
 
     Walks the pglast AST; a ``pglast.parser.ParseError`` propagates so the caller
-    reports the file as unparseable (ANA-02).
+    reports the file as unparseable.
 
     Args:
         sql: The SQL string to analyze

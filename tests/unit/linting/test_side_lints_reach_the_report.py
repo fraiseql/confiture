@@ -5,7 +5,7 @@ the formatter reads, so `lint --format json` reported `violations.items: []`
 while the terminal showed the finding — and worse, the console block landed *in*
 the JSON stream, so the payload would not parse at all. `--baseline` could not
 see them either. They go through the same report as every other rule now, which
-is also what lets the gate read them (LINT-03).
+is also what lets the gate read them.
 """
 
 from __future__ import annotations

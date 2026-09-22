@@ -1,4 +1,4 @@
-"""Integration: a build artifact round-trips through `confiture restore` (P1).
+"""Integration: a build artifact round-trips through `confiture restore`.
 
 Builds a small schema into a pg_dump -Fc / -Fd artifact via an ephemeral
 database, restores it into a fresh database with the three-phase restorer, and

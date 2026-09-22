@@ -243,9 +243,8 @@ LINT_RULES: tuple[LintRule, ...] = (
         family="acl",
         title="Every CREATE TABLE has a matching GRANT",
         # A missing GRANT is a table the application cannot read once deployed.
-        # The rule has always emitted `error`; before 1.4.0 the catalogue said
-        # `warning`, which is the entry that was wrong (LINT-01) — no project's
-        # exit code moves, because the emission is unchanged.
+        # The catalogue states the severity the rule emits, because `--fail-on`
+        # is chosen by reading it.
         severity="error",
         default_on=False,
         requires_config="acls.lint_enabled: true",

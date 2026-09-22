@@ -125,7 +125,7 @@ def run_preflight(
             plans = plannable(sql_content)
         except pglast.parser.ParseError as exc:
             # A file PostgreSQL's parser rejects is a finding (PFLIGHT_UNPARSEABLE),
-            # never an empty analysis (ANA-02).
+            # never an empty analysis.
             parse_error = str(exc)
             parse_error_line = parse_error_line_of(sql_content, exc)
 

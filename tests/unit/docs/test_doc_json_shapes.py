@@ -1,6 +1,5 @@
 """Executable guards: documented JSON/result shapes match the real models.
 
-DOCS-H2 / DOCS-H3 anti-drift guards.
 
 * ``migrate up`` JSON in ``structured-output.md`` must use the real
   ``MigrateUpResult.to_dict()`` keys (no fictional ``migrations_applied`` /

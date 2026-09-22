@@ -3,7 +3,7 @@
 `GEN001` and `GEN003` walked the filesystem with `rglob` from a hardcoded
 `db/schema`, so they reported files the environment keeps out of the build —
 a directory in `exclude_dirs`, a file matched by a per-directory `exclude`
-glob, a tree the project does not even build from (LINT-08). A finding about
+glob, a tree the project does not even build from. A finding about
 the numbering of a file nothing reads is a finding with nothing behind it, and
 `--schema-dir`'s help promised the resolution it did not do.
 

@@ -7,7 +7,7 @@ reports is a file. `tree_001:file:00001_create.sql` alone would collapse every
 directory in the tree onto one entry.
 
 And confiture carried two enums called `LintSeverity` — three severity types
-between them, two sharing a name (LINT-11) — so which one an import meant
+between them, two sharing a name — so which one an import meant
 depended on where the import was written.
 """
 
@@ -127,7 +127,7 @@ class TestTreeFindingIdentity:
 
 
 def test_one_severity_enum_per_name() -> None:
-    """`LintSeverity` named a three-value enum and a four-value one (LINT-11).
+    """`LintSeverity` named a three-value enum and a four-value one.
 
     Which one an import meant depended on where the import was written, and the
     compliance catalogues' `CRITICAL` has no counterpart anywhere a lint report

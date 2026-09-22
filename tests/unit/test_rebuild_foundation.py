@@ -11,7 +11,7 @@ from confiture.models.results import MigrateRebuildResult, MigrationApplied
 
 
 class TestRebuildError:
-    """Cycle 1.1: RebuildError exception."""
+    """RebuildError exception."""
 
     def test_importable_from_exceptions(self):
         assert RebuildError is not None
@@ -33,7 +33,7 @@ class TestRebuildError:
 
 
 class TestMigrateRebuildResult:
-    """Cycle 1.2: MigrateRebuildResult dataclass."""
+    """MigrateRebuildResult dataclass."""
 
     def test_basic_fields(self):
         result = MigrateRebuildResult(
@@ -110,7 +110,7 @@ class TestMigrateRebuildResult:
 
 
 class TestRebuildThresholdConfig:
-    """Cycle 1.3: rebuild_threshold on MigrationConfig."""
+    """`rebuild_threshold` on MigrationConfig."""
 
     def test_default_value(self):
         from confiture.config.environment import MigrationConfig
@@ -132,7 +132,7 @@ class TestRebuildThresholdConfig:
 
 
 class TestStrategyParser:
-    """Cycle 1.4: Strategy header parser."""
+    """Strategy header parser."""
 
     def test_parse_rebuild_strategy(self):
         from confiture.core.strategy import parse_migration_strategy

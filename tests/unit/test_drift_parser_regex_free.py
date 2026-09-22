@@ -1,4 +1,4 @@
-"""The drift expected-schema parser is the pglast walk, not a regex (#227, ANA-05).
+"""The drift expected-schema parser is the pglast walk, not a regex (#227).
 
 pglast is the one parser (D13); ``core/drift.py`` was the last analyzer
 still matching ``CREATE TABLE (\\w+)`` by hand — which is how ``tenant.tb_user``

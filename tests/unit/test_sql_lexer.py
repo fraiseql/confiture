@@ -82,7 +82,7 @@ def test_statement_type_names_the_verb() -> None:
 
 
 def test_commented_out_ddl_is_nothing_to_the_differ() -> None:
-    """ANA-04: the differ's index/enum/sequence/constraint passes walk the AST."""
+    """The differ's index/enum/sequence/constraint passes walk the AST."""
     sql = """
 CREATE TABLE t (id INT PRIMARY KEY, a INT);
 -- CREATE INDEX idx_gone ON t (a);

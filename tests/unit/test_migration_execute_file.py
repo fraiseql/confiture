@@ -32,7 +32,7 @@ def _make_migration(tmp_path: Path) -> ConcreteMigration:
 
 
 class TestExecuteFileHappyPath:
-    """Cycle 1: execute_file reads file and delegates to self.execute()."""
+    """`execute_file` reads the file and delegates to `self.execute()`."""
 
     def test_executes_sql_from_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -99,7 +99,7 @@ $$ LANGUAGE plpgsql;"""
 
 
 class TestExecuteFileErrors:
-    """Cycle 2: error cases."""
+    """Error cases."""
 
     def test_file_not_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -142,7 +142,7 @@ class TestExecuteFileErrors:
 
 
 class TestExecuteFilePathResolution:
-    """Cycle 3: path types and relative resolution."""
+    """Path types and relative resolution."""
 
     def test_relative_path_resolves_against_cwd(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

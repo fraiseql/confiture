@@ -1,6 +1,6 @@
 """Executable guard: docs/api/migrator.md references only real symbols.
 
-DOCS-C2 / DOCS-L3 anti-drift guard. The API doc historically described a
+Anti-drift guard. The API doc historically described a
 ``Migrator`` surface that does not exist (``apply_all``, ``rollback_to``,
 ``connect_async``, ``MigrationAlreadyApplied`` …). This guard pins the doc to
 the real public API three ways:

@@ -131,7 +131,7 @@ class TestTheSilenceThatWouldHaveReplacedTheHeuristic:
         """The path heuristic used to route unqualified DDL; the qualifier cannot.
 
         Level 2 returning no violations for a schema it never looked at is the
-        silent pass this campaign exists to remove, so it is a finding instead.
+        silent pass, so it is a finding instead.
         """
         schema_dir = _schema_dir(
             tmp_path, tables__bare="CREATE TABLE tb_a (id UUID);\nCREATE TABLE tb_b (id UUID);"
