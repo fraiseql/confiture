@@ -3474,6 +3474,27 @@ may change in any release, without a deprecation, as the Model Context Protocol 
 it is run against a database in every CI run
 (`tests/integration/test_experimental_commands.py`).
 
+**Over HTTP** (`--port`, which needs the `[mcp-http]` extra) the server listens on
+`127.0.0.1` and its tools run migrations, so `POST /mcp` answers only a request that
+carries `Authorization: Bearer <token>` with the token it was started with (401
+otherwise), is sent as `Content-Type: application/json` (415), and has no `Origin`
+header or a loopback one — `localhost`, `127.0.0.1` or `[::1]`, any port (403). Any
+web page open in a browser on the same machine can reach a local port: a
+cross-origin `text/plain` POST needs no CORS preflight, and the `Origin` check is the
+MCP transport's defence against DNS rebinding. The token comes from `--token` or
+`CONFITURE_MCP_TOKEN`; the environment variable keeps it out of the process list.
+`--port` without a token is a usage error (exit 2), and none is generated for you.
+
+```bash
+export CONFITURE_MCP_TOKEN="$(openssl rand -hex 32)"
+confiture mcp --database-url "$DATABASE_URL" --port 8080
+
+curl -s http://127.0.0.1:8080/mcp \
+  -H "Authorization: Bearer $CONFITURE_MCP_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}'
+```
+
 <!-- BEGIN GENERATED: cli confiture mcp -->
 
 **Usage**
@@ -3492,6 +3513,7 @@ confiture mcp [OPTIONS] COMMAND [ARGS]...
 | `--include` | - | str | - | LIKE pattern to filter functions |
 | `--port` | - | int | - | Serve over HTTP on this port (needs the [mcp-http] extra) |
 | `--no-confiture-tools` | - | Flag | off | Disable built-in Confiture migration/introspection tools |
+| `--token` | - | str | - | Bearer token every HTTP request must carry; required with --port. Defaults to $CONFITURE_MCP_TOKEN, which keeps it out of the process list |
 
 <!-- END GENERATED: cli confiture mcp -->
 
