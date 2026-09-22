@@ -14,6 +14,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-09-22
+
+**One pipeline.** The second train of the one-model-one-platform campaign (phases
+07–09): the migrator is layered, every command speaks one contract, and every command
+confiture ships is run by its command line against a database. Closes [#346], [#354].
+
+No import-cycle deferral is left under `_migrator/` or `models/`; every migration,
+online or not, goes through one `ApplyPipeline`. Every command's JSON carries the
+same envelope — `ok`, `command`, `parser` — through one writer, and each of the 28
+published payload schemas declares it; exits are named, the common options come
+from one factory each, and "do not act" has one spelling. Then the breadth was
+decided: two census tests (`test_every_command_has_an_integration_test.py`,
+`test_no_orphan_modules.py`) are guards now, not maps, and the first time the
+product commands were run by argv they found `migrate fix-signatures --mode apply`
+failing on every database, seed files never committed by three commands, a
+schema-to-schema foreign server pointed at the wrong host, and `migrate estimate`
+dead since 0.49 — each fixed below, with 15 smaller defects filed as #358–#360.
+
+**What a consumer will see:**
+
+- ⚠️ pgGit's `branch`, `coordinate` and `generate from-branch | preview | diff` are a
+  plugin (`plugins/fraiseql-confiture-pggit/`, not yet published), registered through
+  the new `confiture.plugins` entry point.
+- ⚠️ Removed with no alias: `migrate estimate` (see `preflight --against`'s
+  `large_tables`), `seed benchmark`, `seed apply --sequential` (it always applies
+  now), `--apply` / `--no-dry-run` / `--check` (now `--mode`), `seed generate --env`
+  (now `--seed-env`), and the exports of `blue_green`, `pg_version`,
+  `rollback_generator` and the pgGit coordination classes.
+- ⚠️ `body_001`'s analysis artefacts are codes of their own (`body_003`–`body_005`),
+  with a `class` in the JSON: a baseline's artefact entries move code once.
+- `seed apply`, `build --sequential` and `migrate rebuild --seed` keep the rows they
+  report; `migrate fix-signatures --mode apply` runs, and applies what it plans.
+
 ### Removed
 
 - ⚠️ **`seed benchmark` is gone** (owner decision 15, #346). It measured nothing: it
@@ -375,6 +408,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Transactional`, `Autocommit` or `Online` — which runs the body between its hooks and
   records the ledger row. `tests/integration/test_every_strategy_reaches_hooks.py`
   asserts the same hooks and the same precondition refusal of all three.
+
+[#346]: https://github.com/fraiseql/confiture/issues/346
+[#354]: https://github.com/fraiseql/confiture/issues/354
 
 ## [1.15.0] - 2026-09-21
 
