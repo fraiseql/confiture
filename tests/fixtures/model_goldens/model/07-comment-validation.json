@@ -1,235 +1,235 @@
 {
+  "enum_types": [],
+  "routines": [],
+  "sequences": [],
   "tables": [
     {
-      "name": "posts",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 34,
-          "type_text": "serial",
-          "type_key": "integer",
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
           "raw_sql_type": "SERIAL",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
-        },
-        {
-          "name": "user_id",
-          "folded": "user_id",
-          "line": 35,
-          "type_text": "integer",
           "type_key": "integer",
+          "type_text": "serial"
+        },
+        {
+          "default": null,
+          "folded": "user_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 35,
+          "name": "user_id",
+          "not_null": true,
+          "primary_key": false,
           "raw_sql_type": "INTEGER",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "type_key": "integer",
+          "type_text": "integer"
         },
         {
-          "name": "title",
+          "default": null,
           "folded": "title",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 36,
-          "type_text": "varchar(500)",
-          "type_key": "varchar(500)",
-          "raw_sql_type": "VARCHAR(500)",
+          "name": "title",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "VARCHAR(500)",
+          "type_key": "varchar(500)",
+          "type_text": "varchar(500)"
         },
         {
-          "name": "content",
+          "default": null,
           "folded": "content",
-          "line": 37,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
-          "not_null": false,
-          "default": null,
-          "identity": null,
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 37,
+          "name": "content",
+          "not_null": false,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "created_at",
-          "folded": "created_at",
-          "line": 38,
-          "type_text": "timestamp",
-          "type_key": "timestamp",
-          "raw_sql_type": "TIMESTAMP",
-          "not_null": false,
           "default": "CURRENT_TIMESTAMP",
-          "identity": null,
+          "folded": "created_at",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 38,
+          "name": "created_at",
+          "not_null": false,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMP",
+          "type_key": "timestamp",
+          "type_text": "timestamp"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
-          "kind": "foreign_key",
-          "name": "",
           "columns": [
             "user_id"
           ],
-          "ref_table": "users",
+          "deferrable": null,
+          "expression": null,
+          "kind": "foreign_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
           "ref_columns": [
             "id"
           ],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_table": "users"
         }
       ],
-      "indexes": []
+      "indexes": [],
+      "name": "posts",
+      "schema": null
     },
     {
-      "name": "users",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 24,
-          "type_text": "serial",
-          "type_key": "integer",
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
           "raw_sql_type": "SERIAL",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "type_key": "integer",
+          "type_text": "serial"
         },
         {
-          "name": "username",
+          "default": null,
           "folded": "username",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 25,
-          "type_text": "varchar(255)",
-          "type_key": "varchar(255)",
-          "raw_sql_type": "VARCHAR(255)",
+          "name": "username",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "VARCHAR(255)",
+          "type_key": "varchar(255)",
+          "type_text": "varchar(255)"
         },
         {
-          "name": "email",
+          "default": null,
           "folded": "email",
-          "line": 26,
-          "type_text": "varchar(255)",
-          "type_key": "varchar(255)",
-          "raw_sql_type": "VARCHAR(255)",
-          "not_null": true,
-          "default": null,
-          "identity": null,
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 26,
+          "name": "email",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "VARCHAR(255)",
+          "type_key": "varchar(255)",
+          "type_text": "varchar(255)"
         },
         {
-          "name": "created_at",
-          "folded": "created_at",
-          "line": 27,
-          "type_text": "timestamp",
-          "type_key": "timestamp",
-          "raw_sql_type": "TIMESTAMP",
-          "not_null": false,
           "default": "CURRENT_TIMESTAMP",
-          "identity": null,
+          "folded": "created_at",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 27,
+          "name": "created_at",
+          "not_null": false,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMP",
+          "type_key": "timestamp",
+          "type_text": "timestamp"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
-          "kind": "unique",
-          "name": "",
           "columns": [
             "username"
           ],
-          "ref_table": null,
-          "ref_columns": [],
-          "on_delete": null,
-          "on_update": null,
+          "deferrable": null,
           "expression": null,
-          "deferrable": null
-        },
-        {
           "kind": "unique",
           "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [],
+          "ref_table": null
+        },
+        {
           "columns": [
             "email"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "unique",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         }
       ],
-      "indexes": []
+      "indexes": [],
+      "name": "users",
+      "schema": null
     }
   ],
-  "enum_types": [],
-  "sequences": [],
-  "routines": [],
+  "triggers": [],
   "views": [
     {
-      "name": "v_recent_posts",
-      "schema": null,
-      "materialized": false,
       "definition": "SELECT p.id, p.title, p.content, u.username AS author, p.created_at FROM posts AS p INNER JOIN users AS u ON p.user_id = u.id ORDER BY p.created_at DESC LIMIT 100",
-      "indexes": []
+      "indexes": [],
+      "materialized": false,
+      "name": "v_recent_posts",
+      "schema": null
     },
     {
-      "name": "v_user_stats",
-      "schema": null,
-      "materialized": false,
       "definition": "SELECT u.id, u.username, count(p.id) AS post_count, max(p.created_at) AS last_post_date FROM users AS u LEFT JOIN posts AS p ON u.id = p.user_id GROUP BY u.id, u.username",
-      "indexes": []
+      "indexes": [],
+      "materialized": false,
+      "name": "v_user_stats",
+      "schema": null
     }
-  ],
-  "triggers": []
+  ]
 }

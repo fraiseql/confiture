@@ -1,424 +1,4 @@
 {
-  "tables": [
-    {
-      "name": "tb_product",
-      "schema": "catalog",
-      "columns": [
-        {
-          "name": "id",
-          "folded": "id",
-          "line": 34,
-          "type_text": "uuid",
-          "type_key": "uuid",
-          "raw_sql_type": "UUID",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "pk_product",
-          "folded": "pk_product",
-          "line": 35,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": "always",
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
-        },
-        {
-          "name": "fk_vendor",
-          "folded": "fk_vendor",
-          "line": 36,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "name",
-          "folded": "name",
-          "line": 37,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "price",
-          "folded": "price",
-          "line": 38,
-          "type_text": "numeric(10, 2)",
-          "type_key": "numeric(10,2)",
-          "raw_sql_type": "NUMERIC(10,2)",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "status",
-          "folded": "status",
-          "line": 39,
-          "type_text": "catalog.product_status",
-          "type_key": "catalog.product_status",
-          "raw_sql_type": "catalog.product_status",
-          "not_null": true,
-          "default": "'draft'",
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        }
-      ],
-      "constraints": [
-        {
-          "kind": "unique",
-          "name": "",
-          "columns": [
-            "id"
-          ],
-          "ref_table": null,
-          "ref_columns": [],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
-        },
-        {
-          "kind": "primary_key",
-          "name": "",
-          "columns": [
-            "pk_product"
-          ],
-          "ref_table": null,
-          "ref_columns": [],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
-        },
-        {
-          "kind": "foreign_key",
-          "name": "",
-          "columns": [
-            "fk_vendor"
-          ],
-          "ref_table": "catalog.tb_vendor",
-          "ref_columns": [
-            "pk_vendor"
-          ],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
-        },
-        {
-          "kind": "check",
-          "name": "",
-          "columns": [],
-          "ref_table": null,
-          "ref_columns": [],
-          "on_delete": null,
-          "on_update": null,
-          "expression": "price > 0",
-          "deferrable": null
-        }
-      ],
-      "indexes": []
-    },
-    {
-      "name": "tb_vendor",
-      "schema": "catalog",
-      "columns": [
-        {
-          "name": "id",
-          "folded": "id",
-          "line": 26,
-          "type_text": "uuid",
-          "type_key": "uuid",
-          "raw_sql_type": "UUID",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "pk_vendor",
-          "folded": "pk_vendor",
-          "line": 27,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": "always",
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
-        },
-        {
-          "name": "name",
-          "folded": "name",
-          "line": 28,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "country_code",
-          "folded": "country_code",
-          "line": 29,
-          "type_text": "varchar(2)",
-          "type_key": "varchar(2)",
-          "raw_sql_type": "VARCHAR(2)",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        }
-      ],
-      "constraints": [
-        {
-          "kind": "unique",
-          "name": "",
-          "columns": [
-            "id"
-          ],
-          "ref_table": null,
-          "ref_columns": [],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
-        },
-        {
-          "kind": "primary_key",
-          "name": "",
-          "columns": [
-            "pk_vendor"
-          ],
-          "ref_table": null,
-          "ref_columns": [],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
-        }
-      ],
-      "indexes": []
-    },
-    {
-      "name": "tb_product",
-      "schema": "prep_seed",
-      "columns": [
-        {
-          "name": "id",
-          "folded": "id",
-          "line": 17,
-          "type_text": "uuid",
-          "type_key": "uuid",
-          "raw_sql_type": "UUID",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
-        },
-        {
-          "name": "fk_vendor_id",
-          "folded": "fk_vendor_id",
-          "line": 18,
-          "type_text": "uuid",
-          "type_key": "uuid",
-          "raw_sql_type": "UUID",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "name",
-          "folded": "name",
-          "line": 19,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "price",
-          "folded": "price",
-          "line": 20,
-          "type_text": "numeric(10, 2)",
-          "type_key": "numeric(10,2)",
-          "raw_sql_type": "NUMERIC(10,2)",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "status",
-          "folded": "status",
-          "line": 21,
-          "type_text": "catalog.product_status",
-          "type_key": "catalog.product_status",
-          "raw_sql_type": "catalog.product_status",
-          "not_null": true,
-          "default": "'draft'",
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        }
-      ],
-      "constraints": [
-        {
-          "kind": "primary_key",
-          "name": "",
-          "columns": [
-            "id"
-          ],
-          "ref_table": null,
-          "ref_columns": [],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
-        },
-        {
-          "kind": "foreign_key",
-          "name": "",
-          "columns": [
-            "fk_vendor_id"
-          ],
-          "ref_table": "prep_seed.tb_vendor",
-          "ref_columns": [
-            "id"
-          ],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
-        },
-        {
-          "kind": "check",
-          "name": "",
-          "columns": [],
-          "ref_table": null,
-          "ref_columns": [],
-          "on_delete": null,
-          "on_update": null,
-          "expression": "price > 0",
-          "deferrable": null
-        }
-      ],
-      "indexes": []
-    },
-    {
-      "name": "tb_vendor",
-      "schema": "prep_seed",
-      "columns": [
-        {
-          "name": "id",
-          "folded": "id",
-          "line": 10,
-          "type_text": "uuid",
-          "type_key": "uuid",
-          "raw_sql_type": "UUID",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
-        },
-        {
-          "name": "name",
-          "folded": "name",
-          "line": 11,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "country_code",
-          "folded": "country_code",
-          "line": 12,
-          "type_text": "varchar(2)",
-          "type_key": "varchar(2)",
-          "raw_sql_type": "VARCHAR(2)",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        }
-      ],
-      "constraints": [
-        {
-          "kind": "primary_key",
-          "name": "",
-          "columns": [
-            "id"
-          ],
-          "ref_table": null,
-          "ref_columns": [],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
-        }
-      ],
-      "indexes": []
-    }
-  ],
   "enum_types": [
     {
       "name": "product_status",
@@ -430,35 +10,455 @@
       ]
     }
   ],
-  "sequences": [],
   "routines": [
     {
-      "name": "fn_resolve_tb_product",
-      "schema": null,
+      "body": "\nBEGIN\n    INSERT INTO catalog.tb_product (id, fk_vendor, name, price, status)\n    SELECT prep.id, vendor.pk_vendor, prep.name, prep.price, prep.status\n    FROM prep_seed.tb_product prep\n    LEFT JOIN catalog.tb_vendor vendor ON vendor.id = prep.fk_vendor_id\n    ON CONFLICT (id) DO NOTHING;\nEND;\n",
       "kind": "function",
+      "language": "plpgsql",
+      "name": "fn_resolve_tb_product",
+      "returns": "void",
+      "schema": null,
+      "search_path_pinned": false,
+      "security_definer": false,
       "signature": "",
       "signature_key": [],
-      "returns": "void",
-      "language": "plpgsql",
-      "body": "\nBEGIN\n    INSERT INTO catalog.tb_product (id, fk_vendor, name, price, status)\n    SELECT prep.id, vendor.pk_vendor, prep.name, prep.price, prep.status\n    FROM prep_seed.tb_product prep\n    LEFT JOIN catalog.tb_vendor vendor ON vendor.id = prep.fk_vendor_id\n    ON CONFLICT (id) DO NOTHING;\nEND;\n",
-      "security_definer": false,
-      "search_path_pinned": false,
       "volatility": "volatile"
     },
     {
-      "name": "fn_resolve_tb_vendor",
-      "schema": null,
+      "body": "\nBEGIN\n    INSERT INTO catalog.tb_vendor (id, name, country_code)\n    SELECT prep.id, prep.name, prep.country_code\n    FROM prep_seed.tb_vendor prep\n    ON CONFLICT (id) DO NOTHING;\nEND;\n",
       "kind": "function",
+      "language": "plpgsql",
+      "name": "fn_resolve_tb_vendor",
+      "returns": "void",
+      "schema": null,
+      "search_path_pinned": false,
+      "security_definer": false,
       "signature": "",
       "signature_key": [],
-      "returns": "void",
-      "language": "plpgsql",
-      "body": "\nBEGIN\n    INSERT INTO catalog.tb_vendor (id, name, country_code)\n    SELECT prep.id, prep.name, prep.country_code\n    FROM prep_seed.tb_vendor prep\n    ON CONFLICT (id) DO NOTHING;\nEND;\n",
-      "security_definer": false,
-      "search_path_pinned": false,
       "volatility": "volatile"
     }
   ],
-  "views": [],
-  "triggers": []
+  "sequences": [],
+  "tables": [
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 34,
+          "name": "id",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "pk_product",
+          "generated": null,
+          "generated_kind": null,
+          "identity": "always",
+          "line": 35,
+          "name": "pk_product",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
+        },
+        {
+          "default": null,
+          "folded": "fk_vendor",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 36,
+          "name": "fk_vendor",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
+        },
+        {
+          "default": null,
+          "folded": "name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 37,
+          "name": "name",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "folded": "price",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 38,
+          "name": "price",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "NUMERIC(10,2)",
+          "type_key": "numeric(10,2)",
+          "type_text": "numeric(10, 2)"
+        },
+        {
+          "default": "'draft'",
+          "folded": "status",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 39,
+          "name": "status",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "catalog.product_status",
+          "type_key": "catalog.product_status",
+          "type_text": "catalog.product_status"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "kind": "unique",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [],
+          "ref_table": null
+        },
+        {
+          "columns": [
+            "pk_product"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [],
+          "ref_table": null
+        },
+        {
+          "columns": [
+            "fk_vendor"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "kind": "foreign_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [
+            "pk_vendor"
+          ],
+          "ref_table": "catalog.tb_vendor"
+        },
+        {
+          "columns": [],
+          "deferrable": null,
+          "expression": "price > 0",
+          "kind": "check",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [],
+          "ref_table": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_product",
+      "schema": "catalog"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 26,
+          "name": "id",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "pk_vendor",
+          "generated": null,
+          "generated_kind": null,
+          "identity": "always",
+          "line": 27,
+          "name": "pk_vendor",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
+        },
+        {
+          "default": null,
+          "folded": "name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 28,
+          "name": "name",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "folded": "country_code",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 29,
+          "name": "country_code",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "VARCHAR(2)",
+          "type_key": "varchar(2)",
+          "type_text": "varchar(2)"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "kind": "unique",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [],
+          "ref_table": null
+        },
+        {
+          "columns": [
+            "pk_vendor"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [],
+          "ref_table": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_vendor",
+      "schema": "catalog"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 17,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "fk_vendor_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 18,
+          "name": "fk_vendor_id",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 19,
+          "name": "name",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "folded": "price",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 20,
+          "name": "price",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "NUMERIC(10,2)",
+          "type_key": "numeric(10,2)",
+          "type_text": "numeric(10, 2)"
+        },
+        {
+          "default": "'draft'",
+          "folded": "status",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 21,
+          "name": "status",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "catalog.product_status",
+          "type_key": "catalog.product_status",
+          "type_text": "catalog.product_status"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [],
+          "ref_table": null
+        },
+        {
+          "columns": [
+            "fk_vendor_id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "kind": "foreign_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [
+            "id"
+          ],
+          "ref_table": "prep_seed.tb_vendor"
+        },
+        {
+          "columns": [],
+          "deferrable": null,
+          "expression": "price > 0",
+          "kind": "check",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [],
+          "ref_table": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_product",
+      "schema": "prep_seed"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 10,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 11,
+          "name": "name",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "folded": "country_code",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 12,
+          "name": "country_code",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "VARCHAR(2)",
+          "type_key": "varchar(2)",
+          "type_text": "varchar(2)"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "ref_columns": [],
+          "ref_table": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_vendor",
+      "schema": "prep_seed"
+    }
+  ],
+  "triggers": [],
+  "views": []
 }

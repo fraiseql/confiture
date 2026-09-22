@@ -1,219 +1,219 @@
 {
+  "enum_types": [],
+  "routines": [
+    {
+      "body": "\nBEGIN\n    NEW.updated_at = NOW();\n    RETURN NEW;\nEND;\n",
+      "kind": "function",
+      "language": "plpgsql",
+      "name": "update_updated_at_column",
+      "returns": "trigger",
+      "schema": null,
+      "search_path_pinned": false,
+      "security_definer": false,
+      "signature": "",
+      "signature_key": [],
+      "volatility": "volatile"
+    }
+  ],
+  "sequences": [],
   "tables": [
     {
-      "name": "users",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 6,
-          "type_text": "bigserial",
-          "type_key": "bigint",
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
           "raw_sql_type": "BIGSERIAL",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "type_key": "bigint",
+          "type_text": "bigserial"
         },
         {
-          "name": "email",
+          "default": null,
           "folded": "email",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 7,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "email",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "first_name",
+          "default": null,
           "folded": "first_name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 8,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "first_name",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "last_name",
+          "default": null,
           "folded": "last_name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 9,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "last_name",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "bio",
+          "default": null,
           "folded": "bio",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 10,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "bio",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "created_at",
+          "default": "now()",
           "folded": "created_at",
-          "line": 11,
-          "type_text": "timestamptz",
-          "type_key": "timestamptz",
-          "raw_sql_type": "TIMESTAMPTZ",
-          "not_null": true,
-          "default": "now()",
-          "identity": null,
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 11,
+          "name": "created_at",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMPTZ",
+          "type_key": "timestamptz",
+          "type_text": "timestamptz"
         },
         {
-          "name": "updated_at",
-          "folded": "updated_at",
-          "line": 12,
-          "type_text": "timestamptz",
-          "type_key": "timestamptz",
-          "raw_sql_type": "TIMESTAMPTZ",
-          "not_null": true,
           "default": "now()",
-          "identity": null,
+          "folded": "updated_at",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 12,
+          "name": "updated_at",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMPTZ",
+          "type_key": "timestamptz",
+          "type_text": "timestamptz"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
-          "kind": "unique",
-          "name": "",
           "columns": [
             "email"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "unique",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         }
       ],
       "indexes": [
         {
-          "name": "idx_users_email",
-          "table": "users",
+          "backs_constraint": false,
           "columns": [
             "email"
           ],
-          "unique": false,
-          "where": null,
           "method": "btree",
-          "backs_constraint": false
+          "name": "idx_users_email",
+          "table": "users",
+          "unique": false,
+          "where": null
         },
         {
-          "name": "idx_users_first_name",
-          "table": "users",
+          "backs_constraint": false,
           "columns": [
             "first_name"
           ],
-          "unique": false,
-          "where": null,
           "method": "btree",
-          "backs_constraint": false
+          "name": "idx_users_first_name",
+          "table": "users",
+          "unique": false,
+          "where": null
         },
         {
-          "name": "idx_users_last_name",
-          "table": "users",
+          "backs_constraint": false,
           "columns": [
             "last_name"
           ],
-          "unique": false,
-          "where": null,
           "method": "btree",
-          "backs_constraint": false
+          "name": "idx_users_last_name",
+          "table": "users",
+          "unique": false,
+          "where": null
         },
         {
-          "name": "idx_users_full_name",
-          "table": "users",
+          "backs_constraint": false,
           "columns": [
             "first_name",
             "last_name"
           ],
-          "unique": false,
-          "where": null,
           "method": "btree",
-          "backs_constraint": false
+          "name": "idx_users_full_name",
+          "table": "users",
+          "unique": false,
+          "where": null
         },
         {
-          "name": "idx_users_created_at",
-          "table": "users",
+          "backs_constraint": false,
           "columns": [
             "created_at"
           ],
-          "unique": false,
-          "where": null,
           "method": "btree",
-          "backs_constraint": false
+          "name": "idx_users_created_at",
+          "table": "users",
+          "unique": false,
+          "where": null
         }
-      ]
+      ],
+      "name": "users",
+      "schema": null
     }
   ],
-  "enum_types": [],
-  "sequences": [],
-  "routines": [
-    {
-      "name": "update_updated_at_column",
-      "schema": null,
-      "kind": "function",
-      "signature": "",
-      "signature_key": [],
-      "returns": "trigger",
-      "language": "plpgsql",
-      "body": "\nBEGIN\n    NEW.updated_at = NOW();\n    RETURN NEW;\nEND;\n",
-      "security_definer": false,
-      "search_path_pinned": false,
-      "volatility": "volatile"
-    }
-  ],
-  "views": [],
   "triggers": [
     {
       "name": "trigger_users_updated_at",
-      "table": "users",
-      "schema": null
+      "schema": null,
+      "table": "users"
     }
-  ]
+  ],
+  "views": []
 }

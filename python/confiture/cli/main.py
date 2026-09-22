@@ -45,6 +45,7 @@ from confiture.cli.commands.migrate.steps import migrate_steps
 from confiture.cli.commands.migrate.up import migrate_up
 from confiture.cli.commands.migrate.validate import migrate_validate
 from confiture.cli.commands.migrate.verify import migrate_verify
+from confiture.cli.commands.schema import schema_app
 from confiture.cli.generate import generate_app
 from confiture.cli.helpers import console
 from confiture.cli.plugins import load_plugins
@@ -115,6 +116,9 @@ app.add_typer(debug_app, name="debug")
 
 # Add hooks subcommand group (notification hook testing)
 app.add_typer(hooks_app, name="hooks")
+
+# Add schema subcommand group (the schema model itself)
+app.add_typer(schema_app, name="schema")
 
 
 def version_callback(value: bool) -> None:

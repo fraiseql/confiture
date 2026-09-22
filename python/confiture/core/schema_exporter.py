@@ -64,6 +64,7 @@ CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "migrate-validate-grant.schema.json",
     "migrate-validate-idempotent.schema.json",
     "migrate-validate-list-patterns.schema.json",
+    "schema-dump-model.schema.json",
     "validate-config.schema.json",
     "verify-checksums.schema.json",
 )

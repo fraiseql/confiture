@@ -35,9 +35,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **[Building on confiture](docs/guides/building-on-confiture.md)** and a
   [platform API reference](docs/reference/platform-api.md) generated from the package
   (`scripts/gen_platform_reference.py --check` runs in the Lint leg).
+- **`confiture schema dump-model`.** The model's one wire form, from DDL paths, a
+  project's build (`--env`) or a live database (`--database-url`, `--schemas`): the same
+  model is the same bytes, in every process and under every hash seed. A new `schema`
+  group; the payload is `schema-dump-model.schema.json`.
+- **[The Rust port's boundary](docs/architecture/rust-port-boundary.md).** What the 2.x
+  crate holds, what stays Python glue, what does not port, and the byte-identity test it
+  is accepted by — every module under `core/` placed once, line counts measured
+  (`scripts/gen_port_boundary.py --check` in the Lint leg).
 
 ### Changed
 
+- **The model goldens are the parity corpus, byte for byte.** Each
+  `tests/fixtures/model_goldens/model/*.json` is now `SchemaModel.to_json()` — sorted
+  keys — and a unit test re-reads every tree and compares bytes. No file's content
+  changed, only its key order.
 - **`DependencyGraph.topological_sort` has a rule for its ties.** Among the tables ready
   at each step, the smallest goes first — a breadth-first walk put `d` before `a` in
   `{a→c, b→c, c, d}`. `cycles` names the tables on a cycle, not the ones downstream

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.dev/schemas/schema-dump-model.schema.json",
+  "title": "confiture schema dump-model --format json",
+  "description": "The schema model confiture reads from DDL, a project's build or a live database: `SchemaModel.to_json()` under `model`, keys sorted, so the same model is the same bytes on every run. The model's shape is schema-model.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "model",
+    "ok",
+    "command",
+    "parser"
+  ],
+  "properties": {
+    "model": {
+      "$ref": "schema-model.schema.json"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope: the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "description": "The envelope: the command that wrote this payload, `schema dump-model`."
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "The envelope: the installed pglast release and the PostgreSQL grammar major it embeds. Two dumps are byte-identical under one parser.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

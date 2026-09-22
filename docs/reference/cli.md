@@ -3532,6 +3532,52 @@ confiture restore [OPTIONS] {backup_file}
 
 <!-- END GENERATED: cli confiture restore -->
 
+## `confiture schema`
+
+The schema model itself, as confiture reads it.
+
+### `confiture schema dump-model`
+
+Write the model confiture reads from one source: DDL paths, a project's build
+(`--env`) or a live database (`--database-url`). The JSON is
+`SchemaModel.to_json()` under `model`, keys sorted, in the command envelope —
+[`schema-dump-model.schema.json`](json-schemas/schema-dump-model.schema.json). The
+same model is the same bytes on every run and under every hash seed, which is what a
+second implementation of the reader is checked against. `--format text` prints how
+many of each kind the model holds.
+
+```bash
+confiture schema dump-model --env local > model.json
+confiture schema dump-model --database-url "$DATABASE_URL" --schemas app,catalog
+```
+
+<!-- BEGIN GENERATED: cli confiture schema dump-model -->
+
+**Usage**
+
+```bash
+confiture schema dump-model [OPTIONS] [paths]...
+```
+
+**Arguments**
+
+| Argument | Type | Required | Description |
+|---|---|---|---|
+| `paths` | path | no | DDL files or directories, read in the order given (a directory as the build reads one) |
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--env` | `-e` | str | - | Read what `confiture build --env <name> --schema-only` builds |
+| `--project-dir` | - | path | `.` | Project directory (default: current directory) |
+| `--database-url` | `-d` | str | - | Read a live database's catalog instead of DDL |
+| `--schemas` | - | str | - | With --database-url: comma-separated schemas to read (default: every user schema) |
+| `--format` | `-f` | str | `json` | Output format: json or text (default: json) |
+| `--output` | `-o` | path | - | Write the output to this file instead of stdout |
+
+<!-- END GENERATED: cli confiture schema dump-model -->
+
 ## `confiture seed`
 
 Seed data validation and management
