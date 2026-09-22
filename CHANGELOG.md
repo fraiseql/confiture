@@ -14,6 +14,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-09-22
+
+**One platform.** The third train of the one-model-one-platform campaign (phases
+10–11): what confiture knows about a schema is a public seam a tool builds on, and
+the model has one wire form a second implementation is checked against.
+
+`confiture.platform` reads a schema into the one model — from DDL or from a database
+— orders its tables by their foreign keys, says which columns a writer supplies and
+what each must respect, writes seeds, applies them and validates them. Every name,
+signature and field is pinned by a contract test, and no signature names a parser or
+driver type. `confiture schema dump-model` writes that model as the same bytes on
+every run; the model goldens are those bytes, and a test holds Python to them first,
+because they are what the 2027 Rust crate is accepted against —
+[the port's boundary](docs/architecture/rust-port-boundary.md) places every `core/`
+module in the crate, the Python glue, or what does not port.
+
+Building the example a seed generator imitates found that **`seed apply` had never
+loaded a `COPY` file against a real database**, and that prep-seed level 5 loaded
+seeds and ran resolvers in file-name order — both fixed below.
+
+**What a consumer will see:**
+
+- `confiture seed apply` now loads `COPY … FROM stdin` blocks, and `--copy-format`
+  works; a seed value that mentions `BEGIN` or `COMMIT` is no longer refused.
+- `confiture seed validate --prep-seed --level 5` resolves parents before children,
+  whatever the resolvers are named.
+- New: `confiture.platform`, `confiture schema dump-model`, and
+  `schema-model.schema.json` / `schema-dump-model.schema.json`.
+- Nothing removed; every JSON change is additive. Filed: #366 (prep-seed level 1 reads
+  only `INSERT`).
+
 ### Added
 
 - **`confiture.platform`: the seam a tool builds on.** Read a schema into the one model
