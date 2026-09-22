@@ -1,0 +1,187 @@
+# Building on confiture
+
+`confiture.platform` is the surface a tool builds on when it needs what confiture
+knows about a schema. A seed generator, a parity fixture or a schema browser can
+read a schema into one model, order its tables, and ask what each column
+accepts. A seed generator can also write seeds the applier and the validator
+accept. Everything here is re-exported from confiture's own modules, and nothing
+else is promised: [the reference](../reference/platform-api.md) lists every name.
+A contract test (`tests/contract/test_platform_surface.py`) pins each signature
+and each field by equality.
+
+Two rules shape every signature:
+
+- **No parser or driver type crosses the seam.** A guard fails on any pglast or
+  psycopg type in a platform signature, field or returned value.
+- **A connection is a URL or yours.** Pass a URL and the call opens, commits and
+  closes its own connection. Pass an object that meets `Connection` (a psycopg 3
+  connection does) and the transaction stays yours: the call neither commits nor
+  rolls back.
+
+## A seed generator, end to end
+
+```python
+import random
+from pathlib import Path
+
+from confiture.platform import (
+    apply_seeds,
+    column_facts,
+    dependency_order,
+    parse_schema,
+    validate_seeds,
+    writable_columns,
+    write_copy_seed,
+)
+
+model = parse_schema(Path("db/schema"))
+rng = random.Random(42)
+for number, table in enumerate(dependency_order(model), 1):
+    columns = writable_columns(model, table)
+    rows = [{c.name: my_value(column_facts(model, table, c.name), rng) for c in columns}]
+    write_copy_seed(Path(f"db/seeds/prep/{number:02}_{table.name}.sql"), table,
+                    [c.name for c in columns], rows, model=model)
+
+apply_seeds("postgresql://localhost/dev", Path("db/seeds/prep"))
+report = validate_seeds(Path("db/seeds/prep"), schema_dir=Path("db/schema"), max_level=3)
+```
+
+`my_value` is yours. [`examples/08-generated-seeds`](https://github.com/fraiseql/confiture/tree/main/examples/08-generated-seeds)
+is the whole thing in 60 lines, run in CI against a real database at all five
+validation levels.
+
+## Reading a schema
+
+`parse_schema` reads DDL into the model:
+
+- a `str` is DDL text;
+- a `Path` is a file, or a directory read the way a bare `include_dirs` entry is:
+  every `.sql` under it, sorted by path;
+- a list of paths is read in its order;
+- `env="local"` (with `project_dir=`) reads exactly what `confiture build --env
+  local --schema-only` builds.
+
+The model is order-aware: a later `ALTER TABLE` or `DROP` folds into what an
+earlier file created, as the build applies it. A statement PostgreSQL's parser
+rejects raises `SchemaError` with code `DIFFER_400`.
+
+`introspect` reads a live database into the same model: tables, enum types,
+sequences, routines, views and triggers, in the schemas you name or every user
+schema. The same model from both sides is what lets a tool compare them.
+
+`SchemaModel.to_json()` writes the model with sorted keys, so one model is one
+text. `SchemaModel.from_json()` reads it back, and
+[`schema-model.schema.json`](../reference/json-schemas/schema-model.schema.json)
+publishes its shape.
+
+## Ordering tables
+
+`dependency_order(model)` lists every table after each table it references by
+foreign key. The order depends on the schema alone: among the tables ready at
+each step, the first by `(schema, name)` goes first. The same schema gives the
+same order on every run, whatever order its files declared it in. Two rules:
+
+- A table that references itself is ordered like any other. Its rows are yours
+  to order, parents first, or with the reference `NULL` and then updated.
+- Tables whose keys form a cycle raise `DependencyCycle` (`SCHEMA_202`), which
+  names the tables on the cycle and not the ones merely downstream of it.
+
+`tables=[...]` orders a subset, and walks through the tables the subset depends
+on. A reference is resolved the way PostgreSQL resolved it wherever the model
+can tell. A written schema is that schema. A bare name is the default schema's
+table, or else the one schema that holds a table of that name, since a parse
+cannot see `SET search_path`.
+
+## What a writer may supply
+
+`writable_columns(model, table)` is every column PostgreSQL does not fill. It
+leaves out identity columns (either kind), generated columns and serials; a
+serial is a `nextval` default in the catalog. That is the split between `id` and
+`pk_*`: a writer supplies `id` and PostgreSQL generates `pk_language`.
+
+`column_facts(model, table, column)` says what a value must respect:
+
+| Field | What it holds |
+|-------|---------------|
+| `type_key`, `raw_sql_type` | the type's identity (`varchar(20)`) and its spelling (`VARCHAR(20)`) |
+| `not_null`, `default` | what PostgreSQL records |
+| `unique` | true when a PRIMARY KEY, UNIQUE constraint or unique index covers this column alone, wherever it was declared |
+| `checks` | every CHECK expression that reads the column, written on it or at table level |
+| `enum_values` | the labels of the enum the column's type is, or `None` |
+| `foreign_key` | the table it references, resolved, and the column; a key naming no column references the primary key |
+
+`naming_hints(model, table)` applies `confiture introspect`'s naming heuristic.
+It reports the first primary-key column named `pk_*`, and a column named `id`.
+Treat both as signals, not facts. The seam does not guess audit columns: a
+generator that fills `created_by` knows why, and supplies it.
+
+## Writing seeds
+
+`write_copy_seed` and `write_insert_seed` take the same arguments: the table, the
+columns in the order to write them, and rows as mappings of every column to its
+value. They refuse at write time, and write nothing, when the table lacks a
+column, when PostgreSQL fills one, when a row misses a column or carries another,
+or when a value cannot be given as written. NOT NULL is not checked, because a
+trigger may fill a column and the model does not know what a trigger writes;
+`column_facts` tells you which columns are NOT NULL.
+
+Values: `None` is NULL; `True`/`False` are booleans; `bytes` is `bytea`; a
+`dict` or `list` is JSON for a `json`/`jsonb` column, and a `list` is an array
+for an array column. Anything else is written as `str(value)`, which PostgreSQL's
+input function for the column then reads.
+
+Which format:
+
+- **COPY** is what `seed apply` loads fastest.
+- **INSERT** is what a reader can run by hand. Every value is a literal typed by
+  its column, written `E'…'` when it holds a backslash.
+- Both load through `confiture seed apply`, and either one leaves a generated key
+  to PostgreSQL: COPY honours the identity and the default of every column its
+  list leaves out.
+
+`apply_seeds(database, seeds)` applies a directory's top-level `.sql` files in
+name order, or a list of files in the given order. It runs one transaction with
+a savepoint per file: a failed file is undone and nothing before it. The first
+failure then raises `SeedError`, unless `continue_on_error=True` keeps going and
+reports the failed files. With a URL the run is all or nothing (unless
+`continue_on_error=True`); with a connection the transaction is yours. A
+`COPY … FROM stdin` block streams through the driver's COPY protocol. `profile=`
+takes a `SeedProfile`, whose `include` / `exclude` are `fnmatch` globs over the
+**bare file name**, not the path globs `include_dirs` uses.
+
+`validate_seeds(seeds_dir, schema_dir=…, max_level=3)` runs the prep-seed
+validator. Levels 1 to 3 read files and need no database. Levels 4 and 5 load
+the seeds and run the resolvers against `database_url=`, in a transaction they
+roll back, parents first. Level 1 reads `INSERT` statements only, so a COPY file
+passes it unread (#366).
+
+## Ids
+
+confiture does not generate ids and keeps no copy of any id convention. A
+FraiseQL project takes its structured ids from **fraiseql-uuid**, which owns that
+pattern. Level 1's `VALID_UUID_PATTERN` checks only the generic shape, eight,
+four, four, four and twelve hex digits, as PostgreSQL's `uuid` input does.
+Neither reads the version or variant nibble, so fraiseql-semis's 32|16|16|64
+layout (`01234567-5001-0001-0000-000000000042`) loads and validates, although it
+is not RFC-4122. Take ids from the library that owns them, not from a table of
+codes copied into a generator: semis's own worked example uses a table code its
+registry does not list.
+
+## What changed between two schemas
+
+`diff(old, new)` takes two sources, each anything `parse_schema` takes. It
+returns a `SchemaDiff`: `changes`, each one variant of the closed `SchemaChange`
+union, and `warnings`, the duplicate definitions the comparison resolved
+(`DIFFER_402`). It compares DDL, not two models, because views, routines and
+triggers are compared as the statements that create them, and the model does not
+hold those. `tier_of(change)` gives a change's `RiskTier`, the taxonomy
+`migrate preflight` reports, or `None` where no tier applies.
+
+## Where existing code fits
+
+`confiture seed generate` writes a commented-out `INSERT` template for one table.
+It is a starting point for a hand-written seed, not a generator.
+
+In printoptim_backend, `scripts/generate_frontend_seed_data.py` and
+`scripts/generate_meter_seed_data.py` already draw from `Random(42)` and write
+batched `INSERT` files. They are the first consumers to move onto this seam.

@@ -83,25 +83,19 @@ class CopyFormatter:
         Returns:
             String representation for COPY format
         """
-        # NULL values
         if value is None:
             return "\\N"
+        return copy_escape(str(value))
 
-        # Convert to string
-        str_value = str(value)
 
-        # Escape special characters
-        # Backslash must be escaped first
-        str_value = str_value.replace("\\", "\\\\")
-        # Tab
-        str_value = str_value.replace("\t", "\\t")
-        # Newline
-        str_value = str_value.replace("\n", "\\n")
-        # Carriage return
-        str_value = str_value.replace("\r", "\\r")
-        # Backspace
-        str_value = str_value.replace("\b", "\\b")
-        # Form feed
-        str_value = str_value.replace("\f", "\\f")
+#: COPY's text format reads a backslash as an escape, and a tab, a newline and a
+#: carriage return as the row's structure; ``\b`` and ``\f`` are escaped for a
+#: reader's sake. Any other character — a vertical tab included — is data as it is.
+_COPY_ESCAPES = str.maketrans(
+    {"\\": "\\\\", "\t": "\\t", "\n": "\\n", "\r": "\\r", "\b": "\\b", "\f": "\\f"}
+)
 
-        return str_value
+
+def copy_escape(text: str) -> str:
+    """*text* as one field of COPY's text format reads it back: the one escaper."""
+    return text.translate(_COPY_ESCAPES)

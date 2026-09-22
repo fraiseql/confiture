@@ -50,7 +50,7 @@ from typing import Any
 import pglast.parser
 
 from confiture.core.plpgsql_parse import parse_body
-from confiture.core.sql_lexer import split_statements, statement_type, tokens
+from confiture.core.sql_lexer import blank_copy_blocks, split_statements, statement_type, tokens
 
 #: Relation schemas whose contents exist on a schema-only database.
 _SCHEMA_ONLY_SAFE = frozenset({"pg_catalog", "information_schema"})
@@ -488,6 +488,10 @@ def scan_sql(sql: str, file: Path) -> AssertionScan:
     if error_level is None:
         return AssertionScan(file=file, assertions=[])
 
+    # COPY rows are psql's to stream, and the scanner rejects some outright
+    # (`28df…` is junk after a numeric literal). Blanked, not stripped: every
+    # line after a block keeps its number.
+    sql = blank_copy_blocks(sql)
     lines = sql.splitlines()
     derivations = _derivations(sql)
     found: list[DataAssertion] = []

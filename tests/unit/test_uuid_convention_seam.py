@@ -40,8 +40,10 @@ GENERIC_ONLY_UUID = "abcdef01-0000-4000-8000-000000000001"
 # these reappears in confiture's own source, a parallel copy has crept back in.
 _STRUCTURED_SIGNATURES = (r"([0-9]{6})([0-9]{2})", r"4([0-9]{3})-8")
 
-_CONFITURE_SRC = Path(__file__).resolve().parents[2] / "python" / "confiture"
-_SEED_VALIDATION = _CONFITURE_SRC / "core" / "seed_validation"
+_REPO = Path(__file__).resolve().parents[2]
+_CONFITURE_SRC = _REPO / "python" / "confiture"
+_SEED_VALIDATION = _CONFITURE_SRC / "core" / "seed" / "validation"
+_GUIDE = _REPO / "docs" / "guides" / "building-on-confiture.md"
 
 
 # ---------------------------------------------------------------------------
@@ -61,9 +63,30 @@ def test_confiture_uuid_check_is_generic_rfc4122() -> None:
 
 
 def test_deleted_uuid_island_stays_deleted() -> None:
-    """The parallel UUID-convention island deleted in P04b is not reintroduced."""
-    assert not (_SEED_VALIDATION / "uuid_patterns.py").exists()
-    assert not (_SEED_VALIDATION / "uuid_validator.py").exists()
+    """The parallel UUID-convention island deleted in P04b is not reintroduced.
+
+    The directory is asserted first: pointed at one that does not exist, the two
+    ``not exists()`` checks pass whatever is there — which they did, for as long as
+    this path named ``core/seed_validation/``.
+    """
+    assert _SEED_VALIDATION.is_dir()
+    assert not list(_SEED_VALIDATION.rglob("uuid_patterns.py"))
+    assert not list(_SEED_VALIDATION.rglob("uuid_validator.py"))
+
+
+def test_the_platform_seam_encodes_no_uuid() -> None:
+    """``confiture.platform`` is what a seed generator builds on; its ids are fraiseql-uuid's."""
+    from confiture import platform
+
+    assert [name for name in platform.__all__ if "uuid" in name.lower()] == []
+
+
+def test_the_guide_sends_ids_to_fraiseql_uuid() -> None:
+    """The guide's paragraph on ids names the library that owns the convention."""
+    text = _GUIDE.read_text(encoding="utf-8")
+    ids = text.split("## Ids", 1)[1].split("\n## ", 1)[0]
+    assert "fraiseql-uuid" in ids
+    assert "VALID_UUID_PATTERN" in ids
 
 
 def test_no_parallel_structured_pattern_copy_in_confiture() -> None:

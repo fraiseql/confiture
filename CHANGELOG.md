@@ -14,6 +14,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`confiture.platform`: the seam a tool builds on.** Read a schema into the one model
+  from DDL (`parse_schema`: text, a file, a directory read as the build reads it, or an
+  environment's build) or from a database (`introspect`), and compare two sources
+  (`diff`, returning the `SchemaDiff` with its warnings; `tier_of` gives a change's
+  risk tier). Order tables by their foreign keys (`dependency_order`), ask which
+  columns a writer supplies (`writable_columns`) and what each must respect
+  (`column_facts`, `naming_hints`), write seeds (`write_copy_seed`,
+  `write_insert_seed`), apply them (`apply_seeds`) and validate them
+  (`validate_seeds`). Every name, signature and field is pinned by
+  `tests/contract/test_platform_surface.py`, and no signature names a pglast or
+  psycopg type: a connection is a URL the call owns, or an object meeting
+  `Connection` whose transaction stays the caller's.
+- **`SchemaModel.to_json()` / `from_json()` and `schema-model.schema.json`.** The
+  model's wire, keys sorted, read back to the model it was written from.
+- **`examples/08-generated-seeds`.** A 60-line generator on `confiture.platform` alone,
+  run in CI at all five prep-seed validation levels.
+- **[Building on confiture](docs/guides/building-on-confiture.md)** and a
+  [platform API reference](docs/reference/platform-api.md) generated from the package
+  (`scripts/gen_platform_reference.py --check` runs in the Lint leg).
+
+### Changed
+
+- **`DependencyGraph.topological_sort` has a rule for its ties.** Among the tables ready
+  at each step, the smallest goes first — a breadth-first walk put `d` before `a` in
+  `{a→c, b→c, c, d}`. `cycles` names the tables on a cycle, not the ones downstream
+  of it, and a table that references itself is not its own dependency.
+
+### Fixed
+
+- **`seed apply` loads a `COPY … FROM stdin` block.** It ran each file through the
+  driver's `execute`, which cannot read COPY rows: every `seed convert` output and
+  every file `--copy-format` converted failed on its first data row. The rows now
+  stream through the driver's COPY protocol, inside the file's savepoint.
+- **A seed value that says `BEGIN` or `COMMIT` is data.** Transaction control was
+  found with a regex over the whole file; it is now a statement.
+- **A carriage return inside a seed's string literal survives.** Files were read in
+  text mode, which turns it into a newline.
+- **Prep-seed level 5 loads what `seed apply` loads, in the same order, and resolves
+  parents first.** It could not load a COPY seed, loaded files in directory order,
+  and ran resolvers by file name — `fn_resolve_tb_product` before
+  `fn_resolve_tb_vendor`, so the product's join found no vendor.
+- **The data-assertion scan reads past inline COPY data.** A migration that loaded
+  rows inline crashed it: the rows reached the scanner as SQL.
+
 ## [1.16.0] - 2026-09-22
 
 **One pipeline.** The second train of the one-model-one-platform campaign (phases

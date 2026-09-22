@@ -18,6 +18,7 @@ import psycopg
 from psycopg import sql
 
 from confiture.core import live_catalog
+from confiture.core.seed.executor import run_script
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
@@ -103,10 +104,11 @@ class Level5ExecutionValidator:
                     )
                     continue
 
-                sql = seed_file.read_text()
-
-                # Execute seed file
-                connection.execute(sql)
+                # Bytes, decoded: a text-mode read turns a carriage return inside
+                # a string literal into a newline. Run as `seed apply` runs it, so
+                # a COPY block loads here too.
+                with connection.cursor() as cursor:
+                    run_script(cursor, seed_file.read_bytes().decode("utf-8"))
 
             except (OSError, UnicodeDecodeError, psycopg.Error) as e:
                 violations.append(

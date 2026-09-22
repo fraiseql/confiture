@@ -33,17 +33,17 @@ class TestLevel5ExecutionValidator:
         assert validator is not None
 
     @patch("pathlib.Path.exists")
-    @patch("pathlib.Path.read_text")
+    @patch("pathlib.Path.read_bytes")
     def test_validates_seed_loading_success(
         self,
-        mock_read_text: MagicMock,
+        mock_read_bytes: MagicMock,
         mock_exists: MagicMock,
     ) -> None:
         """Validates successful seed loading into prep_seed."""
         # Mock file operations
         mock_exists.return_value = True
-        mock_read_text.return_value = (
-            "INSERT INTO prep_seed.tb_manufacturer (id, name) VALUES ('uuid-1', 'Acme');"
+        mock_read_bytes.return_value = (
+            b"INSERT INTO prep_seed.tb_manufacturer (id, name) VALUES ('uuid-1', 'Acme');"
         )
 
         validator = Level5ExecutionValidator()
@@ -64,22 +64,23 @@ class TestLevel5ExecutionValidator:
         assert len(violations) == 0
 
     @patch("pathlib.Path.exists")
-    @patch("pathlib.Path.read_text")
+    @patch("pathlib.Path.read_bytes")
     def test_detects_seed_loading_failure(
         self,
-        mock_read_text: MagicMock,
+        mock_read_bytes: MagicMock,
         mock_exists: MagicMock,
     ) -> None:
         """Detects errors during seed loading."""
         # Mock file operations
         mock_exists.return_value = True
-        mock_read_text.return_value = "INSERT INTO prep_seed.tb_bad (id) VALUES ('uuid-1');"
+        mock_read_bytes.return_value = b"INSERT INTO prep_seed.tb_bad (id) VALUES ('uuid-1');"
 
         validator = Level5ExecutionValidator()
 
         # Mock database that fails
         mock_conn = MagicMock()
-        mock_conn.execute.side_effect = psycopg.ProgrammingError("Syntax error in seed file")
+        cursor = mock_conn.cursor.return_value.__enter__.return_value
+        cursor.execute.side_effect = psycopg.ProgrammingError("Syntax error in seed file")
 
         violations = validator.load_seeds(
             connection=mock_conn,
@@ -88,10 +89,7 @@ class TestLevel5ExecutionValidator:
 
         # Should detect error
         assert len(violations) > 0
-        assert any(
-            v.pattern == PrepSeedPattern.PREP_SEED_TARGET_MISMATCH or "Syntax" in v.message
-            for v in violations
-        )
+        assert any("Syntax error in seed file" in v.message for v in violations)
 
     def test_executes_resolution_functions(self) -> None:
         """Executes resolution functions after seed loading."""

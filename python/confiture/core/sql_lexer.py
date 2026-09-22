@@ -18,6 +18,10 @@ literals and nested tags (ANA-05). Every consumer now goes through here:
   ``-- confiture:<name>`` directives among them with the statement each attaches to.
 - :func:`blank_copy_blocks` — ``COPY … FROM stdin`` blocks blanked in place, so
   the text parses and every offset after a block is still its own.
+- :func:`copy_blocks` — each ``COPY … FROM stdin`` block's statement and data
+  rows, for a caller that hands the rows to the driver's ``COPY`` protocol.
+- :func:`transaction_statements` — the statements that open, end or split a
+  transaction, found by their first token rather than by a word in the text.
 - :func:`blank_preserving_lines` — the same blanking over a whole string, for a
   caller that must hide a span from the parser without moving anything after it.
 """
@@ -293,10 +297,14 @@ def _is_quoted_identifier(sql: str, token: Any) -> bool:
     return token.name == "UIDENT" or (token.name == "IDENT" and sql[token.start] == '"')
 
 
-def _lex(sql: str) -> tuple[list[Any], list[tuple[int, int]]]:
-    """(tokens outside COPY data, ``(start, end)`` offsets of each COPY block incl. its data)."""
+def _lex(sql: str) -> tuple[list[Any], list[tuple[int, int, int]]]:
+    """(tokens outside COPY data, ``(start, data_start, end)`` of each COPY block).
+
+    ``start`` is the statement's first character, ``data_start`` the first of its
+    data rows, ``end`` just past its ``\\.`` line.
+    """
     out: list[Any] = []
-    blocks: list[tuple[int, int]] = []
+    blocks: list[tuple[int, int, int]] = []
     n = len(sql)
     toks = _scan_recovering(sql)
     windowed = False
@@ -317,7 +325,7 @@ def _lex(sql: str) -> tuple[list[Any], list[tuple[int, int]]]:
         data_first = _index_at_or_after(toks, semicolon + 1, base, data_start)
         out.extend(_shift(toks[idx:data_first], base))
         data_end = _terminator_end(sql, data_start)
-        blocks.append((base + toks[first].start, data_end))
+        blocks.append((base + toks[first].start, data_start, data_end))
         if data_end >= n:
             return out, blocks
         # A windowed scan is trusted for the one block it was grown to hold and no
@@ -528,13 +536,75 @@ def blank_copy_blocks(sql: str) -> str:
         return sql
     parts: list[str] = []
     cursor = 0
-    for start, end in blocks:
+    for start, _data_start, end in blocks:
         stop = min(end, len(sql))
         parts.append(sql[cursor:start])
         parts.append(blank_preserving_lines(sql[start:stop]))
         cursor = stop
     parts.append(sql[cursor:])
     return "".join(parts)
+
+
+@dataclass(frozen=True)
+class CopyBlock:
+    """One ``COPY … FROM stdin`` block: its statement, then the rows psql would stream.
+
+    ``start`` / ``end`` are its offsets in the text, ``end`` just past the ``\\.``
+    line (the end of the text when there is none). ``statement`` runs from
+    ``COPY`` to the end of its line; ``data`` is the rows, the terminator left out.
+    """
+
+    start: int
+    end: int
+    statement: str
+    data: str
+
+
+def copy_blocks(sql: str) -> list[CopyBlock]:
+    """Every ``COPY … FROM stdin`` block in *sql*, in order.
+
+    The rows are not SQL — psql reads them off its input and streams them — so a
+    driver that runs a script must do the same: execute the text between blocks,
+    and hand each block's rows to its ``COPY`` protocol.
+    """
+    found: list[CopyBlock] = []
+    for first, data_start, end in _lex(sql)[1]:
+        # A comment before `COPY` is the text before the block, not the block.
+        start = skip_leading_comments(sql, first)
+        data = sql[data_start:end]
+        body, _, last = data.rstrip("\n").rpartition("\n")
+        if last.rstrip("\r") == _COPY_TERMINATOR:
+            data = f"{body}\n" if body else ""
+        found.append(
+            CopyBlock(start=start, end=end, statement=sql[start:data_start].strip(), data=data)
+        )
+    return found
+
+
+#: The first token of a statement that opens, ends or splits a transaction.
+_TRANSACTION_TOKENS = frozenset(
+    {"BEGIN_P", "COMMIT", "END_P", "ROLLBACK", "SAVEPOINT", "RELEASE", "ABORT_P"}
+)
+#: ``START TRANSACTION`` and ``PREPARE TRANSACTION``: two words, since ``PREPARE``
+#: alone prepares a statement.
+_TRANSACTION_PAIRS = frozenset({("START", "TRANSACTION"), ("PREPARE", "TRANSACTION")})
+
+
+def transaction_statements(sql: str) -> int:
+    """How many top-level statements in *sql* control a transaction.
+
+    Read from the statements' first tokens: ``BEGIN`` inside a string, a
+    ``DO`` body or COPY data is not a statement, and ``END`` closing a ``CASE``
+    is not the first token of one.
+    """
+    code = [token.name for token in tokens(sql) if token.name not in _COMMENT_TOKENS]
+    starts = [0, *(i + 1 for i, name in enumerate(code) if name == _SEMICOLON)]
+    return sum(
+        1
+        for i in starts
+        if i < len(code)
+        and (code[i] in _TRANSACTION_TOKENS or tuple(code[i : i + 2]) in _TRANSACTION_PAIRS)
+    )
 
 
 def blank_preserving_lines(text: str) -> str:

@@ -89,7 +89,19 @@ WRITER = (
     "TableHints",
 )
 
-EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING + WRITER)
+#: Writing, applying and validating seeds.
+SEEDS = (
+    "SeedFile",
+    "SeedError",
+    "write_copy_seed",
+    "write_insert_seed",
+    "apply_seeds",
+    "ApplyResult",
+    "validate_seeds",
+    "PrepSeedReport",
+)
+
+EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING + WRITER + SEEDS)
 
 #: ``str(inspect.signature(...))`` of every callable the seam defines. Under
 #: ``from __future__ import annotations`` an annotation is its source text.
@@ -112,6 +124,24 @@ SIGNATURES: dict[str, str] = {
         "(model: 'SchemaModel', table: 'ObjectRef | str', column: 'str') -> 'ColumnFacts'"
     ),
     "naming_hints": "(model: 'SchemaModel', table: 'ObjectRef | str') -> 'TableHints'",
+    "write_copy_seed": (
+        "(path: 'Path', table: 'ObjectRef | str', columns: 'Sequence[str]', "
+        "rows: 'Iterable[Mapping[str, object]]', *, model: 'SchemaModel') -> 'SeedFile'"
+    ),
+    "write_insert_seed": (
+        "(path: 'Path', table: 'ObjectRef | str', columns: 'Sequence[str]', "
+        "rows: 'Iterable[Mapping[str, object]]', *, model: 'SchemaModel') -> 'SeedFile'"
+    ),
+    "apply_seeds": (
+        "(database: 'str | Connection', seeds: 'Path | Sequence[Path]', *, "
+        "profile: 'SeedProfile | None' = None, continue_on_error: 'bool' = False) "
+        "-> 'ApplyResult'"
+    ),
+    "validate_seeds": (
+        "(seeds_dir: 'Path', *, schema_dir: 'Path', max_level: 'int' = 3, "
+        "database_url: 'str | None' = None, prep_seed_schema: 'str' = 'prep_seed', "
+        "catalog_schema: 'str' = 'catalog') -> 'PrepSeedReport'"
+    ),
     "SchemaModel.to_json": "(self) -> 'str'",
     "SchemaModel.from_json": "(text: 'str') -> 'SchemaModel'",
 }
@@ -223,6 +253,20 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("foreign_key", "ColumnReference | None"),
     ),
     "TableHints": (("surrogate_pk", "str | None"), ("natural_id", "str | None")),
+    "SeedFile": (
+        ("path", "Path"),
+        ("table", "ObjectRef"),
+        ("columns", "tuple[str, ...]"),
+        ("rows", "int"),
+        ("format", "SeedFormat"),
+    ),
+    "ApplyResult": (
+        ("total", "int"),
+        ("succeeded", "int"),
+        ("failed", "int"),
+        ("failed_files", "list[str]"),
+        ("seed_profile", "str | None"),
+    ),
 }
 
 

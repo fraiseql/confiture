@@ -175,6 +175,18 @@ class TestMixedFiles:
         """A findings pass must never be the thing that fails the command."""
         assert find_data_assertions("this is not sql at all (((", HERE) == []
 
+    def test_copy_data_before_a_block_neither_crashes_nor_moves_it(self) -> None:
+        """COPY rows are psql's to stream, not SQL: `b2b9437a-28df` is scanner junk.
+
+        A migration that loads reference rows inline crashed the scan outright —
+        the statement splitter handed the rows to the scanner.
+        """
+        copied = (
+            "COPY app.t (id) FROM stdin;\nb2b9437a-28df-4ec4-8e4a-2bbdc241330b\n\\.\n" + INCIDENT
+        )
+        (found,) = find_data_assertions(copied, HERE)
+        assert copied.splitlines()[found.line - 1].strip().startswith("RAISE EXCEPTION")
+
     def test_a_body_that_was_meant_to_be_read_and_was_not_is_flagged(self) -> None:
         """A file pglast rejects is a finding in this repo, never a green tick.
 

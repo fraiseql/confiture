@@ -2,15 +2,21 @@
 
 Executes seed files within PostgreSQL savepoints to isolate failures
 and avoid parser limits from concatenation.
+
+A seed file is a script the way ``psql`` reads one: statements, and ``COPY …
+FROM stdin`` blocks whose rows are not SQL. The driver's ``execute`` parses
+everything it is given, so the text between blocks is executed and each block's
+rows go through the driver's ``COPY`` protocol — the file loads the same way it
+would through ``psql``, inside this file's savepoint.
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import psycopg
 
+from confiture.core.sql_lexer import copy_blocks, strip_comments, transaction_statements
 from confiture.exceptions import SeedError
 
 
@@ -23,11 +29,6 @@ class SeedExecutor:
     - Error context capture
     - Validation of seed content
     """
-
-    # Pattern to detect transaction control commands
-    TRANSACTION_COMMANDS = re.compile(
-        r"\b(BEGIN|START\s+TRANSACTION|COMMIT|ROLLBACK|SAVEPOINT)\b", re.IGNORECASE
-    )
 
     def __init__(self, connection) -> None:
         """Initialize SeedExecutor.
@@ -52,7 +53,9 @@ class SeedExecutor:
         """
         # Read seed file
         try:
-            sql_content = seed_file.read_text(encoding="utf-8")
+            # Bytes, decoded: a text-mode read turns a carriage return inside a
+            # string literal into a newline, and a seed file is data.
+            sql_content = seed_file.read_bytes().decode("utf-8")
         except (OSError, UnicodeDecodeError) as e:
             raise SeedError(
                 f"Failed to read seed file: {seed_file}",
@@ -76,9 +79,8 @@ class SeedExecutor:
             # Create savepoint
             self._create_savepoint(savepoint_name)
 
-            # Execute seed file
             with self.connection.cursor() as cursor:
-                cursor.execute(sql_content)
+                run_script(cursor, sql_content)
 
             # Release savepoint on success
             self._release_savepoint(savepoint_name)
@@ -99,8 +101,9 @@ class SeedExecutor:
     def _validate_seed_content(self, sql_content: str) -> None:
         """Validate seed file content.
 
-        Rejects seed files that contain transaction control commands,
-        as these conflict with the outer transaction.
+        Rejects seed files that contain transaction control statements, as
+        these conflict with the outer transaction. A statement, not a word:
+        ``'Begin here'`` in a value is data.
 
         Args:
             sql_content: SQL content to validate
@@ -108,11 +111,11 @@ class SeedExecutor:
         Raises:
             SeedError: If seed file contains invalid commands
         """
-        # Check for transaction commands
-        if self.TRANSACTION_COMMANDS.search(sql_content):
+        if transaction_statements(sql_content):
             raise SeedError(
-                "Seed files must not contain transaction control commands (BEGIN, COMMIT, ROLLBACK, SAVEPOINT). "
-                "Use --sequential mode which wraps each file in its own savepoint.",
+                "Seed files must not contain transaction control statements (BEGIN, COMMIT, "
+                "ROLLBACK, SAVEPOINT): each file already runs in a savepoint of its own, "
+                "inside the run's transaction.",
                 resolution_hint="Remove BEGIN/COMMIT/ROLLBACK statements from seed files",
             )
 
@@ -150,3 +153,24 @@ class SeedExecutor:
         except psycopg.Error:
             # Savepoint rollback failed, do full rollback
             self.connection.rollback()
+
+
+def run_script(cursor: psycopg.Cursor, sql: str) -> None:
+    """Run *sql* as ``psql`` would: its statements, and each COPY block's rows streamed.
+
+    The one way a seed script reaches the database through the driver — ``seed
+    apply`` and the prep-seed validator's level 5 both run seeds through it.
+    """
+    position = 0
+    for block in copy_blocks(sql):
+        _execute_code(cursor, sql[position : block.start])
+        with cursor.copy(block.statement) as copy:
+            copy.write(block.data)
+        position = block.end
+    _execute_code(cursor, sql[position:])
+
+
+def _execute_code(cursor: psycopg.Cursor, sql: str) -> None:
+    """Execute *sql* unless it holds nothing but comments and space."""
+    if strip_comments(sql).strip():
+        cursor.execute(sql)

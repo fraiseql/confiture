@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,6 +16,7 @@ from typing import TYPE_CHECKING
 import psycopg
 from rich.console import Console
 
+from confiture.core.connection import Connection, connection_for
 from confiture.core.progress import ProgressManager
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.seed.executor import SeedExecutor
@@ -270,7 +272,9 @@ class SeedApplier:
         """Run one seed file (as COPY when large enough); commit in transaction mode."""
         assert self.connection is not None
         self.console.print(f"[cyan]→ {seed_file.name}[/cyan]", end=" ")
-        sql_content = seed_file.read_text(encoding="utf-8")
+        # Bytes, decoded: a text-mode read turns a carriage return inside a
+        # string literal into a newline, and a seed file is data.
+        sql_content = seed_file.read_bytes().decode("utf-8")
         if self.copy_format and count_insert_rows(sql_content) >= self.copy_threshold:
             sql_content = InsertToCopyConverter().convert(sql_content)
             self.console.print("[dim](COPY)[/dim]", end=" ")
@@ -286,6 +290,42 @@ class SeedApplier:
             self.console.print(f"[yellow]⚠ {result.failed} files failed[/yellow]")
             for failed_file in result.failed_files:
                 self.console.print(f"  - {failed_file}")
+
+
+def apply_seeds(
+    database: str | Connection,
+    seeds: Path | Sequence[Path],
+    *,
+    profile: SeedProfile | None = None,
+    continue_on_error: bool = False,
+) -> ApplyResult:
+    """Apply seed files in order: one transaction, a savepoint per file.
+
+    *seeds* is a directory — its top-level ``.sql`` files, sorted, filtered by
+    *profile*'s filename globs — or the files themselves, in the order given. A
+    file is a script as ``psql`` reads one: statements, and ``COPY … FROM stdin``
+    blocks streamed through the driver's COPY protocol.
+
+    The transaction: each file runs in a savepoint of its own
+    (:class:`SeedExecutor`), so a failed file is undone and nothing before it.
+    Then the first failure raises, unless *continue_on_error* keeps going and
+    reports the failed files in the result. For a URL the transaction is this
+    call's — committed when it returns, rolled back when it raises, so a run is
+    all or nothing unless *continue_on_error* says otherwise. For a connection it
+    is the caller's, and nothing is committed or rolled back here: a caller that
+    wants seeds and its own statements in one transaction opens it. Nothing here
+    changes an object's owner.
+
+    Raises:
+        SeedError: the first file that failed, when *continue_on_error* is off.
+    """
+    files = [seeds] if isinstance(seeds, Path) and seeds.is_file() else None
+    if not isinstance(seeds, Path):
+        files = list(seeds)
+    seeds_dir = seeds if isinstance(seeds, Path) else Path()
+    with connection_for(database) as conn:
+        applier = SeedApplier(seeds_dir, connection=conn, console=Console(quiet=True), files=files)
+        return applier.apply_sequential(continue_on_error=continue_on_error, profile=profile)
 
 
 _ROW_SEPARATOR = re.compile(r"\)\s*,\s*\(")

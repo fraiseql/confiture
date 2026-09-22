@@ -94,6 +94,7 @@ nav:
       - 'Anonymization': guides/anonymization.md
       - 'Bootstrap': guides/bootstrap.md
       - 'Build-Time Validation Guide': guides/build-validation.md
+      - 'Building on confiture': guides/building-on-confiture.md
       - 'Compliance Guide': guides/compliance.md
       - 'COPY Format Loading - Practical Examples': guides/copy-format-examples.md
       - 'COPY Format Loading - Documentation Index': guides/copy-format-index.md
@@ -140,6 +141,7 @@ nav:
       - 'Lint rules': reference/lint-rules.md
       - 'Notification Architecture Reference': reference/notification-architecture.md
       - 'Notification Context Reference': reference/notification-context.md
+      - 'Platform API reference': reference/platform-api.md
       - 'Prerequisites': reference/prerequisites.md
       - 'Tracking Table Reference': reference/tracking-table.md
       - 'Transaction & SAVEPOINT Compatibility Contract': reference/transaction-contract.md

@@ -197,6 +197,41 @@ class TestDiscoverResolutionFunctions:
 
         assert functions == []
 
+    def test_resolvers_run_parents_first_whatever_their_names(self) -> None:
+        """``fn_resolve_tb_product`` joins ``catalog.tb_vendor``: the vendor's runs first.
+
+        By path, ``product`` sorts before ``vendor``, and the product resolver's join
+        found no vendor row — a NOT NULL ``fk_vendor`` failed the run.
+        """
+        example = Path(__file__).resolve().parents[4] / "examples" / "08-generated-seeds"
+        config = OrchestrationConfig(
+            max_level=5,
+            seeds_dir=example / "db" / "seeds" / "prep",
+            schema_dir=example / "db" / "schema",
+        )
+        assert PrepSeedOrchestrator(config)._discover_resolution_functions() == [
+            "fn_resolve_tb_vendor",
+            "fn_resolve_tb_product",
+        ]
+
+    def test_a_cycle_leaves_the_name_order(self, tmp_path: Path) -> None:
+        schema = tmp_path / "schema"
+        schema.mkdir()
+        (schema / "tables.sql").write_text(
+            "CREATE TABLE catalog.tb_b (pk_b INT PRIMARY KEY, fk_a INT);\n"
+            "CREATE TABLE catalog.tb_a (pk_a INT PRIMARY KEY, fk_b INT REFERENCES catalog.tb_b);\n"
+            "ALTER TABLE catalog.tb_b ADD FOREIGN KEY (fk_a) REFERENCES catalog.tb_a;\n"
+        )
+        for name in ("fn_resolve_tb_b", "fn_resolve_tb_a"):
+            (schema / f"{name}.sql").write_text(
+                f"CREATE FUNCTION {name}() RETURNS void LANGUAGE sql AS '';"
+            )
+        config = OrchestrationConfig(max_level=5, seeds_dir=tmp_path, schema_dir=schema)
+        assert PrepSeedOrchestrator(config)._discover_resolution_functions() == [
+            "fn_resolve_tb_a",
+            "fn_resolve_tb_b",
+        ]
+
 
 class TestLevel2Integration:
     """Test Level 2 integration with orchestrator."""

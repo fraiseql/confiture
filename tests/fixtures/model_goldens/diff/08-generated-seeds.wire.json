@@ -1,0 +1,327 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 4,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 1,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "catalog.tb_product",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "pk_product",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null,
+              "identity": "always"
+            },
+            {
+              "name": "fk_vendor",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "price",
+              "type": "NUMERIC(10,2)",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "status",
+              "type": "catalog.product_status",
+              "nullable": false,
+              "default": "'draft'"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "pk_product"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "fk_vendor"
+              ],
+              "ref_table": "catalog.tb_vendor",
+              "ref_columns": [
+                "pk_vendor"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "CHECK",
+              "name": "",
+              "expression": "price > 0"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "catalog.tb_vendor",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "pk_vendor",
+              "type": "BIGINT",
+              "nullable": false,
+              "default": null,
+              "identity": "always"
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "country_code",
+              "type": "VARCHAR(2)",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "pk_vendor"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "prep_seed.tb_product",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "fk_vendor_id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "price",
+              "type": "NUMERIC(10,2)",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "status",
+              "type": "catalog.product_status",
+              "nullable": false,
+              "default": "'draft'"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "fk_vendor_id"
+              ],
+              "ref_table": "prep_seed.tb_vendor",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "CHECK",
+              "name": "",
+              "expression": "price > 0"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "prep_seed.tb_vendor",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "country_code",
+              "type": "VARCHAR(2)",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_ENUM_TYPE",
+        "table": "catalog.product_status",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": null
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "fn_resolve_tb_product()",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE FUNCTION fn_resolve_tb_product() RETURNS void AS $$\nBEGIN\n    INSERT INTO catalog.tb_product (id, fk_vendor, name, price, status)\n    SELECT prep.id, vendor.pk_vendor, prep.name, prep.price, prep.status\n    FROM prep_seed.tb_product prep\n    LEFT JOIN catalog.tb_vendor vendor ON vendor.id = prep.fk_vendor_id\n    ON CONFLICT (id) DO NOTHING;\nEND;\n$$ LANGUAGE plpgsql",
+        "details": {
+          "kind": "function",
+          "name": "fn_resolve_tb_product()",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "fn_resolve_tb_vendor()",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE FUNCTION fn_resolve_tb_vendor() RETURNS void AS $$\nBEGIN\n    INSERT INTO catalog.tb_vendor (id, name, country_code)\n    SELECT prep.id, prep.name, prep.country_code\n    FROM prep_seed.tb_vendor prep\n    ON CONFLICT (id) DO NOTHING;\nEND;\n$$ LANGUAGE plpgsql",
+        "details": {
+          "kind": "function",
+          "name": "fn_resolve_tb_vendor()",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "table": "catalog",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE SCHEMA catalog",
+        "details": {
+          "kind": "schema",
+          "name": "catalog",
+          "keyword": "SCHEMA"
+        }
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "table": "prep_seed",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE SCHEMA prep_seed",
+        "details": {
+          "kind": "schema",
+          "name": "prep_seed",
+          "keyword": "SCHEMA"
+        }
+      }
+    ],
+    "ok": true,
+    "command": "diff",
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}
