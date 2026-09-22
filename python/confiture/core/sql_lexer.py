@@ -36,7 +36,7 @@ from typing import Any
 import pglast
 import pglast.parser
 
-from confiture.core.parser_info import parse_error_index
+from confiture.core.parser_info import ascii_shadow, is_ascii, parse_error_index
 
 _COMMENT_TOKENS = frozenset({"SQL_COMMENT", "C_COMMENT"})
 # String-like constants: single-quoted, ``E''``, ``U&''``, ``B''``, ``X''`` and
@@ -372,15 +372,26 @@ def _scan_after_block(sql: str, start: int) -> tuple[list[Any], bool]:
 
 
 def _scan_recovering(text: str) -> list[Any]:
-    """The scanner's tokens; on a scanner error, the tokens before it."""
+    """The scanner's tokens; on a scanner error, the tokens before it.
+
+    The scanner reads :func:`ascii_shadow` of *text*, never *text* itself: an
+    error index reported over multibyte characters is short of the truth, and
+    this function cuts the text at that index. Cutting early inside a COPY
+    block — where the scanner always errors, data rows not being SQL — lands
+    before the ``COPY … FROM stdin;`` header, and the block is then never
+    recognised and its rows are read as statements. The shadow is the same text
+    to the scanner, one ASCII character per character, so every offset here
+    indexes *text*; token *text* is read from *text* by those offsets.
+    """
+    shadow = text if is_ascii(text) else ascii_shadow(text)
     try:
-        return list(pglast.parser.scan(text))
+        return list(pglast.parser.scan(shadow))
     except pglast.parser.ParseError as exc:
         index = parse_error_index(exc)
         if not index:
             return []
         try:
-            return list(pglast.parser.scan(text[:index]))
+            return list(pglast.parser.scan(shadow[:index]))
         except pglast.parser.ParseError:
             return []
 

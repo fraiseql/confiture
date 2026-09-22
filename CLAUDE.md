@@ -142,8 +142,11 @@ unclassified change-set entry, `DIFFER_400`. `core/parser_info.py` names the par
 pattern carries a lexical marker (`--`, `/*`, a dollar quote, a `'…'` shape, `stdin`,
 `\.`) fails `tests/unit/test_one_sql_lexer.py`; a regex matching a statement's shape
 counts against the shrink-only `sql_keyword_regex` budget. Read a `-- confiture:<name>`
-directive through `directives()`. A `COPY … FROM stdin` block is **blanked, never
-stripped**: the text pglast reads keeps the file's length, lines and offsets, so every
+directive through `directives()`. The scanner reads `parser_info.ascii_shadow` of the
+text — one `x` per non-ASCII character, lexically the same to PostgreSQL — because
+pglast reports a syntax error's offset in neither characters nor bytes once a
+multibyte character precedes it, and this text is cut at that offset. A `COPY … FROM
+stdin` block is **blanked, never stripped**: the text pglast reads keeps the file's length, lines and offsets, so every
 `file:line` after the block stays true. The same blanking makes a file lint could not
 parse cost that file rather than the build.
 

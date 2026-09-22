@@ -380,6 +380,7 @@ jobs:
           tests/unit/test_function_signature_checker.py \
           tests/unit/test_function_body_checker.py \
           tests/unit/test_sql_lexer_scripts.py \
+          tests/unit/test_sql_lexer_multibyte.py \
           tests/unit/test_platform_dependency_order.py \
           tests/unit/test_platform_writer_facts.py \
           tests/unit/test_platform_seed_writers.py \
