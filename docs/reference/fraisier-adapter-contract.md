@@ -410,3 +410,14 @@ The exit-code convention and the JSON shapes above are a **stability contract**
   [capability table](#minimum-version) and gate on the detected version instead.
   Bump the floor only when an older Confiture would be *misread*, not merely
   less capable.
+
+## When confiture becomes a crate
+
+The five subcommands above (`migrate status`, `up`, `preflight`, `verify` and `down-to`)
+are the process seam between fraisier and confiture. The 2.x Rust crate replaces the
+subprocess with an in-process call that carries the same JSON. The adapter derives no
+serde structs for confiture's payloads: it walks `serde_json::Value` by string key, and it
+vendors `confiture --exit-codes-json` in `exit_codes.vendored.json`. So what the crate
+owes the adapter is those key names and that exit-code table, not a Rust type. The
+boundary document, [the Rust port's boundary](../architecture/rust-port-boundary.md),
+states what the crate holds and the corpus it is accepted against.

@@ -411,6 +411,9 @@ decision log). The port's intended shape is a **standalone Confiture Rust crate
 that `fraisier-core` embeds as a library** — the fraisier adapter is already
 designed for that eventual library embed — *not* folding migration logic into
 `fraisier-core`. Confiture keeps its identity and ownership across the port.
+What the crate holds, what stays Python glue around it, what does not port, and the
+byte-identity test it is accepted by are measured in
+[`docs/architecture/rust-port-boundary.md`](docs/architecture/rust-port-boundary.md).
 
 **2. The optional `confiture-core` PyO3 crate is a perf accelerator, NOT the port.**
 The repo ships a small optional Rust extension (`confiture-core`, a `cdylib` PyO3

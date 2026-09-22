@@ -824,6 +824,7 @@ confiture/
 │
 ├── docs/                         # the mkdocs site: guides, reference, api, features
 │   ├── api/
+│   ├── architecture/
 │   ├── features/
 │   ├── guides/
 │   ├── operations/

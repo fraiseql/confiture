@@ -158,6 +158,8 @@ nav:
       - 'Dynamic Discovery': features/dynamic-discovery.md
       - 'Hexadecimal Sorting': features/hexadecimal-sorting.md
       - 'Recursive Directory Support': features/recursive-directories.md
+  - 'Architecture':
+      - 'The Rust port''s boundary': architecture/rust-port-boundary.md
   - 'Operations':
       - 'Confiture Disaster Recovery Procedures': operations/disaster-recovery.md
       - 'Confiture Performance Tuning Guide': operations/performance-tuning.md
