@@ -2,7 +2,9 @@
 
 Two concerns, one home:
 
-- :func:`redact_url` scrubs a password to ``***`` for safe **log / error** output.
+- :func:`redact_url` scrubs a password to ``***`` for safe **log / error** output —
+  and, for a URL that is itself the credential (a webhook), everything after the
+  host.
 - :func:`split_password` + :func:`libpq_env` keep a password off a **subprocess
   argv** — a DSN passed as ``-d <url>`` is visible in the process list (``ps
   aux``), so the password is moved into the ``PGPASSWORD`` environment variable
@@ -17,7 +19,7 @@ Lives in ``core`` so that ``core`` modules — the ``psql`` applier and the
 from __future__ import annotations
 
 import os
-from urllib.parse import unquote, urlparse, urlunparse
+from urllib.parse import ParseResult, unquote, urlparse, urlunparse
 
 _PASSWORD_KEY = "password"
 
@@ -50,7 +52,7 @@ def _netloc(parsed, *, password: str | None) -> str:
     return host_part
 
 
-def redact_url(url: str) -> str:
+def redact_url(url: str, *, bearer: bool = False) -> str:
     """Return *url* with any password replaced by ``***`` (username preserved).
 
     Both places libpq reads a password from are masked: the userinfo
@@ -61,17 +63,35 @@ def redact_url(url: str) -> str:
 
     Args:
         url: A connection URL that may embed a password.
+        bearer: *url* is itself the credential — a Slack or Discord webhook
+            carries its token in the path, others in the query — so the path,
+            query and fragment are masked too, and the scheme and host are what
+            is left to say where it points.
 
     Returns:
         The URL with its password(s) redacted (unchanged if there is none).
     """
     parsed = urlparse(url)
+    if bearer:
+        return _redact_bearer(url, parsed)
     parts = _query_parts(parsed.query)
     if not parsed.password and not any(is_pw for _, _, is_pw in parts):
         return url
     query = "&".join(f"{_PASSWORD_KEY}=***" if is_pw else raw for raw, _, is_pw in parts)
     netloc = _netloc(parsed, password="***" if parsed.password else None)
     return urlunparse(parsed._replace(netloc=netloc, query=query))
+
+
+def _redact_bearer(url: str, parsed: ParseResult) -> str:
+    """*url* with its password and everything after its host masked."""
+    masked = parsed._replace(
+        netloc=_netloc(parsed, password="***") if parsed.password else parsed.netloc,
+        path="/***" if parsed.path.strip("/") else parsed.path,
+        params="***" if parsed.params else "",
+        query="***" if parsed.query else "",
+        fragment="***" if parsed.fragment else "",
+    )
+    return url if masked == parsed else urlunparse(masked)
 
 
 def split_password(url: str) -> tuple[str, str | None]:

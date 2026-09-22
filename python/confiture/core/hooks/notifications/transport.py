@@ -35,6 +35,8 @@ from typing import Any, TextIO
 
 from pydantic import SecretStr
 
+from confiture.url_redaction import redact_url
+
 logger = logging.getLogger(__name__)
 
 
@@ -153,7 +155,9 @@ class HttpTransport(Transport):
         method: HTTP method.  Defaults to POST.
 
     The transport does not log payload contents — that's the renderer's
-    concern.  Connection-level logs are emitted at DEBUG.
+    concern.  Connection-level logs are emitted at DEBUG.  A webhook URL is a
+    bearer secret, so every message and log line names it redacted to its
+    scheme and host (``redact_url(url, bearer=True)``).
     """
 
     def __init__(
@@ -166,6 +170,7 @@ class HttpTransport(Transport):
         method: str = "POST",
     ) -> None:
         self.url = url
+        self._shown_url = redact_url(url, bearer=True)
         self.timeout_seconds = timeout_seconds
         self.retry = retry or RetryPolicy()
         self.verify_tls = verify_tls
@@ -204,7 +209,7 @@ class HttpTransport(Transport):
                 backoff *= 2  # exponential
 
         raise HttpTransportError(
-            f"HTTP send to {self.url} failed after {self.retry.attempts} attempt(s): {last_error}"
+            f"HTTP send to {self._shown_url} failed after {self.retry.attempts} attempt(s): {last_error}"
         ) from last_error
 
     def _send_once(self, payload: TransportPayload) -> None:
@@ -229,14 +234,14 @@ class HttpTransport(Transport):
         except urllib.error.HTTPError as exc:
             status = exc.code
             if 500 <= status < 600:
-                raise _RetryableHttpError(f"HTTP {status} from {self.url}") from exc
-            raise _NonRetryableHttpError(f"HTTP {status} from {self.url}") from exc
+                raise _RetryableHttpError(f"HTTP {status} from {self._shown_url}") from exc
+            raise _NonRetryableHttpError(f"HTTP {status} from {self._shown_url}") from exc
 
         if 200 <= status < 300:
             return
         if 500 <= status < 600:
-            raise _RetryableHttpError(f"HTTP {status} from {self.url}")
-        raise _NonRetryableHttpError(f"HTTP {status} from {self.url}")
+            raise _RetryableHttpError(f"HTTP {status} from {self._shown_url}")
+        raise _NonRetryableHttpError(f"HTTP {status} from {self._shown_url}")
 
 
 # ---------------------------------------------------------------------------

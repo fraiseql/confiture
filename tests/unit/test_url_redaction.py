@@ -65,3 +65,21 @@ class TestLibpqEnv:
         env = libpq_env("secret", extra_options="-c synchronous_commit=off")
         assert env["PGPASSWORD"] == "secret"
         assert "synchronous_commit=off" in env["PGOPTIONS"]
+
+
+class TestRedactBearerUrl:
+    """A webhook's URL is the credential: its path and query are the secret."""
+
+    def test_the_path_and_query_are_masked_and_the_host_kept(self) -> None:
+        assert redact_url(
+            "https://user:pw@hooks.slack.com:443/services/T000/B000/SECRET?token=abc#frag",
+            bearer=True,
+        ) == ("https://user:***@hooks.slack.com:443/***?***#***")
+
+    def test_a_url_with_nothing_after_its_host_is_unchanged(self) -> None:
+        assert redact_url("https://hooks.example.com/", bearer=True) == (
+            "https://hooks.example.com/"
+        )
+
+    def test_a_dsn_keeps_its_database_without_bearer(self) -> None:
+        assert redact_url("postgresql://u:pw@host/db") == "postgresql://u:***@host/db"
