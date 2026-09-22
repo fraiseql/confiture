@@ -145,6 +145,11 @@ class Column:
     primary_key: bool = False
 
 
+#: ``serial`` and its siblings are not types: PostgreSQL stores an integer, NOT NULL,
+#: a ``nextval`` default and a sequence the column owns, none of which DDL wrote.
+SERIAL_TYPES = frozenset({"SMALLSERIAL", "SERIAL", "BIGSERIAL"})
+
+
 @dataclass(frozen=True)
 class Constraint:
     """A table constraint: a primary key, a UNIQUE, a CHECK or a foreign key.
@@ -320,6 +325,42 @@ class Trigger:
     def qualified(self) -> str:
         """``schema.table.trigger``, the schema only where it was written."""
         return f"{qualified_name(self.schema, self.table)}.{self.name}"
+
+
+@dataclass(frozen=True)
+class ColumnReference:
+    """What a foreign key column points at: the table, found, and the column in it.
+
+    ``table`` is the table the model holds when it holds it — a bare name found
+    wherever ``search_path`` put it — and otherwise the reference as identity
+    reads it. ``column`` is the referenced column; ``None`` where the key names
+    none and the model does not hold the target's primary key to say which.
+    """
+
+    table: ObjectRef
+    column: str | None
+
+
+@dataclass(frozen=True)
+class ColumnFacts:
+    """What a writer supplying one column must respect.
+
+    ``type_key`` / ``raw_sql_type`` / ``not_null`` / ``default`` are the column's.
+    ``unique`` is true where one PRIMARY KEY, UNIQUE constraint or unique index
+    covers this column alone — declared on the column, at table level or as an
+    index. ``checks`` are the CHECK expressions that name it, ``enum_values`` the
+    labels of the enum its type is, ``foreign_key`` what it references.
+    """
+
+    name: str
+    type_key: str | None
+    raw_sql_type: str | None
+    not_null: bool
+    default: str | None
+    unique: bool
+    checks: tuple[str, ...] = ()
+    enum_values: tuple[str, ...] | None = None
+    foreign_key: ColumnReference | None = None
 
 
 def routine_ref(routine: Routine) -> ObjectRef:
@@ -532,8 +573,6 @@ _EXPRESSION = "<expression>"
 #: An index key that is a column, not an expression.
 _COLUMN_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 
-#: The pseudo-types a column may be declared with and PostgreSQL never stores.
-_SERIALS = frozenset({"SMALLSERIAL", "SERIAL", "BIGSERIAL"})
 
 #: An ascending sequence's bounds when none is written, per sequence type.
 _DEFAULT_MAX = frozenset({2**15 - 1, 2**31 - 1, 2**63 - 1})
@@ -552,9 +591,9 @@ def _generated_name(table: str, name: str) -> bool:
 
 
 def _parity_column(column: Column) -> Column:
-    serial = (column.raw_sql_type or "").upper() in _SERIALS or (column.default or "").startswith(
-        "nextval("
-    )
+    serial = (column.raw_sql_type or "").upper() in SERIAL_TYPES or (
+        column.default or ""
+    ).startswith("nextval(")
     return replace(
         column,
         name=column.folded,

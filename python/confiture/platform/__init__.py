@@ -3,8 +3,10 @@
 Read a schema into the model — from DDL (:func:`parse_schema`) or from a database
 (:func:`introspect`) — and compare two (:func:`diff`), each change typed and tiered
 (:func:`tier_of`); order a model's tables by their foreign keys
-(:func:`dependency_order`). Nothing here is defined here: every name is confiture's own,
-re-exported so that a consumer depends on this list and on nothing behind it.
+(:func:`dependency_order`); and ask which columns a writer supplies
+(:func:`writable_columns`) and what each must respect (:func:`column_facts`,
+:func:`naming_hints`). Nothing here is defined here: every name is confiture's
+own, re-exported so that a consumer depends on this list and nothing behind it.
 ``tests/contract/test_platform_surface.py`` pins the list, every signature and
 every field, and ``docs/guides/building-on-confiture.md`` is its guide.
 
@@ -16,6 +18,7 @@ connection does — whose transaction stays the caller's.
 from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.connection import Connection
 from confiture.core.introspection.dependency_graph import DependencyCycle, dependency_order
+from confiture.core.model_facts import column_facts, naming_hints, writable_columns
 from confiture.core.risk_tier import RiskTier
 from confiture.core.schema_change import (
     CheckConstraintAdded,
@@ -48,6 +51,8 @@ from confiture.core.schema_change import (
 )
 from confiture.core.schema_model import (
     Column,
+    ColumnFacts,
+    ColumnReference,
     Constraint,
     EnumType,
     Index,
@@ -61,6 +66,7 @@ from confiture.core.schema_model import (
 )
 from confiture.core.schema_sources import SchemaSource, diff, introspect, parse_schema
 from confiture.exceptions import SchemaError
+from confiture.models.introspection import TableHints
 
 __all__ = [
     "CheckConstraintAdded",
@@ -69,7 +75,9 @@ __all__ = [
     "ColumnAdded",
     "ColumnDefaultChanged",
     "ColumnDropped",
+    "ColumnFacts",
     "ColumnNullabilityChanged",
+    "ColumnReference",
     "ColumnRenamed",
     "ColumnTypeChanged",
     "Connection",
@@ -101,14 +109,18 @@ __all__ = [
     "Table",
     "TableAdded",
     "TableDropped",
+    "TableHints",
     "TableRenamed",
     "Trigger",
     "UniqueConstraintAdded",
     "UniqueConstraintDropped",
     "View",
+    "column_facts",
     "dependency_order",
     "diff",
     "introspect",
+    "naming_hints",
     "parse_schema",
     "tier_of",
+    "writable_columns",
 ]

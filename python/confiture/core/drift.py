@@ -24,6 +24,7 @@ from confiture.core.linting.inventory import Inventory, schema_model
 from confiture.core.locking import LOCK_HOLDER_TABLE
 from confiture.core.schema_analyzer import SchemaAnalyzer
 from confiture.core.schema_model import (
+    SERIAL_TYPES,
     Column,
     Constraint,
     Index,
@@ -386,10 +387,6 @@ def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> Exp
     return ExpectedSchema(model=model, schemas=frozenset(schemas))
 
 
-#: The pseudo-types a column may be declared with and PostgreSQL never stores; the
-#: ``nextval`` default the catalog then holds is the column's, not a drift.
-_SERIALS = frozenset({"SMALLSERIAL", "SERIAL", "BIGSERIAL"})
-
 #: How a finding names a constraint the DDL left unnamed.
 _CONSTRAINT_KEYWORDS = {
     "primary_key": "PRIMARY KEY",
@@ -418,7 +415,7 @@ def _comparable_defaults(exp: Column, act: Column) -> tuple[str | None, str | No
     """
     if exp.identity or act.identity or exp.generated or act.generated:
         return None, None
-    if (exp.raw_sql_type or "").upper() in _SERIALS:
+    if (exp.raw_sql_type or "").upper() in SERIAL_TYPES:
         return None, None
     column_type = act.type_text or exp.type_text
     try:

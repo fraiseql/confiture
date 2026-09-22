@@ -88,3 +88,34 @@ def test_an_introspected_model_orders_like_a_parsed_one(fresh_database: str) -> 
         "public.root",
         "public.leaf",
     ]
+
+
+def test_a_live_table_answers_what_a_writer_may_supply(fresh_database: str) -> None:
+    """The catalog holds a ``serial`` as an integer with a ``nextval`` default."""
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute(DDL)
+        conn.execute(
+            "CREATE TABLE app.item (pk_item BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, "
+            "id UUID NOT NULL UNIQUE, seq SERIAL, doubled INT GENERATED ALWAYS AS (2) STORED, "
+            "status app.status NOT NULL, fk_parent BIGINT REFERENCES app.parent, "
+            "qty INT CHECK (qty > 0))"
+        )
+    model = platform.introspect(fresh_database, schemas=["app"])
+    assert [c.name for c in platform.writable_columns(model, "app.item")] == [
+        "id",
+        "status",
+        "fk_parent",
+        "qty",
+    ]
+    assert platform.column_facts(model, "app.item", "status").enum_values == ("new", "done")
+    reference = platform.column_facts(model, "app.item", "fk_parent").foreign_key
+    assert reference is not None
+    assert (reference.table.schema, reference.table.name, reference.column) == (
+        "app",
+        "parent",
+        "pk_parent",
+    )
+    assert platform.column_facts(model, "app.item", "id").unique
+    assert len(platform.column_facts(model, "app.item", "qty").checks) == 1
+    hints = platform.naming_hints(model, "app.item")
+    assert (hints.surrogate_pk, hints.natural_id) == ("pk_item", "id")

@@ -79,7 +79,17 @@ READING = ("SchemaSource", "Connection", "parse_schema", "introspect", "diff", "
 #: Ordering tables by their foreign keys.
 ORDERING = ("dependency_order", "DependencyCycle")
 
-EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING)
+#: What a writer may supply to a table, and what each column must respect.
+WRITER = (
+    "writable_columns",
+    "column_facts",
+    "naming_hints",
+    "ColumnFacts",
+    "ColumnReference",
+    "TableHints",
+)
+
+EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING + WRITER)
 
 #: ``str(inspect.signature(...))`` of every callable the seam defines. Under
 #: ``from __future__ import annotations`` an annotation is its source text.
@@ -97,6 +107,11 @@ SIGNATURES: dict[str, str] = {
         "-> 'list[ObjectRef]'"
     ),
     "tier_of": "(change: 'SchemaChange') -> 'RiskTier | None'",
+    "writable_columns": "(model: 'SchemaModel', table: 'ObjectRef | str') -> 'list[Column]'",
+    "column_facts": (
+        "(model: 'SchemaModel', table: 'ObjectRef | str', column: 'str') -> 'ColumnFacts'"
+    ),
+    "naming_hints": "(model: 'SchemaModel', table: 'ObjectRef | str') -> 'TableHints'",
     "SchemaModel.to_json": "(self) -> 'str'",
     "SchemaModel.from_json": "(text: 'str') -> 'SchemaModel'",
 }
@@ -195,6 +210,19 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("triggers", "Mapping[ObjectRef, Trigger]"),
     ),
     "SchemaDiff": (("changes", "list[SchemaChange]"), ("warnings", "list[BuildWarning]")),
+    "ColumnReference": (("table", "ObjectRef"), ("column", "str | None")),
+    "ColumnFacts": (
+        ("name", "str"),
+        ("type_key", "str | None"),
+        ("raw_sql_type", "str | None"),
+        ("not_null", "bool"),
+        ("default", "str | None"),
+        ("unique", "bool"),
+        ("checks", "tuple[str, ...]"),
+        ("enum_values", "tuple[str, ...] | None"),
+        ("foreign_key", "ColumnReference | None"),
+    ),
+    "TableHints": (("surrogate_pk", "str | None"), ("natural_id", "str | None")),
 }
 
 
