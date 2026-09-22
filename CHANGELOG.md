@@ -23,6 +23,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drops were committed, losing every dependent view. Names go through
   `psycopg.sql.Identifier`, the comment through `sql.Literal`, and savepoints are
   `confiture_recreate_<n>`. `ViewManager`'s API is unchanged.
+- **A COPY block after accented text is blanked again.** pglast reports a syntax
+  error's offset in a unit that is neither the text's characters nor its bytes once a
+  multibyte character precedes it (measured on 6.16 and 8.4, `scan` and `parse_sql`
+  alike), and the lexer cuts the text at that offset to keep the tokens before it.
+  COPY data is not SQL, so the scanner always errors inside it: with a short offset
+  the cut landed before the `COPY … FROM stdin;` header, the block went unrecognised,
+  and its rows reached the parser as statements. One French seed file was enough to
+  make a whole schema tree unparseable — `migrate validate --require-migration`
+  reported `the schema does not parse`, `confiture lint` and `migrate diff` read the
+  same text. The scanner now reads an ASCII shadow of the text, one `x` per non-ASCII
+  character (PostgreSQL's scanner classes every byte over 0x7f as a letter, so token
+  extents are identical), and a reported error line is taken from that shadow too.
 - **The MCP server calls an exposed routine by its quoted name**: a routine named
   `helper(); DROP TABLE keepme; …` no longer runs the rest, and a mixed-case schema or
   name reaches the right routine.
