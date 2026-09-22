@@ -23,6 +23,7 @@ NOT_A_PAYLOAD = {
     "_common.schema.json": "shared $defs",
     "_preflight_defs.schema.json": "shared $defs",
     "issue-object.schema.json": "the object embedded in a payload's issues, not a payload",
+    "schema-model.schema.json": "SchemaModel.to_json(), the model's own wire in confiture.platform",
 }
 
 

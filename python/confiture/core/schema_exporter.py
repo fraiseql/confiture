@@ -5,7 +5,8 @@
 byte-identical copy written by ``scripts/gen_schemas.py`` and checked in CI.
 :data:`MODEL_SCHEMAS` names the result model behind each schema whose payload is
 that model's ``to_dict()``; a test populates every such model and validates it.
-:data:`CLI_BUILT_SCHEMAS` are the payloads a command assembles itself.
+:data:`CLI_BUILT_SCHEMAS` are the payloads a command assembles itself, and
+:data:`LIBRARY_SCHEMAS` what the library seam writes, which no command emits alone.
 """
 
 from __future__ import annotations
@@ -66,6 +67,9 @@ CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "validate-config.schema.json",
     "verify-checksums.schema.json",
 )
+
+# What the library seam writes (``confiture.platform``); no command emits it alone.
+LIBRARY_SCHEMAS: tuple[str, ...] = ("schema-model.schema.json",)
 
 SCHEMA_NAMES: tuple[str, ...] = tuple(MODEL_SCHEMAS)
 

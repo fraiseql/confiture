@@ -10,6 +10,7 @@ import pytest
 import confiture
 from confiture.core.schema_exporter import (
     CLI_BUILT_SCHEMAS,
+    LIBRARY_SCHEMAS,
     MODEL_SCHEMAS,
     SCHEMA_NAMES,
     docs_out_of_sync,
@@ -43,7 +44,7 @@ def test_export_all_writes_every_packaged_schema(tmp_path: Path) -> None:
 
 def test_every_packaged_schema_is_a_model_schema_or_cli_built_or_shared() -> None:
     public = {n for n in schema_files() if not n.startswith("_")}
-    assert public == set(MODEL_SCHEMAS.values()) | set(CLI_BUILT_SCHEMAS)
+    assert public == set(MODEL_SCHEMAS.values()) | set(CLI_BUILT_SCHEMAS) | set(LIBRARY_SCHEMAS)
 
 
 def test_docs_copy_is_in_sync() -> None:

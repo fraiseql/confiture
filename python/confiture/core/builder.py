@@ -174,6 +174,32 @@ def _order_blocks(selected: list[SelectedFile]) -> list[list[SelectedFile]]:
     return [blocks[order] for order in sorted(blocks)]
 
 
+def _entry_files(config: dict[str, Any]) -> list[SelectedFile]:
+    """The files one existing ``include_dirs`` entry selects, in the order its patterns are written."""
+    include_dir: Path = config["path"]
+    order = int(config["order"])
+    found: list[SelectedFile] = []
+    for path in _walk_files(include_dir, recursive=config["recursive"]):
+        rel_path = path.relative_to(include_dir)
+        if path_globs.matches_any(rel_path, config["exclude"]):
+            continue
+        pattern = _first_matching(rel_path, config["include"])
+        if pattern is not None:
+            found.append(SelectedFile(path=path, entry=include_dir, order=order, pattern=pattern))
+    return found
+
+
+def files_under(directory: Path) -> list[Path]:
+    """The files a build reads from *directory* named bare in ``include_dirs``, in build order.
+
+    A bare entry is the whole tree — recursive, ``**/*.sql`` — in one block, sorted
+    by path: what ``include_dirs: [<directory>]`` builds with no other key set.
+    """
+    config = _include_config(str(directory))
+    assert config is not None
+    return [record.path for record in _sorted_block(_entry_files(config), numbered=False)]
+
+
 def _resolved_dir_paths(items: Any) -> list[Path]:
     """Absolute paths of a directory list (strings, ``{path: …}`` dicts or ``DirectoryConfig``)."""
     paths: list[Path] = []
@@ -392,20 +418,7 @@ class SchemaBuilder:
                 resolution_hint=f"Create the directory at {include_dir} or update include_dirs in your config",
             )
 
-        order = int(config["order"])
-        include_patterns = config["include"]
-        exclude_patterns = config["exclude"]
-        found: list[SelectedFile] = []
-        for path in _walk_files(include_dir, recursive=config["recursive"]):
-            rel_path = path.relative_to(include_dir)
-            if path_globs.matches_any(rel_path, exclude_patterns):
-                continue
-            pattern = _first_matching(rel_path, include_patterns)
-            if pattern is not None:
-                found.append(
-                    SelectedFile(path=path, entry=include_dir, order=order, pattern=pattern)
-                )
-        return found
+        return _entry_files(config)
 
     def _without_excluded_dirs(self, selected: list[SelectedFile]) -> list[SelectedFile]:
         """*selected* minus everything under ``exclude_dirs`` (the pattern-less legacy key)."""

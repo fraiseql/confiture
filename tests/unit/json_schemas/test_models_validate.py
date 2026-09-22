@@ -204,5 +204,9 @@ def test_populated_model_validates_against_its_schema(model_name: str, schema_fi
 def test_every_public_schema_is_mapped_to_a_model_or_listed_as_cli_built() -> None:
     """A schema without a model behind it is a hand-maintained contract; say so explicitly."""
     public = {p.name for p in PACKAGE_SCHEMAS.glob("*.schema.json") if not p.name.startswith("_")}
-    covered = set(schema_exporter.MODEL_SCHEMAS.values()) | set(schema_exporter.CLI_BUILT_SCHEMAS)
+    covered = (
+        set(schema_exporter.MODEL_SCHEMAS.values())
+        | set(schema_exporter.CLI_BUILT_SCHEMAS)
+        | set(schema_exporter.LIBRARY_SCHEMAS)
+    )
     assert public == covered, {"unmapped": public - covered, "unknown": covered - public}

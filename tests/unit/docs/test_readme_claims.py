@@ -19,8 +19,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 README = REPO_ROOT / "README.md"
 SCHEMAS = REPO_ROOT / "docs" / "reference" / "json-schemas"
 
-# Schema files that describe a shared fragment rather than one command's payload.
-FRAGMENT_SCHEMAS = frozenset({"error-envelope", "issue-object"})
+# Schema files that describe no one command's payload: a shared fragment, or the
+# library seam's model wire (``confiture.platform``).
+FRAGMENT_SCHEMAS = frozenset({"error-envelope", "issue-object", "schema-model"})
 
 
 def _json_capable_commands() -> set[str]:

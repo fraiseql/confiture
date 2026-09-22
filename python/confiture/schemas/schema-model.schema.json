@@ -1,0 +1,524 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.dev/schemas/schema-model.schema.json",
+  "title": "SchemaModel.to_json()",
+  "description": "The one model of what a schema declares, as `confiture.platform` writes it: `SchemaModel.to_json()`, read back by `SchemaModel.from_json()`. Objects are listed in identity order ((schema, name) with an unqualified name in the default schema); a routine appears once per overload. Not a command payload on its own.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tables",
+    "enum_types",
+    "sequences",
+    "routines",
+    "views",
+    "triggers"
+  ],
+  "properties": {
+    "tables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Table"
+      }
+    },
+    "enum_types": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EnumType"
+      }
+    },
+    "sequences": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Sequence"
+      }
+    },
+    "routines": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Routine"
+      }
+    },
+    "views": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/View"
+      }
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Trigger"
+      }
+    }
+  },
+  "$defs": {
+    "Column": {
+      "type": "object",
+      "description": "A column, whole. `type_key` is the identity (typmod kept), `raw_sql_type` the spelling generated DDL writes, `type_text` the author's.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "folded",
+        "line",
+        "type_text",
+        "type_key",
+        "raw_sql_type",
+        "not_null",
+        "default",
+        "identity",
+        "generated",
+        "generated_kind",
+        "primary_key"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "folded": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer"
+        },
+        "type_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "raw_sql_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "not_null": {
+          "type": "boolean"
+        },
+        "default": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "identity": {
+          "enum": [
+            "always",
+            "by default",
+            null
+          ]
+        },
+        "generated": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "generated_kind": {
+          "enum": [
+            "stored",
+            "virtual",
+            null
+          ]
+        },
+        "primary_key": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Constraint": {
+      "type": "object",
+      "description": "A primary key, a UNIQUE, a CHECK or a foreign key. `name` is empty where the schema wrote none; an empty `ref_columns` means the referenced primary key.",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name",
+        "columns",
+        "ref_table",
+        "ref_columns",
+        "on_delete",
+        "on_update",
+        "expression",
+        "deferrable"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "primary_key",
+            "unique",
+            "check",
+            "foreign_key"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ref_table": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ref_columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "on_delete": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "on_update": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expression": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deferrable": {
+          "enum": [
+            "immediate",
+            "deferred",
+            null
+          ]
+        }
+      }
+    },
+    "Index": {
+      "type": "object",
+      "description": "An index on one table or materialized view. `backs_constraint` marks PostgreSQL's own index behind a PRIMARY KEY, UNIQUE or EXCLUDE.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "table",
+        "columns",
+        "unique",
+        "where",
+        "method",
+        "backs_constraint"
+      ],
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "table": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "where": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "backs_constraint": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Table": {
+      "type": "object",
+      "description": "A table: its columns, its constraints and its indexes. `schema` is null where the author wrote none.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "schema",
+        "columns",
+        "constraints",
+        "indexes"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Column"
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Constraint"
+          }
+        },
+        "indexes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Index"
+          }
+        }
+      }
+    },
+    "EnumType": {
+      "type": "object",
+      "description": "`CREATE TYPE … AS ENUM`: its labels, in declaration order.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "schema",
+        "values"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Sequence": {
+      "type": "object",
+      "description": "`CREATE SEQUENCE`, with the options a comparison reads.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "schema",
+        "start",
+        "increment",
+        "min_value",
+        "max_value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "increment": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "min_value": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "max_value": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "Routine": {
+      "type": "object",
+      "description": "One overload of a function, procedure or aggregate. `signature` is the spelling, `signature_key` the identity: (schema or null, canonical type) per input argument.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "schema",
+        "kind",
+        "signature",
+        "signature_key",
+        "returns",
+        "language",
+        "body",
+        "security_definer",
+        "search_path_pinned",
+        "volatility"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "enum": [
+            "function",
+            "procedure",
+            "aggregate"
+          ]
+        },
+        "signature": {
+          "type": "string"
+        },
+        "signature_key": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "items": false,
+            "minItems": 2
+          }
+        },
+        "returns": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "body": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "security_definer": {
+          "type": "boolean"
+        },
+        "search_path_pinned": {
+          "type": "boolean"
+        },
+        "volatility": {
+          "enum": [
+            "immutable",
+            "stable",
+            "volatile"
+          ]
+        }
+      }
+    },
+    "View": {
+      "type": "object",
+      "description": "A view or a materialized view; `definition` is the query as the reader holds it.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "schema",
+        "materialized",
+        "definition",
+        "indexes"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "materialized": {
+          "type": "boolean"
+        },
+        "definition": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "indexes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Index"
+          }
+        }
+      }
+    },
+    "Trigger": {
+      "type": "object",
+      "description": "A trigger a user created, named with the table it fires on.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "table",
+        "schema"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "table": {
+          "type": "string"
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

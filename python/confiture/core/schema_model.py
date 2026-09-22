@@ -34,10 +34,11 @@ overload that falls in it.
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 
@@ -376,11 +377,96 @@ class SchemaModel:
             "triggers": section(self.triggers),
         }
 
+    def to_json(self) -> str:
+        """The model's wire: :meth:`to_dict`, keys sorted, so one model is one text.
+
+        ``schema-model.schema.json`` publishes its shape. Sorted keys make the bytes
+        a function of the model alone, not of the order fields are declared in.
+        """
+        return json.dumps(self.to_dict(), indent=2, sort_keys=True)
+
+    @staticmethod
+    def from_json(text: str) -> SchemaModel:
+        """The model :meth:`to_json` wrote *text* from.
+
+        Each object's reference is derived from the object, as every reader derives
+        it — a table's from its schema and name, a routine's from its signature — so
+        the wire carries no key a reader could disagree with.
+        """
+        return _model_from_dict(json.loads(text))
+
 
 def _ordered(objects: Mapping[ObjectRef, Any]) -> list[tuple[ObjectRef, Any]]:
     return sorted(
         objects.items(),
         key=lambda item: (item[0].schema, item[0].name, item[0].kind, item[0].signature or ()),
+    )
+
+
+def _column_from(data: dict[str, Any]) -> Column:
+    return Column(**data)
+
+
+def _constraint_from(data: dict[str, Any]) -> Constraint:
+    return Constraint(
+        **{**data, "columns": tuple(data["columns"]), "ref_columns": tuple(data["ref_columns"])}
+    )
+
+
+def _index_from(data: dict[str, Any]) -> Index:
+    return Index(**{**data, "columns": tuple(data["columns"])})
+
+
+def _table_from(data: dict[str, Any]) -> Table:
+    return Table(
+        **{
+            **data,
+            "columns": tuple(_column_from(c) for c in data["columns"]),
+            "constraints": tuple(_constraint_from(c) for c in data["constraints"]),
+            "indexes": tuple(_index_from(i) for i in data["indexes"]),
+        }
+    )
+
+
+def _routine_from(data: dict[str, Any]) -> Routine:
+    key = tuple((schema, name) for schema, name in data["signature_key"])
+    return Routine(**{**data, "signature_key": key})
+
+
+def _view_from(data: dict[str, Any]) -> View:
+    return View(**{**data, "indexes": tuple(_index_from(i) for i in data["indexes"])})
+
+
+_T = TypeVar("_T")
+
+
+def _keyed(
+    items: list[dict[str, Any]],
+    read: Callable[[dict[str, Any]], _T],
+    ref: Callable[[_T], ObjectRef],
+) -> dict[ObjectRef, _T]:
+    return {ref(obj): obj for obj in map(read, items)}
+
+
+def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
+    routines: dict[ObjectRef, list[Routine]] = {}
+    for routine in map(_routine_from, data["routines"]):
+        routines.setdefault(routine_ref(routine), []).append(routine)
+    return SchemaModel(
+        tables=_keyed(data["tables"], _table_from, lambda t: ref_for("table", t.schema, t.name)),
+        enum_types=_keyed(
+            data["enum_types"],
+            lambda d: EnumType(**{**d, "values": tuple(d["values"])}),
+            lambda e: ref_for("type", e.schema, e.name),
+        ),
+        sequences=_keyed(
+            data["sequences"],
+            lambda d: Sequence(**d),
+            lambda s: ref_for("sequence", s.schema, s.name),
+        ),
+        routines={ref: tuple(found) for ref, found in routines.items()},
+        views=_keyed(data["views"], _view_from, view_ref),
+        triggers=_keyed(data["triggers"], lambda d: Trigger(**d), trigger_ref),
     )
 
 
