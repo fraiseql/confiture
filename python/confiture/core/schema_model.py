@@ -34,10 +34,11 @@ overload that falls in it.
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field, replace
-from typing import Any, Literal
+from typing import Any, Literal, TypeVar
 
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 
@@ -142,6 +143,11 @@ class Column:
     generated: str | None = None
     generated_kind: GeneratedKind | None = None
     primary_key: bool = False
+
+
+#: ``serial`` and its siblings are not types: PostgreSQL stores an integer, NOT NULL,
+#: a ``nextval`` default and a sequence the column owns, none of which DDL wrote.
+SERIAL_TYPES = frozenset({"SMALLSERIAL", "SERIAL", "BIGSERIAL"})
 
 
 @dataclass(frozen=True)
@@ -321,6 +327,42 @@ class Trigger:
         return f"{qualified_name(self.schema, self.table)}.{self.name}"
 
 
+@dataclass(frozen=True)
+class ColumnReference:
+    """What a foreign key column points at: the table, found, and the column in it.
+
+    ``table`` is the table the model holds when it holds it — a bare name found
+    wherever ``search_path`` put it — and otherwise the reference as identity
+    reads it. ``column`` is the referenced column; ``None`` where the key names
+    none and the model does not hold the target's primary key to say which.
+    """
+
+    table: ObjectRef
+    column: str | None
+
+
+@dataclass(frozen=True)
+class ColumnFacts:
+    """What a writer supplying one column must respect.
+
+    ``type_key`` / ``raw_sql_type`` / ``not_null`` / ``default`` are the column's.
+    ``unique`` is true where one PRIMARY KEY, UNIQUE constraint or unique index
+    covers this column alone — declared on the column, at table level or as an
+    index. ``checks`` are the CHECK expressions that name it, ``enum_values`` the
+    labels of the enum its type is, ``foreign_key`` what it references.
+    """
+
+    name: str
+    type_key: str | None
+    raw_sql_type: str | None
+    not_null: bool
+    default: str | None
+    unique: bool
+    checks: tuple[str, ...] = ()
+    enum_values: tuple[str, ...] | None = None
+    foreign_key: ColumnReference | None = None
+
+
 def routine_ref(routine: Routine) -> ObjectRef:
     """The bucket of a routine: its kind, folded schema, name and argument type names."""
     return ObjectRef(
@@ -376,11 +418,96 @@ class SchemaModel:
             "triggers": section(self.triggers),
         }
 
+    def to_json(self) -> str:
+        """The model's wire: :meth:`to_dict`, keys sorted, so one model is one text.
+
+        ``schema-model.schema.json`` publishes its shape. Sorted keys make the bytes
+        a function of the model alone, not of the order fields are declared in.
+        """
+        return json.dumps(self.to_dict(), indent=2, sort_keys=True)
+
+    @staticmethod
+    def from_json(text: str) -> SchemaModel:
+        """The model :meth:`to_json` wrote *text* from.
+
+        Each object's reference is derived from the object, as every reader derives
+        it — a table's from its schema and name, a routine's from its signature — so
+        the wire carries no key a reader could disagree with.
+        """
+        return _model_from_dict(json.loads(text))
+
 
 def _ordered(objects: Mapping[ObjectRef, Any]) -> list[tuple[ObjectRef, Any]]:
     return sorted(
         objects.items(),
         key=lambda item: (item[0].schema, item[0].name, item[0].kind, item[0].signature or ()),
+    )
+
+
+def _column_from(data: dict[str, Any]) -> Column:
+    return Column(**data)
+
+
+def _constraint_from(data: dict[str, Any]) -> Constraint:
+    return Constraint(
+        **{**data, "columns": tuple(data["columns"]), "ref_columns": tuple(data["ref_columns"])}
+    )
+
+
+def _index_from(data: dict[str, Any]) -> Index:
+    return Index(**{**data, "columns": tuple(data["columns"])})
+
+
+def _table_from(data: dict[str, Any]) -> Table:
+    return Table(
+        **{
+            **data,
+            "columns": tuple(_column_from(c) for c in data["columns"]),
+            "constraints": tuple(_constraint_from(c) for c in data["constraints"]),
+            "indexes": tuple(_index_from(i) for i in data["indexes"]),
+        }
+    )
+
+
+def _routine_from(data: dict[str, Any]) -> Routine:
+    key = tuple((schema, name) for schema, name in data["signature_key"])
+    return Routine(**{**data, "signature_key": key})
+
+
+def _view_from(data: dict[str, Any]) -> View:
+    return View(**{**data, "indexes": tuple(_index_from(i) for i in data["indexes"])})
+
+
+_T = TypeVar("_T")
+
+
+def _keyed(
+    items: list[dict[str, Any]],
+    read: Callable[[dict[str, Any]], _T],
+    ref: Callable[[_T], ObjectRef],
+) -> dict[ObjectRef, _T]:
+    return {ref(obj): obj for obj in map(read, items)}
+
+
+def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
+    routines: dict[ObjectRef, list[Routine]] = {}
+    for routine in map(_routine_from, data["routines"]):
+        routines.setdefault(routine_ref(routine), []).append(routine)
+    return SchemaModel(
+        tables=_keyed(data["tables"], _table_from, lambda t: ref_for("table", t.schema, t.name)),
+        enum_types=_keyed(
+            data["enum_types"],
+            lambda d: EnumType(**{**d, "values": tuple(d["values"])}),
+            lambda e: ref_for("type", e.schema, e.name),
+        ),
+        sequences=_keyed(
+            data["sequences"],
+            lambda d: Sequence(**d),
+            lambda s: ref_for("sequence", s.schema, s.name),
+        ),
+        routines={ref: tuple(found) for ref, found in routines.items()},
+        views=_keyed(data["views"], _view_from, view_ref),
+        triggers=_keyed(data["triggers"], lambda d: Trigger(**d), trigger_ref),
     )
 
 
@@ -446,8 +573,6 @@ _EXPRESSION = "<expression>"
 #: An index key that is a column, not an expression.
 _COLUMN_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 
-#: The pseudo-types a column may be declared with and PostgreSQL never stores.
-_SERIALS = frozenset({"SMALLSERIAL", "SERIAL", "BIGSERIAL"})
 
 #: An ascending sequence's bounds when none is written, per sequence type.
 _DEFAULT_MAX = frozenset({2**15 - 1, 2**31 - 1, 2**63 - 1})
@@ -466,9 +591,9 @@ def _generated_name(table: str, name: str) -> bool:
 
 
 def _parity_column(column: Column) -> Column:
-    serial = (column.raw_sql_type or "").upper() in _SERIALS or (column.default or "").startswith(
-        "nextval("
-    )
+    serial = (column.raw_sql_type or "").upper() in SERIAL_TYPES or (
+        column.default or ""
+    ).startswith("nextval(")
     return replace(
         column,
         name=column.folded,

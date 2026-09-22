@@ -1,9 +1,9 @@
 """Database connection management for CLI commands."""
 
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 import psycopg
 import yaml
@@ -27,6 +27,50 @@ def connect_url(url: str, **kwargs: Any) -> psycopg.Connection:
     superuser URL). Keyword arguments go to ``psycopg.connect``.
     """
     return psycopg.connect(url, **kwargs)
+
+
+class Connection(Protocol):
+    """What confiture calls on a connection a caller hands it; a psycopg 3 connection is one.
+
+    A library entry point that takes a connection takes this rather than the
+    driver's class, so its signature does not make the driver its caller's
+    dependency. The transaction is the caller's: confiture neither commits nor
+    rolls back a connection it did not open.
+    """
+
+    def cursor(self) -> Any:
+        """A cursor on this connection."""
+        ...
+
+    def execute(self, query: Any, params: Any = None) -> Any:
+        """Run *query* and return its cursor."""
+        ...
+
+    def commit(self) -> None:
+        """Commit the current transaction."""
+        ...
+
+    def rollback(self) -> None:
+        """Roll the current transaction back."""
+        ...
+
+
+@contextmanager
+def connection_for(database: str | Connection) -> Iterator[psycopg.Connection]:
+    """The connection a library call runs on: its own for a URL, the caller's otherwise.
+
+    For a URL the connection is opened here and is this call's: committed when
+    the block succeeds, rolled back when it raises, closed either way. A
+    connection the caller passed is used as it is and its transaction left alone.
+    """
+    if not isinstance(database, str):
+        # The Protocol names what is called on it; psycopg's own class is what
+        # the readers below are written against, and a psycopg connection is
+        # what meets the Protocol.
+        yield cast("psycopg.Connection", database)
+        return
+    with psycopg.connect(database) as conn:
+        yield conn
 
 
 def load_config(config_file: Path) -> dict[str, Any]:

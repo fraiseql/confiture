@@ -4,8 +4,9 @@ The graph is every import that runs — module level, inside a function, relativ
 module named as a string in a lazy table — plus the parent packages Python imports
 first. Two root sets walk it:
 
-- **exported**: ``confiture.cli.main``, ``confiture``'s ``_LAZY_IMPORTS`` table, and
-  the ``pytest11`` entry point — what an installed confiture offers. A module no root
+- **exported**: ``confiture.cli.main``, ``confiture``'s ``_LAZY_IMPORTS`` table,
+  ``confiture.platform`` and the ``pytest11`` entry point — what an installed
+  confiture offers. A module no root
   reaches is dead code;
 - **called**: ``confiture.cli.main`` and what the suites that run against a database
   import, walking *through* ``confiture/__init__.py``'s table not at all — a re-export
@@ -25,7 +26,9 @@ import confiture
 PACKAGE = Path(confiture.__file__).resolve().parent
 REPO_ROOT = PACKAGE.parents[1]
 
-EXPORTED_ROOTS = frozenset({"confiture.cli.main", "confiture", "confiture.testing.pytest_plugin"})
+EXPORTED_ROOTS = frozenset(
+    {"confiture.cli.main", "confiture", "confiture.platform", "confiture.testing.pytest_plugin"}
+)
 #: Reached from outside the package, where an import walk cannot follow.
 CALLED_EXEMPT: dict[str, str] = {
     "confiture.core.schema_exporter": "scripts/gen_schemas.py publishes the JSON schemas from it in CI",
@@ -44,10 +47,6 @@ CALLED_EXEMPT: dict[str, str] = {
 }
 #: Named by a string outside the package, or read before any caller exists.
 EXPORTED_EXEMPT: dict[str, str] = {
-    "confiture.core.change_set.diff_tiers": (
-        "the risk tier each SchemaChange kind declares (owner decision 6), held by "
-        "tests/unit/test_schema_change_tiers.py until the platform seam reads it"
-    ),
     "confiture.testing.pytest": (
         'a plugin user names it in `pytest_plugins = ["confiture.testing.pytest"]` for '
         "the `migration_test` decorator; pytest imports it by that string"

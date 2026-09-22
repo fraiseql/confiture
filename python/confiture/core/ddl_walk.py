@@ -900,6 +900,21 @@ def render_default(raw_expr: Any) -> str | None:
     return RawStream()(raw_expr)
 
 
+def expression_columns(expression: str) -> frozenset[str]:
+    """The columns a rendered expression — a CHECK's, a default's — names, as the parser folds them.
+
+    A CHECK written on a column covers no column of its own (``Constraint.columns``
+    is empty): what it constrains is whatever its expression reads, which is also
+    true of one written at table level.
+    """
+    select: Any = pglast.parse_sql(f"SELECT {expression}")[0].stmt
+    return frozenset(
+        node.fields[-1].sval
+        for node in walk_nodes(select.targetList)
+        if isinstance(node, _pg_ast.ColumnRef) and isinstance(node.fields[-1], _pg_ast.String)
+    )
+
+
 def _fk_action(code: Any) -> str | None:
     return _FK_ACTIONS.get(str(code or ""))
 

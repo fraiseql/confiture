@@ -1,11 +1,13 @@
 """Data models for schema introspection output.
-from dataclasses import dataclass
 
 These models represent the structured output of the `confiture introspect`
 command: tables, columns, types, constraints, and the FK relationship graph.
 """
 
+from __future__ import annotations
+
 import dataclasses
+from collections.abc import Collection, Iterable
 from typing import Any
 
 
@@ -63,6 +65,14 @@ class TableHints:
 
     surrogate_pk: str | None
     natural_id: str | None
+
+    @staticmethod
+    def of(primary_key: Iterable[str], columns: Collection[str]) -> TableHints:
+        """The convention a table's names show: its first ``pk_*`` key column, a column ``id``."""
+        return TableHints(
+            surrogate_pk=next((name for name in primary_key if name.startswith("pk_")), None),
+            natural_id="id" if "id" in columns else None,
+        )
 
 
 @dataclasses.dataclass

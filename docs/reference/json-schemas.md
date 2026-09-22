@@ -535,6 +535,17 @@ always exits 0, never reads a schema.
 `code` matches the `rule_id` field on lint violations, so a finding can be
 mapped back to the selector that turns it off.
 
+### The schema model (`confiture.platform`)
+
+[schema-model.schema.json](./json-schemas/schema-model.schema.json)
+
+`SchemaModel.to_json()`: the one model of what a schema declares — `tables`,
+`enum_types`, `sequences`, `routines` (one entry per overload), `views` and
+`triggers` — as `confiture.platform.parse_schema` reads it from DDL and
+`confiture.platform.introspect` reads it from a database. Keys are sorted, so one
+model is one text, and `SchemaModel.from_json()` reads it back. No command emits
+it on its own; it is the wire of the library seam, `confiture.platform`.
+
 ---
 
 ## Field-name traps (issue #123)

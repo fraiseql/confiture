@@ -168,12 +168,5 @@ def _detect_hints(columns: list[IntrospectedColumn]) -> TableHints | None:
     Returns:
         TableHints if at least one convention is detected, otherwise None.
     """
-    pk_names = [c.name for c in columns if c.is_primary_key]
-    surrogate_pk = next((n for n in pk_names if n.startswith("pk_")), None)
-
-    col_names = {c.name for c in columns}
-    natural_id = "id" if "id" in col_names else None
-
-    if surrogate_pk or natural_id:
-        return TableHints(surrogate_pk=surrogate_pk, natural_id=natural_id)
-    return None
+    hints = TableHints.of([c.name for c in columns if c.is_primary_key], {c.name for c in columns})
+    return hints if hints.surrogate_pk or hints.natural_id else None
