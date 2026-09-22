@@ -44,6 +44,9 @@ _JSON_TYPES = frozenset({"json", "jsonb"})
 
 _BACKSLASH = "\\"
 
+#: The one character PostgreSQL text cannot hold, and where psql ends a line.
+_NUL = "\x00"
+
 
 @dataclass(frozen=True)
 class SeedFile:
@@ -80,9 +83,23 @@ def _scalar_text(value: object) -> str:
 
 
 def _input_text(value: object, column: Column, where: str) -> str | None:
-    """*value* as the text PostgreSQL's input function for *column* reads; ``None`` is NULL."""
+    """*value* as the text PostgreSQL's input function for *column* reads; ``None`` is NULL.
+
+    A NUL is refused: PostgreSQL text cannot hold one, and psql ends a line at
+    it and reads the next line as that line's rest — a COPY row merged into the
+    next, or an INSERT whose next value is read as SQL.
+    """
     if value is None:
         return None
+    text = _value_text(value, column, where)
+    if _NUL in text:
+        raise SeedError(
+            f"{where} gives {column.name} a NUL character, which PostgreSQL text cannot hold"
+        )
+    return text
+
+
+def _value_text(value: object, column: Column, where: str) -> str:
     type_key = column.type_key or ""
     if type_key in _JSON_TYPES:
         return value if isinstance(value, str) else json.dumps(value)
@@ -181,7 +198,7 @@ def write_copy_seed(
     Raises:
         SeedError: a table or column the model does not hold, a column PostgreSQL
             fills, a row missing a column or carrying another, a value the
-            column's type cannot take as given.
+            column's type cannot take as given, a value holding a NUL.
     """
     ref, header, texts = _prepared(model, table, columns, rows)
     lines = [f"COPY {header} FROM stdin;"]

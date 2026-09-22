@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import psycopg
+from psycopg import sql
 
 from confiture import __version__
 from confiture.core import migrator as _core_migrator
@@ -256,13 +257,13 @@ class MCPServer:
         assert self._catalog is not None
         func_info = next(f for f in self._catalog.functions if f.name == name)
         args = [arguments[p.name] for p in func_info.in_params if p.name in arguments]
-        placeholders = ", ".join(["%s"] * len(args))
-        if func_info.is_procedure:
-            sql = f"CALL {self._schema}.{name}({placeholders})"
-        else:
-            sql = f"SELECT {self._schema}.{name}({placeholders})"
+        # The schema and the routine's name are identifiers, quoted whatever they
+        # hold: the name is pg_proc's and the schema the caller's.
+        statement = sql.SQL("CALL {}({})" if func_info.is_procedure else "SELECT {}({})").format(
+            sql.Identifier(self._schema, name), sql.SQL(", ").join(sql.Placeholder() * len(args))
+        )
         with self._conn.cursor() as cur:
-            cur.execute(sql, args)
+            cur.execute(statement, args)
             if func_info.is_procedure:
                 return None
             row = cur.fetchone()

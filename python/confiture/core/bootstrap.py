@@ -326,16 +326,17 @@ class BootstrapExecutor:
 
 
 def _quote_ident(ident: str) -> str:
-    """Quote a PostgreSQL identifier safely.
+    """*ident* as one double-quoted PostgreSQL identifier, whatever it holds.
 
-    Roles and schemas come through Pydantic validators (role idents
-    match ``[a-z_][a-z0-9_]*`` or are double-quoted; schema names are
-    validated by Postgres at lookup time), so we only need to handle
-    embedded double-quotes via doubling.  We never accept user input
-    that wasn't run through the env-config validation pipeline.
+    The config spells a mixed-case role ``"Name"``, the way SQL writes the
+    identifier ``Name``: a value that is exactly one quoted identifier — its
+    inner quotes doubled — is kept as written. Any other value is the name
+    itself, and its quotes are doubled, so nothing in it can end the
+    identifier; ``default_privileges`` keys are not validated before they
+    reach here.
     """
-    # Already double-quoted form — preserve as-is.
-    if ident.startswith('"') and ident.endswith('"'):
+    inner = ident[1:-1]
+    if inner and ident[0] == ident[-1] == '"' and '"' not in inner.replace('""', ""):
         return ident
     escaped = ident.replace('"', '""')
     return f'"{escaped}"'

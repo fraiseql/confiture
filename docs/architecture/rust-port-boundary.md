@@ -122,7 +122,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-39,726 lines, 57% of `core/`.
+39,779 lines, 57% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -131,7 +131,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `anonymization/` | 4,437 | database orchestration |
 | `backfill.py` | 124 | database orchestration |
 | `baseline_detector.py` | 248 | database orchestration |
-| `bootstrap.py` | 350 | database orchestration |
+| `bootstrap.py` | 351 | database orchestration |
 | `builder.py` | 1,016 | database orchestration |
 | `checksum.py` | 432 | database orchestration |
 | `connection.py` | 244 | database orchestration |
@@ -145,7 +145,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `error_handler.py` | 281 | neutral |
 | `expected_db.py` | 217 | database orchestration |
 | `function_body_drift.py` | 211 | database orchestration |
-| `function_signature_drift.py` | 358 | database orchestration |
+| `function_signature_drift.py` | 375 | database orchestration |
 | `git.py` | 521 | neutral |
 | `git_accompaniment.py` | 344 | neutral |
 | `git_schema.py` | 258 | neutral |
@@ -180,7 +180,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_snapshot.py` | 104 | database orchestration |
 | `schema_sources.py` | 144 | database orchestration |
 | `schema_to_schema.py` | 602 | database orchestration |
-| `seed/` | 4,813 | database orchestration |
+| `seed/` | 4,830 | database orchestration |
 | `sql_path.py` | 135 | database orchestration |
 | `sql_utils.py` | 74 | neutral |
 | `ssh_tunnel.py` | 138 | database orchestration |
@@ -194,21 +194,21 @@ duplicate readers were deleted. The count below is what the port translates.
 | `unified_linter.py` | 155 | database orchestration |
 | `validation/` | 2,101 | database orchestration |
 | `view_body_drift.py` | 198 | database orchestration |
-| `view_manager.py` | 506 | database orchestration |
+| `view_manager.py` | 524 | database orchestration |
 
 ### What does not port
 
-6,663 lines, 9% of `core/`.
+6,669 lines, 9% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `_migrator/loader.py` | 133 | Python-bound |
 | `anonymization/plugins/` | 302 | Python-bound |
-| `hooks/` | 3,260 | Python-bound |
+| `hooks/` | 3,265 | Python-bound |
 | `idempotency/python_migration_extractor.py` | 294 | Python-bound |
 | `idempotency/static_eval/` | 1,730 | Python-bound |
 | `import_checker.py` | 493 | Python-bound |
 | `mcp_http.py` | 125 | Python-bound |
-| `mcp_server.py` | 326 | Python-bound |
+| `mcp_server.py` | 327 | Python-bound |
 
 <!-- END GENERATED: port-boundary -->

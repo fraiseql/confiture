@@ -31,6 +31,7 @@ from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any
 
 import pglast
+from pglast.stream import maybe_double_quote_name
 
 from confiture.core import ddl_objects, live_catalog
 from confiture.core.linting.inventory import build_model
@@ -168,6 +169,10 @@ class StaleOverload:
         stale_signature: Canonical form of the stale overload, e.g. "public.f(integer)"
         source_signatures: All signatures that source defines for this (schema, name)
         kind: What the live routine is — ``DROP FUNCTION`` refuses a procedure
+        arguments: The argument types as SQL spells them: the routine's
+            ``signature``, which for a live routine is ``format_type``'s text and
+            quotes a type name that needs it. ``None`` when the overload is stated
+            by hand; the arguments ``stale_signature`` prints are used then.
     """
 
     schema: str
@@ -175,12 +180,23 @@ class StaleOverload:
     stale_signature: str
     source_signatures: list[str]
     kind: RoutineKind = "function"
+    arguments: str | None = None
 
     @property
     def drop_sql(self) -> str:
-        """``DROP FUNCTION`` or ``DROP PROCEDURE``, whichever removes this overload."""
+        """``DROP FUNCTION`` or ``DROP PROCEDURE``, whichever removes this overload.
+
+        The statement ``fix-signatures --mode apply`` runs, so it names this
+        overload and no other: the schema and the name are quoted wherever
+        PostgreSQL would fold or misread them bare — ``MyFunc`` unquoted is
+        ``myfunc``, another routine when there is one.
+        """
         keyword = "PROCEDURE" if self.kind == "procedure" else "FUNCTION"
-        return f"DROP {keyword} {self.stale_signature};"
+        qualified = f"{maybe_double_quote_name(self.schema)}.{maybe_double_quote_name(self.name)}"
+        arguments = self.arguments
+        if arguments is None:
+            arguments = self.stale_signature[len(f"{self.schema}.{self.name}(") : -1]
+        return f"DROP {keyword} {qualified}({arguments});"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -333,6 +349,7 @@ class FunctionSignatureDriftDetector:
                 stale_signature=printed_signature(routine),
                 source_signatures=sorted(printed_signature(r) for r in declared),
                 kind=routine.kind,
+                arguments=routine.signature,
             )
             for fn_key, declared in source_by_fn.items()
             for routine in sorted(

@@ -14,6 +14,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`ViewManager` composes view names as identifiers.** Schema and view names read from
+  `pg_class` were pasted between double quotes without doubling one inside them, and
+  each recreate savepoint was named after the view: a view named like a statement ran
+  it, and an ordinary view named `order-summary` failed its `SAVEPOINT` *after* the
+  drops were committed, losing every dependent view. Names go through
+  `psycopg.sql.Identifier`, the comment through `sql.Literal`, and savepoints are
+  `confiture_recreate_<n>`. `ViewManager`'s API is unchanged.
+- **The MCP server calls an exposed routine by its quoted name**: a routine named
+  `helper(); DROP TABLE keepme; …` no longer runs the rest, and a mixed-case schema or
+  name reaches the right routine.
+- **`migrate fix-signatures --mode apply` drops the overload it names.** The `DROP
+  FUNCTION` wrote schema, name and argument types unquoted, so a stale
+  `"MyFunc"(text)` became `DROP FUNCTION public.MyFunc(text)` and dropped an unrelated
+  `myfunc(text)`. Additive: `StaleOverload.arguments` carries PostgreSQL's spelling
+  of the argument types; `stale_signature` and the JSON keys are unchanged.
+- **`confiture bootstrap` renders every `default_privileges` schema and grantee as
+  exactly one identifier**; a value quoted as `"Name"` stays as written, anything else
+  has its quotes doubled.
+- **`write_copy_seed` / `write_insert_seed` refuse a value holding a NUL** with
+  `SeedError`, before a file is written: psql drops the rest of such a line and joins
+  the next, which ran injected SQL from an INSERT seed and merged two COPY rows.
+- **A notification webhook's token stays out of errors and logs** —
+  `redact_url(url, bearer=True)` keeps the scheme and host of a Slack or Discord URL.
+
 ### Changed
 
 - **Nothing in the package or its tests names the plan that produced it.**

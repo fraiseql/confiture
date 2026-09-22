@@ -38,6 +38,7 @@ from importlib import resources
 from typing import Any
 
 import psycopg
+from psycopg import sql
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +145,16 @@ class SavedView:
     def qualified_name(self) -> str:
         """Return schema.name for display."""
         return f"{self.schema}.{self.name}"
+
+
+def _relation(view: SavedView) -> sql.Identifier:
+    """The view as SQL names it: both names quoted, whatever characters they hold."""
+    return sql.Identifier(view.schema, view.name)
+
+
+def _kind_keyword(view: SavedView) -> sql.SQL:
+    """``MATERIALIZED VIEW`` or ``VIEW``, the word a statement about *view* uses."""
+    return sql.SQL("MATERIALIZED VIEW" if view.kind == "m" else "VIEW")
 
 
 @dataclass
@@ -343,14 +354,12 @@ class ViewManager:
         # Drop in reverse dependency order (deepest first — already sorted)
         with self._conn.cursor() as cur:
             for view in self._saved_views:
-                qualified = f'"{view.schema}"."{view.name}"'
-                if view.kind == "m":
-                    cur.execute(f"DROP MATERIALIZED VIEW IF EXISTS {qualified} CASCADE")
-                else:
-                    cur.execute(f"DROP VIEW IF EXISTS {qualified} CASCADE")
-                logger.debug(
-                    "Dropped %s %s", "MATERIALIZED VIEW" if view.kind == "m" else "VIEW", qualified
+                cur.execute(
+                    sql.SQL("DROP {} IF EXISTS {} CASCADE").format(
+                        _kind_keyword(view), _relation(view)
+                    )
                 )
+                logger.debug("Dropped %s %s", view.kind, view.qualified_name)
 
         self._conn.commit()
         return len(self._saved_views)
@@ -394,22 +403,27 @@ class ViewManager:
         )
 
         with self._conn.cursor() as cur:
-            for view in ordered:
-                qualified = f'"{view.schema}"."{view.name}"'
-                definition = view.definition.rstrip().rstrip(";")
+            for position, view in enumerate(ordered):
+                relation = _relation(view)
+                # The body is pg_get_viewdef's deparse: SQL PostgreSQL wrote itself.
+                definition = sql.SQL(view.definition.rstrip().rstrip(";"))
 
-                # Use a savepoint so a single failure doesn't abort the batch
-                savepoint = f"recreate_{view.schema}_{view.name}"
-                cur.execute(f"SAVEPOINT {savepoint}")
+                # A savepoint per view, so a single failure doesn't abort the batch.
+                # Its name is ours rather than built from the view's, which can
+                # run past the 63 bytes PostgreSQL keeps of an identifier.
+                savepoint = sql.Identifier(f"confiture_recreate_{position}")
+                cur.execute(sql.SQL("SAVEPOINT {}").format(savepoint))
 
                 try:
                     if view.kind == "m":
                         cur.execute(
-                            f"CREATE MATERIALIZED VIEW {qualified} AS {definition} WITH NO DATA"
+                            sql.SQL("CREATE MATERIALIZED VIEW {} AS {} WITH NO DATA").format(
+                                relation, definition
+                            )
                         )
-                        cur.execute(f"REFRESH MATERIALIZED VIEW {qualified}")
+                        cur.execute(sql.SQL("REFRESH MATERIALIZED VIEW {}").format(relation))
                     else:
-                        cur.execute(f"CREATE VIEW {qualified} AS {definition}")
+                        cur.execute(sql.SQL("CREATE VIEW {} AS {}").format(relation, definition))
 
                     # Restore indexes (materialized views only)
                     for idx in view.indexes:
@@ -417,20 +431,24 @@ class ViewManager:
 
                     # Restore comment
                     if view.comment:
-                        kind_label = "MATERIALIZED VIEW" if view.kind == "m" else "VIEW"
-                        escaped = view.comment.replace("'", "''")
-                        cur.execute(f"COMMENT ON {kind_label} {qualified} IS '{escaped}'")
+                        cur.execute(
+                            sql.SQL("COMMENT ON {} {} IS {}").format(
+                                _kind_keyword(view), relation, sql.Literal(view.comment)
+                            )
+                        )
 
-                    cur.execute(f"RELEASE SAVEPOINT {savepoint}")
+                    cur.execute(sql.SQL("RELEASE SAVEPOINT {}").format(savepoint))
                     result.recreated.append(view)
-                    logger.debug("Recreated %s %s", view.kind, qualified)
+                    logger.debug("Recreated %s %s", view.kind, view.qualified_name)
 
                 except psycopg.Error as e:
-                    cur.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
-                    cur.execute(f"RELEASE SAVEPOINT {savepoint}")
+                    cur.execute(sql.SQL("ROLLBACK TO SAVEPOINT {}").format(savepoint))
+                    cur.execute(sql.SQL("RELEASE SAVEPOINT {}").format(savepoint))
                     error_msg = str(e).strip()
                     result.failed.append((view, error_msg))
-                    logger.warning("Could not recreate %s %s: %s", view.kind, qualified, error_msg)
+                    logger.warning(
+                        "Could not recreate %s %s: %s", view.kind, view.qualified_name, error_msg
+                    )
 
         self._conn.commit()
 

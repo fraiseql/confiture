@@ -8,7 +8,9 @@ exercised against ``pytest-httpserver`` for happy-path / retry tests.
 from __future__ import annotations
 
 import io
+import logging
 import socket
+import urllib.error
 from unittest import mock
 
 import pytest
@@ -221,3 +223,59 @@ class TestHttpTransport:
         req = urlopen.call_args.args[0]
         # urllib lowercases-then-titlecases the header name; use the public getter.
         assert req.get_header("X-custom-header") == "yes"
+
+
+# ---------------------------------------------------------------------------
+# A webhook URL is a bearer secret: no message or log line carries it
+# ---------------------------------------------------------------------------
+
+_WEBHOOK = "https://hooks.slack.com/services/T000/B000/SECRETTOKEN"
+
+
+def _failed_send(response: object, caplog: pytest.LogCaptureFixture) -> tuple[str, str]:
+    """A hook sending through a failing POST: its result's error, and every log line."""
+    import asyncio
+
+    from confiture.core.hooks.context import ExecutionContext, HookContext
+    from confiture.core.hooks.notifications.hook import NotificationHook
+    from confiture.core.hooks.notifications.renderer import RawJsonRenderer
+
+    transport = HttpTransport(_WEBHOOK, retry=RetryPolicy(attempts=2))
+    hook = NotificationHook("slack", transport, RawJsonRenderer())
+    context = HookContext(
+        phase="after_execute", data=ExecutionContext(metadata={"migration_name": "x"})
+    )
+    patch = (
+        {"side_effect": response}
+        if isinstance(response, BaseException)
+        else {"return_value": response}
+    )
+    with (
+        mock.patch("urllib.request.urlopen", **patch),
+        caplog.at_level(logging.DEBUG),
+    ):
+        result = asyncio.run(hook.execute(context))
+    assert result.error is not None
+    return result.error, caplog.text
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        _mock_response(404),
+        _mock_response(503),
+        urllib.error.HTTPError(_WEBHOOK, 500, "boom", {}, None),  # type: ignore[arg-type]
+        ConnectionRefusedError("refused"),
+    ],
+    ids=["4xx", "5xx", "http-error", "connection"],
+)
+def test_a_failed_webhook_post_never_shows_its_token(response, caplog) -> None:
+    error, logged = _failed_send(response, caplog)
+
+    assert ("SECRETTOKEN" in error, "SECRETTOKEN" in logged) == (False, False)
+
+
+def test_the_error_still_names_where_it_was_sent(caplog) -> None:
+    error, _ = _failed_send(_mock_response(404), caplog)
+
+    assert "https://hooks.slack.com/" in error

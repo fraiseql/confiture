@@ -296,3 +296,29 @@ def test_mcp_cli_port_starts_http_server():
                 # If serve was called OR the import itself raised (no fastapi), either is OK
                 # The key is the old "not yet implemented" message is gone
                 assert "not yet implemented" not in (result.output or "")
+
+
+def test_a_routine_is_called_by_its_name_as_an_identifier():
+    """The call names the routine; nothing in its name can end the statement."""
+    import dataclasses
+
+    import pglast
+
+    from confiture.core.mcp_server import MCPServer
+
+    name = "helper(); DROP TABLE keepme; COMMIT; SELECT now"
+    func = dataclasses.replace(_make_catalog().functions[0], name=name, params=[])
+    catalog = dataclasses.replace(_make_catalog(), functions=[func])
+    server = MCPServer(MagicMock(), schema="Tools", expose_confiture_tools=False)
+    with patch.object(server._introspector, "introspect", return_value=catalog):
+        server.initialize()
+    cursor = server._conn.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (1,)
+
+    server.call_tool(name, {})
+
+    statement = cursor.execute.call_args.args[0]
+    text = statement if isinstance(statement, str) else statement.as_string()
+    (parsed,) = pglast.parse_sql(text)
+    (target,) = parsed.stmt.targetList
+    assert tuple(part.sval for part in target.val.funcname) == ("Tools", name)

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pglast
 import pytest
 
 from confiture.config.environment import OwnershipApplyTo, OwnershipExpectation
@@ -190,3 +191,44 @@ def test_plan_to_dict_round_trips_steps() -> None:
     data = plan.to_dict()
     assert data["steps"] == [{"label": "dummy", "sql": "SELECT 1", "description": "noop"}]
     assert data["is_empty"] is False
+
+
+# ---------------------------------------------------------------------------
+# Identifiers: one name each, whatever the config holds
+# ---------------------------------------------------------------------------
+
+#: A value that opens and closes with a quote but is not one quoted identifier.
+_INJECTED = '"app"; DROP TABLE keepme; --"'
+
+
+def _default_privileges_names(schema: str, grantee: str) -> tuple[object, ...]:
+    """What the one ``ALTER DEFAULT PRIVILEGES`` statement names, as PostgreSQL reads it."""
+    planner = BootstrapPlanner(
+        ownership=_make_ownership(default_privileges={schema: {grantee: ["SELECT"]}})
+    )
+    (step,) = planner.plan(_make_conn(role_exists=True, postgres_owned_schemas=[])).steps
+    statements = pglast.parse_sql(step.sql)
+    options = {option.defname: option.arg for option in statements[0].stmt.options}
+    return (
+        len(statements),
+        tuple(role.rolename for role in options["roles"]),
+        tuple(name.sval for name in options["schemas"]),
+        tuple(role.rolename for role in statements[0].stmt.action.grantees),
+    )
+
+
+@pytest.mark.parametrize(
+    ("schema", "grantee", "named"),
+    [
+        pytest.param("tenant", _INJECTED, ("tenant", _INJECTED), id="grantee-closes-its-quotes"),
+        pytest.param(_INJECTED, "app", (_INJECTED, "app"), id="schema-closes-its-quotes"),
+        pytest.param(
+            'ten"ant; --', 'a"pp;', ('ten"ant; --', 'a"pp;'), id="embedded-quote-and-semicolon"
+        ),
+        pytest.param('"Tenant"', '"App""s"', ("Tenant", 'App"s'), id="quoted-form-is-its-name"),
+    ],
+)
+def test_a_default_privileges_statement_names_each_identifier_once(
+    schema: str, grantee: str, named: tuple[str, str]
+) -> None:
+    assert _default_privileges_names(schema, grantee) == (1, ("migrator",), *[(n,) for n in named])
