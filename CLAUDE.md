@@ -99,11 +99,10 @@ pyyaml = ">=6.0"          # YAML parsing
 psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
 rich = ">=13.7"           # Terminal formatting
 sqlglot = ">=28.0"        # SQL dialect-aware parsing (transpilation)
+pglast = ">=6.0"          # PostgreSQL's own C parser (libpg_query) — the one parser
 
 [project.optional-dependencies]
-ast = [
-    "pglast>=6.0",         # PostgreSQL's own C parser (libpg_query) — no token limits
-]
+ast = []                  # empty alias: an older `fraiseql-confiture[ast]` still resolves
 
 dev = [
     "pytest>=8.0",
@@ -116,476 +115,208 @@ dev = [
 ]
 ```
 
-### SQL Parsing Architecture
+### Architecture: one model
 
-**One parser: pglast** (PostgreSQL's own C parser via `libpg_query`), a hard
-dependency since 0.50.0 (D13). There is no regex or sqlparse fallback and no
-switch to one — `tests/unit/test_single_parser.py` fails on any `FORCE_REGEX`
-env var, `_HAS_PGLAST` flag or `is_pglast_available` probe. Every DDL question
-has one answer, and a file pglast rejects is a **finding**, never a clean result:
-`IDEM_UNPARSEABLE` (idempotency, counted as unanalyzed), `PFLIGHT_UNPARSEABLE`
-(preflight, forces `window_safe: false`), lint's `UNPARSEABLE` notice, one
-unclassified change-set entry, `DIFFER_400` from `migrate diff`.
+Confiture parses DDL once, reads the live catalog once, types what changed, and exposes
+exactly that as the seam its consumers build on. Each "one X" below is a module and a
+guard test; the guard fails on a second implementation, and its allow-list — where it
+has one — is a table of **reasons**, each naming the different question a module asks.
+An allow-list entry that matches nothing fails too, so an entry is an edit, never an
+escape. Keep every guard green; when a change makes an entry match nothing, delete it
+in the same change.
 
-The prose is guarded too, since 1.10.1: `tests/unit/docs/test_no_optional_parser.py`
-fails on any document, help string or docstring that tells a reader to install a
-parser confiture already depends on, or that describes a fallback. It found **19**
-sites that had drifted since D13 — four guides selling the extra, five CLI `--help`
-strings (published twice, since `docs/reference/cli.md` is generated from them), and
-six docstrings promising a skip notice no code can emit. It reads `pyproject.toml`
-and applies only while pglast is a dependency, and it scans **whole documents**: a
-promise about installation lives in a paragraph, not in a code block, which is where
-the guard's own first draft could not see it.
+**One parser: pglast** (PostgreSQL's own C parser, `libpg_query`), a hard dependency.
+There is no regex or sqlparse fallback: `tests/unit/test_single_parser.py` fails on a
+fallback switch, an availability flag or a probe, and
+`tests/unit/docs/test_no_optional_parser.py` fails on any document, help string or
+docstring that tells a reader to install a parser confiture depends on. `[ast]` is an
+empty alias kept so an older `fraiseql-confiture[ast]` still resolves. A file pglast
+rejects is a **finding**, never a clean result: `IDEM_UNPARSEABLE`,
+`PFLIGHT_UNPARSEABLE` (forces `window_safe: false`), lint's `UNPARSEABLE`, an
+unclassified change-set entry, `DIFFER_400`. `core/parser_info.py` names the parser on
+`confiture --version`'s second line and in every JSON payload's `parser` key.
 
-`[ast]` is an **empty alias** (`ast = []`), kept so an older
-`fraiseql-confiture[ast]` still resolves. Installing it changes nothing.
+**One lexer** — `core/sql_lexer.py` is the only module that tokenises SQL text
+(`split_statements`, `strip_comments`, `tokens`, `code_text`, `directives`,
+`blank_copy_blocks`, `copy_blocks`, `transaction_statements`). A regex elsewhere whose
+pattern carries a lexical marker (`--`, `/*`, a dollar quote, a `'…'` shape, `stdin`,
+`\.`) fails `tests/unit/test_one_sql_lexer.py`; a regex matching a statement's shape
+counts against the shrink-only `sql_keyword_regex` budget. Read a `-- confiture:<name>`
+directive through `directives()`. A `COPY … FROM stdin` block is **blanked, never
+stripped**: the text pglast reads keeps the file's length, lines and offsets, so every
+`file:line` after the block stays true. The same blanking makes a file lint could not
+parse cost that file rather than the build.
 
-The consumers, all on `pglast.parser.parse_sql`:
+**One PL/pgSQL compiler call** — `core/plpgsql_parse.parse_body()` returns
+`Compiled(tree, text, neutralised, repaired)`; `tests/unit/test_plpgsql_parse.py` pins
+the two shapes pglast 8 gets wrong. Its catalogue stub refuses any schema-qualified type
+outside `pg_catalog`/`public`, so the qualifier is blanked with spaces (offsets kept),
+and which one to blank is the compiler's answer — each blank is tested by putting it
+back — never a model of PL/pgSQL's grammar. Its serialiser writes a trigger's implicit
+`TG_*` datums as `{}}`, so the stray brace is deleted at the position
+`json.JSONDecodeError.pos` names, only when the characters there are that defect; a
+serialisation that decodes is returned byte for byte. Do not call
+`pglast.parse_plpgsql` directly; do not replace the oracle with a grammar; do not
+repair the JSON with a global replace.
 
-- **`detect_non_idempotent_patterns`** (`core/idempotency/patterns.py`, visitors
-  in `ast_detector.py`) — the `migrate validate --idempotent` gate. The validator
-  hands pglast the raw file; statement locations index that exact text.
-- **`OperationClassifier`** (`core/replica/classifier.py`) and
-  **`build_change_set`** (`core/change_set.py`) — replica forward-compatibility
-  and risk tiers, sharing `core/ddl_walk.py` for what "nullable", "has a default"
-  and "the type as written" mean.
-- **`SchemaDiffer`** (`core/differ.py`) — `CREATE TABLE`, index, enum, sequence
-  and constraint passes, all through pglast, all keyed by `(schema, name)` with
-  an unqualified name folded to `schema_identity.DEFAULT_SCHEMA` (#313).
-- **`SchemaLinter`** (`core/linting/schema_linter.py`) — the default rules read
-  `core/linting/inventory.py`, a pglast-built object inventory, so a schema
-  qualifier changes nothing (#216).
+**`plpgsql_check` is an analysis engine, not a second parser** (`core/linting/bodies.py`,
+the `body` rule family). Only a built schema knows that `v_pk` is `UUID`, so the DDL is
+materialised into a throwaway database (`ExpectedSchemaDB.from_source()`) and PostgreSQL
+is asked; its diagnosis is reported verbatim, message and SQLSTATE. The extension is in
+no stock PostgreSQL, so the rule reports `skipped` rather than an empty result when it
+cannot run, and the `plpgsql-check` CI leg is where it does.
 
-`confiture --version` names the parser on its second line and every JSON payload
-carries `parser: {"pglast": "8.4", "pg_major": 18}` (`core/parser_info.py`).
+**One type canonicaliser** — `core/type_lattice.py`: `canonical_type` decides that
+`int8` and `bigint` are one type, `same_type` whether two declarations are, and
+`core/ddl_walk.type_name` reads a pglast `TypeName` for it (drops the `pg_catalog`
+qualifier, keeps the array suffix). `tests/unit/test_one_type_canonicaliser.py`
+allow-lists one other table, `ddl_walk`'s spelling table, which writes the upper-case
+type a generated migration prints. A type's identity and its spelling are two fields,
+deliberately: a signature drops typmods (PostgreSQL ignores them there) and a column
+type keeps them, or `varchar(50)` and `varchar(100)` would compare equal.
 
-**`plpgsql_check` is not a second parser** (`core/linting/bodies.py`, the `body`
-family, #245). A parser cannot know that `pk_widget` is `BIGINT` and `v_pk` is
-`UUID`; only a built schema knows that, so the DDL is materialised into a
-throwaway database (`ExpectedSchemaDB.from_source()`) and PostgreSQL is asked.
-It is an *analysis engine consulted about resolved types*, never a fallback for
-reading DDL: confiture still parses every statement with pglast, and the
-extension's diagnosis is reported verbatim — message and SQLSTATE — because
-confiture has nothing to add to it. The extension is in no stock PostgreSQL, so
-the rule reports a `skipped` status rather than an empty result when it cannot
-run, and one required CI leg (`plpgsql-check`) is the only place it does.
+**One path matcher** — `core/path_globs.py` answers "does this path, relative to its
+include directory, match this configured glob", in **gitignore's** dialect: a pattern
+with no `/` matches the filename at any depth, one with a `/` is left-anchored, `**`
+spans zero or more components, `*` and `?` never cross a separator.
+`PurePath.match`/`full_match`/`fnmatch` on a *path* elsewhere fails
+`tests/unit/test_one_path_matcher.py`; its allow-list names the modules that match an
+*object* name instead (a seed profile's globs are over bare filenames of a flat
+listing, on purpose).
 
-**One place compiles a PL/pgSQL body** (`core/plpgsql_parse.py`, #270 and #272).
-`pglast.parse_plpgsql` is the wrong shape twice, on **pglast 8 only** both
-times — 6.16 and 7.18 have neither — and both ended in the same place, a routine
-`build_003` never looked at. `parse_body()` answers for both and returns
-`Compiled(tree, text, neutralised, repaired)`.
+**One DDL reader: `core/ddl_walk.py`**, shared by every walker of a DDL tree.
+- *ALTER folding.* `column_edit`, `adds_primary_key` and `object_edits` decide what an
+  `ALTER`, `DROP` or rename does to the schema a tree declares. Every `AlterTableType`
+  member is in `FOLDED`, `MODELLED_ELSEWHERE` or `NOT_AN_EXPECTED_SCHEMA_FACT`, and every
+  `Alter…`/`Drop…`/`Rename…Stmt` node in `FOLDED_STATEMENTS`, `MODELLED_STATEMENTS` or
+  `NOT_AN_EXPECTED_SCHEMA_STATEMENT` (`tests/unit/test_alter_subtypes_are_exhaustive.py`,
+  `tests/unit/test_ddl_statement_kinds_are_exhaustive.py`);
+  `tests/unit/test_one_alter_folder.py` fails on a module elsewhere that names an
+  `AlterTableType` member. The fold is **order-aware** — `DROP TABLE IF EXISTS x;
+  CREATE TABLE x (…);` is everyday DDL, and an order-blind fold deletes a table the tree
+  declares.
+- *Constraints.* `read_constraint(node, column=None)` returns a
+  `schema_model.Constraint` or a `ColumnFact` wherever the grammar puts the node — on a
+  column, at table level, in `ALTER TABLE … ADD CONSTRAINT` — and
+  `read_column_constraints` folds a column's clauses in order (a trailing
+  `DEFERRABLE` qualifies the constraint before it). Every `ConstrType` member is in
+  `MODELLED_CONSTRAINTS` or `NOT_MODELLED_CONSTRAINTS`
+  (`tests/unit/test_constraint_reader_is_exhaustive.py`). An unnamed constraint is
+  identified by what it says, and generated DDL omits its `CONSTRAINT` clause so
+  PostgreSQL names it as it would the author's own.
+- *Column types.* `Column.type_key` is the identity (typmod kept), `raw_sql_type` the
+  spelling generated DDL writes (`written_type`: the canonical name plus the parser's
+  typmod, since pglast has already folded `INT` to `int4`), `type_text` the author's
+  spelling a finding prints. A type the map does not know is kept exactly as the parser
+  holds it, case included.
 
-*The compiler* is PostgreSQL's own with the catalogue stubbed out, and that
-stub's `LookupExplicitNamespace` resolves `pg_catalog` and `public` and refuses
-everything else — so `app.mutation_response` as a parameter, a return type, a
-`SETOF`, a `RETURNS TABLE` column or a `DECLARE` took the whole routine down
-before a line of its body was read. That was 233 of 297 routines on a
-FraiseQL-shaped schema, silently. Nothing downstream reads a type — the caller
-wants linenos and `PLpgSQL_expr` query strings — so the qualifier is **blanked
-with spaces**, keeping every offset and line number. Which one to blank is the
-compiler's answer, never a model of PL/pgSQL's declaration grammar: a guess
-narrows the search and each blank in it is then tested by *putting it back*,
-because a qualifier the compiler accepts is a reference and `app.tv_summary`
-blanked to `tv_summary` is a name `build_003` declines to judge.
+**One object list** — `core/ddl_objects.py` decides what a statement *defines* for
+everything `migrate validate --require-migration` must notice (views, routines,
+triggers, extensions, schemas, …), with two renderings: `definition` neutralises
+`OR REPLACE`/`IF NOT EXISTS` so a view that gains one is the same view, `create_sql`
+re-renders with the clause each kind supports so a generated migration re-applies.
+Every `Create…Stmt` in pglast's grammar is in exactly one of `TRACKED_NODES`,
+`MODELLED_ELSEWHERE` or `NOT_A_SCHEMA_OBJECT`
+(`tests/unit/test_ddl_objects_are_exhaustive.py`). `ObjectRef` is a **bucket**, not an
+identity: a routine's key carries its signature bucket and definitions are paired
+inside it, so `fn(bigint)` and `fn(int8)` are one routine.
 
-*The serialiser* writes a trigger function's implicit `TG_*` datums as `{}}`,
-one closing brace too many each, so `json.loads` never reached the tree and
-**every** `RETURNS TRIGGER` and `RETURNS event_trigger` body was unread whatever
-it held — 5 of the 8 plpgsql routines in this repo's own corpora. The stray
-brace is deleted at the position `json.JSONDecodeError.pos` names, and only when
-the characters there are that defect: `{"PLpgSQL_stmt_return":{}}` is a
-legitimate `{}}` in very nearly every body, so `raw.replace("{}}", "{}")`
-corrupts an ordinary `RETURNS void` function. A serialisation that decodes is
-returned byte-for-byte (`repaired == 0`); one broken some other way raises, so
-the routine stays named in `degraded`. Each repaired datum decodes to `{}` —
-**a datum index is not a fact that tree holds**, and the three majors do not
-agree on that array anyway.
+**One object identity** — `(schema, name)`, a missing qualifier folded to
+`core/schema_identity.DEFAULT_SCHEMA`. Identity folds; **spelling never does**:
+`qualified` prints what the author wrote and never invents `public.`, because a project
+whose `search_path` is not `public` would have its generated DDL moved to another
+schema. `tests/unit/test_one_object_identity.py` fails on a module that spells its own
+`or "public"` or keys a model by a bare `.name`; both allow-lists are empty. Renames are
+matched within one schema (moving a table between schemas is `SET SCHEMA`). Two
+definitions of one `(schema, name)` are resolved by `duplicates.wins` — `build_001`'s
+rule, so the diff reads the tree the build produces — and reported as `DIFFER_402`.
 
-Do not call `pglast.parse_plpgsql` directly; do not replace the oracle with a
-grammar; do not repair the JSON with a global replace.
+**One schema model** — `core/schema_model.py`: `Table`, `Column`, `Constraint`,
+`Index`, `EnumType`, `Sequence`, `Routine`, `View`, `Trigger`, and the `SchemaModel` that
+keys them by `ObjectRef`. It imports no parser and no driver (a subprocess test pins
+that, which is why `confiture/core/__init__.py` resolves its names lazily).
+`inventory.build_model(sql)` reads a DDL tree into it; the differ, drift and prep-seed
+level 2 read that model, and the lint rules read the inventory it is built from. `tests/unit/test_one_schema_model.py` fails on a
+class elsewhere named like a model type or carrying a model's fields; its allow-list
+names the question each remaining class answers. `SchemaModel.to_json()` is the model's
+one wire: sorted, byte-stable, published as `schema-model.schema.json`, and the model
+goldens in `tests/fixtures/model_goldens/model/` are those bytes
+(`tests/unit/test_port_parity_corpus.py`).
 
-**One lexer too.** `core/sql_lexer.py` is the only module that tokenises SQL text
-(`split_statements`, `strip_comments`, `tokens`, `code_text`, `comments`,
-`directives`, `blank_copy_blocks`, `copy_blocks`, `transaction_statements`). A regex outside it whose pattern carries a
-lexical marker — `--`, `/*`, a dollar quote, a `'…'` shape, `stdin`, `\.` — fails
-`tests/unit/test_one_sql_lexer.py` (allow-list entries state why the text is not
-SQL); a regex that matches a statement's shape (`^CREATE\s+TABLE`) counts against
-the shrink-only `sql_keyword_regex` dimension of `tests/budgets.json`. Read a
-`-- confiture:<name>` directive through `sql_lexer.directives()`, never with a
-line walker of your own.
+**One live reader** — `core/live_catalog.py` is the only module that reads schema facts
+from `pg_catalog`, `information_schema` or the catalog views, into the same model
+(`read`, plus routines, views and triggers). `tests/unit/test_one_live_reader.py` fails
+on a SQL-shaped string naming the catalog anywhere else; its allow-list holds only
+modules asking something that is not a schema fact (ownership, ACLs, dependency
+graphs, confiture's own ledger, operational state). The parse side and the live side of
+one tree are the same model — `tests/integration/test_parse_live_parity.py`, with each
+normalisation it needs named and measured in `normalise_for_parity` — so drift
+(`core/drift.py`) compares a model to a model, and a database built from its own DDL has
+no drift by construction.
 
-A `COPY … FROM stdin` block is **blanked, never stripped** (since 1.9.0, #274).
-`blank_copy_blocks` replaces the block's characters with spaces and leaves its
-newlines alone, so the text pglast reads is the same length, the same line count
-and the same offsets as the text on disk. `strip_copy_blocks` is retired, not
-kept alongside: deleting a block moves every finding after it, and `confiture
-lint` reports `file:line` on all of them. The same technique — #270's — blanks a
-whole file the lint could not parse, which is what makes a rejected file cost
-that file rather than the build.
+**One change union** — `core/schema_change.py`: a closed union of change variants and
+the `SchemaDiff` that carries them, `to_wire()` per variant for the JSON. Every variant
+declares an up renderer, a down renderer, a destructive verdict, an accompaniment class
+and a risk tier from the one `RiskTier` taxonomy
+(`tests/unit/test_schema_change_is_exhaustive.py`); `core/differ_sql.py` is the one
+renderer, matching per group and closed by `assert_never`, and `core/ddl_clauses.py`
+holds the one clause builder per element (`constraint_body`, `column_body`): the text
+after `ADD` in an `ALTER` and the element in a `CREATE TABLE` are the same text. Assert
+generated SQL by parsing it with pglast, never by matching strings.
 
-`_lex` reads the file once however many blocks are in it (since 1.9.1, #278).
-After a block whose data it cannot resume across, the rescan grows a window from
-the resume point until a complete `COPY … FROM stdin;` is inside it, rather than
-handing `pglast.parser.scan` the rest of the file — the scanner reads its whole
-buffer however early its error is, so that cost O(n × total) for n blocks. A
-window is trusted for exactly the one block it was grown to hold: its tokens stop
-at the window, not at the end of the file, so resuming inside one drops
-everything past it. Note that `\.` does **not** make the scanner error
-(`scan("\\.\n")` is `ASCII_92`, `ASCII_46`); an unterminated quote does, which
-is why a corpus whose data rows lex cleanly never reaches the rescan at all and
-proves nothing about it.
+**The seam** — `confiture.platform` re-exports what a tool builds on: `parse_schema`,
+`introspect`, `diff`, `dependency_order`, `writable_columns`, `column_facts`,
+`naming_hints`, `write_copy_seed`, `write_insert_seed`, `apply_seeds`, `validate_seeds`,
+`tier_of`, the model types and the change union. A function that needs a database takes
+a URL (confiture opens, commits and closes it) or any object meeting the `Connection`
+Protocol (the caller owns its transaction). What the seam refuses it refuses in a
+`ConfiturError` — `NotInModelError` is also a `KeyError` — never a driver's exception,
+and a typo (a missing path, a bare `str` where names are expected) is never an empty
+success. `tests/contract/test_platform_surface.py`
+pins every name, signature and field; `tests/unit/test_platform_leaks_no_driver_types.py`
+fails on a `pglast` or `psycopg` type in any signature; `docs/reference/platform-api.md`
+is generated (`scripts/gen_platform_reference.py`). `confiture schema dump-model` writes
+the model's wire from DDL or a live database, and
+[the port's boundary](docs/architecture/rust-port-boundary.md)
+(`scripts/gen_port_boundary.py`) places every `core/` module in the 2027 crate, in
+Python glue, or outside the port.
 
-**One type canonicaliser too** (since 1.9.0, #275). `core/type_lattice.py` holds
-the only alias table: `canonical_type` decides that `int8` and `bigint` are one
-type, and `core/ddl_walk.type_name` is its reader for a pglast `TypeName` — it
-drops the `pg_catalog` qualifier the parser adds, keeps the array suffix, and
-leaves the internal spelling for the lattice to alias. There were **six** such
-tables resolving in **three** directions; `tests/unit/test_one_type_canonicaliser.py`
-deleted the two under `core/linting/` and allow-lists the remaining **one** with
-the reason it is a different question (`core/ddl_walk.py` writes upper-case column
-types into a migration). `core/drift.py`'s `_types_compatible` is gone since
-1.11.0: `same_type` in the lattice answers it, carrying the schema wildcard
-`type_lattice.types_match` applies to a routine's arguments, because `format_type`
-omits a schema that `search_path` makes visible (#302). The signature parser's
-`_TYPE_ALIASES` is gone with the parser: a routine's argument types are keyed by
-the lattice on both sides of `--check-signatures`, and the catalogue's spelling a
-report prints (`character varying`) is `type_lattice.catalog_spelling`, the
-lattice's own table read the other way. An allow-list entry that no longer matches
-anything fails, as in the one-lexer guard — which is what forced each edit.
+#### Python migrations: the static evaluator
 
-A type's *identity* and its *spelling* are two fields, deliberately:
-`SchemaObject.signature` is the arguments as the author wrote them, because it is
-what a finding prints, and `signature_key` is `canonical_type(type_name(arg))` per
-argument, because it is what decides whether two routines are the same routine.
-`object_key` is a **bucket**, not an identity — a dict key cannot express "a type
-schema written on one side and left off the other still matches" — so group
-through `inventory.group_by_signature`, never through the key alone.
-
-**One path matcher too** (since 1.5.0, #256). `core/path_globs.py` answers "does
-this path, relative to its include directory, match this configured glob" and
-nothing else does. The dialect is **gitignore's**, named as such so a reader has
-a reference implementation to compare against: a pattern with no `/` matches the
-*filename* at any depth, a pattern with a `/` is matched **left-anchored**
-against the whole relative path, `**` spans **zero or more** components, and `*`
-/ `?` never cross a separator. `PurePath.match`, `PurePath.full_match` or
-`fnmatch` called on a *path* anywhere else fails
-`tests/unit/test_one_path_matcher.py`; its allow-list entries state, per module,
-which *object* name (`schema.relname`, a bare filename from a flat listing) that
-module matches instead. That is the point of the allow-list: `SeedProfile`
-spells its keys `include` / `exclude` exactly as `DirectoryConfig` does, but they
-are `fnmatch` globs over a bare filename, on purpose — seed discovery is a flat
-listing where a path never appears and `**` has nothing to span. `recursive`
-bounds the walk and the patterns filter what it found; nothing rewrites a
-pattern between what the YAML says and what the matcher sees.
-
-**One ALTER folder too** (since 1.11.0, #301). `core/ddl_walk.py` decides what a
-DDL statement does to the schema a tree declares, and the lint inventory applies
-the verdict — `confiture drift`'s expected side, and since the schema model also
-`SchemaDiffer`'s, which reads the model the inventory builds rather than folding a
-model of its own. `column_edit`
-answers for one `AlterTableCmd`, `adds_primary_key` for the table-level flag, and
-`object_edits` for the statement kinds that are not `AlterTableStmt` at all:
-`DROP TABLE`, `ALTER TABLE … RENAME COLUMN`, `… RENAME TO` and `… SET SCHEMA` are
-a `DropStmt`, two `RenameStmt` and an `AlterObjectSchemaStmt`, and no reader saw
-any of them. Before it, the differ folded 3 of 66 `AlterTableType` members and
-the inventory 2, so a column the tree itself dropped was reported as **critical**
-drift against a database applied verbatim from that tree.
-
-Two guards, both enumerating pglast's own grammar rather than a hand list: every
-`AlterTableType` member (66) is in `FOLDED`, `MODELLED_ELSEWHERE` or
-`NOT_AN_EXPECTED_SCHEMA_FACT`, and every `Alter…`/`Drop…`/`Rename…Stmt` node (41)
-in `FOLDED_STATEMENTS`, `MODELLED_STATEMENTS` or
-`NOT_AN_EXPECTED_SCHEMA_STATEMENT` — the declining tables being tables of
-**reasons**. `tests/unit/test_one_alter_folder.py` fails on any module outside
-`ddl_walk` that names an `AlterTableType` member or compares a `subtype` against
-a bare ordinal; its four allow-list entries each state the different question that
-module asks (replica observability, risk tier, an `IF NOT EXISTS` guard, the
-object a finding names).
-
-The fold is **order-aware**, and that is not a detail:
-`DROP TABLE IF EXISTS x; CREATE TABLE x (…);` is everyday DDL and the readers
-collect every `CREATE` before folding anything, so an order-blind fold deletes a
-table the tree really declares. Each compares the statement's offset against the
-object's. `ddl_objects` folds less than the inventory on purpose: `objects_in` applies a
-`DROP` and **not** a rename, because its two renderings are of the creating
-statement and rewriting `CREATE VIEW v` as `CREATE VIEW v2` is SQL generation, not
-parsing.
-
-**One object list too** (since 1.10.0, #288). `core/ddl_objects.py` decides what
-a DDL statement *defines*, for everything `migrate validate --require-migration`
-has to notice. Before it, `SchemaDiffer` modelled tables, enum types and
-sequences, so a view, a routine, a trigger, an extension or a schema added to the
-tree and not to a migration passed the gate with a green tick — **sixteen**
-statement kinds, `ALTER TABLE … ADD COLUMN` among them.
-
-Identity is **the lint inventory's answer**, not a second one:
-`inventory.object_from_statement` already decides what a statement defines, how a
-schema qualifier is read, and which overload a routine is. What `ddl_objects`
-adds is the half the inventory does not hold — the definition — in **two**
-renderings, both `RawStream`'s and neither string surgery on its output:
-`definition` neutralises `OR REPLACE` / `IF NOT EXISTS`, so a view that gains one
-is the same view; `create_sql` re-renders *with* the clause each kind supports,
-because a migration generated from the neutralised form carries a bare
-`CREATE VIEW` that fails on its second apply.
-
-`ObjectRef` is a **bucket**, as `object_key` is: a dict key cannot express "a type
-schema written on one side and left off the other still matches", so the key
-carries `signature_bucket` and `pair_definitions` matches inside it. Keying on the
-full signature reported `DROP fn(bigint)` + `ADD fn(int8)` for one routine
-respelled — an instruction to drop a function and take its dependents with it —
-and `display`, which carries the signature *as written*, re-made the same mistake
-one field along until it became `field(compare=False)`.
-
-Every `Create…Stmt` in pglast's grammar must be in exactly one of `TRACKED_NODES`,
-`MODELLED_ELSEWHERE` or `NOT_A_SCHEMA_OBJECT` — the last a table of **reasons** —
-or `tests/unit/test_ddl_objects_are_exhaustive.py` fails; so does a node claimed
-twice, and so does a declined node pglast no longer defines. That guard is the
-point of the module. The sixteen invisible kinds were not sixteen oversights but
-one: nothing said which statements the differ answered for, so a kind never
-considered looked exactly like a kind deliberately skipped.
-
-A schema pglast rejects now **fails** that gate rather than skipping it
-(`is_valid: false`, `was_skipped` in the envelope). The old exit 0 was justified
-by the sqlparse token limit, which D13 made unreachable.
-
-**One object identity too** (since 1.13.0, #313). What makes two relations the
-same relation is `(schema, name)` with a missing qualifier folded to
-`core/schema_identity.py`'s `DEFAULT_SCHEMA` — the middle term of
-`inventory.object_key`, which `ddl_objects.ObjectRef` and `drift.py` already
-applied. `SchemaDiffer` was the **last reader of a DDL tree here with no schema
-in its identity**: `Table(name=stmt.relation.relname)` threw `schemaname` away at
-parse time, so inside one `compare()` call `a.v` and `b.v` were two views —
-`ParsedSchema.objects` is #288's `ObjectRef` — and `a.t` and `b.t` were one
-table. The same run answered the same question two ways.
-
-It was silent *and* destructive. Silent: on a 707-file schema with `tenant.` /
-`etl_ingest.` twins, **4 of 433 tables** were permanently invisible to
-`migrate validate --require-migration`. Destructive: swapping two files' build
-order — a rename, a renumber, **no schema change at all** — made the differ
-compare `tenant.t` against `etl.t` and `migrate diff --generate` write
-`ALTER TABLE t DROP COLUMN IF EXISTS b`. It also corrupted the parse itself:
-`ALTER TABLE etl.t ADD COLUMN` and `CREATE INDEX … ON etl.t` landed on
-`tenant.t`; `DROP TABLE etl.t` and `ALTER TABLE etl.t RENAME TO` hit **both**
-tables. And it shipped in this repository's own `examples/06-prep-seed-validation`
-— the prep-seed pattern *is* two schemas holding the same table names.
-
-Identity folds; **spelling never does**. `Table.qualified` /
-`EnumType.qualified` / `Sequence.qualified` print what the author wrote and
-never invent a `public.`, because a project whose `search_path` is not `public`
-would have its generated DDL rewritten into another schema. That is
-`ObjectRef`'s own split between the key and `display`, and `SchemaObject`'s
-between `signature` and `signature_key` (#275).
-
-Renames are matched **within one schema**, and that is grammar rather than a
-threshold: `ALTER TABLE a.t RENAME TO a.t2` is a syntax error (moving a table
-between schemas is `SET SCHEMA`), and `_similarity_score` scores
-`tenant.tb_meter`/`etl.tb_meter` at 0.6 — exactly what it scores the real rename
-`tenant.tb_a`/`tenant.tb_b`. No threshold separates those.
-
-A **collapse is a finding**: two definitions of one `(schema, name)` in one tree
-are resolved by `duplicates.wins` — `build_001`'s own rule — so the diff reads
-the tree the build produces (a later `IF NOT EXISTS` is a no-op, so the *first*
-definition is what the database has), and `DIFFER_402` says so in
-`migrate diff --format json`'s `warnings[]` and in the accompaniment report.
-Warned, not failed: a duplicate is `confiture lint`'s problem and
-`build --fail-on-duplicates`' problem, both of which already exist and are
-opt-in.
-
-`tests/unit/test_one_object_identity.py` fails on a module that spells its own
-`or "public"` beside a schema (nine sites in four modules did) or that keys one
-of the schema-object models by a bare `.name` in a comprehension; both
-allow-lists are empty, and an entry matching nothing fails as in the one-lexer
-guard. The check is pinned against `3b12dcce`'s three maps verbatim — a guard
-never seen red is a guard that does not run. `DEFAULT_SCHEMA` moved out of
-`core/linting/inventory.py` into its own import-safe module for a measured
-reason: two of those four sites needed the fold and not a parser, so they wrote
-the word instead.
-
-**One constraint reader too** (since 1.14.0, #315 and #316). PostgreSQL's
-grammar puts a `Constraint` node in three places — on a column, at table level
-inside `CREATE TABLE`, and in `ALTER TABLE … ADD CONSTRAINT` — and
-`core/differ.py` had three readers of it. The column loop read **none**, so
-`pid INT REFERENCES b.parent(id)` parsed to zero foreign keys; the other two
-disagreed about what a CHECK expression is, one rendering it and one storing
-`type(raw_expr).__name__`, which generated
-`ALTER TABLE t ADD CONSTRAINT ck CHECK (A_Expr) ()`. Across this repository's own
-schema and its eight example schemas, **13 of 17 foreign keys** and 16 of 23
-unique constraints were invisible.
-
-The one reader lives in `core/ddl_walk.py` and **returns** what a node declares:
-`read_constraint(node, column=None)` gives a `schema_model.Constraint` (primary
-key, UNIQUE, CHECK, foreign key — with its deferrability) or a `ColumnFact`
-(`NOT NULL`, default, identity, generated expression), and
-`read_column_constraints(coldef)` folds a column's clauses in order, because on a
-column `DEFERRABLE INITIALLY DEFERRED` arrives as sibling nodes after the
-constraint it qualifies. Where the constraint was written decides only which
-columns it covers; whoever assembles the table applies a primary key to the
-columns it covers. The differ and the lint inventory both read through it. Every
-`ConstrType` member is in `MODELLED_CONSTRAINTS` or `NOT_MODELLED_CONSTRAINTS`,
-the second a table of **reasons**; a generated column's `raw_expr` is not a
-CHECK, which is exactly why the reader dispatches on the kind and never on that
-field. `tests/unit/test_constraint_reader_is_exhaustive.py` enumerates pglast's
-own enum and fails on a member in neither table, in both, or on a modelled kind
-missing from `_pglast_enums.REQUIRED_MEMBERS`. A *declined* member the installed
-pglast lacks is tolerated and named: confiture supports pglast 6 through 8 and
-PostgreSQL 18 added the `ENFORCED` pair — which is also why that pair stays
-declined, since `REQUIRED_MEMBERS` is version-fatal.
-
-An **unnamed** constraint is identified by what it says, never by `""` — two
-unnamed foreign keys on one table were one — and generated DDL omits the
-`CONSTRAINT` clause rather than inventing `child_pid_fkey`. PostgreSQL then
-generates the same name it would have generated for the author's own DDL, which
-an integration test pins, because that is what makes omitting it safe rather than
-lossy. `NOT VALID` + `VALIDATE CONSTRAINT` needs the name, so an unnamed foreign
-key is added in one statement carrying the module's `-- review:` idiom.
-
-`ddl_clauses.constraint_body` is the one clause builder: the text after `ADD` in an
-`ALTER` and the element in a `CREATE TABLE` are the same text. Writing it twice is
-how the reader came to disagree with itself. `ddl_clauses.column_body` is its sibling
-for a column — `CREATE TABLE`, `ADD COLUMN` and a dropped column's declaration —
-and writes an identity and a generated expression as the schema declared them. Both
-take the model's own `Constraint` and `Column`.
-
-**A column's type has a spelling too** (since 1.14.0). `Column.type` is the
-canonical `ColumnType` — the identity — and `Column.raw_sql_type` is **the type
-as generated DDL should write it, recorded for every column**
-(`ddl_walk.written_type`, one rule for every model of a column). It used to be
-filled only when the type map missed, which is what dropped
-`VARCHAR(50)`'s length on the floor: the length lives in the spelling, and a
-modelled type had no spelling to keep it in. A schema saying `VARCHAR(50)`
-generated an unbounded `VARCHAR`, and `VARCHAR(50)` → `VARCHAR(100)` reported
-**nothing at all**.
-
-The name comes from the canonical type and the typmod from the parser, and that
-split is deliberate: pglast has already folded the author's keywords into
-PostgreSQL's internal spellings — `INT` arrives as `int4`, `DOUBLE PRECISION` as
-`float8` — so "as the author wrote it" is not recoverable here and writing the
-parser's string back is valid DDL nobody wants to read. A type the map does not
-know is left exactly as the parser holds it, case included, because `"MyType"`
-is not `mytype`. A type with no typmod therefore generates the text it always
-generated.
-
-Whether two columns declare the same type is `type_lattice.same_type`, never a
-comparison of the spellings: that is the one canonicaliser (#275), and its own
-docstring states this case — *a signature drops typmods, because PostgreSQL
-ignores them there, and a **column** type must keep them or `varchar(50)` and
-`varchar(100)` compare equal*. One rule, two questions.
-
-**One schema model too.** `core/schema_model.py` defines `Table`, `Column`,
-`Constraint`, `Index`, `EnumType`, `Sequence` and the `SchemaModel` that keys them
-by `ObjectRef`; it imports no parser and no driver (a subprocess test pins that,
-which is why `confiture/core/__init__.py` resolves its names lazily).
-`inventory.build_model(sql)` reads a DDL tree into it — the lint inventory is the
-one DDL reader that answers in it — and its output for every example tree is
-pinned in `tests/fixtures/model_goldens/model/`. A column carries its type twice
-(`type_key` the identity, typmod kept; `raw_sql_type` the spelling) plus
-`type_text`, the author's spelling a finding prints.
-`tests/unit/test_one_schema_model.py` fails on a class elsewhere that is named
-like a model type or carries the fields of one; its allow-list names the question
-each existing one answers, and an entry that matches nothing fails.
-
-**One change union too** (since 1.15.0). What changed between two trees is
-`core/schema_change.py`'s `SchemaChange`: 25 frozen variants, closed, each carrying the
-model objects it is about — `ColumnAdded(table, column: Column)`,
-`ForeignKeyDropped(table, constraint: Constraint)`, `ObjectReplaced(ref, old, new)` for
-#288's nineteen definition-compared kinds. The differ builds nothing else. The names are
-past participles because `core/replica/classifier.py` names *migration operations* in
-the imperative (`AddColumn`, `DropObject`), and a test keeps the two vocabularies apart.
-
-The wire is `to_wire()` → `models.schema.WireChange`, the six fields and one line every
-JSON payload has always carried, byte for byte (the `*.wire.json` model goldens, over
-every tree and over `tests/fixtures/every_change/`, a pair whose diff is every kind
-once). The wire's `type` strings (`"ADD_COLUMN"`) are a serialisation: read the variant,
-not the string.
-
-Every reader of a change `match`es on the variant, one function per group
-(`TableChange`, `ColumnChange`, `TableObjectChange`, `EnumOrSequenceChange`,
-`DefinitionChange` — a 25-arm `match` is past the complexity budget), each ending in
-`case _: assert_never(change)`. `core/differ_sql.py` is the **one renderer**, up and
-down; `MigrationGenerator` writes the files and renders nothing. The destructive
-verdict is `destructive.data_loss_reason`, the accompaniment class
-`git_accompaniment.is_body_change`, and the risk tier `change_set.diff_tiers.tier_of` —
-the change set's own table and rules read for a difference, with `ChangeEntry` and its
-`CONTRACT_VERSION` untouched (owner decision 6). `tests/unit/test_schema_change_is_exhaustive.py`
-fails on a kind any of them does not answer, on a `match` over the union without the
-`assert_never` arm, and on a wire `type` string spelled outside the serialiser;
-`test_schema_change_tiers.py` holds each tier equal to what the change set says about
-the SQL confiture writes for it, except two declared, measured disagreements (a type
-change's source type; an addition written `CREATE OR REPLACE`).
-
-Prep-seed level 2 reads the qualifier too (1.14.0, #317): `SchemaTables` keys
-`(schema, name)` and routes on `Table.schema`, not on
-`"prep_seed" in str(sql_file)`. A tree declaring nothing in the configured
-prep-seed schema is a **finding**, not a silent empty pass — the heuristic routed
-unqualified DDL somewhere and a qualifier cannot.
-
-**One seam too** (since 1.17.0). `confiture.platform` is what a tool —
-fraiseql-semis, later the Rust crate — builds on, and it **defines nothing**: every
-name is re-exported from the core module that owns it, and
-`tests/contract/test_platform_surface.py` pins the list, each signature and each
-dataclass field by equality. No signature names a pglast or psycopg type
-(`test_platform_leaks_no_driver_types.py` walks annotations, fields and returned
-values); a connection is a URL the call owns or a `core.connection.Connection` the
-caller does. `diff` compares DDL sources, not two models — views, routines and
-triggers are compared as their creating statements, which the model does not hold.
-`docs/reference/platform-api.md` is generated (`scripts/gen_platform_reference.py`).
-
-A seed script is read the way psql reads one: `seed apply` and prep-seed level 5 run
-it through `seed.executor.run_script`, which executes the text between
-`COPY … FROM stdin` blocks and streams each block's rows through the driver's COPY
-protocol (`sql_lexer.copy_blocks`). Transaction control is a statement
-(`sql_lexer.transaction_statements`), never a word in the text; a seed file is
-decoded from bytes, because a text-mode read turns a CR inside a literal into a
-newline.
-
-#### Python migrations: the static evaluator (since 0.46.0, #213)
-
-The SQL a `.py` migration hands to `self.execute(...)` / `self.execute_file(...)`
-is resolved by `core/idempotency/static_eval.py`, not by pattern-matching the
-call's argument. It evaluates every form that is a pure function of the file's
-own text — literals, names bound exactly once in the scope that reads them
-(module constants, single-assignment locals, `self.<attr>` class attributes),
-`Path(__file__)` arithmetic, file reads, pure `str` methods by whitelist, and
-one-line reader helpers — and refuses everything else with a `Refusal` code, a
-reason and a `remedy`. Scoping comes from the stdlib `symtable` (the compiler's
-own analysis), never from an enumerated list of binding forms. **It never
+The SQL a `.py` migration hands to `self.execute(...)` / `self.execute_file(...)` is
+resolved by `core/idempotency/static_eval/`, not by pattern-matching the call's
+argument. It evaluates every form that is a pure function of the file's own text —
+literals, names bound exactly once in the scope that reads them, `Path(__file__)`
+arithmetic, file reads, whitelisted pure `str` methods, one-line reader helpers — and
+refuses everything else with a `Refusal` code, a reason and a `remedy`. Scoping comes
+from the stdlib `symtable`, never from an enumerated list of binding forms. **It never
 imports, executes, `eval`s or `compile`s** — a guard test pins that.
 
-Two invariants to keep:
-
-- **Reach is a pinned table.** `tests/fixtures/idempotency_shapes/` holds one
-  migration per argument shape and `test_extractor_coverage.py` pins what each
-  resolves to. Widening the grammar is an edit to that table; narrowing it, by
-  any refactor, fails the row that regressed. `CONFITURE_CORPUS_DIR=<dir of
-  real .py migrations>` enables a floor test on a real corpus.
+- **Reach is a pinned table.** `tests/fixtures/idempotency_shapes/` holds one migration
+  per argument shape and `tests/unit/idempotency/test_extractor_coverage.py` pins what each resolves to.
+  Widening the grammar is an edit to that table; a refactor that narrows it fails the
+  row that regressed. `CONFITURE_CORPUS_DIR=<dir of real .py migrations>` enables a
+  floor test on a real corpus.
 - **Test fixtures for "dynamic SQL" use a loop variable or a parameter.**
-  `sql = "…"; self.execute(sql)` resolves now; a test built on it proves nothing.
+  `sql = "…"; self.execute(sql)` resolves; a test built on it proves nothing.
 
 Every file-naming shape (`execute_file`, `read_text`, the runtime's
 `Migration.execute_file`, the import checker's IMP010) resolves through
-`core/sql_path.py`: project root → the migration's directory → cwd, first
-existing file wins; static analyzers additionally confine the winner to the
-project root. Do not add a fourth resolver.
+`core/sql_path.py`: project root → the migration's directory → cwd, first existing file
+wins; static analyzers additionally confine the winner to the project root. Do not add
+a fourth resolver.
 
-#### pglast version matrix (since 0.39.0, #192)
+#### pglast version matrix
 
-Confiture depends on **`pglast>=6.0`, uncapped** — a hard dependency since
-0.50.0 (D13), not an extra. `[ast]` survives as an empty alias so an older
-`fraiseql-confiture[ast]` still resolves; installing it changes nothing.
-Verified green on 6.16,
-7.18 and 8.4; `uv.lock` pins the current major, and a required
-`pglast-matrix` CI leg runs the AST-backed suites against both ends of the
-range (`>=6,<7` and `>=8`).
+Confiture depends on **`pglast>=6.0`, uncapped**, verified on 6.16, 7.18 and 8.4;
+`uv.lock` pins the current major and the required `pglast-matrix` CI leg runs the
+AST-backed suites against both ends of the range (`>=6,<7` and `>=8`). That leg runs an
+explicit list of test files: a change that moves DDL reading adds its guards there.
 
-**Never compare a parse-node enum against a literal ordinal.** PostgreSQL 18
-inserted a member into `AlterTableType`, so pglast 8 renumbered everything at
-index ≥ 13 down by one — `_AT_DROP_COLUMN = 14` silently stopped matching and
-the `elif` chains fell through, *dropping* the operation. Because `window_safe`
-is computed from the presence of `PFLIGHT_REPLICA_*` findings, that turned
-replica-unsafe migrations into `window_safe: true`.
-
-Resolve by name through the single shared module instead:
+**Never compare a parse-node enum against a literal ordinal.** PostgreSQL 18 inserted a
+member into `AlterTableType`, so pglast 8 renumbered everything after it: a literal
+silently stops matching, the walker drops the operation, and a replica-unsafe migration
+reads `window_safe: true`. Resolve by name through the one shared module:
 
 ```python
 from confiture.core._pglast_enums import member as _pg_member
@@ -593,15 +324,11 @@ from confiture.core._pglast_enums import member as _pg_member
 _AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
 ```
 
-Add the member to `REQUIRED_MEMBERS` in that module — the guard test
-(`tests/unit/test_pglast_enum_binding.py`) enumerates from it, so a new constant
-joins the guard automatically. If pglast ever drops a member confiture walks,
-`enums_are_usable()` raises `CONFIG_011` naming the installed pglast, at first
-use, rather than under-reporting silently.
-
-Note that a literal can hide *inline* (`if sub_int == 17:`), not just in a
-constant block — that form is how `core/idempotency/_captures.py` survived the
-first sweep. The guard checks both shapes.
+Add the member to `REQUIRED_MEMBERS` there — `tests/unit/test_pglast_enum_binding.py`
+enumerates from it, and checks inline literals (`if sub_int == 17:`) as well as constant
+blocks. **Never add a member that only one supported pglast defines**: if a member is
+missing, `enums_are_usable()` raises `CONFIG_011` naming the installed pglast at first
+use, so a pglast-8-only member would make confiture refuse to start on 6 and 7.
 
 ### Native extension (schema hash only)
 
@@ -1235,9 +962,9 @@ A rule that emits violations without a registry entry still reports (unregistere
 codes are never filtered out), but it is invisible to `--list-rules` and cannot
 be selected or ignored.
 
-Confiture runs `E, W, F, I, B, C4, UP, ARG, SIM` plus the heavier families the
-top-notch plan turned on in Phase 11 — `RUF`, `ERA`, `PTH`, `PERF`, `PL` and
-`C901`, the last two with their design metrics baselined in `tests/budgets.json`.
+Confiture runs `E, W, F, I, B, C4, UP, ARG, SIM`, `RUF`, `ERA`, `PTH`, `PERF`,
+`PL` and `C901`, the last two with their design metrics baselined in
+`tests/budgets.json`.
 Only `FURB` and `TCH` are still off. `[tool.ruff.lint]` in `pyproject.toml` is the
 source of truth and documents the rationale, per-rule ignores included.
 
@@ -1411,7 +1138,6 @@ Brief description of changes
 - [x] Code formatted (`uv run ruff format`)
 - [x] Type checking passes (`uv run ty check python/confiture/`)
 - [x] Documentation updated
-- [x] PHASES.md updated (if applicable)
 
 ## Testing
 Describe testing performed

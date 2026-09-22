@@ -1,7 +1,7 @@
 [project]
 name = "fraiseql-confiture"
 version = "1.17.0"
-description = "PostgreSQL schema evolution with built-in multi-agent coordination 🍓"
+description = "PostgreSQL migrations, sweetly done: build from DDL, migrate, preflight, sync 🍓"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -14,11 +14,9 @@ keywords = [
     "database",
     "schema",
     "ddl",
-    "coordination",
-    "multi-agent",
-    "collaboration",
-    "conflict-detection",
-    "ai-agents",
+    "schema-diff",
+    "drift-detection",
+    "seed-data",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -30,7 +28,6 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
-    "Topic :: Software Development :: Version Control",
 ]
 
 dependencies = [

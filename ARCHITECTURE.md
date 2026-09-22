@@ -126,7 +126,7 @@ CLI module reaches into a `_private` attribute of a core object (`tests/unit/cli
 
 #### 2.3 Introspection Layer (`introspection/`)
 
-A package providing PostgreSQL introspection beyond tables and columns, used as foundation for code generation features (Phase 6):
+A package providing PostgreSQL introspection beyond tables and columns, used as foundation for code generation features:
 
 | Module | Description |
 |--------|-------------|

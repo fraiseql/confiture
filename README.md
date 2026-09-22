@@ -2,7 +2,7 @@
 
 **PostgreSQL migrations, sweetly done.**
 
-Build from DDL. Adopt on day one against a database that already has migrations applied. Preflight every deploy against a parallel database with structural diff. Sync production data with PII anonymization.
+Build from DDL. Adopt on day one against a database that already has migrations applied. Preflight every deploy by replaying the pending migrations against a parallel database, rolled back. Sync production data with PII anonymization.
 
 [![PyPI](https://img.shields.io/pypi/v/fraiseql-confiture.svg?logo=python&logoColor=white)](https://pypi.org/project/fraiseql-confiture/)
 [![Quality Gate](https://github.com/fraiseql/confiture/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/quality-gate.yml)
@@ -30,13 +30,14 @@ $ confiture migrate baseline --through 004 -c db/environments/production.yaml
 $ confiture migrate status -c db/environments/production.yaml --format json | jq '.applied | length'
 4
 
-# 3. Preflight: replay pending migrations on a parallel DB, emit a structural diff vs. db/schema/.
+# 3. Preflight: replay the pending migrations on a parallel DB, inside a rollback.
 $ confiture migrate preflight --against "$PREFLIGHT_URL" -c db/environments/production.yaml
-▸ Replaying pending migrations on preflight DB …
-  ✓ 20260520143015_add_user_bio                 applied in 24 ms
-▸ Comparing resulting schema vs. db/schema/ …
-  ✓ No drift — preflight matches db/schema/
-✓ Preflight passed. Safe to deploy.
+Execution check: 1 migration(s) against postgresql://preflight-host/app
+
+  ✓  20260520143015  add_user_bio                              (0.02s)
+
+  ✓ All 1 migration(s) passed.
+  (Rolled back — preflight DB unchanged)
 exit 0
 ```
 
@@ -82,7 +83,7 @@ Walkthrough: [docs/guides/02-incremental-migrations.md](docs/guides/02-increment
 | Source of truth | DDL files *or* migration chain | migration chain | model classes | migration chain | migration chain | DDL files |
 | Tracking table | yes | yes | yes | yes | yes | no |
 | Rollback (`down.sql`) | yes | paid | yes | yes | yes | no |
-| Preflight against a copy DB | **yes (structural diff)** | no | no | no | no | no |
+| Preflight against a copy DB | **yes (replayed, rolled back)** | no | no | no | no | no |
 | Build from scratch in <1s | **yes** | no | no | no | no | yes (manual) |
 | Production sync + anonymization | **yes** | no | no | no | no | no |
 | Zero-downtime via FDW | **yes** | no | no | no | no | no |
@@ -90,7 +91,7 @@ Walkthrough: [docs/guides/02-incremental-migrations.md](docs/guides/02-increment
 
 > **Note on "source of truth":** confiture can run as a pure migration tool against a project that has no `db/schema/` directory — the DDL workflow is opt-in. See [No `db/schema/` directory?](#no-dbschema-directory-that-works-too) above.
 
-Confiture wins on **build-from-DDL**, **structural-diff preflight**, and **production sync**. It loses on ecosystem age — Flyway and Alembic have a decade of community knowledge. Pick honestly.
+Confiture wins on **build-from-DDL**, **replayed preflight**, and **production sync**. It loses on ecosystem age — Flyway and Alembic have a decade of community knowledge. Pick honestly.
 
 ### Adoption checklist
 
@@ -239,6 +240,29 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
         result = m.up()
         print(f"Applied {len(result.applied)} migrations")
 ```
+
+## Building on confiture
+
+What confiture knows about a schema is a public seam, `confiture.platform`: read a schema
+from DDL or from a live database into one model, diff two schemas into typed changes,
+order tables by their foreign keys, say which columns a writer supplies and what each must
+respect, and write, apply and validate seed files. Every name and signature is pinned by a
+contract test, and no signature exposes a parser or driver type.
+
+```python
+from confiture.platform import dependency_order, parse_schema, writable_columns
+
+model = parse_schema(env="local")
+for table in dependency_order(model):
+    print(table.display, [c.name for c in writable_columns(model, table)])
+```
+
+`confiture schema dump-model` writes the same model as byte-stable JSON. Its consumers:
+[fraisier](https://github.com/fraiseql/fraisier), which drives confiture at deploy time
+through the [adapter contract](docs/reference/fraisier-adapter-contract.md), and
+fraiseql-semis (in development), which generates seed data on the seam. See
+[Building on confiture](docs/guides/building-on-confiture.md) and the
+[platform API reference](docs/reference/platform-api.md).
 
 ---
 
