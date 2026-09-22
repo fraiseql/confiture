@@ -1,7 +1,7 @@
 """Session-level policies for ``up()``: strict mode, view helpers, auto-baseline.
 
-These are the decisions the CLI used to take in its own apply loop. They live
-here so the library path and the CLI path make them the same way.
+These are the decisions an apply loop takes. They live here, not in the CLI, so
+the library path and the CLI path make them the same way.
 """
 
 from __future__ import annotations

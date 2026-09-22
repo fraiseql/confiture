@@ -79,8 +79,8 @@ def _checksum_payload(
     bare name is involved, so both are always emitted rather than one
     conditionally — a consumer should not have to guess which it is holding.
 
-    ``ok`` and the exit code answer different questions, and #311 is what
-    happens when one is computed as though it answered the other:
+    ``ok`` and the exit code answer different questions, and neither may be
+    computed as though it answered the other (#311):
 
     * the **exit code** answers "should this gate trip?" — and
       ``--allow-uninitialized`` is the operator declaring, in advance, that a
@@ -90,10 +90,9 @@ def _checksum_payload(
       it did not happen.
 
     So an absent ledger is ``ok: false`` at exit ``0``. Computed as
-    ``not mismatches`` it was ``true``: no ledger yields no mismatches, and the
-    published schema tells consumers to read ``ok`` and nothing else, so a run
-    that compared zero files reported green to a conforming consumer. It ran
-    that way in a reporter's CI, on every ship, for months.
+    ``not mismatches`` it would be ``true``: no ledger yields no mismatches, and
+    the published schema tells consumers to read ``ok`` and nothing else, so a
+    run that compared zero files would report green to a conforming consumer.
 
     ``was_skipped`` is always present, never absent-on-success: a key that
     appears on one path only makes every consumer branch before it can read it.
@@ -342,8 +341,8 @@ def _report_absent_ledger(
     Raises:
         DatabaseNotInitializedError: unless ``--allow-uninitialized`` was given.
     """
-    # Since 0.41.0 a bare name is resolved through search_path, so "absent" can
-    # mean "present, but not where this session looks". Saying which is the
+    # A bare name is resolved through search_path, so "absent" can mean
+    # "present, but not where this session looks". Saying which is the
     # difference between an actionable message and a puzzle (#188).
     elsewhere = _core_ledger.find_ledger_relations(conn, tracking_table)
     note = (
@@ -360,9 +359,8 @@ def _report_absent_ledger(
         )
 
     if json_mode:
-        # 0.37.0 turned this crash into a graceful exit but left it returning
-        # after a Rich print, so --format json produced no JSON at all on the
-        # one path most likely to be scripted.
+        # The payload, not a Rich print: this is the path most likely to be
+        # scripted, and --format json must produce JSON on it too.
         emit(
             _checksum_payload(
                 ledger_present=False,
@@ -516,9 +514,8 @@ def verify_checksums(
         if fix:
             # Scoped to what was just reported, and atomic (#311). Not
             # `update_all_checksums`, which re-stamps every recorded row one
-            # transaction at a time — so `--fix` for one bad checksum rewrote
-            # all 268 of the reporter's, and said so in the line after the one
-            # that said "Found 1".
+            # transaction at a time: `--fix` for one bad checksum would rewrite
+            # them all, right after a report that said "Found 1".
             updated = verifier.update_checksums_for(mismatches)
 
         if json_mode:

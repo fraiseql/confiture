@@ -85,8 +85,8 @@ class _Context:
 
         SQL states the target and never the source, so the direction is knowable
         only from a live database (or a differ). Without it the entry stays
-        tier-less, exactly as it was before #199 — an honest absence rather than a
-        confident guess in either direction.
+        tier-less — an honest absence rather than a confident guess in either
+        direction.
         """
         old_type = self.facts.column_type(target) if self.facts else None
         direction = compare_types(old_type, new_type)

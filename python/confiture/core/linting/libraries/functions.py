@@ -7,8 +7,7 @@ earlier copies are silently overwritten at build time.  ``func_001``
 catches the duplicate before it ships.
 
 Mirrors :mod:`confiture.core.linting.libraries.ownership` on the
-function-uniqueness axis: AST-only via pglast, emits a single skip
-notice when pglast is unavailable, opt-in via the
+function-uniqueness axis: AST-only via pglast, opt-in via the
 ``function_coverage:`` env block.
 
 Kind-aware key
@@ -86,7 +85,7 @@ class _CallableDefinition:
     name: str
     #: The canonical argument types — what decides whether two definitions are
     #: the same signature. `int8` and `bigint` are one entry here and two in
-    #: `param_text`, which is the whole of #275.
+    #: `param_text` (#275).
     param_types: Signature
     #: The same arguments as the author wrote them, for the message.
     param_text: tuple[str, ...]
@@ -300,11 +299,10 @@ class Func001FunctionUniqueness:
     def _extract_param_types(parameters: Any) -> tuple[tuple[str | None, str], ...]:
         """The canonical argument types: the identity two definitions are compared on.
 
-        `inventory.type_key`, not a table of this module's own. The one that
-        lived here mapped `pg_catalog.int4` back to `integer`, which resolves a
-        pair written `int` against `integer` and does nothing for `int8`
-        against `bigint` — a bare internal name never reached it, so `func_001`
-        reported no duplicate for two `CREATE`s PostgreSQL rejects (#275).
+        `inventory.type_key`, not a table of this module's own: every alias the
+        canonicaliser knows — `int8` and `bigint` as much as `int` and `integer`
+        — must make two definitions one signature, or `func_001` misses a
+        duplicate PostgreSQL rejects (#275).
         """
         return tuple(
             type_key(p.argType) for p in Func001FunctionUniqueness._signature_parameters(parameters)

@@ -1,7 +1,4 @@
-"""`confiture migrate up`.
-
-Split out of the monolithic migrate command modules.
-"""
+"""`confiture migrate up`."""
 
 from __future__ import annotations
 

@@ -61,9 +61,8 @@ def _combine_python_snippets(
 
     A single :func:`detect_non_idempotent_patterns` pass over the
     combined string is what makes cross-snippet DROP+CREATE pairs
-    recognizable — previously each snippet went through the detector
-    independently, so a DROP in one call and a CREATE in the next looked
-    like an unpaired violation.
+    recognizable: run per snippet, a DROP in one call and a CREATE in the
+    next would look like an unpaired violation.
     """
     parts: list[str] = []
     origins: list[_SnippetOrigin] = []
@@ -226,8 +225,7 @@ class IdempotencyValidator:
             recursive: If True, scan subdirectories recursively
             include_python: When True (default), also scan ``*.py`` Confiture
                 migrations in the directory using the AST extractor. Set to
-                False to preserve the pre-0.13.0 SQL-only behavior. Added in
-                0.13.0.
+                False to scan SQL files only.
 
         Returns:
             IdempotencyReport with violations from all files
@@ -285,10 +283,10 @@ class IdempotencyValidator:
                 for violation in combined_report.violations:
                     origin = _map_combined_line_to_source(violation.line_number, origins)
                     if origin is not None:
-                        # Preserve the pre-0.14.0 contract: ``line_number``
-                        # is snippet-local (so users can see "line 1 of
-                        # the snippet"); ``source_line`` is the .py file
-                        # line of the originating ``self.execute()`` call.
+                        # ``line_number`` is snippet-local (so users can
+                        # see "line 1 of the snippet"); ``source_line`` is
+                        # the .py file line of the originating
+                        # ``self.execute()`` call.
                         violation.line_number = (
                             violation.line_number - origin.combined_start_line + 1
                         )

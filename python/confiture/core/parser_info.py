@@ -1,10 +1,9 @@
 """What parses the SQL: pglast's version and the PostgreSQL grammar it embeds.
 
-Every verdict confiture gives about DDL comes from pglast (D13). A standard
-install once classified with a regex backend while reporting a version that
-looked exactly like an AST-capable one (#210); now ``confiture --version``
-names the parser on its second line and every JSON envelope carries
-:func:`parser_stamp`.
+Every verdict confiture gives about DDL comes from pglast (D13).
+``confiture --version`` names the parser on its second line and every JSON
+envelope carries :func:`parser_stamp`, so which parser produced a verdict is
+stated rather than inferred from confiture's own version (#210).
 """
 
 from __future__ import annotations

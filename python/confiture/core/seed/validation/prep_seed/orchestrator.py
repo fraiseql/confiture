@@ -49,8 +49,8 @@ from confiture.exceptions import SchemaError
 class SchemaTables:
     """What the schema files declare, sorted onto the two sides level 2 compares.
 
-    Keyed by ``(schema, name)``: a bare table name is not an identity, which is
-    how ``tenant.tb_x`` and ``etl.tb_x`` used to become one entry. ``schemas_seen``
+    Keyed by ``(schema, name)``: a bare table name is not an identity — keyed on
+    it, ``tenant.tb_x`` and ``etl.tb_x`` would be one entry. ``schemas_seen``
     is every schema the files actually declare into, so a tree with nothing in
     either configured schema can say so rather than pass empty.
     """
@@ -213,8 +213,7 @@ class PrepSeedOrchestrator:
 
         # The catalog counterpart of a prep-seed table is the same name in the
         # configured catalog schema — the pairing is across schemas, by name,
-        # which is what makes the *side* a table is on the thing that had to be
-        # read from its qualifier.
+        # which is why the *side* a table is on is read from its qualifier.
         catalog_schema = self.config.catalog_schema.lower()
 
         def get_final_table(table_name: str) -> TableDefinition | None:
@@ -403,10 +402,8 @@ class PrepSeedOrchestrator:
             # Start transaction for validation (will rollback)
             connection.execute("BEGIN;")
 
-            # Create validator
-            # `catalog_schema` is a documented OrchestrationConfig field that
-            # level 5 used to ignore: `catalog.` was hardwired into one query and
-            # absent from the rest.
+            # Create validator. Every level-5 query is qualified with the
+            # configured `catalog_schema`, never a hardwired `catalog.`.
             validator = Level5ExecutionValidator(catalog_schema=self.config.catalog_schema)
 
             # Choose execution mode
@@ -482,11 +479,9 @@ class PrepSeedOrchestrator:
 
         Which side a table is on is a fact the statement carries:
         ``CREATE TABLE catalog.tb_manufacturer`` is in ``catalog``, and
-        ``Table.schema`` has held that since 1.13.0. This read it from
-        ``"prep_seed" in str(sql_file)`` instead and keyed the result on
-        ``table.name`` — #313's defect one module over, and latent only because
-        the shipped ``examples/06`` happens to put its two ``tb_manufacturer``
-        declarations in directories the heuristic separates (#317).
+        ``Table.schema`` holds it. The file's path is never consulted: a
+        directory name says nothing about where the DDL in it lands, and
+        ``examples/06`` declares ``tb_manufacturer`` on both sides (#317).
 
         Identity is ``(schema, name)`` with a missing qualifier folded to
         :data:`~confiture.core.schema_identity.DEFAULT_SCHEMA`, so a table in
@@ -533,7 +528,8 @@ class PrepSeedOrchestrator:
             # ``confiture build`` concatenates in order and a table has no
             # ``OR REPLACE`` form, so the first definition is the one the
             # database ends up with — ``duplicates.wins``' answer for a table.
-            # Last-one-wins is the silence #313 removed from the differ.
+            # Last-one-wins would silently validate a definition the database
+            # never has (#313).
             tables.violations.append(
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_MAPPING,
@@ -557,11 +553,11 @@ class PrepSeedOrchestrator:
     def _nothing_to_compare(self, tables: SchemaTables) -> list[PrepSeedViolation]:
         """Level 2 looked at a schema tree and found no prep-seed table in it.
 
-        Returning no violations for a tree it never compared is the silent pass
-        this reader used to hide behind the path heuristic: the heuristic routed
-        unqualified DDL somewhere, and a qualifier cannot. Saying which schemas
-        the files actually declare is the difference between "nothing is wrong"
-        and "nothing was checked".
+        Returning no violations for a tree it never compared would be a silent
+        pass. A table is placed by its qualifier, never by its path, so a tree
+        whose DDL never names the prep-seed schema reaches here; saying which
+        schemas the files actually declare is the difference between "nothing is
+        wrong" and "nothing was checked".
         """
         if not tables.schemas_seen:
             return []

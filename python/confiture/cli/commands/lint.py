@@ -239,7 +239,7 @@ def lint(
         ↳ Fail the run on warnings as well as errors (--fail-on-warning is an alias)
 
       confiture lint --fail-on never
-        ↳ Report every finding and never fail — the setting the two booleans could not express
+        ↳ Report every finding and never fail — a setting neither alias can express
 
     RELATED:
       confiture build       - Build schema from DDL files
@@ -268,7 +268,7 @@ def lint(
         )
         # One selection, resolved once (#150). The three per-rule flags are
         # aliases over it rather than branches further down: each adds its
-        # family to the defaults, which is exactly what it always did.
+        # family to the defaults.
         selected = resolve_lint_rules(
             select=select,
             ignore=ignore,
@@ -388,10 +388,10 @@ def _resolve_threshold(
 def _print_gate_notice(gate: Gate, format_type: str) -> None:
     """Say, on the summary, when nothing this run selected could have failed it.
 
-    The whole of #247: a pipeline set ``--fail-on-error``, no selected rule
-    emitted at ``error``, and four real findings sat behind a green tick for
-    months. ``--fail-on never`` is the same fact deliberately chosen, so it is
-    stated rather than warned about.
+    A threshold no selected rule can reach passes whatever the findings: under
+    ``--fail-on-error`` with no rule emitting at ``error``, real findings sit
+    behind a green tick (#247). ``--fail-on never`` is the same fact deliberately
+    chosen, so it is stated rather than warned about.
     """
     if format_type != "table" or gate.reachable or gate.reason is None:
         return

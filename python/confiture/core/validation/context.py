@@ -1,8 +1,7 @@
 """Shared per-run resources for ``migrate validate`` (#187).
 
-Before 0.40.0 each validation mode returned as soon as it finished, so nothing
-was ever shared: five ``core/validation`` handlers each called ``load_config``
-and opened their own connection. Once the modes *compose*, running
+The validation modes *compose*, and each ``core/validation`` handler needs the
+config and, often, a connection. Without a shared context, running
 ``--check-signatures --check-live-drift`` would parse the config twice and open
 two connections — and over ``--ssh``, spin up two tunnel subprocesses.
 

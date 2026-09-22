@@ -49,7 +49,7 @@ def collect_report(
     pre-commit gate must judge what is about to be committed (#181). The
     blob is analyzed *as the file at that path*: ``Path(__file__)`` and
     migration-relative reads resolve where the migration lives, not in a
-    temp directory (0.46.0).
+    temp directory.
     """
 
     combined = IdempotencyReport()

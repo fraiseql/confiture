@@ -26,6 +26,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   step made it hold. The word *phase* stays where it is the domain's: `HookPhase`,
   `restore`'s phases, expand/contract. A table of one sample per shape keeps each
   family switched on.
+- **The source states what holds, not how it came to hold.** The comments and
+  docstrings of 123 modules narrated fixes — "before #274 there was…", "used to",
+  "233 of 297 routines were skipped", "since 0.41.0". Each now states the invariant
+  and, where the history carried one, the reason for it; an issue number stays as a
+  tag where a reader would want the discussion. Four docstrings described a regex or
+  sqlparse fallback that has not existed since pglast became the one parser, and are
+  corrected. Published JSON schema descriptions keep their "added in" notes: a
+  consumer reading an older payload needs them.
+- **Dead code from the retired regex backends is gone** — 89 definitions nothing
+  read, among them every regex in the replica classifier, the grant extractor and the
+  idempotency captures (`captures_from_regex` with them), and
+  `tests/unit/test_no_unreferenced_private_names.py` fails on the next one. A private
+  name is decided per module, so two modules defining the same `_RE_ADD_COLUMN` no
+  longer keep each other alive. `sql_keyword_regex` in `tests/budgets.json`: 102 → 46.
 - `seed convert --batch` is its own function; `too_many_statements` has no entry
   left in `tests/budgets.json`.
 

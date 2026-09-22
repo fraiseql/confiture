@@ -1,6 +1,5 @@
 """Shared helpers for Confiture CLI commands."""
 
-import difflib
 import json
 import re
 from contextlib import AbstractContextManager
@@ -108,21 +107,6 @@ COMMON_COMMANDS = [
 ]
 
 
-def _get_suggestion(unknown_command: str) -> str | None:
-    """Get "Did you mean?" suggestion for unknown command.
-
-    Uses difflib to find similar commands (75% similarity threshold).
-
-    Args:
-        unknown_command: The command user tried to run
-
-    Returns:
-        Suggested command if match found (>75% similarity), None otherwise
-    """
-    matches = difflib.get_close_matches(unknown_command, COMMON_COMMANDS, n=1, cutoff=0.75)
-    return matches[0] if matches else None
-
-
 #: The linter's severities, in the order ``models.lint`` names them.
 _SEVERITIES: dict[RuleSeverity, LintSeverity] = {
     RuleSeverity.ERROR: LintSeverity.ERROR,
@@ -134,9 +118,9 @@ _SEVERITIES: dict[RuleSeverity, LintSeverity] = {
 def _to_violation(violation: LintViolation) -> Violation:
     """The one place a linter violation becomes a reportable one.
 
-    Copying the fields at each of the three call sites is how ``file_path`` and
-    ``line_number`` came to be dropped from every ``lint --format json``
-    payload; there is one conversion now, and one test over it.
+    Every call site converts here, under one test: copying the fields at each
+    site instead is how ``file_path`` and ``line_number`` go missing from a
+    ``lint --format json`` payload.
     """
     return Violation(
         rule_id=violation.rule_id,
@@ -260,8 +244,7 @@ def _get_tracking_table(config_data: Any) -> str:
     """Safely extract migration tracking table name from any config format.
 
     Handles Environment objects (from mocks / validated config), raw dicts
-    from load_config() (old YAML format without database_url), and MagicMock
-    objects used in tests.
+    from load_config(), and MagicMock objects used in tests.
 
     Always returns a ``str``: a non-string candidate (e.g. a bare ``MagicMock``
     config in tests) falls back to the default rather than leaking a non-string
@@ -406,22 +389,11 @@ def _print_orphaned_files_warning(orphaned_files: list[Path], console: Console) 
     console.print("[yellow]Learn more: https://github.com/evoludigit/confiture/issues/13[/yellow]")
 
 
-"""Exit code for a run that failed only because it could not read a call.
-
-Under ``--fail-on-unanalyzable`` an unverified call fails the gate. It signals
-the existing findings class (1) rather than a new integer: the documented exit
-table is frozen at 0–8 and shared with the fraisier adapters, so a distinct
-"completed, N unverified" code is a contract change on both sides. It is
-parked, not refused (#213) — and when it lands, this constant and the
-schema note are the only two places that change.
-"""
-
-
 def _extract_version(filename: str) -> str | None:
     """Pull the leading version token out of a migration filename.
 
     Confiture migration files are named ``<version>_<name>.up.sql`` where
-    ``<version>`` is either ``NNN`` (legacy) or ``YYYYMMDDHHMMSS`` (post-0.6.0).
+    ``<version>`` is either ``NNN`` or a ``YYYYMMDDHHMMSS`` timestamp.
     Both forms parse as a leading run of digits.
     """
     m = re.match(r"^(\d+)", filename)

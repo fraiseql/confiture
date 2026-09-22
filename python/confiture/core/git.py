@@ -304,8 +304,8 @@ class GitRepository:
                 raise GitError(f"Invalid git reference: {error_msg}")
             if "no merge base" in error_msg or "unrelated histories" in error_msg:
                 # Shallow clone: the histories are present but truncated before
-                # their fork point. Name the remedy — this message previously
-                # fell into the generic bucket and never mentioned it.
+                # their fork point. Name the remedy — the generic bucket never
+                # mentions it.
                 raise GitError(
                     f"Cannot compare '{base_ref}' to '{target_ref}': no merge base. "
                     "This usually means a shallow clone. In CI, set fetch-depth: 0 "

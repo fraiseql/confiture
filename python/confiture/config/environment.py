@@ -60,18 +60,6 @@ from confiture.config._env_vars import expand_env_vars
 from confiture.exceptions import ConfigurationError
 from confiture.url_redaction import redact_url
 
-# Privileges that PostgreSQL's GRANT statement allows on tables.  Sequences,
-# functions, schemas, etc. use a different vocabulary and are out of scope
-# for the ACL coverage feature (see #120 README "Out of scope").
-_TABLE_PRIVILEGES: tuple[str, ...] = (
-    "SELECT",
-    "INSERT",
-    "UPDATE",
-    "DELETE",
-    "TRUNCATE",
-    "REFERENCES",
-    "TRIGGER",
-)
 _TablePrivilege = Literal[
     "SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"
 ]
@@ -516,8 +504,8 @@ class AclTableExpectation(BaseModel):
 
     Named ``AclTableExpectation`` to leave namespace open for future
     column-level (``AclColumnExpectation``) and sequence-level
-    (``AclSequenceExpectation``) variants.  The legacy ``AclExpectation``
-    alias remains importable for back-compat through the 0.12.x line.
+    (``AclSequenceExpectation``) variants.  ``AclExpectation`` is the same
+    class under its shorter name, and the name most callers import.
 
     ``apply_to`` is either the literal string ``"ALL_TABLES"`` (every base
     table in the schema except those matching ``ignore``) or a list of
@@ -540,7 +528,7 @@ class AclTableExpectation(BaseModel):
     grants: list[AclGrant]
 
 
-# Back-compat alias.  Kept as a plain assignment (not a subclass) so
+# The shorter name.  Kept as a plain assignment (not a subclass) so
 # ``isinstance(x, AclExpectation)`` and ``isinstance(x, AclTableExpectation)``
 # behave identically — they're the same class.
 AclExpectation = AclTableExpectation
@@ -644,9 +632,9 @@ class LintSettings(BaseModel):
             and confiture cannot enumerate it.
         status_words: The words in a file or directory name that say the work
             is unfinished, matched case-insensitively against the
-            underscore-separated parts of the name. The default is the
-            vocabulary ``tree_008`` was filed for; a project that writes
-            ``_SPIKE`` says so here.
+            underscore-separated parts of the name. The default is
+            :data:`DEFAULT_STATUS_WORDS`; a project that writes ``_SPIKE``
+            says so here.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -714,8 +702,8 @@ class OwnershipExpectation(BaseModel):
     environment.
 
     Mirrors the structure of :class:`AclTableExpectation` (#120) but on
-    the ownership axis.  Opt-in by default: ``lint_enabled`` defaults
-    to ``True`` per the issue's Definition of done.
+    the ownership axis.  Declaring the block is the opt-in: once it is
+    declared, ``lint_enabled`` defaults to ``True``.
 
     Attributes:
         expected_owner: Canonical role that should own every in-scope
@@ -851,7 +839,7 @@ def _resolve_dir_items(
 def _normalize_acls(data: dict[str, Any]) -> None:
     """Flatten a nested ``acls:`` block into the model's split fields.
 
-    Two shapes are accepted: a flat list (legacy) ``acls: [ {...}, {...} ]`` and
+    Two shapes are accepted: a flat list ``acls: [ {...}, {...} ]`` and
     the preferred nested dict ``acls: { lint_enabled: true, expectations: [...] }``.
     The rest of the loader (env-var expansion, Pydantic validation) then sees
     one shape.
@@ -953,12 +941,12 @@ class Environment(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _reject_legacy_migration_table(cls, data: Any) -> Any:
-        """Reject the legacy top-level ``migration_table`` key with an actionable error.
+        """Reject a top-level ``migration_table`` key with an actionable error.
 
-        Before Issue #60, some documentation showed ``migration_table:`` at the
-        top level of the environment YAML.  Pydantic would silently ignore it
-        (unknown field).  This validator turns that silent misconfiguration into
-        a clear ``ConfigurationError`` so users know exactly what to fix.
+        ``migration_table:`` at the top level of the environment YAML is a
+        misplaced ``migration.tracking_table``.  Pydantic would silently ignore
+        it as an unknown field, so this validator raises a ``ConfigurationError``
+        that names the correct form (#60).
 
         Correct form::
 

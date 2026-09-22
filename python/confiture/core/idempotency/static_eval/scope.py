@@ -123,16 +123,6 @@ def _pattern_captures(pattern: ast.pattern) -> list[str]:
     return names
 
 
-_SCOPE_NODES = (
-    ast.FunctionDef,
-    ast.AsyncFunctionDef,
-    ast.ClassDef,
-    ast.Lambda,
-    ast.ListComp,
-    ast.SetComp,
-    ast.DictComp,
-    ast.GeneratorExp,
-)
 # PEP 709 (Python 3.12) inlines list, set and dict comprehensions into the
 # enclosing scope: ``symtable`` emits no child table for them, and their
 # targets are symbols of the enclosing table. Generator expressions keep their
@@ -294,8 +284,8 @@ class _BindingCollector:
             if isinstance(alias_name, ast.Name):
                 self.add(alias_name.id, "typealias", stmt.lineno, top_level=top_level)
 
-    # Statement node types → the method that records their bindings, in the
-    # order the ``elif`` chain used to try them.
+    # Statement node types → the method that records their bindings; the first
+    # entry whose types match handles the statement.
     _STATEMENT_HANDLERS: tuple[tuple[tuple[type, ...], Any], ...] = (
         ((ast.Assign,), _assign),
         ((ast.AnnAssign,), _ann_assign),

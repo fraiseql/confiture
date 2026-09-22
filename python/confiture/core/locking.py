@@ -483,8 +483,8 @@ class MigrationLock:
 
         Reads the ``confiture_lock_holder`` row (exact command/acquired_at) and
         cross-checks ``pg_stat_activity`` for the pid's liveness. Returns None
-        when no identity is recorded (older lock, or no metadata table) — the
-        graceful-degradation path the issue requires.
+        when no identity is recorded (a holder that wrote none, or no metadata
+        table): the identity is diagnostic, never required (#147).
         """
         lock_id = self._get_lock_id()
         with self.connection.cursor() as cur:

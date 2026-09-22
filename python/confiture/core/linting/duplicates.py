@@ -82,11 +82,9 @@ def inventory_files(
 class Rejected:
     """A file pglast refused, with what is needed to report it.
 
-    The label alone was enough while the answer was "something here did not
-    parse". It is not enough to say *where*: the notice names a line, and the
-    line comes from the error and the text it indexes. Recomputing both by
-    parsing the file a second time would be throwing away what this already
-    holds.
+    A label alone says only that something in the file did not parse. The
+    notice names a line, and the line comes from the error and the text it
+    indexes; carrying both here spares parsing the file a second time.
     """
 
     label: str

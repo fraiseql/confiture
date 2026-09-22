@@ -462,7 +462,7 @@ class SchemaBuilder:
 
         Whether numeric prefixes are read at all is decided once, over every
         selected file: a two-block tree where only one block carries them sorts
-        both blocks the same way, as it did before blocks existed.
+        both blocks the same way the same files would sort in one block.
         """
         # Numeric order, reading the prefix on every path component — see
         # core.tree_prefix for why the filename's own prefix is not enough.
@@ -542,8 +542,8 @@ class SchemaBuilder:
 
         The env config's ``include_dirs`` deliberately does *not* drive this:
         ``SeedConfig`` has no seed-directory concept, so seeds are identified by
-        this path heuristic rather than configuration (do not "fix" it back to a
-        config lookup — there is no such option to honour).
+        this path heuristic rather than configuration — a config lookup would
+        have no option to honour.
 
         Matching is anchored at the include-root level (``self.base_dir`` and
         below) — the absolute filesystem prefix *above* the project is ignored,

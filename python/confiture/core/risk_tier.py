@@ -16,9 +16,7 @@ Two properties are deliberate and load-bearing:
 * **The ordering is for picking the worst of a set, not for deciding policy.**
   Consumers map each tier to an action independently.
 
-This module is pure: no I/O, no database, no parser. That is what the deleted
-``core/risk/`` package (a never-wired DowntimePredictor, removed at ``2bf38f1``)
-was not.
+This module is pure: no I/O, no database, no parser.
 """
 
 from __future__ import annotations

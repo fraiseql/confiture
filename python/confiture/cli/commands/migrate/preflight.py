@@ -1,7 +1,4 @@
-"""`confiture migrate preflight`.
-
-Split out of the monolithic migrate command modules.
-"""
+"""`confiture migrate preflight`."""
 
 from __future__ import annotations
 
@@ -82,21 +79,20 @@ def _preflight_tracking_table(config: Path | None) -> str:
     except (OSError, ValueError, ConfigurationError):
         # An unreadable or malformed config: the preflight run itself fails
         # loudly a few lines later, so this advisory probe just defaults. The
-        # catch is deliberately narrow — a bare `except Exception` here masked
-        # a NameError and made this function silently return the default.
+        # catch is deliberately narrow: a bare `except Exception` would turn a
+        # programming error such as a NameError into a silent default.
         return "tb_confiture"
 
 
 def _target_tracking_table_state(session: MigratorSession, table: str) -> tuple[bool, bool]:
     """Return ``(exists, is_empty)`` for the preflight target's ledger.
 
-    Split apart (#190) because the caller's hint means different things for the
-    two states: a ledger that is *absent* was probably dropped during
-    anonymization, while one that is *present but empty* was probably truncated.
-    The old probe collapsed both — plus every error — into a single "looks
-    empty" boolean, and queried the literal ``tb_confiture`` regardless of
-    ``tracking_table``, which raises ``UndefinedTable`` on any project that
-    renamed its ledger.
+    Two answers, not one (#190), because the caller's hint means different
+    things for the two states: a ledger that is *absent* was probably dropped
+    during anonymization, while one that is *present but empty* was probably
+    truncated. *table* is the configured ``tracking_table``: the literal
+    ``tb_confiture`` raises ``UndefinedTable`` on any project that renamed its
+    ledger.
 
     Best-effort: presence comes from :func:`core.ledger.ledger_exists`, and any
     database error still degrades to "absent and empty", because the worst case
@@ -353,10 +349,9 @@ def _run_dependent_check(
 ) -> Any:
     """Resolve pending migrations' CoR targets and run the pg_depend check.
 
-    On any error (pglast missing, connection failure, query failure) returns
-    a skipped report with a clear reason rather than raising — the caller
-    decides how to surface that. ``mode`` is ``"fail"`` (severity=error) or
-    ``"warn"`` (severity=info).
+    On a database error, connecting or querying, returns a skipped report with
+    a clear reason rather than raising — the caller decides how to surface
+    that. ``mode`` is ``"fail"`` (severity=error) or ``"warn"`` (severity=info).
     """
 
     targets: list[Any] = []
@@ -562,9 +557,9 @@ def migrate_preflight(
     from confiture.core.preflight import preflight_exit_code, run_preflight
 
     # A --config the operator typed is read before the report renders (#284).
-    # In default mode preflight needs no config and never opened it, so an
-    # absent file still produced the whole Pre-flight Check table and exit 0 —
-    # a pre-deployment gate reporting on a configuration that was not there.
+    # Default mode needs no config, and without this an absent file would still
+    # get the whole Pre-flight Check table and exit 0 — a pre-deployment gate
+    # reporting on a configuration that is not there.
     require_readable_config(ctx, config)
 
     if check_dependents not in {"off", "fail", "warn"}:
@@ -602,7 +597,7 @@ def migrate_preflight(
         output_file=output_file,
     )
     # Resolved once and threaded through the override, the probe and the hint
-    # (#190) — three sites that previously each spelled the default by hand.
+    # (#190), so the three read one name rather than each spelling the default.
     target_tracking_table = _preflight_tracking_table(config)
     run = _run_against(
         pending_files,
@@ -831,7 +826,7 @@ def _against_pending_files(
             fail(e, json_mode=is_json(format_type), output_file=output_file)
         # #151: any other failure resolving the pending set is a harness /
         # connection failure — align to the canonical connection-failure exit 3
-        # (CONFIG_006), not the old generic exit 2.
+        # (CONFIG_006).
         fail(
             ConfigurationError(
                 f"Failed to resolve pending migrations: {e}",

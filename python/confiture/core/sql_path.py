@@ -2,22 +2,22 @@
 
 A Python migration names files three ways — ``self.execute_file("db/schema/fn.sql")``,
 ``self.execute(Path("db/schema/fn.sql").read_text())`` and the path arithmetic
-the static evaluator folds — and three parts of confiture used to decide,
-each on its own, which file that is: the runtime's ``execute_file`` (cwd only),
-the idempotency extractor (cwd, then the migration's directory) and the import
-checker's IMP010 (cwd only, literals only). They disagreed with each other, and
-all three were wrong from any working directory but the project root: the
-documented form is written against the project root, and cwd was only ever a
-proxy for it. The gate could verify one file while the deploy executed another.
+the static evaluator folds — and three parts of confiture have to decide which
+file that is: the runtime's ``execute_file``, the idempotency extractor and the
+import checker's IMP010. Deciding each on its own, they would disagree, and a
+resolver that starts from cwd is wrong from any working directory but the
+project root: the documented form is written against the project root, and cwd
+is at best a proxy for it. The gate would verify one file while the deploy
+executes another.
 
-:func:`resolve_sql_file` is now the only function that turns such a path into a
+:func:`resolve_sql_file` is the only function that turns such a path into a
 file, and :func:`find_project_root` the only one that decides what "the project
 root" means. The order is **project root → the migration's directory → cwd**;
 the first candidate that is a file wins. Under ``confine=True`` (every static
 analyzer) the winner must also lie inside the project root after symlinks are
-resolved — the v0.8.4 path-traversal hardening, unchanged — and ``escaped`` is
-reported only when *no* existing candidate lies inside, so an out-of-root cwd
-hit can never shadow an in-root file. The runtime does not confine: it is
+resolved — the path-traversal hardening — and ``escaped`` is reported only when
+*no* existing candidate lies inside, so an out-of-root cwd hit can never shadow
+an in-root file. The runtime does not confine: it is
 already executing arbitrary migration Python, and a boundary there would be
 theatre.
 """

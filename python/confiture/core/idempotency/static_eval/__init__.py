@@ -1,12 +1,11 @@
 r"""Static evaluation of what ``self.execute(...)`` / ``self.execute_file(...)`` receive.
 
 The idempotency gate can only judge SQL it has read. A Python migration hands
-its SQL to ``execute`` as an expression, and before 0.46.0 only three shapes
-were read — a literal, a static f-string, a literal concatenation — so a
-``CREATE TABLE`` hoisted into a module constant was invisible to the gate
-(#213). This module evaluates the expression instead, for every form that is
-a *pure function of the migration file's own text*, and refuses everything
-else with the reason.
+its SQL to ``execute`` as an expression, and a ``CREATE TABLE`` hoisted into a
+module constant is as much the migration's SQL as a literal at the call site
+(#213). This module evaluates the expression, for every form that is a *pure
+function of the migration file's own text*, and refuses everything else with
+the reason.
 
 **Never imports, never executes.** ``ast`` supplies the tree, ``symtable``
 supplies the interpreter's own scoping decisions, and the only side effect

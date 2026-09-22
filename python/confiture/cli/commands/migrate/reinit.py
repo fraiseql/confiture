@@ -1,7 +1,4 @@
-"""`confiture migrate reinit`.
-
-Split out of the monolithic migrate command modules.
-"""
+"""`confiture migrate reinit`."""
 
 from __future__ import annotations
 

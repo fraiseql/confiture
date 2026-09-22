@@ -4,10 +4,9 @@
 with the error on stderr — the same way on every command — before the command
 body runs, so nothing is printed to stdout and no database is touched.
 
-An option two commands take is declared **once**, here. ``--schemas`` was
-declared twice — in ``migrate validate`` and in ``migrate fix-signatures`` — and
-the two help strings had already drifted apart before one of them changed its
-default (#303). The second of those commands executes ``DROP FUNCTION``.
+An option two commands take is declared **once**, here: two declarations drift
+apart, and ``--schemas`` is read by both ``migrate validate`` and
+``migrate fix-signatures``, the second of which executes ``DROP FUNCTION`` (#303).
 
 The six options most commands take — ``--config``, ``--env``, ``--database-url``,
 ``--migrations-dir``, ``--output``, ``--verbose`` — each come from one factory

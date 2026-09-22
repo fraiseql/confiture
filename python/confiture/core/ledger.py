@@ -13,10 +13,10 @@ connection so that callers which never build a :class:`Migrator` — such as
 **The two paths are deliberately different queries** (#188).
 
 A *bare* name resolves through ``search_path``, exactly as the query the probe
-is a precondition for will.  Before 0.41.0 it matched
-``information_schema.tables WHERE table_name = %s``, which is schema-blind: a
-ledger in ``staging`` reported present to a session that would go on to read
-``public``, and the two disagreed silently.
+is a precondition for will.  Matching
+``information_schema.tables WHERE table_name = %s`` instead would be
+schema-blind: a ledger in ``staging`` would report present to a session that
+goes on to read ``public``, and the two would disagree silently.
 
 A *qualified* name stays on ``information_schema``.  Converting it too would be
 tidier and is wrong: ``to_regclass('hidden.tb_secret')`` **raises**
@@ -24,7 +24,7 @@ tidier and is wrong: ``to_regclass('hidden.tb_secret')`` **raises**
 ``information_schema`` query returns cleanly (both measured on PostgreSQL 17.8).
 A qualified name already filters on schema correctly, so the conversion would
 buy nothing and would put an unhandled psycopg exception on the hot ledger path
-— the crash class #182 and 0.37.0 closed.
+— the crash class of #182.
 
 The asymmetry is the point, not an oversight.
 """
@@ -52,8 +52,8 @@ _QUALIFIED_SQL = """
 
 # `to_regclass` resolves *any* relation kind, so a sequence or an index named
 # `tb_confiture` would answer "the ledger exists".  The relkinds below are the
-# ones `information_schema.tables` reported — ordinary and partitioned tables,
-# views, foreign tables — so the only behaviour this conversion changes is
+# ones `information_schema.tables` reports — ordinary and partitioned tables,
+# views, foreign tables — so the only way this differs from that lookup is
 # search_path awareness.
 _BARE_SQL = """
     SELECT n.nspname, c.relname
@@ -64,7 +64,7 @@ _BARE_SQL = """
 """
 
 # Schema-blind on purpose: this answers "does this name exist anywhere?", the
-# question `LedgerProbe` deliberately stopped answering.  `pg_class` rather than
+# question `LedgerProbe` deliberately does not answer.  `pg_class` rather than
 # `information_schema` so it does not depend on table privileges.
 _ANYWHERE_SQL = """
     SELECT n.nspname
@@ -92,7 +92,7 @@ class LedgerProbe:
     Note:
         ``exists`` is presence, not readability.  A role that can see a table
         in ``information_schema`` but cannot ``SELECT`` from it gets
-        ``exists=True``.  Readability was considered and dropped: the obvious
+        ``exists=True``.  Readability is deliberately not probed: the obvious
         implementation, ``has_table_privilege``, raises on exactly the
         missing-``USAGE`` case that motivates the question.
     """

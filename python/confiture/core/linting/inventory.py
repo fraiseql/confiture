@@ -77,8 +77,6 @@ from confiture.core.type_lattice import (
 
 _T = TypeVar("_T")
 
-_CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
-_CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
 _OBJECT_TABLE = _pg_member("ObjectType", "OBJECT_TABLE")
 _OBJECT_FUNCTION = _pg_member("ObjectType", "OBJECT_FUNCTION")
 _OBJECT_PROCEDURE = _pg_member("ObjectType", "OBJECT_PROCEDURE")
@@ -198,8 +196,8 @@ class SchemaObject:
         """Whether a ``COMMENT`` on this object left anything behind.
 
         ``COMMENT ON TABLE t IS NULL`` *removes* a comment and ``IS ''`` stores
-        an empty one; both satisfied the ``doc`` family while it counted the
-        statement rather than what the statement left (#250).
+        an empty one; neither documents the object, so what counts is what the
+        statement left, not the statement (#250).
         """
         return bool(self.comment and self.comment.strip())
 
@@ -379,8 +377,8 @@ def _sql_type(type_node: Any) -> str | None:
     The dimension collapse belongs here rather than in
     :func:`~confiture.core.type_lattice.canonical_type`: ``SqlType.dimensions``
     is part of a type's identity there, because ``text`` and ``text[]`` are two
-    types, and a lattice that dropped the suffix answered IDENTICAL for a change
-    that rewrites every page. Here the question is different — what will the
+    types, and a lattice that dropped the suffix would answer IDENTICAL for a
+    change that rewrites every page. Here the question is different — what will the
     database hold — and the answer is one array.
 
     A *user* schema qualifier stays: ``app.custom_t`` and ``other.custom_t`` are
@@ -453,8 +451,8 @@ def _append_column(sql: str, table: SchemaObject, node: Any) -> None:
 
 
 # Two functions over one `TypeName`, and they answer different questions.
-# Public, because `func_001` and `sec_002` walk their own files and each kept a
-# pasted alias table of its own rather than asking (#275).
+# Public, because `func_001` and `sec_002` walk their own files and ask here
+# rather than keep a pasted alias table of their own (#275).
 # `_type_text` is the **prose**: what a finding prints, spelled the way the
 # author wrote it, so `app.fn_c(integer)` and never `app.fn_c(int4)`.
 # `_type_key` is the **identity**: what decides whether two routines are the
@@ -467,8 +465,9 @@ def type_text(type_name: Any) -> str:
 
     A leading ``pg_catalog.`` is dropped too. ``RawStream`` prints the qualifier
     pglast attached, which for ``json`` and ``bit`` is the whole rendering:
-    a ``doc_002`` finding read ``Function 'app.fn_j(pg_catalog.json)' should
-    have a COMMENT`` and its suggested fix told the author to write that. No
+    kept, a ``doc_002`` finding would read ``Function 'app.fn_j(pg_catalog.json)'
+    should have a COMMENT`` and its suggested fix would tell the author to write
+    that. No
     user schema can be called ``pg_catalog`` — the ``pg_`` prefix is reserved —
     so the qualifier is always the parser's.
     """
@@ -966,8 +965,8 @@ def build_inventory(sql: str, raws: Sequence[Any] | None = None) -> Inventory:
         elif kind == "CommentStmt":
             _apply_comment(stmt, inventory)
         else:
-            # A drop, a rename or a schema move: not `ALTER TABLE` at all, and
-            # invisible to every reader of a DDL tree before #301.
+            # A drop, a rename or a schema move: not `ALTER TABLE` at all, yet
+            # each changes what the tree declares (#301).
             edits = object_edits(stmt)
             offset = _statement_offset(sql, raw) if edits else 0
             for edit in edits:

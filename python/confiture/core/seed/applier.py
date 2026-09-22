@@ -167,8 +167,8 @@ class SeedApplier:
 
         Returns the files the caller selected, in its order, or else the SQL
         files in sorted order from the (top-level, non-recursive) seeds
-        directory. Non-SQL files are ignored. When *profile* is None the result
-        is byte-identical to the historical apply-all behaviour.
+        directory. Non-SQL files are ignored. When *profile* is None nothing is
+        filtered out.
 
         Args:
             profile: Optional seed profile selecting an include/exclude subset by

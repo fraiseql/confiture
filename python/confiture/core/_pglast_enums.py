@@ -1,11 +1,11 @@
 """Name-resolved PostgreSQL parse-node enum members (issue #192).
 
-Confiture's AST visitors used to compare ``cmd.subtype`` against hardcoded
-ordinals — ``_AT_DROP_COLUMN = 14`` and friends. PostgreSQL 18 inserted a member
-into ``AlterTableType``, so pglast 8 renumbered everything at index >= 13 down by
-one. Every comparison past that point missed, the ``elif`` chains fell through,
-and the operation was **silently dropped** rather than misclassified:
-``ALTER TABLE t DROP COLUMN c`` classified to ``[]``.
+A hardcoded ordinal — ``_AT_DROP_COLUMN = 14`` — binds a visitor to one grammar.
+PostgreSQL 18 inserted a member into ``AlterTableType``, so pglast 8 numbers
+everything at index >= 13 one lower than earlier majors do. A comparison against a
+literal past that point misses, the ``elif`` chain falls through, and the
+operation is **silently dropped** rather than misclassified:
+``ALTER TABLE t DROP COLUMN c`` classifies to ``[]``.
 
 That is the worst available failure mode here. ``window_safe`` is computed from
 the *presence* of ``PFLIGHT_REPLICA_*`` findings, so a dropped ``DropColumn``
@@ -17,8 +17,7 @@ Resolving by name makes the binding version-independent. The declarative
 declared, so ``tests/unit/test_pglast_enum_binding.py`` picks it up
 automatically rather than needing to be kept in sync by hand.
 
-pglast is a dependency (D13, 0.50.0); this module imports it at module
-scope unconditionally — a regex-fallback install must still import cleanly.
+pglast is a dependency (D13), so this module imports it at module scope.
 """
 
 from __future__ import annotations
@@ -93,10 +92,10 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
     ),
 }
 
-# Members that could not be resolved *while pglast was importable* — i.e. an
-# upstream release removed or renamed something confiture walks. Consumers gate
-# their AST path on this being empty, so a partially-resolvable enum surface
-# degrades to the regex backend instead of silently dropping operations.
+# Members the installed pglast does not define — an upstream release removed or
+# renamed something confiture walks. :func:`enums_are_usable` refuses to proceed
+# while this is non-empty, so a partially-resolvable enum surface is a
+# configuration error rather than silently dropped operations.
 MISSING_MEMBERS: Final[list[str]] = []
 
 # Ordinals PostgreSQL will never use, handed out one per unresolved member so
@@ -122,9 +121,9 @@ def member(enum_name: str, member_name: str) -> int:
 def enums_are_usable() -> bool:
     """True when every declared member resolved against the installed pglast.
 
-    Half-resolved enums mean silently-dropped operations, which is what #192
-    was — so a pglast that lacks a member confiture walks is a configuration
-    error naming the version, not a degrade.
+    Half-resolved enums mean silently-dropped operations (#192), so a pglast
+    that lacks a member confiture walks is a configuration error naming the
+    version, not a degrade.
 
     Raises:
         ConfigurationError: the installed pglast lacks declared members.

@@ -26,17 +26,17 @@ tree_008  Status word — a file or directory name says the work is not
           finished.  Severity: INFO.
 
 ``tree_001`` compares files within one directory, so a pair of colliding
-*directories* was invisible to it; ``tree_005`` is about the entries it does
+*directories* is invisible to it; ``tree_005`` is about the entries it does
 not compare, and ``tree_002`` looks only at files that already carry a prefix,
-which is why ``tree_007`` exists. The last four are the shapes #249 found by
-hand in one tree, 54 times between them.
+which is why ``tree_007`` exists. The last four are the naming shapes of #249.
 
 Every rule but ``tree_004`` reads *the files the build reads*, handed to it as
 a list — none of them walks the filesystem. A rule that rglobbed its own tree
-reported files the environment's ``exclude_dirs`` and per-directory ``exclude``
-globs keep out of the build, i.e. files whose numbering decides nothing.
-``tree_004``'s subject is the overrides mirror, which the build never reads, so
-it walks that tree and asks the schema roots whether a counterpart exists.
+would report files the environment's ``exclude_dirs`` and per-directory
+``exclude`` globs keep out of the build, i.e. files whose numbering decides
+nothing. ``tree_004``'s subject is the overrides mirror, which the build never
+reads, so it walks that tree and asks the schema roots whether a counterpart
+exists.
 
 None of them opens a file. These are findings about names, and the filename
 patterns here are filename patterns: no rule in this module reads SQL text, so
@@ -375,8 +375,8 @@ class Tree005SiblingPrefix:
     """``tree_005`` — two sibling entries share a numeric prefix.
 
     ``tree_001`` compares the *files* in one directory; this compares every
-    entry the build reads, so the shape #249 found 36 times — two sibling
-    *directories* numbered ``0248`` — is reported at last. A group of files
+    entry the build reads, so two sibling *directories* numbered ``0248`` are
+    reported (#249). A group of files
     alone stays ``tree_001``'s, which is an ``error`` and already names them.
 
     The message carries the resulting build order, because confiture is the

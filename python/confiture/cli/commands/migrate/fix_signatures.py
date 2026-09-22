@@ -1,7 +1,4 @@
-"""`confiture migrate fix-signatures`.
-
-Split out of the monolithic migrate command modules.
-"""
+"""`confiture migrate fix-signatures`."""
 
 from __future__ import annotations
 

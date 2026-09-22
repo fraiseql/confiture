@@ -11,9 +11,9 @@ The check is **semantic** (issue #162): it verifies that each *changed*
 GRANT/REVOKE statement is actually present in an accompanying migration — not
 merely that some migration exists in the changeset. When a changed grant can't
 be represented statically (dynamic SQL, unmodeled object classes, removed
-grants, search_path-relative schemas), it degrades to the previous
-file-presence check (a migration must be present) and the reason is surfaced as
-a note. It never silently passes an unaccompanied grant.
+grants, search_path-relative schemas), it degrades to a file-presence
+check (a migration must be present) and the reason is surfaced as a note. It
+never silently passes an unaccompanied grant.
 """
 
 from __future__ import annotations
@@ -200,7 +200,7 @@ class GrantAccompanimentChecker:
             )
 
             # A grant removed from the file (present at base, absent at target)
-            # degrades to file-presence — v1 does not auto-require a REVOKE (D8).
+            # degrades to file-presence — the check does not require a REVOKE (D8).
             notes.extend(
                 f"{grant_file.as_posix()}: {stmt.describe()} was removed; relying on "
                 "migration presence (no automatic REVOKE-migration requirement)"
@@ -259,7 +259,7 @@ class GrantAccompanimentChecker:
             return covered, notes
 
         # The blob at the target ref is analyzed as the file it will be
-        # (D11, and 0.46.0): `Path(__file__)` and migration-relative
+        # (D11): `Path(__file__)` and migration-relative
         # reads resolve where the migration lives. execute_file() targets
         # still come from the working tree — pass the repo root and note it.
         located = (

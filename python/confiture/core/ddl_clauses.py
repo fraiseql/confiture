@@ -2,11 +2,11 @@
 
 A column is written in a ``CREATE TABLE``, in an ``ADD COLUMN`` and in the
 declaration a dropped column's change carries; a constraint after ``ADD`` in an
-``ALTER TABLE`` and as an element of a ``CREATE TABLE``. Each of those used to
-have its own rendering, and they drifted: the generator substituted ``text`` for
-every added column's type, and one reader of a CHECK rendered it while another
-stored ``type(raw_expr).__name__`` (#316). Here they take the schema model's own
-objects, so what a clause says is what the model holds.
+``ALTER TABLE`` and as an element of a ``CREATE TABLE``. One rendering per
+clause is what keeps those places from drifting apart — two renderings of one
+CHECK are two chances to write something other than its expression (#316).
+Here they take the schema model's own objects, so what a clause says is what
+the model holds.
 
 A leaf: the change union serialises a column with :func:`column_body` and the
 renderer writes one, so neither may be where the other has to import from.
@@ -85,12 +85,11 @@ def references(fk: Constraint) -> str | None:
 def constraint_body(constraint: Constraint) -> str | None:
     """The text after ``ADD`` in an ``ALTER``, and the element in a ``CREATE TABLE``.
 
-    One clause, both places: the same constraint written two ways is how the
-    reader that produced it came to disagree with itself (#316). ``None`` when the
-    constraint does not hold what the clause needs — a CHECK with no expression, a
-    foreign key with no referenced table — because writing ``CHECK ()`` produces a
-    migration that fails at apply, and inventing the missing half one that
-    succeeds and is wrong.
+    One clause, both places: a constraint written two ways can disagree with
+    itself (#316). ``None`` when the constraint does not hold what the clause
+    needs — a CHECK with no expression, a foreign key with no referenced table —
+    because writing ``CHECK ()`` produces a migration that fails at apply, and
+    inventing the missing half one that succeeds and is wrong.
     """
     match constraint.kind:
         case "foreign_key":

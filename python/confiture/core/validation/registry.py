@@ -1,15 +1,13 @@
 """Check registry and composition runner for ``migrate validate`` (#187).
 
-``migrate validate`` used to be a flat chain of ``if <flag>: … return`` blocks
-evaluated in source order, so any two validation flags meant the second one was
-silently skipped and the gate still exited 0. This module replaces the chain
-with an ordered registry of descriptors: the command builds the enabled list,
-the runner executes all of them, and the outcomes aggregate into one exit code
-and one JSON document.
+``migrate validate`` runs every validation flag it is given. The checks are an
+ordered registry of descriptors: the command builds the enabled list, the runner
+executes all of them, and the outcomes aggregate into one exit code and one JSON
+document. A chain that returned after the first enabled check would skip the
+second silently and still exit 0.
 
-The registry's order deliberately reproduces the old source order, so a
-single-flag invocation is byte-identical to 0.39.0 — that is what keeps the
-blast radius of a 940-line refactor survivable.
+The registry's order is the order checks run and report in, and a single-flag
+invocation emits exactly what that one check emits.
 """
 
 from __future__ import annotations
@@ -83,7 +81,7 @@ class ValidationCheck:
 
 
 def enabled_checks(checks: Sequence[ValidationCheck]) -> list[ValidationCheck]:
-    """The subset this run asked for, in registry (= historical source) order."""
+    """The subset this run asked for, in registry order."""
     return [c for c in checks if c.enabled]
 
 
@@ -92,10 +90,9 @@ def run_checks(checks: Sequence[ValidationCheck], ctx: ValidationContext) -> lis
 
     Findings compose; genuine failures do not. A check that raises
     ``ConfiturError`` (bad config, unreachable database, missing git ref)
-    propagates immediately to the command's ``fail()`` boundary, exactly as it
-    did before composition existed — an infrastructure failure is not a finding
-    to be aggregated, and continuing would emit an error envelope alongside
-    unrelated check output.
+    propagates immediately to the command's ``fail()`` boundary: an
+    infrastructure failure is not a finding to be aggregated, and continuing
+    would emit an error envelope alongside unrelated check output.
     """
     return [check.run(ctx) for check in enabled_checks(checks)]
 
@@ -121,8 +118,7 @@ def compose_payload(outcomes: Sequence[CheckOutcome]) -> dict[str, Any] | None:
 
     A single check emits its payload **verbatim**, so every documented
     single-check schema keeps its exact shape. Two or more emit a wrapper keyed
-    by check name — a new shape for a combination that previously could not
-    happen at all.
+    by check name.
 
     Returns:
         The document to emit, or ``None`` when no check produced one (text mode).

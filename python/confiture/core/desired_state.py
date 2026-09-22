@@ -1,10 +1,10 @@
 """Where ``migrate diff`` reads its desired state from (issue #196).
 
-The target of a diff used to be one hand-authored SQL file. The canonical
-desired-state artifact is what ``fraiseql compile --emit-ddl <dir>`` writes: a
-directory of DDL files, one per type. A pipeline hands the same text over on
-stdin. Each source yields DDL text; the differ parses it exactly as before and
-never learns what an artifact is. ``describe()`` is what ``--format json``
+The target of a diff is a hand-authored SQL file, or the canonical
+desired-state artifact ``fraiseql compile --emit-ddl <dir>`` writes: a directory
+of DDL files, one per type. A pipeline hands the same text over on stdin. Each
+source yields DDL text; the differ parses it the same way whatever the source
+and never learns what an artifact is. ``describe()`` is what ``--format json``
 reports as ``source``.
 """
 

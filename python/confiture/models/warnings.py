@@ -18,12 +18,12 @@ from confiture.error_codes import ERROR_CODE_REGISTRY
 class BuildWarning:
     """A build-time diagnostic that reaches the envelope, not only the console.
 
-    ``confiture build`` has always had diagnostics it printed and never
-    published — a seed file that failed under ``--continue-on-error``, a file
-    pglast could not parse during the duplicate scan. A consumer doing the right
-    thing (reading the JSON, not the prose) could not see them (issue #268).
-    They are entries here now, keyed by an error-code registry entry so a
-    consumer matches a code rather than a sentence.
+    ``confiture build`` has diagnostics that do not fail it — a seed file that
+    failed under ``--continue-on-error``, a file pglast could not parse during
+    the duplicate scan. Printed only, they would be invisible to a consumer doing
+    the right thing (reading the JSON, not the prose), so each is an entry here
+    (issue #268), keyed by an error-code registry entry so a consumer matches a
+    code rather than a sentence.
 
     Attributes:
         code: The registry entry that names the situation.

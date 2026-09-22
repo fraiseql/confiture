@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 class OwnershipCoverageReport:
     """Ownership-coverage findings plus the gate decision.
 
-    ``has_errors`` mirrors the historical gate: warnings (own_002 guarded) print
-    but do not fail; only ERROR-severity violations block (exit 1).
+    ``has_errors`` is the gate: warnings (own_002 guarded) print but do not
+    fail; only ERROR-severity violations block (exit 1).
     """
 
     violations: list[LintViolation]

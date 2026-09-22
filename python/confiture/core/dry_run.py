@@ -108,8 +108,8 @@ class _LegacyDryRunResult(DryRunResult):
 class DryRunExecutor:
     """Execute migration SQL inside a SAVEPOINT, then rollback.
 
-    Unlike the previous simulation executor, this runs real SQL against
-    the database. The SAVEPOINT guarantees no data is persisted.
+    This runs real SQL against the database; the SAVEPOINT guarantees no
+    data is persisted.
 
     Supports both old and new APIs for backward compatibility.
     """
@@ -143,14 +143,14 @@ class DryRunExecutor:
             executor.run(migration_name="name", statements=["SQL..."])
         """
         # Reconcile positional new-API args with keyword form.  The first
-        # positional may be either the migration_name (new API) or — in
-        # very old call sites — a connection object that's now ignored.
+        # positional may be either the migration_name (new API) or a
+        # connection object, which is ignored.
         if migration_name_or_conn is not None and migration_name is None:
             if isinstance(migration_name_or_conn, str):
                 migration_name = migration_name_or_conn
             elif isinstance(migration_name_or_conn, psycopg.Connection):
-                # Pre-instance-conn callers passed conn first; silently
-                # accepted for compatibility.
+                # A connection in the first position is accepted and
+                # ignored, for compatibility.
                 pass
             elif hasattr(migration_name_or_conn, "up"):
                 # Legacy: caller passed a migration object positionally.

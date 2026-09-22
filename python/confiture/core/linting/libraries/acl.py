@@ -243,11 +243,11 @@ class Acl001GrantCoverage:
 
     @staticmethod
     def _migration_files(migrations_dir: Path) -> list[Path]:
-        """Migration files to scan: ``.up.sql`` plus ``.py`` (issue #162 twin gap).
+        """Migration files to scan: ``.up.sql`` plus ``.py`` (#162).
 
         Recognizes Python migrations the same way the loader does — excluding
         ``__init__.py`` and ``_``-prefixed helper modules — so a CREATE/GRANT
-        carried by a Python migration is no longer a blind spot in the ACL lint.
+        carried by a Python migration is as visible to the ACL lint as one in SQL.
         """
         sql = sorted(migrations_dir.rglob("*.up.sql"))
         py = sorted(

@@ -183,13 +183,12 @@ class AnonymizationProfile(BaseModel):
     def validate_rules_name_defined_strategies(self) -> "AnonymizationProfile":
         """Every rule must name a strategy this profile defines (#285).
 
-        ``StrategyDefinition.type`` has been whitelisted since the model was
-        written, but a *rule* refers to a strategy by the key it was given in
-        ``strategies:``, and nothing checked that the key existed. So a profile
-        whose only rule said ``strategy: emial_mask`` beside a definition called
-        ``email_mask`` passed `confiture validate-profile`, which printed
-        ``✅ Valid profile!`` and exited 0 — a validation command calling a
-        dangling reference valid.
+        ``StrategyDefinition.type`` is whitelisted by the model, but a *rule*
+        refers to a strategy by the key it was given in ``strategies:``, and that
+        key is what this checks. Without it, a profile whose only rule says
+        ``strategy: emial_mask`` beside a definition called ``email_mask`` would
+        pass `confiture validate-profile` with ``✅ Valid profile!`` and exit 0 —
+        a validation command calling a dangling reference valid.
 
         The message names the profile's own strategies rather than a fixed
         vocabulary, because the names here are the author's, not PostgreSQL's.

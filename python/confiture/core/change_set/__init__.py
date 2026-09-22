@@ -21,7 +21,7 @@ Three rules shape the code:
    there, which flips ``window_safe`` to false. Widening *it* to cover the
    change-set vocabulary would move that pinned field, so this module walks the
    statements itself. The cost is a second parse of files preflight has already
-   read; the alternative was a false verdict on a cross-repo contract.
+   read; the alternative would be a false verdict on a cross-repo contract.
 
 pglast is the one parser (D13); a statement it rejects yields an unclassified entry.
 """

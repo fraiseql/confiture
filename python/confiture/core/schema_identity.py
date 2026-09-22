@@ -7,12 +7,12 @@ constant has one home and the literal ``"public"`` appears beside a schema
 variable nowhere else — ``tests/unit/test_one_object_identity.py`` fails on a
 second spelling of it (#313).
 
-Import-safe on purpose. It lived in ``core/linting/inventory``, which is the
-module that decides object identity but which also imports pglast; modules that
-only need to resolve a bare relation name for a catalogue query — a batched
-backfill, an idempotency suggestion — were paying a parser to learn one word, so
-they wrote the word instead. The identity is the fold; the *spelling* an object
-prints is :func:`~confiture.core.schema_model.qualified_name`, which never invents a
+Import-safe on purpose. ``core/linting/inventory`` decides object identity but
+imports pglast, and a module that only needs to resolve a bare relation name for
+a catalogue query — a batched backfill, an idempotency suggestion — should not
+pay for a parser to learn one word: made to, it is tempted to write the word
+instead. The identity is the fold; the *spelling* an object prints is
+:func:`~confiture.core.schema_model.qualified_name`, which never invents a
 qualifier the author did not write.
 """
 

@@ -114,10 +114,10 @@ def _structural(obj: SchemaObject) -> bool:
 def _duplicate_warnings(inventory: Inventory) -> list[BuildWarning]:
     """Say so when one ``(schema, name)`` is defined more than once in one tree.
 
-    Two definitions of one object is #313's defect with the schema taken out of
-    it. The model keeps the definition a build keeps — a later ``IF NOT EXISTS``
-    is a no-op, a later plain ``CREATE`` fails the build at that statement — and
-    the collapse is reported either way. The verdict is ``duplicates.wins``,
+    Two definitions of one ``(schema, name)`` collapse into one entry of the
+    model (#313). The model keeps the definition a build keeps — a later
+    ``IF NOT EXISTS`` is a no-op, a later plain ``CREATE`` fails the build at
+    that statement — and the collapse is reported either way. The verdict is ``duplicates.wins``,
     ``build_001``'s own rule. A warning, not a failure: a duplicate is
     ``confiture lint``'s and ``build --fail-on-duplicates``' problem, and failing
     ``--require-migration`` for it would fail the gate for a reason it is not about.
@@ -170,8 +170,9 @@ def _object_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
     Its name, when the schema wrote one. PostgreSQL lets a constraint and an
     index go unnamed — ``pid INT REFERENCES b.parent(id)``, ``CREATE INDEX ON t
     (x)`` — and generates the name at apply time; two unnamed ones on a table are
-    two objects, and a map keyed on ``""`` keeps one of them. That is #313's
-    defect one field along, and #315 makes the unnamed form the common case.
+    two objects, and a map keyed on ``""`` keeps one of them — #313's collapse,
+    one field along. Unnamed is the common case: a column-level ``REFERENCES``
+    is a foreign key (#315) and almost never carries a name.
 
     An unnamed object is therefore identified by what it *says*. Nothing here
     invents a name: the identity is internal to the comparison, and the DDL
@@ -297,7 +298,7 @@ class SchemaDiffer:
         changes = self._compare_tables(old_schema, new_schema)
         changes.extend(self._compare_enum_types(old_schema.enum_types, new_schema.enum_types))
         changes.extend(self._compare_sequences(old_schema.sequences, new_schema.sequences))
-        # Objects compared by definition: views, and #288's later kinds.
+        # Objects compared by definition: views, routines and the rest (#288).
         changes.extend(self._compare_objects(old_schema.objects, new_schema.objects))
         return SchemaDiff(changes=changes, warnings=_merged_warnings(old_schema, new_schema))
 
@@ -311,8 +312,8 @@ class SchemaDiffer:
         """Added, dropped, renamed and edited tables, paired by identity.
 
         The maps key on :func:`_identity`, never on a bare name: ``tenant.t`` and
-        ``etl.t`` are two tables, and pairing one against the other reported a
-        ``DROP COLUMN`` on a schema where nothing had changed — a migration
+        ``etl.t`` are two tables, and pairing one against the other would report
+        a ``DROP COLUMN`` on a schema where nothing changed — a migration
         generated from a file rename (#313).
 
         What a change *prints* is ``Table.qualified``, the spelling the author
@@ -484,7 +485,7 @@ class SchemaDiffer:
         changes: list[SchemaChange] = []
 
         # Type change, typmod included: a `varchar(50)` widened to `varchar(100)`
-        # is a change, and was reported as nothing at all.
+        # is a change.
         if _types_differ(old_col, new_col):
             changes.append(ColumnTypeChanged(table, old_col, new_col))
 
@@ -507,10 +508,10 @@ class SchemaDiffer:
     def _compare_indexes(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
         """Detect added / dropped indexes.
 
-        The variant carries the ``Index`` itself. Indexes were once the one kind
-        whose name travelled as ``index_name`` on this side of the seam, so every
-        generator read took its fallback and created ``idx_{table}`` instead of
-        the index the author declared — a key two modules had to spell alike.
+        The variant carries the ``Index`` itself, not its name under a key two
+        modules have to spell alike: a generator that misses the key takes its
+        fallback and creates ``idx_{table}`` instead of the index the author
+        declared.
         """
         return self._compare_named_objects(
             old=list(old_table.indexes),
@@ -519,8 +520,7 @@ class SchemaDiffer:
             dropped=IndexDropped,
             table=old_table.qualified,
             # The access method is part of what an index *is*: a btree and a hash
-            # index on one column are two indexes, and were one to this module
-            # while it never read `USING`.
+            # index on one column are two indexes.
             identity=("columns", "unique", "method"),
             compared=("method",),
         )
@@ -623,7 +623,7 @@ class SchemaDiffer:
         *identity* names the fields that tell two **unnamed** objects apart —
         see :func:`_object_identity`. *compared* names the fields that, differing
         under one name, make the object a change rather than a constant; a kind
-        that passes none keeps the add/drop-only comparison it always had.
+        that passes none is compared by add and drop only.
 
         Emitted in a stable order, and a changed object's drop immediately
         precedes its add: PostgreSQL has no ``ALTER CONSTRAINT``, so replacing one

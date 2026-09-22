@@ -1,7 +1,4 @@
-"""`confiture migrate validate`.
-
-Split out of the monolithic migrate command modules.
-"""
+"""`confiture migrate validate`."""
 
 from __future__ import annotations
 
@@ -454,7 +451,7 @@ def migrate_validate(
       optionally verifies idempotency, checks for schema drift, and ensures DDL
       changes have corresponding migration files.
 
-      Every check you ask for runs (0.40.0). The exit code is the worst outcome
+      Every check you ask for runs. The exit code is the worst outcome
       across them, so a passing check cannot mask a failing one.
 
     EXAMPLES:
@@ -507,10 +504,9 @@ def migrate_validate(
                             0, so there is no result to compose. Combining either
                             with anything else is rejected (exit 5).
 
-      --idempotent composes with the git checks from 0.41.0. It was rejected
-      alongside --check-drift / --require-migration / --require-migration-bodies /
-      --require-grant-migration in 0.37.0–0.40.0, because the pre-composition
-      dispatch ran the git branch and silently skipped idempotency (#181).
+      --idempotent composes with the git checks like any other check; an explicit
+      --base-ref / --since, or --staged, scopes it to the migrations that changed
+      (#181).
 
     JSON SCHEMA:
       See docs/reference/json-schemas.md for the JSON output schemas:
@@ -528,8 +524,8 @@ def migrate_validate(
     json_mode = is_json(format_output)
     # A --config the operator typed is read before any check reports (#284).
     # With no check flags this command runs only the orphaned-file check, which
-    # needs no config at all — and printed the same tick for a valid config, a
-    # broken one and one that was not there.
+    # needs no config at all, and would print the same tick for a valid config,
+    # a broken one and one that is not there.
     require_readable_config(ctx, config)
     if not list_patterns:
         config = _resolve_config(config, env)
@@ -537,8 +533,7 @@ def migrate_validate(
     # The git checks build the expected schema via GitSchemaBuilder(env),
     # so --env must reach them: on projects whose `local` env includes
     # seed data, pointing at a DDL-only env is the difference between a
-    # working gate and a silent no-op (#194). --config-only callers keep
-    # the historical "local" default.
+    # working gate and a silent no-op (#194). Without --env they read "local".
     opts = ValidateOptions(
         format_output=format_output,
         json_mode=json_mode,
@@ -618,8 +613,8 @@ def _reject_exclusive_composition(checks: list[ValidationCheck]) -> None:
     ``--list-patterns`` and ``--list-unmigrated-bodies`` are *report* modes, not
     validation modes: they dump a catalog or size a backlog and always exit 0,
     so there is no exit code for them to compose into. Silently running one and
-    dropping the other is the very defect #187 is about, so this fails loudly
-    and names both flags.
+    dropping the other would skip a check the operator asked for (#187), so this
+    fails loudly and names both flags.
 
     Raises:
         ConfigurationError: an exclusive check was requested alongside another.

@@ -342,8 +342,8 @@ def resolve_lint_rules(
 ) -> frozenset[str]:
     """The rule codes this invocation applies, legacy flags folded in.
 
-    Each legacy flag means "the defaults *plus* this family", which is what it
-    did when it was a branch of its own. Expressing them as selectors keeps one
+    Each legacy flag means "the defaults *plus* this family". Expressing them
+    as selectors keeps one
     dispatch path — the point of #150 — and makes them exactly equivalent to the
     ``--select`` form they are documented as aliasing.
 

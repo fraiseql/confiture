@@ -5,8 +5,7 @@ against what its own help twice recommends be a schema-only database, seeded
 from ``pg_dump --schema-only``. Every table there is empty. So a migration that
 reads a row count and raises on it aborts the preflight every time, however
 correct the migration's actual work — and a deploy gated on the preflight
-aborts with it. One backend lost two nightly staging restores to exactly that,
-three days apart, under two different migrations' names.
+aborts with it.
 
 The assertion is not wrong; it is in the wrong file. ``.verify.sql`` sidecars
 run under ``migrate verify``, separately, after the migration is applied,
@@ -103,10 +102,10 @@ def _elog_level_of(raise_stmt: str) -> int | None:
     """The ``elog_level`` PostgreSQL's own compiler assigns to one RAISE.
 
     Asking rather than tabulating. ``elog_level`` is a server constant from
-    ``elog.h``, and the lesson of #192 is that a literal ordinal for a
-    PostgreSQL enum fails silently at the next major: ``_AT_DROP_COLUMN = 14``
-    stopped matching on pglast 8 and the ``elif`` chains fell through, turning
-    replica-unsafe migrations into ``window_safe: true``. A probe cannot drift.
+    ``elog.h``, and a literal ordinal for a PostgreSQL enum fails silently at
+    the next major (#192): pglast 8 numbers ``AlterTableType`` differently from
+    earlier majors, so a hardcoded ``_AT_DROP_COLUMN = 14`` falls through its
+    ``elif`` chain there. A probe cannot drift.
     """
     try:
         compiled = parse_body(_PROBE.format(raise_stmt=raise_stmt))
@@ -200,11 +199,9 @@ def _catalogue_derived(
 ) -> bool:
     """Whether this migration fills ``qualified`` from the catalogue, transitively.
 
-    The blind spot this closes was measured downstream, not reasoned about: the
-    same detector, built independently, reported **76 findings across 295
-    migrations** and the checked samples were false — a temp table or view
-    populated from ``pg_class`` has rows at preflight time, and its *name* says
-    nothing about that.
+    A temp table or view populated from ``pg_class`` has rows at preflight time,
+    and its *name* says nothing about that: without this check, every guard
+    over one is a false finding.
 
     A relation created here with **no** sources is not derived: an empty table
     is precisely the case worth flagging, so "created in this file" must not
@@ -383,10 +380,8 @@ def _absolute_line(raise_stmt: dict, stmt_if: dict, line_base: int, lines: list[
 
     ``parse_plpgsql`` is handed one statement at a time and counts from the
     first line of the body string. Reported raw, two ``DO`` blocks in one file
-    both claim line 7 — which is how this was caught: a scan of 3996 of this
-    repo's SQL files reported the same line twice in the same file.
-    ``confiture lint`` prints ``file:line`` on every finding, so an offset that
-    is only locally correct is wrong.
+    would both claim line 7. ``confiture lint`` prints ``file:line`` on every
+    finding, so an offset that is only locally correct is wrong.
 
     The computed line is then **checked by putting it back**: if the text there
     does not hold a ``RAISE``, the base was wrong and the ``IF``'s line is
@@ -419,8 +414,8 @@ def _located_statements(sql: str) -> list[tuple[str, int]]:
     ``psql`` (``core/psql_applier.py``), so it may legitimately carry a psql
     meta-command that ``pglast.parse_sql`` rejects outright — this repo's own
     ``examples/04-production-sync-anonymization/verify_anonymization.sql`` is
-    one, and parsing the whole file lost all eight of its statements for a
-    backslash on line 21. ``split_statements`` splits it and each statement is
+    one, and parsing the whole file would lose every statement in it for one
+    backslash. ``split_statements`` splits it and each statement is
     then judged on its own, which is exactly what its docstring promises.
 
     The line is tracked with a forward cursor rather than recounted from the

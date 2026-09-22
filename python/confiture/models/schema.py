@@ -3,8 +3,8 @@
 What changed between two trees is ``core/schema_change.py``'s — a closed union of
 variants, each carrying the model objects it is about. Every JSON payload that
 carries a change reads the one serialised form this module defines, which a
-variant produces with ``to_wire()``: the six fields and the one line that the
-string-and-dict ``SchemaChange`` printed before the union, byte for byte.
+variant produces with ``to_wire()``: six fields and one printed line, a published
+shape that a change to the variants does not move.
 
 The names this module held before are retired; importing one says where it went.
 """

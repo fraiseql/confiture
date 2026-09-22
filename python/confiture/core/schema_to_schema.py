@@ -60,10 +60,10 @@ class SchemaToSchemaMigrator:
     def _get_connection_params(self) -> dict[str, str]:
         """Where the source database is, as the source connection reached it.
 
-        Host, port and password are the connection's, not defaults: the foreign
-        server was always ``localhost:5432`` with an empty password, so a source
-        anywhere else was silently read from whatever database of that name the
-        *target's* host held.
+        Host, port and password are the connection's, not defaults: a foreign
+        server defaulted to ``localhost:5432`` with an empty password would
+        silently read a source anywhere else from whatever database of that name
+        the *target's* host holds.
 
         Returns:
             ``host``, ``port``, ``dbname``, ``user`` and ``password`` (empty when

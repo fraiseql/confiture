@@ -35,7 +35,7 @@ MALFORMED_CODE = "CONFIG_012"
 #: identifies its finding by the object alone — moving a table from one schema
 #: file to another must not retire a baseline entry and add a new one. That is
 #: why this is an explicit set and not "whatever violations happen to carry a
-#: ``file_path``": since 1.4.0 nearly all of them do. ``func_001`` is deliberately
+#: ``file_path``": nearly all of them do. ``func_001`` is deliberately
 #: outside it although it walks a tree: it reports one finding per duplicated
 #: signature, and the file it names is whichever copy sorted first, so ``@file``
 #: would churn the identity when the *other* copy moved.

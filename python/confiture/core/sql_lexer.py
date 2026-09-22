@@ -56,7 +56,7 @@ _SCAN_WINDOW = 128
 DIRECTIVE_PREFIX = "confiture:"
 _WHITESPACE = " \t\n\r\f\v"
 
-# pglast statement node → the verb ``sqlparse``'s ``get_type`` used to report.
+# pglast statement node → its verb, as ``sqlparse``'s ``get_type`` names it.
 _VERB_BY_NODE: dict[str, str] = {
     "SelectStmt": "SELECT",
     "InsertStmt": "INSERT",
@@ -320,8 +320,8 @@ def _lex(sql: str) -> tuple[list[Any], list[tuple[int, int, int]]]:
         data_start = n if newline == -1 else newline + 1
         # The rest of the COPY line is still code: psql lexes it before it reads data.
         # Tokens are sorted by offset, so the run ends at the first one that is not —
-        # searching from the semicolon rather than filtering the whole tail, which cost
-        # O(tokens) per block and was the larger half of #278's quadratic.
+        # searching from the semicolon rather than filtering the whole tail, which would
+        # cost O(tokens) per block: quadratic over a file of blocks (#278).
         data_first = _index_at_or_after(toks, semicolon + 1, base, data_start)
         out.extend(_shift(toks[idx:data_first], base))
         data_end = _terminator_end(sql, data_start)
@@ -332,9 +332,9 @@ def _lex(sql: str) -> tuple[list[Any], list[tuple[int, int, int]]]:
         # further: its tokens stop at the window, not at the end of the file, so
         # resuming inside one would drop everything past it without a word. The
         # scanner tokenises `\.` quite happily (`ASCII_92`, `ASCII_46`), so a window
-        # that reaches past a block's data really can look in sync at `data_end` —
-        # measured, 1359 of 2198 windowed rescans over generated input. Dropping this
-        # guard loses text, silently.
+        # that reaches past a block's data really can look in sync at `data_end`, and
+        # over generated input it more often does than not. Without this guard text
+        # is lost, silently.
         resume = None if windowed else _resume_index(sql, toks, data_first, base, data_end)
         if resume is None:
             toks, windowed = _scan_after_block(sql, data_end)
@@ -352,8 +352,8 @@ def _scan_after_block(sql: str, start: int) -> tuple[list[Any], bool]:
     stop at a window that was grown until it held a complete ``COPY … FROM stdin;``.
 
     ``pglast.parser.scan`` reads its whole buffer however early its error is, so
-    handing it the rest of the file after every block cost O(remaining) each time
-    and O(n × total) for n blocks (issue #278). It only ever needs to reach the
+    handing it the rest of the file after every block would cost O(remaining) each
+    time and O(n × total) for n blocks (issue #278). It only ever needs to reach the
     *next* block, and a prefix is safe to scan on its own because cutting text short
     can only destroy structure, never invent it: an unterminated string, comment or
     dollar quote makes the scanner error and ``_scan_recovering`` cuts back to
@@ -482,12 +482,10 @@ def comments(sql: str) -> list[Comment]:
 def directives(sql: str) -> list[Directive]:
     """The ``-- confiture:<name>`` line-comment directives of ``sql``, in order.
 
-    Each rule used to find its directive with its own regex over lines, so a
-    directive inside a dollar-quoted body or a COPY data row was one, and each
-    rule attached it to "the next line" by its own walk. Here a directive is a
-    comment *token*, and it attaches to the first statement after it (blank
-    lines and other comments in between do not detach it). Block comments are
-    not directives.
+    A directive is a comment *token* — so text inside a dollar-quoted body or a
+    COPY data row is never one — and it attaches to the first statement after it
+    (blank lines and other comments in between do not detach it). Block comments
+    are not directives.
     """
     out: list[Directive] = []
     pending: list[tuple[str, str | None, int]] = []
@@ -524,12 +522,13 @@ def blank_copy_blocks(sql: str) -> str:
     Same length, same newlines, same line numbers: a character offset into the
     result is the same offset in ``sql``. That is the whole point — a lint reports
     ``file:line`` on every finding and ``parse_error_line`` counts newlines up
-    to an index into the text it parsed, so deleting a block — which is what
-    this replaced (#194) — silently moves every finding after it (#274).
+    to an index into the text it parsed, so deleting a block would silently move
+    every finding after it (#274).
 
-    Do not "simplify" this back to a strip. The technique is #270's: when the
-    parser must not see some characters but the caller must keep every
-    position, blank them and leave the newlines alone.
+    A strip is not a simplification of this. The technique is the one
+    ``plpgsql_parse`` uses on a qualifier (#270): when the parser must not see
+    some characters but the caller must keep every position, blank them and
+    leave the newlines alone.
     """
     _, blocks = _lex(sql)
     if not blocks:

@@ -1,39 +1,16 @@
 """Tests for the ``Captures`` normalization layer.
 
-The regex backend produces ``re.Match`` objects with numbered groups
-that vary by pattern; the AST backend produces typed pglast nodes.
-Templates can't accept either directly — they take a single normalized
-:class:`Captures` instance. This test module proves the two dispatchers
-produce equivalent captures for equivalent SQL.
+Templates never read a pglast node: they take one normalized :class:`Captures`
+instance, which defaults to all-None and is frozen.
 """
 
 from __future__ import annotations
-
-import re
 
 import pytest
 
 from confiture.core.idempotency._captures import (
     Captures,
 )
-from confiture.core.idempotency.models import IdempotencyPattern
-from confiture.core.idempotency.patterns import PATTERN_CATALOG
-
-pglast = pytest.importorskip("pglast")
-
-
-def _regex_match(pattern: IdempotencyPattern, sql: str) -> re.Match[str]:
-    for pdef in PATTERN_CATALOG:
-        if pdef.pattern is pattern:
-            m = pdef.regex.search(sql)
-            assert m is not None, f"regex for {pattern.name} did not match {sql!r}"
-            return m
-    raise AssertionError(f"no PATTERN entry for {pattern.name}")
-
-
-def _first_ast_stmt(sql: str):
-    tree = pglast.parse_sql(sql)
-    return tree[0].stmt
 
 
 class TestCapturesDataclass:

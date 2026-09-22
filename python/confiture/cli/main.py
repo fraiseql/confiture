@@ -198,7 +198,7 @@ app.command()(drift)
 # Register admin commands
 app.command("install-helpers")(install_helpers)
 app.command()(validate_profile)
-# #143: verify-checksums is canonical (the `verify` alias, deprecated in 0.19.0, is gone).
+# #143: verify-checksums is the checksum check's canonical name.
 # #311: also registered under `migrate` below. Both names are permanent — the
 # top-level one is on the fraisier adapter's exit-code table, and `migrate` is
 # where a user looking for a migration concern actually looks.
@@ -234,9 +234,7 @@ migrate_app.command("fix-signatures")(migrate_fix_signatures)
 migrate_app.command("introspect")(migrate_introspect)
 migrate_app.command("verify")(migrate_verify)
 # #311: the same callable as the top-level `verify-checksums`, not a wrapper —
-# one function and one option list, so the two names cannot drift. It was
-# invisible here, and `migrate --help` is where it was looked for: a reporter
-# whose CI ran it on every ship still concluded it did not exist.
+# one function and one option list, so the two names cannot drift.
 migrate_app.command("verify-checksums")(verify_checksums)
 migrate_app.command("preflight")(migrate_preflight)
 migrate_app.command("steps")(migrate_steps)

@@ -1,8 +1,7 @@
 """Shared constants for the ``_migrator`` package.
 
-Pure data extracted from ``engine.py`` so the concern
-modules (engine / apply / baseline) can share one copy without a runtime
-import cycle.  The tracking-table name rule lives in
+Pure data, in a module of its own so the concern modules (engine / apply /
+baseline) can share one copy without a runtime import cycle.  The tracking-table name rule lives in
 :mod:`confiture.core.ledger`, next to the probe that resolves the name.
 """
 

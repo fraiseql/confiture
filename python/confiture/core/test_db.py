@@ -693,10 +693,9 @@ class TestDbProvisioner:
         ``CREATE DATABASE … WITH TEMPLATE <missing>`` otherwise surfaces a raw
         psycopg ``template database "<name>" does not exist`` — and because the
         clone runs from the session provisioning fixture, that cryptic message
-        repeats once per collected test (one CI job saw 1120 identical errors)
-        while pointing at neither the cause nor the fix. The probe reuses the same
-        connection-free ``shobj_description`` read that backs
-        :meth:`template_status`, so the precondition is cheap.
+        repeats once per collected test while pointing at neither the cause nor
+        the fix. The probe reuses the same connection-free ``shobj_description``
+        read that backs :meth:`template_status`, so the precondition is cheap.
 
         Raises:
             SchemaError: If no database named *template* exists.

@@ -1,11 +1,10 @@
 """What lock a DDL operation takes, and whether it rewrites the heap (issue #199).
 
-Preflight's only size-awareness used to be ``TableSizeEstimator``'s row-count
-hint, surfaced as ``migrate up --batched``. That says nothing about *which* lock a
-statement takes or *whether* it rewrites the table — and those two facts, not row
-count, are what separate a metadata blip from a multi-minute outage. A
-``DROP COLUMN`` on a billion-row table is instant; an ``ALTER COLUMN … TYPE`` on a
-small one still rewrites it.
+``TableSizeEstimator``'s row-count hint, surfaced as ``migrate up --batched``,
+says nothing about *which* lock a statement takes or *whether* it rewrites the
+table — and those two facts, not row count, are what separate a metadata blip
+from a multi-minute outage. A ``DROP COLUMN`` on a billion-row table is instant;
+an ``ALTER COLUMN … TYPE`` on a small one still rewrites it.
 
 Three properties are deliberate:
 
@@ -149,8 +148,7 @@ class LockProfile:
 
 
 # The conservative answer for an operation with no row: assume the worst. An
-# operation confiture cannot cost must not read as cheap — that is #206's lesson
-# applied to this table.
+# operation confiture cannot cost must not read as cheap (#206).
 _UNKNOWN = LockProfile(
     lock=LockLevel.ACCESS_EXCLUSIVE,
     rewrites_table=True,

@@ -51,7 +51,7 @@ def _detect_error_context(error: Exception) -> str | None:
         Error context code if matched, None otherwise
     """
 
-    # #211: match on the base message. ``str(error)`` now carries the
+    # #211: match on the base message. ``str(error)`` carries the
     # resolution_hint, and hint text is written to guide, not to classify — a
     # hint mentioning "database" or "permission" must not re-route the template.
     error_msg = base_message(error).lower()
@@ -83,8 +83,8 @@ def _detect_error_context(error: Exception) -> str | None:
     # "No SQL files found" is deliberately NOT a signal here (#256): a
     # selection that came out empty is not a missing directory — the directory
     # exists and is full of files the patterns stopped matching — and its own
-    # resolution_hint names the pattern that emptied it. Routing it here
-    # printed "The schema directory doesn't exist" and told the reader to
+    # resolution_hint names the pattern that emptied it. Routed here, it would
+    # print "The schema directory doesn't exist" and tell the reader to
     # `mkdir` it. A genuinely absent include directory raises SCHEMA_201,
     # whose message carries "does not exist" and still lands here.
     if isinstance(error, (SchemaError, FileNotFoundError)) and any(

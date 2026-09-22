@@ -206,8 +206,8 @@ own schemas. It is deliberately not the full signature: a dict key cannot
 express "a type schema written on one side and left off the other still
 matches", so `fn(bigint)` and `fn(int8)` must land in one bucket and
 `signatures_match` decides inside it.
-Keying on the full signature reported an added and a dropped function where
-one routine had been respelled (CLAUDE.md, #275).
+Keyed on the full signature, one respelled routine would report as an added
+and a dropped function (#275).
 
 | Field | Type | Default |
 |---|---|---|

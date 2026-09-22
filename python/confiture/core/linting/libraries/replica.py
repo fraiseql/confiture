@@ -39,7 +39,7 @@ REPLICA_CODE_BY_OP = {
     "ChangeColumnType": "PFLIGHT_REPLICA_CHANGE_TYPE",
     "AddConstraint": "PFLIGHT_REPLICA_ADD_CONSTRAINT",
     "CreateIndex": "PFLIGHT_REPLICA_CREATE_INDEX",
-    # Widened in 0.44.0 (#206). Additions to this namespace are allowed by #154;
+    # Object-level operations (#206). Additions to this namespace are allowed by #154;
     # renames and removals are not. Operations that classify **safe** — `Benign`,
     # `AddEnumValue` — emit no finding, so they need no code here.
     "DropTable": "PFLIGHT_REPLICA_DROP_TABLE",
