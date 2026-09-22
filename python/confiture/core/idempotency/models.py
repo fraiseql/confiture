@@ -181,8 +181,8 @@ class IdempotencyViolation:
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization.
 
-        ``source_line`` is omitted when ``None`` so .sql-origin output is
-        byte-identical to releases before 0.12.1.
+        ``source_line`` is omitted when ``None``: a ``.sql``-origin finding
+        carries no key it cannot fill, and the payload contract is additive-only.
         """
         payload: dict[str, Any] = {
             "pattern": self.pattern.name,
@@ -302,10 +302,7 @@ class IdempotencyReport:
         Returns:
             Dictionary representation suitable for JSON serialization
 
-        ``warnings`` and ``has_warnings`` were added in 0.12.1;
-        ``analysis_complete``, ``unanalyzed_count`` and each warning's
-        ``reason_code`` / ``remedy`` in 0.46.0. Existing keys keep their names
-        and types (additive-only contract).
+        Existing keys keep their names and types (additive-only contract).
         """
         return {
             "violations": [v.to_dict() for v in self.violations],

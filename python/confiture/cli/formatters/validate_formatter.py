@@ -6,10 +6,10 @@ or **returns** the JSON payload. Collapsing the per-mode ``if format_output ==
 "json"`` branches here keeps the ``migrate_validate`` dispatcher thin and the
 output shapes in one place.
 
-Renderers return their payload rather than writing it (0.40.0, #187): checks
-compose now, so a run can produce several payloads and only the runner knows
-whether they go out verbatim or wrapped. Emitting from here would produce two
-JSON documents on one stdout.
+Renderers return their payload rather than writing it (#187): checks compose,
+so a run can produce several payloads and only the runner knows whether they go
+out verbatim or wrapped. Emitting from here would produce two JSON documents on
+one stdout.
 
 These functions never decide exit codes — the runner aggregates outcomes;
 genuine failures travel as ``ConfiturError`` to the ``fail()`` boundary.
@@ -33,7 +33,7 @@ def _violation_dict(
     include_object_type: bool = False,
     include_line: bool = False,
 ) -> dict[str, Any]:
-    """Serialize one lint violation, matching each check's historical JSON shape."""
+    """Serialize one lint violation in the JSON shape its check publishes."""
     payload: dict[str, Any] = {
         "rule_id": violation.rule_id,
         "severity": violation.severity.value,
@@ -383,8 +383,8 @@ def render_signature_drift(
     """Render the ``--check-signatures`` (+ ``--check-body``) result.
 
     ``show_diff`` (from ``--show-diff``) surfaces each drifted function's bodies
-    and unified diff; when ``False`` the output stays hash-only for both JSON and
-    text — the historical, terse shape.
+    and unified diff; when ``False`` the output is hash-only for both JSON and
+    text, the terse default.
     """
 
     if json_mode:

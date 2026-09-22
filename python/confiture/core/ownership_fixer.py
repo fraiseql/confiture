@@ -9,11 +9,9 @@ closing ``;`` of the offending ``CREATE``.
 Detection delegates to :class:`Own001OwnershipCoverage` so the static
 lint rule and the fixer always agree on what's a violation.
 
-AST-only: the fixer is a no-op when pglast is unavailable (delegating to
-the rule's skip-notice path).  The lint rule and fixer share that
-constraint by design — a partial regex-based fixer would silently miss
-violations that the AST detector would catch, leading to confusing
-"fix → re-validate → still flagged" cycles.
+AST-only, like the rule, by design: a partial regex-based fixer would
+silently miss violations that the AST detector catches, leading to
+confusing "fix → re-validate → still flagged" cycles.
 """
 
 from __future__ import annotations

@@ -90,7 +90,8 @@ def _detect_transactional(up_file: Path) -> bool:
     that declares ``transactional = False`` (issue #169).
 
     Any read or analysis failure degrades to ``True`` (transactional), the
-    historical default; the real error surfaces when the migration executes.
+    default for a SQL migration; the real error surfaces when the migration
+    executes.
     """
     try:
         sql = up_file.read_text(encoding="utf-8")

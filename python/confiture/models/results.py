@@ -730,12 +730,11 @@ class VerifyAllResult:
     def ok(self) -> bool:
         """Whether verification happened and nothing failed.
 
-        Both conjuncts, because either alone is a lie somewhere (#311). The
-        published adapter contract said *ok ⇔ ``failed_count == 0``*, and a
+        Both conjuncts, because either alone is a lie somewhere (#311). A
         ledger-less run has ``failed_count == 0`` for the trivial reason that
-        nothing ran — so a conforming consumer read success from a run that
-        verified nothing. ``failed_count`` itself stays honest at 0; what was
-        wrong was the inference drawn from it.
+        nothing ran, so reading *ok ⇔ ``failed_count == 0``* would report
+        success from a run that verified nothing. ``failed_count`` itself stays
+        honest at 0; the inference drawn from it is what ``ok`` answers for.
 
         This mirrors ``verify-checksums``' ``ok`` exactly. Two neighbouring
         commands answering "I could not verify anything" differently is a trap
@@ -1057,9 +1056,8 @@ PFLIGHT_CODES: dict[str, tuple[str, str]] = {
 class PreflightIssue:
     """A single preflight finding — the unified inner issue object (#148).
 
-    Same shape as #145's ``error`` and #144's ``issues[]`` (see
-    shared-issue-schema.md): severity/code/message always present; the rest
-    present-but-nullable.
+    Same shape as #145's ``error`` and #144's ``issues[]``: severity/code/message
+    always present; the rest present-but-nullable.
     """
 
     severity: str

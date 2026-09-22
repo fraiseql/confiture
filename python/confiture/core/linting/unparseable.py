@@ -1,11 +1,11 @@
 """The lint notice for a file pglast cannot parse.
 
-A rule that reads DDL through pglast used to return no findings for a file the
-parser rejected, so a broken file linted clean. Each rule now reports the file
-once, as an ``UNPARSEABLE`` finding, and reads the rest.
+A rule that reads DDL through pglast reports each file the parser rejects as
+one ``UNPARSEABLE`` finding and reads the rest: returning no findings for such a
+file would let it lint clean.
 
 It is a *finding about a file*, not a report that a rule could not run, which is
-why it is a registered rule at ``error`` from 1.9.0 (#274) and why the report
+why it is a registered rule at ``error`` (#274) and why the report
 keeps one per file however many rules discovered it.
 """
 

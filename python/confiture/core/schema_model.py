@@ -1,10 +1,9 @@
 """The one model of what a schema declares: tables, types, sequences, routines and views.
 
 Every reader of a DDL tree answers in these types, and each is defined here once.
-There were six models of a table in this package, and a column's nullability was
-derived six ways from four sources; a fact one reader modelled and another did not
-reached an artefact every time — a primary key declared at table level read as a
-nullable column, a generated DDL file that lost a column's identity.
+A second model of a table is how a fact one reader models and another does not
+reaches an artefact — a primary key declared at table level read as a nullable
+column, a generated DDL file that loses a column's identity.
 
 The module is data and nothing else. It imports no parser and no database driver,
 so a tool that only has to *hold* a schema — a seed generator, a parity fixture —
@@ -82,8 +81,8 @@ class ObjectRef:
     express "a type schema written on one side and left off the other still
     matches", so ``fn(bigint)`` and ``fn(int8)`` must land in one bucket and
     :func:`~confiture.core.linting.inventory.signatures_match` decides inside it.
-    Keying on the full signature reported an added and a dropped function where
-    one routine had been respelled (CLAUDE.md, #275).
+    Keyed on the full signature, one respelled routine would report as an added
+    and a dropped function (#275).
     """
 
     kind: str
@@ -92,8 +91,8 @@ class ObjectRef:
     signature: tuple[str, ...] | None
     #: The spelling a change prints. Out of the key deliberately: it carries the
     #: *signature as written*, and ``fn(bigint)`` and ``fn(int8)`` are one
-    #: routine written two ways (#275). Keying on it reported a dropped and an
-    #: added function where a type had merely been respelled.
+    #: routine written two ways (#275). Keyed on it, a respelled type would report
+    #: as a dropped and an added function.
     display: str = field(compare=False)
 
     @property

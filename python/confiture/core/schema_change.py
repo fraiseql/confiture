@@ -1,13 +1,12 @@
 """What changed between two schema trees: one variant per kind, closed, and their wire form.
 
 ``SchemaDiffer.compare`` returns a :class:`SchemaDiff` whose changes are these
-variants and nothing else. A change used to be a string and a dict —
-``SchemaChange(type="ADD_COLUMN", details={...})`` — so every reader dispatched on a
-string it had to spell correctly and read keys the differ may never have written;
-``differ_sql`` read ``details["type"]`` for a column, which the differ never set,
-and substituted ``text`` for every added column's type. A variant carries the model
-objects themselves (``core/schema_model.py``): an added column *is* a
-:class:`~confiture.core.schema_model.Column`.
+variants and nothing else. A variant carries the model objects themselves
+(``core/schema_model.py``): an added column *is* a
+:class:`~confiture.core.schema_model.Column`. A change spelled as a string and a
+dict — ``type="ADD_COLUMN", details={...}`` — would make every reader dispatch on
+a string it has to spell correctly and read keys the differ may never have
+written: a column's type read from a key nobody set comes back as ``text``.
 
 The names are past participles on purpose. ``core/replica/classifier.py`` names the
 *operations read from a migration file* in the imperative — ``CreateTable``,
@@ -17,9 +16,9 @@ shared names in one package would be two taxonomies spelled alike.
 The wire is :meth:`to_wire`. Every payload that carries a change — ``confiture diff
 --format json``, ``migrate diff``, the accompaniment report, ``migrate validate
 --check-git`` — reads the :class:`~confiture.models.schema.WireChange` it returns,
-whose six fields and one line are byte-identical to what the string-and-dict change
-printed (``tests/integration/test_diff_goldens.py`` and ``test_wire_goldens.py`` hold
-that). The wire's ``type`` strings live in this module and in no other.
+whose six fields and one line are pinned byte for byte by
+``tests/integration/test_diff_goldens.py`` and ``test_wire_goldens.py``. The wire's
+``type`` strings live in this module and in no other.
 """
 
 from __future__ import annotations
@@ -137,9 +136,9 @@ def _table_details(table: Table) -> dict[str, Any]:
     """A table's columns and constraints, in the shape a ``CREATE TABLE`` is rendered from.
 
     The constraints travel with the columns: a ``DROP_TABLE`` down recreates the
-    table from exactly these, so a table that came back without its foreign keys
-    was a table that came back wrong. The primary key is emitted at table level
-    rather than on the column so that a composite one has somewhere to go.
+    table from exactly these, and a table that comes back without its foreign keys
+    comes back wrong. The primary key is emitted at table level rather than on
+    the column so that a composite one has somewhere to go.
     """
     constraints: list[dict[str, Any]] = [
         {
@@ -576,7 +575,7 @@ class _ObjectChange(_Change):
     that creates them (``DDLObject``), keyed by ``ObjectRef``, so one variant per
     verb covers every kind ``ddl_objects.OBJECT_KEYWORD`` names — which is what
     makes this union finite. The wire spells the kind into the type
-    (``ADD_VIEW``, ``REPLACE_FUNCTION``), as it always has.
+    (``ADD_VIEW``, ``REPLACE_FUNCTION``).
     """
 
     __slots__ = ()
@@ -723,7 +722,7 @@ KINDS: frozenset[type[SchemaChange]] = frozenset(get_args(SchemaChange))
 
 #: ``confiture diff --format json``'s ``summary``, in its key order. A rename, a
 #: column's type, nullability or default, an enum's labels and every object compared
-#: by definition are not counted there, and never were.
+#: by definition are not counted there.
 _SUMMARY: tuple[tuple[str, tuple[type[SchemaChange], ...]], ...] = (
     ("tables_added", (TableAdded,)),
     ("tables_dropped", (TableDropped,)),

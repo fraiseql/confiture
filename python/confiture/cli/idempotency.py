@@ -27,8 +27,8 @@ def _idempotent_backend_banner(format_output: str) -> dict[str, Any]:
     pipe-able output stays valid.
 
     Returns:
-        A ``meta`` dict the caller folds into its JSON payload. Always
-        contains ``{"backend": "ast" | "regex"}``.
+        A ``meta`` dict the caller folds into its JSON payload: always
+        ``{"backend": "ast"}``.
     """
     # One parser (D13): the AST backend is the only backend. ``backend`` stays in
     # ``meta`` because the payload contract carries it.
@@ -88,7 +88,10 @@ class IdempotencyOutcome:
             info finding under ``--strict-cor``, or an unverified call under
             ``--fail-on-unanalyzable``.
         payload: The JSON document in JSON mode, else ``None``.
-        exit_code: The code this run signals when it does not pass.
+        exit_code: The code this run signals when it does not pass: ``FINDINGS``,
+            an unverified call under ``--fail-on-unanalyzable`` included. The exit
+            table is frozen at 0–8 and shared with the fraisier adapters, so
+            "completed, N unverified" has no code of its own (#213).
     """
 
     passed: bool
@@ -255,15 +258,13 @@ def _render_idempotency_headline(report: Any, *, fail: bool, strict_cor: bool) -
     ``--strict-cor``, then calls the analyzer could not read, then the green
     line. The green line is printed only when every call was read and nothing
     was found: "checked and clean" is a different answer from "could not
-    check", and the two used to print the same headline (#213).
-
-    Two sites rendered this independently before 0.46.0, which is how the
-    info-only branch kept the contradiction after the clean branch was noticed.
+    check", so the two never share a headline (#213). One renderer decides it,
+    because two would disagree as soon as one branch changed.
 
     Args:
         report: The merged :class:`IdempotencyReport`.
         fail: What the caller decided the exit code is — computed once from
-            severity, ``strict_cor`` and (from 0.46.0) ``--fail-on-unanalyzable``.
+            severity, ``strict_cor`` and ``--fail-on-unanalyzable``.
             The renderer never re-derives it.
         strict_cor: Whether info findings are blocking this run.
     """

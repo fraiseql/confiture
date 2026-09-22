@@ -7,14 +7,14 @@ forward-compatibility and risk tier — from the same pglast nodes. What
 definition, so it lives here.
 
 So does the other half: what a statement *does to the schema a DDL tree
-declares*. A build-from-DDL tree is read by two walkers with unrelated object
-models — the lint inventory and the differ — and each used to decide for itself
-which statements change what a tree declares. :func:`column_edit` answers for
-the ``ALTER TABLE`` subcommands and :func:`object_edits` for the statement kinds
-that are not ``ALTER TABLE`` at all, both in neither reader's vocabulary. The
-tables beside them say which of pglast's members are answered for and, for the
-rest, why not — because a member nobody considered looks exactly like one that
-was decided (#288, #301).
+declares*. A build-from-DDL tree is folded by more than one reader — the lint
+inventory, whose schema model the differ reads, and ``core/ddl_objects.py`` —
+and none of them decides for itself which statements change what a tree
+declares. :func:`column_edit` answers for the ``ALTER TABLE`` subcommands and
+:func:`object_edits` for the statement kinds that are not ``ALTER TABLE`` at
+all, both in no reader's vocabulary. The tables beside them say which of
+pglast's members are answered for and, for the rest, why not — because a member
+nobody considered looks exactly like one that was decided (#288, #301).
 """
 
 from __future__ import annotations
@@ -44,10 +44,6 @@ from confiture.core.type_lattice import canonical_type, parse_type
 _CONSTR_NOTNULL = _pg_member("ConstrType", "CONSTR_NOTNULL")
 _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
 
-# Resolved BY NAME, never by literal ordinal (#192).
-_AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
-_AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
-_AT_ALTER_COLUMN_TYPE = _pg_member("AlterTableType", "AT_AlterColumnType")
 _AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
 _CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
 
@@ -66,8 +62,7 @@ def walk_nodes(node: Any) -> Iterator[Any]:
 
     pglast nodes carry their children in ``__slots__``, singly or in a tuple,
     so "walk the tree" is the same three lines wherever it is needed. It lives
-    here because it is the only piece the DDL walkers were still each writing
-    for themselves.
+    here so the DDL walkers do not each write it for themselves.
     """
     if isinstance(node, list | tuple):
         for item in node:
@@ -88,9 +83,10 @@ class ColumnEdit:
 
     A build-from-DDL tree may append an ``ALTER TABLE`` rather than edit the
     ``CREATE TABLE``, so what a database ends up with is the two together — and
-    two readers have to see it: the lint inventory (``core/linting/inventory.py``)
-    and the differ (``core/differ.py``). Their object models share nothing, so
-    what they share is this *decision*; each applies it to its own types.
+    every reader of the tree has to see it. What they share is this *decision*,
+    in no reader's vocabulary: the lint inventory (``core/linting/inventory.py``)
+    applies it to its own types, and the differ (``core/differ.py``) reads the
+    model the inventory builds.
 
     ``kind`` is the decision. ``column`` names the target for every kind but
     ``add``, where the name is inside ``coldef`` — ``AT_AlterColumnType`` puts it
@@ -105,7 +101,7 @@ class ColumnEdit:
     wrong.
 
     A cmd this module does not model yields ``None`` — never a silently-empty
-    edit, which is how a renumbered enum member disappeared in #192.
+    edit, which is how a renumbered enum member would disappear (#192).
     """
 
     kind: Literal[
@@ -356,9 +352,9 @@ class ObjectEdit:
     ``DROP TABLE``, ``ALTER TABLE … RENAME COLUMN``, ``ALTER TABLE … RENAME TO``
     and ``ALTER TABLE … SET SCHEMA`` are a ``DropStmt``, two ``RenameStmt`` and
     an ``AlterObjectSchemaStmt`` — not ``AlterTableStmt``, so folding the
-    subcommands reaches none of them. A tree that created and then dropped a
-    table still expected it: one critical ``missing_table`` on a database that
-    matches the tree exactly, which is #301's defect class one node type over.
+    subcommands reaches none of them. Unfolded, a tree that creates and then
+    drops a table would still expect it: one critical ``missing_table`` on a
+    database that matches the tree exactly (#301).
 
     ``object_kind`` is the vocabulary the lint inventory and ``ddl_objects``
     share (``table``, ``view``, ``function``, …). ``name`` is the object's own
@@ -679,8 +675,8 @@ def adds_primary_key(cmd: Any) -> bool:
     a column's, and folding it into the column vocabulary would make every
     reader unpack something it did not ask for. It lives here for the same
     reason ``column_edit`` does — one module knows what an ``AlterTableType``
-    member means, because a literal ordinal silently stopped matching once
-    already (#192).
+    member means, because a literal ordinal stops matching silently when pglast
+    renumbers the enum (#192).
     """
     if enum_int(getattr(cmd, "subtype", None)) != _AT_ADD_CONSTRAINT:
         return False
@@ -806,9 +802,9 @@ def column_has_default(coldef: object) -> bool:
 #
 # PostgreSQL's grammar puts a ``Constraint`` node in three places: on a column,
 # at table level inside ``CREATE TABLE``, and in ``ALTER TABLE … ADD CONSTRAINT``.
-# The differ read them with three pieces of code and every divergence reached an
-# artefact: a column-level ``REFERENCES`` parsed to nothing (#315), and a CHECK
-# rendered in one reader was stored as its AST class name in another (#316).
+# Three pieces of code reading them diverge, and every divergence reaches an
+# artefact: a column-level ``REFERENCES`` that parses to nothing (#315), a CHECK
+# rendered by one reader and stored as its AST class name by another (#316).
 #
 # One node, one reader, and it *returns* what the node declares — a
 # :class:`~confiture.core.schema_model.Constraint` for what the table enforces, a
@@ -1171,11 +1167,11 @@ def type_name(type_node: Any) -> str | None:
     (``int8``) is left alone, since :mod:`confiture.core.type_lattice` aliases it.
 
     The array bounds are **not** dropped. They live on ``arrayBounds`` rather
-    than in ``names``, and reading only ``names`` made ``int[]`` render ``int4`` —
-    the same string as ``int``. Both callers compose this with ``canonical_type``
-    over an ``ALTER COLUMN … TYPE``, so a column going ``varchar(50)`` to
-    ``text[]`` was captured as ``text`` and compared as a free, rewrite-less
-    widening (#275).
+    than in ``names``, and reading only ``names`` would render ``int[]`` as
+    ``int4`` — the same string as ``int``. Both callers compose this with
+    ``canonical_type`` over an ``ALTER COLUMN … TYPE``, so without the bounds a
+    column going ``varchar(50)`` to ``text[]`` would be captured as ``text`` and
+    compared as a free, rewrite-less widening (#275).
     """
     if type_node is None:
         return None
@@ -1298,9 +1294,10 @@ def written_type(type_node: Any) -> str | None:
     The typmod and the array bounds come from :func:`type_name`, the one reader
     of a pglast ``TypeName``; the name from :func:`readable_type`. A type with no
     readable keyword is left exactly as the parser holds it, case included,
-    because ``"MyType"`` is not ``mytype``. A length lives in the spelling: a
-    schema saying ``VARCHAR(50)`` generated an unbounded ``VARCHAR`` while this
-    was filled only for the types the table missed.
+    because ``"MyType"`` is not ``mytype``. A length lives in the spelling, so the
+    spelling is recorded for every column: were it recorded only for the types
+    the table misses, a schema saying ``VARCHAR(50)`` would generate an unbounded
+    ``VARCHAR``.
     """
     written = type_name(type_node)
     readable = readable_type(type_node)
@@ -1345,8 +1342,8 @@ def canonical_default(text: str | None, column_type: str | None) -> str | None:
 
     Read as a parse tree, never as text: every cast of a literal is dropped, and so is
     an outer cast to the column's own type; a quoted number is the number; ``NULL`` is
-    no default, because PostgreSQL stores none. Measured over 23 defaults on
-    PostgreSQL 18.4, text agreed on 10 and this agrees on all 23.
+    no default, because PostgreSQL stores none. Over 23 defaults on PostgreSQL
+    18.4, comparing text agrees on 10 and this agrees on all 23.
     """
     if text is None:
         return None

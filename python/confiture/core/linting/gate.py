@@ -1,11 +1,10 @@
 """What makes ``confiture lint`` fail, and whether the threshold it was given can be reached.
 
-``--fail-on-error`` is on by default and, before 1.4.0, no rule in the registry
-emitted at ``error`` — so the flag a CI pipeline reaches for to make lint block
-was a flag that could not block, and four real ``build_001`` findings sat in a
-green pipeline for months (#247). Two booleans could express three of the four
-useful settings and not the fourth ("report, never fail"), and neither of them
-could say *whether the setting was reachable at all*.
+A threshold no selected rule can reach passes every run, so a pipeline that
+trusts it stays green over real findings (#247). ``--fail-on`` takes one of four
+settings — ``error``, ``warning``, ``info`` or ``never`` ("report, never fail"),
+the last of which the ``--fail-on-error`` / ``--fail-on-warning`` booleans cannot
+express — and the run says *whether the setting is reachable at all*.
 
 One threshold decides the exit code, and :func:`compute_gate` answers the second
 question from the registry's declared severities plus the configuration
@@ -62,7 +61,7 @@ def parse_threshold(value: str) -> Threshold:
 
 
 def threshold_from_aliases(*, fail_on_error: bool, fail_on_warning: bool) -> Threshold:
-    """The threshold the two pre-1.4.0 booleans express between them."""
+    """The threshold the ``--fail-on-error`` / ``--fail-on-warning`` aliases express."""
     if fail_on_warning:
         return Threshold.WARNING
     return Threshold.ERROR if fail_on_error else Threshold.NEVER

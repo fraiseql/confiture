@@ -3,9 +3,8 @@
 ``migrate validate --require-migration`` asks whether the schema tree changed in
 a way a migrate-only environment will never receive. Answering it needs more
 than the tables, enum types and sequences :class:`~confiture.core.differ.SchemaDiffer`
-modelled before #288 — a view, a routine, a trigger or an extension added to the
-tree and not to a migration is exactly the change the gate exists to catch, and
-each of them passed it with a green tick.
+models — a view, a routine, a trigger or an extension added to the tree and not
+to a migration is exactly the change the gate exists to catch (#288).
 
 **Identity is the inventory's answer, not a second one.**
 :func:`confiture.core.linting.inventory.object_from_statement` already decides
@@ -117,11 +116,11 @@ BODY_KINDS: frozenset[str] = frozenset({"function", "procedure", "aggregate"})
 #: Parse nodes that define something the differ models elsewhere, so tracking
 #: them here would report every table twice.
 #:
-#: Each reason names the identity that model is keyed by, because for as long as
-#: both modules existed these four were delegated to a reader that identified
-#: them differently — by a bare name — while this module's docstring said
-#: identity was the inventory's answer and not a second one (#313). A reason
-#: that says only *where* a kind is modelled cannot catch that.
+#: Each reason names the identity that model is keyed by. A kind delegated to a
+#: reader that identified it differently — by a bare name — would break this
+#: module's rule that identity is the inventory's answer and not a second one
+#: (#313), and a reason that says only *where* a kind is modelled cannot catch
+#: that.
 MODELLED_ELSEWHERE: dict[str, str] = {
     "CreateStmt": (
         "the schema model's tables (core/schema_model.py), read whole by the lint "

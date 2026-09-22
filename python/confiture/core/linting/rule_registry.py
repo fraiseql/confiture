@@ -1,9 +1,7 @@
 """The catalogue of rules ``confiture lint`` can run, and how to select them (#150).
 
-Before 0.42.0 every opt-in rule arrived as its own flag: ``--replica-safe``
-(0.19.0), ``--check-tenant-isolation``, ``--check-security-definer`` (0.28.0).
-Three flags, two naming styles, and no way to *turn a rule off* — #150's
-prediction, filed when there was one of them.
+A rule is selected by its code or its family, never by a flag of its own:
+per-rule flags multiply naming styles and give no way to *turn a rule off*.
 
 This module is the single backing store: :func:`resolve_selection` turns
 ``--select`` / ``--ignore`` into the exact set of rule codes a run will apply,
@@ -12,9 +10,8 @@ are re-expressed as ``--select default,<family>`` rather than as branches in the
 command body.
 
 **Only rules that can actually emit a violation are listed**, and every switch
-``LintConfig`` carries belongs to one of them. Two did not — ``check_indexes``
-computed and discarded, ``check_constraints`` had no implementation at all —
-and both were on by default, so a lint dispatched work no rule was behind.
+``LintConfig`` carries belongs to one of them: a switch with no rule behind it
+would dispatch work that nothing reports.
 ``tests/unit/linting/test_every_switch_has_a_rule.py`` is what keeps the
 catalogue and the dispatch agreeing in that direction, as
 ``test_every_rule_is_registered.py`` does in the other.
@@ -32,13 +29,6 @@ from confiture.exceptions import ConfigurationError
 #: ``--select default,replica``, i.e. the usual lint *plus* one family.
 DEFAULT_SELECTOR = "default"
 
-#: Retired rule ids that still resolve, lower-cased. The file-tree rules emitted
-#: ``GEN001``–``GEN004`` from a namespace ``confiture lint`` could not reach;
-#: folding them in as ``tree_001``–``tree_004`` renamed ids a pipeline may have
-#: typed, so the old spelling stays an accepted *selector* for one minor — it
-#: costs one mapping — while the emitted ``rule_id`` is the new code from 1.4.0
-#: on. Nothing published ever carried the old ids: ``lint-unified``, the only
-#: command that emitted them, has no JSON schema.
 #: The notice a file pglast rejected produces. Named here rather than beside its
 #: constructor because two modules need it and one of them (``schema_linter``)
 #: cannot import the other without a cycle.
@@ -58,6 +48,11 @@ BODY_CLASS_CODES: dict[str, str] = {
 #: The ``body`` codes that are artefacts rather than failures.
 ARTEFACT_CODES = frozenset(BODY_CLASS_CODES.values()) - {BODY_CLASS_CODES["real"]}
 
+#: Retired rule ids that still resolve, lower-cased. ``GEN001``–``GEN004`` are
+#: ``tree_001``–``tree_004`` under the ids a pipeline may have typed, so they
+#: stay accepted *selectors* — it costs one mapping — while every emitted
+#: ``rule_id`` is the ``tree_*`` code and no published JSON schema names the old
+#: ids.
 LEGACY_CODE_ALIASES: dict[str, str] = {
     "gen001": "tree_001",
     "gen002": "tree_002",
@@ -74,13 +69,14 @@ class LintRule:
         code: Stable rule identifier, as it appears in violation output.
         family: Selector group. Usually the code's prefix — with one exception:
             ``sec_001`` (``security``) and ``sec_002`` (``security-definer``)
-            are unrelated rules that happen to share a prefix, and the flag
-            that shipped ``sec_002`` named the latter.
+            are unrelated rules that happen to share a prefix, and
+            ``sec_002``'s family is named after its flag,
+            ``--check-security-definer``.
         title: One-line description, shown by ``--list-rules``.
         severity: Severity the rule emits *by default*. ``sec_002`` and
             ``replica_001`` can be escalated by configuration.
         default_on: Whether a plain ``confiture lint`` applies it.
-        legacy_flag: The pre-0.42.0 per-rule flag, kept as an alias, or None.
+        legacy_flag: The rule's own per-rule flag, kept as an alias, or None.
         requires_config: Configuration the rule additionally needs before it can
             report anything — selecting it is necessary, not sufficient.
         requires_db: Whether the rule answers from a database rather than from
@@ -131,11 +127,11 @@ LINT_RULES: tuple[LintRule, ...] = (
         # A file PostgreSQL's own parser rejects is a finding everywhere else in
         # confiture — `IDEM_UNPARSEABLE` fails `--fail-on-unanalyzable`,
         # `PFLIGHT_UNPARSEABLE` forces `window_safe: false`, `migrate diff` exits
-        # on `DIFFER_400`. Lint graded it `info`, below every `--fail-on`
-        # threshold but `info`, so a build it had not read passed the gate
-        # (#274). Registering it is also what lets `compute_gate` see it, and
-        # what gives a project with a deliberately non-SQL file the
-        # `--ignore UNPARSEABLE` it needs.
+        # on `DIFFER_400`. Lint grades it `error` for the same reason: at `info`
+        # it would sit below every `--fail-on` threshold but `info`, and a build
+        # lint had not read would pass the gate (#274). Registering it is also
+        # what lets `compute_gate` see it, and what gives a project with a
+        # deliberately non-SQL file the `--ignore UNPARSEABLE` it needs.
         title="Every file in the build parses",
         severity="error",
         default_on=True,
@@ -438,7 +434,7 @@ def _expand(token: str, *, option: str) -> frozenset[str]:
 
     Raises:
         ConfigurationError: The token matches no rule and no family. Selecting
-            nothing silently is precisely the failure this replaces, so an
+            nothing silently would let a typo switch a rule off, so an
             unknown selector is loud and lists what is valid.
     """
     key = token.strip().lower()
@@ -448,9 +444,9 @@ def _expand(token: str, *, option: str) -> frozenset[str]:
     if key == DEFAULT_SELECTOR:
         return default_codes()
     # Keyed on the folded code and answering with the registry's own spelling:
-    # selection has always been case-insensitive, and every code was lower-case
-    # until `UNPARSEABLE` — which would otherwise resolve to a set holding
-    # `unparseable`, matching no finding's `rule_id`.
+    # selection is case-insensitive, and `UNPARSEABLE` is the one upper-case
+    # code — which would otherwise resolve to a set holding `unparseable`,
+    # matching no finding's `rule_id`.
     by_code = {rule.code.lower(): rule.code for rule in LINT_RULES}
     if key in by_code:
         return frozenset({by_code[key]})
@@ -485,7 +481,7 @@ def resolve_selection(
 
     Args:
         select: ``--select`` values (each may be comma-separated). ``None`` or
-            empty means the default set, i.e. pre-0.42.0 behaviour.
+            empty means the default set, what a plain ``confiture lint`` applies.
         ignore: ``--ignore`` values, removed after selection.
 
     Returns:

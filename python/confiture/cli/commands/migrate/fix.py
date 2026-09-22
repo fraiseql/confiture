@@ -1,7 +1,4 @@
-"""`confiture migrate fix`.
-
-Split out of the monolithic migrate command modules.
-"""
+"""`confiture migrate fix`."""
 
 from __future__ import annotations
 
@@ -88,10 +85,9 @@ def migrate_fix(
     """
     is_json(format_output)
     # A --config the operator typed is read whatever this run goes on to do
-    # (#284). Only --ownership uses it, so `migrate fix --idempotent --config
-    # broken.yaml` used to rewrite migration files while never opening the file
-    # the operator named, and `migrate fix --config broken.yaml` with no fix
-    # type printed a usage warning and exited 0.
+    # (#284). Only --ownership uses it, but a file named on the command line and
+    # never opened cannot fail: `--idempotent --config broken.yaml` would rewrite
+    # migration files, and a run with no fix type would exit 0.
     if config_path is not None:
         load_config(config_path)
     config_path = config_path or DEFAULT_CONFIG_PATH

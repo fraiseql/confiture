@@ -173,9 +173,9 @@ class MigrationChecksumVerifier:
             config: Checksum configuration (uses defaults if None)
             migration_table: Tracking table name; may be schema-qualified
                 (e.g. ``public.tb_confiture``). Must match the migrator's
-                tracking table — stored checksums live there. Defaulting this to
-                the literal default silently read the wrong table under a custom
-                ``tracking_table`` (#152).
+                tracking table — stored checksums live there, so under a custom
+                ``tracking_table`` the literal default reads the wrong table
+                (#152).
         """
         self.connection = connection
         self.config = config or ChecksumConfig()
@@ -359,9 +359,8 @@ class MigrationChecksumVerifier:
 
         This is what ``verify-checksums --fix`` calls. It exists because
         :meth:`update_all_checksums` answers a different question — "re-stamp
-        everything" — and ``--fix`` was calling it: a single bad checksum in a
-        268-migration ledger reported "Found 1 checksum mismatch(es)" and then
-        rewrote all 268 rows, one transaction each (#311).
+        everything" — and from ``--fix`` that would turn one reported mismatch
+        into a rewrite of every row in the ledger, one transaction each (#311).
 
         Both halves matter. The scope is the caller's own
         :meth:`verify_all` result, so ``--fix`` cannot touch a row it never
@@ -375,9 +374,8 @@ class MigrationChecksumVerifier:
         would open a window in which the digest written differs from the digest
         reported.
 
-        :meth:`update_checksum`'s single-row, commit-now contract is deliberately
-        untouched — it is a library method, and this method is not a reason to
-        change it underneath a caller.
+        :meth:`update_checksum` keeps its single-row, commit-now contract
+        deliberately — it is a library method, and its callers rely on it.
 
         Args:
             mismatches: The mismatches to re-stamp, as returned by

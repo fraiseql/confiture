@@ -136,10 +136,8 @@ def _render_param_list(parameters: Any) -> str:
     `inventory.type_text` — the types **as written** — and deliberately not the
     canonical key `func_001` compares on. This string goes into the
     ``ALTER FUNCTION app.f(…) SET search_path`` statement the finding tells the
-    operator to run, so it should read the way their `CREATE` reads. A copy of
-    `func_001`'s alias table lived here under a comment saying it was shared
-    with it; it was not shared, it was pasted, and neither covered a bare
-    internal name (#275).
+    operator to run, so it should read the way their `CREATE` reads. Both read
+    the inventory; neither keeps an alias table of its own (#275).
     """
     if not parameters:
         return ""

@@ -61,15 +61,6 @@ class PatternMatch:
     suggestion: str | None = None
 
 
-# Compile regex patterns for performance
-# Each pattern detects non-idempotent SQL and has an optional skip pattern
-# for the idempotent equivalent
-
-
-# Human-readable descriptions of what each pattern detects.
-# Surfaced via ``confiture migrate validate --list-patterns``; keep concise
-# (one short sentence per entry, present tense, describes the violation —
-# not the fix).
 class CatalogEntryDefinition(NamedTuple):
     """One detectable pattern: what it is, how severe, whether an idempotent spelling exists."""
 
@@ -79,7 +70,7 @@ class CatalogEntryDefinition(NamedTuple):
 
 
 # The catalog `--list-patterns` publishes (frozen at ``version: "1"``): one entry
-# per pattern the AST detector reports, in the order the regex table once had.
+# per pattern the AST detector reports, in a fixed order so the list never reshuffles.
 PATTERN_CATALOG: tuple[CatalogEntryDefinition, ...] = (
     CatalogEntryDefinition(IdempotencyPattern.CREATE_TABLE, "error", True),
     CatalogEntryDefinition(IdempotencyPattern.CREATE_UNIQUE_INDEX, "error", True),
@@ -116,6 +107,10 @@ PATTERN_CATALOG: tuple[CatalogEntryDefinition, ...] = (
 )
 
 
+# Human-readable descriptions of what each pattern detects.
+# Surfaced via ``confiture migrate validate --list-patterns``; keep concise
+# (one short sentence per entry, present tense, describes the violation —
+# not the fix).
 _DESCRIPTIONS: dict[IdempotencyPattern, str] = {
     IdempotencyPattern.CREATE_TABLE: "CREATE TABLE without IF NOT EXISTS.",
     IdempotencyPattern.CREATE_INDEX: "CREATE INDEX without IF NOT EXISTS.",
@@ -170,7 +165,7 @@ _DESCRIPTIONS: dict[IdempotencyPattern, str] = {
 # :class:`IdempotencyPattern` member; the two sets are disjoint.
 #
 # ``TEMPLATE_FILLABLE`` patterns expose at least one identifier
-# (table, index, constraint, column, …) that the AST / regex backend
+# (table, index, constraint, column, …) that the AST detector
 # can extract reliably, so the violation's ``suggestion`` is a
 # copy-pasteable SQL block with that identifier inlined.
 #
@@ -206,7 +201,7 @@ TEMPLATE_FILLABLE: frozenset[IdempotencyPattern] = frozenset(
 )
 
 # Patterns that can be detected but whose fix has no mechanical
-# template — the regex doesn't pin a single identifier to substitute
+# template — the match doesn't pin a single identifier to substitute
 # in, or the fix structurally requires user judgement (e.g. DROP
 # FUNCTION needs a parameter signature, not just a name).
 TEMPLATE_NOT_AVAILABLE: frozenset[IdempotencyPattern] = frozenset(
@@ -220,8 +215,9 @@ TEMPLATE_NOT_AVAILABLE: frozenset[IdempotencyPattern] = frozenset(
 )
 
 # Human-friendly hints describing what idempotent form the validator
-# skips over. Only set for patterns with a ``skip_regex`` — patterns
-# that have no simple skip (e.g. CREATE TYPE) map to ``None``.
+# skips over. Only set for patterns with an idempotent spelling
+# (``has_skip_form``) — patterns that have no simple skip (e.g. CREATE
+# TYPE) map to ``None``.
 _SKIP_HINTS: dict[IdempotencyPattern, str | None] = {
     IdempotencyPattern.CREATE_TABLE: "CREATE TABLE IF NOT EXISTS",
     IdempotencyPattern.CREATE_INDEX: "CREATE INDEX IF NOT EXISTS",
@@ -268,22 +264,6 @@ def list_patterns() -> list[PatternCatalogEntry]:
             )
         )
     return catalog
-
-
-_ADD_CONSTRAINT_PATTERNS = frozenset(
-    {
-        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_CHECK,
-        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_PRIMARY_KEY,
-        IdempotencyPattern.ALTER_TABLE_ADD_CONSTRAINT_UNIQUE,
-    }
-)
-
-
-_COR_SHAPE_RISK_KINDS: dict[IdempotencyPattern, str] = {
-    IdempotencyPattern.CREATE_OR_REPLACE_VIEW_SHAPE_RISK: "VIEW",
-    IdempotencyPattern.CREATE_OR_REPLACE_FUNCTION_SHAPE_RISK: "FUNCTION",
-    IdempotencyPattern.CREATE_OR_REPLACE_PROCEDURE_SHAPE_RISK: "PROCEDURE",
-}
 
 
 def detect_non_idempotent_patterns(sql: str) -> list[PatternMatch]:

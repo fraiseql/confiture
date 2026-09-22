@@ -1,13 +1,11 @@
 """pglast-backed idempotency detector.
 
-Mirrors :mod:`patterns` in interface — ``_detect_via_ast(sql)`` returns
-the same ``list[PatternMatch]`` shape — but uses PostgreSQL's own parser
-(via :mod:`pglast`) to recognize statements structurally rather than via
-regex.
+``_detect_via_ast(sql)`` returns the ``list[PatternMatch]`` that
+:func:`patterns.detect_non_idempotent_patterns` hands back, recognizing
+statements structurally with PostgreSQL's own parser (via :mod:`pglast`).
 
 This is the only backend (D13). Parse failures bubble up as
 :class:`pglast.parser.ParseError`; the validator records the file as unparseable.
-templated SQL still gets scanned.
 
 Visitor layout
 --------------
@@ -16,8 +14,8 @@ Detection runs in two passes:
 
 1. **Pair collection**: walk every statement once to record names
    dropped with ``IF EXISTS`` — views, functions, procedures, and table
-   constraints. Names come straight from AST nodes, so quoted/long
-   identifiers are no longer truncated (issue #122 Bug 2).
+   constraints. Names come straight from AST nodes, so a quoted or long
+   identifier is recorded whole, never truncated (#122).
 
 2. **Match emission**: walk the statements again, dispatching by class
    name (``CreateStmt``, ``AlterTableStmt``, ``DropStmt``, …) to a
@@ -26,9 +24,8 @@ Detection runs in two passes:
    shape-risk notes) consult the recorded drops and skip emission when
    a matching drop precedes the create.
 
-Unknown nodes are skipped — the regex backend is the safety net for any
-statement shape we don't yet recognize, and DO-block bodies are opaque
-to pglast, so non-idempotent statements wrapped in a protective
+Unknown nodes are skipped, and DO-block bodies are opaque to pglast, so
+non-idempotent statements wrapped in a protective
 ``DO $$ … EXCEPTION WHEN … $$`` are never visited as top-level
 statements at all.
 """
@@ -380,8 +377,8 @@ def _visit_alter_table_stmt(
 
     ``AlterTableStmt`` is one node per source statement, but holds a
     tuple of :class:`AlterTableCmd` (one per comma-separated clause).
-    Walking the tuple is what closes the *multi-clause ALTER* gap from
-    issue #122 — each clause produces its own match.
+    Walking the tuple gives each clause its own match, so a multi-clause
+    ALTER reports every clause, not only the first (#122).
     """
     objtype = ctx.stmt.objtype
     for cmd in ctx.stmt.cmds or ():

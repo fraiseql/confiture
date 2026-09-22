@@ -1,8 +1,7 @@
 """Baseline / reinit / rebuild concern for ``MigrationEngine``.
 
-Peeled out of ``engine.py``. Free functions taking the
-``MigrationEngine`` instance as their first argument; the class keeps thin delegating
-methods so its public surface and patch targets are unchanged. Pure refactor.
+Free functions taking the ``MigrationEngine`` instance as their first argument; the
+class keeps thin delegating methods, which are its public surface and its patch targets.
 """
 
 from __future__ import annotations
@@ -348,10 +347,10 @@ def rebuild(
         migrator._backup_tracking_table()  # result used by CLI for JSON dump
 
     # Step 2: Build DDL via SchemaBuilder.  The builder takes the Environment
-    # itself: passing ``env_config.name`` sent it back to
-    # ``db/environments/<name>.yaml``, discarding the config the caller had
+    # itself: passing ``env_config.name`` would send it back to
+    # ``db/environments/<name>.yaml``, discarding the config the caller has
     # already resolved — and ``from_config`` does not inject ``name``, so a
-    # migrate-only config (#168) resolved to ``db/environments/.yaml``.
+    # migrate-only config (#168) would resolve to ``db/environments/.yaml``.
     try:
         builder = _core_builder.SchemaBuilder(
             env=env_config if env_config is not None else "rebuild"

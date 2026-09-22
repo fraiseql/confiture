@@ -109,8 +109,7 @@ def replacing_definitions(sql: str) -> Definitions:
     The statement is ``ddl_objects``' re-appliable rendering — ``CREATE OR
     REPLACE``, the body verbatim — and not the author's text. ``fix-signatures``
     creates an overload beside ones that exist and replaces a drifted body in
-    place, and a ``CREATE FUNCTION`` as written fails on a routine that exists:
-    every plan the routine goldens recorded before 1.16 did.
+    place, and a ``CREATE FUNCTION`` as written fails on a routine that exists.
 
     Raises:
         pglast.parser.ParseError: pglast rejects *sql*.
@@ -202,12 +201,9 @@ class FunctionSignatureDriftReport:
         missing_from_db: Source signatures the live database has not got. Which of
             the two readings applies is the caller's to decide, and both are
             legitimate: **before** a deploy it says what is about to be applied;
-            **after** one it is the failure a deploy gate is looking for. It was
-            labelled "informational" when it could not be trusted either way — a
-            trigger function was permanently in it, and so was every routine
-            outside ``public`` (#303). ``--missing-is-drift`` is how a caller says
-            which reading it means; :attr:`has_undeployed` is the answer either
-            way.
+            **after** one it is the failure a deploy gate is looking for (#303).
+            ``--missing-is-drift`` is how a caller says which reading it means;
+            :attr:`has_undeployed` is the answer either way.
         schemas_checked: List of schemas that were compared
         functions_checked: Total number of distinct functions checked
         has_drift: True when stale_overloads is non-empty
@@ -277,12 +273,12 @@ def schemas_to_scan(requested: str | None, source: Iterable[Routine]) -> list[st
     ``requested`` is a comma-separated ``--schemas`` value, or ``None`` when the
     caller did not name any. In that case the answer is **the schemas the source
     declares** — the same answer ``--check-live-drift`` derives from the DDL.
-    The two halves of one gate disagreed before: this one defaulted to ``public``
-    while the other read the tree, so every routine outside ``public`` was
-    reported as not deployed on a database that had it (#303).
+    The two halves of one gate have to agree: defaulting to ``public`` here while
+    the other half reads the tree would report every routine outside ``public``
+    as not deployed on a database that has it (#303).
 
-    A source that declares no routine at all has no schema to name, and
-    ``public`` is the historical answer; there is nothing to compare either way.
+    A source that declares no routine at all has no schema to name, so the answer
+    is ``DEFAULT_SCHEMA``; there is nothing to compare either way.
     """
     named = [part.strip() for part in (requested or "").split(",") if part.strip()]
     if named:

@@ -3,7 +3,7 @@
 Every other rule in the catalogue answers from the text. This one cannot: that
 ``v_pk`` is ``UUID`` and ``pk_widget`` is ``BIGINT`` is a fact about resolved
 types, and a parser that has not built the schema does not hold it. So the DDL
-is materialised into a *throwaway* database — the drift-guard epic's
+is materialised into a *throwaway* database —
 :class:`~confiture.core.expected_db.ExpectedSchemaDB`, on a writable maintenance
 server — and ``plpgsql_check`` is asked what each body would do on its first
 call.
@@ -172,8 +172,8 @@ class Diagnosis:
         """Whether this is a body that will fail, rather than an opinion about one.
 
         ``plpgsql_check`` reports both through one table, and its own ``level``
-        does not separate them: the issue's headline case — a ``UUID`` variable
-        fed from a ``BIGINT`` column — comes back at ``warning`` and carries
+        does not separate them: the case this rule exists for — a ``UUID``
+        variable fed from a ``BIGINT`` column — comes back at ``warning`` and carries
         SQLSTATE ``42804``, while "unused variable" comes back at ``warning``
         and carries ``00000``. The SQLSTATE is what tells them apart: a
         condition PostgreSQL would actually raise, or the analyser's own view of
@@ -245,8 +245,7 @@ def diagnose(
 
     The DDL is built into a throwaway database on *server_url* and the database
     is dropped again — :class:`~confiture.core.expected_db.ExpectedSchemaDB` owns
-    that lifecycle, and has since the drift-guard epic. Nothing here opens the
-    server's own database.
+    that lifecycle. Nothing here opens the server's own database.
 
     *search_path* is the environment's ``lint.search_path``. An unqualified name
     in a body resolves through ``search_path`` at run time, so the analyser has

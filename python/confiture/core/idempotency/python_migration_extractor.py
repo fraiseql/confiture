@@ -65,15 +65,14 @@ class ExtractedSQL:
         sql: The text the migration hands to ``execute``.
         source_file: The migration.
         source_line: The line of the ``self.execute`` / ``self.execute_file``
-            call — what the user greps for, and what the 0.12.1 contract pins.
+            call — what the user greps for, and what the JSON contract pins.
         kind: How the text was obtained: a literal, an f-string, or a file.
         sql_file: The file read, for ``FILE`` snippets.
         resolved_via: Names walked to reach the text, in resolution order
-            (``("DDL",)`` for the #213 shape; ``()`` for a literal at the
-            call site). Added in 0.46.0.
+            (``("DDL",)`` for a module constant ``DDL`` (#213); ``()`` for a
+            literal at the call site).
         definition_line: Where the first of those names is bound, so a
-            finding can point at the constant as well as the call. Added in
-            0.46.0.
+            finding can point at the constant as well as the call.
     """
 
     sql: str
@@ -108,8 +107,8 @@ class ExtractionWarning:
         source_line: The line of the call.
         message: What was refused and why, naming the construct and line.
         reason_code: The evaluator's :class:`~static_eval.Refusal` value, or
-            ``""`` for a syntax error. Added in 0.46.0; remedies key on it.
-        remedy: The rewrite that makes the call readable. Added in 0.46.0.
+            ``""`` for a syntax error; remedies key on it.
+        remedy: The rewrite that makes the call readable.
     """
 
     kind: WarningKind
@@ -165,9 +164,8 @@ def _warning(
 ) -> ExtractionWarning:
     """Turn an evaluator refusal into the extractor's warning vocabulary.
 
-    The seven kinds are a JSON-visible contract and stay as they were; the
-    message now carries the evaluator's reason, and ``reason_code`` its
-    category.
+    The seven kinds are a JSON-visible contract; the message carries the
+    evaluator's reason, and ``reason_code`` its category.
     """
     if refusal.hint == "file_missing":
         kind, message = WarningKind.EXECUTE_FILE_MISSING, refusal.reason

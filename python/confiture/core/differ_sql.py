@@ -2,12 +2,11 @@
 
 The one renderer of a :data:`~confiture.core.schema_change.SchemaChange`.
 ``MigrationGenerator`` writes the files — the destructive gate, the tier and
-irreversibility directives — and asks this module what each change is. It used to
-write eight kinds itself and hand the rest here, while this module kept its own
-renderings of those eight that nothing called: a ``DROP TABLE … CASCADE`` and an
-``ADD COLUMN IF NOT EXISTS``, tested and unreachable. Dispatch is a ``match`` per
-group, each closed by ``assert_never``, so a new variant is a type error here before
-it is a missing migration.
+irreversibility directives — and asks this module what each change is, for every
+kind: a second renderer is how a kind comes to have a rendering nothing calls,
+tested and unreachable. Dispatch is a ``match`` per group, each closed by
+``assert_never``, so a new variant is a type error here before it is a missing
+migration.
 
 ``None`` from :meth:`DifferSQLGenerator.generate_up` is *no SQL derived*: the
 change is reported and the author writes its DDL. ``None`` from
@@ -62,7 +61,7 @@ from confiture.core.schema_model import Constraint, Table
 from confiture.exceptions import UnsafeOperationError
 
 #: The kinds compared by definition that a migration is derived for, created and
-#: dropped — the ones ``migrate diff --generate`` has written since #288. The rest —
+#: dropped — the ones ``migrate diff --generate`` writes (#288). The rest —
 #: a trigger, an extension, a schema, a policy, … — are reported, and the migration
 #: says ``-- WARNING: no SQL derived`` for the author to write.
 DERIVED_KINDS: frozenset[str] = frozenset(

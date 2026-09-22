@@ -5,8 +5,8 @@ Three modes, chosen with ``--mode``:
 - ``check`` (default): report drift; exit 0 if clean, exit 1 if drift
   exists.  Read-only.
 - ``plan``: print the exact SQL that ``apply`` would run; no side effects.
-  Its JSON payload keeps ``"mode": "dry-run"``, the value it carried before
-  the flag was renamed.
+  Its JSON payload says ``"mode": "dry-run"``: that value is the payload's
+  contract, which consumers match on, not the flag's spelling.
 - ``apply``: execute.  Refuses to proceed without ``--all-schemas``
   if ``REASSIGN OWNED`` would affect schemas outside
   ``ownership.apply_to``.

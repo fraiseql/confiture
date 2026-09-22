@@ -1,7 +1,4 @@
-"""`confiture migrate introspect`.
-
-Split out of the monolithic migrate command modules.
-"""
+"""`confiture migrate introspect`."""
 
 from __future__ import annotations
 
@@ -150,10 +147,8 @@ def _introspect_payload(ledger_present: bool, **extra: Any) -> dict[str, Any]:
     """Build ``migrate introspect``'s JSON payload (#186).
 
     ``ledger_present`` is the table-name-agnostic spelling ``migrate verify``
-    adopted in 0.37.0. The 0.39.0 deprecated alias ``tb_confiture_present`` —
-    which hardcoded the default table name and was therefore wrong for any
-    project that configured ``tracking_table`` — was removed in 0.40.0 as
-    announced.
+    also uses: a key that named the default table would be wrong for any
+    project that configures ``tracking_table``.
 
     One builder for all three emit sites, so the shape cannot drift between them.
     """

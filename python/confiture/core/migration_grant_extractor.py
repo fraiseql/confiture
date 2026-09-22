@@ -5,14 +5,9 @@ Used by the ACL coverage lint rule (issue #120) to answer: *"does this
 migration's `CREATE TABLE` have a matching `GRANT` either in the same
 file or in the configured global grant sweep directory?"*
 
-Two-tier parsing, mirroring :mod:`confiture.core.differ`:
-
-* **Primary — pglast**: PostgreSQL's own C parser via ``libpg_query``.
-  Limit-free, syntax-accurate, preserves identifier case for quoted
-  names.
-* **Fallback — sqlparse + regex**: kicks in when pglast isn't installed
-  (it's an optional extra in this project).  Good enough for hand-written
-  migrations; not used as the test ground truth.
+Statements are read by pglast — PostgreSQL's own C parser via
+``libpg_query``: limit-free, syntax-accurate, and preserving identifier case
+for quoted names.
 
 Dynamic SQL (``EXECUTE format('CREATE TABLE …')``) is invisible to any
 static parser.  We surface that via :meth:`has_dynamic_sql` so callers
@@ -49,94 +44,8 @@ _ALL_PRIVILEGES_BY_OBJTYPE: dict[str, frozenset[str]] = {
     "SCHEMA": _ALL_SCHEMA_PRIVILEGES,
 }
 
-# Regex helpers for the sqlparse fallback path.
-#
-# A *qname* is a possibly-schema-qualified identifier with quoting support.
-# A *qname list* is one or more qnames separated by commas (Postgres allows
-# ``GRANT … ON a, s.b, c TO …`` and ``DROP TABLE a, b, c``).
-_QNAME = r"""(?:"[^"]+"|\w+)(?:\.(?:"[^"]+"|\w+))?"""
-_QNAME_LIST = rf"""(?:{_QNAME})(?:\s*,\s*(?:{_QNAME}))*"""
 
-_CREATE_TABLE_RE = re.compile(
-    rf"""
-    \bCREATE\s+
-    (?:(?:GLOBAL|LOCAL)\s+)?
-    (?P<modifier>TEMP(?:ORARY)?|UNLOGGED)?\s*
-    TABLE\s+
-    (?:IF\s+NOT\s+EXISTS\s+)?
-    (?P<qname>{_QNAME})
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-# ``CREATE TABLE foo_2026 PARTITION OF foo FOR VALUES …`` — partition
-# child detection for the sqlparse fallback path.  Matched against the
-# small lookahead window after each qname; mirrors pglast's
-# ``stmt.partbound is not None`` test.
-_PARTITION_OF_RE = re.compile(r"^\s*PARTITION\s+OF\b", re.IGNORECASE)
-_DROP_TABLE_RE = re.compile(
-    rf"""
-    \bDROP\s+TABLE\s+
-    (?:IF\s+EXISTS\s+)?
-    (?P<qnames>{_QNAME_LIST})
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-_GRANT_RE = re.compile(
-    rf"""
-    \bGRANT\s+
-    (?P<privs>.+?)
-    \s+ON\s+(?:TABLE\s+)?
-    (?P<qnames>{_QNAME_LIST})
-    \s+TO\s+
-    (?P<roles>.+?)
-    \s*;
-    """,
-    re.IGNORECASE | re.DOTALL | re.VERBOSE,
-)
-# Trailing modifiers that follow the role list in a GRANT.  See the
-# ``role_specification`` grammar in the PostgreSQL docs.
-_WITH_OPTION_SUFFIX_RE = re.compile(
-    r"\s+WITH\s+(?:GRANT|HIERARCHY|ADMIN)\s+OPTION\s*;?\s*$",
-    re.IGNORECASE,
-)
 _DYNAMIC_SQL_RE = re.compile(r"\bEXECUTE\s+(?:format\s*\(|['\"])", re.IGNORECASE)
-
-# Statement-level GRANT/REVOKE matcher for the regex fallback path of
-# ``extract_grant_statements`` (issue #162). Captures the privilege list, the
-# raw ``ON`` clause (classified separately), and the grantee list, for both
-# ``GRANT … TO …`` and ``REVOKE … FROM …``.
-_GRANT_REVOKE_STMT_RE = re.compile(
-    r"""
-    ^\s*
-    (?P<action>GRANT|REVOKE)\s+
-    (?P<go_for>GRANT\s+OPTION\s+FOR\s+)?   # REVOKE GRANT OPTION FOR …
-    (?P<privs>.+?)
-    \s+ON\s+
-    (?P<onclause>.+?)
-    \s+(?:TO|FROM)\s+
-    (?P<roles>.+?)
-    \s*;?\s*$
-    """,
-    re.IGNORECASE | re.DOTALL | re.VERBOSE,
-)
-_ALL_IN_SCHEMA_RE = re.compile(
-    r"""
-    ^ALL\s+
-    (?P<plural>TABLES|SEQUENCES|FUNCTIONS|ROUTINES|PROCEDURES)\s+
-    IN\s+SCHEMA\s+
-    (?P<schema>.+)$
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-_ALTER_DEFAULT_PRIVS_RE = re.compile(r"^\s*ALTER\s+DEFAULT\s+PRIVILEGES\b", re.IGNORECASE)
-_WITH_GRANT_OPTION_RE = re.compile(r"\bWITH\s+GRANT\s+OPTION\b", re.IGNORECASE)
-_ALL_IN_SCHEMA_PLURAL_TO_OBJTYPE: dict[str, str] = {
-    "TABLES": "TABLE",
-    "SEQUENCES": "SEQUENCE",
-    "FUNCTIONS": "FUNCTION",
-    "ROUTINES": "FUNCTION",
-    "PROCEDURES": "FUNCTION",
-}
 
 
 def _strip_quotes(ident: str) -> str:
@@ -177,70 +86,12 @@ def _parse_qualified_name(qname: str) -> tuple[str, str]:
     return (_strip_quotes(parts[0]), _strip_quotes(parts[1]))
 
 
-def _split_qname_list(qnames: str) -> list[str]:
-    """Split a comma-separated qname list, respecting quoted identifiers.
-
-    Postgres permits ``"weird,name"`` as a legal table name; the embedded
-    comma must not split the list.  Iterates char-by-char tracking quote
-    state, only splitting on top-level commas.
-    """
-    items: list[str] = []
-    current: list[str] = []
-    inside_quote = False
-    for ch in qnames:
-        if ch == '"':
-            inside_quote = not inside_quote
-            current.append(ch)
-        elif ch == "," and not inside_quote:
-            items.append("".join(current).strip())
-            current = []
-        else:
-            current.append(ch)
-    last = "".join(current).strip()
-    if last:
-        items.append(last)
-    return items
-
-
-def _normalize_grantee(name: str) -> str:
-    """Map a parsed grantee string to its canonical form.
-
-    Strips surrounding double quotes (preserving case for quoted names),
-    leaves unquoted names as-is (Postgres folds them to lower-case at
-    parse time, but the role lookup is case-insensitive in
-    ``has_table_privilege``).  ``PUBLIC`` and other pseudo-roles flow
-    through unchanged from the sqlparse path; the pglast path emits the
-    literal ``"PUBLIC"`` string when ``roletype == ROLESPEC_PUBLIC``.
-    """
-    name = name.strip()
-    if name.startswith('"') and name.endswith('"'):
-        return name[1:-1]
-    return name
-
-
-def _fold_grantee(name: str) -> str:
-    """Canonicalize a grantee for the semantic match key (D12, issue #162).
-
-    Mirrors PostgreSQL identifier folding so the regex fallback agrees with
-    pglast (which already folds): unquoted names lower-case, quoted names keep
-    their case, and ``PUBLIC`` (any case) maps to the literal ``"PUBLIC"`` so
-    it lines up with pglast's ``ROLESPEC_PUBLIC`` emission.
-    """
-    name = name.strip()
-    if name.startswith('"') and name.endswith('"'):
-        return name[1:-1]
-    folded = name.lower()
-    if folded == "public":
-        return "PUBLIC"
-    return folded
-
-
 @dataclass(frozen=True)
 class GrantStatement:
     """A single, comparable GRANT/REVOKE fact (issue #162).
 
     Fanned out to one instance per ``(object × grantee × privilege)`` — the
-    same philosophy as the legacy ``extract_grants`` tuple, but extended to
+    same philosophy as the ``extract_grants`` tuple, but extended to
     REVOKE and to schema/sequence/function objects. The seven leading fields
     *are* the match key the semantic engine compares; ``grant_option`` is
     deliberately excluded from equality/hash (``compare=False``) because
@@ -298,20 +149,6 @@ class GrantExtraction:
 
     statements: list[GrantStatement]
     unrepresentable: list[UnrepresentableGrant]
-
-
-# Object classes that parse cleanly but Confiture does not model (D9). The
-# regex fallback detects them by the leading ``ON <keyword>`` token.
-_UNMODELED_ON_KEYWORDS: tuple[str, ...] = (
-    "DATABASE",
-    "LANGUAGE",
-    "TYPE",
-    "DOMAIN",
-    "FOREIGN DATA WRAPPER",
-    "FOREIGN SERVER",
-    "TABLESPACE",
-    "LARGE OBJECT",
-)
 
 
 def _unrepresentable_grant(stmt: Any, action: str, modeled: str | None) -> Any | None:
@@ -372,8 +209,8 @@ class MigrationGrantExtractor:
         tuple per ``(target, role)`` pair.  ``GRANT … TO PUBLIC`` emits
         the literal role name ``"PUBLIC"``.  ``WITH GRANT OPTION`` /
         ``WITH HIERARCHY OPTION`` / ``WITH ADMIN OPTION`` suffixes are
-        stripped before parsing the role list — Confiture treats the
-        grant itself, not its propagation flag, as the unit of coverage.
+        ignored — Confiture treats the grant itself, not its propagation
+        flag, as the unit of coverage.
         """
         return self._grants_pglast(sql)
 
@@ -432,7 +269,7 @@ class MigrationGrantExtractor:
         return GrantExtraction(statements=statements, unrepresentable=unrepresentable)
 
     # ------------------------------------------------------------------ #
-    # pglast primary path                                                 #
+    # pglast readers                                                      #
     # ------------------------------------------------------------------ #
 
     def _creates_pglast(self, sql: str) -> list[tuple[str, str]]:
@@ -497,7 +334,7 @@ class MigrationGrantExtractor:
                 continue
             if stmt.objtype != ObjectType.OBJECT_TABLE:
                 continue
-            # ACL_TARGET_ALL_IN_SCHEMA → not v1 scope.  Skip.
+            # ACL_TARGET_ALL_IN_SCHEMA → outside this reader's scope.  Skip.
             if stmt.targtype != GrantTargetType.ACL_TARGET_OBJECT:
                 continue
 
@@ -510,7 +347,7 @@ class MigrationGrantExtractor:
             # PUBLIC is a real grantee target — Postgres treats grants
             # to PUBLIC as a wildcard, and ``has_table_privilege`` honours
             # them.  Emit the literal "PUBLIC" so library consumers see
-            # the same shape both backends produce.
+            # one shape for it.
             roles: list[str] = []
             for g in stmt.grantees or []:
                 if g.roletype == RoleSpecType.ROLESPEC_PUBLIC:
@@ -530,7 +367,7 @@ class MigrationGrantExtractor:
         statements: list[GrantStatement],
         unrepresentable: list[UnrepresentableGrant],
     ) -> None:
-        """pglast backend for :meth:`extract_grant_statements` (issue #162)."""
+        """The pglast reader behind :meth:`extract_grant_statements` (issue #162)."""
 
         objtype_map = {
             ObjectType.OBJECT_TABLE: "TABLE",
@@ -674,10 +511,6 @@ class MigrationGrantExtractor:
         if not relname:
             return ("", None, "unmodeled_objtype")
         return (schema, relname, None)
-
-    # ------------------------------------------------------------------ #
-    # sqlparse fallback path                                              #
-    # ------------------------------------------------------------------ #
 
 
 __all__ = [

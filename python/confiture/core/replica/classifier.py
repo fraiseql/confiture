@@ -1,9 +1,9 @@
 """Classify migration DDL into replica-safety-relevant operations (issue #139).
 
-Reuses the two-tier parsing strategy of ``core/idempotency/`` — pglast primary,
-regex fallback — adding no new SQL parser. The output carries exactly the
-attributes the replica-safety matrix needs (nullability, DEFAULT presence,
-CONCURRENTLY, constraint kind/validation, type change).
+Parses with pglast, as ``core/idempotency/`` does, adding no new SQL parser.
+The output carries exactly the attributes the replica-safety matrix needs
+(nullability, DEFAULT presence, CONCURRENTLY, constraint kind/validation, type
+change).
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ from confiture.core.ddl_walk import (
 from confiture.core.type_lattice import canonical_type
 
 # Resolved BY NAME, never by literal ordinal (#192): PG18 renumbered
-# AlterTableType, so pglast 8 shifted every member at index >= 13 down by one
-# and the hardcoded comparisons below started missing silently.
+# AlterTableType, so pglast 8 numbers every member at index >= 13 one lower than
+# pglast 6 and 7, and a literal ordinal would silently miss on one side of that.
 _AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
 _AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
 _AT_ALTER_COLUMN_TYPE = _pg_member("AlterTableType", "AT_AlterColumnType")
@@ -133,7 +133,6 @@ _AST_BENIGN = {
     "SelectStmt": "select",
 }
 
-_CONSTR_NOTNULL = _pg_member("ConstrType", "CONSTR_NOTNULL")
 _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
 _CONSTR_KIND = {
     _pg_member("ConstrType", "CONSTR_CHECK"): "check",
@@ -297,9 +296,7 @@ class OperationClassifier:
     def classify(self, sql: str) -> list[DdlOperation]:
         """Return the ordered DDL operations in ``sql``.
 
-        Parses with pglast, the one parser since 0.50.0 (D13). The regex
-        fallback this once had, and the parity tests that held the two
-        backends together, went with it.
+        Parses with pglast, the one parser (D13).
         """
         # pglast.parser.ParseError propagates: the caller reports the file as
         # unclassifiable instead of reading a guess.
@@ -335,11 +332,11 @@ class OperationClassifier:
         return ops
 
     def _ast_wider(self, node: object, name: str) -> list[DdlOperation]:
-        """Classify a statement outside the original seven-operation matrix (#206).
+        """Classify a statement outside the core seven-operation matrix (#206).
 
         Everything that reaches here either maps to a typed operation or becomes
-        :class:`Other`. Returning an empty list is what made ``DROP TABLE``
-        certify as window-safe, so this method never does.
+        :class:`Other`. Returning an empty list would certify ``DROP TABLE`` as
+        window-safe, so this method never does.
         """
         if name == "DropStmt":
             return _ast_drop(node)
@@ -430,16 +427,10 @@ class OperationClassifier:
             new=getattr(node, "newname", None),
         )
 
-    # ------------------------------------------------------------------ #
-    # regex backend (fallback / parity)
-    # ------------------------------------------------------------------ #
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-_IDENT = r'(?P<{name}>"?[\w.]+"?)'
 
 
 def _norm(ident: str | None) -> str | None:
@@ -453,15 +444,6 @@ def _readable_node(node_name: str) -> str:
     """`CreateStatsStmt` → `create stats statement`, for the finding's reason."""
     words = re.findall(r"[A-Z][a-z0-9]*|[a-z0-9]+", node_name)
     return " ".join(word.lower() for word in words) or node_name
-
-
-def _clean_type(raw: str | None) -> str | None:
-    """Trim a type captured from SQL, dropping a trailing `USING`/`NOT NULL` tail."""
-    if not raw:
-        return None
-    text = re.sub(r"\s+", " ", raw).strip().rstrip(",;")
-    text = re.split(r"\b(?:USING|COLLATE|NOT|NULL|DEFAULT)\b", text, flags=re.IGNORECASE)[0]
-    return text.strip() or None
 
 
 def _first_relname(objects: Any) -> str | None:
@@ -513,199 +495,6 @@ def _replace_or_benign(node: object, noun: str, name: str | None) -> DdlOperatio
     if bool(getattr(node, "replace", False)):
         return ReplaceObject(table=name, kind=noun, name=name)
     return Benign(table=name, kind=f"create_{noun.replace(' ', '_')}")
-
-
-_RE_ADD_COLUMN = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
-    + _IDENT.format(name="table")
-    + r"\s+ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?"
-    + _IDENT.format(name="col")
-    + r"\s+(?P<rest>.*)$",
-    re.IGNORECASE | re.DOTALL,
-)
-_RE_DROP_COLUMN = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
-    + _IDENT.format(name="table")
-    + r"\s+DROP\s+COLUMN\s+(?:IF\s+EXISTS\s+)?"
-    + _IDENT.format(name="col"),
-    re.IGNORECASE,
-)
-_RE_RENAME_COLUMN = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
-    + _IDENT.format(name="table")
-    + r"\s+RENAME\s+COLUMN\s+"
-    + _IDENT.format(name="old")
-    + r"\s+TO\s+"
-    + _IDENT.format(name="new"),
-    re.IGNORECASE,
-)
-_RE_ALTER_TYPE = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
-    + _IDENT.format(name="table")
-    + r"\s+ALTER\s+COLUMN\s+"
-    + _IDENT.format(name="col")
-    + r"\s+(?:SET\s+DATA\s+)?TYPE\s+(?P<newtype>[\w ]+(?:\(\s*\d+\s*(?:,\s*\d+\s*)?\))?)",
-    re.IGNORECASE,
-)
-_RE_ADD_CONSTRAINT = re.compile(
-    r"^\s*ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"
-    + _IDENT.format(name="table")
-    + r"\s+ADD\s+CONSTRAINT\s+",
-    re.IGNORECASE,
-)
-_RE_CREATE_INDEX = re.compile(
-    r"^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?P<conc>CONCURRENTLY\s+)?"
-    r"(?:IF\s+NOT\s+EXISTS\s+)?\S+\s+ON\s+(?:ONLY\s+)?" + _IDENT.format(name="table"),
-    re.IGNORECASE,
-)
-_RE_CREATE_TABLE = re.compile(
-    r"^\s*CREATE\s+(?:UNLOGGED\s+|TEMPORARY\s+|TEMP\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"
-    + _IDENT.format(name="table"),
-    re.IGNORECASE,
-)
-
-# --------------------------------------------------------------------------- #
-# Widened regex surface (#206) — the twin of the _ast_wider tables above.
-# --------------------------------------------------------------------------- #
-
-_ANY = r'(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))*'
-
-# Statement heads that change neither schema nor data (the regex twin of _AST_SKIP).
-_RE_SKIP = re.compile(
-    r"^(?:BEGIN|COMMIT|END|ROLLBACK|START\s+TRANSACTION|SAVEPOINT|RELEASE\b|SET\b|RESET\b"
-    r"|SHOW\b|CHECKPOINT|DISCARD\b|LOCK\b|VACUUM\b|ANALYZE\b|ANALYSE\b|LISTEN\b|NOTIFY\b"
-    r"|UNLISTEN\b)",
-    re.IGNORECASE,
-)
-
-_RE_DROP = re.compile(
-    r"^DROP\s+(?P<what>TABLE|INDEX|MATERIALIZED\s+VIEW|VIEW|SEQUENCE|SCHEMA|TYPE|DOMAIN"
-    r"|FUNCTION|PROCEDURE|TRIGGER|POLICY|RULE|EXTENSION)\s+"
-    r"(?:CONCURRENTLY\s+)?(?:IF\s+EXISTS\s+)?(?P<names>.+)$",
-    re.IGNORECASE | re.DOTALL,
-)
-# Dropping any of these retires a name an N-1 reader may still resolve.
-_DROP_UNSAFE_WORDS = frozenset(
-    {
-        "view",
-        "materialized view",
-        "sequence",
-        "schema",
-        "type",
-        "domain",
-        "function",
-        "procedure",
-        "extension",
-    }
-)
-
-_RE_TRUNCATE = re.compile(
-    r"^TRUNCATE\s+(?:TABLE\s+)?(?:ONLY\s+)?(?P<names>.+)$", re.IGNORECASE | re.DOTALL
-)
-_RE_REVOKE = re.compile(r"^REVOKE\b", re.IGNORECASE)
-_RE_GRANT_TARGET = re.compile(
-    rf"\bON\s+(?:TABLE\s+|SEQUENCE\s+|SCHEMA\s+)?(?P<obj>{_ANY})", re.IGNORECASE
-)
-_RE_ALTER_ENUM = re.compile(
-    rf"^ALTER\s+TYPE\s+(?P<type>{_ANY})\s+(?P<verb>ADD|RENAME)\s+VALUE\s+"
-    r"(?:IF\s+NOT\s+EXISTS\s+)?'(?P<val>[^']*)'",
-    re.IGNORECASE,
-)
-_RE_ALTER_TABLE_SUB = re.compile(
-    rf"^ALTER\s+(?:TABLE|MATERIALIZED\s+VIEW|VIEW|FOREIGN\s+TABLE)\s+(?:IF\s+EXISTS\s+)?"
-    rf"(?:ONLY\s+)?(?P<table>{_ANY})\s+(?P<rest>.*)$",
-    re.IGNORECASE | re.DOTALL,
-)
-_RE_REPLACE_OBJECT = re.compile(
-    rf"^CREATE\s+OR\s+REPLACE\s+(?P<what>VIEW|MATERIALIZED\s+VIEW|FUNCTION|PROCEDURE)\s+"
-    rf"(?P<name>{_ANY})",
-    re.IGNORECASE,
-)
-
-_RE_AT_SET_NOT_NULL = re.compile(
-    rf"^ALTER\s+(?:COLUMN\s+)?{_ANY}\s+SET\s+NOT\s+NULL", re.IGNORECASE
-)
-_RE_AT_ALTER_COLUMN = re.compile(rf"^ALTER\s+(?:COLUMN\s+)?(?P<col>{_ANY})", re.IGNORECASE)
-_RE_AT_RENAME_TO = re.compile(r"^RENAME\s+TO\b", re.IGNORECASE)
-_RE_AT_BENIGN: tuple[tuple[re.Pattern[str], str], ...] = (
-    (
-        re.compile(rf"^ALTER\s+(?:COLUMN\s+)?{_ANY}\s+DROP\s+NOT\s+NULL", re.IGNORECASE),
-        "drop_not_null",
-    ),
-    (
-        re.compile(rf"^ALTER\s+(?:COLUMN\s+)?{_ANY}\s+SET\s+DEFAULT", re.IGNORECASE),
-        "column_default",
-    ),
-    (
-        re.compile(rf"^ALTER\s+(?:COLUMN\s+)?{_ANY}\s+DROP\s+DEFAULT", re.IGNORECASE),
-        "column_default",
-    ),
-    (re.compile(r"^DROP\s+CONSTRAINT\b", re.IGNORECASE), "drop_constraint"),
-)
-
-# `head → kind` for statements that are additive or invisible to an N-1 reader.
-_RE_BENIGN: tuple[tuple[re.Pattern[str], str], ...] = (
-    (
-        re.compile(
-            rf"^CREATE\s+MATERIALIZED\s+VIEW\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<name>{_ANY})",
-            re.IGNORECASE,
-        ),
-        "create_materialized_view",
-    ),
-    (re.compile(rf"^CREATE\s+(?:\w+\s+)*?VIEW\s+(?P<name>{_ANY})", re.IGNORECASE), "create_view"),
-    (re.compile(rf"^CREATE\s+FUNCTION\s+(?P<name>{_ANY})", re.IGNORECASE), "create_function"),
-    (re.compile(rf"^CREATE\s+PROCEDURE\s+(?P<name>{_ANY})", re.IGNORECASE), "create_procedure"),
-    (
-        re.compile(rf"^CREATE\s+SCHEMA\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<name>{_ANY})", re.IGNORECASE),
-        "create_schema",
-    ),
-    (
-        re.compile(
-            rf"^CREATE\s+SEQUENCE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<name>{_ANY})", re.IGNORECASE
-        ),
-        "create_sequence",
-    ),
-    (re.compile(rf"^CREATE\s+TYPE\s+(?P<name>{_ANY})", re.IGNORECASE), "create_type"),
-    (re.compile(rf"^CREATE\s+DOMAIN\s+(?P<name>{_ANY})", re.IGNORECASE), "create_domain"),
-    (
-        re.compile(
-            rf"^CREATE\s+EXTENSION\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<name>{_ANY})", re.IGNORECASE
-        ),
-        "create_extension",
-    ),
-    (
-        re.compile(rf"^CREATE\s+(?:CONSTRAINT\s+)?TRIGGER\s+(?P<name>{_ANY})", re.IGNORECASE),
-        "create_trigger",
-    ),
-    (re.compile(rf"^CREATE\s+POLICY\s+(?P<name>{_ANY})", re.IGNORECASE), "create_policy"),
-    (re.compile(rf"^CREATE\s+RULE\s+(?P<name>{_ANY})", re.IGNORECASE), "create_rule"),
-    (re.compile(r"^GRANT\b", re.IGNORECASE), "grant"),
-    (re.compile(rf"^COMMENT\s+ON\s+(?:\w+\s+)+?(?P<name>{_ANY})", re.IGNORECASE), "comment"),
-    (re.compile(rf"^INSERT\s+INTO\s+(?P<name>{_ANY})", re.IGNORECASE), "insert"),
-    (re.compile(rf"^UPDATE\s+(?:ONLY\s+)?(?P<name>{_ANY})", re.IGNORECASE), "update"),
-    (re.compile(rf"^DELETE\s+FROM\s+(?:ONLY\s+)?(?P<name>{_ANY})", re.IGNORECASE), "delete"),
-    (
-        re.compile(
-            rf"^REFRESH\s+MATERIALIZED\s+VIEW\s+(?:CONCURRENTLY\s+)?(?P<name>{_ANY})", re.IGNORECASE
-        ),
-        "refresh_materialized_view",
-    ),
-    (re.compile(rf"^CLUSTER\s+(?P<name>{_ANY})", re.IGNORECASE), "cluster"),
-    (re.compile(rf"^REINDEX\s+(?:\w+\s+)?(?P<name>{_ANY})", re.IGNORECASE), "reindex"),
-    (
-        re.compile(rf"^ALTER\s+SEQUENCE\s+(?:IF\s+EXISTS\s+)?(?P<name>{_ANY})", re.IGNORECASE),
-        "alter_sequence",
-    ),
-    (re.compile(r"^ALTER\s+DEFAULT\s+PRIVILEGES\b", re.IGNORECASE), "alter_default_privileges"),
-    (re.compile(r"^(?:SELECT|TABLE|VALUES|WITH)\b", re.IGNORECASE), "select"),
-    (
-        re.compile(
-            rf"^CREATE\s+(?:GLOBAL\s+|LOCAL\s+)?(?:UNLOGGED\s+|TEMPORARY\s+|TEMP\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?P<name>{_ANY})\s+AS\b",
-            re.IGNORECASE,
-        ),
-        "create_table_as",
-    ),
-)
 
 
 _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")

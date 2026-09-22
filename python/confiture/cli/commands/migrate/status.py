@@ -1,7 +1,4 @@
-"""`confiture migrate status`.
-
-Split out of the monolithic migrate command modules.
-"""
+"""`confiture migrate status`."""
 
 from __future__ import annotations
 
@@ -103,9 +100,10 @@ def migrate_status(
         3  Fatal error (connection failure, bad config, permission denied).
 
     NOTE:
-      The -c/--config flag must appear AFTER the subcommand name (v0.5.9+):
+      The -c/--config flag goes AFTER the subcommand name; the `migrate` group
+      itself takes no options:
         confiture migrate status -c config.yaml   ✅
-        confiture migrate -c config.yaml status   ❌ (old form, no longer works)
+        confiture migrate -c config.yaml status   ❌
 
     EXAMPLES:
       confiture migrate status
@@ -288,8 +286,7 @@ def _probe_database(
     A --database-url flag, --no-config, an explicit --config, or the canonical
     CONFITURE_DATABASE_URL connects. A merely-ambient DATABASE_URL must NOT force
     a connection — "status-unknown" (exit 0) stays the informative default
-    (#152; supersedes the #140 flag-only carve-out). Two explicit sources still
-    fail loud via CONFIG_007.
+    (#152). Two explicit sources fail loud via CONFIG_007.
     """
     config_data: Any = None
     if has_intentional_dsn_source(ctx, database_url, no_config):
@@ -311,8 +308,8 @@ def _probe_database(
         with open_connection(config_data) as conn:
             migrator = _core_migrator.Migrator(connection=conn, migration_table=tracking_table)
             was_present = migrator.tracking_table_exists()
-            # A bare name resolves through search_path since 0.41.0, so "absent" no
-            # longer implies "nowhere in this database" (#188).
+            # A bare name resolves through search_path, so "absent" does not
+            # imply "nowhere in this database" (#188).
             elsewhere = (
                 ()
                 if was_present

@@ -229,7 +229,6 @@ def build(
         For applying seeds after build and controlling validation behavior
     """
     # Progress lines go to stderr in JSON mode: stdout is the payload.
-    # Progress lines go to stderr in JSON mode: stdout is the payload.
     out = error_console if is_json(format_type) else console
     json_mode = is_json(format_type)
     try:

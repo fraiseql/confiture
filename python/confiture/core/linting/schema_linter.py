@@ -117,8 +117,8 @@ class LintReport:
     #: the family was not selected — absent, not zero.
     documentation: dict[str, Any] | None = None
     #: ``(file, line)`` of every ``UNPARSEABLE`` already held. Six rules open
-    #: files of their own, so one broken file used to be reported by each of
-    #: them *and* by the build — several identical errors about one fact. The
+    #: files of their own, so without it one broken file would be reported by
+    #: each of them *and* by the build — several identical errors about one fact. The
     #: notice is about the file, not about the rule that happened to find it.
     _unparseable_seen: set[tuple[str | None, int | None]] = field(default_factory=set)
 
@@ -359,7 +359,7 @@ class SchemaLinter:
         # method, and adding one is a row.
         #
         # Deliberately keyed on switches and not on rule codes, which is the
-        # question a reader arrives with now that the registry is the single
+        # question a reader arrives with, the registry being the single
         # source of truth for what a rule is. One method serves several codes
         # (`_check_documentation` emits doc_001 through doc_004), two switches
         # share one method (qual_001 and qual_002), and `LintConfig` is the
@@ -408,10 +408,9 @@ class SchemaLinter:
         self._report_blinded_rules(report, ran, rejected)
 
         # ACL coverage (ACL001) — opt-in via ``acls.lint_enabled: true`` in
-        # the environment YAML.  The mere presence of an ``acls:`` block
-        # used to auto-fire this rule, but that surprised users who set
-        # ``acls:`` only for ``confiture drift --check-acls``.  Explicit
-        # opt-in keeps the two surfaces independently controllable.
+        # the environment YAML.  An ``acls:`` block alone does not fire it:
+        # a project may set ``acls:`` only for ``confiture drift --check-acls``,
+        # and explicit opt-in keeps the two surfaces independently controllable.
         if (
             self.config.check_acl_coverage
             and self.environment.acls_lint_enabled
@@ -438,10 +437,9 @@ class SchemaLinter:
         The first two are empty for a whole-string lint (``lint(schema=...)``),
         which has no files and therefore no locations to report.
 
-        The third used to be discarded here, which is how a broken file could
-        cost the whole build: the per-file pass already knew exactly which file
-        pglast refused, and threw that away, leaving the whole-build parse to
-        fail on it and take the other files' objects with it (#274).
+        The third is kept because the per-file pass knows exactly which file
+        pglast refused: discarding it would leave the whole-build parse to fail
+        on that file and take the other files' objects with it (#274).
         """
         # Reason: import cycle (duplicates imports this module's inventory at module level)
         from confiture.core.linting.duplicates import inventory_texts
@@ -746,8 +744,8 @@ class SchemaLinter:
         (``lint(schema=...)``) has no file to name, so its label is ``None``.
 
         The text is **blanked**: a ``COPY … FROM stdin`` block is psql client
-        protocol and pglast rejects the text it sits in, so one seed file used
-        to empty the inventory (#274). Blanking keeps every offset and every
+        protocol and pglast rejects the text it sits in, so one unblanked seed
+        file would empty the inventory (#274). Blanking keeps every offset and every
         line number, so a finding still points at the line its author wrote —
         which deleting the block would not (:func:`sql_lexer.blank_copy_blocks`).
 
@@ -773,9 +771,8 @@ class SchemaLinter:
     def _report_rejected_files(report: LintReport, rejected: list[Rejected]) -> None:
         """One ``UNPARSEABLE`` finding per file pglast refused, naming that file.
 
-        Before #274 there was one notice for the whole build, carrying no file
-        and a line into a generated artefact — which was all the whole-build
-        parse could say, because it failed as a unit.
+        The whole-build parse fails as a unit, so all it could name is a line
+        in a generated artefact; the per-file pass names the file (#274).
         """
         for rejection in rejected:
             SchemaLinter._add_unparseable(
@@ -791,9 +788,9 @@ class SchemaLinter:
         A rejected file is missing from *both* object lists — the whole-build
         inventory never saw it, and `inventory_texts` skips it, so the per-file
         list has none of its objects either. So every rule whose subject is DDL
-        examined a short schema, `build_001` and `qual_001` included; the first
-        draft of this exempted them, and a duplicate defined in the broken file
-        then went unreported with nothing saying so.
+        examines a short schema, `build_001` and `qual_001` included: exempting
+        them would leave a duplicate defined in the broken file unreported with
+        nothing saying so.
 
         This is the channel a `--baseline` does not touch (D6): a project can
         record the `UNPARSEABLE` finding as known, and the blindness still says

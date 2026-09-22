@@ -1,8 +1,8 @@
 """Is an `ALTER COLUMN … TYPE` widening or narrowing (issue #199)?
 
 `bigint`→`integer` silently loses data or aborts mid-migration; `integer`→`bigint`
-cannot. `ChangeColumnType` carried only the table and column, so preflight had to
-treat both alike — and, having no honest answer, emitted no risk tier at all.
+cannot. Knowing only the table and column, preflight would have to treat both
+alike — and, having no honest answer, emit no risk tier at all.
 
 Two questions are answered separately because their answers differ:
 
@@ -127,9 +127,9 @@ _EXACT_NUMERIC = frozenset({*_INTEGER_WIDTHS, "numeric"})
 _STRING = frozenset({"varchar", "text", "char"})
 
 #: ``NAME [(typmod)] [TAIL] [arrays]``. The ``TAIL`` is what ``format_type``
-#: writes *after* the typmod — ``timestamp(3) without time zone`` — and the
-#: reason this regex could not read its own live counterpart: it wanted the
-#: typmod last, so the whole value fell through unparsed and lower-cased.
+#: writes *after* the typmod — ``timestamp(3) without time zone``. A regex that
+#: expects the typmod last cannot read that live spelling: the whole value falls
+#: through unparsed and lower-cased.
 #:
 #: The tail needs the whitespace in front of it. Without it the non-greedy
 #: ``name`` splits a single word — ``serial`` into ``s`` + ``erial`` — and every

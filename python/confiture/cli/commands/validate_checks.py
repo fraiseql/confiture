@@ -7,10 +7,8 @@ handler (which computes) and a ``formatters/validate_formatter`` renderer
 (which prints or returns a payload); the adapter itself only decides whether
 the check passed.
 
-The registry order reproduces the pre-0.40.0 dispatch order exactly, so a
-single-flag invocation behaves — and prints — as it always did. That is
-deliberate: reordering for elegance would change which error a user sees first
-for no benefit.
+The registry order is fixed and deliberate: it decides which error a user sees
+first, and reordering for elegance would change that for no benefit.
 """
 
 from __future__ import annotations
@@ -61,10 +59,9 @@ from confiture.core.validation.security_definer import (
 from confiture.core.validation.signature_drift import check_signature_drift
 
 # Flags that are modifiers rather than checks, and the checks they modify. Each
-# entry is (flag, "at least one of these must also be on"). Replaces the ad-hoc
-# `if check_body and not check_signatures` guards that used to sit halfway down
-# the dispatch — halfway down meant a git flag returned before they were ever
-# evaluated, so an illegal combination could pass silently.
+# entry is (flag, "at least one of these must also be on"), checked before any
+# check runs: a guard halfway down the dispatch is never reached when an earlier
+# branch returns, so an illegal combination would pass silently.
 _FLAG_DEPENDENCIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("--check-body", ("--check-signatures",)),
     ("--missing-is-drift", ("--check-signatures",)),
@@ -140,9 +137,9 @@ class ValidateOptions:
     def git_group_enabled(self) -> bool:
         """Whether the git-accompaniment group runs at all.
 
-        ``--staged`` on its own still enters the group (and passes trivially),
-        which is the pre-0.40.0 behaviour — except when ``--idempotent`` is also
-        set, where #181 routes ``--staged`` to the idempotency scope instead.
+        ``--staged`` on its own enters the group (and passes trivially) — except
+        when ``--idempotent`` is also set, where ``--staged`` scopes idempotency
+        instead (#181).
         """
         return bool(
             self.check_drift
@@ -189,10 +186,9 @@ def validate_flag_dependencies(opts: ValidateOptions) -> None:
 def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
     """Run every requested git sub-check and report them together.
 
-    Before 0.40.0 this block aggregated correctly in text mode but raised
-    ``typer.Exit(1)`` on the first failure in JSON mode, so a failing drift
-    check meant accompaniment and grant never ran. Both modes now run all
-    three and report once.
+    Both output modes run all three and report once: stopping at the first
+    failure would leave accompaniment and grant unrun behind a failing drift
+    check.
     """
     # Reason: CLI start-up: importing confiture.cli.git_validation costs ~11 ms at start (importtime, 2026-09-07); deferred until the command runs
     from confiture.cli.git_validation import (
@@ -209,16 +205,16 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
     # context resolves one (base, target) pair for the group — in staged mode the
     # target is the index materialised as a tree, so what gets judged is what is
     # about to be committed rather than HEAD, which is the whole point of a
-    # pre-commit flag. Grant accompaniment
-    # keeps its own `staged_only` path: it diffs grant *files* through the index
-    # directly and never built a schema from a ref.
+    # pre-commit flag. Grant accompaniment keeps its own `staged_only` path: it
+    # diffs grant *files* through the index directly and never builds a schema
+    # from a ref.
     #
     # Read `ctx.git_base_ref` / `ctx.git_target_ref` only inside the branches
     # that use them. Staged resolution runs real git (`rev-parse --verify`,
     # `merge-base`, `write-tree`) and can legitimately fail with GIT_003 in a
-    # shallow clone, so resolving it up front would make
-    # `--require-grant-migration --staged` — which needs neither ref — start
-    # failing in exactly the CI checkout where it used to work.
+    # shallow clone, so resolving it up front would fail
+    # `--require-grant-migration --staged`, which needs neither ref, in exactly
+    # that CI checkout.
     requested: list[str] = []
     results: dict[str, dict[str, Any]] = {}
     failed: list[str] = []
@@ -260,10 +256,10 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
             failed.append("accompaniment")
 
     if opts.require_grant_migration:
-        # Historically the envelope lists grant_accompaniment whenever it was
-        # *requested*, including when --allow-grant-only suppresses the run.
-        # Kept verbatim: the list means "asked for", and --allow-grant-only is
-        # documented as suppressing the failure, not the request.
+        # The envelope lists grant_accompaniment whenever it is *requested*,
+        # including when --allow-grant-only suppresses the run: the list means
+        # "asked for", and --allow-grant-only is documented as suppressing the
+        # failure, not the request.
         requested.append("grant_accompaniment")
         if not opts.allow_grant_only:
             try:
@@ -292,7 +288,7 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
     if passed:
         payload: dict[str, Any] = {"status": "passed", "checks": requested}
     elif len(requested) == 1:
-        # Byte-identical to the 0.39.0 single-check failure envelope.
+        # One check requested: its result flat beside `check`, not the wrapper.
         payload = {"status": "failed", "check": requested[0], **results[requested[0]]}
     else:
         payload = {
@@ -422,7 +418,7 @@ def _run_imports(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome
 # ---------------------------------------------------------------------------
 #: What the checks that read ``--schemas`` scan when it is not given. Only
 #: ``--check-signatures`` derives its own answer from the source it parsed; the
-#: other three readers of this option keep the historical ``public``, and
+#: other three readers of this option read ``public``, and
 #: ``--check-body-replay`` has no parsed source to derive from at all (#303).
 DEFAULT_SIGNATURE_SCHEMAS = "public"
 
@@ -568,10 +564,9 @@ def _run_naming(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
 def build_registry(opts: ValidateOptions) -> list[ValidationCheck]:
     """The ordered descriptor list for one invocation.
 
-    Order is the pre-0.40.0 source order of the ``if <flag>: … return`` chain.
-    The naming check is last and enabled only when nothing else is — it is the
-    command's default mode, not a composable check, and that is exactly how it
-    behaved when every other branch returned before reaching it.
+    The order is fixed; see the module docstring. The naming check is last and
+    enabled only when nothing else is: it is the command's default mode, not a
+    composable check.
     """
     checks: list[ValidationCheck] = [
         ValidationCheck(

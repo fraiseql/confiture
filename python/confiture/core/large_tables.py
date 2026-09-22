@@ -39,10 +39,11 @@ WHERE c.relkind IN ('r', 'p')
 def row_estimates(connection: Any) -> dict[str, int | None]:
     """The planner's row estimate of every user table, by ``schema.table``.
 
-    ``None`` where the table was never analysed: reading ``-1`` as zero rows called
-    a table small because nobody had measured it. Qualified, because a table is its
-    ``(schema, name)`` (#313): ``migrate estimate`` looked tables up by name alone
-    and listed only ``public``, and printoptim's large tables are elsewhere.
+    ``None`` where the table was never analysed: reading ``-1`` as zero rows would
+    call a table small because nobody has measured it. Qualified, because a table
+    is its ``(schema, name)`` (#313): looking tables up by name alone, ``migrate
+    estimate`` would list only ``public``, and a project's large tables may be
+    elsewhere.
     """
     with connection.cursor() as cur:
         cur.execute(_ROW_ESTIMATES)

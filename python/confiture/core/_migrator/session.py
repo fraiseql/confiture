@@ -3,10 +3,9 @@
 The file is a facade, and it is long because it is documented: of its ~690 lines,
 ~330 are the ``Args:``/``Raises:``/``Example:`` blocks of the public library API
 and ~290 are code. The longest verb, ``up()``, is 43 code lines against a budget
-of 150. A line count is the wrong instrument here — the 2026-06 remediation
-target of ≤500 could only be met by deleting or relocating the documentation a
-library user reads, so it was retired rather than met (ARCHITECTURE.md
-Decision 10).
+of 150. A line count is the wrong instrument here — a target of ≤500 could only
+be met by deleting or relocating the documentation a library user reads
+(ARCHITECTURE.md Decision 10).
 
 What does constrain this file is that every public verb stays a pass-through:
 resolve the lock settings, hand every parameter to ``apply_loop``,
@@ -91,9 +90,9 @@ class MigratorSession:
     )
     default_migration_loader: ClassVar[Callable[[Path], type]] = staticmethod(load_migration_class)
     #: What the session drives once it is connected, and what takes the migration
-    #: lock. Class attributes for the same reason: a test injects a double here,
-    #: where it used to patch a name in ``confiture.core.migrator`` that this package
-    #: then had to look up at call time — an import cycle kept alive for a test seam.
+    #: lock. Class attributes for the same reason: a test injects a double here
+    #: rather than patching a name in ``confiture.core.migrator`` that this package
+    #: would then look up at call time — an import cycle kept alive for a test seam.
     default_engine: ClassVar[Callable[..., MigrationEngine]] = MigrationEngine
     default_lock: ClassVar[Callable[[Any, LockConfig], MigrationLock]] = MigrationLock
 
@@ -477,9 +476,9 @@ class MigratorSession:
         ``down()`` method or ``.down.sql`` file is executed.
 
         Acquires the migration advisory lock for the duration of the rollback
-        (issue #142) so it is atomic w.r.t. a concurrent ``up()``/``down()`` —
-        previously ``down()`` ran unlocked, a latent race. Pass ``no_lock=True``
-        to skip (dangerous in multi-pod environments).
+        (issue #142) so it is atomic w.r.t. a concurrent ``up()``/``down()``; an
+        unlocked rollback races them. Pass ``no_lock=True`` to skip (dangerous in
+        multi-pod environments).
 
         Args:
             steps: Number of migrations to roll back (default: 1).

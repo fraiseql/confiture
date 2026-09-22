@@ -242,8 +242,8 @@ class ProductionSyncer:
             return None
 
         if strategy not in KEYED_STRATEGIES:
-            # `redact`. Since #285 `AnonymizationRule` refuses any other name, so
-            # this is no longer a catch-all that a typo can reach — it covers a
+            # `redact`. `AnonymizationRule` refuses any other name (#285), so
+            # this is not a catch-all that a typo can reach — it covers a
             # strategy that got past a validated boundary, which is the case a
             # defensive default is for.
             return "[REDACTED]"
@@ -508,10 +508,10 @@ class ProductionSyncer:
         Truncating each table immediately before copying it looks equivalent and
         is not. ``TRUNCATE ... CASCADE`` empties every table that references the
         one named, so with tables copied in alphabetical order a parent copied
-        late silently emptied children copied earlier — ``users`` wiping
+        late would silently empty children copied earlier — ``users`` wiping
         ``orders``, and through it ``order_items`` and ``payments``. The sync
-        reported every table at its full row count, because that count is what
-        it inserted rather than what the target ends up holding.
+        would report every table at its full row count, because that count is
+        what it inserts rather than what the target ends up holding.
 
         One ``TRUNCATE a, b, c CASCADE`` has no such ordering: all the named
         tables are emptied together, before anything is copied. CASCADE is still

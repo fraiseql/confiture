@@ -18,10 +18,10 @@ the order the translation applies them:
    ``[!abc]`` its negation; matching is case-sensitive and reads the POSIX
    spelling of the path, so the answer does not depend on the platform.
 
-Until 1.5.0 exclusions were filtered with :meth:`pathlib.PurePath.match`, where
-``**`` is a single component and matching is anchored at the *right* end — so
-``**/*.bak`` did not exclude a ``.bak`` at the root of the include directory and
-``temp/*.sql`` excluded one at any depth (issue #256).
+:meth:`pathlib.PurePath.match` is a different dialect: there ``**`` is a single
+component and matching is anchored at the *right* end, so ``**/*.bak`` would not
+exclude a ``.bak`` at the root of the include directory and ``temp/*.sql`` would
+exclude one at any depth (issue #256).
 """
 
 from __future__ import annotations

@@ -85,9 +85,9 @@ class MigrationAccompanimentReport:
           migrations exist,
         AND no function signature violations AND no function body violations.
 
-        A check that could not run has not passed (#288). It used to return
-        True, so a skipped gate and a passed gate differed by a line of console
-        output and nothing else. What reaches that branch is a schema
+        A check that could not run has not passed (#288): returning True would
+        make a skipped gate and a passed gate differ by a line of console output
+        and nothing else. What reaches that branch is a schema
         **PostgreSQL itself rejects** — which ``confiture build`` would also
         refuse, and which confiture calls a finding everywhere else it appears:
         ``IDEM_UNPARSEABLE``, ``PFLIGHT_UNPARSEABLE`` forcing

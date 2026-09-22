@@ -4,8 +4,8 @@
 is the wrong shape twice: the compiler behind it refuses a routine it should
 read, and the serialiser behind *that* writes a body it did read as JSON that
 does not decode. Both are pglast 8's alone — 6.16 and 7.18, which the
-dependency equally accepts, have neither — and both ended in the same place, a
-routine ``build_003`` never looked at. So both are answered here, and
+dependency equally accepts, have neither — and both end in the same place, a
+routine ``build_003`` never looks at. So both are answered here, and
 :func:`parse_body` is the one place either is.
 
 The catalogue, first.
@@ -19,8 +19,8 @@ routine**, before a line of the body is read.
 
 That is not an exotic shape. ``fn(uuid, app.type_x_input, jsonb) RETURNS
 app.mutation_response`` is the convention for every mutation in a FraiseQL
-schema: 233 of 297 plpgsql routines on the one #270 was filed from, and the 64
-that were analysable were the ones without write logic in them.
+schema, so without the repair the routines left analysable are the ones with no
+write logic in them (#270).
 
 Nothing downstream of the parse reads a type. :mod:`confiture.core.linting.references`
 wants the tree's ``lineno``s and its ``PLpgSQL_expr`` query strings, and a datum's
@@ -34,14 +34,14 @@ PL/pgSQL's declaration grammar:
 - a qualifier it **refuses** is a type, and blanking it costs nothing;
 - a qualifier it **accepts** is a reference, and blanking one would turn
   ``app.tv_summary`` into a bare name that ``build_003`` declines to judge —
-  #270's silent miss, moved one step along.
+  the same silent miss, moved one step along.
 
 Only the compiler can tell those apart with certainty, so only the compiler is
 asked. A guess — the signature, plus every ``DECLARE … BEGIN`` region — narrows
 the search, and then every blank in it is **tested by putting it back**: if the
 statement still compiles without it, it was never needed. The guess is a
 performance hint and never the decision, which is what keeps a future change in
-where PL/pgSQL writes a type from re-opening this issue.
+where PL/pgSQL writes a type from becoming a silent miss.
 
 Finding the candidates is :mod:`confiture.core.sql_lexer`'s work and nobody
 else's. A qualified name inside a string literal or a comment must not be
@@ -50,11 +50,10 @@ touched, and the scanner is what knows where those end.
 The serialiser, second (#272).
 
 A trigger function's implicit ``TG_*`` datums are written ``{}}`` — one closing
-brace too many each — so ``json.loads`` never reaches the tree, and *every*
-``RETURNS TRIGGER`` and ``RETURNS event_trigger`` body was unread whatever it
-contained. Trigger functions are where a schema keeps its audit writes and its
-cross-table invariants, so that was not a corner: 5 of the 8 plpgsql routines
-in this repository's own corpora.
+brace too many each — so ``json.loads`` never reaches the tree, and without the
+repair *every* ``RETURNS TRIGGER`` and ``RETURNS event_trigger`` body goes unread
+whatever it contains. Trigger functions are where a schema keeps its audit
+writes and its cross-table invariants, so that is not a corner.
 
 The same rule decides the repair. The decoder stops at the first character it
 cannot accept, so it names the stray brace exactly and nothing has to be
@@ -65,7 +64,7 @@ also how a legitimate implicit ``RETURN`` is written.
 What the two repairs share is the failure they refuse to become. A qualifier
 blanked too eagerly, or a brace deleted on a hunch, hands back a tree that is
 missing something without saying so — and a routine reported as clean because
-it was never read is the bug both of these issues are.
+it was never read is the failure both repairs exist to prevent.
 
 Both are pglast 8's, both are reported upstream as
 https://github.com/pganalyze/libpg_query/issues/337, and neither is repaired
@@ -196,9 +195,9 @@ def _compile(text: str) -> tuple[Any, int]:
     ``pglast.parse_plpgsql`` is ``json.loads`` over ``libpg_query``'s
     serialisation, and that serialisation is not always valid JSON: a trigger
     function's implicit ``TG_`` datums are written ``{}}``, one closing brace
-    too many each, so every ``RETURNS TRIGGER`` and ``RETURNS event_trigger``
-    body failed to decode (issue #272, pglast 8 only — 6.16 and 7.18 do not
-    write those datums at all).
+    too many each, so unrepaired every ``RETURNS TRIGGER`` and
+    ``RETURNS event_trigger`` body fails to decode (issue #272, pglast 8 only —
+    6.16 and 7.18 do not write those datums at all).
 
     The decoder is what says where the defect is. It stops at the first
     character it cannot accept, so ``JSONDecodeError.pos`` names a stray brace
@@ -370,8 +369,8 @@ def _body_span(statement: str, body_at: int | None) -> Span | None:
 
     Without a *body_at* the ``AS`` is found in the token stream instead. The
     caller's offset is a precision hint, not a prerequisite: a routine's
-    declarations are where most of #270's type names are written, and a missing
-    argument must not quietly put them out of reach.
+    declarations are where most qualified type names are written (#270), and a
+    missing argument must not quietly put them out of reach.
     """
     tokens = sql_lexer.tokens(statement)
     at = _as_offset(tokens, body_at)

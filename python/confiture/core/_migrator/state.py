@@ -1,8 +1,7 @@
 """Tracking-table state concern for ``MigrationEngine``: init, queries, hook trigger.
 
-Peeled out of ``engine.py``. Free functions taking the
-``MigrationEngine`` instance as their first argument; the class keeps thin delegating
-methods, so its public surface and patch targets are unchanged. Pure refactor.
+Free functions taking the ``MigrationEngine`` instance as their first argument; the
+class keeps thin delegating methods, which are its public surface and its patch targets.
 """
 
 from __future__ import annotations
@@ -97,10 +96,10 @@ def initialize(migrator: EngineHost) -> None:
                 )
             )
         else:
-            # Issue #137 — `applied_by` column was added in 0.17.0.
-            # Existing installs auto-migrate via IF NOT EXISTS; pre-0.17.0
-            # rows keep `applied_by IS NULL` ("applied before 0.17.0;
-            # role unknown") as a documented invariant.
+            # Issue #137 — a ledger created before 0.17.0 has no `applied_by`
+            # column; IF NOT EXISTS adds it, and the rows already there keep
+            # `applied_by IS NULL` ("applied before 0.17.0; role unknown") as
+            # a documented invariant.
             migrator._execute_sql(
                 pgsql.SQL("ALTER TABLE {} ADD COLUMN IF NOT EXISTS applied_by TEXT").format(
                     migrator._table_ident

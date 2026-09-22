@@ -7,7 +7,7 @@ Error codes follow the format: CATEGORY_NNN where:
 - CATEGORY is a 3-6 letter category name (CONFIG, MIGR, SCHEMA, etc.)
 - NNN is a 3-digit number within the category (001-999)
 
-Categories and their exit codes (the #146 stabilized convention; see
+Categories and their exit codes (the #146 convention; see
 docs/reference/exit-codes.md and CANONICAL_EXIT_CODES below for the contract):
 - CONFIG (001-099): Configuration errors → exit code 5
     (carve-out: CONFIG_006 "connection failed" → 3)
@@ -183,7 +183,7 @@ ERROR_CODE_REGISTRY = _create_global_registry()
 # asserts ERROR_CODE_REGISTRY == this dict; deriving one from the other would
 # make that test a tautology. The redundancy IS the enforcement mechanism.
 #
-# Family defaults (the renumbered convention #146 freezes as a contract):
+# Family defaults (the convention #146 fixes as a contract):
 #   2 = tracking table absent (PRECON_1001 only)   3 = DB connection failed
 #   4 = schema/DDL/build       5 = config invalid + validation/sync/lint/...
 #   6 = lock contention        7 = git / pggit / grant

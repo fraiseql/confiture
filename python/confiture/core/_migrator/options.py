@@ -1,9 +1,9 @@
 """What ``MigratorSession.up`` was asked for, as the one value the apply loop reads.
 
 ``up()`` keeps its keyword parameters — fraisier and printoptim call them, and
-``tests/contract/test_consumer_symbols.py`` pins the shapes — but the chain below it
-forwarded every one of them by name through three functions, and a keyword dropped
-in any of them was silently ignored. :class:`UpOptions` is built once, at the
+``tests/contract/test_consumer_symbols.py`` pins the shapes — but nothing below it
+forwards them by name: a keyword forwarded through a chain of functions is silently
+ignored wherever one link drops it. :class:`UpOptions` is built once, at the
 facade; ``tests/unit/test_one_session_signature.py`` holds that every keyword ``up()``
 accepts is a field of it and that every field is given one.
 """

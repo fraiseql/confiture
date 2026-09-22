@@ -3,20 +3,19 @@
 A migration's body runs one of three ways: inside a transaction behind a savepoint
 (:class:`Transactional`), in autocommit for the DDL that cannot run in a transaction
 (:class:`Autocommit`), or as ``--online`` expand/contract stages with a checkpoint
-after each (:class:`Online`). The first two were free functions that took the engine
-and called back into it; the third was reached from the apply loop *past* the
-engine, so it never asked a precondition and never ran a hook.
+after each (:class:`Online`).
 
-Every migration now goes through :class:`ApplyPipeline`: the gates each strategy
+Every migration goes through :class:`ApplyPipeline`: the gates each strategy
 shares — already applied, a body that must commit asked to run inside a caller's
 savepoint, the preconditions — then the strategy, which runs the body between the
-``BEFORE_EXECUTE`` and ``AFTER_EXECUTE`` hooks and records the ledger row. A
-strategy receives its collaborators as arguments (:class:`ApplyStage`); none of
+``BEFORE_EXECUTE`` and ``AFTER_EXECUTE`` hooks and records the ledger row. No
+strategy, ``--online`` included, reaches a body past its preconditions and hooks.
+A strategy receives its collaborators as arguments (:class:`ApplyStage`); none of
 them knows the engine exists.
 
 The ledger writes (:func:`record_applied`, :func:`mark_applied`), the dry run and the
-precondition checks live here too, and still take the engine; they are the next
-stage to be given their collaborators.
+precondition checks live here too, and take the engine rather than their
+collaborators.
 """
 
 from __future__ import annotations
@@ -281,8 +280,7 @@ class Online:
     """The body as its expand/contract stages, each checkpointed in ``<ledger>_steps``.
 
     The stages commit as they go, so this is not a body a caller's savepoint can
-    hold. What it did not do before it was a strategy is what every other body does:
-    run between its hooks, after its preconditions.
+    hold. Like every other body, it runs between its hooks, after its preconditions.
     """
 
     transactional: ClassVar[bool] = False
@@ -526,10 +524,10 @@ def dry_run(migrator: EngineHost, migration: Migration) -> DryRunResult:
     """
     statements = migration.get_up_sql_statements()
     if not statements:
-        # Fallback to old simulation mode for Python migrations
-        # Note: This creates a basic simulation result since the old executor
-        # is no longer available. In practice, Python migrations should implement
-        # get_up_sql_statements() or use SQL-based migrations.
+        # A Python migration that does not override get_up_sql_statements()
+        # has nothing to run under a savepoint, so the result is a
+        # low-confidence simulation. Such a migration gets a real dry run by
+        # implementing get_up_sql_statements(), or by being a SQL migration.
 
         return DryRunResult(
             migration_name=migration.name,

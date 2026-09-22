@@ -33,8 +33,8 @@ class Violation:
     Attributes:
         rule_name: Human-readable name of the rule that detected this violation
         rule_id: Stable rule code (``naming_001``…), the identifier
-            ``confiture lint --select`` / ``--ignore`` take. Empty for
-            violations produced by code that predates the registry (#150).
+            ``confiture lint --select`` / ``--ignore`` take. Empty for a
+            violation from a rule with no registry entry (#150).
         severity: Severity level (ERROR, WARNING, INFO)
         message: Human-readable description of the issue
         location: Where the violation occurred (table name, column, etc.)
@@ -152,8 +152,8 @@ class LintReport:
         skipped: Rules that did not run, each with a reason. A skip is not a
             pass, and a payload that omitted it would read as one.
         degraded: Rules that ran on less than the whole schema, each with its
-            own reason: ``build_003`` with no live database was the first, and
-            every rule that reads DDL when a file would not parse is the other.
+            own reason: ``build_003`` with no live database is one, and every
+            rule that reads DDL when a file would not parse is the other.
             Never written to a baseline, so a project that records an
             ``UNPARSEABLE`` as known still sees what it costs on every run.
         documentation: How much of the schema carries a comment and how long

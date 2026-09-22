@@ -19,9 +19,6 @@ _CONFITURE_DSN_ENV = "CONFITURE_DATABASE_URL"
 _AMBIENT_DSN_ENV = "DATABASE_URL"
 
 
-_DATABASE_URL_ENV_VARS = (_CONFITURE_DSN_ENV, _AMBIENT_DSN_ENV)
-
-
 # Shared --help text for the --no-config flag across the migrate family (#152).
 NO_CONFIG_OPTION_HELP = (
     "Suppress config-file discovery entirely; the environment "
@@ -65,7 +62,8 @@ def resolve_database_url(
     4. An explicit ``--config``/``--env`` only → defer to the config (``None``);
        an ambient ``DATABASE_URL`` does NOT override an explicit config.
     5. ``CONFITURE_DATABASE_URL`` set while the config is only the **default** →
-       the canonical var (it beats a default config — the bug #152 fixes).
+       the canonical var (set on purpose, it beats a config that is merely the
+       default).
     6. A present config file (even the default) → defer to it (``None``); it
        beats the ambient ``DATABASE_URL``.
     7. Otherwise the ambient ``DATABASE_URL`` — unless
@@ -233,10 +231,8 @@ def require_readable_config(ctx: Any, config: Path | None, *params: str) -> None
 
     Whatever the command goes on to do with the file — and several commands
     legitimately do nothing with it — a path named on the command line and never
-    opened is the shape of a gate that cannot fail. ``migrate status``,
-    ``migrate validate``, ``migrate fix`` and ``migrate preflight`` each printed
-    a tick and exited 0 for a config that did not parse, and for one that did not
-    exist; ``migrate preflight`` rendered its whole Pre-flight Check table.
+    opened is the shape of a gate that cannot fail: without this, a command
+    prints a tick and exits 0 for a config that does not parse, or does not exist.
 
     Only an *explicit* path is checked. The ambient ``confiture.yaml`` keeps the
     behaviour #152's precedence contract gives it: merely being present must not
@@ -253,9 +249,8 @@ def require_readable_config(ctx: Any, config: Path | None, *params: str) -> None
 
     Raises:
         ConfigurationError: ``CONFIG_004`` when the file is absent, ``CONFIG_002``
-            when it does not parse — ``load_config``'s own codes, so the two
-            commands that already got this right and the four that did not now
-            say the same thing.
+            when it does not parse — ``load_config``'s own codes, so a command
+            that reads the file and one that only checks it say the same thing.
     """
     if config is None or not param_is_explicit(ctx, *(params or ("config",))):
         return

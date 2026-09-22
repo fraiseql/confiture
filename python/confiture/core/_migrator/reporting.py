@@ -1,7 +1,7 @@
 """Read-only views of a session: ``status()``, ``current_revision()``, ``preflight()``.
 
-Split out of ``session.py``. Every function takes the
-``MigratorSession`` as its first argument; the session's methods delegate here.
+Every function takes the ``MigratorSession`` as its first argument; the session's
+methods delegate here.
 """
 
 from __future__ import annotations

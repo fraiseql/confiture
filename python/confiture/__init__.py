@@ -136,7 +136,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Core
     "SchemaBuilder": ("confiture.core.builder", "SchemaBuilder"),
     "Migrator": ("confiture.core.migrator", "Migrator"),
-    # two of them were importable from the top level and two were not (#287).
+    # The four mediums are a set: each one's entry point imports from the top
+    # level (#287).
     "ProductionSyncer": ("confiture.core.syncer", "ProductionSyncer"),
     "SchemaToSchemaMigrator": ("confiture.core.schema_to_schema", "SchemaToSchemaMigrator"),
     "MigratorSession": ("confiture.core.migrator", "MigratorSession"),

@@ -137,7 +137,8 @@ def check_signature_drift(
         ctx: Shared per-run resources. When given, the config and the live
             connection come from there, so several checks in one
             ``migrate validate`` run connect once between them. When ``None``
-            this function is fully standalone, exactly as before 0.40.0.
+            this function is fully standalone: it loads the config and opens its
+            own connection.
 
     Raises:
         ConfigurationError: config missing, auto-build failed, or connection failed.

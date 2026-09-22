@@ -133,7 +133,7 @@ class DriftReport:
     columns_checked: int = 0
     indexes_checked: int = 0
     #: Views, matviews, triggers and routines compared — the objects a tree
-    #: declares whose *existence* is now checked (#303).
+    #: declares whose *existence* is checked (#303).
     objects_checked: int = 0
     detection_time_ms: int = 0
 
@@ -402,7 +402,7 @@ def _named(table: Table) -> str:
 
 
 def _column_facts(column: Column) -> dict[str, Any]:
-    """A column as a finding reports it — the shape ``expected`` / ``actual`` always had."""
+    """A column as a finding reports it: the shape of ``expected`` / ``actual``."""
     return {"type": column.type_text, "nullable": not column.not_null, "default": column.default}
 
 
@@ -632,7 +632,7 @@ class SchemaDriftDetector:
             self._compare_constraints(table, expected_tables[table], actual_tables[table], report)
 
         # Compare object existence: a view, matview, trigger or routine the tree
-        # declares and the database has not got was exit 0 before this (#303).
+        # declares and the database has not got is drift, not exit 0 (#303).
         if objects:
             report.drift_items.extend(_compare_objects(expected, actual))
             report.objects_checked = (
@@ -825,8 +825,8 @@ class SchemaDriftDetector:
 
         Keyed by name where the DDL wrote one, and by what the constraint says where
         it did not — PostgreSQL names an unnamed constraint at apply time
-        (``child_pid_fkey``), and 1.14.0's rule is that two unnamed foreign keys on one
-        table are two. A CHECK's text is not compared: PostgreSQL stores it analysed.
+        (``child_pid_fkey``), and two unnamed foreign keys on one table are two
+        (#315). A CHECK's text is not compared: PostgreSQL stores it analysed.
         """
         unmatched = list(actual.constraints)
         missing: list[Constraint] = []

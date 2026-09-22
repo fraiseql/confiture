@@ -149,9 +149,9 @@ class MigrationRunner:
         Raises:
             psycopg.Error: For any failure that is *not* an absent ledger —
                 a dropped connection, a permission error, a malformed query.
-                These used to be swallowed into ``[]``, which made this test
-                fixture report "nothing applied" for a broken database and
-                turned assertions against it silently vacuous (#190).
+                Swallowing them into ``[]`` would make this fixture report
+                "nothing applied" for a broken database and turn assertions
+                against it silently vacuous (#190).
         """
         ident = table_identifier(self.tracking_table)
         try:

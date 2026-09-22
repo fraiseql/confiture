@@ -5,7 +5,8 @@ semantically valid?" *without ever opening a database connection*. It composes
 the existing building blocks — `Environment` Pydantic validation, the
 migrations-tree helpers used by preflight — into a structured report.
 
-Each issue is the unified inner issue object (see the batch shared-issue-schema):
+Each issue is the unified inner issue object preflight's ``issues[]`` also carries
+(:class:`~confiture.models.results.PreflightIssue`):
 ``{severity, code, message, actionable, details, migration, file, line}``.
 """
 

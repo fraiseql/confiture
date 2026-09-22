@@ -8,7 +8,7 @@ this command to apply that one migration with superuser, then re-runs
 
 Connection
 ==========
-The connection URL is read from a new ``apply_as.<role>.url`` config
+The connection URL is read from the ``apply_as.<role>.url`` config
 block (env-var-expanded).  We never silently reuse the env's main URL
 because the whole point of ``apply-as`` is to use a different role
 than the default migrator.

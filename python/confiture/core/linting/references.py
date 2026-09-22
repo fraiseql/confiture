@@ -1,11 +1,10 @@
 """What a body names, so the build can be asked whether it creates it (#246).
 
 ``build_001`` proves confiture holds a complete inventory of what a build
-*creates* — it has to, to know that something is created twice. Nothing ever
-read it in the other direction: a routine that selects from a table no file
-creates, or calls a function no file creates, builds and lints in silence.
-
-This module is the missing half — the objects a body *references*:
+*creates* — it has to, to know that something is created twice. This module
+reads it in the other direction, because a routine that selects from a table no
+file creates, or calls a function no file creates, otherwise builds and lints in
+silence. It collects the objects a body *references*:
 
 - a PL/pgSQL body through ``pglast.parse_plpgsql``, which hands back every
   embedded SQL fragment as a ``PLpgSQL_expr.query`` string together with the
@@ -15,8 +14,7 @@ This module is the missing half — the objects a body *references*:
   already.
 
 One walker then collects ``RangeVar`` (a relation) and ``FuncCall`` (a routine)
-from whatever came back. The issue that asked for this says of its own
-hand-rolled regex version that it "is crude and misses plenty", and that the
+from whatever came back. A hand-rolled regex is crude and misses plenty; the
 value of doing it here is the parser and the inventory — so what a parser
 cannot resolve is *declared* unresolvable rather than guessed at: an
 ``EXECUTE`` of a string built at run time comes back as a reference marked
@@ -38,14 +36,13 @@ there is one answer to "which line is this, really", not two.
 
 A body has a third possible outcome beside "read" and "dynamic": *not
 returned*. The compiler behind ``parse_plpgsql`` has no catalogue, and there
-are still shapes it will not resolve without one — an array whose element type
-it cannot name being the one left (#270, #272 repaired the rest).
-:func:`read_references` names those routines instead of raising or staying
-quiet, because a rule that skipped a body has not established that the body is
-clean. What it takes to keep that list short is
-:mod:`confiture.core.plpgsql_parse`'s work, not this module's: everything here
-asks :func:`~confiture.core.plpgsql_parse.parse_body` for a tree and reports
-the routine when it does not get one.
+are shapes it will not resolve without one — an array whose element type it
+cannot name, for one. :func:`read_references` names those routines instead of
+raising or staying quiet, because a rule that skipped a body has not
+established that the body is clean. What it takes to keep that list short is
+:mod:`confiture.core.plpgsql_parse`'s work (#270, #272), not this module's:
+everything here asks :func:`~confiture.core.plpgsql_parse.parse_body` for a
+tree and reports the routine when it does not get one.
 """
 
 from __future__ import annotations
@@ -376,8 +373,8 @@ def _plpgsql_references(
     except pglast.parser.ParseError as exc:
         # The statement parsed as SQL — it is in `raws` — so a refusal here is
         # the PL/pgSQL compiler's, about this one body, and not one blanking a
-        # qualifier addresses. Reporting nothing about a body that was never
-        # read is the failure #270 is filed on.
+        # qualifier addresses. A body that was never read is named, never
+        # passed off as clean (#270).
         raise _UnreadableBody(obj.identity) from exc
     except json.JSONDecodeError as exc:
         # `libpg_query`'s serialisation did not decode, and the one defect

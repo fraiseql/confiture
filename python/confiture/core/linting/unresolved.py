@@ -2,9 +2,9 @@
 
 :mod:`confiture.core.linting.references` says what a body names.
 :mod:`confiture.core.linting.inventory` says what the build creates. This is
-the subtraction, and the answer to "then what did you miss": the reporter's
-routine read ``app.tv_summary`` and called ``app.fn_refresh_summary``, no file
-created either, and the routine had never completed a call.
+the subtraction: a routine that reads ``app.tv_summary`` and calls
+``app.fn_refresh_summary`` when no file creates either still builds, and fails
+on its first call.
 
 The inventory is the *whole build*, not one file, so an object created three
 files later resolves: file order is build order, not resolution order. Only a
@@ -17,7 +17,7 @@ of them being fixed must not retire the other five from a ``--baseline``.
 An unqualified name is not judged unless ``lint.search_path`` says where to
 look, and an unqualified *routine* call is not judged even then: ``pg_catalog``
 is on every search path, so ``now()`` and ``count()`` would be findings and the
-rule would be unusable — the failure #246 names in its own scope notes.
+rule would be unusable (#246).
 """
 
 from __future__ import annotations

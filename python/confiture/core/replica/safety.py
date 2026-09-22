@@ -181,7 +181,7 @@ _VERDICTS: tuple[tuple[type, Callable[[Any], ReplicaVerdict]], ...] = (
 
 
 def classify_replica_safety(op: DdlOperation) -> ReplicaVerdict:
-    """Verdict for one operation, per the issue's replica-safety matrix.
+    """Verdict for one operation, read from the replica-safety table ``_VERDICTS``.
 
     The lag window is the crux: a replica serving reads on the *old* schema
     while the primary already has the *new* one. ``ADD COLUMN NOT NULL`` /

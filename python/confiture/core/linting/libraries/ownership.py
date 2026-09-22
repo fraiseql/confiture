@@ -82,8 +82,8 @@ class _AlterOwnerRecord:
 class Own001OwnershipCoverage:
     """OWN001 — every created relation must have a matching ALTER OWNER.
 
-    The rule is a no-op when ``expectation.lint_enabled`` is False, when
-    no expectation is provided, or when pglast is unavailable.
+    The rule is a no-op when ``expectation.lint_enabled`` is False or when
+    no expectation is provided.
 
     Args:
         expectation: Parsed ``ownership:`` block from the environment config.
@@ -357,7 +357,8 @@ class Own002BareAlterOwner:
     Detecting ``IF EXISTS`` guards walks the parent AST tree for an
     enclosing ``DO $$ … IF EXISTS … END IF; … $$`` block.
 
-    AST-only: shares the pglast-required guard with :class:`Own001OwnershipCoverage`.
+    AST-only, as :class:`Own001OwnershipCoverage` is: a file pglast rejects is
+    reported as unparseable.
     """
 
     rule_id: ClassVar[str] = "own_002"

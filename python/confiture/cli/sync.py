@@ -1,6 +1,6 @@
 """``confiture sync`` — Medium 3 (Production Data Sync) CLI.
 
-Wires the previously-orphaned ``core.syncer.ProductionSyncer`` to a top-level
+Wires ``core.syncer.ProductionSyncer`` to a top-level
 ``confiture sync`` command matching ``docs/guides/03-production-sync.md``: copy
 data from a production database to a local/staging target, optionally masking
 PII on the way.

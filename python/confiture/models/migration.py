@@ -257,7 +257,7 @@ class Migration(ABC):
         The project root is the nearest ancestor of this migration's source
         file carrying ``pyproject.toml``, ``.git`` or ``db/``. A migration
         class with no source file (built in memory) resolves from the working
-        directory only, which is what every migration did before 0.46.0.
+        directory only.
 
         Args:
             path: Path to a ``.sql`` file (absolute, or relative as above).

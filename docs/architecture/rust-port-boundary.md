@@ -81,59 +81,59 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-23,694 lines, 33% of `core/`.
+23,027 lines, 33% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
-| `_pglast_enums.py` | 139 | DDL transform |
+| `_pglast_enums.py` | 138 | DDL transform |
 | `change_set/` | 1,250 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
-| `data_assertions.py` | 569 | DDL transform |
-| `ddl_clauses.py` | 106 | DDL transform |
-| `ddl_objects.py` | 507 | DDL transform |
-| `ddl_walk.py` | 1,364 | DDL transform |
+| `data_assertions.py` | 564 | DDL transform |
+| `ddl_clauses.py` | 105 | DDL transform |
+| `ddl_objects.py` | 506 | DDL transform |
+| `ddl_walk.py` | 1,361 | DDL transform |
 | `destructive.py` | 169 | DDL transform |
 | `differ.py` | 708 | DDL transform |
-| `differ_sql.py` | 507 | DDL transform |
+| `differ_sql.py` | 506 | DDL transform |
 | `expand_contract.py` | 273 | DDL transform |
 | `fk_extractor.py` | 458 | DDL transform |
 | `function_body_checker.py` | 210 | DDL transform |
 | `function_body_normalizer.py` | 69 | DDL transform |
 | `function_signature_checker.py` | 187 | DDL transform |
-| `idempotency/` | 2,982 | DDL transform |
+| `idempotency/` | 2,726 | DDL transform |
 | `introspection/dependency_graph.py` | 200 | DDL transform |
-| `linting/` | 7,884 | DDL transform |
-| `lock_profile.py` | 493 | DDL transform |
+| `linting/` | 7,872 | DDL transform |
+| `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
-| `migration_grant_extractor.py` | 692 | DDL transform |
+| `migration_grant_extractor.py` | 525 | DDL transform |
 | `model_facts.py` | 169 | DDL transform |
-| `parser_info.py` | 57 | DDL transform |
+| `parser_info.py` | 56 | DDL transform |
 | `path_globs.py` | 158 | DDL transform |
-| `plpgsql_parse.py` | 401 | DDL transform |
-| `replica/` | 951 | DDL transform |
-| `risk_tier.py` | 78 | DDL transform |
-| `schema_change.py` | 776 | DDL transform |
+| `plpgsql_parse.py` | 400 | DDL transform |
+| `replica/` | 740 | DDL transform |
+| `risk_tier.py` | 76 | DDL transform |
+| `schema_change.py` | 775 | DDL transform |
 | `schema_identity.py` | 23 | DDL transform |
-| `schema_model.py` | 692 | DDL transform |
-| `sql_lexer.py` | 618 | DDL transform |
+| `schema_model.py` | 691 | DDL transform |
+| `sql_lexer.py` | 617 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |
 | `type_lattice.py` | 484 | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 
-39,754 lines, 56% of `core/`.
+39,726 lines, 57% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `__init__.py` | 124 | neutral |
-| `_migrator/` | 4,862 | database orchestration |
-| `anonymization/` | 4,438 | database orchestration |
+| `_migrator/` | 4,856 | database orchestration |
+| `anonymization/` | 4,437 | database orchestration |
 | `backfill.py` | 124 | database orchestration |
 | `baseline_detector.py` | 248 | database orchestration |
 | `bootstrap.py` | 350 | database orchestration |
 | `builder.py` | 1,016 | database orchestration |
-| `checksum.py` | 434 | database orchestration |
+| `checksum.py` | 432 | database orchestration |
 | `connection.py` | 244 | database orchestration |
 | `cte_debugger.py` | 198 | database orchestration |
 | `dependent_objects.py` | 162 | database orchestration |
@@ -145,19 +145,19 @@ duplicate readers were deleted. The count below is what the port translates.
 | `error_handler.py` | 281 | neutral |
 | `expected_db.py` | 217 | database orchestration |
 | `function_body_drift.py` | 211 | database orchestration |
-| `function_signature_drift.py` | 362 | database orchestration |
+| `function_signature_drift.py` | 358 | database orchestration |
 | `git.py` | 521 | neutral |
 | `git_accompaniment.py` | 344 | neutral |
 | `git_schema.py` | 258 | neutral |
 | `grant_accompaniment.py` | 380 | database orchestration |
 | `introspection/` | 303 | database orchestration |
 | `introspection/type_mapping.py` | 112 | neutral |
-| `large_tables.py` | 928 | database orchestration |
+| `large_tables.py` | 929 | database orchestration |
 | `ledger.py` | 505 | database orchestration |
 | `linting/baseline.py` | 153 | neutral |
-| `linting/bodies.py` | 466 | database orchestration |
-| `linting/libraries/security_definer.py` | 406 | database orchestration |
-| `linting/schema_linter.py` | 1,041 | database orchestration |
+| `linting/bodies.py` | 465 | database orchestration |
+| `linting/libraries/security_definer.py` | 404 | database orchestration |
+| `linting/schema_linter.py` | 1,038 | database orchestration |
 | `linting/selection.py` | 368 | database orchestration |
 | `linting/unresolved.py` | 213 | database orchestration |
 | `live_catalog.py` | 872 | database orchestration |
@@ -165,7 +165,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `migration_generator.py` | 565 | database orchestration |
 | `migration_verifier.py` | 229 | database orchestration |
 | `migrator.py` | 206 | database orchestration |
-| `ownership_fixer.py` | 245 | database orchestration |
+| `ownership_fixer.py` | 243 | database orchestration |
 | `pgtap_generator.py` | 63 | neutral |
 | `preconditions.py` | 655 | database orchestration |
 | `preflight.py` | 187 | database orchestration |
@@ -180,7 +180,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_snapshot.py` | 104 | database orchestration |
 | `schema_sources.py` | 144 | database orchestration |
 | `schema_to_schema.py` | 602 | database orchestration |
-| `seed/` | 4,817 | database orchestration |
+| `seed/` | 4,813 | database orchestration |
 | `sql_path.py` | 135 | database orchestration |
 | `sql_utils.py` | 74 | neutral |
 | `ssh_tunnel.py` | 138 | database orchestration |
@@ -188,25 +188,25 @@ duplicate readers were deleted. The count below is what the port translates.
 | `stub_generator.py` | 56 | neutral |
 | `syncer.py` | 654 | database orchestration |
 | `temp_database.py` | 275 | database orchestration |
-| `test_db.py` | 950 | database orchestration |
+| `test_db.py` | 949 | database orchestration |
 | `tree_allocator.py` | 266 | database orchestration |
 | `tree_renumber.py` | 485 | database orchestration |
 | `unified_linter.py` | 155 | database orchestration |
-| `validation/` | 2,104 | database orchestration |
+| `validation/` | 2,101 | database orchestration |
 | `view_body_drift.py` | 198 | database orchestration |
 | `view_manager.py` | 506 | database orchestration |
 
 ### What does not port
 
-6,677 lines, 9% of `core/`.
+6,663 lines, 9% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `_migrator/loader.py` | 133 | Python-bound |
 | `anonymization/plugins/` | 302 | Python-bound |
-| `hooks/` | 3,261 | Python-bound |
-| `idempotency/python_migration_extractor.py` | 296 | Python-bound |
-| `idempotency/static_eval/` | 1,741 | Python-bound |
+| `hooks/` | 3,260 | Python-bound |
+| `idempotency/python_migration_extractor.py` | 294 | Python-bound |
+| `idempotency/static_eval/` | 1,730 | Python-bound |
 | `import_checker.py` | 493 | Python-bound |
 | `mcp_http.py` | 125 | Python-bound |
 | `mcp_server.py` | 326 | Python-bound |

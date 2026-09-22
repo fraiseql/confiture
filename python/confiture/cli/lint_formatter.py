@@ -137,10 +137,9 @@ def format_table(report: LintReport, console: Console) -> None:
 
 
 #: How each status reads on the summary: "<code> <verb>: <reason>". The verb is
-#: the *state*; what was lost is the `RuleStatus`'s own reason. "ran without the
-#: live tier" stood here while `build_003`'s live tier was the only degradation
-#: there was, and read as a claim about every later one — an unread file has no
-#: live tier to have run without (#274).
+#: the *state*; what was lost is the `RuleStatus`'s own reason. A verb naming one
+#: degradation ("ran without the live tier") would read as a claim about every
+#: other — an unread file has no live tier to have run without (#274).
 _STATE_VERB = {
     "skipped": "did not run",
     "degraded": "ran on less than the whole schema",

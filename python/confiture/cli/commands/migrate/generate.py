@@ -1,7 +1,4 @@
-"""`confiture migrate generate`.
-
-Split out of the monolithic migrate command modules.
-"""
+"""`confiture migrate generate`."""
 
 from __future__ import annotations
 
@@ -239,10 +236,9 @@ def _write_verify_sidecar(
 ) -> Path | None:
     """Write the empty `.verify.sql` placeholder; return its path, or None.
 
-    Written by default, opted out with ``--no-verify-sidecar`` (#311). An
-    opt-in flag would reproduce the defect this fixes: the mechanism was
-    already correct and already shipped, and a reporter with 268 migrations had
-    never heard of it.
+    Written by default, opted out with ``--no-verify-sidecar`` (#311): an
+    opt-in sidecar is one a project never hears of, and a verification
+    mechanism nobody knows to use verifies nothing.
 
     An existing sidecar is **never** overwritten, ``--force`` included. That
     flag is about the migration file; a sidecar with content in it is somebody's
