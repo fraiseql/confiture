@@ -37,6 +37,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`write_copy_seed` / `write_insert_seed` refuse a value holding a NUL** with
   `SeedError`, before a file is written: psql drops the rest of such a line and joins
   the next, which ran injected SQL from an INSERT seed and merged two COPY rows.
+- ⚠️ **`confiture mcp --port` requires a bearer token** (`--token`, or
+  `CONFITURE_MCP_TOKEN`; without one the command exits 2 and names both). HTTP mode
+  served every tool, `confiture__migrate_down` included, to any web page: a
+  cross-origin `text/plain` POST needs no CORS preflight and was answered. Now
+  `POST /mcp` answers 401 without the token (compared in constant time), 415 for
+  anything but `application/json`, and every route 403 for a non-loopback `Origin`;
+  FastAPI's `/docs`, `/redoc` and `/openapi.json` are not served. `create_app()` and
+  `serve()` take a required keyword-only `token`.
+- **A plugin adds names; it never replaces one.** A `confiture.plugins` entry point
+  that registered a command, group or group callback under a name confiture ships —
+  `migrate`, `build`, `generate alloc`, the root options — replaced it silently (or,
+  for a command under a group's name, vanished). The built-in is kept and the clash is
+  named on stderr with the plugin's name; its other names still register, which is how
+  pgGit adds to `generate`. A plugin that raises anything, `SystemExit` included, is
+  skipped with everything it registered taken back.
 - **A notification webhook's token stays out of errors and logs** —
   `redact_url(url, bearer=True)` keeps the scheme and host of a Slack or Discord URL.
 

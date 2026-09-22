@@ -161,7 +161,7 @@ def test_mcp_http_import_error_without_fastapi():
 
         with patch("builtins.__import__", side_effect=mock_import):
             with pytest.raises(ImportError, match="mcp-http"):
-                _http_mod.create_app("postgresql://localhost/test")
+                _http_mod.create_app("postgresql://localhost/test", token="t")
 
 
 def test_mcp_http_uvicorn_import_error():
@@ -180,7 +180,7 @@ def test_mcp_http_uvicorn_import_error():
         from confiture.core import mcp_http as _http_mod
 
         with pytest.raises(ImportError, match="mcp-http"):
-            _http_mod.serve("postgresql://localhost/test")
+            _http_mod.serve("postgresql://localhost/test", token="t")
 
 
 def test_mcp_http_create_app_returns_fastapi_app():
@@ -201,7 +201,7 @@ def test_mcp_http_create_app_returns_fastapi_app():
 
             from confiture.core.mcp_http import create_app
 
-            app = create_app("postgresql://localhost/testdb")
+            app = create_app("postgresql://localhost/testdb", token="t")
 
             from fastapi import FastAPI
 
@@ -229,12 +229,15 @@ def test_mcp_http_post_tools_list():
 
             from confiture.core.mcp_http import create_app
 
-            app = create_app("postgresql://localhost/testdb", expose_confiture_tools=False)
+            app = create_app(
+                "postgresql://localhost/testdb", expose_confiture_tools=False, token="t"
+            )
             client = TestClient(app)
 
             resp = client.post(
                 "/mcp",
                 json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                headers={"Authorization": "Bearer t"},
             )
             assert resp.status_code == 200
             data = resp.json()
@@ -263,7 +266,7 @@ def test_mcp_http_health_returns_ok():
 
             from confiture.core.mcp_http import create_app
 
-            app = create_app("postgresql://localhost/testdb")
+            app = create_app("postgresql://localhost/testdb", token="t")
             client = TestClient(app)
 
             resp = client.get("/health")
@@ -291,6 +294,8 @@ def test_mcp_cli_port_starts_http_server():
                         "postgresql://localhost/test",
                         "--port",
                         "8080",
+                        "--token",
+                        "t",
                     ],
                 )
                 # If serve was called OR the import itself raised (no fastapi), either is OK

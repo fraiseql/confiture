@@ -84,7 +84,7 @@ CLI module reaches into a `_private` attribute of a core object (`tests/unit/cli
 
 #### 1.4 Additional CLI Modules
 
-- **`plugins.py`** — loads the `confiture.plugins` entry points: another distribution adds its commands to the root app. pgGit's `branch` and `coordinate` groups arrive this way from `plugins/fraiseql-confiture-pggit/`
+- **`plugins.py`** — loads the `confiture.plugins` entry points: another distribution adds its commands to the root app. pgGit's `branch` and `coordinate` groups arrive this way from `plugins/fraiseql-confiture-pggit/`. A plugin adds names and never replaces one: a command, group or group callback over a name the tree already has is taken back with a warning naming the plugin, and a plugin that raises anything but `KeyboardInterrupt` is skipped whole
 - **`seed.py`** — `seed` subcommand group (seed validation)
 - **`generate.py`** — `generate` subcommand group (migration generation)
 - **`dry_run.py`** — Dry-run UI helpers (`display_dry_run_header`, `save_text_report`, `save_json_report`, `ask_dry_run_execute_confirmation`)
