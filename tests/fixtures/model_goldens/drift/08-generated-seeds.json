@@ -1,0 +1,25 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "database_name": "<database>",
+    "expected_schema_source": "file:<schema>",
+    "has_drift": false,
+    "has_critical_drift": false,
+    "critical_count": 0,
+    "warning_count": 0,
+    "info_count": 0,
+    "tables_checked": 4,
+    "columns_checked": 18,
+    "indexes_checked": 0,
+    "objects_checked": 2,
+    "detection_time_ms": 0,
+    "drift_items": [],
+    "hints": [],
+    "ok": true,
+    "command": "drift",
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

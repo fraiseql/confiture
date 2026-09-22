@@ -107,6 +107,14 @@ TREES: tuple[Tree, ...] = (
         preamble="CREATE SCHEMA prep_seed;\nCREATE SCHEMA catalog;\n",
     ),
     Tree("07-comment-validation", "examples/07-comment-validation", "local"),
+    # No environment: run.sh applies db/schema in path order, schemas first.
+    Tree(
+        "08-generated-seeds",
+        files=tuple(
+            path.relative_to(REPO_ROOT).as_posix()
+            for path in sorted((REPO_ROOT / "examples/08-generated-seeds/db/schema").rglob("*.sql"))
+        ),
+    ),
     Tree("basic", "examples/basic", "local"),
     # A pair whose diff is every kind of schema change, once each: what the
     # other trees, almost all additions, cannot show of the wire.

@@ -1,0 +1,70 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE catalog.tb_product",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE catalog.tb_vendor",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE prep_seed.tb_product",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE prep_seed.tb_vendor",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_ENUM_TYPE",
+        "details": "ADD ENUM TYPE catalog.product_status",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "details": "ADD FUNCTION fn_resolve_tb_product()",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "details": "ADD FUNCTION fn_resolve_tb_vendor()",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "details": "ADD SCHEMA catalog",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "details": "ADD SCHEMA prep_seed",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 9,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": [],
+    "ok": true,
+    "command": "migrate diff",
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

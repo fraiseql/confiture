@@ -1,0 +1,464 @@
+{
+  "tables": [
+    {
+      "name": "tb_product",
+      "schema": "catalog",
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 34,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "pk_product",
+          "folded": "pk_product",
+          "line": 35,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": "always",
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "fk_vendor",
+          "folded": "fk_vendor",
+          "line": 36,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "name",
+          "folded": "name",
+          "line": 37,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "price",
+          "folded": "price",
+          "line": 38,
+          "type_text": "numeric(10, 2)",
+          "type_key": "numeric(10,2)",
+          "raw_sql_type": "NUMERIC(10,2)",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "status",
+          "folded": "status",
+          "line": 39,
+          "type_text": "catalog.product_status",
+          "type_key": "catalog.product_status",
+          "raw_sql_type": "catalog.product_status",
+          "not_null": true,
+          "default": "'draft'",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "pk_product"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "foreign_key",
+          "name": "",
+          "columns": [
+            "fk_vendor"
+          ],
+          "ref_table": "catalog.tb_vendor",
+          "ref_columns": [
+            "pk_vendor"
+          ],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "price > 0",
+          "deferrable": null
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "tb_vendor",
+      "schema": "catalog",
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 26,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "pk_vendor",
+          "folded": "pk_vendor",
+          "line": 27,
+          "type_text": "bigint",
+          "type_key": "bigint",
+          "raw_sql_type": "BIGINT",
+          "not_null": true,
+          "default": null,
+          "identity": "always",
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "folded": "name",
+          "line": 28,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "country_code",
+          "folded": "country_code",
+          "line": 29,
+          "type_text": "varchar(2)",
+          "type_key": "varchar(2)",
+          "raw_sql_type": "VARCHAR(2)",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "unique",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "pk_vendor"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "tb_product",
+      "schema": "prep_seed",
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 17,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "fk_vendor_id",
+          "folded": "fk_vendor_id",
+          "line": 18,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "name",
+          "folded": "name",
+          "line": 19,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "price",
+          "folded": "price",
+          "line": 20,
+          "type_text": "numeric(10, 2)",
+          "type_key": "numeric(10,2)",
+          "raw_sql_type": "NUMERIC(10,2)",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "status",
+          "folded": "status",
+          "line": 21,
+          "type_text": "catalog.product_status",
+          "type_key": "catalog.product_status",
+          "raw_sql_type": "catalog.product_status",
+          "not_null": true,
+          "default": "'draft'",
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "foreign_key",
+          "name": "",
+          "columns": [
+            "fk_vendor_id"
+          ],
+          "ref_table": "prep_seed.tb_vendor",
+          "ref_columns": [
+            "id"
+          ],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        },
+        {
+          "kind": "check",
+          "name": "",
+          "columns": [],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": "price > 0",
+          "deferrable": null
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "tb_vendor",
+      "schema": "prep_seed",
+      "columns": [
+        {
+          "name": "id",
+          "folded": "id",
+          "line": 10,
+          "type_text": "uuid",
+          "type_key": "uuid",
+          "raw_sql_type": "UUID",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": true
+        },
+        {
+          "name": "name",
+          "folded": "name",
+          "line": 11,
+          "type_text": "text",
+          "type_key": "text",
+          "raw_sql_type": "TEXT",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        },
+        {
+          "name": "country_code",
+          "folded": "country_code",
+          "line": 12,
+          "type_text": "varchar(2)",
+          "type_key": "varchar(2)",
+          "raw_sql_type": "VARCHAR(2)",
+          "not_null": true,
+          "default": null,
+          "identity": null,
+          "generated": null,
+          "generated_kind": null,
+          "primary_key": false
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "primary_key",
+          "name": "",
+          "columns": [
+            "id"
+          ],
+          "ref_table": null,
+          "ref_columns": [],
+          "on_delete": null,
+          "on_update": null,
+          "expression": null,
+          "deferrable": null
+        }
+      ],
+      "indexes": []
+    }
+  ],
+  "enum_types": [
+    {
+      "name": "product_status",
+      "schema": "catalog",
+      "values": [
+        "draft",
+        "active",
+        "retired"
+      ]
+    }
+  ],
+  "sequences": [],
+  "routines": [
+    {
+      "name": "fn_resolve_tb_product",
+      "schema": null,
+      "kind": "function",
+      "signature": "",
+      "signature_key": [],
+      "returns": "void",
+      "language": "plpgsql",
+      "body": "\nBEGIN\n    INSERT INTO catalog.tb_product (id, fk_vendor, name, price, status)\n    SELECT prep.id, vendor.pk_vendor, prep.name, prep.price, prep.status\n    FROM prep_seed.tb_product prep\n    LEFT JOIN catalog.tb_vendor vendor ON vendor.id = prep.fk_vendor_id\n    ON CONFLICT (id) DO NOTHING;\nEND;\n",
+      "security_definer": false,
+      "search_path_pinned": false,
+      "volatility": "volatile"
+    },
+    {
+      "name": "fn_resolve_tb_vendor",
+      "schema": null,
+      "kind": "function",
+      "signature": "",
+      "signature_key": [],
+      "returns": "void",
+      "language": "plpgsql",
+      "body": "\nBEGIN\n    INSERT INTO catalog.tb_vendor (id, name, country_code)\n    SELECT prep.id, prep.name, prep.country_code\n    FROM prep_seed.tb_vendor prep\n    ON CONFLICT (id) DO NOTHING;\nEND;\n",
+      "security_definer": false,
+      "search_path_pinned": false,
+      "volatility": "volatile"
+    }
+  ],
+  "views": [],
+  "triggers": []
+}
