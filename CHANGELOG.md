@@ -100,6 +100,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/unit/test_no_unreferenced_private_names.py` fails on the next one. A private
   name is decided per module, so two modules defining the same `_RE_ADD_COLUMN` no
   longer keep each other alive. `sql_keyword_regex` in `tests/budgets.json`: 102 → 46.
+- **The README describes the preflight confiture has.** Its first screen promised a
+  "structural diff vs. db/schema/" and printed "No drift — preflight matches
+  db/schema/", output no version of `migrate preflight --against` ever wrote: preflight
+  replays the pending migrations against a parallel database and rolls back. The
+  example now shows the command's real output, and the comparison table and tagline
+  say "replayed". `tests/unit/docs/test_doc_dry_run_narrative.py` read only `docs/`;
+  it now reads the four root documents too, which is where all six sites were.
+- The README states the platform seam and its consumers (fraisier, fraiseql-semis);
+  CLAUDE.md's parsing section is one paragraph per module and its guard, with the live
+  reader, the change union and the seam added; the package's PyPI description and
+  keywords no longer advertise the coordination commands that moved to the pgGit
+  plugin in 1.16.
 - `seed convert --batch` is its own function; `too_many_statements` has no entry
   left in `tests/budgets.json`.
 
