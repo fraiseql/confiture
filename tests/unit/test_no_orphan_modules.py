@@ -24,7 +24,8 @@ from pathlib import Path
 import confiture
 
 PACKAGE = Path(confiture.__file__).resolve().parent
-REPO_ROOT = PACKAGE.parents[1]
+#: From this file, not from the package: the release gate imports an installed wheel.
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 EXPORTED_ROOTS = frozenset(
     {"confiture.cli.main", "confiture", "confiture.platform", "confiture.testing.pytest_plugin"}
@@ -155,6 +156,16 @@ def test_exemptions_state_a_reason_and_name_a_module() -> None:
 def test_nothing_is_dead() -> None:
     orphans = sorted(set(MODULES) - _reach(set(EXPORTED_ROOTS)) - set(EXPORTED_EXEMPT))
     assert orphans == [], "reached by no entry point:\n  " + "\n  ".join(orphans)
+
+
+def test_the_database_suites_are_read() -> None:
+    """The called roots are real: a guard reading no suite passes on nothing.
+
+    The release gate tests the installed wheel, where ``confiture`` lives under
+    ``site-packages`` — so the repository is found from this file, never from the
+    package, or ``tests/integration`` is looked for next to ``site-packages``.
+    """
+    assert "confiture.platform" in _database_suites()
 
 
 def test_nothing_is_offered_and_never_used() -> None:
