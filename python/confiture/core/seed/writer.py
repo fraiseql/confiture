@@ -31,7 +31,7 @@ from typing import Literal
 
 from pglast.stream import maybe_double_quote_name
 
-from confiture.core.model_facts import table_ref, writable_columns
+from confiture.core.model_facts import NotInModelError, table_ref, writable_columns
 from confiture.core.schema_model import Column, ObjectRef, SchemaModel, Table
 from confiture.core.seed.copy_formatter import copy_escape
 from confiture.exceptions import SeedError
@@ -161,11 +161,17 @@ def _prepared(
     columns: Sequence[str],
     rows: Iterable[Mapping[str, object]],
 ) -> tuple[ObjectRef, str, list[list[str | None]]]:
-    """The table, its header column list and the rows as input text — or a SeedError."""
+    """The table, its header column list and the rows as input text — or a SeedError.
+
+    A table the model lacks is refused as everything else a writer refuses is, so
+    a writer raises one class; the lookup that failed is the error's cause.
+    """
     try:
         ref = table_ref(model, table)
-    except KeyError as exc:
-        raise SeedError(f"the model holds no table {table!r}") from exc
+    except NotInModelError as exc:
+        raise SeedError(
+            f"the model holds no table {table!r}", resolution_hint=exc.resolution_hint
+        ) from exc
     names = list(columns)
     found = _columns(model, ref, names)
     column_list = ", ".join(maybe_double_quote_name(column.folded) for column in found)
@@ -175,8 +181,15 @@ def _prepared(
 def _written(
     path: Path, text: str, ref: ObjectRef, columns: Sequence[str], rows: int, fmt: SeedFormat
 ) -> SeedFile:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8", newline="")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="")
+    except OSError as exc:
+        raise SeedError(
+            f"Cannot write the seed file {path}: {exc}",
+            seed_file=str(path),
+            resolution_hint="Write to a path whose directory can be created and written to.",
+        ) from exc
     return SeedFile(path=path, table=ref, columns=tuple(columns), rows=rows, format=fmt)
 
 
@@ -196,9 +209,11 @@ def write_copy_seed(
     ``bytes`` is ``bytea``. Nothing is written when anything is refused.
 
     Raises:
-        SeedError: a table or column the model does not hold, a column PostgreSQL
-            fills, a row missing a column or carrying another, a value the
-            column's type cannot take as given, a value holding a NUL.
+        SeedError: a table or column the model does not hold (a table's
+            :class:`NotInModelError` is its cause), a column PostgreSQL fills, a
+            row missing a column or carrying another, a value the column's type
+            cannot take as given, a value holding a NUL, a *path* that cannot be
+            written.
     """
     ref, header, texts = _prepared(model, table, columns, rows)
     lines = [f"COPY {header} FROM stdin;"]

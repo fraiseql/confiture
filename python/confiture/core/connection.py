@@ -3,7 +3,7 @@
 from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, cast, runtime_checkable
 
 import psycopg
 import yaml
@@ -29,13 +29,15 @@ def connect_url(url: str, **kwargs: Any) -> psycopg.Connection:
     return psycopg.connect(url, **kwargs)
 
 
+@runtime_checkable
 class Connection(Protocol):
     """What confiture calls on a connection a caller hands it; a psycopg 3 connection is one.
 
     A library entry point that takes a connection takes this rather than the
     driver's class, so its signature does not make the driver its caller's
     dependency. The transaction is the caller's: confiture neither commits nor
-    rolls back a connection it did not open.
+    rolls back a connection it did not open. ``isinstance`` answers whether an
+    object has the four methods, which is what the entry points check.
     """
 
     def cursor(self) -> Any:
@@ -62,15 +64,24 @@ def connection_for(database: str | Connection) -> Iterator[psycopg.Connection]:
     For a URL the connection is opened here and is this call's: committed when
     the block succeeds, rolled back when it raises, closed either way. A
     connection the caller passed is used as it is and its transaction left alone.
+
+    Raises:
+        ConfigurationError: ``CONFIG_006`` when the URL does not connect — refused,
+            unresolvable or not a connection string — the driver's error its cause.
+        TypeError: for a *database* that is neither a URL nor a :class:`Connection`.
     """
-    if not isinstance(database, str):
-        # The Protocol names what is called on it; psycopg's own class is what
-        # the readers below are written against, and a psycopg connection is
-        # what meets the Protocol.
-        yield cast("psycopg.Connection", database)
+    if isinstance(database, str):
+        with create_connection(database) as conn:
+            yield conn
         return
-    with psycopg.connect(database) as conn:
-        yield conn
+    if not isinstance(database, Connection):
+        raise TypeError(
+            "database must be a URL (str) or a connection meeting "
+            f"confiture.platform.Connection, not {type(database).__name__}"
+        )
+    # The Protocol names what is called on it; psycopg's own class is what the
+    # readers are written against, and a psycopg connection is what meets it.
+    yield cast("psycopg.Connection", database)
 
 
 def load_config(config_file: Path) -> dict[str, Any]:

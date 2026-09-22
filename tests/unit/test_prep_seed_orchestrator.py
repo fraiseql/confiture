@@ -325,28 +325,13 @@ class TestPrepSeedOrchestrator:
         with pytest.raises(ValueError, match=r"database_url.*required.*level"):
             orchestrator.run()
 
-    def test_report_includes_scanned_files(self) -> None:
+    def test_report_includes_scanned_files(self, tmp_path: Path) -> None:
         """Test that report includes list of scanned files."""
-        config = OrchestrationConfig(
-            max_level=1,
-            seeds_dir=Path("db/seeds/prep"),
-            schema_dir=Path("db/schema"),
-        )
-        orchestrator = PrepSeedOrchestrator(config)
+        seeds = tmp_path / "prep"
+        seeds.mkdir()
+        (seeds / "test.sql").write_text("-- nothing to seed\n")
+        config = OrchestrationConfig(max_level=1, seeds_dir=seeds, schema_dir=tmp_path)
 
-        with (
-            patch(
-                "confiture.core.seed.validation.prep_seed.orchestrator.Level1SeedValidator"
-            ) as mock_level1,
-            patch("confiture.core.seed.validation.prep_seed.orchestrator.Path.rglob") as mock_rglob,
-        ):
-            test_file = Path("db/seeds/prep/test.sql")
-            mock_rglob.return_value = [test_file]
+        report = PrepSeedOrchestrator(config).run()
 
-            l1 = MagicMock()
-            l1.validate_seed_file.return_value = []
-            mock_level1.return_value = l1
-
-            report = orchestrator.run()
-
-        assert "db/seeds/prep/test.sql" in report.scanned_files
+        assert str(seeds / "test.sql") in report.scanned_files

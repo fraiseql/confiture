@@ -57,17 +57,20 @@ validation levels.
 - a `str` is DDL text;
 - a `Path` is a file, or a directory read the way a bare `include_dirs` entry is:
   every `.sql` under it, sorted by path;
-- a list of paths is read in its order;
+- a list of paths is read in its order, each a `Path` or a `str` naming one;
 - `env="local"` (with `project_dir=`) reads exactly what `confiture build --env
   local --schema-only` builds.
 
 The model is order-aware: a later `ALTER TABLE` or `DROP` folds into what an
 earlier file created, as the build applies it. A statement PostgreSQL's parser
-rejects raises `SchemaError` with code `DIFFER_400`.
+rejects raises `SchemaError` with code `DIFFER_400`, a path that does not exist
+`SCHEMA_201`, and a file that is not UTF-8 text a `SchemaError` naming it.
 
 `introspect` reads a live database into the same model: tables, enum types,
 sequences, routines, views and triggers, in the schemas you name or every user
-schema. The same model from both sides is what lets a tool compare them.
+schema. `schemas="app"` is the one schema `app`, and a schema the database does
+not have adds nothing, so a misspelt name gives an empty model rather than an
+error. The same model from both sides is what lets a tool compare them.
 
 `SchemaModel.to_json()` writes the model with sorted keys, so one model is one
 text. `SchemaModel.from_json()` reads it back, and
@@ -87,10 +90,12 @@ same order on every run, whatever order its files declared it in. Two rules:
   names the tables on the cycle and not the ones merely downstream of it.
 
 `tables=[...]` orders a subset, and walks through the tables the subset depends
-on. A reference is resolved the way PostgreSQL resolved it wherever the model
-can tell. A written schema is that schema. A bare name is the default schema's
-table, or else the one schema that holds a table of that name, since a parse
-cannot see `SET search_path`.
+on; `tables="app.item"` is that one table. A reference is resolved the way
+PostgreSQL resolved it wherever the model can tell. A written schema is that
+schema. A bare name is the default schema's table, or else the one schema that
+holds a table of that name, since a parse cannot see `SET search_path`. A name
+the model does not hold raises `NotInModelError`, as it does from
+`writable_columns`, `column_facts` and `naming_hints`.
 
 ## What a writer may supply
 
@@ -105,7 +110,7 @@ serial is a `nextval` default in the catalog. That is the split between `id` and
 |-------|---------------|
 | `type_key`, `raw_sql_type` | the type's identity (`varchar(20)`) and its spelling (`VARCHAR(20)`) |
 | `not_null`, `default` | what PostgreSQL records |
-| `unique` | true when a PRIMARY KEY, UNIQUE constraint or unique index covers this column alone, wherever it was declared |
+| `unique` | true when a PRIMARY KEY, UNIQUE constraint or unique index covers this column alone, wherever it was declared; a partial unique index (one with `WHERE`) does not count, since it leaves the rows outside its predicate free to repeat |
 | `checks` | every CHECK expression that reads the column, written on it or at table level |
 | `enum_values` | the labels of the enum the column's type is, or `None` |
 | `foreign_key` | the table it references, resolved, and the column; a key naming no column references the primary key |
@@ -119,11 +124,13 @@ generator that fills `created_by` knows why, and supplies it.
 
 `write_copy_seed` and `write_insert_seed` take the same arguments: the table, the
 columns in the order to write them, and rows as mappings of every column to its
-value. They refuse at write time, and write nothing, when the table lacks a
-column, when PostgreSQL fills one, when a row misses a column or carries another,
-or when a value cannot be given as written. NOT NULL is not checked, because a
-trigger may fill a column and the model does not know what a trigger writes;
-`column_facts` tells you which columns are NOT NULL.
+value. They refuse at write time, and write nothing, when the model lacks the
+table or the table a column, when PostgreSQL fills one, when a row misses a
+column or carries another, or when a value cannot be given as written. Every
+refusal is a `SeedError`, a path that cannot be written included; for a table
+the model lacks, its cause is the `NotInModelError` the lookup raised. NOT NULL
+is not checked, because a trigger may fill a column and the model does not know
+what a trigger writes; `column_facts` tells you which columns are NOT NULL.
 
 Values: `None` is NULL; `True`/`False` are booleans; `bytes` is `bytea`; a
 `dict` or `list` is JSON for a `json`/`jsonb` column, and a `list` is an array
@@ -140,20 +147,29 @@ Which format:
   list leaves out.
 
 `apply_seeds(database, seeds)` applies a directory's top-level `.sql` files in
-name order, or a list of files in the given order. It runs one transaction with
-a savepoint per file: a failed file is undone and nothing before it. The first
-failure then raises `SeedError`, unless `continue_on_error=True` keeps going and
-reports the failed files. With a URL the run is all or nothing (unless
-`continue_on_error=True`); with a connection the transaction is yours. A
-`COPY … FROM stdin` block streams through the driver's COPY protocol. `profile=`
-takes a `SeedProfile`, whose `include` / `exclude` are `fnmatch` globs over the
-**bare file name**, not the path globs `include_dirs` uses.
+name order, or a list of files in the given order; a `str` is the path it
+spells. Every path is checked before the database is reached, so a misspelt one
+raises `SeedError` and applies nothing. It runs one transaction with a savepoint
+per file: a failed file is undone and nothing before it. The first failure, a
+file that is not UTF-8 text included, then raises `SeedError`, unless
+`continue_on_error=True` keeps going and reports the failed files. With a URL
+the run is all or nothing (unless `continue_on_error=True`), and a transaction
+that fails to commit, as one with a deferred constraint violated does, is a
+`SeedError` too; with a connection the transaction is yours. A `COPY … FROM
+stdin` block streams through the driver's COPY protocol. `profile=` takes a
+`SeedProfile`, whose `include` / `exclude` are `fnmatch` globs over the **bare
+file name**, not the path globs `include_dirs` uses.
 
 `validate_seeds(seeds_dir, schema_dir=…, max_level=3)` runs the prep-seed
 validator. Levels 1 to 3 read files and need no database. Levels 4 and 5 load
 the seeds and run the resolvers against `database_url=`, in a transaction they
 roll back, parents first. Level 1 reads `INSERT` statements only, so a COPY file
-passes it unread (#366).
+passes it unread (#366). The report's violations are `PrepSeedViolation`s, each
+with a `PrepSeedPattern` and a `ViolationSeverity`. What the validator cannot run
+it raises rather than reports: a `seeds_dir` that is not a directory, or a seed
+file that is not UTF-8 text, is a `SeedError`; a missing `schema_dir`, when a
+level that reads it runs, is a `SchemaError`; a `max_level` outside 1 to 5 is a
+`ConfigurationError`; and 4 or 5 without `database_url=` is a `ValueError`.
 
 ## Ids
 
@@ -169,13 +185,41 @@ registry does not list.
 
 ## What changed between two schemas
 
-`diff(old, new)` takes two sources, each anything `parse_schema` takes. It
-returns a `SchemaDiff`: `changes`, each one variant of the closed `SchemaChange`
-union, and `warnings`, the duplicate definitions the comparison resolved
-(`DIFFER_402`). It compares DDL, not two models, because views, routines and
-triggers are compared as the statements that create them, and the model does not
-hold those. `tier_of(change)` gives a change's `RiskTier`, the taxonomy
-`migrate preflight` reports, or `None` where no tier applies.
+`diff(old, new)` takes two sources, each anything `parse_schema` takes: a side
+given as `None` is the build of `env=` from `project_dir=`, so
+`diff(Path("snapshot.sql"), None, env="local")` is what changed from a snapshot
+to the current tree. Exactly one side is `None` when `env=` is given, and
+neither is when it is not; anything else is a `ValueError`. It returns a
+`SchemaDiff`: `changes`, each one variant of the closed `SchemaChange` union,
+and `warnings`, the duplicate definitions the comparison resolved (`DIFFER_402`),
+each a `BuildWarning`. It compares DDL, not two models, because views, routines
+and triggers are compared as the statements that create them, and the model does
+not hold those; the variants that carry one hold it as a `DDLObject`.
+`tier_of(change)` gives a change's `RiskTier`, the taxonomy `migrate preflight`
+reports, or `None` where no tier applies.
+
+## Errors
+
+What a call refuses it raises as confiture's own error: a `ConfiturError` with a
+code and a hint, naming what it refused, with the driver's or the codec's
+exception as its cause where there was one. Only two are Python's own, for a
+mistake in the call itself rather than in what it was pointed at.
+
+| Raised | When |
+|--------|------|
+| `SchemaError` | DDL PostgreSQL's parser rejects (`DIFFER_400`), a schema path that does not exist (`SCHEMA_201`), a schema file that is not UTF-8 text |
+| `NotInModelError` | a table or column the model does not hold; a `SchemaError` and a `KeyError` both, so `except KeyError` catches it too |
+| `DependencyCycle` | tables whose foreign keys form a cycle (`SCHEMA_202`) |
+| `SeedError` | anything a seed writer refuses, a seed path that does not exist, a seed file that fails or cannot be read, a seed transaction that fails to commit |
+| `ConfigurationError` | a URL that does not connect (`CONFIG_006`, the driver's error as its cause), a `max_level` outside 1 to 5 |
+| `TypeError` | an argument of the wrong type: a `database` that is neither a URL nor a `Connection`, a `tier_of` argument that is not a change |
+| `ValueError` | arguments that cannot run together: `parse_schema` given both a source and `env=` or neither, `diff`'s sides and `env=`, `validate_seeds` levels 4 and 5 without `database_url=` |
+
+Where names are expected, a bare `str` is one name: `introspect(url,
+schemas="app")`, `dependency_order(model, tables="app.item")`. Where a path is
+expected, a `str` is the path it spells: `apply_seeds(url, "db/seeds")`, or a
+`str` in a list of paths. A bare `str` given to `parse_schema` or as a side of
+`diff` is DDL text, as it always is there.
 
 ## Where existing code fits
 

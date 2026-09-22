@@ -25,10 +25,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, ClassVar, get_args
+from typing import Any, ClassVar, get_args
 
 from confiture.core.ddl_clauses import column_body, column_type
-from confiture.core.ddl_objects import OBJECT_KEYWORD
+from confiture.core.ddl_objects import OBJECT_KEYWORD, DDLObject
 from confiture.core.schema_model import (
     Column,
     Constraint,
@@ -40,9 +40,6 @@ from confiture.core.schema_model import (
 )
 from confiture.models.schema import WireChange
 from confiture.models.warnings import BuildWarning
-
-if TYPE_CHECKING:
-    from confiture.core.ddl_objects import DDLObject
 
 __all__ = [
     "KINDS",

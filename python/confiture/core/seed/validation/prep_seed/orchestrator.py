@@ -42,7 +42,24 @@ from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedViolation,
     ViolationSeverity,
 )
-from confiture.exceptions import SchemaError
+from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError, SeedError
+
+#: The validation levels there are.
+LEVELS = range(1, 6)
+
+#: The first level that reads the schema directory.
+FIRST_SCHEMA_LEVEL = 2
+
+
+def _read(path: Path, error: type[ConfiturError]) -> str:
+    """*path*'s UTF-8 text, or *error* naming it: a file validation cannot read did not pass."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise error(
+            f"Cannot read {path}: {exc}",
+            resolution_hint="Validation reads every file it checks as UTF-8 text.",
+        ) from exc
 
 
 @dataclass
@@ -126,9 +143,17 @@ class PrepSeedOrchestrator:
             PrepSeedReport with accumulated violations from all levels
 
         Raises:
+            ConfigurationError: a max_level outside 1-5.
             ValueError: If database_url required for max_level but not provided
+            SeedError: a seed file level 1 cannot read as UTF-8 text.
+            SchemaError: a resolver file level 3 cannot read as UTF-8 text.
         """
-        # Validate prerequisites
+        if self.config.max_level not in LEVELS:
+            raise ConfigurationError(
+                f"max_level {self.config.max_level} is not a validation level: "
+                f"levels run {LEVELS.start} to {LEVELS.stop - 1}",
+                resolution_hint="Pass max_level=3 for the static levels, 5 for all of them.",
+            )
         if self.config.max_level >= 4 and not self.config.database_url:
             msg = "database_url required for levels 4-5"
             raise ValueError(msg)
@@ -185,13 +210,8 @@ class PrepSeedOrchestrator:
         sql_files = list(self.config.seeds_dir.rglob("*.sql"))
 
         for file_path in sql_files:
-            try:
-                content = file_path.read_text()
-                file_violations = validator.validate_seed_file(content, str(file_path))
-                violations.extend(file_violations)
-            except OSError:
-                # Skip files that can't be read
-                pass
+            content = _read(file_path, SeedError)
+            violations.extend(validator.validate_seed_file(content, str(file_path)))
 
         return violations
 
@@ -247,13 +267,8 @@ class PrepSeedOrchestrator:
         func_files = list(self.config.schema_dir.rglob("fn_resolve*.sql"))
 
         for file_path in func_files:
-            try:
-                content = file_path.read_text()
-                func_name = file_path.stem
-                file_violations = validator.validate_function(func_name, content)
-                violations.extend(file_violations)
-            except OSError:
-                pass
+            content = _read(file_path, SchemaError)
+            violations.extend(validator.validate_function(file_path.stem, content))
 
         return violations
 
@@ -613,11 +628,30 @@ def validate_seeds(
 
     Levels 1-3 read files and need no database; 4 and 5 load the seeds and run
     the resolvers against *database_url*, in a transaction they roll back.
-    Nothing is printed: the report is the answer.
+    Nothing is printed: the report is the answer, and a file the run could not
+    read is an error rather than a file that passed.
 
     Raises:
+        SeedError: ``SEED_001`` for a *seeds_dir* that is not a directory, or a
+            seed file that cannot be read as UTF-8 text.
+        SchemaError: ``SCHEMA_201`` for a *schema_dir* that is not a directory when
+            a level that reads it runs (2 and up), ``SCHEMA_001`` for a resolver
+            file that cannot be read as UTF-8 text.
+        ConfigurationError: ``CONFIG_001`` for a *max_level* outside 1-5.
         ValueError: *max_level* of 4 or 5 without a *database_url*.
     """
+    if not seeds_dir.is_dir():
+        raise SeedError(
+            f"Seeds directory not found: {seeds_dir}",
+            seed_file=str(seeds_dir),
+            resolution_hint="Pass the directory the seed files are in, as it is on disk.",
+        )
+    if max_level >= FIRST_SCHEMA_LEVEL and not schema_dir.is_dir():
+        raise SchemaError(
+            f"Schema directory not found: {schema_dir}",
+            error_code="SCHEMA_201",
+            resolution_hint="Pass the directory the schema's DDL is in, as it is on disk.",
+        )
     config = OrchestrationConfig(
         max_level=max_level,
         seeds_dir=seeds_dir,

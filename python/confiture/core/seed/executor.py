@@ -20,6 +20,23 @@ from confiture.core.sql_lexer import copy_blocks, strip_comments, transaction_st
 from confiture.exceptions import SeedError
 
 
+def read_seed(seed_file: Path) -> str:
+    """*seed_file*'s text, or a SeedError naming the file.
+
+    Bytes, decoded: a text-mode read turns a carriage return inside a string
+    literal into a newline, and a seed file is data.
+    """
+    try:
+        return seed_file.read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise SeedError(
+            f"Failed to read seed file {seed_file}: {e}",
+            seed_file=str(seed_file),
+            sql_error=e,
+            resolution_hint="A seed file is a readable file of UTF-8 text.",
+        ) from e
+
+
 class SeedExecutor:
     """Executes seed files within savepoints.
 
@@ -51,18 +68,7 @@ class SeedExecutor:
         Raises:
             SeedError: If seed file is invalid or execution fails
         """
-        # Read seed file
-        try:
-            # Bytes, decoded: a text-mode read turns a carriage return inside a
-            # string literal into a newline, and a seed file is data.
-            sql_content = seed_file.read_bytes().decode("utf-8")
-        except (OSError, UnicodeDecodeError) as e:
-            raise SeedError(
-                f"Failed to read seed file: {seed_file}",
-                seed_file=str(seed_file),
-                sql_error=e,
-            ) from e
-        self.execute_sql(sql_content, savepoint_name, source=seed_file)
+        self.execute_sql(read_seed(seed_file), savepoint_name, source=seed_file)
 
     def execute_sql(self, sql_content: str, savepoint_name: str, *, source: Path) -> None:
         """Execute already-read seed SQL (possibly converted) inside a savepoint.

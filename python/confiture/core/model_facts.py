@@ -31,7 +31,22 @@ from confiture.core.schema_model import (
     Table,
     ref_for,
 )
+from confiture.exceptions import SchemaError
 from confiture.models.introspection import TableHints
+
+
+class NotInModelError(SchemaError, KeyError):
+    """A table or column the model does not hold, named as it was asked for.
+
+    A :class:`~confiture.exceptions.SchemaError`, so ``except ConfiturError``
+    sees it with a code and a hint, and a ``KeyError``, because a lookup by name
+    that finds nothing is one in Python and ``except KeyError`` is how a caller
+    says so.
+    """
+
+    def _render_message(self) -> str:
+        # ``KeyError.__str__`` is the repr of its argument; the message is prose.
+        return self.message
 
 
 def resolve(refs: Iterable[ObjectRef], written: str) -> ObjectRef | None:
@@ -50,11 +65,17 @@ def table_ref(model: SchemaModel, table: ObjectRef | str) -> ObjectRef:
     """*table*'s reference in *model*: a reference it holds, or a name resolved as DDL's is.
 
     Raises:
-        KeyError: when *model* holds no such table.
+        NotInModelError: when *model* holds no such table.
     """
     found = table if isinstance(table, ObjectRef) else resolve(model.tables, table)
     if found is None or found not in model.tables:
-        raise KeyError(f"no table {table!r} in the model")
+        raise NotInModelError(
+            f"no table {table!r} in the model",
+            resolution_hint=(
+                "Name a table the model holds: schema.name, or a bare name the default "
+                "schema holds or exactly one schema does."
+            ),
+        )
     return found
 
 
@@ -74,7 +95,8 @@ def writable_columns(model: SchemaModel, table: ObjectRef | str) -> list[Column]
     PostgreSQL generate ``pk_language``.
 
     Raises:
-        KeyError: when *model* holds no such table.
+        NotInModelError: when *model* holds no such table — a ``SchemaError`` and a
+            ``KeyError``.
     """
     columns = model.tables[table_ref(model, table)].columns
     return [column for column in columns if not _filled_by_postgresql(column)]
@@ -83,7 +105,10 @@ def writable_columns(model: SchemaModel, table: ObjectRef | str) -> list[Column]
 def _column(table: Table, column: str) -> Column:
     found = table.column(column) or next((c for c in table.columns if c.name == column), None)
     if found is None:
-        raise KeyError(f"no column {column!r} in {table.qualified}")
+        raise NotInModelError(
+            f"no column {column!r} in {table.qualified}",
+            resolution_hint="Name a column the table declares, as written or as folded.",
+        )
     return found
 
 
@@ -133,7 +158,8 @@ def column_facts(model: SchemaModel, table: ObjectRef | str, column: str) -> Col
     there; a key that names no column references the target's primary key.
 
     Raises:
-        KeyError: when *model* holds no such table, or the table no such column.
+        NotInModelError: when *model* holds no such table, or the table no such
+            column — a ``SchemaError`` and a ``KeyError``.
     """
     found = model.tables[table_ref(model, table)]
     col = _column(found, column)
@@ -163,7 +189,8 @@ def naming_hints(model: SchemaModel, table: ObjectRef | str) -> TableHints:
     — both ``None`` where the table shows neither.
 
     Raises:
-        KeyError: when *model* holds no such table.
+        NotInModelError: when *model* holds no such table — a ``SchemaError`` and a
+            ``KeyError``.
     """
     columns = model.tables[table_ref(model, table)].columns
     return TableHints.of([c.folded for c in columns if c.primary_key], {c.folded for c in columns})
