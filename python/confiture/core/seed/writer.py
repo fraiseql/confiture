@@ -194,7 +194,7 @@ def _written(
 
 
 def write_copy_seed(
-    path: Path,
+    path: Path | str,
     table: ObjectRef | str,
     columns: Sequence[str],
     rows: Iterable[Mapping[str, object]],
@@ -219,7 +219,7 @@ def write_copy_seed(
     lines = [f"COPY {header} FROM stdin;"]
     lines += ["\t".join("\\N" if t is None else copy_escape(t) for t in row) for row in texts]
     lines.append("\\.")
-    return _written(path, "\n".join(lines) + "\n", ref, columns, len(texts), "copy")
+    return _written(Path(path), "\n".join(lines) + "\n", ref, columns, len(texts), "copy")
 
 
 def _literal(text: str | None) -> str:
@@ -232,7 +232,7 @@ def _literal(text: str | None) -> str:
 
 
 def write_insert_seed(
-    path: Path,
+    path: Path | str,
     table: ObjectRef | str,
     columns: Sequence[str],
     rows: Iterable[Mapping[str, object]],
@@ -250,4 +250,4 @@ def write_insert_seed(
     ref, header, texts = _prepared(model, table, columns, rows)
     values = ",\n".join("    (" + ", ".join(_literal(t) for t in row) + ")" for row in texts)
     text = f"INSERT INTO {header} VALUES\n{values};\n" if texts else ""
-    return _written(path, text, ref, columns, len(texts), "insert")
+    return _written(Path(path), text, ref, columns, len(texts), "insert")

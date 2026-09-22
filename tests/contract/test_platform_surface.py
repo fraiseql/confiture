@@ -139,11 +139,11 @@ SIGNATURES: dict[str, str] = {
     ),
     "naming_hints": "(model: 'SchemaModel', table: 'ObjectRef | str') -> 'TableHints'",
     "write_copy_seed": (
-        "(path: 'Path', table: 'ObjectRef | str', columns: 'Sequence[str]', "
+        "(path: 'Path | str', table: 'ObjectRef | str', columns: 'Sequence[str]', "
         "rows: 'Iterable[Mapping[str, object]]', *, model: 'SchemaModel') -> 'SeedFile'"
     ),
     "write_insert_seed": (
-        "(path: 'Path', table: 'ObjectRef | str', columns: 'Sequence[str]', "
+        "(path: 'Path | str', table: 'ObjectRef | str', columns: 'Sequence[str]', "
         "rows: 'Iterable[Mapping[str, object]]', *, model: 'SchemaModel') -> 'SeedFile'"
     ),
     "apply_seeds": (
@@ -152,7 +152,7 @@ SIGNATURES: dict[str, str] = {
         "-> 'ApplyResult'"
     ),
     "validate_seeds": (
-        "(seeds_dir: 'Path', *, schema_dir: 'Path', max_level: 'int' = 3, "
+        "(seeds_dir: 'Path | str', *, schema_dir: 'Path | str', max_level: 'int' = 3, "
         "database_url: 'str | None' = None, prep_seed_schema: 'str' = 'prep_seed', "
         "catalog_schema: 'str' = 'catalog') -> 'PrepSeedReport'"
     ),

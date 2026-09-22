@@ -69,7 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `database` that is neither a URL nor a `Connection`, or a `tier_of` argument that is
   not a change. `validate_seeds` refuses a missing `seeds_dir` or `schema_dir`, a
   `max_level` outside 1–5, and a file it cannot read. A bare `str` is one name
-  (`schemas=`, `tables=`) or one path (`apply_seeds`, path lists).
+  (`schemas=`, `tables=`) or one path (`apply_seeds`, `write_*_seed`, `validate_seeds`,
+  path lists).
 - `diff` takes keyword-only `env` / `project_dir` — a side passed as `None` is that
   environment's build — as `parse_schema` does. New exports: `NotInModelError`,
   `ConfiturError`, `ConfigurationError`, `SeedProfile`, `BuildWarning`, `DDLObject`,

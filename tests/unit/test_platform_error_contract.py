@@ -209,3 +209,21 @@ def test_a_schema_file_that_is_not_utf8_is_a_schema_error_naming_it(tmp_path: Pa
 def test_tier_of_something_that_is_not_a_change_is_a_type_error() -> None:
     with pytest.raises(TypeError, match=r"SchemaChange.*str"):
         platform.tier_of("x")  # type: ignore[arg-type]
+
+
+def test_a_str_path_is_a_path_everywhere_the_seam_takes_one(tmp_path: Path) -> None:
+    """``write_*_seed(path=)`` and ``validate_seeds(seeds_dir=, schema_dir=)`` take a
+    ``str`` as the path it spells, as ``apply_seeds`` and the schema sources do."""
+    rows = [{"id": 1}]
+    written = [
+        write(str(tmp_path / name), "app_parent", ["id"], rows, model=MODEL)
+        for write, name in (
+            (platform.write_copy_seed, "copy.sql"),
+            (platform.write_insert_seed, "insert.sql"),
+        )
+    ]
+    seeds = tmp_path / "seeds"
+    seeds.mkdir()
+    report = platform.validate_seeds(str(seeds), schema_dir=str(tmp_path), max_level=1)
+    assert [f.path for f in written] == [tmp_path / "copy.sql", tmp_path / "insert.sql"]
+    assert report.violations == []

@@ -616,9 +616,9 @@ class PrepSeedOrchestrator:
 
 
 def validate_seeds(
-    seeds_dir: Path,
+    seeds_dir: Path | str,
     *,
-    schema_dir: Path,
+    schema_dir: Path | str,
     max_level: int = 3,
     database_url: str | None = None,
     prep_seed_schema: str = "prep_seed",
@@ -640,6 +640,7 @@ def validate_seeds(
         ConfigurationError: ``CONFIG_001`` for a *max_level* outside 1-5.
         ValueError: *max_level* of 4 or 5 without a *database_url*.
     """
+    seeds_dir, schema_dir = Path(seeds_dir), Path(schema_dir)
     if not seeds_dir.is_dir():
         raise SeedError(
             f"Seeds directory not found: {seeds_dir}",

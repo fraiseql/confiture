@@ -618,7 +618,7 @@ The convention a table's names show: its first `pk_*` key column, a column `id`.
 
 ```python
 def write_copy_seed(
-    path: Path,
+    path: Path | str,
     table: ObjectRef | str,
     columns: Sequence[str],
     rows: Iterable[Mapping[str, object]],
@@ -642,7 +642,7 @@ them to its value; `None` is NULL. A `dict` or `list` is JSON for a
 
 ```python
 def write_insert_seed(
-    path: Path,
+    path: Path | str,
     table: ObjectRef | str,
     columns: Sequence[str],
     rows: Iterable[Mapping[str, object]],
@@ -770,9 +770,9 @@ Dictionary with all fields suitable for JSON output.
 
 ```python
 def validate_seeds(
-    seeds_dir: Path,
+    seeds_dir: Path | str,
     *,
-    schema_dir: Path,
+    schema_dir: Path | str,
     max_level: int = 3,
     database_url: str | None = None,
     prep_seed_schema: str = 'prep_seed',
