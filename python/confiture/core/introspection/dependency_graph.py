@@ -183,16 +183,19 @@ def dependency_order(
     ``(schema, name)``. A table that references itself is ordered like any other.
     *tables* orders just those — a reference or a name, resolved as DDL's is — and
     reads through the tables they depend on, so a cycle elsewhere does not stop it.
+    A bare ``str`` is one name.
 
     Raises:
         DependencyCycle: tables whose foreign keys form a cycle, named.
-        KeyError: a table in *tables* the model does not hold.
+        NotInModelError: a table in *tables* the model does not hold — a
+            ``SchemaError`` and a ``KeyError``.
     """
     refs = {(ref.schema, ref.name): ref for ref in model.tables}
     graph = DependencyGraph.from_model(model)
     wanted = None
     if tables is not None:
-        wanted = {(ref.schema, ref.name) for ref in (table_ref(model, t) for t in tables)}
+        named = [tables] if isinstance(tables, str) else tables
+        wanted = {(ref.schema, ref.name) for ref in (table_ref(model, t) for t in named)}
         graph = graph.restricted_to(wanted)
     order = graph.topological_sort()
     if order.cycles:

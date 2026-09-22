@@ -57,6 +57,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ⚠️ **`confiture.platform` refuses in its own errors, and never answers a typo with
+  success.** `apply_seeds` on a missing path returned `total=0`; `validate_seeds` on a
+  missing folder or `max_level=0` reported clean; `introspect(url, schemas="app")`
+  iterated the string and returned an empty model. Now: `SeedError` for a missing
+  seeds path, an unreadable seed file, an unwritable seed path or a seed transaction
+  that fails to commit; `SchemaError` for a schema file that is not UTF-8;
+  `ConfigurationError` `CONFIG_006` for a URL that does not connect (psycopg's error
+  is the cause); `NotInModelError` — a `SchemaError` *and* a `KeyError`, so a caller
+  catching `KeyError` still does — for an unknown table or column; `TypeError` for a
+  `database` that is neither a URL nor a `Connection`, or a `tier_of` argument that is
+  not a change. `validate_seeds` refuses a missing `seeds_dir` or `schema_dir`, a
+  `max_level` outside 1–5, and a file it cannot read. A bare `str` is one name
+  (`schemas=`, `tables=`) or one path (`apply_seeds`, `write_*_seed`, `validate_seeds`,
+  path lists).
+- `diff` takes keyword-only `env` / `project_dir` — a side passed as `None` is that
+  environment's build — as `parse_schema` does. New exports: `NotInModelError`,
+  `ConfiturError`, `ConfigurationError`, `SeedProfile`, `BuildWarning`, `DDLObject`,
+  `PrepSeedViolation`, `PrepSeedPattern`, `ViolationSeverity`; `typing.get_type_hints`
+  resolves on every export. The guide gains an Errors section.
 - **Nothing in the package or its tests names the plan that produced it.**
   `tests/unit/test_no_archaeology.py` already refused a numbered phase, a review id
   from four families and a TODO marker; it now also refuses a hyphenated phase, a

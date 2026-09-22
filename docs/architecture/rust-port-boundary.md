@@ -81,12 +81,12 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-23,027 lines, 33% of `core/`.
+23,061 lines, 33% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `_pglast_enums.py` | 138 | DDL transform |
-| `change_set/` | 1,250 | DDL transform |
+| `change_set/` | 1,257 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 564 | DDL transform |
 | `ddl_clauses.py` | 105 | DDL transform |
@@ -101,18 +101,18 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_body_normalizer.py` | 69 | DDL transform |
 | `function_signature_checker.py` | 187 | DDL transform |
 | `idempotency/` | 2,726 | DDL transform |
-| `introspection/dependency_graph.py` | 200 | DDL transform |
+| `introspection/dependency_graph.py` | 203 | DDL transform |
 | `linting/` | 7,872 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
 | `migration_grant_extractor.py` | 525 | DDL transform |
-| `model_facts.py` | 169 | DDL transform |
+| `model_facts.py` | 196 | DDL transform |
 | `parser_info.py` | 56 | DDL transform |
 | `path_globs.py` | 158 | DDL transform |
 | `plpgsql_parse.py` | 400 | DDL transform |
 | `replica/` | 740 | DDL transform |
 | `risk_tier.py` | 76 | DDL transform |
-| `schema_change.py` | 775 | DDL transform |
+| `schema_change.py` | 772 | DDL transform |
 | `schema_identity.py` | 23 | DDL transform |
 | `schema_model.py` | 691 | DDL transform |
 | `sql_lexer.py` | 617 | DDL transform |
@@ -122,7 +122,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-39,779 lines, 57% of `core/`.
+39,919 lines, 57% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -134,7 +134,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `bootstrap.py` | 351 | database orchestration |
 | `builder.py` | 1,016 | database orchestration |
 | `checksum.py` | 432 | database orchestration |
-| `connection.py` | 244 | database orchestration |
+| `connection.py` | 255 | database orchestration |
 | `cte_debugger.py` | 198 | database orchestration |
 | `dependent_objects.py` | 162 | database orchestration |
 | `desired_state.py` | 72 | database orchestration |
@@ -178,9 +178,9 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_exporter.py` | 155 | neutral |
 | `schema_facts.py` | 132 | database orchestration |
 | `schema_snapshot.py` | 104 | database orchestration |
-| `schema_sources.py` | 144 | database orchestration |
+| `schema_sources.py` | 186 | database orchestration |
 | `schema_to_schema.py` | 602 | database orchestration |
-| `seed/` | 4,830 | database orchestration |
+| `seed/` | 4,917 | database orchestration |
 | `sql_path.py` | 135 | database orchestration |
 | `sql_utils.py` | 74 | neutral |
 | `ssh_tunnel.py` | 138 | database orchestration |

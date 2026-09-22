@@ -20,6 +20,7 @@ import enum
 import inspect
 import re
 import sys
+import types
 import typing
 from pathlib import Path
 from typing import Any
@@ -69,22 +70,31 @@ SECTIONS: list[tuple[str, list[str]]] = [
             "write_insert_seed",
             "SeedFile",
             "apply_seeds",
+            "SeedProfile",
             "ApplyResult",
             "validate_seeds",
             "PrepSeedReport",
+            "PrepSeedViolation",
+            "PrepSeedPattern",
+            "ViolationSeverity",
         ],
     ),
     (
         "What changed",
         [
             "SchemaDiff",
+            "BuildWarning",
             "SchemaChange",
             "tier_of",
             "RiskTier",
             *(variant.__name__ for variant in typing.get_args(platform.SchemaChange)),
+            "DDLObject",
         ],
     ),
-    ("Errors", ["SchemaError", "SeedError"]),
+    (
+        "Errors",
+        ["ConfiturError", "SchemaError", "NotInModelError", "SeedError", "ConfigurationError"],
+    ),
 ]
 
 _ROLE = re.compile(r":(?:func|class|data|meth|attr|mod|exc):`~?([^`]+)`")
@@ -177,6 +187,8 @@ def _methods(cls: type) -> list[str]:
 
 def _type_name(tp: Any) -> str:
     args = typing.get_args(tp)
+    if isinstance(tp, types.UnionType):
+        return " | ".join(_type_name(arg) for arg in args)
     name = getattr(typing.get_origin(tp) or tp, "__name__", str(tp))
     return f"{name}[{', '.join(_type_name(arg) for arg in args)}]" if args else name
 

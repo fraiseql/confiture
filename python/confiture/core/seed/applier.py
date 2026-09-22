@@ -11,20 +11,17 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import psycopg
 from rich.console import Console
 
+from confiture.config.environment import SeedProfile
 from confiture.core.connection import Connection, connection_for
 from confiture.core.progress import ProgressManager
 from confiture.core.psql_applier import apply_sql_via_psql
-from confiture.core.seed.executor import SeedExecutor
+from confiture.core.seed.executor import SeedExecutor, read_seed
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
-from confiture.exceptions import ConfiturError, SchemaError, base_message
-
-if TYPE_CHECKING:
-    from confiture.config.environment import SeedProfile
+from confiture.exceptions import ConfiturError, SchemaError, SeedError, base_message
 
 
 def apply_profile_filter(files: list[Path], profile: SeedProfile) -> list[Path]:
@@ -247,7 +244,7 @@ class SeedApplier:
             try:
                 self._apply_seed_file(executor, seed_file, f"sp_seed_{i:03d}", transaction_mode)
                 result.succeeded += 1
-            except (OSError, UnicodeDecodeError, psycopg.Error, ConfiturError) as e:
+            except (psycopg.Error, ConfiturError) as e:
                 if transaction_mode == "transaction":
                     self.connection.rollback()
                 result.failed += 1
@@ -272,9 +269,7 @@ class SeedApplier:
         """Run one seed file (as COPY when large enough); commit in transaction mode."""
         assert self.connection is not None
         self.console.print(f"[cyan]→ {seed_file.name}[/cyan]", end=" ")
-        # Bytes, decoded: a text-mode read turns a carriage return inside a
-        # string literal into a newline, and a seed file is data.
-        sql_content = seed_file.read_bytes().decode("utf-8")
+        sql_content = read_seed(seed_file)
         if self.copy_format and count_insert_rows(sql_content) >= self.copy_threshold:
             sql_content = InsertToCopyConverter().convert(sql_content)
             self.console.print("[dim](COPY)[/dim]", end=" ")
@@ -292,9 +287,27 @@ class SeedApplier:
                 self.console.print(f"  - {failed_file}")
 
 
+def _existing(path: Path) -> Path:
+    if not path.exists():
+        raise SeedError(
+            f"Seed path not found: {path}",
+            seed_file=str(path),
+            resolution_hint="Pass a directory of .sql seed files, or the files, as they are on disk.",
+        )
+    return path
+
+
+def _seed_selection(seeds: Path | str | Sequence[Path | str]) -> tuple[Path, list[Path] | None]:
+    """The directory whose files are listed, or the files themselves — each one there."""
+    if isinstance(seeds, str | Path):
+        path = _existing(Path(seeds))
+        return (path, None) if path.is_dir() else (path.parent, [path])
+    return Path(), [_existing(Path(item)) for item in seeds]
+
+
 def apply_seeds(
     database: str | Connection,
-    seeds: Path | Sequence[Path],
+    seeds: Path | str | Sequence[Path | str],
     *,
     profile: SeedProfile | None = None,
     continue_on_error: bool = False,
@@ -302,9 +315,11 @@ def apply_seeds(
     """Apply seed files in order: one transaction, a savepoint per file.
 
     *seeds* is a directory — its top-level ``.sql`` files, sorted, filtered by
-    *profile*'s filename globs — or the files themselves, in the order given. A
-    file is a script as ``psql`` reads one: statements, and ``COPY … FROM stdin``
-    blocks streamed through the driver's COPY protocol.
+    *profile*'s filename globs — or the files themselves, in the order given; a
+    ``str`` is the path it spells. A file is a script as ``psql`` reads one:
+    statements, and ``COPY … FROM stdin`` blocks streamed through the driver's
+    COPY protocol. Every path is checked before the database is reached, so a
+    misspelt one applies nothing.
 
     The transaction: each file runs in a savepoint of its own
     (:class:`SeedExecutor`), so a failed file is undone and nothing before it.
@@ -317,15 +332,31 @@ def apply_seeds(
     changes an object's owner.
 
     Raises:
-        SeedError: the first file that failed, when *continue_on_error* is off.
+        SeedError: a seed path that does not exist, before anything is applied; the
+            first file that failed — its SQL, or a file that is not readable UTF-8
+            text — when *continue_on_error* is off; and, for a URL, a transaction
+            that fails to commit, as a deferred constraint does.
+        ConfigurationError: ``CONFIG_006`` when the URL does not connect.
+        TypeError: a *database* that is neither a URL nor a :class:`Connection`.
     """
-    files = [seeds] if isinstance(seeds, Path) and seeds.is_file() else None
-    if not isinstance(seeds, Path):
-        files = list(seeds)
-    seeds_dir = seeds if isinstance(seeds, Path) else Path()
-    with connection_for(database) as conn:
-        applier = SeedApplier(seeds_dir, connection=conn, console=Console(quiet=True), files=files)
-        return applier.apply_sequential(continue_on_error=continue_on_error, profile=profile)
+    seeds_dir, files = _seed_selection(seeds)
+    try:
+        with connection_for(database) as conn:
+            applier = SeedApplier(
+                seeds_dir, connection=conn, console=Console(quiet=True), files=files
+            )
+            return applier.apply_sequential(continue_on_error=continue_on_error, profile=profile)
+    except psycopg.Error as exc:
+        # Every statement's own failure is already a SeedError; what reaches here
+        # is the transaction's — a deferred constraint checked at commit.
+        raise SeedError(
+            f"The seeds' transaction failed: {exc}",
+            sql_error=exc,
+            resolution_hint=(
+                "A deferred constraint is checked when the transaction commits, after "
+                "every file ran: seed the rows it references in the same run."
+            ),
+        ) from exc
 
 
 _ROW_SEPARATOR = re.compile(r"\)\s*,\s*\(")

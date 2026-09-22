@@ -15,12 +15,29 @@ every field, and ``docs/guides/building-on-confiture.md`` is its guide.
 No signature names a parser or a driver type. A connection is a URL, which the
 call opens and closes, or anything meeting :class:`Connection` — a psycopg 3
 connection does — whose transaction stays the caller's.
+
+What a call refuses it raises as a :class:`ConfiturError` naming what it
+refused — :class:`SchemaError`, :class:`SeedError`, or a
+:class:`ConfigurationError` for a URL that does not connect — with the driver's
+or the codec's exception as its cause where there was one.
+:class:`NotInModelError` is a ``SchemaError`` and a ``KeyError`` both. Two
+errors are Python's own, for a mistake in the call itself: a ``TypeError`` for an
+argument of the wrong type, and the ``ValueError`` that :func:`parse_schema`,
+:func:`diff` and :func:`validate_seeds` raise for arguments that cannot be run
+together.
 """
 
+from confiture.config.environment import SeedProfile
 from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.connection import Connection
+from confiture.core.ddl_objects import DDLObject
 from confiture.core.introspection.dependency_graph import DependencyCycle, dependency_order
-from confiture.core.model_facts import column_facts, naming_hints, writable_columns
+from confiture.core.model_facts import (
+    NotInModelError,
+    column_facts,
+    naming_hints,
+    writable_columns,
+)
 from confiture.core.risk_tier import RiskTier
 from confiture.core.schema_change import (
     CheckConstraintAdded,
@@ -68,14 +85,21 @@ from confiture.core.schema_model import (
 )
 from confiture.core.schema_sources import SchemaSource, diff, introspect, parse_schema
 from confiture.core.seed.applier import ApplyResult, apply_seeds
-from confiture.core.seed.validation.prep_seed.models import PrepSeedReport
+from confiture.core.seed.validation.prep_seed.models import (
+    PrepSeedPattern,
+    PrepSeedReport,
+    PrepSeedViolation,
+    ViolationSeverity,
+)
 from confiture.core.seed.validation.prep_seed.orchestrator import validate_seeds
 from confiture.core.seed.writer import SeedFile, write_copy_seed, write_insert_seed
-from confiture.exceptions import SchemaError, SeedError
+from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError, SeedError
 from confiture.models.introspection import TableHints
+from confiture.models.warnings import BuildWarning
 
 __all__ = [
     "ApplyResult",
+    "BuildWarning",
     "CheckConstraintAdded",
     "CheckConstraintDropped",
     "Column",
@@ -87,8 +111,11 @@ __all__ = [
     "ColumnReference",
     "ColumnRenamed",
     "ColumnTypeChanged",
+    "ConfigurationError",
+    "ConfiturError",
     "Connection",
     "Constraint",
+    "DDLObject",
     "DependencyCycle",
     "EnumType",
     "EnumTypeAdded",
@@ -99,11 +126,14 @@ __all__ = [
     "Index",
     "IndexAdded",
     "IndexDropped",
+    "NotInModelError",
     "ObjectAdded",
     "ObjectDropped",
     "ObjectRef",
     "ObjectReplaced",
+    "PrepSeedPattern",
     "PrepSeedReport",
+    "PrepSeedViolation",
     "RiskTier",
     "Routine",
     "SchemaChange",
@@ -113,6 +143,7 @@ __all__ = [
     "SchemaSource",
     "SeedError",
     "SeedFile",
+    "SeedProfile",
     "Sequence",
     "SequenceAdded",
     "SequenceDropped",
@@ -125,6 +156,7 @@ __all__ = [
     "UniqueConstraintAdded",
     "UniqueConstraintDropped",
     "View",
+    "ViolationSeverity",
     "apply_seeds",
     "column_facts",
     "dependency_order",

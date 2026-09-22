@@ -31,8 +31,9 @@ from confiture.core.schema_model import SchemaModel
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.exceptions import SchemaError
 
-#: DDL text (a ``str``), one file or directory (a ``Path``), or several in order.
-SchemaSource = str | Path | Sequence[Path]
+#: DDL text (a ``str``), one file or directory (a ``Path``), or several in order —
+#: each a ``Path`` or a ``str`` spelling one.
+SchemaSource = str | Path | Sequence[Path | str]
 
 
 def _file_text(path: Path) -> str:
@@ -43,7 +44,17 @@ def _file_text(path: Path) -> str:
             resolution_hint="Pass DDL text as a str, and a file or directory as a Path.",
         )
     files = files_under(path) if path.is_dir() else [path]
-    return "\n".join(file.read_text(encoding="utf-8") for file in files)
+    return "\n".join(_read(file) for file in files)
+
+
+def _read(file: Path) -> str:
+    try:
+        return file.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SchemaError(
+            f"Cannot read schema file {file}: {exc}",
+            resolution_hint="A schema file is a readable file of UTF-8 text.",
+        ) from exc
 
 
 def schema_text(
@@ -56,12 +67,14 @@ def schema_text(
 
     A ``str`` is DDL text. A ``Path`` is a file, or a directory read the way a bare
     ``include_dirs`` entry is — every ``.sql`` under it, sorted by path. A sequence
-    of paths is read in its order. *env* reads the project's build instead: the
-    files it selects, seed files left out, in build order.
+    of paths is read in its order, a ``str`` in it being the path it spells. *env*
+    reads the project's build instead: the files it selects, seed files left out,
+    in build order.
 
     Raises:
         ValueError: unless exactly one of *source* and *env* is given.
-        SchemaError: ``SCHEMA_201`` for a path that does not exist.
+        SchemaError: ``SCHEMA_201`` for a path that does not exist, ``SCHEMA_001``
+            for a file that cannot be read as UTF-8 text.
     """
     if (source is None) == (env is None):
         raise ValueError("Give exactly one of a schema source or an environment.")
@@ -72,7 +85,7 @@ def schema_text(
     if isinstance(source, Path):
         return _file_text(source)
     assert source is not None
-    return "\n".join(_file_text(path) for path in source)
+    return "\n".join(_file_text(Path(path)) for path in source)
 
 
 def _model(sql: str) -> SchemaModel:
@@ -96,15 +109,16 @@ def parse_schema(
 
     A ``str`` is DDL text. A ``Path`` is a file, or a directory read the way a
     bare ``include_dirs`` entry is — every ``.sql`` under it, sorted by path. A
-    sequence of paths is read in its order. *env* reads the project's build
-    instead: the files ``confiture build --env <env> --schema-only`` selects, in
-    build order. ``COPY … FROM stdin`` data is blanked before parsing, so a tree
-    that seeds inline still reads.
+    sequence of paths is read in its order, a ``str`` in it being the path it
+    spells. *env* reads the project's build instead: the files ``confiture build
+    --env <env> --schema-only`` selects, in build order. ``COPY … FROM stdin``
+    data is blanked before parsing, so a tree that seeds inline still reads.
 
     Raises:
         ValueError: unless exactly one of *source* and *env* is given.
         SchemaError: ``DIFFER_400`` when PostgreSQL's parser rejects the DDL,
-            ``SCHEMA_201`` for a path that does not exist.
+            ``SCHEMA_201`` for a path that does not exist, ``SCHEMA_001`` for a
+            file that cannot be read as UTF-8 text.
     """
     return _model(schema_text(source, env=env, project_dir=project_dir))
 
@@ -116,24 +130,52 @@ def introspect(database: str | Connection, *, schemas: Sequence[str] | None = No
     ``live_catalog``, the one reader of a live catalog; an extension's own objects
     are left out, as they are when a tree is compared with a database. A URL is
     connected to and closed here; a connection is the caller's, transaction and all.
+    A bare ``str`` is one schema name. A schema the database does not have holds
+    nothing, so it adds nothing: ``schemas=["nope"]`` is an empty model, not an
+    error.
+
+    Raises:
+        ConfigurationError: ``CONFIG_006`` when the URL does not connect.
+        TypeError: a *database* that is neither a URL nor a :class:`Connection`.
     """
     with connection_for(database) as conn:
-        wanted = list(schemas) if schemas is not None else user_schemas(conn)
+        if schemas is None:
+            wanted = user_schemas(conn)
+        else:
+            wanted = [schemas] if isinstance(schemas, str) else list(schemas)
         return read(conn, schemas=wanted, routines=True, views=True, triggers=True)
 
 
-def diff(old: SchemaSource, new: SchemaSource) -> SchemaDiff:
+def diff(
+    old: SchemaSource | None,
+    new: SchemaSource | None,
+    *,
+    env: str | None = None,
+    project_dir: Path | None = None,
+) -> SchemaDiff:
     """What changed from the schema *old* declares to the one *new* declares.
+
+    Each side is anything :func:`parse_schema` takes: a source, or — given as
+    ``None`` — *env*'s build from *project_dir*, so ``diff(snapshot, None,
+    env="local")`` is what changed from a snapshot to the current tree.
 
     Every kind ``migrate diff`` reports, views, routines and triggers included, and
     the warnings it reports beside them — two definitions of one object, resolved
     the way the build resolves them (``DIFFER_402``).
 
     Raises:
+        ValueError: unless exactly one side is ``None`` when *env* is given, and
+            neither is when it is not.
         SchemaError: ``DIFFER_400`` when PostgreSQL's parser rejects either side,
-            ``SCHEMA_201`` for a path that does not exist.
+            ``SCHEMA_201`` for a path that does not exist, ``SCHEMA_001`` for a
+            file that cannot be read as UTF-8 text.
     """
-    old_sql, new_sql = schema_text(old), schema_text(new)
+    if env is not None and (old is None) == (new is None):
+        raise ValueError("Give exactly one side as None with an environment: the side it builds.")
+    old_sql, new_sql = (
+        schema_text(side, env=env if side is None else None, project_dir=project_dir)
+        for side in (old, new)
+    )
     try:
         return SchemaDiffer().compare(old_sql, new_sql)
     except pglast.parser.ParseError as exc:

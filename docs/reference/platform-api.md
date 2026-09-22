@@ -31,15 +31,15 @@ The model of the schema *source* declares — or *env*'s build, from *project_di
 
 A `str` is DDL text. A `Path` is a file, or a directory read the way a
 bare `include_dirs` entry is — every `.sql` under it, sorted by path. A
-sequence of paths is read in its order. *env* reads the project's build
-instead: the files `confiture build --env <env> --schema-only` selects, in
-build order. `COPY … FROM stdin` data is blanked before parsing, so a tree
-that seeds inline still reads.
+sequence of paths is read in its order, a `str` in it being the path it
+spells. *env* reads the project's build instead: the files `confiture build
+--env <env> --schema-only` selects, in build order. `COPY … FROM stdin`
+data is blanked before parsing, so a tree that seeds inline still reads.
 
 **Raises**
 
 - `ValueError`: unless exactly one of *source* and *env* is given.
-- `SchemaError`: `DIFFER_400` when PostgreSQL's parser rejects the DDL, `SCHEMA_201` for a path that does not exist.
+- `SchemaError`: `DIFFER_400` when PostgreSQL's parser rejects the DDL, `SCHEMA_201` for a path that does not exist, `SCHEMA_001` for a file that cannot be read as UTF-8 text.
 
 ### `introspect`
 
@@ -57,14 +57,32 @@ Tables, enum types, sequences, routines, views and triggers, read through
 `live_catalog`, the one reader of a live catalog; an extension's own objects
 are left out, as they are when a tree is compared with a database. A URL is
 connected to and closed here; a connection is the caller's, transaction and all.
+A bare `str` is one schema name. A schema the database does not have holds
+nothing, so it adds nothing: `schemas=["nope"]` is an empty model, not an
+error.
+
+**Raises**
+
+- `ConfigurationError`: `CONFIG_006` when the URL does not connect.
+- `TypeError`: a *database* that is neither a URL nor a `Connection`.
 
 ### `diff`
 
 ```python
-def diff(old: SchemaSource, new: SchemaSource) -> SchemaDiff
+def diff(
+    old: SchemaSource | None,
+    new: SchemaSource | None,
+    *,
+    env: str | None = None,
+    project_dir: Path | None = None,
+) -> SchemaDiff
 ```
 
 What changed from the schema *old* declares to the one *new* declares.
+
+Each side is anything `parse_schema` takes: a source, or — given as
+`None` — *env*'s build from *project_dir*, so `diff(snapshot, None,
+env="local")` is what changed from a snapshot to the current tree.
 
 Every kind `migrate diff` reports, views, routines and triggers included, and
 the warnings it reports beside them — two definitions of one object, resolved
@@ -72,12 +90,13 @@ the way the build resolves them (`DIFFER_402`).
 
 **Raises**
 
-- `SchemaError`: `DIFFER_400` when PostgreSQL's parser rejects either side, `SCHEMA_201` for a path that does not exist.
+- `ValueError`: unless exactly one side is `None` when *env* is given, and neither is when it is not.
+- `SchemaError`: `DIFFER_400` when PostgreSQL's parser rejects either side, `SCHEMA_201` for a path that does not exist, `SCHEMA_001` for a file that cannot be read as UTF-8 text.
 
 ### `SchemaSource`
 
 ```python
-SchemaSource = str | Path | Sequence[Path]
+SchemaSource = str | Path | Sequence[Path | str]
 ```
 
 ### `Connection`
@@ -91,7 +110,8 @@ What confiture calls on a connection a caller hands it; a psycopg 3 connection i
 A library entry point that takes a connection takes this rather than the
 driver's class, so its signature does not make the driver its caller's
 dependency. The transaction is the caller's: confiture neither commits nor
-rolls back a connection it did not open.
+rolls back a connection it did not open. `isinstance` answers whether an
+object has the four methods, which is what the entry points check.
 
 #### `Connection.cursor`
 
@@ -452,11 +472,12 @@ Deterministic: among the tables ready at each step, the first by
 `(schema, name)`. A table that references itself is ordered like any other.
 *tables* orders just those — a reference or a name, resolved as DDL's is — and
 reads through the tables they depend on, so a cycle elsewhere does not stop it.
+A bare `str` is one name.
 
 **Raises**
 
 - `DependencyCycle`: tables whose foreign keys form a cycle, named.
-- `KeyError`: a table in *tables* the model does not hold.
+- `NotInModelError`: a table in *tables* the model does not hold — a `SchemaError` and a `KeyError`.
 
 ### `DependencyCycle`
 
@@ -483,7 +504,7 @@ PostgreSQL generate `pk_language`.
 
 **Raises**
 
-- `KeyError`: when *model* holds no such table.
+- `NotInModelError`: when *model* holds no such table — a `SchemaError` and a `KeyError`.
 
 ### `column_facts`
 
@@ -500,7 +521,7 @@ there; a key that names no column references the target's primary key.
 
 **Raises**
 
-- `KeyError`: when *model* holds no such table, or the table no such column.
+- `NotInModelError`: when *model* holds no such table, or the table no such column — a `SchemaError` and a `KeyError`.
 
 ### `naming_hints`
 
@@ -516,7 +537,7 @@ column named `pk_*`, and a column named `id`. Heuristic signals, not facts
 
 **Raises**
 
-- `KeyError`: when *model* holds no such table.
+- `NotInModelError`: when *model* holds no such table — a `SchemaError` and a `KeyError`.
 
 ### `ColumnFacts`
 
@@ -597,7 +618,7 @@ The convention a table's names show: its first `pk_*` key column, a column `id`.
 
 ```python
 def write_copy_seed(
-    path: Path,
+    path: Path | str,
     table: ObjectRef | str,
     columns: Sequence[str],
     rows: Iterable[Mapping[str, object]],
@@ -615,13 +636,13 @@ them to its value; `None` is NULL. A `dict` or `list` is JSON for a
 
 **Raises**
 
-- `SeedError`: a table or column the model does not hold, a column PostgreSQL fills, a row missing a column or carrying another, a value the column's type cannot take as given, a value holding a NUL.
+- `SeedError`: a table or column the model does not hold (a table's `NotInModelError` is its cause), a column PostgreSQL fills, a row missing a column or carrying another, a value the column's type cannot take as given, a value holding a NUL, a *path* that cannot be written.
 
 ### `write_insert_seed`
 
 ```python
 def write_insert_seed(
-    path: Path,
+    path: Path | str,
     table: ObjectRef | str,
     columns: Sequence[str],
     rows: Iterable[Mapping[str, object]],
@@ -660,7 +681,7 @@ A seed file written: where, for which table, which columns, how many rows, how.
 ```python
 def apply_seeds(
     database: str | Connection,
-    seeds: Path | Sequence[Path],
+    seeds: Path | str | Sequence[Path | str],
     *,
     profile: SeedProfile | None = None,
     continue_on_error: bool = False,
@@ -670,9 +691,11 @@ def apply_seeds(
 Apply seed files in order: one transaction, a savepoint per file.
 
 *seeds* is a directory — its top-level `.sql` files, sorted, filtered by
-*profile*'s filename globs — or the files themselves, in the order given. A
-file is a script as `psql` reads one: statements, and `COPY … FROM stdin`
-blocks streamed through the driver's COPY protocol.
+*profile*'s filename globs — or the files themselves, in the order given; a
+`str` is the path it spells. A file is a script as `psql` reads one:
+statements, and `COPY … FROM stdin` blocks streamed through the driver's
+COPY protocol. Every path is checked before the database is reached, so a
+misspelt one applies nothing.
 
 The transaction: each file runs in a savepoint of its own
 (`SeedExecutor`), so a failed file is undone and nothing before it.
@@ -686,7 +709,32 @@ changes an object's owner.
 
 **Raises**
 
-- `SeedError`: the first file that failed, when *continue_on_error* is off.
+- `SeedError`: a seed path that does not exist, before anything is applied; the first file that failed — its SQL, or a file that is not readable UTF-8 text — when *continue_on_error* is off; and, for a URL, a transaction that fails to commit, as a deferred constraint does.
+- `ConfigurationError`: `CONFIG_006` when the URL does not connect.
+- `TypeError`: a *database* that is neither a URL nor a `Connection`.
+
+### `SeedProfile`
+
+```python
+class SeedProfile(BaseModel)
+```
+
+A named subset of seed files, selected by glob patterns.
+
+Patterns match seed *filenames* (seed discovery is top-level, non-recursive).
+Selection is include-then-exclude: an empty `include` starts from all
+files; `exclude` then removes matches. Lets CI apply a lean test seed
+(e.g. excluding large ETL-statistics partitions) for faster, higher-parallel
+test databases.
+
+These are `fnmatch` globs over a bare filename, **not** the gitignore path
+globs `include_dirs` entries take under the same two key names: seed
+discovery is a flat listing, so a path never appears and `**` would have
+nothing to span.
+
+Attributes:
+    include: Globs a *filename* must match to be included (empty = all files).
+    exclude: Globs over a *filename* that remove an otherwise-included file.
 
 ### `ApplyResult`
 
@@ -722,9 +770,9 @@ Dictionary with all fields suitable for JSON output.
 
 ```python
 def validate_seeds(
-    seeds_dir: Path,
+    seeds_dir: Path | str,
     *,
-    schema_dir: Path,
+    schema_dir: Path | str,
     max_level: int = 3,
     database_url: str | None = None,
     prep_seed_schema: str = 'prep_seed',
@@ -736,10 +784,14 @@ Run prep-seed validation levels 1 through *max_level* over *seeds_dir*.
 
 Levels 1-3 read files and need no database; 4 and 5 load the seeds and run
 the resolvers against *database_url*, in a transaction they roll back.
-Nothing is printed: the report is the answer.
+Nothing is printed: the report is the answer, and a file the run could not
+read is an error rather than a file that passed.
 
 **Raises**
 
+- `SeedError`: `SEED_001` for a *seeds_dir* that is not a directory, or a seed file that cannot be read as UTF-8 text.
+- `SchemaError`: `SCHEMA_201` for a *schema_dir* that is not a directory when a level that reads it runs (2 and up), `SCHEMA_001` for a resolver file that cannot be read as UTF-8 text.
+- `ConfigurationError`: `CONFIG_001` for a *max_level* outside 1-5.
 - `ValueError`: *max_level* of 4 or 5 without a *database_url*.
 
 ### `PrepSeedReport`
@@ -791,6 +843,59 @@ def to_dict(self) -> dict[str, Any]
 
 Convert report to dictionary for serialization.
 
+### `PrepSeedViolation`
+
+```python
+class PrepSeedViolation
+```
+
+Represents a single prep_seed validation violation.
+
+Attributes:
+    pattern: The type of prep_seed issue detected
+    severity: Severity level (INFO, WARNING, ERROR, CRITICAL)
+    message: Human-readable message describing the violation
+    file_path: Path to the file containing the violation
+    line_number: Line number where violation occurs
+    impact: Optional description of impact if not fixed
+    fix_available: Whether automatic fix is available
+    suggestion: Optional suggestion for fixing the violation
+
+| Field | Type | Default |
+|---|---|---|
+| `pattern` | `PrepSeedPattern` | required |
+| `severity` | `ViolationSeverity` | required |
+| `message` | `str` | required |
+| `file_path` | `str` | required |
+| `line_number` | `int` | required |
+| `impact` | `str \| None` | `None` |
+| `fix_available` | `bool` | `False` |
+| `suggestion` | `str \| None` | `None` |
+
+#### `PrepSeedViolation.to_dict`
+
+```python
+def to_dict(self) -> dict[str, Any]
+```
+
+Convert to dictionary for serialization.
+
+### `PrepSeedPattern`
+
+Patterns of prep_seed validation issues.
+
+These patterns represent issues specific to the prep_seed transformation
+pattern where UUID FKs in prep_seed schema transform to BIGINT FKs in
+final tables via resolution functions.
+
+Members: `SCHEMA_DRIFT_IN_RESOLVER`, `MISSING_FK_TRANSFORMATION`, `MISSING_RESOLVER_FUNCTION`, `MISSING_FK_MAPPING`, `PREP_SEED_TARGET_MISMATCH`, `INVALID_FK_NAMING`, `INVALID_UUID_FORMAT`, `UNION_TYPE_MISMATCH`, `NULL_FK_AFTER_RESOLUTION`, `UNIQUE_CONSTRAINT_VIOLATION`, `MISSING_SELF_REFERENCE_HANDLING`, `UNION_INLINE_COMMENT`, `UNION_UNCAST_NULL`.
+
+### `ViolationSeverity`
+
+Severity levels for violations.
+
+Members: `INFO`, `WARNING`, `ERROR`, `CRITICAL`.
+
 ## What changed
 
 ### `SchemaDiff`
@@ -829,6 +934,71 @@ def summary(self) -> dict[str, int]
 ```
 
 How many changes of each counted kind — `confiture diff`'s `summary`.
+
+### `BuildWarning`
+
+```python
+class BuildWarning
+```
+
+A build-time diagnostic that reaches the envelope, not only the console.
+
+`confiture build` has diagnostics that do not fail it — a seed file that
+failed under `--continue-on-error`, a file pglast could not parse during
+the duplicate scan. Printed only, they would be invisible to a consumer doing
+the right thing (reading the JSON, not the prose), so each is an entry here
+(issue #268), keyed by an error-code registry entry so a consumer matches a
+code rather than a sentence.
+
+Attributes:
+    code: The registry entry that names the situation.
+    severity: That entry's severity — `warning` or `info`. Resolved from
+        the registry by `of`, never written twice.
+    message: What happened, in one line.
+    file: The file the warning is about, named the way a finding names one;
+        `None` when the warning is about the build rather than a file.
+
+| Field | Type | Default |
+|---|---|---|
+| `code` | `str` | required |
+| `severity` | `str` | required |
+| `message` | `str` | required |
+| `file` | `str \| None` | `None` |
+
+#### `BuildWarning.of`
+
+```python
+def of(code: str, *, file: str | None = None, fields: object) -> BuildWarning
+```
+
+The registry's entry for *code*, filled in.
+
+Severity *and* wording come from the registry, so the sentence a build
+prints is the one the published codebook documents — neither can drift
+from the other by being written twice.
+
+**Args**
+
+- `code`: A registered error code.
+- `file`: The file the warning is about, when it is about one. Also available to the message template as `{file}`.
+- `**fields`: The remaining placeholders of the code's message template.
+
+**Returns**
+
+The warning, ready for the envelope.
+
+**Raises**
+
+- `ValueError`: *code* is not registered — a warning no consumer could look up is a bug, not a payload.
+- `KeyError`: The template has a placeholder *fields* does not fill.
+
+#### `BuildWarning.to_dict`
+
+```python
+def to_dict(self) -> dict[str, Any]
+```
+
+Convert to the envelope's `warnings[]` entry.
 
 ### `SchemaChange`
 
@@ -869,6 +1039,10 @@ def tier_of(change: SchemaChange) -> RiskTier | None
 ```
 
 The tier *change* carries, or `None` where the change set would classify nothing.
+
+**Raises**
+
+- `TypeError`: for anything that is not one of the `SchemaChange` variants.
 
 ### `RiskTier`
 
@@ -1215,7 +1389,98 @@ object's shape moved.
 | `old` | `DDLObject` | required |
 | `new` | `DDLObject` | required |
 
+### `DDLObject`
+
+```python
+class DDLObject
+```
+
+One tracked `CREATE`: what it defines, and two renderings of it.
+
+`definition` is what decides whether the object *changed* — existence
+clauses neutralised, so a view that gains `OR REPLACE` is the same view.
+`create_sql` is what a generated migration carries — the same statement
+with the existence clause its kind supports, so re-applying the migration
+is not an error. `signature` is the routine's full canonical signature,
+schemas included, which is what separates two definitions that share a
+bucket.
+
+| Field | Type | Default |
+|---|---|---|
+| `ref` | `ObjectRef` | required |
+| `definition` | `str` | required |
+| `create_sql` | `str` | required |
+| `signature` | `Signature \| None` | `None` |
+| `trigger` | `Trigger \| None` | `None` |
+
 ## Errors
+
+### `ConfiturError`
+
+```python
+class ConfiturError(Exception)
+```
+
+Base exception for all Confiture errors.
+
+All Confiture-specific exceptions inherit from this base class.
+This allows catching all Confiture errors with:
+
+    try:
+        confiture.build()
+    except ConfiturError as e:
+        # Handle any Confiture error
+        pass
+
+Supports optional error codes for structured error handling:
+
+    try:
+        confiture.build()
+    except ConfiturError as e:
+        if e.error_code == "CONFIG_001":
+            # Handle missing configuration
+            pass
+
+Attributes:
+    error_code: Machine-readable error code (e.g., "CONFIG_001").
+               All subclasses provide defaults; callers may override.
+
+    severity: Error severity (INFO, WARNING, ERROR, CRITICAL).
+
+    context: Structured context dict. Universal keys (all optional):
+             - "file_path": str — path to the file that caused the error
+             - "migration_version": str — version string (e.g., "20260228180602")
+             - "database_name": str — target database name
+             - "recovery_suggestions": list[str] — manual recovery steps
+
+             Subclasses may add domain-specific keys; see their docstrings.
+
+    resolution_hint: Human-readable suggestion for resolving the error.
+                    Example: "Check database permissions for schema 'public'"
+                    Rendered by `__str__` so it survives every consumer,
+                    including library callers that only ever see the string
+                    form of the exception (issue #211).
+
+    message: The base message, without the resolution hint. Renderers and
+             keyword classifiers read this; `str(self)` is for humans.
+
+#### `ConfiturError.to_dict`
+
+```python
+def to_dict(self) -> dict[str, Any]
+```
+
+Get machine-readable representation of the error.
+
+**Returns**
+
+Dict with error_code, severity, message, context, resolution_hint
+
+**Example**
+
+>>> error = ConfiturError("test", error_code="CONFIG_001")
+>>> error.to_dict()
+{'error_code': 'CONFIG_001', 'severity': 'error', 'message': 'test', ...}
 
 ### `SchemaError`
 
@@ -1235,6 +1500,19 @@ Raised when:
 
 >>> raise SchemaError("Syntax error in 10_tables/users.sql at line 15")
 
+### `NotInModelError`
+
+```python
+class NotInModelError(SchemaError, KeyError)
+```
+
+A table or column the model does not hold, named as it was asked for.
+
+A `SchemaError`, so `except ConfiturError`
+sees it with a code and a hint, and a `KeyError`, because a lookup by name
+that finds nothing is one in Python and `except KeyError` is how a caller
+says so.
+
 ### `SeedError`
 
 ```python
@@ -1252,5 +1530,23 @@ Raised when:
 Attributes:
     seed_file: Path to seed file that failed (if applicable)
     sql_error: Original SQL error (if applicable)
+
+### `ConfigurationError`
+
+```python
+class ConfigurationError(ConfiturError)
+```
+
+Invalid configuration (YAML, environment, database connection).
+
+Raised when:
+- Environment YAML file is malformed or missing
+- Required configuration fields are missing
+- Database connection string is invalid
+- Include/exclude directory patterns are invalid
+
+**Example**
+
+>>> raise ConfigurationError("Missing database_url in local.yaml")
 
 <!-- END GENERATED: platform-api -->

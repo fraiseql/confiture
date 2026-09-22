@@ -17,6 +17,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import json
+import typing
 from pathlib import Path
 
 import pytest
@@ -70,6 +71,8 @@ CHANGES = (
     "ObjectAdded",
     "ObjectDropped",
     "ObjectReplaced",
+    "DDLObject",
+    "BuildWarning",
     "RiskTier",
     "tier_of",
 )
@@ -87,6 +90,7 @@ WRITER = (
     "ColumnFacts",
     "ColumnReference",
     "TableHints",
+    "NotInModelError",
 )
 
 #: Writing, applying and validating seeds.
@@ -96,12 +100,19 @@ SEEDS = (
     "write_copy_seed",
     "write_insert_seed",
     "apply_seeds",
+    "SeedProfile",
     "ApplyResult",
     "validate_seeds",
     "PrepSeedReport",
+    "PrepSeedViolation",
+    "PrepSeedPattern",
+    "ViolationSeverity",
 )
 
-EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING + WRITER + SEEDS)
+#: What every refusal is: confiture's own error, with a code and a hint.
+ERRORS = ("ConfiturError", "ConfigurationError")
+
+EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING + WRITER + SEEDS + ERRORS)
 
 #: ``str(inspect.signature(...))`` of every callable the seam defines. Under
 #: ``from __future__ import annotations`` an annotation is its source text.
@@ -113,7 +124,10 @@ SIGNATURES: dict[str, str] = {
     "introspect": (
         "(database: 'str | Connection', *, schemas: 'Sequence[str] | None' = None) -> 'SchemaModel'"
     ),
-    "diff": "(old: 'SchemaSource', new: 'SchemaSource') -> 'SchemaDiff'",
+    "diff": (
+        "(old: 'SchemaSource | None', new: 'SchemaSource | None', *, env: 'str | None' = None, "
+        "project_dir: 'Path | None' = None) -> 'SchemaDiff'"
+    ),
     "dependency_order": (
         "(model: 'SchemaModel', *, tables: 'Iterable[ObjectRef | str] | None' = None) "
         "-> 'list[ObjectRef]'"
@@ -125,20 +139,20 @@ SIGNATURES: dict[str, str] = {
     ),
     "naming_hints": "(model: 'SchemaModel', table: 'ObjectRef | str') -> 'TableHints'",
     "write_copy_seed": (
-        "(path: 'Path', table: 'ObjectRef | str', columns: 'Sequence[str]', "
+        "(path: 'Path | str', table: 'ObjectRef | str', columns: 'Sequence[str]', "
         "rows: 'Iterable[Mapping[str, object]]', *, model: 'SchemaModel') -> 'SeedFile'"
     ),
     "write_insert_seed": (
-        "(path: 'Path', table: 'ObjectRef | str', columns: 'Sequence[str]', "
+        "(path: 'Path | str', table: 'ObjectRef | str', columns: 'Sequence[str]', "
         "rows: 'Iterable[Mapping[str, object]]', *, model: 'SchemaModel') -> 'SeedFile'"
     ),
     "apply_seeds": (
-        "(database: 'str | Connection', seeds: 'Path | Sequence[Path]', *, "
+        "(database: 'str | Connection', seeds: 'Path | str | Sequence[Path | str]', *, "
         "profile: 'SeedProfile | None' = None, continue_on_error: 'bool' = False) "
         "-> 'ApplyResult'"
     ),
     "validate_seeds": (
-        "(seeds_dir: 'Path', *, schema_dir: 'Path', max_level: 'int' = 3, "
+        "(seeds_dir: 'Path | str', *, schema_dir: 'Path | str', max_level: 'int' = 3, "
         "database_url: 'str | None' = None, prep_seed_schema: 'str' = 'prep_seed', "
         "catalog_schema: 'str' = 'catalog') -> 'PrepSeedReport'"
     ),
@@ -267,6 +281,30 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("failed_files", "list[str]"),
         ("seed_profile", "str | None"),
     ),
+    "PrepSeedReport": (("violations", "list[PrepSeedViolation]"), ("scanned_files", "list[str]")),
+    "PrepSeedViolation": (
+        ("pattern", "PrepSeedPattern"),
+        ("severity", "ViolationSeverity"),
+        ("message", "str"),
+        ("file_path", "str"),
+        ("line_number", "int"),
+        ("impact", "str | None"),
+        ("fix_available", "bool"),
+        ("suggestion", "str | None"),
+    ),
+    "BuildWarning": (
+        ("code", "str"),
+        ("severity", "str"),
+        ("message", "str"),
+        ("file", "str | None"),
+    ),
+    "DDLObject": (
+        ("ref", "ObjectRef"),
+        ("definition", "str"),
+        ("create_sql", "str"),
+        ("signature", "Signature | None"),
+        ("trigger", "Trigger | None"),
+    ),
 }
 
 
@@ -299,6 +337,39 @@ def test_every_dataclass_is_pinned(name: str) -> None:
 def test_every_callable_is_pinned() -> None:
     callables = {name for name in EXPORTS if inspect.isfunction(getattr(platform, name, None))}
     assert callables <= set(SIGNATURES), sorted(callables - set(SIGNATURES))
+
+
+def _annotated(name: str) -> list[object]:
+    """*name*'s export, and each public method of it when it is a class."""
+    obj = getattr(platform, name)
+    if not isinstance(obj, type):
+        return [obj]
+    members = (getattr(member, "__func__", member) for key, member in vars(obj).items())
+    return [obj, *(m for m in members if inspect.isfunction(m) and not m.__name__.startswith("_"))]
+
+
+@pytest.mark.parametrize(
+    "name",
+    sorted(
+        n
+        for n in EXPORTS
+        if inspect.isfunction(getattr(platform, n, None))
+        or isinstance(getattr(platform, n, None), type)
+    ),
+)
+def test_every_annotation_resolves_at_runtime(name: str) -> None:
+    """``typing.get_type_hints`` answers for every function, class and method the seam exports.
+
+    A consumer that validates, serialises or documents what it calls resolves the
+    annotations; a name imported only for the type checker is a ``NameError`` there.
+    """
+    unresolved = []
+    for target in _annotated(name):
+        try:
+            typing.get_type_hints(target)
+        except NameError as exc:
+            unresolved.append(f"{getattr(target, '__qualname__', name)}: {exc}")
+    assert unresolved == []
 
 
 def _goldens() -> list[Path]:

@@ -34,6 +34,7 @@ from confiture.core.differ_sql import REPLACED_BY_DROP_AND_CREATE
 from confiture.core.lock_profile import profile_for_kind
 from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.schema_change import (
+    KINDS,
     CheckConstraintAdded,
     CheckConstraintDropped,
     ColumnAdded,
@@ -174,7 +175,13 @@ def _definition_tier(change: DefinitionChange) -> RiskTier | None:
 
 
 def tier_of(change: SchemaChange) -> RiskTier | None:
-    """The tier *change* carries, or ``None`` where the change set would classify nothing."""
+    """The tier *change* carries, or ``None`` where the change set would classify nothing.
+
+    Raises:
+        TypeError: for anything that is not one of the ``SchemaChange`` variants.
+    """
+    if not isinstance(change, tuple(KINDS)):
+        raise TypeError(f"tier_of takes a SchemaChange, not {type(change).__name__}")
     match change:
         case TableAdded() | TableDropped() | TableRenamed():
             return _table_tier(change)
