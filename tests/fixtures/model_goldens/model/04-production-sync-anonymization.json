@@ -1,1170 +1,1170 @@
 {
+  "enum_types": [],
+  "routines": [],
+  "sequences": [],
   "tables": [
     {
-      "name": "audit_logs",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 133,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
+          "name": "id",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "actor_email",
+          "default": null,
           "folded": "actor_email",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 134,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "actor_email",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "action",
+          "default": null,
           "folded": "action",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 135,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "action",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "detail",
+          "default": null,
           "folded": "detail",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 136,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "detail",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "occurred_at",
+          "default": "now()",
           "folded": "occurred_at",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 137,
-          "type_text": "timestamptz",
-          "type_key": "timestamptz",
-          "raw_sql_type": "TIMESTAMPTZ",
+          "name": "occurred_at",
           "not_null": true,
-          "default": "now()",
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMPTZ",
+          "type_key": "timestamptz",
+          "type_text": "timestamptz"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         }
       ],
-      "indexes": []
+      "indexes": [],
+      "name": "audit_logs",
+      "schema": null
     },
     {
-      "name": "employees",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 56,
-          "type_text": "bigint",
-          "type_key": "bigint",
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
           "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "email",
+          "default": null,
           "folded": "email",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 57,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "email",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "full_name",
+          "default": null,
           "folded": "full_name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 58,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "full_name",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "phone",
+          "default": null,
           "folded": "phone",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 59,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "phone",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "ssn",
+          "default": null,
           "folded": "ssn",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 60,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "ssn",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "bank_account_number",
+          "default": null,
           "folded": "bank_account_number",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 61,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "bank_account_number",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "department",
-          "folded": "department",
-          "line": 62,
-          "type_text": "text",
-          "type_key": "text",
+          "primary_key": false,
           "raw_sql_type": "TEXT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "hired_at",
-          "folded": "hired_at",
-          "line": 63,
-          "type_text": "timestamptz",
-          "type_key": "timestamptz",
-          "raw_sql_type": "TIMESTAMPTZ",
-          "not_null": true,
-          "default": "now()",
-          "identity": null,
+          "default": null,
+          "folded": "department",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 62,
+          "name": "department",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": "now()",
+          "folded": "hired_at",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 63,
+          "name": "hired_at",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMPTZ",
+          "type_key": "timestamptz",
+          "type_text": "timestamptz"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         }
       ],
-      "indexes": []
+      "indexes": [],
+      "name": "employees",
+      "schema": null
     },
     {
-      "name": "order_items",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 90,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
+          "name": "id",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "order_id",
+          "default": null,
           "folded": "order_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 91,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
+          "name": "order_id",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "product_id",
+          "default": null,
           "folded": "product_id",
-          "line": 92,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 92,
+          "name": "product_id",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "quantity",
-          "folded": "quantity",
-          "line": 93,
-          "type_text": "integer",
-          "type_key": "integer",
-          "raw_sql_type": "INTEGER",
-          "not_null": true,
           "default": null,
-          "identity": null,
+          "folded": "quantity",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 93,
+          "name": "quantity",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "INTEGER",
+          "type_key": "integer",
+          "type_text": "integer"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
-          "kind": "foreign_key",
-          "name": "",
           "columns": [
             "order_id"
           ],
-          "ref_table": "orders",
+          "deferrable": null,
+          "expression": null,
+          "kind": "foreign_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
           "ref_columns": [
             "id"
           ],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_table": "orders"
         },
         {
-          "kind": "foreign_key",
-          "name": "",
           "columns": [
             "product_id"
           ],
-          "ref_table": "products",
+          "deferrable": null,
+          "expression": null,
+          "kind": "foreign_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
           "ref_columns": [
             "id"
           ],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_table": "products"
         },
         {
+          "columns": [],
+          "deferrable": null,
+          "expression": "quantity > 0",
           "kind": "check",
           "name": "",
-          "columns": [],
-          "ref_table": null,
-          "ref_columns": [],
           "on_delete": null,
           "on_update": null,
-          "expression": "quantity > 0",
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         }
       ],
       "indexes": [
         {
+          "backs_constraint": false,
+          "columns": [
+            "order_id"
+          ],
+          "method": "btree",
           "name": "idx_order_items_order",
           "table": "order_items",
-          "columns": [
-            "order_id"
-          ],
           "unique": false,
-          "where": null,
-          "method": "btree",
-          "backs_constraint": false
+          "where": null
         }
-      ]
+      ],
+      "name": "order_items",
+      "schema": null
     },
     {
-      "name": "orders",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 78,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
+          "name": "id",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "user_id",
+          "default": null,
           "folded": "user_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 79,
-          "type_text": "bigint",
-          "type_key": "bigint",
+          "name": "user_id",
+          "not_null": true,
+          "primary_key": false,
           "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "billing_email",
+          "default": null,
           "folded": "billing_email",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 81,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "billing_email",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "customer_notes",
+          "default": null,
           "folded": "customer_notes",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 82,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "customer_notes",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "total_cents",
-          "folded": "total_cents",
-          "line": 84,
-          "type_text": "integer",
-          "type_key": "integer",
-          "raw_sql_type": "INTEGER",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "status",
-          "folded": "status",
-          "line": 85,
-          "type_text": "text",
-          "type_key": "text",
+          "primary_key": false,
           "raw_sql_type": "TEXT",
-          "not_null": true,
-          "default": "'paid'",
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "placed_at",
-          "folded": "placed_at",
-          "line": 86,
-          "type_text": "timestamptz",
-          "type_key": "timestamptz",
-          "raw_sql_type": "TIMESTAMPTZ",
-          "not_null": true,
-          "default": "now()",
-          "identity": null,
+          "default": null,
+          "folded": "total_cents",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 84,
+          "name": "total_cents",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "INTEGER",
+          "type_key": "integer",
+          "type_text": "integer"
+        },
+        {
+          "default": "'paid'",
+          "folded": "status",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 85,
+          "name": "status",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": "now()",
+          "folded": "placed_at",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 86,
+          "name": "placed_at",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMPTZ",
+          "type_key": "timestamptz",
+          "type_text": "timestamptz"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
-          "kind": "foreign_key",
-          "name": "",
           "columns": [
             "user_id"
           ],
-          "ref_table": "users",
+          "deferrable": null,
+          "expression": null,
+          "kind": "foreign_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
           "ref_columns": [
             "id"
           ],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_table": "users"
         },
         {
+          "columns": [],
+          "deferrable": null,
+          "expression": "total_cents >= 0",
           "kind": "check",
           "name": "",
-          "columns": [],
-          "ref_table": null,
-          "ref_columns": [],
           "on_delete": null,
           "on_update": null,
-          "expression": "total_cents >= 0",
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         }
       ],
       "indexes": [
         {
+          "backs_constraint": false,
+          "columns": [
+            "user_id"
+          ],
+          "method": "btree",
           "name": "idx_orders_user",
           "table": "orders",
-          "columns": [
-            "user_id"
-          ],
           "unique": false,
-          "where": null,
-          "method": "btree",
-          "backs_constraint": false
+          "where": null
         }
-      ]
+      ],
+      "name": "orders",
+      "schema": null
     },
     {
-      "name": "payments",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 97,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
+          "name": "id",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "order_id",
+          "default": null,
           "folded": "order_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 98,
-          "type_text": "bigint",
-          "type_key": "bigint",
+          "name": "order_id",
+          "not_null": true,
+          "primary_key": false,
           "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "cardholder_name",
+          "default": null,
           "folded": "cardholder_name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 100,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "cardholder_name",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "card_last4",
+          "default": null,
           "folded": "card_last4",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 101,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "card_last4",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "stripe_customer_id",
+          "default": null,
           "folded": "stripe_customer_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 102,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "stripe_customer_id",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "billing_zip",
+          "default": null,
           "folded": "billing_zip",
-          "line": 104,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
-          "not_null": false,
-          "default": null,
-          "identity": null,
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 104,
+          "name": "billing_zip",
+          "not_null": false,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "amount_cents",
-          "folded": "amount_cents",
-          "line": 105,
-          "type_text": "integer",
-          "type_key": "integer",
-          "raw_sql_type": "INTEGER",
-          "not_null": true,
           "default": null,
-          "identity": null,
+          "folded": "amount_cents",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 105,
+          "name": "amount_cents",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "INTEGER",
+          "type_key": "integer",
+          "type_text": "integer"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
-          "kind": "foreign_key",
-          "name": "",
           "columns": [
             "order_id"
           ],
-          "ref_table": "orders",
+          "deferrable": null,
+          "expression": null,
+          "kind": "foreign_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
           "ref_columns": [
             "id"
           ],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_table": "orders"
         },
         {
+          "columns": [],
+          "deferrable": null,
+          "expression": "amount_cents >= 0",
           "kind": "check",
           "name": "",
-          "columns": [],
-          "ref_table": null,
-          "ref_columns": [],
           "on_delete": null,
           "on_update": null,
-          "expression": "amount_cents >= 0",
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         }
       ],
       "indexes": [
         {
-          "name": "idx_payments_order",
-          "table": "payments",
+          "backs_constraint": false,
           "columns": [
             "order_id"
           ],
-          "unique": false,
-          "where": null,
           "method": "btree",
-          "backs_constraint": false
+          "name": "idx_payments_order",
+          "table": "payments",
+          "unique": false,
+          "where": null
         }
-      ]
+      ],
+      "name": "payments",
+      "schema": null
     },
     {
-      "name": "products",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 71,
-          "type_text": "bigint",
-          "type_key": "bigint",
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
           "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "sku",
+          "default": null,
           "folded": "sku",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 72,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "sku",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "name",
+          "default": null,
           "folded": "name",
-          "line": 73,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 73,
+          "name": "name",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "price_cents",
-          "folded": "price_cents",
-          "line": 74,
-          "type_text": "integer",
-          "type_key": "integer",
-          "raw_sql_type": "INTEGER",
-          "not_null": true,
           "default": null,
-          "identity": null,
+          "folded": "price_cents",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 74,
+          "name": "price_cents",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "INTEGER",
+          "type_key": "integer",
+          "type_text": "integer"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
-          "kind": "unique",
-          "name": "",
           "columns": [
             "sku"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "unique",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
+          "columns": [],
+          "deferrable": null,
+          "expression": "price_cents >= 0",
           "kind": "check",
           "name": "",
-          "columns": [],
-          "ref_table": null,
-          "ref_columns": [],
           "on_delete": null,
           "on_update": null,
-          "expression": "price_cents >= 0",
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         }
       ],
-      "indexes": []
+      "indexes": [],
+      "name": "products",
+      "schema": null
     },
     {
-      "name": "support_tickets",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 121,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
+          "name": "id",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "user_id",
+          "default": null,
           "folded": "user_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 122,
-          "type_text": "bigint",
-          "type_key": "bigint",
+          "name": "user_id",
+          "not_null": true,
+          "primary_key": false,
           "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "customer_email",
+          "default": null,
           "folded": "customer_email",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 123,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "customer_email",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "subject",
+          "default": null,
           "folded": "subject",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 124,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "subject",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "body",
+          "default": null,
           "folded": "body",
-          "line": 125,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 125,
+          "name": "body",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "opened_at",
-          "folded": "opened_at",
-          "line": 126,
-          "type_text": "timestamptz",
-          "type_key": "timestamptz",
-          "raw_sql_type": "TIMESTAMPTZ",
-          "not_null": true,
           "default": "now()",
-          "identity": null,
+          "folded": "opened_at",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 126,
+          "name": "opened_at",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMPTZ",
+          "type_key": "timestamptz",
+          "type_text": "timestamptz"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
-          "kind": "foreign_key",
-          "name": "",
           "columns": [
             "user_id"
           ],
-          "ref_table": "users",
+          "deferrable": null,
+          "expression": null,
+          "kind": "foreign_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
           "ref_columns": [
             "id"
           ],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_table": "users"
         }
       ],
       "indexes": [
         {
+          "backs_constraint": false,
+          "columns": [
+            "user_id"
+          ],
+          "method": "btree",
           "name": "idx_tickets_user",
           "table": "support_tickets",
-          "columns": [
-            "user_id"
-          ],
           "unique": false,
-          "where": null,
-          "method": "btree",
-          "backs_constraint": false
+          "where": null
         }
-      ]
+      ],
+      "name": "support_tickets",
+      "schema": null
     },
     {
-      "name": "user_sessions",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 113,
-          "type_text": "bigint",
-          "type_key": "bigint",
-          "raw_sql_type": "BIGINT",
+          "name": "id",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "primary_key": true,
+          "raw_sql_type": "BIGINT",
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "user_id",
+          "default": null,
           "folded": "user_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 114,
-          "type_text": "bigint",
-          "type_key": "bigint",
+          "name": "user_id",
+          "not_null": true,
+          "primary_key": false,
           "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "ip_address",
+          "default": null,
           "folded": "ip_address",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 115,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "ip_address",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "user_agent",
+          "default": null,
           "folded": "user_agent",
-          "line": 116,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
-          "not_null": false,
-          "default": null,
-          "identity": null,
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 116,
+          "name": "user_agent",
+          "not_null": false,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "started_at",
-          "folded": "started_at",
-          "line": 117,
-          "type_text": "timestamptz",
-          "type_key": "timestamptz",
-          "raw_sql_type": "TIMESTAMPTZ",
-          "not_null": true,
           "default": "now()",
-          "identity": null,
+          "folded": "started_at",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 117,
+          "name": "started_at",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMPTZ",
+          "type_key": "timestamptz",
+          "type_text": "timestamptz"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         },
         {
-          "kind": "foreign_key",
-          "name": "",
           "columns": [
             "user_id"
           ],
-          "ref_table": "users",
+          "deferrable": null,
+          "expression": null,
+          "kind": "foreign_key",
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
           "ref_columns": [
             "id"
           ],
-          "on_delete": null,
-          "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_table": "users"
         }
       ],
       "indexes": [
         {
-          "name": "idx_sessions_user",
-          "table": "user_sessions",
+          "backs_constraint": false,
           "columns": [
             "user_id"
           ],
-          "unique": false,
-          "where": null,
           "method": "btree",
-          "backs_constraint": false
+          "name": "idx_sessions_user",
+          "table": "user_sessions",
+          "unique": false,
+          "where": null
         }
-      ]
+      ],
+      "name": "user_sessions",
+      "schema": null
     },
     {
-      "name": "users",
-      "schema": null,
       "columns": [
         {
-          "name": "id",
+          "default": null,
           "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 35,
-          "type_text": "bigint",
-          "type_key": "bigint",
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
           "raw_sql_type": "BIGINT",
-          "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": true
+          "type_key": "bigint",
+          "type_text": "bigint"
         },
         {
-          "name": "email",
+          "default": null,
           "folded": "email",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 37,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "email",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "full_name",
+          "default": null,
           "folded": "full_name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 38,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "full_name",
           "not_null": true,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "phone",
+          "default": null,
           "folded": "phone",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 39,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "phone",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "ssn",
+          "default": null,
           "folded": "ssn",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
           "line": 40,
-          "type_text": "text",
-          "type_key": "text",
-          "raw_sql_type": "TEXT",
+          "name": "ssn",
           "not_null": false,
-          "default": null,
-          "identity": null,
-          "generated": null,
-          "generated_kind": null,
-          "primary_key": false
-        },
-        {
-          "name": "country_code",
-          "folded": "country_code",
-          "line": 42,
-          "type_text": "text",
-          "type_key": "text",
+          "primary_key": false,
           "raw_sql_type": "TEXT",
-          "not_null": true,
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
           "default": "'US'",
-          "identity": null,
+          "folded": "country_code",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 42,
+          "name": "country_code",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
         },
         {
-          "name": "is_active",
-          "folded": "is_active",
-          "line": 43,
-          "type_text": "boolean",
-          "type_key": "boolean",
-          "raw_sql_type": "BOOLEAN",
-          "not_null": true,
           "default": "true",
-          "identity": null,
+          "folded": "is_active",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 43,
+          "name": "is_active",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "BOOLEAN",
+          "type_key": "boolean",
+          "type_text": "boolean"
         },
         {
-          "name": "created_at",
-          "folded": "created_at",
-          "line": 44,
-          "type_text": "timestamptz",
-          "type_key": "timestamptz",
-          "raw_sql_type": "TIMESTAMPTZ",
-          "not_null": true,
           "default": "now()",
-          "identity": null,
+          "folded": "created_at",
           "generated": null,
           "generated_kind": null,
-          "primary_key": false
+          "identity": null,
+          "line": 44,
+          "name": "created_at",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMPTZ",
+          "type_key": "timestamptz",
+          "type_text": "timestamptz"
         }
       ],
       "constraints": [
         {
-          "kind": "primary_key",
-          "name": "",
           "columns": [
             "id"
           ],
-          "ref_table": null,
-          "ref_columns": [],
+          "deferrable": null,
+          "expression": null,
+          "kind": "primary_key",
+          "name": "",
           "on_delete": null,
           "on_update": null,
-          "expression": null,
-          "deferrable": null
+          "ref_columns": [],
+          "ref_table": null
         }
       ],
-      "indexes": []
+      "indexes": [],
+      "name": "users",
+      "schema": null
     }
   ],
-  "enum_types": [],
-  "sequences": [],
-  "routines": [],
-  "views": [],
-  "triggers": []
+  "triggers": [],
+  "views": []
 }

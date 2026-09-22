@@ -227,16 +227,20 @@ def diff_goldens() -> dict[str, str]:
 
 
 def model_goldens() -> dict[str, str]:
-    """Every model golden: the schema model each tree builds, as JSON."""
-    from confiture.core.linting.inventory import build_model
+    """Every model golden: the model each tree builds, as ``SchemaModel.to_json()`` writes it.
+
+    The bytes are the parity corpus a second reader is checked against
+    (``tests/unit/test_port_parity_corpus.py``), so they are the canonical wire —
+    sorted keys — read through ``parse_schema``, the one entry point.
+    """
+    from confiture.core.schema_sources import parse_schema
 
     with tempfile.TemporaryDirectory(prefix="confiture-goldens-") as tmp:
         root = Path(tmp)
         with ThreadPoolExecutor() as pool:
             paths = list(pool.map(lambda tree: build(tree, root / f"{tree.name}.sql"), TREES))
         return {
-            f"model/{tree.name}.json": json.dumps(build_model(path.read_text()).to_dict(), indent=2)
-            + "\n"
+            f"model/{tree.name}.json": parse_schema(path).to_json() + "\n"
             for tree, path in zip(TREES, paths, strict=True)
         }
 
