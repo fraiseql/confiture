@@ -1,4 +1,4 @@
-"""The test count means what it says: no test is parametrized over local artefacts (TST-01).
+"""The test count means what it says: no test is parametrized over local artefacts.
 
 A parity probe once parametrized over every ``*.sql`` under the repo root, so a
 developer machine contributed ~1,600 gitignored ``db/schema_history/`` snapshots

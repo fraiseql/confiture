@@ -118,7 +118,7 @@ def test_sync_workflow_table_selection(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# DB-gated e2e (SEC-M3): drive the *real* ``confiture sync`` CLI — no syncer
+# DB-gated e2e: drive the *real* ``confiture sync`` CLI — no syncer
 # mock — against the source/target test databases, so the whole wire from the
 # command down to anonymized rows in the target is exercised. Skips when no
 # Postgres (the ``source_db``/``target_db`` fixtures call ``pytest.skip``).
@@ -210,7 +210,7 @@ def test_sync_cli_verbatim_warns_and_copies_unmasked(
 ) -> None:
     """Without --anonymize the CLI copies verbatim and warns about plaintext PII.
 
-    This is the Phase-05 *warn* posture, asserted end to end: the data lands
+    This is the *warn* posture, asserted end to end: the data lands
     unmasked AND the JSON envelope carries a non-empty ``warnings`` array.
     """
     _seed_source(source_db)

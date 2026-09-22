@@ -65,7 +65,7 @@ class TestDispatchCoverage:
     def test_dispatch_routes_every_fixable_pattern(self):
         """For each fixable pattern, dispatch produces a transformed snippet.
 
-        Without the Cycle 2 fix, six patterns (CREATE_EXTENSION,
+        Without a suggestion builder of their own, six patterns (CREATE_EXTENSION,
         CREATE_SCHEMA, CREATE_SEQUENCE, DROP_TYPE, DROP_SCHEMA,
         DROP_SEQUENCE) fail this — ``_get_suggested_fix`` returns the
         input unchanged because their dispatch entry is missing.

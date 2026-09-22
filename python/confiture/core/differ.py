@@ -236,7 +236,7 @@ class SchemaDiffer:
     def parse_schema(self, sql: str) -> ParsedSchema:
         """Parse SQL DDL into the schema model, plus the objects compared by definition.
 
-        The one parse (ANA-04): ``pglast.parse_sql`` once, the statements handed
+        One parse: ``pglast.parse_sql`` once, the statements handed
         to the lint inventory — which reads a table whole through
         ``ddl_walk``'s one constraint reader, folds every ``ALTER``, ``DROP``
         and rename order-aware (#301), and keys every object by ``(schema,

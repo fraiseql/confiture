@@ -1,6 +1,6 @@
 """Tests for prep_seed violation models.
 
-Cycle 1 & 2: Core Models - PrepSeedViolation, Report, and Pattern enum
+Core models: PrepSeedViolation, Report, and the Pattern enum.
 """
 
 from __future__ import annotations

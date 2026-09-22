@@ -1,4 +1,4 @@
-"""Unit tests for per-worker DB name/URL resolution (P3, Cycle 1)."""
+"""Unit tests for per-worker DB name/URL resolution."""
 
 from __future__ import annotations
 

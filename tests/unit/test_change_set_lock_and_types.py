@@ -23,7 +23,7 @@ from confiture.core.risk_tier import RiskTier
 from confiture.core.schema_facts import SchemaFacts
 
 # --------------------------------------------------------------------------- #
-# Cycle 5: the lock profile rides on the entry
+# The lock profile rides on the entry
 # --------------------------------------------------------------------------- #
 
 
@@ -70,7 +70,7 @@ def test_python_migration_has_no_lock(tmp_path) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Cycle 6: DB-refined answers
+# DB-refined answers
 # --------------------------------------------------------------------------- #
 
 

@@ -387,7 +387,7 @@ def apply(
         None,
         "--report",
         help="Save structured output (JSON/CSV) to file. --report is a "
-        "back-compat alias for --output/-o (DOCS-M2).",
+        "back-compat alias for --output/-o.",
     ),
     profile: ProfileOpt = None,
 ) -> None:

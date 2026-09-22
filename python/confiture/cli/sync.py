@@ -20,7 +20,7 @@ Anonymization is **opt-in** via ``--anonymize``, driven by a YAML config
 Failures route through the ``fail()`` boundary (the #145 ``{ok: false, error}``
 envelope in ``--format json``).
 
-Safety posture (owner decision Q3 = *warn*): without ``--anonymize`` the sync
+Safety posture — *warn*: without ``--anonymize`` the sync
 copies data verbatim, so a prominent warning is emitted — real PII would land
 **unmasked** in the target. Anonymization stays opt-in to match the published
 guide's "Basic sync"; the warning makes the risk legible (text → stderr, JSON →

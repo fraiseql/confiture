@@ -1,7 +1,7 @@
 """The severity `--list-rules` prints is the severity the rule emits.
 
 `acl_001` emitted `RuleSeverity.ERROR` and its registry entry declared
-`warning` (LINT-01), so the catalogue an operator reads to choose a `--fail-on`
+`warning`, so the catalogue an operator reads to choose a `--fail-on`
 threshold was wrong about the one rule that could reach `error`. Nothing held
 the two together.
 

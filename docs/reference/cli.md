@@ -3605,7 +3605,7 @@ confiture seed apply [OPTIONS]
 | `--copy-format` | - | Flag | off | Use COPY format (2-10x faster for large datasets) |
 | `--copy-threshold` | - | int | `1000` | Row threshold for auto COPY (default: 1000, use >1000 rows) |
 | `--format` | `-f` | str | `text` | Output format: text or json or csv (default: text) |
-| `--output` / `--report` | `-o` | path | - | Save structured output (JSON/CSV) to file. --report is a back-compat alias for --output/-o (DOCS-M2). |
+| `--output` / `--report` | `-o` | path | - | Save structured output (JSON/CSV) to file. --report is a back-compat alias for --output/-o. |
 | `--profile` | - | str | - | Apply only the named seed profile (seed.profiles.<name> in env config). |
 
 <!-- END GENERATED: cli confiture seed apply -->

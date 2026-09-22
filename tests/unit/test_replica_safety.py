@@ -51,7 +51,7 @@ def test_verdict_is_dataclass() -> None:
     assert v.reason is None and v.multi_step is None
 
 
-# ── severity policy (OD-12) ───────────────────────────────────────────────────
+# ── severity policy ────────────────────────────────────────────────────────
 
 
 def test_severity_warns_by_default_no_replicas() -> None:

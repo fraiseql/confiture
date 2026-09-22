@@ -129,7 +129,7 @@ _label = label_for
 
 #: What makes two ``CREATE`` statements definitions of the same object. The
 #: inventory's answer, not one of this module's own: the rules that report a
-#: property of an object once (LINT-10) must group exactly as ``build_001`` does,
+#: property of an object once must group exactly as ``build_001`` does,
 #: or a duplicate would silence a documentation finding it did not cover.
 _group = group_definitions
 

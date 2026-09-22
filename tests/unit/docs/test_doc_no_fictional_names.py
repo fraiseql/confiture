@@ -1,6 +1,6 @@
 """Executable guard: no fictional names in docs or the project CLAUDE.md.
 
-DOCS-M5 / DOCS-M4 anti-drift guard. These names describe a tool that doesn't
+Anti-drift guard. These names describe a tool that doesn't
 exist and must never reappear in user-facing docs:
 
 * ``confiture_migrations`` / ``confiture_version`` — the tracking table is

@@ -2,8 +2,7 @@
 
 In ``--format json`` mode, every failure path emits a stable, machine-readable
 envelope on stdout instead of free-form Rich text. The ``error`` value is the
-unified inner issue object shared across #144 / #145 / #148 (see
-.phases/.../shared-issue-schema.md):
+unified inner issue object shared across #144 / #145 / #148:
 
     {"ok": false, "error": {severity, code, message, actionable,
                             details, migration, file, line}}
@@ -149,9 +148,8 @@ def fail(
 ) -> NoReturn:
     """Single error boundary: emit the failure, then exit with the #146 code.
 
-    In ``json_mode`` the envelope goes to stdout (OD-4) so a single ``jq`` pipe
-    reads it; otherwise the human-readable Rich rendering goes to stderr. The
-    human path is byte-for-byte the pre-#145 behavior.
+    In ``json_mode`` the envelope goes to stdout so a single ``jq`` pipe
+    reads it; otherwise the human-readable Rich rendering goes to stderr.
 
     Raises:
         typer.Exit: always, with ``ConfiturError.exit_code``.

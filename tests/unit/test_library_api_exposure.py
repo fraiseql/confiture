@@ -34,7 +34,7 @@ _NEWLY_EXPOSED = _BUILTIN_HOOKS + _ANONYMIZATION
 
 
 def test_newly_exposed_symbols_resolve() -> None:
-    """Each Phase-04 library symbol imports from the top-level package."""
+    """Each library symbol imports from the top-level package."""
     for name in _NEWLY_EXPOSED:
         assert name in confiture.__all__, f"{name} missing from __all__"
         assert getattr(confiture, name) is not None

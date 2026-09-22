@@ -155,13 +155,13 @@ class IdempotencyValidator:
 
         # The raw text goes to the parser: pglast handles comments, literals and
         # dollar-quoted bodies itself, and its statement locations index this
-        # exact string (ANA-01).
+        # exact string.
         try:
             matches = detect_non_idempotent_patterns(sql)
         except pglast.parser.ParseError as exc:
             # What PostgreSQL's own parser rejects cannot be certified: one
             # finding, counted as unanalyzed, so `--fail-on-unanalyzable`
-            # covers it and the verdict reads "unverified" (ANA-02).
+            # covers it and the verdict reads "unverified".
             report.warnings.append(
                 ExtractionWarning(
                     kind=WarningKind.UNPARSEABLE_SQL,

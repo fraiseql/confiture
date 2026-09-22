@@ -49,7 +49,7 @@ def _write(tmp_path: Path, name: str, sql: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# AST signature extractor — Cycle 1
+# AST signature extractor
 # ---------------------------------------------------------------------------
 
 
@@ -107,7 +107,7 @@ def test_unqualified_function_defaults_to_public_schema(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Duplicate detection across files — Cycle 2
+# Duplicate detection across files
 # ---------------------------------------------------------------------------
 
 
@@ -150,7 +150,7 @@ def test_passes_when_each_signature_is_unique(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Overload + kind distinction — Cycle 3
+# Overload + kind distinction
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +187,7 @@ def test_function_and_procedure_with_same_name_not_flagged(tmp_path: Path) -> No
 
 
 # ---------------------------------------------------------------------------
-# Opt-out directive — Cycle 4
+# Opt-out directive
 # ---------------------------------------------------------------------------
 
 
@@ -246,7 +246,7 @@ def test_ignore_globs_skip_specific_objects(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Env-config gate — Cycle 5
+# Env-config gate
 # ---------------------------------------------------------------------------
 
 

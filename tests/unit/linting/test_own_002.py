@@ -42,7 +42,7 @@ def _write_migration(tmp_path: Path, name: str, sql: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 1: bare ALTER OWNER on non-created object → ERROR
+# Bare ALTER OWNER on non-created object → ERROR
 # ---------------------------------------------------------------------------
 
 
@@ -62,7 +62,7 @@ def test_flags_bare_alter_owner_on_pre_existing_object(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 2: don't flag when CREATE in same migration
+# Don't flag when CREATE in same migration
 # ---------------------------------------------------------------------------
 
 
@@ -77,7 +77,7 @@ def test_does_not_flag_when_create_in_same_migration(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 3: IF EXISTS guard inside DO block → WARNING
+# IF EXISTS guard inside DO block → WARNING
 # ---------------------------------------------------------------------------
 
 
@@ -102,7 +102,7 @@ def test_if_exists_guard_downgrades_to_warning(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 4: companion `.py` requires_superuser=True suppresses
+# Companion `.py` requires_superuser=True suppresses
 # ---------------------------------------------------------------------------
 
 
@@ -167,7 +167,7 @@ def test_requires_superuser_companion_does_not_suppress_bare_error(
 
 
 # ---------------------------------------------------------------------------
-# Cycle 5: violation message includes copy-paste remediation
+# Violation message includes copy-paste remediation
 # ---------------------------------------------------------------------------
 
 

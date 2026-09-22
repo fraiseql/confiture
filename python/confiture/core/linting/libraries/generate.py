@@ -114,7 +114,7 @@ def _entries_by_parent(files: Sequence[Path], roots: Sequence[Path]) -> dict[Pat
 
     Derived from the file list rather than walked, so a directory the
     environment's ``exclude_dirs`` or per-directory ``exclude`` globs keep out
-    of the build contributes no entry and is judged by nothing (LINT-08).
+    of the build contributes no entry and is judged by nothing.
     Groups are in build order, and so is *files*.
 
     Args:

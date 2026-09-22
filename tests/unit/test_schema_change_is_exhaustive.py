@@ -3,8 +3,7 @@
 ``core/schema_change.KINDS`` is closed, and this guard enumerates it: each kind must
 have an up rendering and a down rendering (``differ_sql``), a destructive verdict
 (``destructive.data_loss_reason``), an accompaniment class
-(``git_accompaniment.is_body_change``) and a risk tier (``change_set.diff_tiers``,
-owner decision 6). One sample per kind comes from ``tests/fixtures/every_change``,
+(``git_accompaniment.is_body_change``) and a risk tier (``change_set.diff_tiers``). One sample per kind comes from ``tests/fixtures/every_change``,
 the pair whose diff is every kind once, so a kind the differ no longer emits fails
 here too.
 

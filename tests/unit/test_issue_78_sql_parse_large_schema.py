@@ -207,7 +207,7 @@ class TestPglastParser:
 
 
 class TestAccompanimentReportsAParseFailure:
-    """Cycle 3, superseded by #288: a parse failure is reported, and it fails.
+    """A parse failure is reported, and it fails (#288).
 
     Issue #78 made the checker *degrade gracefully* — return a report carrying
     `migration_error` and `is_valid: True` — so a schema too large for sqlparse

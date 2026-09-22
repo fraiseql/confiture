@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Nothing in the package or its tests names the plan that produced it.**
+  `tests/unit/test_no_archaeology.py` already refused a numbered phase, a review id
+  from four families and a TODO marker; it now also refuses a hyphenated phase, a
+  numbered cycle, an owner's decision by number, review ids from the other families
+  the reviews used (`LINT-`, `ANA-`, `TST-`, `OD-`, `ARCH-`, `QW`), a plan step
+  (`(P4)`), a path under the plan directory and "this campaign" — 202 lines across
+  `python/`, `tests/` and `docs/`, each rewritten to say what holds rather than which
+  step made it hold. The word *phase* stays where it is the domain's: `HookPhase`,
+  `restore`'s phases, expand/contract. A table of one sample per shape keeps each
+  family switched on.
+- `seed convert --batch` is its own function; `too_many_statements` has no entry
+  left in `tests/budgets.json`.
+
 ## [1.17.0] - 2026-09-22
 
 **One platform.** The third train of the one-model-one-platform campaign (phases

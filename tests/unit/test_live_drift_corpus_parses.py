@@ -2,8 +2,8 @@
 
 `tests/fixtures/live_drift_corpus/` is the control corpus for #301, #302 and
 #303: one file per gap, applied verbatim to a database so that "this database
-was built from this DDL and therefore has zero drift" is a test the campaign can
-fail against. A corpus file pglast rejects would make every phase's measurement
+was built from this DDL and therefore has zero drift" is a test a comparison can
+fail against. A corpus file pglast rejects would make every measurement
 a parse error wearing an empty expectation, so it is checked here first, where
 no server is needed.
 """

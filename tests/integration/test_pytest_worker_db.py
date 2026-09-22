@@ -1,4 +1,4 @@
-"""Integration tests for per-worker xdist provisioning (P3).
+"""Integration tests for per-worker xdist provisioning.
 
 Covers single-flight template build (`ensure_template`) and a REAL `pytest -n2`
 subprocess run exercising the `confiture_worker_db` fixture under genuine

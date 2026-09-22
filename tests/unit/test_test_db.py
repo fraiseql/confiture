@@ -1,4 +1,4 @@
-"""Unit tests for the test-db provisioner's pure logic (P2).
+"""Unit tests for the test-db provisioner's pure logic.
 
 Identifier validation, SQL composition, and template-status classification are
 testable without a database. DB-touching behaviour is integration-tested.

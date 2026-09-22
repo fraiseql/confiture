@@ -1,7 +1,4 @@
-"""Data models for prep_seed validation.
-
-Cycle 1 & 2: Core Models for tracking prep_seed pattern violations.
-"""
+"""Data models for tracking prep_seed pattern violations."""
 
 from __future__ import annotations
 

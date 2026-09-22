@@ -205,11 +205,11 @@ def _run_git_group(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcom
     # NotAGitRepositoryError (GIT_002 → exit 7) propagates to fail().
     validate_git_flags_in_repo()
 
-    # ARCH-L1, revised in 0.42.0 (#184): --staged now reaches every check here,
-    # not just grant accompaniment. The context resolves one (base, target) pair
-    # for the group — in staged mode the target is the index materialised as a
-    # tree, so what gets judged is what is about to be committed rather than
-    # HEAD, which is the whole point of a pre-commit flag. Grant accompaniment
+    # --staged reaches every check here, not just grant accompaniment (#184). The
+    # context resolves one (base, target) pair for the group — in staged mode the
+    # target is the index materialised as a tree, so what gets judged is what is
+    # about to be committed rather than HEAD, which is the whole point of a
+    # pre-commit flag. Grant accompaniment
     # keeps its own `staged_only` path: it diffs grant *files* through the index
     # directly and never built a schema from a ref.
     #

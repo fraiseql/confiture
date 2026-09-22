@@ -1,4 +1,4 @@
-"""Unit tests for seed-profile filtering and config (P4, Cycles 1–2)."""
+"""Unit tests for seed-profile filtering and config."""
 
 from __future__ import annotations
 

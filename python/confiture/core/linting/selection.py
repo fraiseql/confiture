@@ -5,7 +5,7 @@ into one set of codes (#150), turns that set into ``LintConfig``'s switches, and
 runs the rules that read the DDL tree or the migrations tree rather than the
 built schema — ``replica_001``, ``sec_002``, ``func_001``, ``own_001``/``own_002``,
 ``tree_001``–``tree_004``. Each such rule reads the files the environment's build
-reads (LINT-08), and a rule whose configuration is absent has nothing to report.
+reads, and a rule whose configuration is absent has nothing to report.
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def env_ddl_files(env: str, project_dir: Path) -> tuple[list[Path], list[Path]]:
 
     One answer for every rule that walks the DDL tree, so none of them reports a
     file the environment's ``exclude_dirs`` or per-directory ``exclude`` globs
-    keep out of the build (LINT-08). A project whose config will not load has no
+    keep out of the build. A project whose config will not load has no
     build to describe, so it has no tree to lint.
     """
     try:
@@ -251,8 +251,8 @@ def _security_definer_findings(env: str, project_dir: Path) -> list[LintViolatio
     """#161: sec_002 — SECURITY DEFINER / search_path over the env's schema DDL.
 
     Findings join the report, so `lint --format json` carries them and
-    `--baseline` can absorb them (LINT-03). They used to print straight to the
-    console, which in a machine-output mode meant printing *into* the payload.
+    `--baseline` can absorb them. Printed to the console instead, a finding
+    would land *inside* a machine-output payload.
     """
     sec_cfg = _security_lint_config(env, project_dir)
     if sec_cfg is None:

@@ -595,7 +595,7 @@ The `_common.schema.json` file holds shared `$defs`:
 * `Violation` — used by `migrate validate --idempotent`
 * `ExtractorWarning` — dynamic-SQL warnings
 * `DriftItem` — used by `drift`
-* `HintsArray` — the `hints` field (pre-allocated for Phase 05)
+* `HintsArray` — the `hints` field
 
 The `_preflight_defs.schema.json` file holds preflight-specific
 sub-schemas:

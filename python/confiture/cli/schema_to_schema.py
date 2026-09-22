@@ -1,7 +1,7 @@
-"""``confiture migrate schema-to-schema`` — Medium 4 (FDW) CLI (issue ARCH-N2).
+"""``confiture migrate schema-to-schema`` — Medium 4 (FDW) CLI.
 
-Wires the previously-orphaned ``core.schema_to_schema.SchemaToSchemaMigrator``
-to a CLI subcommand group matching docs/guides/04-schema-to-schema.md:
+Wires ``core.schema_to_schema.SchemaToSchemaMigrator`` to a CLI subcommand
+group matching docs/guides/04-schema-to-schema.md:
 ``setup``, ``analyze``, ``migrate``, ``migrate-table``, ``verify``, ``cleanup``.
 
 Each command resolves a ``--source`` and ``--target`` database (env name →

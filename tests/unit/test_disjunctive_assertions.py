@@ -1,4 +1,4 @@
-"""``assert A or B`` without a reason is a budget that may only shrink (TST-04).
+"""``assert A or B`` without a reason is a budget that may only shrink.
 
 A disjunctive assertion passes when *either* side holds, so it pins less than it
 looks like it does. Some are legitimate — two spellings of the same message, two

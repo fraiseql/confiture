@@ -5,7 +5,7 @@ There were six ways to ask for a preview: ``--dry-run``, ``--dry-run-execute``,
 ``bootstrap``'s ``--check/--no-check`` and its three-way ``--check/--dry-run/--apply``.
 A command either acts by default and takes ``--dry-run`` to preview, or previews
 by default and takes ``--mode`` whose default only looks (``check``, ``plan``) —
-never both, and never one of the retired spellings (owner decisions 3 and 10).
+never both, and never one of the retired spellings.
 
 ``--dry-run-execute`` on ``migrate up`` is not a spelling of either: it executes
 every pending migration inside a SAVEPOINT and rolls back. It keeps its name.

@@ -1,4 +1,4 @@
-"""Every test asserts something (TST-04).
+"""Every test asserts something.
 
 A test function with no assertion passes whenever the code under test does
 not raise. That is a smoke test at best and, more often, a test that once

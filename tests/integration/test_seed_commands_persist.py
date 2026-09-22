@@ -98,7 +98,7 @@ def test_continue_on_error_keeps_the_files_that_applied(project: Path, fresh_dat
 
 
 def test_seed_apply_has_one_mode(project: Path, fresh_database: str) -> None:
-    """``--sequential`` was the only mode that applied anything (owner decision 14)."""
+    """``seed apply`` applies by default; ``--sequential`` is not one of its flags."""
     result = runner.invoke(app, ["seed", "apply", "--sequential", "--env", "test"])
 
     assert result.exit_code == 2, result.output

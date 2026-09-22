@@ -1179,7 +1179,7 @@ def group_definitions(objects: Iterable[SchemaObject]) -> list[list[SchemaObject
 
     The one answer to "are these the same object": ``build_001`` reports a group
     of more than one, and the rules that report a property of an object once
-    (LINT-10) keep the first of each group. They must agree, or a duplicate
+    keep the first of each group. They must agree, or a duplicate
     would silence a documentation finding it did not cover.
     """
     return group_by_signature(objects, object_key, lambda obj: obj.signature_key)
@@ -1192,9 +1192,8 @@ def distinct(objects: Iterable[SchemaObject]) -> list[SchemaObject]:
     carries no ``COMMENT``, its name is not snake_case — reports it once
     however many times the object is defined. The second definition is
     ``build_001``'s finding and nobody else's: repeating every other rule
-    against it turned one mistake into N identical ones, halved a project's
-    documentation backlog the day it deduplicated a file, and put identities in
-    baselines that existed only because of the duplication (LINT-10).
+    against it would turn one mistake into N identical findings, and put
+    identities in a baseline that exist only because of the duplication.
 
     A rule whose subject is the *statement* rather than the object — which
     schema does this ``CREATE`` land in — reads the objects directly, because

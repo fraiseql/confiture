@@ -3,7 +3,7 @@
 A table defined in two files is one mistake — ``build_001``'s — and before 1.4.0
 every other inventory-reading rule repeated itself against each definition:
 ``app.tb_widget`` defined twice yielded two identical ``doc_001`` findings, two
-``pk_001``, two ``naming_001`` and two ``naming_002`` per column (LINT-10). A
+``pk_001``, two ``naming_001`` and two ``naming_002`` per column. A
 project fixing the duplicate saw its documentation backlog halve as a
 side-effect, and a baseline recorded identities that existed only because of the
 duplication.

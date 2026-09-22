@@ -150,7 +150,7 @@ def local_env_config(temp_project_dir: Path, test_db_url: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Database routing (TST-02)
+# Database routing
 #
 # Every database test reaches its server through the fixtures below; no test
 # module carries its own connection string (tests/unit/test_no_literal_dsn.py

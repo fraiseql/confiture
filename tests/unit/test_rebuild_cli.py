@@ -15,7 +15,7 @@ runner = CliRunner()
 
 
 class TestRebuildCLIHelp:
-    """Cycle 5.1: Basic CLI wiring."""
+    """Basic CLI wiring."""
 
     def test_help_shows_all_options(self):
         result = runner.invoke(app, ["migrate", "rebuild", "--help"])
@@ -33,7 +33,7 @@ class TestRebuildCLIHelp:
 
 
 class TestRebuildPreFlight:
-    """Cycle 5.2: Pre-flight validation."""
+    """Pre-flight validation."""
 
     def test_missing_config_exits_1(self):
         result = runner.invoke(
@@ -70,7 +70,7 @@ def _make_env(tmp_path: Path) -> tuple[Path, Path]:
 
 
 class TestRebuildExecution:
-    """Cycle 5.3: Confirmation UX and execution."""
+    """Confirmation UX and execution."""
 
     def _mock_result(self, **kwargs):
         defaults = {
@@ -136,7 +136,7 @@ class TestRebuildExecution:
 
 
 class TestRebuildFormatter:
-    """Cycle 5.4: Structured output formatter."""
+    """Structured output formatter."""
 
     @patch("confiture.core.migrator.Migrator.from_config")
     def test_json_output(self, mock_from_config, tmp_path: Path):
@@ -175,7 +175,7 @@ class TestRebuildFormatter:
 
 
 class TestRebuildExitCodes:
-    """Cycle 5.5: Semantic exit codes."""
+    """Semantic exit codes."""
 
     @patch("confiture.core.migrator.Migrator.from_config")
     def test_success_exit_0(self, mock_from_config, tmp_path: Path):

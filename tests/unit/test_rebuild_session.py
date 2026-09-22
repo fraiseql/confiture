@@ -11,7 +11,7 @@ from confiture.models.results import MigrateRebuildResult, MigrationApplied
 
 
 class TestMigratorSessionRebuild:
-    """Cycle 3.1: MigratorSession.rebuild()."""
+    """MigratorSession.rebuild()."""
 
     def _make_session(self):
         from confiture.core.migrator import MigratorSession

@@ -1,4 +1,4 @@
-"""Unit tests for the `confiture test-db` CLI group (P2).
+"""Unit tests for the `confiture test-db` CLI group.
 
 TestDbProvisioner is mocked, so no database is needed. Builder-backed commands
 (provision-template, status) run against a tiny tmp project.

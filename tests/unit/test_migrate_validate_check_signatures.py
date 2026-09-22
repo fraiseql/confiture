@@ -274,7 +274,7 @@ class TestCheckBodyFlag:
         return MagicMock(return_value=cm)
 
     # ------------------------------------------------------------------
-    # Cycle 1: Guard — --check-body requires --check-signatures
+    # Guard — --check-body requires --check-signatures
     # ------------------------------------------------------------------
 
     def test_check_body_without_check_signatures_is_config_error(self, tmp_path):
@@ -288,7 +288,7 @@ class TestCheckBodyFlag:
         assert result.exit_code == 5
 
     # ------------------------------------------------------------------
-    # Cycle 2 & 3: Clean run and drift detection
+    # Clean run and drift detection
     # ------------------------------------------------------------------
 
     def test_check_body_clean_run_exits_0(self, tmp_path):
@@ -381,7 +381,7 @@ class TestCheckBodyFlag:
         assert "7b2e09f1c3a8" in output
 
     # ------------------------------------------------------------------
-    # Cycle 4: JSON output includes body_drift key
+    # JSON output includes body_drift key
     # ------------------------------------------------------------------
 
     def test_check_body_json_output_includes_body_drift(self, tmp_path):
@@ -439,7 +439,7 @@ class TestCheckBodyFlag:
         assert drift_entry["db_hash"] == "7b2e09f1c3a8"
 
     # ------------------------------------------------------------------
-    # Cycle 5: Exit code matrix
+    # Exit code matrix
     # ------------------------------------------------------------------
 
     @pytest.mark.parametrize(
@@ -499,7 +499,7 @@ class TestCheckBodyFlag:
         assert result.exit_code == expected_exit
 
     # ------------------------------------------------------------------
-    # Cycle 6 (#177): --show-diff surfaces bodies + unified diff
+    # --show-diff surfaces bodies + unified diff (#177)
     # ------------------------------------------------------------------
 
     def _run_show_diff(self, tmp_path, args: list[str]):

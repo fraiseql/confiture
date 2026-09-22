@@ -3,7 +3,7 @@
 ``Column.raw_sql_type`` held the written spelling only when the canonical type
 map *missed*, so every recognised type arrived stripped of its typmod:
 ``VARCHAR(50)`` became ``VARCHAR`` and ``NUMERIC(10,2)`` became ``NUMERIC``.
-Two failures, the pair this campaign keeps finding together:
+Two failures, which travel together:
 
 * generated DDL declared a **different column** than the schema did — an
   unbounded ``varchar`` where the schema said fifty characters;

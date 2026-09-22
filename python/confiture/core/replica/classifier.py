@@ -302,7 +302,7 @@ class OperationClassifier:
         backends together, went with it.
         """
         # pglast.parser.ParseError propagates: the caller reports the file as
-        # unclassifiable instead of reading a guess (ANA-02).
+        # unclassifiable instead of reading a guess.
         return self._classify_ast(sql)
 
     # ------------------------------------------------------------------ #

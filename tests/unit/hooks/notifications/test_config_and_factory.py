@@ -1,4 +1,4 @@
-"""Tests for NotificationConfig + NotificationsRootConfig + factory — Cycle 7.
+"""Tests for NotificationConfig + NotificationsRootConfig + factory.
 
 Pin: discriminated-union validation, env-var expansion, helpful errors on
 misspelled discriminator values, Jinja opt-in gate, factory builds the

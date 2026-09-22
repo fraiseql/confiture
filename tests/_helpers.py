@@ -30,7 +30,7 @@ def plpgsql_check_url() -> str | None:
     ``postgres:15``, the compose stack's ``postgres:16-alpine`` and a stock
     local install all lack the extension, so every other run of these tests
     exercises the skip path instead. ``CONFITURE_TEST_DB_URL`` is the one place
-    a server URL comes from (TST-02); an unset variable means "no server was
+    a server URL comes from; an unset variable means "no server was
     asked for", which is not a failure.
 
     Probed once per session — the answer cannot change mid-run, and a server

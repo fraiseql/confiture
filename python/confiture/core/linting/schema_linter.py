@@ -338,7 +338,7 @@ class SchemaLinter:
 
         # A schema PostgreSQL's own parser rejects can never lint clean: the
         # rules below read what they can, and this notice says the rest was
-        # not read (ANA-02).
+        # not read.
         self._inventory = Inventory()
         self._file_objects, self._file_schemas, rejected = self._inventory_per_file()
         self._parse_sql = self._assemble_parse_text({r.label for r in rejected})

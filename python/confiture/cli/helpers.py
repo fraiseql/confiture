@@ -314,7 +314,7 @@ def emit(data: dict[str, Any], output_file: Path | None = None, out: Console | N
     ``is_valid``, say what it found) — ``command`` (``migrate up``) and ``parser``
     (what parsed the SQL). Each is added only when the payload does not carry it,
     after every key it does: nothing is renamed, nested or reordered, so a consumer
-    that read a payload before reads the same payload now (owner decision 2).
+    that reads a payload without the envelope reads it unchanged with it.
 
     With *output_file* the JSON goes to the file and one human line to stdout — the
     split the fraisier adapter depends on, reading clean JSON from ``--output`` while

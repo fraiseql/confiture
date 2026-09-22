@@ -37,7 +37,7 @@ steps spread across releases.
 > **`ADD COLUMN NOT NULL DEFAULT` stays unsafe** even on PostgreSQL 11+ where the
 > "fast default" optimization makes the *primary* change cheap. The fast-default
 > optimization is orthogonal to the replica-lag concern: a reader on the old
-> schema still errors on the new `NOT NULL` column. (OD-13.)
+> schema still errors on the new `NOT NULL` column.
 
 ## Default severity policy
 

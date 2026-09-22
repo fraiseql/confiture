@@ -241,8 +241,7 @@ def test_preflight_exposes_top_level_window_safe_verdict(tmp_path: Path) -> None
 
     fraisier's window-safety gate reads this single field instead of prefix-matching
     ``PFLIGHT_REPLICA_*`` codes — and (since fraisier dropped its own safety nets)
-    it is the *whole* safety contract. Filesystem-only, no DB. This is the Phase-3
-    commitment.
+    it is the *whole* safety contract. Filesystem-only, no DB.
     """
     # A forward-compatible, reversible, transactional migration → certified safe.
     safe = _preflight_payload(

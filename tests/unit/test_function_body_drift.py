@@ -12,7 +12,7 @@ from confiture.core.function_body_drift import (
 from tests._helpers import routines
 
 # ---------------------------------------------------------------------------
-# Cycle 1: No drift cases
+# No drift cases
 # ---------------------------------------------------------------------------
 
 
@@ -50,7 +50,7 @@ def test_no_drift_case_difference():
 
 
 # ---------------------------------------------------------------------------
-# Cycle 2: Drift detected
+# Drift detected
 # ---------------------------------------------------------------------------
 
 
@@ -86,7 +86,7 @@ def test_drift_detected_only_changed_functions_listed():
 
 
 # ---------------------------------------------------------------------------
-# Cycle 2b (#177): drift record carries both bodies + a unified diff
+# Drift record carries both bodies + a unified diff (#177)
 # ---------------------------------------------------------------------------
 
 
@@ -163,7 +163,7 @@ def test_report_to_dict_matches_inline_shape():
 
 
 # ---------------------------------------------------------------------------
-# Cycle 3: None-body handling
+# None-body handling
 # ---------------------------------------------------------------------------
 
 
@@ -193,7 +193,7 @@ def test_both_none_skipped():
 
 
 # ---------------------------------------------------------------------------
-# Cycle 4: Keys only in source or only in live are not compared
+# Keys only in source or only in live are not compared
 # ---------------------------------------------------------------------------
 
 

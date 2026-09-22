@@ -1,4 +1,4 @@
-"""Unit tests for the cacheable schema-artifact dumper (P1).
+"""Unit tests for the cacheable schema-artifact dumper.
 
 Subprocess and TempDatabase are mocked; no real database or pg_dump is needed.
 """
@@ -20,7 +20,7 @@ from confiture.core.schema_artifact import (
 from confiture.exceptions import SchemaError
 
 # ---------------------------------------------------------------------------
-# Cycle 1: dumper core — argv construction + error paths
+# Dumper core — argv construction + error paths
 # ---------------------------------------------------------------------------
 
 
@@ -93,7 +93,7 @@ class TestDump:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 2: content-addressing + idempotent skip
+# Content-addressing + idempotent skip
 # ---------------------------------------------------------------------------
 
 

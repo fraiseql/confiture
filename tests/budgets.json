@@ -33,9 +33,7 @@
     "python/confiture/cli/commands/debug.py": 1,
     "python/confiture/cli/commands/migrate/introspect.py": 1
   },
-  "too_many_statements": {
-    "python/confiture/cli/seed_copy.py": 1
-  },
+  "too_many_statements": {},
   "too_many_returns": {
     "python/confiture/core/error_handler.py": 1,
     "python/confiture/core/idempotency/static_eval/evaluator.py": 3,

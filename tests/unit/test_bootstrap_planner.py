@@ -62,7 +62,7 @@ def _make_conn(
 
 
 # ---------------------------------------------------------------------------
-# Cycle 1: empty-plan happy path
+# Empty-plan happy path
 # ---------------------------------------------------------------------------
 
 
@@ -75,7 +75,7 @@ def test_empty_plan_when_role_exists_and_no_drift() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 2: role creation step
+# Role creation step
 # ---------------------------------------------------------------------------
 
 
@@ -91,7 +91,7 @@ def test_plan_includes_role_creation_when_missing() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 3: REASSIGN OWNED step
+# REASSIGN OWNED step
 # ---------------------------------------------------------------------------
 
 
@@ -110,7 +110,7 @@ def test_plan_includes_reassign_when_postgres_owns_in_scope_schemas() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 4: --all-schemas safety check
+# --all-schemas safety check
 # ---------------------------------------------------------------------------
 
 
@@ -137,7 +137,7 @@ def test_plan_allows_reassign_with_all_schemas_flag() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Cycle 6: ALTER DEFAULT PRIVILEGES step
+# ALTER DEFAULT PRIVILEGES step
 # ---------------------------------------------------------------------------
 
 
