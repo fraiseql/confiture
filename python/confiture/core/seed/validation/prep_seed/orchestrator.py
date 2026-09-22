@@ -16,8 +16,10 @@ import psycopg
 from confiture.core import live_catalog
 from confiture.core.connection import create_connection
 from confiture.core.differ import SchemaDiffer
+from confiture.core.introspection.dependency_graph import dependency_order
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import Table
+from confiture.core.schema_sources import parse_schema
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )
@@ -40,6 +42,7 @@ from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedViolation,
     ViolationSeverity,
 )
+from confiture.exceptions import SchemaError
 
 
 @dataclass
@@ -375,8 +378,9 @@ class PrepSeedOrchestrator:
             # Should not reach here (checked in run()), but be safe
             return violations
 
-        # Collect seed files
-        seed_files = list(self.config.seeds_dir.glob("*.sql"))
+        # In name order, as `seed apply` loads them: a file may reference the rows
+        # of one before it.
+        seed_files = sorted(self.config.seeds_dir.glob("*.sql"))
         seed_file_paths = [str(f) for f in seed_files]
 
         if not seed_file_paths:
@@ -577,19 +581,27 @@ class PrepSeedOrchestrator:
         ]
 
     def _discover_resolution_functions(self) -> list[str]:
-        """Discover resolution function names from schema directory.
+        """Resolution function names from the schema directory, parents first.
 
-        Globs for fn_resolve*.sql files and returns function names (stems).
-
-        Returns:
-            List of resolution function names
+        ``fn_resolve_<table>`` fills ``<catalog>.<table>`` and joins the tables it
+        references, so it runs after the resolvers of those: the catalog tables'
+        foreign-key order decides, and a resolver of no catalog table follows in
+        name order. A schema that does not parse, or whose keys form a cycle,
+        leaves the name order — level 2 reports the schema, not this.
         """
         if not self.config.schema_dir.exists():
             return []
-
-        func_files = sorted(self.config.schema_dir.rglob("fn_resolve*.sql"))
-
-        return [f.stem for f in func_files]
+        names = [f.stem for f in sorted(self.config.schema_dir.rglob("fn_resolve*.sql"))]
+        try:
+            order = dependency_order(parse_schema(self.config.schema_dir))
+        except SchemaError:
+            return names
+        rank = {
+            f"fn_resolve_{ref.name}": position
+            for position, ref in enumerate(order)
+            if ref.schema == self.config.catalog_schema
+        }
+        return sorted(names, key=lambda name: (rank.get(name, len(rank)), name))
 
 
 def validate_seeds(

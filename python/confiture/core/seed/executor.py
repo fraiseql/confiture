@@ -80,7 +80,7 @@ class SeedExecutor:
             self._create_savepoint(savepoint_name)
 
             with self.connection.cursor() as cursor:
-                _run_script(cursor, sql_content)
+                run_script(cursor, sql_content)
 
             # Release savepoint on success
             self._release_savepoint(savepoint_name)
@@ -155,8 +155,12 @@ class SeedExecutor:
             self.connection.rollback()
 
 
-def _run_script(cursor: psycopg.Cursor, sql: str) -> None:
-    """Run *sql* as ``psql`` would: its statements, and each COPY block's rows streamed."""
+def run_script(cursor: psycopg.Cursor, sql: str) -> None:
+    """Run *sql* as ``psql`` would: its statements, and each COPY block's rows streamed.
+
+    The one way a seed script reaches the database through the driver — ``seed
+    apply`` and the prep-seed validator's level 5 both run seeds through it.
+    """
     position = 0
     for block in copy_blocks(sql):
         _execute_code(cursor, sql[position : block.start])
