@@ -669,7 +669,7 @@ confiture/
 │   │   ├── seed_copy.py          # ``confiture seed convert``: the COPY-format tool
 │   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
 │   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
-│   │   ├── commands/             # CLI command modules for Confiture (34 modules)
+│   │   ├── commands/             # CLI command modules for Confiture (35 modules)
 │   │   └── formatters/           # (7 modules)
 │   ├── config/                   # Configuration module for Confiture
 │   │   ├── __init__.py           # Configuration module for Confiture

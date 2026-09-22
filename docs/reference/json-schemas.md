@@ -535,6 +535,12 @@ always exits 0, never reads a schema.
 `code` matches the `rule_id` field on lint violations, so a finding can be
 mapped back to the selector that turns it off.
 
+### `confiture schema dump-model --format json`
+
+[schema-dump-model.schema.json](./json-schemas/schema-dump-model.schema.json) —
+`{model, ok, command, parser}`: the schema model below, from DDL, a project's build
+or a live database, keys sorted so the same model is the same bytes.
+
 ### The schema model (`confiture.platform`)
 
 [schema-model.schema.json](./json-schemas/schema-model.schema.json)
