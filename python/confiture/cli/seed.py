@@ -568,6 +568,8 @@ def seed_generate(
 
     Connects to the database, introspects the table's column structure,
     and writes a commented-out INSERT template to db/seeds/<env>/<table>.sql.
+    A stub to fill by hand, not a generator: a tool that writes seed data builds
+    on confiture.platform (docs/guides/building-on-confiture.md).
 
     EXAMPLES:
       confiture seed generate users --database-url $DATABASE_URL

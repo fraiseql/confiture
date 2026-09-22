@@ -207,7 +207,7 @@ grammar; do not repair the JSON with a global replace.
 
 **One lexer too.** `core/sql_lexer.py` is the only module that tokenises SQL text
 (`split_statements`, `strip_comments`, `tokens`, `code_text`, `comments`,
-`directives`, `blank_copy_blocks`). A regex outside it whose pattern carries a
+`directives`, `blank_copy_blocks`, `copy_blocks`, `transaction_statements`). A regex outside it whose pattern carries a
 lexical marker — `--`, `/*`, a dollar quote, a `'…'` shape, `stdin`, `\.` — fails
 `tests/unit/test_one_sql_lexer.py` (allow-list entries state why the text is not
 SQL); a regex that matches a statement's shape (`^CREATE\s+TABLE`) counts against
@@ -519,6 +519,25 @@ Prep-seed level 2 reads the qualifier too (1.14.0, #317): `SchemaTables` keys
 `"prep_seed" in str(sql_file)`. A tree declaring nothing in the configured
 prep-seed schema is a **finding**, not a silent empty pass — the heuristic routed
 unqualified DDL somewhere and a qualifier cannot.
+
+**One seam too** (since 1.17.0). `confiture.platform` is what a tool —
+fraiseql-semis, later the Rust crate — builds on, and it **defines nothing**: every
+name is re-exported from the core module that owns it, and
+`tests/contract/test_platform_surface.py` pins the list, each signature and each
+dataclass field by equality. No signature names a pglast or psycopg type
+(`test_platform_leaks_no_driver_types.py` walks annotations, fields and returned
+values); a connection is a URL the call owns or a `core.connection.Connection` the
+caller does. `diff` compares DDL sources, not two models — views, routines and
+triggers are compared as their creating statements, which the model does not hold.
+`docs/reference/platform-api.md` is generated (`scripts/gen_platform_reference.py`).
+
+A seed script is read the way psql reads one: `seed apply` and prep-seed level 5 run
+it through `seed.executor.run_script`, which executes the text between
+`COPY … FROM stdin` blocks and streams each block's rows through the driver's COPY
+protocol (`sql_lexer.copy_blocks`). Transaction control is a statement
+(`sql_lexer.transaction_statements`), never a word in the text; a seed file is
+decoded from bytes, because a text-mode read turns a CR inside a literal into a
+newline.
 
 #### Python migrations: the static evaluator (since 0.46.0, #213)
 

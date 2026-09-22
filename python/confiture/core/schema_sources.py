@@ -10,7 +10,7 @@ schema.
 A comparison of two sources is ``SchemaDiffer.compare``'s, over their DDL text:
 views, routines and triggers are compared as the whole statements that create
 them, which the model does not hold, so two models could not be compared for
-them at all (owner decision 17).
+them at all.
 """
 
 from __future__ import annotations
@@ -94,8 +94,12 @@ def parse_schema(
 ) -> SchemaModel:
     """The model of the schema *source* declares — or *env*'s build, from *project_dir*.
 
-    See :func:`schema_text` for what a source is. ``COPY … FROM stdin`` data is
-    blanked before parsing, so a tree that seeds inline still reads.
+    A ``str`` is DDL text. A ``Path`` is a file, or a directory read the way a
+    bare ``include_dirs`` entry is — every ``.sql`` under it, sorted by path. A
+    sequence of paths is read in its order. *env* reads the project's build
+    instead: the files ``confiture build --env <env> --schema-only`` selects, in
+    build order. ``COPY … FROM stdin`` data is blanked before parsing, so a tree
+    that seeds inline still reads.
 
     Raises:
         ValueError: unless exactly one of *source* and *env* is given.

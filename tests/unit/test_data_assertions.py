@@ -182,9 +182,7 @@ class TestMixedFiles:
         the statement splitter handed the rows to the scanner.
         """
         copied = (
-            "COPY app.t (id) FROM stdin;\n"
-            "b2b9437a-28df-4ec4-8e4a-2bbdc241330b\n"
-            "\\.\n" + INCIDENT
+            "COPY app.t (id) FROM stdin;\nb2b9437a-28df-4ec4-8e4a-2bbdc241330b\n\\.\n" + INCIDENT
         )
         (found,) = find_data_assertions(copied, HERE)
         assert copied.splitlines()[found.line - 1].strip().startswith("RAISE EXCEPTION")

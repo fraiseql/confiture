@@ -568,7 +568,9 @@ def copy_blocks(sql: str) -> list[CopyBlock]:
     and hand each block's rows to its ``COPY`` protocol.
     """
     found: list[CopyBlock] = []
-    for start, data_start, end in _lex(sql)[1]:
+    for first, data_start, end in _lex(sql)[1]:
+        # A comment before `COPY` is the text before the block, not the block.
+        start = skip_leading_comments(sql, first)
         data = sql[data_start:end]
         body, _, last = data.rstrip("\n").rpartition("\n")
         if last.rstrip("\r") == _COPY_TERMINATOR:
