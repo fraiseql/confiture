@@ -177,3 +177,17 @@ def test_create_app_refuses_an_empty_token_before_connecting(monkeypatch):
     with pytest.raises(ValueError, match="token"):
         mcp_http.create_app(URL, token="")
     psycopg.connect.assert_not_called()
+
+
+def test_http_mode_serves_no_unauthenticated_schema_pages(monkeypatch):
+    """Only ``/mcp`` and ``/health`` answer: FastAPI's docs pages would describe the
+    tools to anyone who can reach the port, token or not."""
+    _patch_backend(monkeypatch, {})
+    from fastapi.testclient import TestClient
+
+    app = mcp_http.create_app(URL, token=TOKEN)
+    with TestClient(app) as client:
+        statuses = {
+            path: client.get(path).status_code for path in ("/docs", "/redoc", "/openapi.json")
+        }
+    assert statuses == {"/docs": 404, "/redoc": 404, "/openapi.json": 404}

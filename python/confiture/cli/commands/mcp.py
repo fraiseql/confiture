@@ -34,7 +34,7 @@ def mcp_server(
     stdio: bool = typer.Option(False, "--stdio", help="Run in stdio mode (for Claude Code)"),
     include: str | None = typer.Option(None, "--include", help="LIKE pattern to filter functions"),
     port: int | None = typer.Option(
-        None, "--port", help="Serve over HTTP on this port (needs the [mcp-http] extra)"
+        None, "--port", help="Serve over HTTP on this port (needs the mcp-http extra)"
     ),
     no_confiture_tools: bool = typer.Option(
         False,

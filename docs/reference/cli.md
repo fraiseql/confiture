@@ -3511,7 +3511,7 @@ confiture mcp [OPTIONS] COMMAND [ARGS]...
 | `--schema` | `-s` | str | `public` | Schema to expose |
 | `--stdio` | - | Flag | off | Run in stdio mode (for Claude Code) |
 | `--include` | - | str | - | LIKE pattern to filter functions |
-| `--port` | - | int | - | Serve over HTTP on this port (needs the [mcp-http] extra) |
+| `--port` | - | int | - | Serve over HTTP on this port (needs the mcp-http extra) |
 | `--no-confiture-tools` | - | Flag | off | Disable built-in Confiture migration/introspection tools |
 | `--token` | - | str | - | Bearer token every HTTP request must carry; required with --port. Defaults to $CONFITURE_MCP_TOKEN, which keeps it out of the process list |
 

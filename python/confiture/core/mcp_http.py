@@ -104,6 +104,10 @@ def create_app(
         title="confiture-mcp",
         version=__version__,
         description="Confiture MCP server over HTTP",
+        # The schema pages would describe the tools to anyone who reaches the port.
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
 
     @app.middleware("http")
