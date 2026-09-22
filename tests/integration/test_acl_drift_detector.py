@@ -345,7 +345,7 @@ def test_unrelated_table_not_in_acls_is_ignored(acl_db: psycopg.Connection) -> N
 
 
 # ---------------------------------------------------------------------------
-# Partition handling — phase 06.  Parent appears in ``relkind = 'p'`` and
+# Partition handling. Parent appears in ``relkind = 'p'`` and
 # must be discovered; children with ``relispartition = true`` must not
 # spuriously surface as extras.
 # ---------------------------------------------------------------------------

@@ -116,7 +116,7 @@ def test_narrowing_is_not_symmetric_with_widening() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# The classifier carries the target type (cycle 3)
+# The classifier carries the target type
 # --------------------------------------------------------------------------- #
 
 

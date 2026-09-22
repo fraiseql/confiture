@@ -164,7 +164,7 @@ class TestAbsentIsNotEmpty:
 class TestSkippedIsNotSuccess:
     """`migrate verify` must not read as a pass when it verified nothing (#311).
 
-    This is phase 01's defect under another name. `verify-checksums` computed
+    `verify-checksums` had the same defect under another name: it computed
     `ok` as `not mismatches`, so a ledger-less run reported green; it now
     reports `ok: false` with `was_skipped: true`. `migrate verify` has the same
     hole in a different shape: it carries no `ok` field at all, and the

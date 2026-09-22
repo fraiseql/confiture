@@ -49,7 +49,27 @@ _CAMPAIGN_SHAPES = (
     _PLAN_STEP,
     _REVIEW_IDS,
 )
-CODE_PATTERN = re.compile("|".join((rf"\b{_PHASE}", *_CAMPAIGN_SHAPES, _MARKERS)))
+
+
+def _anycase(pattern: str) -> str:
+    """*pattern*, matched whatever case it is written in."""
+    return f"(?i:{pattern})"
+
+
+#: Under ``python/`` and ``tests/`` a numbered phase or cycle is campaign vocabulary
+#: in any case: ``phase 05`` in a docstring or an xfail reason names the plan exactly
+#: as ``Phase 05`` does. ``docs/`` keeps the case-sensitive forms, because a
+#: lower-case "phase 1" there is a step of a guide the reader is following.
+CODE_PATTERN = re.compile(
+    "|".join(
+        (
+            _anycase(rf"\b{_PHASE}"),
+            _anycase(_CYCLE),
+            *_CAMPAIGN_SHAPES,
+            _MARKERS,
+        )
+    )
+)
 DOCS_PATTERN = re.compile(
     "|".join(
         (
@@ -106,6 +126,8 @@ def test_docs_do_not_reference_the_remediation_phases() -> None:
 #: Assembled from pieces for the same reason as the patterns.
 CAUGHT = (
     "Phase" + " 03",
+    "this is " + "phase" + " 05's defect",
+    "# partition handling — " + "cycle" + " 6",
     "the " + "Phase" + "-05 warn posture",
     "[" + "Phase" + " 11, Cycle 2]",
     "# " + "Cycle" + " 3: scoping",
