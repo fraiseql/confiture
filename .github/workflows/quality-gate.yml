@@ -533,7 +533,7 @@ jobs:
         # the pre-commit hook and a local `uv run ty` actually use. Move all
         # three together: a lockfile bump that leaves the pins behind fails here
         # and nowhere else, because the code was fixed for the newer checker.
-        uv pip install 'ty==0.0.81'
+        uv pip install 'ty==0.0.83'
     - name: Run ty type check on Python code
       # --no-sync: don't let `uv run` rebuild the project (which needs Rust).
       run: uv run --no-sync ty check python/confiture/
