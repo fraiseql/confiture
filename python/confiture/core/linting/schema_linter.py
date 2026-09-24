@@ -619,19 +619,36 @@ class SchemaLinter:
         from confiture.core.linting.unresolved import RULE_ID
 
         unread = sorted({name for _label, scan in scans for name in scan.unread})
-        if not unread:
-            return
-        body = "body" if len(unread) == 1 else "bodies"
-        report.degraded.append(
-            RuleStatus(
-                code=RULE_ID,
-                state="degraded",
-                reason=(
-                    f"could not read {len(unread)} routine {body}, so the objects "
-                    f"they name are not checked: {', '.join(unread)}"
-                ),
+        if unread:
+            body = "body" if len(unread) == 1 else "bodies"
+            report.degraded.append(
+                RuleStatus(
+                    code=RULE_ID,
+                    state="degraded",
+                    reason=(
+                        f"could not read {len(unread)} routine {body}, so the objects "
+                        f"they name are not checked: {', '.join(unread)}"
+                    ),
+                )
             )
-        )
+        short = [
+            f"{fragment.referrer} at {f'{label}:' if label else 'line '}{fragment.line} "
+            f"({fragment.name})"
+            for label, scan in scans
+            for fragment in scan.unread_fragments
+        ]
+        if short:
+            statement = "statement" if len(short) == 1 else "statements"
+            report.degraded.append(
+                RuleStatus(
+                    code=RULE_ID,
+                    state="degraded",
+                    reason=(
+                        f"could not read {len(short)} {statement} in a routine body, so "
+                        f"the objects they name are not checked: {'; '.join(short)}"
+                    ),
+                )
+            )
 
     def _check_bodies(self, report: LintReport) -> None:
         """``body_001`` / ``body_002``: what ``plpgsql_check`` says about each body (#245).

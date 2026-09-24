@@ -328,9 +328,17 @@ $$;
 
 Extraction is PostgreSQL's own parser end to end. A PL/pgSQL body goes through
 `parse_plpgsql`, which hands back every embedded SQL fragment with the line it
-is written on; each fragment is re-parsed and walked for `RangeVar` and
-`FuncCall`. A `LANGUAGE sql` body, a `BEGIN ATOMIC` body and a view definition
-are SQL already and parse directly.
+is written on and the statement it belongs to; each fragment is parsed the way
+that statement writes it — a query as a query, a condition or a `RETURN` value
+as an expression, `v := app.fn_x(p)` by its right-hand side — and walked for
+`RangeVar` and `FuncCall`. A `LANGUAGE sql` body, a `BEGIN ATOMIC` body and a
+view definition are SQL already and parse directly.
+
+Only the string an `EXECUTE` runs is out of reach, and it is declined out loud
+as dynamic; its `USING` parameters, and the body of a `FOR … IN EXECUTE` loop,
+are read like any other statement. A statement the reader could not parse is
+reported as a `degraded` entry naming the routine, the file and the line — the
+rest of the body is read, and the rule does not pretend it read that one.
 
 #### A schema-qualified type is not a reason to skip a routine
 

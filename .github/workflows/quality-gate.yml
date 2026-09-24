@@ -361,6 +361,10 @@ jobs:
           tests/unit/test_idempotency_suggestion_wiring.py \
           tests/unit/test_pglast_enum_binding.py \
           tests/unit/test_plpgsql_parse.py \
+          tests/unit/test_plpgsql_fragments.py \
+          tests/unit/test_fragment_census.py \
+          tests/unit/test_data_assertions.py \
+          tests/unit/linting/test_reference_extraction.py \
           tests/unit/linting/test_build_003_references.py \
           tests/unit/test_constraint_reader_is_exhaustive.py \
           tests/unit/test_alter_subtypes_are_exhaustive.py \
