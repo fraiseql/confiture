@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Protocol
 
+from confiture.core.builder import files_under
 from confiture.exceptions import SchemaError
 
 STDIN = "-"
@@ -32,7 +33,7 @@ class DesiredStateSource(Protocol):
 
 @dataclass(frozen=True)
 class SqlFileSource:
-    """DDL from a file, a directory of ``.sql`` files (read in name order) or stdin (``-``)."""
+    """DDL from a file, a directory read as a tree (every ``.sql`` under it, by path) or stdin."""
 
     target: str
     kind: ClassVar[str] = "sql"
@@ -45,7 +46,7 @@ class SqlFileSource:
             return sys.stdin.read()
         path = Path(self.target)
         if path.is_dir():
-            files = sorted(path.glob("*.sql"))
+            files = files_under(path)
             if not files:
                 raise SchemaError(
                     f"No .sql files in desired-state directory {path}",

@@ -18,8 +18,6 @@ from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
 )
 from confiture.core.seed.validation.prep_seed.level_2_schema import (
     Level2SchemaValidator,
-    SchemaMapping,
-    TableDefinition,
 )
 from confiture.core.seed.validation.prep_seed.level_3_resolvers import (
     Level3ResolutionValidator,
@@ -55,8 +53,5 @@ __all__ = [
     "PrepSeedPattern",
     "PrepSeedReport",
     "PrepSeedViolation",
-    # Schema utilities
-    "SchemaMapping",
-    "TableDefinition",
     "ViolationSeverity",
 ]

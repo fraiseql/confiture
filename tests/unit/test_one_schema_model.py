@@ -92,9 +92,6 @@ ALLOWED: dict[str, str] = {
     "core/linting/tenant/function_parser.py:InsertStatement": (
         "a parsed INSERT inside a function body: the columns it writes, not a table"
     ),
-    "core/seed/validation/prep_seed/level_2_schema.py:TableDefinition": (
-        "configuration a prep-seed check is told, not a parse of DDL"
-    ),
     "models/introspection.py:IntrospectedColumn": (
         "the `introspect` wire shape, pinned by introspect.schema.json"
     ),

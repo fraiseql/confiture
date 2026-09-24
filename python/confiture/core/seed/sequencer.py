@@ -29,6 +29,7 @@ def apply_seed_files(
     continue_on_error: bool = False,
     transaction_mode: str = "savepoint",
     console: Any = None,
+    anchor: Path | None = None,
 ) -> ApplyResult:
     """Apply *seed_files*, in order, sequentially against *database_url*, and commit.
 
@@ -58,6 +59,7 @@ def apply_seed_files(
             connection=connection,
             console=console,
             files=seed_files,
+            anchor=anchor,
         )
         result = applier.apply_sequential(
             continue_on_error=continue_on_error, profile=profile, transaction_mode=transaction_mode

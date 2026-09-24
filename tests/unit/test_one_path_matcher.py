@@ -6,8 +6,8 @@ can be crossed. Two of them in one codebase is two answers to "is this file in
 the build", which is how the reference manual came to print exclusion examples
 that excluded a different set of files from the one they name (#256).
 
-Matching an *object* name — ``schema.relname``, a bare filename from a flat
-listing — is a different job: there is no path, ``**`` has no meaning, and
+Matching an *object* name — ``schema.relname``, a routine's qualified name —
+is a different job: there is no path, ``**`` has no meaning, and
 ``fnmatch`` is the right tool. Those modules are listed below with the reason,
 and a listed module that no longer matches anything fails the test, as in the
 one-lexer guard.
@@ -26,10 +26,6 @@ MATCHER = PACKAGE / "core" / "path_globs.py"
 
 # Modules that glob something that is not a path, with the reason. D6.
 ALLOWED: dict[str, str] = {
-    "core/seed/applier.py": (
-        "`SeedProfile.include`/`.exclude` select from a flat `glob('*.sql')` listing where a "
-        "path never appears; the patterns match a bare filename and `**` has no meaning there"
-    ),
     "core/drift.py": (
         "`--check-acls` / `--check-ownership` scope by object name — `relname` and "
         "`schema.name` — never by file path"

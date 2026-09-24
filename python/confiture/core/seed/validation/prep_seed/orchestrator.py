@@ -12,22 +12,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
-import pglast.parser
 import psycopg
 
 from confiture.core import live_catalog
+from confiture.core.builder import files_under
 from confiture.core.connection import Connection, create_connection, require_mode
-from confiture.core.differ import SchemaDiffer
 from confiture.core.introspection.dependency_graph import dependency_order
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.schema_model import Table
-from confiture.core.schema_sources import parse_schema
+from confiture.core.schema_model import SchemaModel, Table
+from confiture.core.schema_sources import read_schema
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )
 from confiture.core.seed.validation.prep_seed.level_2_schema import (
     Level2SchemaValidator,
-    TableDefinition,
 )
 from confiture.core.seed.validation.prep_seed.level_3_resolvers import (
     Level3ResolutionValidator,
@@ -45,6 +43,7 @@ from confiture.core.seed.validation.prep_seed.models import (
     ViolationSeverity,
 )
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError, SeedError
+from confiture.models.warnings import BuildWarning
 
 #: The validation levels there are.
 LEVELS = range(1, 6)
@@ -69,17 +68,16 @@ def _read(path: Path, error: type[ConfiturError]) -> str:
 
 @dataclass
 class SchemaTables:
-    """What the schema files declare, sorted onto the two sides level 2 compares.
+    """The model's tables, sorted onto the two sides level 2 compares.
 
     Keyed by ``(schema, name)``: a bare table name is not an identity — keyed on
     it, ``tenant.tb_x`` and ``etl.tb_x`` would be one entry. ``schemas_seen``
-    is every schema the files actually declare into, so a tree with nothing in
+    is every schema the tree actually declares into, so a tree with nothing in
     either configured schema can say so rather than pass empty.
     """
 
-    prep: dict[tuple[str, str], TableDefinition] = field(default_factory=dict)
-    catalog: dict[tuple[str, str], TableDefinition] = field(default_factory=dict)
-    violations: list[PrepSeedViolation] = field(default_factory=list)
+    prep: dict[tuple[str, str], Table] = field(default_factory=dict)
+    catalog: dict[tuple[str, str], Table] = field(default_factory=dict)
     schemas_seen: set[str] = field(default_factory=set)
 
 
@@ -142,6 +140,7 @@ class PrepSeedOrchestrator:
             config: Orchestration configuration
         """
         self.config = config
+        self._schema: tuple[SchemaModel, list[BuildWarning]] | None = None
 
     def run(self) -> PrepSeedReport:
         """Run validation levels 1 through max_level.
@@ -155,8 +154,11 @@ class PrepSeedOrchestrator:
         Raises:
             ConfigurationError: a max_level outside 1-5.
             ValueError: levels 4-5 with neither a database_url nor a connection
-            SeedError: a seed file level 1 cannot read as UTF-8 text.
-            SchemaError: a resolver file level 3 cannot read as UTF-8 text.
+            SeedError: ``SEED_001`` for a seeds_dir that is not a directory, or a
+                seed file level 1 cannot read as UTF-8 text.
+            SchemaError: ``SCHEMA_201`` for a schema_dir that is not a directory
+                when a level that reads it runs (2 and up); ``SCHEMA_001`` for a
+                schema file levels 2-3 cannot read as UTF-8 text.
         """
         if self.config.max_level not in LEVELS:
             raise ConfigurationError(
@@ -169,6 +171,7 @@ class PrepSeedOrchestrator:
         ):
             msg = "database_url or connection required for levels 4-5"
             raise ValueError(msg)
+        self._require_directories()
 
         # Initialize report
         report = PrepSeedReport()
@@ -213,15 +216,35 @@ class PrepSeedOrchestrator:
 
         return report
 
+    def _require_directories(self) -> None:
+        """Refuse a directory that is not there: nothing read is not a clean result."""
+        if not self.config.seeds_dir.is_dir():
+            raise SeedError(
+                f"Seeds directory not found: {self.config.seeds_dir}",
+                seed_file=str(self.config.seeds_dir),
+                resolution_hint="Pass the directory the seed files are in, as it is on disk.",
+            )
+        if self.config.max_level >= FIRST_SCHEMA_LEVEL and not self.config.schema_dir.is_dir():
+            raise SchemaError(
+                f"Schema directory not found: {self.config.schema_dir}",
+                error_code="SCHEMA_201",
+                resolution_hint="Pass the directory the schema's DDL is in, as it is on disk.",
+            )
+
+    def _resolver_files(self) -> list[Path]:
+        """The schema files named for a resolver, ``fn_resolve*``, in path order."""
+        return [f for f in files_under(self.config.schema_dir) if f.name.startswith("fn_resolve")]
+
+    def _seed_files(self) -> list[Path]:
+        """The seed files every level reads: the tree ``seed apply`` loads, in its order."""
+        return files_under(self.config.seeds_dir)
+
     def _run_level_1(self) -> list[PrepSeedViolation]:
         """Run Level 1: Seed file validation."""
         validator = Level1SeedValidator()
         violations: list[PrepSeedViolation] = []
 
-        # Scan for seed files
-        sql_files = list(self.config.seeds_dir.rglob("*.sql"))
-
-        for file_path in sql_files:
+        for file_path in self._seed_files():
             content = _read(file_path, SeedError)
             violations.extend(validator.validate_seed_file(content, str(file_path)))
 
@@ -236,8 +259,14 @@ class PrepSeedOrchestrator:
         Returns:
             List of violations found
         """
-        tables = self._parse_schema_files()
-        violations: list[PrepSeedViolation] = list(tables.violations)
+        try:
+            model, warnings = self._read_schema()
+        except SchemaError as exc:
+            if exc.error_code != "DIFFER_400":
+                raise
+            return [self._unparseable(exc)]
+        tables = self._schema_tables(model)
+        violations = [self._duplicate(warning) for warning in warnings]
 
         if not tables.prep:
             violations.extend(self._nothing_to_compare(tables))
@@ -248,7 +277,7 @@ class PrepSeedOrchestrator:
         # which is why the *side* a table is on is read from its qualifier.
         catalog_schema = self.config.catalog_schema.lower()
 
-        def get_final_table(table_name: str) -> TableDefinition | None:
+        def get_final_table(table_name: str) -> Table | None:
             return tables.catalog.get((catalog_schema, table_name))
 
         validator = Level2SchemaValidator(get_final_table=get_final_table)
@@ -275,10 +304,7 @@ class PrepSeedOrchestrator:
         validator = Level3ResolutionValidator()
         violations: list[PrepSeedViolation] = []
 
-        # Find resolution functions
-        func_files = list(self.config.schema_dir.rglob("fn_resolve*.sql"))
-
-        for file_path in func_files:
+        for file_path in self._resolver_files():
             content = _read(file_path, SchemaError)
             violations.extend(validator.validate_function(file_path.stem, content))
 
@@ -423,10 +449,9 @@ class PrepSeedOrchestrator:
         """
         violations: list[PrepSeedViolation] = []
 
-        # In name order, as `seed apply` loads them: a file may reference the rows
-        # of one before it.
-        seed_files = sorted(self.config.seeds_dir.glob("*.sql"))
-        seed_file_paths = [str(f) for f in seed_files]
+        # In the order `seed apply` loads them: a file may reference the rows of
+        # one before it.
+        seed_file_paths = [str(f) for f in self._seed_files()]
 
         if not seed_file_paths:
             # No seeds to execute
@@ -492,12 +517,28 @@ class PrepSeedOrchestrator:
 
     def _record_scanned_files_level1(self, report: PrepSeedReport) -> None:
         """Record scanned files from Level 1 to report."""
-        sql_files = list(self.config.seeds_dir.rglob("*.sql"))
-        for file_path in sql_files:
+        for file_path in self._seed_files():
             report.add_file_scanned(str(file_path))
 
-    def _parse_schema_files(self) -> SchemaTables:
-        """The tables the schema files declare, on the side their qualifier puts them.
+    def _read_schema(self) -> tuple[SchemaModel, list[BuildWarning]]:
+        """The schema tree as one model, read once and kept for every level that asks.
+
+        The tree is read as ``confiture build`` reads it — every ``.sql`` under
+        ``schema_dir``, in path order — so an ``ALTER`` in one file folds into
+        the table another file creates.
+
+        Raises:
+            SchemaError: ``DIFFER_400`` naming the file and line PostgreSQL's
+                parser rejected — level 2 reports it as a finding — and
+                ``SCHEMA_001`` naming a file that is not UTF-8, which it does not:
+                a file the run could not read is an error, as at levels 1 and 3.
+        """
+        if self._schema is None:
+            self._schema = read_schema(self.config.schema_dir)
+        return self._schema
+
+    def _schema_tables(self, model: SchemaModel) -> SchemaTables:
+        """The model's tables, on the side their qualifier puts them.
 
         Which side a table is on is a fact the statement carries:
         ``CREATE TABLE catalog.tb_manufacturer`` is in ``catalog``, and
@@ -511,65 +552,41 @@ class PrepSeedOrchestrator:
         one that is.
         """
         tables = SchemaTables()
-        if not self.config.schema_dir.exists():
-            return tables
-
-        differ = SchemaDiffer()
         sides = {
             self.config.prep_seed_schema.lower(): tables.prep,
             self.config.catalog_schema.lower(): tables.catalog,
         }
-
-        for sql_file in sorted(self.config.schema_dir.rglob("*.sql")):
-            # Resolution functions are level 3's subject, not level 2's.
-            if sql_file.name.startswith("fn_resolve"):
-                continue
-            try:
-                parsed = differ.parse_sql(sql_file.read_text())
-            except (OSError, UnicodeDecodeError, pglast.parser.ParseError):
-                continue
-            for table in parsed:
-                self._place(table, sides, tables)
-
+        for table in model.tables.values():
+            schema = (table.schema or DEFAULT_SCHEMA).lower()
+            tables.schemas_seen.add(schema)
+            side = sides.get(schema)
+            if side is not None:
+                side[(schema, table.name)] = table
         return tables
 
-    def _place(
-        self,
-        table: Table,
-        sides: dict[str, dict[tuple[str, str], TableDefinition]],
-        tables: SchemaTables,
-    ) -> None:
-        """Put one parsed table on its side, or report that it is already there."""
-        schema = (table.schema or DEFAULT_SCHEMA).lower()
-        tables.schemas_seen.add(schema)
-        side = sides.get(schema)
-        if side is None:
-            return
-        key = (schema, table.name)
-        if key in side:
-            # ``confiture build`` concatenates in order and a table has no
-            # ``OR REPLACE`` form, so the first definition is the one the
-            # database ends up with — ``duplicates.wins``' answer for a table.
-            # Last-one-wins would silently validate a definition the database
-            # never has (#313).
-            tables.violations.append(
-                PrepSeedViolation(
-                    pattern=PrepSeedPattern.MISSING_FK_MAPPING,
-                    severity=ViolationSeverity.WARNING,
-                    message=(
-                        f"Table {schema}.{table.name} is defined more than once in the "
-                        "schema files; the first definition is the one the build keeps"
-                    ),
-                    file_path=str(self.config.schema_dir),
-                    line_number=1,
-                    impact="Level 2 validates the first definition",
-                )
-            )
-            return
-        side[key] = TableDefinition(
-            name=table.name,
-            schema=schema,
-            columns={col.folded: col.raw_sql_type or col.type_key or "" for col in table.columns},
+    def _unparseable(self, exc: SchemaError) -> PrepSeedViolation:
+        """A schema file PostgreSQL's parser rejects: a finding naming it, never a skip."""
+        file = (exc.context or {}).get("file")
+        return PrepSeedViolation(
+            pattern=PrepSeedPattern.MISSING_FK_MAPPING,
+            severity=ViolationSeverity.CRITICAL,
+            message=str(exc).split("\n", 1)[0],
+            file_path=str(file or self.config.schema_dir),
+            line_number=int((exc.context or {}).get("line") or 1),
+            impact="Level 2 compared nothing: PostgreSQL rejects the schema as written",
+        )
+
+    def _duplicate(self, warning: BuildWarning) -> PrepSeedViolation:
+        """One table defined twice. ``confiture build`` keeps the first definition —
+        ``duplicates.wins``' answer — and so does the model level 2 validates (#313).
+        """
+        return PrepSeedViolation(
+            pattern=PrepSeedPattern.MISSING_FK_MAPPING,
+            severity=ViolationSeverity.WARNING,
+            message=warning.message,
+            file_path=str(self.config.schema_dir),
+            line_number=1,
+            impact="Level 2 validates the definition the build keeps",
         )
 
     def _nothing_to_compare(self, tables: SchemaTables) -> list[PrepSeedViolation]:
@@ -609,9 +626,9 @@ class PrepSeedOrchestrator:
         """
         if not self.config.schema_dir.exists():
             return []
-        names = [f.stem for f in sorted(self.config.schema_dir.rglob("fn_resolve*.sql"))]
+        names = [f.stem for f in self._resolver_files()]
         try:
-            order = dependency_order(parse_schema(self.config.schema_dir))
+            order = dependency_order(self._read_schema()[0])
         except SchemaError:
             return names
         rank = {
@@ -646,7 +663,7 @@ def validate_seeds(
         SeedError: ``SEED_001`` for *seeds* that is not a directory, or a seed file
             that cannot be read as UTF-8 text.
         SchemaError: ``SCHEMA_201`` for a *schema_dir* that is not a directory when
-            a level that reads it runs (2 and up), ``SCHEMA_001`` for a resolver
+            a level that reads it runs (2 and up), ``SCHEMA_001`` for a schema
             file that cannot be read as UTF-8 text.
         ConfigurationError: ``CONFIG_001`` for a *max_level* outside 1-5;
             ``CONFIG_013`` for a connection in autocommit at levels 4-5, which
@@ -659,18 +676,6 @@ def validate_seeds(
         raise TypeError(
             "database must be a URL (str) or a connection meeting "
             f"confiture.platform.Connection, not {type(database).__name__}"
-        )
-    if not seeds_dir.is_dir():
-        raise SeedError(
-            f"Seeds directory not found: {seeds_dir}",
-            seed_file=str(seeds_dir),
-            resolution_hint="Pass the directory the seed files are in, as it is on disk.",
-        )
-    if max_level >= FIRST_SCHEMA_LEVEL and not schema_dir.is_dir():
-        raise SchemaError(
-            f"Schema directory not found: {schema_dir}",
-            error_code="SCHEMA_201",
-            resolution_hint="Pass the directory the schema's DDL is in, as it is on disk.",
         )
     if database is None and max_level in range(FIRST_DATABASE_LEVEL, LEVELS.stop):
         msg = f"max_level {max_level} needs a database: levels 4-5 run against one"

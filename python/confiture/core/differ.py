@@ -111,7 +111,7 @@ def _structural(obj: SchemaObject) -> bool:
     return obj.kind in ("table", "sequence") or (obj.kind == "type" and obj.enum_values is not None)
 
 
-def _duplicate_warnings(inventory: Inventory) -> list[BuildWarning]:
+def duplicate_warnings(inventory: Inventory) -> list[BuildWarning]:
     """Say so when one ``(schema, name)`` is defined more than once in one tree.
 
     Two definitions of one ``(schema, name)`` collapse into one entry of the
@@ -271,7 +271,7 @@ class SchemaDiffer:
             enum_types=list(model.enum_types.values()),
             sequences=list(model.sequences.values()),
             objects=objects_in(sql, raws),
-            warnings=_duplicate_warnings(inventory),
+            warnings=duplicate_warnings(inventory),
         )
 
     def compare(self, old_sql: str, new_sql: str) -> SchemaDiff:

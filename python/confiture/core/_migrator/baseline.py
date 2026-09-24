@@ -30,7 +30,7 @@ from confiture.core.checksum import compute_checksum
 from confiture.core.seed import applier as _core_seed_applier
 from confiture.core.sql_lexer import split_statements
 from confiture.core.sql_utils import strip_transaction_wrappers
-from confiture.exceptions import ConfigurationError, RebuildError, SchemaError
+from confiture.exceptions import ConfigurationError, RebuildError, SchemaError, SeedError
 from confiture.models.results import MigrateRebuildResult, MigrateReinitResult, MigrationApplied
 
 logger = logging.getLogger(__name__)
@@ -341,6 +341,13 @@ def rebuild(
         migrations_dir = Path("db") / "migrations"
     if seeds_dir is None:
         seeds_dir = Path("db") / "seeds"
+    if apply_seeds and not seeds_dir.is_dir():
+        # Before anything is dropped: a rebuild that cannot seed has not started.
+        raise SeedError(
+            f"Seeds directory not found: {seeds_dir}",
+            seed_file=str(seeds_dir),
+            resolution_hint="Pass the directory the seed files are in, or rebuild without seeds.",
+        )
 
     # Step 1: Backup tracking table if requested
     if backup_tracking:

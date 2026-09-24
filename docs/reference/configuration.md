@@ -675,8 +675,8 @@ Generated from `confiture.config.environment`; the description is the model's ow
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `include` | list[str] | `[]` | Globs a *filename* must match to be included (empty = all files). |
-| `exclude` | list[str] | `[]` | Globs over a *filename* that remove an otherwise-included file. |
+| `include` | list[str] | `[]` | Globs a seed's path must match to be included (empty = all files). |
+| `exclude` | list[str] | `[]` | Globs over a seed's path that remove an otherwise-included file. |
 | `name` | str \| NoneType | - | The key it is configured under in ``seed.profiles``, filled from that key; ``None`` for a profile built in code without one. What a run that applied it records as ``ApplyResult.seed_profile``. |
 
 #### `DriftConfig`

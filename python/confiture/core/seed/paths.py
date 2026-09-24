@@ -11,9 +11,19 @@ or a ``_`` / ``-`` separator. This recognises ordering-prefixed layouts
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePath
 
 _SEED_DIR_RE = re.compile(r"(?:^|[_-])seeds?(?:$|[_-])")
+
+
+def _components(path: Path, anchor: Path | None) -> tuple[str, ...]:
+    """*path*'s components below *anchor*, or all of them for a path outside it."""
+    if anchor is not None:
+        try:
+            return path.relative_to(anchor).parts
+        except ValueError:
+            pass
+    return path.parts
 
 
 def is_seed_path(path: Path | str, *, anchor: Path | None = None) -> bool:
@@ -24,13 +34,19 @@ def is_seed_path(path: Path | str, *, anchor: Path | None = None) -> bool:
     have every file classified as a seed. A path outside *anchor* is judged on
     all of its components so a genuine seed directory is never missed.
     """
-    candidate = Path(path)
-    components: tuple[str, ...]
-    if anchor is not None:
-        try:
-            components = candidate.relative_to(anchor).parts
-        except ValueError:
-            components = candidate.parts
-    else:
-        components = candidate.parts
-    return any(_SEED_DIR_RE.search(part.lower()) for part in components)
+    return any(_SEED_DIR_RE.search(part.lower()) for part in _components(Path(path), anchor))
+
+
+def seed_relative(path: Path, *, anchor: Path | None = None) -> PurePath:
+    """*path* below the first seed directory in it — what ``seed apply --seeds-dir`` sees.
+
+    ``db/seeds/common/10_users.sql`` is ``common/10_users.sql``, the path a seed
+    profile's globs see when ``seed apply`` reads ``db/seeds``, so a profile
+    selects the same files whichever command applies it. A path with no seed
+    directory below *anchor* is its bare name.
+    """
+    parts = _components(path, anchor)
+    for index, part in enumerate(parts[:-1]):
+        if _SEED_DIR_RE.search(part.lower()):
+            return PurePath(*parts[index + 1 :])
+    return PurePath(path.name)

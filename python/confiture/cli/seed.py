@@ -326,7 +326,7 @@ def validate(
         all_violations: list[Any] = []
         all_files: list[str] = []
         for dir_path, _env_name in dirs_to_validate:
-            report = validator.validate_directory(dir_path, recursive=True)
+            report = validator.validate_directory(dir_path)
             all_violations.extend(report.violations)
             all_files.extend(report.scanned_files)
             if fix:

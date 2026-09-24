@@ -147,20 +147,17 @@ class BuildConfig(BaseModel):
 class SeedProfile(BaseModel):
     """A named subset of seed files, selected by glob patterns.
 
-    Patterns match seed *filenames* (seed discovery is top-level, non-recursive).
-    Selection is include-then-exclude: an empty ``include`` starts from all
-    files; ``exclude`` then removes matches. Lets CI apply a lean test seed
-    (e.g. excluding large ETL-statistics partitions) for faster, higher-parallel
-    test databases.
-
-    These are ``fnmatch`` globs over a bare filename, **not** the gitignore path
-    globs ``include_dirs`` entries take under the same two key names: seed
-    discovery is a flat listing, so a path never appears and ``**`` would have
-    nothing to span.
+    Patterns are ``include_dirs``' own gitignore globs over each seed file's path
+    relative to the seeds directory, which is read as a tree: a pattern with no
+    ``/`` matches the filename at any depth (``stats_*.sql``), one with a ``/`` is
+    anchored at the seeds directory (``stats/``, ``core/*.sql``). Selection is
+    include-then-exclude: an empty ``include`` starts from all files; ``exclude``
+    then removes matches. Lets CI apply a lean test seed (e.g. excluding large
+    ETL-statistics partitions) for faster, higher-parallel test databases.
 
     Attributes:
-        include: Globs a *filename* must match to be included (empty = all files).
-        exclude: Globs over a *filename* that remove an otherwise-included file.
+        include: Globs a seed's path must match to be included (empty = all files).
+        exclude: Globs over a seed's path that remove an otherwise-included file.
         name: The key it is configured under in ``seed.profiles``, filled from
             that key; ``None`` for a profile built in code without one. What a
             run that applied it records as ``ApplyResult.seed_profile``.

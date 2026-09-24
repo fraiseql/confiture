@@ -36,16 +36,17 @@ def migrate_diff(
         None,
         "--from",
         help=(
-            "Current state: a schema file, a directory of .sql files, '-' for stdin, "
-            "or 'db' for the configured database (default: the first positional)"
+            "Current state: a schema file, a directory (every .sql under it, recursively), "
+            "'-' for stdin, or 'db' for the configured database (default: the first positional)"
         ),
     ),
     to: str | None = typer.Option(
         None,
         "--to",
         help=(
-            "Desired state: a schema file, a directory of .sql files (what fraiseql's "
-            "emit-ddl option writes), or '-' for stdin (default: the second positional)"
+            "Desired state: a schema file, a directory (every .sql under it, recursively — "
+            "what fraiseql's emit-ddl option writes), or '-' for stdin "
+            "(default: the second positional)"
         ),
     ),
     config: Path = config_option(

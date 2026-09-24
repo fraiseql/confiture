@@ -571,6 +571,7 @@ def _apply_seeds_sequentially(
             continue_on_error=continue_on_error,
             transaction_mode=transaction_mode,
             console=out,
+            anchor=builder.base_dir.parent,
         )
     except ConfiturError as e:
         fail(e, json_mode=json_mode, output_file=report_output)
@@ -631,7 +632,9 @@ def _write_dump_artifact(
     else:
         _schema_files, seed_paths = builder.categorize_sql_files()
         if seed_profile_obj is not None:
-            seed_paths = apply_profile_filter(seed_paths, seed_profile_obj)
+            seed_paths = apply_profile_filter(
+                seed_paths, seed_profile_obj, anchor=builder.base_dir.parent
+            )
         artifact_seed_files = seed_paths or None
     artifact_result = build_schema_artifact(
         server_url=server_url,

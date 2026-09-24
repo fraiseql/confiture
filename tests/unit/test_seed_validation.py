@@ -388,8 +388,8 @@ class TestSeedValidator:
         assert report.has_violations
         assert report.files_scanned == 2
 
-    def test_validate_directory_recursive(self, tmp_path) -> None:
-        """Test recursive directory scanning."""
+    def test_validate_directory_reads_the_tree(self, tmp_path) -> None:
+        """A seeds directory is a tree: one answer, no ``recursive`` switch (#386)."""
         from confiture.core.seed.validation.validator import SeedValidator
 
         # Create nested directories
@@ -399,7 +399,7 @@ class TestSeedValidator:
         (subdir / "002.sql").write_text("INSERT INTO products VALUES (1);;")
 
         validator = SeedValidator()
-        report = validator.validate_directory(tmp_path, recursive=True)
+        report = validator.validate_directory(tmp_path)
         assert report.files_scanned == 2
 
     def test_ignore_patterns(self) -> None:

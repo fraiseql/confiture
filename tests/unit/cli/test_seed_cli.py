@@ -213,6 +213,25 @@ class TestSeedConvertCommand:
         assert (output_dir / "users.sql").exists()
         assert (output_dir / "posts.sql").exists()
 
+    def test_seed_convert_batch_mode_mirrors_a_nested_file(
+        self, cli_runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """``--batch`` converts the tree, and writes each file at its relative path (#386)."""
+        input_dir = tmp_path / "seeds"
+        (input_dir / "core").mkdir(parents=True)
+        output_dir = tmp_path / "out"
+        (input_dir / "core" / "users.sql").write_text(
+            "INSERT INTO users (id, name) VALUES (1, 'Alice');"
+        )
+
+        result = cli_runner.invoke(
+            seed_app,
+            ["convert", "--input", str(input_dir), "--batch", "--output", str(output_dir)],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert (output_dir / "core" / "users.sql").exists()
+
     def test_seed_convert_batch_mode_shows_summary(
         self, cli_runner: CliRunner, tmp_path: Path
     ) -> None:

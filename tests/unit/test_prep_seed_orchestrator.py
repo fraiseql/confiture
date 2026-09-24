@@ -335,3 +335,39 @@ class TestPrepSeedOrchestrator:
         report = PrepSeedOrchestrator(config).run()
 
         assert str(seeds / "test.sql") in report.scanned_files
+
+
+class TestADirectoryThatIsNotThere:
+    """Nothing read is not a clean result — from the library and the CLI alike (#374)."""
+
+    def test_a_missing_seeds_directory_is_seed_001(self, tmp_path: Path) -> None:
+        from confiture.exceptions import SeedError
+
+        config = OrchestrationConfig(max_level=1, seeds_dir=tmp_path / "nope", schema_dir=tmp_path)
+        with pytest.raises(SeedError, match="Seeds directory not found") as caught:
+            PrepSeedOrchestrator(config).run()
+        assert caught.value.error_code == "SEED_001"
+
+    def test_a_missing_schema_directory_is_schema_201_from_level_2(self, tmp_path: Path) -> None:
+        from confiture.exceptions import SchemaError
+
+        config = OrchestrationConfig(max_level=2, seeds_dir=tmp_path, schema_dir=tmp_path / "nope")
+        with pytest.raises(SchemaError, match="Schema directory not found") as caught:
+            PrepSeedOrchestrator(config).run()
+        assert caught.value.error_code == "SCHEMA_201"
+
+    def test_level_1_does_not_need_a_schema_directory(self, tmp_path: Path) -> None:
+        config = OrchestrationConfig(max_level=1, seeds_dir=tmp_path, schema_dir=tmp_path / "nope")
+        assert PrepSeedOrchestrator(config).run().violations == []
+
+    def test_seed_validate_prep_seed_exits_non_zero(self, tmp_path: Path) -> None:
+        from typer.testing import CliRunner
+
+        from confiture.cli.main import app
+
+        result = CliRunner().invoke(
+            app,
+            ["seed", "validate", "--prep-seed", "--seeds-dir", str(tmp_path / "nope")],
+        )
+        assert result.exit_code not in (0, 1), result.output
+        assert "Seeds directory not found" in result.output

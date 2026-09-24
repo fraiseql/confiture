@@ -122,12 +122,12 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-39,995 lines, 57% of `core/`.
+40,084 lines, 57% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `__init__.py` | 124 | neutral |
-| `_migrator/` | 4,856 | database orchestration |
+| `_migrator/` | 4,865 | database orchestration |
 | `anonymization/` | 4,437 | database orchestration |
 | `backfill.py` | 124 | database orchestration |
 | `baseline_detector.py` | 248 | database orchestration |
@@ -137,7 +137,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `connection.py` | 283 | database orchestration |
 | `cte_debugger.py` | 198 | database orchestration |
 | `dependent_objects.py` | 162 | database orchestration |
-| `desired_state.py` | 72 | database orchestration |
+| `desired_state.py` | 73 | database orchestration |
 | `drift.py` | 1,328 | database orchestration |
 | `dry_run.py` | 239 | database orchestration |
 | `dry_run_summary.py` | 156 | neutral |
@@ -178,9 +178,9 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_exporter.py` | 155 | neutral |
 | `schema_facts.py` | 132 | database orchestration |
 | `schema_snapshot.py` | 104 | database orchestration |
-| `schema_sources.py` | 186 | database orchestration |
+| `schema_sources.py` | 238 | database orchestration |
 | `schema_to_schema.py` | 602 | database orchestration |
-| `seed/` | 4,965 | database orchestration |
+| `seed/` | 4,992 | database orchestration |
 | `sql_path.py` | 135 | database orchestration |
 | `sql_utils.py` | 74 | neutral |
 | `ssh_tunnel.py` | 138 | database orchestration |

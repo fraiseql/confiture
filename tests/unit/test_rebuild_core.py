@@ -335,7 +335,9 @@ class TestRebuildOrchestrator:
 
     @patch("confiture.core.seed.applier.SeedApplier")
     @patch("confiture.core.builder.SchemaBuilder", autospec=True)
-    def test_rebuild_with_seeds(self, MockBuilder, MockSeedApplier):
+    def test_rebuild_with_seeds(self, MockBuilder, MockSeedApplier, tmp_path):
+        seeds = tmp_path / "seeds"
+        seeds.mkdir()
         migrator = self._make_migrator()
         builder_instance = MockBuilder.return_value
         builder_instance.build.return_value = "CREATE TABLE t (id INT);"
@@ -351,7 +353,7 @@ class TestRebuildOrchestrator:
 
         result = migrator.rebuild(
             apply_seeds=True,
-            seeds_dir=Path("db/seeds"),
+            seeds_dir=seeds,
             migrations_dir=Path("db/migrations"),
         )
 

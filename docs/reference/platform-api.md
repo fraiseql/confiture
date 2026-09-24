@@ -39,7 +39,7 @@ data is blanked before parsing, so a tree that seeds inline still reads.
 **Raises**
 
 - `ValueError`: unless exactly one of *source* and *env* is given.
-- `SchemaError`: `DIFFER_400` when PostgreSQL's parser rejects the DDL, `SCHEMA_201` for a path that does not exist, `SCHEMA_001` for a file that cannot be read as UTF-8 text.
+- `SchemaError`: `DIFFER_400` when PostgreSQL's parser rejects the DDL, naming the file and line; `SCHEMA_201` for a path that does not exist, `SCHEMA_001` for a file that cannot be read as UTF-8 text.
 
 ### `introspect`
 
@@ -701,12 +701,12 @@ def apply_seeds(
 
 Apply seed files in order: one transaction, a savepoint per file.
 
-*seeds* is a directory — its top-level `.sql` files, sorted, filtered by
-*profile*'s filename globs — or the files themselves, in the order given; a
-`str` is the path it spells. A file is a script as `psql` reads one:
-statements, and `COPY … FROM stdin` blocks streamed through the driver's
-COPY protocol. Every path is checked before the database is reached, so a
-misspelt one applies nothing.
+*seeds* is a directory — every `.sql` under it, recursively, sorted by
+path as a build reads a tree, filtered by *profile*'s path globs — or the
+files themselves, in the order given; a `str` is the path it spells. A
+file is a script as `psql` reads one: statements, and `COPY … FROM
+stdin` blocks streamed through the driver's COPY protocol. Every path is
+checked before the database is reached, so a misspelt one applies nothing.
 
 The transaction: each file runs in a savepoint of its own
 (`SeedExecutor`), so a failed file is undone and nothing before it.
@@ -734,20 +734,17 @@ class SeedProfile(BaseModel)
 
 A named subset of seed files, selected by glob patterns.
 
-Patterns match seed *filenames* (seed discovery is top-level, non-recursive).
-Selection is include-then-exclude: an empty `include` starts from all
-files; `exclude` then removes matches. Lets CI apply a lean test seed
-(e.g. excluding large ETL-statistics partitions) for faster, higher-parallel
-test databases.
-
-These are `fnmatch` globs over a bare filename, **not** the gitignore path
-globs `include_dirs` entries take under the same two key names: seed
-discovery is a flat listing, so a path never appears and `**` would have
-nothing to span.
+Patterns are `include_dirs`' own gitignore globs over each seed file's path
+relative to the seeds directory, which is read as a tree: a pattern with no
+`/` matches the filename at any depth (`stats_*.sql`), one with a `/` is
+anchored at the seeds directory (`stats/`, `core/*.sql`). Selection is
+include-then-exclude: an empty `include` starts from all files; `exclude`
+then removes matches. Lets CI apply a lean test seed (e.g. excluding large
+ETL-statistics partitions) for faster, higher-parallel test databases.
 
 Attributes:
-    include: Globs a *filename* must match to be included (empty = all files).
-    exclude: Globs over a *filename* that remove an otherwise-included file.
+    include: Globs a seed's path must match to be included (empty = all files).
+    exclude: Globs over a seed's path that remove an otherwise-included file.
     name: The key it is configured under in `seed.profiles`, filled from
         that key; `None` for a profile built in code without one. What a
         run that applied it records as `ApplyResult.seed_profile`.
@@ -810,7 +807,7 @@ passed.
 **Raises**
 
 - `SeedError`: `SEED_001` for *seeds* that is not a directory, or a seed file that cannot be read as UTF-8 text.
-- `SchemaError`: `SCHEMA_201` for a *schema_dir* that is not a directory when a level that reads it runs (2 and up), `SCHEMA_001` for a resolver file that cannot be read as UTF-8 text.
+- `SchemaError`: `SCHEMA_201` for a *schema_dir* that is not a directory when a level that reads it runs (2 and up), `SCHEMA_001` for a schema file that cannot be read as UTF-8 text.
 - `ConfigurationError`: `CONFIG_001` for a *max_level* outside 1-5; `CONFIG_013` for a connection in autocommit at levels 4-5, which need a transaction to roll back.
 - `TypeError`: a *database* that is neither a URL nor a `Connection`.
 - `ValueError`: *max_level* of 4 or 5 without a *database*.

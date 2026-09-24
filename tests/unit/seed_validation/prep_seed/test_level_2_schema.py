@@ -1,28 +1,29 @@
 """Tests for Level 2 - Schema consistency validation.
 
-Cycles 4-7: Validates schema mapping, FK types, trinity pattern, self-references.
+Validates schema mapping, FK types, trinity pattern, self-references.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+from confiture.core.schema_model import Column, Table
 from confiture.core.seed.validation.prep_seed.level_2_schema import (
     Level2SchemaValidator,
-    TableDefinition,
 )
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
 )
 
 
-@dataclass
-class MockTable:
-    """Mock table for testing."""
-
-    name: str
-    schema: str
-    columns: dict[str, str]  # column_name -> type
+def _table(name: str, schema: str, columns: dict[str, str]) -> Table:
+    """A model table with *columns* (name → type), as a parsed tree would hold it."""
+    return Table(
+        name=name,
+        schema=schema,
+        columns=tuple(
+            Column(name=column, folded=column, line=1, type_text=sql_type)
+            for column, sql_type in columns.items()
+        ),
+    )
 
 
 class TestLevel2SchemaValidator:
@@ -35,7 +36,7 @@ class TestLevel2SchemaValidator:
 
     def test_detects_missing_final_table(self) -> None:
         """Detects when prep_seed table has no corresponding final table."""
-        prep_table = TableDefinition(
+        prep_table = _table(
             name="tb_manufacturer",
             schema="prep_seed",
             columns={
@@ -56,7 +57,7 @@ class TestLevel2SchemaValidator:
 
     def test_validates_final_table_exists(self) -> None:
         """Validates when final table exists."""
-        prep_table = TableDefinition(
+        prep_table = _table(
             name="tb_manufacturer",
             schema="prep_seed",
             columns={
@@ -65,7 +66,7 @@ class TestLevel2SchemaValidator:
             },
         )
 
-        final_table = TableDefinition(
+        final_table = _table(
             name="tb_manufacturer",
             schema="catalog",
             columns={
@@ -85,7 +86,7 @@ class TestLevel2SchemaValidator:
 
     def test_detects_missing_fk_mapping(self) -> None:
         """Detects when FK column in prep_seed has no matching column in final."""
-        prep_table = TableDefinition(
+        prep_table = _table(
             name="tb_product",
             schema="prep_seed",
             columns={
@@ -94,7 +95,7 @@ class TestLevel2SchemaValidator:
             },
         )
 
-        final_table = TableDefinition(
+        final_table = _table(
             name="tb_product",
             schema="catalog",
             columns={
@@ -114,7 +115,7 @@ class TestLevel2SchemaValidator:
 
     def test_validates_fk_type_mapping(self) -> None:
         """Validates that FK columns map UUID -> BIGINT."""
-        prep_table = TableDefinition(
+        prep_table = _table(
             name="tb_product",
             schema="prep_seed",
             columns={
@@ -123,7 +124,7 @@ class TestLevel2SchemaValidator:
             },
         )
 
-        final_table = TableDefinition(
+        final_table = _table(
             name="tb_product",
             schema="catalog",
             columns={
@@ -143,14 +144,14 @@ class TestLevel2SchemaValidator:
 
     def test_detects_trinity_pattern_violations(self) -> None:
         """Detects when trinity pattern not followed in final table."""
-        prep_table = TableDefinition(
+        prep_table = _table(
             name="tb_manufacturer",
             schema="prep_seed",
             columns={"id": "UUID"},
         )
 
         # Final table missing pk_* column (trinity pattern incomplete)
-        final_table = TableDefinition(
+        final_table = _table(
             name="tb_manufacturer",
             schema="catalog",
             columns={
@@ -170,7 +171,7 @@ class TestLevel2SchemaValidator:
 
     def test_detects_self_reference(self) -> None:
         """Detects self-referencing FK columns."""
-        prep_table = TableDefinition(
+        prep_table = _table(
             name="tb_product",
             schema="prep_seed",
             columns={
@@ -188,7 +189,7 @@ class TestLevel2SchemaValidator:
 
     def test_detects_self_reference_in_mapping(self) -> None:
         """Marks self-references with special handling note."""
-        prep_table = TableDefinition(
+        prep_table = _table(
             name="tb_node",
             schema="prep_seed",
             columns={
@@ -197,7 +198,7 @@ class TestLevel2SchemaValidator:
             },
         )
 
-        final_table = TableDefinition(
+        final_table = _table(
             name="tb_node",
             schema="catalog",
             columns={
@@ -217,7 +218,7 @@ class TestLevel2SchemaValidator:
 
     def test_valid_trinity_pattern_passes(self) -> None:
         """Valid trinity pattern passes all checks."""
-        prep_table = TableDefinition(
+        prep_table = _table(
             name="tb_manufacturer",
             schema="prep_seed",
             columns={
@@ -227,7 +228,7 @@ class TestLevel2SchemaValidator:
             },
         )
 
-        final_table = TableDefinition(
+        final_table = _table(
             name="tb_manufacturer",
             schema="catalog",
             columns={
