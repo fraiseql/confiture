@@ -154,8 +154,9 @@ Which format:
 - No rows is a file either way that names its table and columns: COPY writes an
   empty block, INSERT a comment, since an `INSERT` without a row is not SQL.
 
-`apply_seeds(database, seeds)` applies a directory's top-level `.sql` files in
-name order, or a list of files in the given order; a `str` is the path it
+`apply_seeds(database, seeds)` applies every `.sql` under a directory,
+recursively, sorted by path — the tree a build reads — or a list of files in
+the given order; a `str` is the path it
 spells. Every path is checked before the database is reached, so a misspelt one
 raises `SeedError` and applies nothing. It runs one transaction with a savepoint
 per file: a failed file is undone and nothing before it. The first failure, a
@@ -167,8 +168,9 @@ that fails to commit, as one with a deferred constraint violated does, is a
 in autocommit is refused before anything runs (`CONFIG_013`), not switched: a
 savepoint needs a transaction, and the mode is yours too. A `COPY … FROM
 stdin` block streams through the driver's COPY protocol. `profile=` takes a
-`SeedProfile`, whose `include` / `exclude` are `fnmatch` globs over the **bare
-file name**, not the path globs `include_dirs` uses; a profile read from
+`SeedProfile`, whose `include` / `exclude` are the path globs `include_dirs`
+uses, over each file's path below the seeds directory: `stats_*.sql` matches the
+file name at any depth, `stats/` a subdirectory; a profile read from
 `seed.profiles` carries its key as `name`, which the result records as
 `seed_profile`.
 

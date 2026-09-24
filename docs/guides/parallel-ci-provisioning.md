@@ -190,7 +190,10 @@ confiture build --sequential --env test --seed-profile slim --dump db/generated/
 confiture test-db provision-template --env test --template app_tmpl --seed-profile slim
 ```
 
-Profile globs match seed **filenames** (discovery is top-level, non-recursive).
+The seeds directory is read as a tree, and profile globs are `include_dirs`' own
+over each seed's path below it: a glob with no `/` (`stats_*.sql`) matches the
+file name at any depth, one with a `/` (`stats/`) is anchored at the seeds
+directory.
 An absent profile keeps today's apply-all behaviour; an unknown name exits 5
 listing the defined profiles. The artifact filename carries the profile segment
 (`schema_test.slim.<hash>.pgdump`) so slim and full dumps never collide.

@@ -226,10 +226,9 @@ anchored at the *right* end — so the three examples above excluded a different
 one they name. `confiture build --list-files` prints the selection a configuration produces, naming
 the entry and the pattern that put each file there; diff it across an upgrade to see what moved.
 
-> **Two dialects, two key names that look alike.** `seed.profiles.<name>.include` / `.exclude` are
-> spelled exactly like an `include_dirs` entry's, but they are `fnmatch` globs over a bare *filename*:
-> seed discovery is a flat, non-recursive listing where a path never appears and `**` has nothing to
-> span. Only `include_dirs` patterns read the gitignore dialect above.
+> **One dialect.** `seed.profiles.<name>.include` / `.exclude` read the gitignore dialect above too,
+> over each seed file's path relative to the seeds directory, which is read as a tree like any bare
+> `include_dirs` entry: `stats_*.sql` matches the file name at any depth, `stats/` a subdirectory.
 
 **Ordering strategy**:
 

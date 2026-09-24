@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file runs, where every file used to fail on its `SAVEPOINT`; so does `validate_seeds`
   at levels 4 and 5. `CONFIG_013` is new in `confiture --exit-codes-json`: a vendored
   copy of that payload is regenerated with it.
+- **Seed profile globs are `include_dirs`' path globs** (#386). With the seeds directory
+  read as a tree, `seed.profiles.<name>.include` / `.exclude` match each seed's path
+  below it in the gitignore dialect, no longer `fnmatch` over a bare file name. A glob
+  with no `/` — every profile written so far — still matches the file name, now at any
+  depth; `stats/` selects a subdirectory. `build --seed-profile` and `test-db
+  provision-template --seed-profile` read a seed's path below its seed directory, so a
+  profile selects the same files whichever command applies it.
 
 ### Added
 
@@ -49,6 +56,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A directory of seed or schema files is a tree, read one way** (#386). Every command
+  that reads "the `.sql` files under a directory" now reads what `include_dirs: [dir]`
+  builds — every `.sql` under it, recursively, sorted by path:
+  - prep-seed level 5 executed only the top level of `seeds_dir` while level 1 checked
+    the whole tree, so a nested seed's missing table was never reported;
+  - `apply_seeds` and `confiture seed apply` applied the top level of the tree
+    `validate_seeds` read whole (#374);
+  - `migrate diff --to <dir>` / `--from <dir>`, `seed convert --batch` (which now writes
+    each file at its relative path) and `SeedValidator.validate_directory` read only the
+    top level. `validate_directory` loses its `recursive` and `pattern` parameters.
+
+  A seeds directory that keeps one subdirectory per environment (`db/seeds/common/`,
+  `db/seeds/test/`) is now applied whole by `seed apply --seeds-dir db/seeds`; point
+  `--seeds-dir` at the subdirectory you mean, or select with a seed profile.
+- **Level 2 reads the schema as one model** (#374). It parsed each file on its own into
+  a partial model of its own, so an `ALTER TABLE` in one file on a table another file
+  creates was lost, and a file it could not read or parse was skipped without a word. It
+  reads the whole tree once: a file PostgreSQL's parser rejects is a CRITICAL finding
+  naming its file and line, a file that is not UTF-8 text raises `SchemaError` naming it,
+  and a file named `fn_resolve*` is no longer skipped — what it defines decides.
+- **A seeds directory that is not there is an error, never an empty run** (#374).
+  `PrepSeedOrchestrator.run()` — and so `confiture seed validate --prep-seed` — raises
+  `SEED_001` for a missing `seeds_dir` and, from level 2, `SCHEMA_201` for a missing
+  `schema_dir`, as `validate_seeds` did; the CLI reported a clean run. `SeedApplier`
+  raises `SEED_001` where it returned no files, and `migrate rebuild --apply-seeds`
+  refuses a missing seeds directory before it drops anything.
+- `DIFFER_400` from `parse_schema` names the file and line PostgreSQL rejected, in the
+  message and in `context`, where it gave a line of the text the tree was joined into.
 - `write_insert_seed` with no rows writes a comment naming the table and columns,
   where it wrote an empty file and `write_copy_seed` an empty `COPY` block.
 - Both seed writers refuse a column named twice, which PostgreSQL would have refused
