@@ -513,7 +513,6 @@ def apply(
         # Savepoint mode leaves the transaction to its owner, and this command
         # opened it; transaction mode has already committed file by file.
         connection.commit()
-        result.seed_profile = profile
 
         # Format output
 

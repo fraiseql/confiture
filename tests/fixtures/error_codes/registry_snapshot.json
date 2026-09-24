@@ -304,5 +304,11 @@
     "severity": "info",
     "exit_code": 0,
     "resolution_hint": "Add seed files under the environment's seed directory, or drop --sequential"
+  },
+  "CONFIG_013": {
+    "message_template": "{call} needs a connection {mode}: {reason}",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open"
   }
 }

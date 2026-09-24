@@ -212,7 +212,7 @@ def test_tier_of_something_that_is_not_a_change_is_a_type_error() -> None:
 
 
 def test_a_str_path_is_a_path_everywhere_the_seam_takes_one(tmp_path: Path) -> None:
-    """``write_*_seed(path=)`` and ``validate_seeds(seeds_dir=, schema_dir=)`` take a
+    """``write_*_seed(path=)`` and ``validate_seeds(seeds=, schema_dir=)`` take a
     ``str`` as the path it spells, as ``apply_seeds`` and the schema sources do."""
     rows = [{"id": 1}]
     written = [

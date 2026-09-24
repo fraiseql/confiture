@@ -35,8 +35,8 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, field, replace
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import asdict, dataclass, field, fields, replace
 from typing import Any, Literal, TypeVar
 
 from confiture.core.schema_identity import DEFAULT_SCHEMA
@@ -383,12 +383,44 @@ def trigger_ref(trigger: Trigger) -> ObjectRef:
     return ref_for("trigger", trigger.schema, f"{trigger.table}.{trigger.name}")
 
 
+_K = TypeVar("_K")
+_V = TypeVar("_V")
+
+
+class _ReadOnly(Mapping[_K, _V]):
+    """A mapping nothing writes to: a copy of what the model was built from.
+
+    Not ``MappingProxyType``, which cannot be copied or pickled: a caller that
+    deep-copies a model, or hands one to another process, gets it whole.
+    """
+
+    __slots__ = ("_data",)
+
+    def __init__(self, data: Mapping[_K, _V]) -> None:
+        self._data = dict(data)
+
+    def __getitem__(self, key: _K) -> _V:
+        return self._data[key]
+
+    def __iter__(self) -> Iterator[_K]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __repr__(self) -> str:
+        return repr(self._data)
+
+
 @dataclass(frozen=True)
 class SchemaModel:
     """Everything one schema declares, each object under its :class:`ObjectRef`.
 
     A routine's reference is a bucket (see :func:`routine_ref`), so
     :attr:`routines` maps it to every overload in it, in declaration order.
+    Frozen through and through: each mapping is a read-only copy of the one it
+    was built from, so neither a reader nor the builder can change a model after
+    it is made.
     """
 
     tables: Mapping[ObjectRef, Table] = field(default_factory=dict)
@@ -397,6 +429,12 @@ class SchemaModel:
     routines: Mapping[ObjectRef, tuple[Routine, ...]] = field(default_factory=dict)
     views: Mapping[ObjectRef, View] = field(default_factory=dict)
     triggers: Mapping[ObjectRef, Trigger] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for mapping in fields(self):
+            value = getattr(self, mapping.name)
+            if not isinstance(value, _ReadOnly):
+                object.__setattr__(self, mapping.name, _ReadOnly(value))
 
     def all_routines(self) -> list[Routine]:
         """Every routine, overloads included, in identity order."""

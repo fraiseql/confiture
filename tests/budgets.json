@@ -78,7 +78,7 @@
     "python/confiture/core/schema_facts.py": 1,
     "python/confiture/core/seed/validation/models.py": 1,
     "python/confiture/core/seed/validation/prep_seed/level_1_seed_files.py": 3,
-    "python/confiture/core/seed/validation/prep_seed/orchestrator.py": 5,
+    "python/confiture/core/seed/validation/prep_seed/orchestrator.py": 4,
     "python/confiture/core/temp_database.py": 2,
     "python/confiture/core/tree_allocator.py": 1,
     "python/confiture/core/tree_renumber.py": 1,

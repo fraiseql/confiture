@@ -174,6 +174,10 @@ def _prepared(
         ) from exc
     names = list(columns)
     found = _columns(model, ref, names)
+    folded = [column.folded for column in found]
+    twice = next((names[n] for n, name in enumerate(folded) if name in folded[:n]), None)
+    if twice is not None:
+        raise SeedError(f"the columns name {twice!r} twice: each column is written once")
     column_list = ", ".join(maybe_double_quote_name(column.folded) for column in found)
     return ref, f"{_qualified(model.tables[ref])} ({column_list})", _texts(rows, names, found)
 
@@ -210,10 +214,10 @@ def write_copy_seed(
 
     Raises:
         SeedError: a table or column the model does not hold (a table's
-            :class:`NotInModelError` is its cause), a column PostgreSQL fills, a
-            row missing a column or carrying another, a value the column's type
-            cannot take as given, a value holding a NUL, a *path* that cannot be
-            written.
+            :class:`NotInModelError` is its cause), a column named twice, a
+            column PostgreSQL fills, a row missing a column or carrying another,
+            a value the column's type cannot take as given, a value holding a
+            NUL, a *path* that cannot be written.
     """
     ref, header, texts = _prepared(model, table, columns, rows)
     lines = [f"COPY {header} FROM stdin;"]
@@ -242,12 +246,14 @@ def write_insert_seed(
     """Write *rows* of *table* to *path* as one multi-row ``INSERT``.
 
     The same rows, values and refusals as :func:`write_copy_seed`; every value a
-    literal PostgreSQL types by its column.
+    literal PostgreSQL types by its column. No rows is a file that says so — a
+    comment naming the table and columns, as the COPY writer's header does —
+    since an ``INSERT`` without a row is not SQL.
 
     Raises:
         SeedError: as :func:`write_copy_seed` does.
     """
     ref, header, texts = _prepared(model, table, columns, rows)
     values = ",\n".join("    (" + ", ".join(_literal(t) for t in row) + ")" for row in texts)
-    text = f"INSERT INTO {header} VALUES\n{values};\n" if texts else ""
+    text = f"INSERT INTO {header} VALUES\n{values};\n" if texts else f"-- {header}: no rows\n"
     return _written(Path(path), text, ref, columns, len(texts), "insert")

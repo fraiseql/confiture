@@ -70,7 +70,7 @@ def test_a_cycle_between_tables_is_reported_by_its_tables() -> None:
         "ALTER TABLE a ADD FOREIGN KEY (b_id) REFERENCES b;\n"
         "CREATE TABLE downstream (a_id INT REFERENCES a);\n"
     )
-    with pytest.raises(platform.DependencyCycle) as caught:
+    with pytest.raises(platform.DependencyCycleError) as caught:
         platform.dependency_order(model)
     assert _names(list(caught.value.tables)) == ["public.a", "public.b"]
     assert caught.value.error_code == "SCHEMA_202"

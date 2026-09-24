@@ -80,7 +80,7 @@ CHANGES = (
 READING = ("SchemaSource", "Connection", "parse_schema", "introspect", "diff", "SchemaError")
 
 #: Ordering tables by their foreign keys.
-ORDERING = ("dependency_order", "DependencyCycle")
+ORDERING = ("dependency_order", "DependencyCycleError")
 
 #: What a writer may supply to a table, and what each column must respect.
 WRITER = (
@@ -152,8 +152,8 @@ SIGNATURES: dict[str, str] = {
         "-> 'ApplyResult'"
     ),
     "validate_seeds": (
-        "(seeds_dir: 'Path | str', *, schema_dir: 'Path | str', max_level: 'int' = 3, "
-        "database_url: 'str | None' = None, prep_seed_schema: 'str' = 'prep_seed', "
+        "(seeds: 'Path | str', *, schema_dir: 'Path | str', max_level: 'int' = 3, "
+        "database: 'str | Connection | None' = None, prep_seed_schema: 'str' = 'prep_seed', "
         "catalog_schema: 'str' = 'catalog') -> 'PrepSeedReport'"
     ),
     "SchemaModel.to_json": "(self) -> 'str'",
@@ -305,6 +305,55 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("signature", "Signature | None"),
         ("trigger", "Trigger | None"),
     ),
+    # The change union, one row per variant. A field is named for what it holds,
+    # so one name holds a model object in one variant and a spelling in another:
+    # ``ColumnAdded.column`` is a ``Column``, ``ColumnNullabilityChanged.column`` a
+    # name; ``EnumTypeAdded.enum`` an ``EnumType``, ``EnumValuesChanged.enum`` a
+    # name. Every variant's ``ref`` is the one field that means the same thing in all.
+    "TableAdded": (("table", "Table"),),
+    "TableDropped": (("table", "Table"),),
+    "TableRenamed": (("old", "Table"), ("new", "Table")),
+    "ColumnAdded": (("table", "str"), ("column", "Column")),
+    "ColumnDropped": (("table", "str"), ("column", "Column")),
+    "ColumnRenamed": (("table", "str"), ("old", "str"), ("new", "str")),
+    "ColumnTypeChanged": (("table", "str"), ("old", "Column"), ("new", "Column")),
+    "ColumnNullabilityChanged": (("table", "str"), ("column", "str"), ("nullable", "bool")),
+    "ColumnDefaultChanged": (
+        ("table", "str"),
+        ("column", "str"),
+        ("old", "str | None"),
+        ("new", "str | None"),
+    ),
+    "IndexAdded": (("table", "str"), ("index", "Index")),
+    "IndexDropped": (("table", "str"), ("index", "Index")),
+    "ForeignKeyAdded": (("table", "str"), ("constraint", "Constraint")),
+    "ForeignKeyDropped": (("table", "str"), ("constraint", "Constraint")),
+    "CheckConstraintAdded": (("table", "str"), ("constraint", "Constraint")),
+    "CheckConstraintDropped": (("table", "str"), ("constraint", "Constraint")),
+    "UniqueConstraintAdded": (("table", "str"), ("constraint", "Constraint")),
+    "UniqueConstraintDropped": (("table", "str"), ("constraint", "Constraint")),
+    "EnumTypeAdded": (("enum", "EnumType"),),
+    "EnumTypeDropped": (("enum", "EnumType"),),
+    "EnumValuesChanged": (
+        ("enum", "str"),
+        ("added", "tuple[str, ...]"),
+        ("removed", "tuple[str, ...]"),
+    ),
+    "SequenceAdded": (("sequence", "Sequence"),),
+    "SequenceDropped": (("sequence", "Sequence"),),
+    "ObjectAdded": (("ref", "ObjectRef"), ("obj", "DDLObject")),
+    "ObjectDropped": (("ref", "ObjectRef"), ("obj", "DDLObject")),
+    "ObjectReplaced": (("ref", "ObjectRef"), ("old", "DDLObject"), ("new", "DDLObject")),
+}
+
+#: The fields of the seam's one configuration model (pydantic, not a dataclass):
+#: name, annotation, and whether a caller must give it.
+MODEL_FIELDS: dict[str, tuple[tuple[str, str, bool], ...]] = {
+    "SeedProfile": (
+        ("include", "list[str]", False),
+        ("exclude", "list[str]", False),
+        ("name", "str | None", False),
+    ),
 }
 
 
@@ -332,6 +381,19 @@ def test_every_signature_is_pinned(dotted: str) -> None:
 @pytest.mark.parametrize("name", sorted(FIELDS))
 def test_every_dataclass_is_pinned(name: str) -> None:
     assert _fields(getattr(platform, name)) == FIELDS[name]
+
+
+@pytest.mark.parametrize("name", sorted(MODEL_FIELDS))
+def test_every_configuration_model_is_pinned(name: str) -> None:
+    fields = getattr(platform, name).model_fields
+    pinned = tuple((key, str(f.annotation), f.is_required()) for key, f in fields.items())
+    assert pinned == MODEL_FIELDS[name]
+
+
+def test_every_change_variant_is_pinned() -> None:
+    """A variant the union gains is a row here before a consumer reads it."""
+    variants = {variant.__name__ for variant in typing.get_args(platform.SchemaChange)}
+    assert variants <= set(FIELDS), sorted(variants - set(FIELDS))
 
 
 def test_every_callable_is_pinned() -> None:
