@@ -35,6 +35,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rule reports exactly the orders PostgreSQL refuses — a finding is a build that
   fails. `--ignore build_004` turns it off for a run.
 
+### Changed
+
+- **`tree_001` is on by default, at `error`** (#384). Two files in one directory
+  sharing a numeric prefix load in an order the rest of their names decides; a
+  default `confiture lint` now reports it and fails under the default
+  `--fail-on error`. To keep the previous behaviour, pass `--ignore tree_001`, or
+  adopt it with `--baseline`. The rest of the `tree` family stays opt-in.
+  `examples/07-comment-validation` carried `20_views.sql`, a byte-identical copy of
+  `20_views_safe.sql` that `build_001` already reported; it is gone, and its
+  README's broken file is numbered `30_`.
+
 ## [1.19.0] - 2026-09-25
 
 **The readers read what they are given, and say what they did not.** Each of

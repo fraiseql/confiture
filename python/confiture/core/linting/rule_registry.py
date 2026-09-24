@@ -303,7 +303,11 @@ LINT_RULES: tuple[LintRule, ...] = (
         family="tree",
         title="No two files in one directory share a numeric prefix",
         severity="error",
-        default_on=False,
+        # On by default (#384): two files on one prefix load in an order their
+        # names after the prefix decide, which no reader of either can see — the
+        # defect build_001 reports once it bites. The rest of the family stays
+        # opt-in: it is about naming, and this one is about order.
+        default_on=True,
     ),
     LintRule(
         code="tree_002",
