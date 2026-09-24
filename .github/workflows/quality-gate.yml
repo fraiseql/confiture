@@ -366,6 +366,7 @@ jobs:
           tests/unit/test_data_assertions.py \
           tests/unit/linting/test_reference_extraction.py \
           tests/unit/linting/test_build_003_references.py \
+          tests/unit/linting/test_build_004.py \
           tests/unit/test_constraint_reader_is_exhaustive.py \
           tests/unit/test_alter_subtypes_are_exhaustive.py \
           tests/unit/test_ddl_objects_are_exhaustive.py \

@@ -22,6 +22,7 @@ Adopt a rule on a schema that already trips it with a
 | `build_001` | build | error | on | An object is defined more than once in one build |
 | `build_002` | build | info | on | A routine's overloads are split across files |
 | `build_003` | build | warning | on | A body references an object the build does not create |
+| `build_004` | build | error | on | A statement needs, when it runs, an object the build creates later |
 | `sec_001` | security | warning | on | Columns that look like secrets should not be plain text |
 | `qual_001` | qual | warning | on | Routines are created schema-qualified |
 | `qual_002` | qual | warning | off | Relations and types are created schema-qualified |
@@ -265,6 +266,7 @@ unqualified), name and — for routines — input parameter types.
 | `build_001` | error | an object defined more than once across the build's files, with every definition's file, offset and line, and which one wins (`last`, `first` or `conflict`) |
 | `build_002` | info | a routine whose overloads are split across files — legal, but how the first mistake starts |
 | `build_003` | warning | a routine or view body that names an object **no file in the build creates** |
+| `build_004` | error | a statement that needs, when it runs, an object the build **creates later** |
 
 `build_001` and `build_002` run as lint rules (`confiture lint`,
 `--select build`) and from the build
@@ -458,6 +460,48 @@ records what is there today; later runs fail only on names the file does not
 know. The identity of a finding is `<referrer> -> <name>`, so fixing one of six
 unresolved names in a routine does not retire the other five, and moving the
 routine to another file does not churn the baseline.
+
+### `build_004` — the inventory, read in build order
+
+`build_003` asks whether the build creates what a body names at all;
+`build_004` asks whether it creates it **before** the statement that needs it
+(#383). Some statements are resolved when they run, so the object has to exist
+by then; others are resolved when they are first used:
+
+| Resolved when the statement runs | Resolved when first used |
+|---|---|
+| a view or materialized view's query; `CREATE TABLE … AS` | a `LANGUAGE plpgsql` body |
+| a `LANGUAGE sql` body, while `check_function_bodies` is on (the default) | a `LANGUAGE sql` body after `SET check_function_bodies = off` |
+| a `LANGUAGE sql … BEGIN ATOMIC` body, always | |
+| a column `DEFAULT`, a `CHECK`, a generated column, an index expression | |
+| a trigger's `EXECUTE FUNCTION`; the table an index, trigger or `ALTER TABLE` is on | |
+| a `REFERENCES`, an `INHERITS` | a `REFERENCES` in a `CREATE TABLE` when `build.two_pass` moves it to the end |
+
+So the same helper fails the build written `LANGUAGE sql` in a directory that
+loads before its table, and builds written `LANGUAGE plpgsql`:
+
+```text
+❌ build_004: Function 'public.first_continent()' needs relation 'catalog.tb_continent'
+   when it is created, but the build first creates it later, at
+   db/schema/0_schema/01_write_side/010211_tb_continent.sql:4. A LANGUAGE sql body is
+   resolved when the function is created, while check_function_bodies is on; a
+   LANGUAGE plpgsql body is resolved when it first runs.
+```
+
+The order is the one `confiture build` emits: its files in build order
+(`build --list-files`), each read top to bottom, and the first `CREATE` of an
+object is the one that counts — a later `OR REPLACE` does not make it exist
+sooner. An object no file creates is `build_003`'s, not this rule's. A statement
+naming what it creates itself (a table's foreign key to itself, a recursive
+`LANGUAGE sql` function) is not a finding: PostgreSQL accepts both.
+
+It is an **error**, on by default, with no directive to silence it: every row
+of the table above was applied to an empty PostgreSQL in both orders
+(`tests/integration/test_forward_reference_oracle.py`), and the rule reports
+exactly the orders PostgreSQL refuses, so a finding is a build that fails.
+The fix is to move one of the two statements. Not yet read: a column or
+parameter typed with a domain, enum or composite type created later — the rule
+reads relations and routines, as `build_003` does.
 
 ## The `tree` family — the arrangement that decides the build order
 

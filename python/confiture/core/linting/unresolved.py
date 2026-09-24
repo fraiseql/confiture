@@ -1,4 +1,5 @@
-"""``build_003``: a body names an object the build does not create (#246).
+"""``build_003``: a body names an object the build does not create (#246);
+``build_004``: a statement needs, when it runs, an object the build creates later (#383).
 
 :mod:`confiture.core.linting.references` says what a body names.
 :mod:`confiture.core.linting.inventory` says what the build creates. This is
@@ -18,10 +19,23 @@ An unqualified name is not judged unless ``lint.search_path`` says where to
 look, and an unqualified *routine* call is not judged even then: ``pg_catalog``
 is on every search path, so ``now()`` and ``count()`` would be findings and the
 rule would be unusable (#246).
+
+``build_004`` asks the same question with order added, over the same references
+and the same inventory: not "does the build create it" but "does it create it
+before the statement that needs it". A view, a ``LANGUAGE sql`` body, a
+default, a check, an index expression, a trigger's function and a foreign key
+are resolved when their statement runs; a PL/pgSQL body is resolved when it
+first runs, so it may name anything the build creates. The order is the one the
+build emits — its files in build order, each top to bottom — and a foreign key
+the builder's two-pass mode moves to the end is not a forward reference. Only
+an object the build creates is judged; one it never creates is ``build_003``'s.
+Which of these PostgreSQL refuses was settled by applying each case to an empty
+database (``tests/integration/test_forward_reference_oracle.py``), not assumed.
 """
 
 from __future__ import annotations
 
+from bisect import bisect_left
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from fnmatch import fnmatch
@@ -29,10 +43,18 @@ from typing import Any
 
 from confiture.core import live_catalog
 from confiture.core.linting.inventory import KIND_KEYWORD, SchemaObject
-from confiture.core.linting.references import RELATION, ROUTINE, Reference
+from confiture.core.linting.references import (
+    AT_CREATE_IF_CHECKED,
+    AT_RUN,
+    RELATION,
+    ROUTINE,
+    Reference,
+    ReferenceScan,
+)
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 
 RULE_ID = "build_003"
+FORWARD_RULE_ID = "build_004"
 
 #: What a ``RangeVar`` can name: everything that occupies a relation's namespace.
 RELATION_KINDS: frozenset[str] = frozenset({"table", "view", "matview", "sequence"})
@@ -211,3 +233,147 @@ def reference_findings(
 ) -> list[LintViolation]:
     """One ``build_003`` per unresolved name per referring object, in source order."""
     return [_finding(file, reference) for file, reference in candidates]
+
+
+#: Where a statement is in the build: its file's place in build order, and its line.
+Position = tuple[int, int]
+
+
+@dataclass(frozen=True)
+class _Created:
+    position: Position
+    file: str | None
+    line: int
+
+
+def _first_created(
+    objects: Sequence[SchemaObject], order: dict[str | None, int]
+) -> dict[tuple[str, str | None, str], _Created]:
+    """Where the build first creates each relation and routine, by kind, schema and name.
+
+    The first ``CREATE`` is the one that counts: an ``OR REPLACE`` or
+    ``IF NOT EXISTS`` later in the build does not make an object exist sooner.
+    """
+    first: dict[tuple[str, str | None, str], _Created] = {}
+    for obj in objects:
+        bucket = (
+            RELATION
+            if obj.kind in RELATION_KINDS
+            else ROUTINE
+            if obj.kind in ROUTINE_KINDS
+            else None
+        )
+        if bucket is None or obj.file not in order:
+            continue
+        created = _Created((order[obj.file], obj.statement_line), obj.file, obj.statement_line)
+        key = (bucket, obj.folded_schema, obj.folded_name)
+        if key not in first or created.position < first[key].position:
+            first[key] = created
+    return first
+
+
+def _bodies_checked(
+    scans: Sequence[tuple[str | None, ReferenceScan]],
+) -> tuple[list[Position], list[bool]]:
+    """Every ``SET check_function_bodies`` in build order, and what it set."""
+    events = sorted(
+        ((index, line), on)
+        for index, (_label, scan) in enumerate(scans)
+        for line, on in scan.body_checks
+    )
+    return [position for position, _ in events], [on for _, on in events]
+
+
+def _checked_at(position: Position, events: tuple[list[Position], list[bool]]) -> bool:
+    """Whether ``check_function_bodies`` is on when the statement at *position* runs."""
+    at = bisect_left(events[0], position)
+    return True if at == 0 else events[1][at - 1]
+
+
+def _needs_at_create(reference: Reference, *, two_pass: bool) -> bool:
+    return (
+        reference.resolves != AT_RUN
+        and not reference.dynamic
+        and reference.schema not in BUILTIN_SCHEMAS
+        and not (reference.movable and two_pass)
+    )
+
+
+def forward_references(
+    scans: Sequence[tuple[str | None, ReferenceScan]],
+    objects: Sequence[SchemaObject],
+    *,
+    search_path: Sequence[str] = (),
+    two_pass: bool = False,
+) -> list[LintViolation]:
+    """``build_004``: every name a statement needs when it runs that the build creates later.
+
+    *scans* is each file's :class:`ReferenceScan` in build order, labelled as a
+    finding names the file; *objects* the whole build's inventory, each object
+    carrying its file's label. *two_pass* is ``build.two_pass``: the builder
+    then moves every foreign key written in a ``CREATE TABLE`` to the end.
+    """
+    order = {label: index for index, (label, _scan) in enumerate(scans)}
+    first = _first_created(objects, order)
+    checks = _bodies_checked(scans)
+    findings: list[LintViolation] = []
+    seen: set[tuple[str | None, str, str, str]] = set()
+    for index, (label, scan) in enumerate(scans):
+        for reference in [*scan.references, *scan.clauses]:
+            if not _needs_at_create(reference, two_pass=two_pass):
+                continue
+            # One finding per name per referring statement, as `build_003` has.
+            pair = (label, reference.referrer, reference.kind, reference.qualified)
+            if pair in seen:
+                continue
+            position = (index, reference.referrer_line)
+            if reference.resolves == AT_CREATE_IF_CHECKED and not _checked_at(position, checks):
+                continue
+            bucket = RELATION if reference.kind == RELATION else ROUTINE
+            created = [
+                found
+                for schema, name in candidates_for(reference, search_path)
+                for found in (first.get((bucket, schema, name)), first.get((bucket, None, name)))
+                if found is not None
+            ]
+            if not created:
+                continue
+            earliest = min(created, key=lambda c: c.position)
+            # The same statement creates what it names: a table's foreign key
+            # to itself, a routine that calls itself. PostgreSQL accepts both.
+            if earliest.position <= position:
+                continue
+            seen.add(pair)
+            findings.append(_forward_finding(label, reference, earliest))
+    return findings
+
+
+def _forward_finding(file: str | None, reference: Reference, created: _Created) -> LintViolation:
+    referrer_noun = KIND_KEYWORD.get(reference.referrer_kind, reference.referrer_kind).capitalize()
+    where = f"{created.file}:{created.line}" if created.file else f"line {created.line}"
+    clause = f" (its {reference.clause})" if reference.clause else ""
+    why = (
+        " A LANGUAGE sql body is resolved when the function is created, while "
+        "check_function_bodies is on; a LANGUAGE plpgsql body is resolved when it first runs."
+        if reference.resolves == AT_CREATE_IF_CHECKED
+        else ""
+    )
+    return LintViolation(
+        rule_id=FORWARD_RULE_ID,
+        rule_name="Forward Reference",
+        severity=RuleSeverity.ERROR,
+        object_type=reference.referrer_kind,
+        object_name=f"{reference.referrer}{JOIN}{reference.qualified}",
+        message=(
+            f"{referrer_noun} '{reference.referrer}' needs {_noun(reference)} "
+            f"'{reference.qualified}' when it is created{clause}, but the build first "
+            f"creates it later, at {where}.{why}"
+            + ("" if reference.line_is_exact else INEXACT_LINE)
+        ),
+        file_path=file,
+        line_number=reference.line if reference.line_is_exact else reference.referrer_line,
+        suggested_fix=(
+            f"Create '{reference.qualified}' earlier in the build order than this statement, "
+            "or move this statement after it."
+        ),
+    )
