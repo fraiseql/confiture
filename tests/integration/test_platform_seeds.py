@@ -19,6 +19,7 @@ from typer.testing import CliRunner
 
 from confiture import platform
 from confiture.cli.main import app
+from confiture.config.environment import SeedConfig
 
 runner = CliRunner()
 
@@ -218,4 +219,41 @@ def test_apply_seeds_on_a_connection_leaves_the_transaction_to_the_caller(
         platform.apply_seeds(conn, [seed.path])
         assert conn.execute("SELECT count(*) FROM app.item").fetchone() == (1,)
         conn.rollback()
+    assert _loaded(fresh_database) == []
+
+
+def test_apply_seeds_refuses_a_connection_in_autocommit(
+    fresh_database: str, tmp_path: Path
+) -> None:
+    """Refused before any file runs, and the mode is left as the caller set it."""
+    model = _database(fresh_database)
+    seed = platform.write_copy_seed(
+        tmp_path / "01_items.sql", "app.item", ["id"], [{"id": 1}], model=model
+    )
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        with pytest.raises(platform.ConfigurationError, match="apply_seeds") as caught:
+            platform.apply_seeds(conn, [seed.path])
+        assert caught.value.error_code == "CONFIG_013"
+        assert conn.autocommit is True
+    assert _loaded(fresh_database) == []
+
+
+def test_apply_seeds_records_the_profile_it_applied(fresh_database: str, tmp_path: Path) -> None:
+    model = _database(fresh_database)
+    for number in (1, 2):
+        platform.write_copy_seed(
+            tmp_path / f"0{number}_items.sql", "app.item", ["id"], [{"id": number}], model=model
+        )
+    lean = SeedConfig.model_validate({"profiles": {"lean": {"exclude": ["02_*"]}}})
+    result = platform.apply_seeds(fresh_database, tmp_path, profile=lean.get_profile("lean"))
+    assert (result.total, result.seed_profile) == (1, "lean")
+    assert platform.apply_seeds(fresh_database, tmp_path / "02_items.sql").seed_profile is None
+
+
+def test_an_insert_seed_of_no_rows_applies(fresh_database: str, tmp_path: Path) -> None:
+    model = _database(fresh_database)
+    for write in (platform.write_copy_seed, platform.write_insert_seed):
+        write(tmp_path / f"{write.__name__}.sql", "app.item", ["id"], [], model=model)
+    result = platform.apply_seeds(fresh_database, tmp_path)
+    assert (result.succeeded, result.failed) == (2, 0)
     assert _loaded(fresh_database) == []

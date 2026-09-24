@@ -163,6 +163,9 @@ Everything one schema declares, each object under its `ObjectRef`.
 
 A routine's reference is a bucket (see `routine_ref`), so
 `routines` maps it to every overload in it, in declaration order.
+Frozen through and through: each mapping is a read-only copy of the one it
+was built from, so neither a reader nor the builder can change a model after
+it is made.
 
 | Field | Type | Default |
 |---|---|---|
@@ -642,7 +645,7 @@ them to its value; `None` is NULL. A `dict` or `list` is JSON for a
 
 **Raises**
 
-- `SeedError`: a table or column the model does not hold (a table's `NotInModelError` is its cause), a column PostgreSQL fills, a row missing a column or carrying another, a value the column's type cannot take as given, a value holding a NUL, a *path* that cannot be written.
+- `SeedError`: a table or column the model does not hold (a table's `NotInModelError` is its cause), a column named twice, a column PostgreSQL fills, a row missing a column or carrying another, a value the column's type cannot take as given, a value holding a NUL, a *path* that cannot be written.
 
 ### `write_insert_seed`
 
@@ -660,7 +663,9 @@ def write_insert_seed(
 Write *rows* of *table* to *path* as one multi-row `INSERT`.
 
 The same rows, values and refusals as `write_copy_seed`; every value a
-literal PostgreSQL types by its column.
+literal PostgreSQL types by its column. No rows is a file that says so — a
+comment naming the table and columns, as the COPY writer's header does —
+since an `INSERT` without a row is not SQL.
 
 **Raises**
 
@@ -710,13 +715,15 @@ reports the failed files in the result. For a URL the transaction is this
 call's — committed when it returns, rolled back when it raises, so a run is
 all or nothing unless *continue_on_error* says otherwise. For a connection it
 is the caller's, and nothing is committed or rolled back here: a caller that
-wants seeds and its own statements in one transaction opens it. Nothing here
-changes an object's owner.
+wants seeds and its own statements in one transaction opens it, and a
+connection in autocommit is refused rather than switched: a savepoint needs a
+transaction, and the mode is the caller's. Nothing here changes an object's
+owner. The result's `seed_profile` is *profile*'s name when one applied.
 
 **Raises**
 
 - `SeedError`: a seed path that does not exist, before anything is applied; the first file that failed — its SQL, or a file that is not readable UTF-8 text — when *continue_on_error* is off; and, for a URL, a transaction that fails to commit, as a deferred constraint does.
-- `ConfigurationError`: `CONFIG_006` when the URL does not connect.
+- `ConfigurationError`: `CONFIG_006` when the URL does not connect; `CONFIG_013` for a connection in autocommit, before anything is applied.
 - `TypeError`: a *database* that is neither a URL nor a `Connection`.
 
 ### `SeedProfile`
@@ -741,6 +748,9 @@ nothing to span.
 Attributes:
     include: Globs a *filename* must match to be included (empty = all files).
     exclude: Globs over a *filename* that remove an otherwise-included file.
+    name: The key it is configured under in `seed.profiles`, filled from
+        that key; `None` for a profile built in code without one. What a
+        run that applied it records as `ApplyResult.seed_profile`.
 
 ### `ApplyResult`
 

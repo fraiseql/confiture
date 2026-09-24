@@ -161,10 +161,14 @@ class SeedProfile(BaseModel):
     Attributes:
         include: Globs a *filename* must match to be included (empty = all files).
         exclude: Globs over a *filename* that remove an otherwise-included file.
+        name: The key it is configured under in ``seed.profiles``, filled from
+            that key; ``None`` for a profile built in code without one. What a
+            run that applied it records as ``ApplyResult.seed_profile``.
     """
 
     include: list[str] = Field(default_factory=list)
     exclude: list[str] = Field(default_factory=list)
+    name: str | None = None
 
 
 class SeedConfig(BaseModel):
@@ -188,6 +192,16 @@ class SeedConfig(BaseModel):
     continue_on_error: bool = False
     transaction_mode: Literal["savepoint", "transaction"] = "savepoint"
     profiles: dict[str, SeedProfile] = Field(default_factory=dict)
+
+    @field_validator("profiles")
+    @classmethod
+    def _profiles_know_their_names(cls, profiles: dict[str, SeedProfile]) -> dict[str, SeedProfile]:
+        """Each profile named by its key; a ``name`` written that disagrees is refused."""
+        for key, profile in profiles.items():
+            if profile.name not in (None, key):
+                msg = f"seed profile {key!r} is named {profile.name!r}: a profile is its key"
+                raise ValueError(msg)
+        return {key: profile.model_copy(update={"name": key}) for key, profile in profiles.items()}
 
     def get_profile(self, name: str) -> SeedProfile:
         """Return the named seed profile, or raise a clear configuration error.

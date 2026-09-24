@@ -16,6 +16,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`confiture.platform` spells each concept one way** (#374). Renamed outright, with
+  no old spelling kept:
+  - `validate_seeds(seeds_dir=…)` is `validate_seeds(seeds=…)`, as `apply_seeds` spells it.
+  - `validate_seeds(database_url=…)` is `validate_seeds(database=…)`, a URL or a
+    `Connection` as `apply_seeds` and `introspect` take it. On a connection, levels 4
+    and 5 run inside a savepoint rolled back on the way out: the caller's transaction
+    holds afterwards what it held before, and the connection is neither committed nor
+    closed.
+  - `DependencyCycle` is `DependencyCycleError`; still a `SchemaError`, `SCHEMA_202`.
+  - `validate_seeds` keeps its name; its docstring and the guide say it validates the
+    prep-seed pattern.
+- **A model cannot be written to.** `SchemaModel`'s mappings are read-only copies of
+  the ones it was built from, so `model.tables[ref] = …` is a `TypeError`. A model still
+  copies, deep-copies and pickles, and its wire is byte-identical.
+- **A seam call never changes a caller's connection's mode; it refuses the wrong one**
+  (`CONFIG_013`, exit 5). `apply_seeds` refuses a connection in autocommit before any
+  file runs, where every file used to fail on its `SAVEPOINT`; so does `validate_seeds`
+  at levels 4 and 5. `CONFIG_013` is new in `confiture --exit-codes-json`: a vendored
+  copy of that payload is regenerated with it.
+
+### Added
+
+- **Every schema change names its object**: `change.ref` is the `ObjectRef` the model
+  keys it under — the table for a column, index or constraint change — on every
+  `SchemaChange` variant. No field changed, and the wire is unchanged. The guide's
+  variant table names the fields one name spells two ways (`column`, `enum`).
+- `SeedProfile.name`: a profile read from `seed.profiles` carries its key, and
+  `apply_seeds` records it as `ApplyResult.seed_profile`, which it never set before.
+- `tests/contract/test_platform_surface.py` pins the fields of every change variant
+  and of `SeedProfile`.
+
+### Fixed
+
+- `write_insert_seed` with no rows writes a comment naming the table and columns,
+  where it wrote an empty file and `write_copy_seed` an empty `COPY` block.
+- Both seed writers refuse a column named twice, which PostgreSQL would have refused
+  at load time.
+
 - **The archaeology guard reads a phase in any case** (#310). Its patterns were
   case-sensitive, so `phase 05` in a docstring or an xfail reason named the plan
   invisibly; nine such lines shipped. Under `python/` and `tests/` a numbered phase or

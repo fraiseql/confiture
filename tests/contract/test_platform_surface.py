@@ -349,7 +349,11 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
 #: The fields of the seam's one configuration model (pydantic, not a dataclass):
 #: name, annotation, and whether a caller must give it.
 MODEL_FIELDS: dict[str, tuple[tuple[str, str, bool], ...]] = {
-    "SeedProfile": (("include", "list[str]", False), ("exclude", "list[str]", False)),
+    "SeedProfile": (
+        ("include", "list[str]", False),
+        ("exclude", "list[str]", False),
+        ("name", "str | None", False),
+    ),
 }
 
 

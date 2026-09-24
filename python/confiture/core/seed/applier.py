@@ -16,7 +16,7 @@ import psycopg
 from rich.console import Console
 
 from confiture.config.environment import SeedProfile
-from confiture.core.connection import Connection, connection_for
+from confiture.core.connection import Connection, connection_for, require_mode
 from confiture.core.progress import ProgressManager
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.seed.executor import SeedExecutor, read_seed
@@ -224,7 +224,7 @@ class SeedApplier:
 
         # Discover seed files
         files = self.find_seed_files(profile=profile)
-        result = ApplyResult(total=len(files))
+        result = ApplyResult(total=len(files), seed_profile=profile.name if profile else None)
 
         if progress and discover_task is not None:
             progress.update(discover_task, len(files))
@@ -328,18 +328,29 @@ def apply_seeds(
     call's — committed when it returns, rolled back when it raises, so a run is
     all or nothing unless *continue_on_error* says otherwise. For a connection it
     is the caller's, and nothing is committed or rolled back here: a caller that
-    wants seeds and its own statements in one transaction opens it. Nothing here
-    changes an object's owner.
+    wants seeds and its own statements in one transaction opens it, and a
+    connection in autocommit is refused rather than switched: a savepoint needs a
+    transaction, and the mode is the caller's. Nothing here changes an object's
+    owner. The result's ``seed_profile`` is *profile*'s name when one applied.
 
     Raises:
         SeedError: a seed path that does not exist, before anything is applied; the
             first file that failed — its SQL, or a file that is not readable UTF-8
             text — when *continue_on_error* is off; and, for a URL, a transaction
             that fails to commit, as a deferred constraint does.
-        ConfigurationError: ``CONFIG_006`` when the URL does not connect.
+        ConfigurationError: ``CONFIG_006`` when the URL does not connect;
+            ``CONFIG_013`` for a connection in autocommit, before anything is
+            applied.
         TypeError: a *database* that is neither a URL nor a :class:`Connection`.
     """
     seeds_dir, files = _seed_selection(seeds)
+    if isinstance(database, Connection):
+        require_mode(
+            database,
+            autocommit=False,
+            call="apply_seeds",
+            reason="it rolls each file back to a savepoint of its own",
+        )
     try:
         with connection_for(database) as conn:
             applier = SeedApplier(

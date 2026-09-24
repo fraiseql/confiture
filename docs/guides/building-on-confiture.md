@@ -72,6 +72,11 @@ schema. `schemas="app"` is the one schema `app`, and a schema the database does
 not have adds nothing, so a misspelt name gives an empty model rather than an
 error. The same model from both sides is what lets a tool compare them.
 
+A model is frozen through and through: its mappings are read-only copies of
+the ones it was built from, so `model.tables[ref] = table` is a `TypeError`. A
+tool that wants a different model builds one, or `dataclasses.replace`s a
+mapping. A model copies, deep-copies and pickles whole.
+
 `SchemaModel.to_json()` writes the model with sorted keys, so one model is one
 text. `SchemaModel.from_json()` reads it back, and
 [`schema-model.schema.json`](../reference/json-schemas/schema-model.schema.json)
@@ -125,7 +130,8 @@ generator that fills `created_by` knows why, and supplies it.
 `write_copy_seed` and `write_insert_seed` take the same arguments: the table, the
 columns in the order to write them, and rows as mappings of every column to its
 value. They refuse at write time, and write nothing, when the model lacks the
-table or the table a column, when PostgreSQL fills one, when a row misses a
+table or the table a column, when a column is named twice, when PostgreSQL
+fills one, when a row misses a
 column or carries another, or when a value cannot be given as written. Every
 refusal is a `SeedError`, a path that cannot be written included; for a table
 the model lacks, its cause is the `NotInModelError` the lookup raised. NOT NULL
@@ -145,6 +151,8 @@ Which format:
 - Both load through `confiture seed apply`, and either one leaves a generated key
   to PostgreSQL: COPY honours the identity and the default of every column its
   list leaves out.
+- No rows is a file either way that names its table and columns: COPY writes an
+  empty block, INSERT a comment, since an `INSERT` without a row is not SQL.
 
 `apply_seeds(database, seeds)` applies a directory's top-level `.sql` files in
 name order, or a list of files in the given order; a `str` is the path it
@@ -155,10 +163,14 @@ file that is not UTF-8 text included, then raises `SeedError`, unless
 `continue_on_error=True` keeps going and reports the failed files. With a URL
 the run is all or nothing (unless `continue_on_error=True`), and a transaction
 that fails to commit, as one with a deferred constraint violated does, is a
-`SeedError` too; with a connection the transaction is yours. A `COPY … FROM
+`SeedError` too; with a connection the transaction is yours, and a connection
+in autocommit is refused before anything runs (`CONFIG_013`), not switched: a
+savepoint needs a transaction, and the mode is yours too. A `COPY … FROM
 stdin` block streams through the driver's COPY protocol. `profile=` takes a
 `SeedProfile`, whose `include` / `exclude` are `fnmatch` globs over the **bare
-file name**, not the path globs `include_dirs` uses.
+file name**, not the path globs `include_dirs` uses; a profile read from
+`seed.profiles` carries its key as `name`, which the result records as
+`seed_profile`.
 
 `validate_seeds(seeds, schema_dir=…, max_level=3)` validates seeds written for
 the prep-seed pattern: UUID-keyed rows in `prep_seed`, resolved into BIGINT-keyed
