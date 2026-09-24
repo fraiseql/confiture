@@ -6,10 +6,10 @@ reads it in the other direction, because a routine that selects from a table no
 file creates, or calls a function no file creates, otherwise builds and lints in
 silence. It collects the objects a body *references*:
 
-- a PL/pgSQL body through ``pglast.parse_plpgsql``, which hands back every
-  embedded SQL fragment as a ``PLpgSQL_expr.query`` string together with the
-  line it is written on, each fragment going back through
-  ``pglast.parser.parse_sql``;
+- a PL/pgSQL body through :mod:`confiture.core.plpgsql_fragments`, which
+  hands back every embedded SQL fragment with the statement it belongs to and
+  the line it is written on, parsed the way that statement writes it — an
+  assignment's value, a condition, a whole query (#363);
 - a ``LANGUAGE sql`` body and a view definition directly, because they are SQL
   already.
 
@@ -43,19 +43,23 @@ established that the body is clean. What it takes to keep that list short is
 :mod:`confiture.core.plpgsql_parse`'s work (#270, #272), not this module's:
 everything here asks :func:`~confiture.core.plpgsql_parse.parse_body` for a
 tree and reports the routine when it does not get one.
+
+A fragment the reader could not parse is a fourth: the body was read, one
+statement in it was not, and :attr:`ReferenceScan.unread_fragments` names it
+with its line rather than letting the rest of the body pass for the whole.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 import pglast
 import pglast.parser
 
-from confiture.core import plpgsql_parse, sql_lexer
+from confiture.core import plpgsql_fragments, plpgsql_parse, sql_lexer
 from confiture.core.ddl_walk import routine_body, walk_nodes
 from confiture.core.linting.inventory import SchemaObject, object_from_statement, split_names
 
@@ -70,15 +74,13 @@ ROUTINE = "routine"
 #: decline it out loud instead of missing it quietly.
 DYNAMIC = "dynamic"
 
+#: Not an object either — a fragment that could not be parsed, kept so the
+#: rule can say the body was read short instead of implying it was read whole.
+UNREAD = "unread"
+
 #: The languages whose bodies are SQL confiture can parse. Everything else —
 #: ``c``, ``internal``, ``plpython3u``, ``plperl`` — has a body that is not SQL.
 _SQL_LANGUAGES = frozenset({"sql", "plpgsql"})
-
-#: PL/pgSQL statements whose query is a string assembled at run time.
-_DYNAMIC_STATEMENTS = frozenset({"PLpgSQL_stmt_dynexecute", "PLpgSQL_stmt_dynfors"})
-
-#: The key libpg_query's PL/pgSQL parser gives every embedded SQL fragment.
-_EXPR = "PLpgSQL_expr"
 
 #: Inventory kinds whose ``CREATE`` carries a body written in a string constant.
 _ROUTINE_KINDS = frozenset({"function", "procedure"})
@@ -170,10 +172,15 @@ class ReferenceScan:
         unread: The identity of each routine whose body no parser returned.
             Empty for almost every schema and never empty for one with a
             trigger function, which is why it is a list and not a flag.
+        unread_fragments: One entry per fragment of a body that *was*
+            returned but that pglast would not parse, or whose slot the
+            fragment reader has no reading for — ``name`` holds the reason,
+            ``line`` where it is written. What it would have named is unknown.
     """
 
     references: list[Reference] = field(default_factory=list)
     unread: list[str] = field(default_factory=list)
+    unread_fragments: list[Reference] = field(default_factory=list)
 
 
 def read_references(sql: str) -> ReferenceScan:
@@ -192,18 +199,21 @@ def read_references(sql: str) -> ReferenceScan:
     # Scanned once for the whole text: a body's first line is a lexical
     # question, and asking it per routine would make the cost quadratic.
     constants = _string_constants(sql)
-    found: list[Reference] = []
-    unread: list[str] = []
+    scan = ReferenceScan()
     for raw in raws:
         obj = object_from_statement(sql, raw)
         reader = None if obj is None else _READERS.get(obj.kind)
         if obj is None or reader is None:
             continue
         try:
-            found.extend(reader(sql, raw, obj, constants))
+            read = reader(sql, raw, obj, constants)
         except _UnreadableBody:
-            unread.append(obj.identity)
-    return ReferenceScan(found, unread)
+            scan.unread.append(obj.identity)
+            continue
+        for reference in read:
+            kept = scan.unread_fragments if reference.kind == UNREAD else scan.references
+            kept.append(reference)
+    return scan
 
 
 def temp_relations(sql: str) -> frozenset[str]:
@@ -229,23 +239,19 @@ def temp_relations(sql: str) -> frozenset[str]:
         at = _as_location(raw.stmt)
         offset = raw.stmt_location or 0
         try:
-            tree = plpgsql_parse.parse_body(
+            compiled = plpgsql_parse.parse_body(
                 _statement_text(sql, raw), body_at=None if at is None else at - offset
-            ).tree
+            )
         except (pglast.parser.ParseError, json.JSONDecodeError):
             continue
-        for query, _line, dynamic in _fragments(tree, line=1, dynamic=False):
-            if not dynamic:
-                found.update(_created_temp(query))
+        for fragment in plpgsql_fragments.fragments(compiled):
+            if fragment.mode is plpgsql_fragments.Mode.STATEMENT and fragment.tree:
+                found.update(_created_temp(fragment.tree))
     return frozenset(found)
 
 
-def _created_temp(query: str) -> set[str]:
+def _created_temp(statements: tuple[Any, ...]) -> set[str]:
     """What one fragment creates ``TEMP``: ``CREATE TEMP TABLE`` or ``… AS``."""
-    try:
-        statements = pglast.parse_sql(query) or []
-    except pglast.parser.ParseError:
-        return set()
     created: set[str] = set()
     for raw in statements:
         stmt = raw.stmt
@@ -361,15 +367,16 @@ def _plpgsql_references(
     ``parse_plpgsql`` counts from the body's first line, so *first* — that
     line's number in the file — turns each ``lineno`` into a file line. Without
     it the reference is inexact and reports the routine's line instead. A
-    fragment marked dynamic yields one dynamic reference and nothing is read
-    out of the string it would have built.
+    dynamic fragment yields one dynamic reference and nothing is read out of
+    the string it would have built; a fragment that did not parse yields one
+    :data:`UNREAD` entry carrying the reason.
 
     The compiler is reached through :func:`confiture.core.plpgsql_parse.parse_body`,
     which blanks the schema qualifiers its stubbed catalogue will not resolve —
     with spaces, so every ``lineno`` below still counts the lines this file has.
     """
     try:
-        tree = plpgsql_parse.parse_body(statement, body_at=body_at).tree
+        compiled = plpgsql_parse.parse_body(statement, body_at=body_at)
     except pglast.parser.ParseError as exc:
         # The statement parsed as SQL — it is in `raws` — so a refusal here is
         # the PL/pgSQL compiler's, about this one body, and not one blanking a
@@ -385,69 +392,42 @@ def _plpgsql_references(
         raise _UnreadableBody(obj.identity) from exc
     found: list[Reference] = []
     exact = first is not None
-    for query, line, dynamic in _fragments(tree, line=1, dynamic=False):
-        at = file_line(line, first)
-        if dynamic:
-            found.append(_reference(None, query, DYNAMIC, at, obj, dynamic=True, exact=False))
-            continue
-        found.extend(_from_text(query, obj, line=at, exact=exact))
+    for fragment in plpgsql_fragments.fragments(compiled):
+        at = file_line(fragment.line, first)
+        if fragment.dynamic:
+            found.append(
+                _reference(None, fragment.text, DYNAMIC, at, obj, dynamic=True, exact=False)
+            )
+        elif fragment.tree is None:
+            found.append(_reference(None, fragment.finding or "", UNREAD, at, obj, exact=exact))
+        else:
+            found.extend(
+                ref
+                for raw in fragment.tree
+                for ref in _from_nodes(
+                    fragment.sql or "", raw.stmt, obj, line=at, created=raw, exact=exact
+                )
+            )
     return found
 
 
-def _fragments(node: Any, *, line: int, dynamic: bool) -> Iterator[tuple[str, int, bool]]:
-    """``(SQL text, body line, dynamic)`` for every fragment under ``node``.
-
-    ``parse_plpgsql`` puts ``lineno`` on the *statement* and the SQL on a
-    ``PLpgSQL_expr`` below it, so the nearest enclosing line travels down.
-    """
-    if isinstance(node, list):
-        for item in node:
-            yield from _fragments(item, line=line, dynamic=dynamic)
-        return
-    if not isinstance(node, dict):
-        return
-    for key, value in node.items():
-        if key == _EXPR:
-            query = value.get("query") if isinstance(value, dict) else None
-            if query:
-                yield query, line, dynamic
-        elif isinstance(value, dict):
-            yield from _fragments(
-                value,
-                line=value.get("lineno", line),
-                dynamic=dynamic or key in _DYNAMIC_STATEMENTS,
-            )
-        elif isinstance(value, list):
-            yield from _fragments(value, line=line, dynamic=dynamic)
-
-
 def _from_text(
-    text: str,
-    obj: SchemaObject,
-    *,
-    line: int | None = None,
-    shift: int = 0,
-    exact: bool = True,
+    text: str, obj: SchemaObject, *, shift: int = 0, exact: bool = True
 ) -> list[Reference]:
-    """References in a SQL fragment: all at *line*, or each at its own plus *shift*.
+    """References in a ``LANGUAGE sql`` body, each at its own line plus *shift*.
 
-    A PL/pgSQL fragment can be a bare expression (``v := app.f(1)``, a ``WHEN``
-    condition), which is not a statement; prefixing ``SELECT`` makes it one
-    without changing what it names.
+    The body is a list of statements, and nothing else can be written there, so
+    it is parsed as one; a body pglast rejects names nothing it can report.
     """
-    for candidate in (text, f"SELECT {text}"):
-        try:
-            raws = list(pglast.parse_sql(candidate) or [])
-        except pglast.parser.ParseError:
-            continue
-        return [
-            ref
-            for raw in raws
-            for ref in _from_nodes(
-                candidate, raw.stmt, obj, line=line, created=raw, exact=exact, offset=shift
-            )
-        ]
-    return []
+    try:
+        raws = list(pglast.parse_sql(text) or [])
+    except pglast.parser.ParseError:
+        return []
+    return [
+        ref
+        for raw in raws
+        for ref in _from_nodes(text, raw.stmt, obj, created=raw, exact=exact, offset=shift)
+    ]
 
 
 def _from_nodes(

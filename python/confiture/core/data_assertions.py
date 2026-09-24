@@ -18,7 +18,8 @@ hold before anything is reported.
 
 1. A ``RAISE`` at ERROR level. ``RAISE NOTICE`` logs and carries on.
 2. Reached from an ``IF`` whose condition reads a variable.
-3. That variable assigned by a ``SELECT ... INTO`` over a **user relation**.
+3. That variable assigned by a ``SELECT ... INTO``, or by ``v := (SELECT …)``,
+   over a **user relation**.
 
 Condition 3 is the one that keeps this honest. A ``RAISE EXCEPTION`` guarded on
 a ``pg_catalog`` or ``information_schema`` lookup is *correct* under a
@@ -41,6 +42,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
@@ -48,6 +50,8 @@ from typing import Any
 
 import pglast.parser
 
+from confiture.core.ddl_walk import walk_nodes
+from confiture.core.plpgsql_fragments import Fragment, Mode, fragments, nodes
 from confiture.core.plpgsql_parse import parse_body
 from confiture.core.sql_lexer import blank_copy_blocks, split_statements, statement_type, tokens
 
@@ -112,9 +116,9 @@ def _elog_level_of(raise_stmt: str) -> int | None:
     # Reason: a probe that will not compile disables the check; it never crashes it
     except (pglast.parser.ParseError, json.JSONDecodeError):
         return None
-    for node in _walk(compiled.tree):
-        if "PLpgSQL_stmt_raise" in node:
-            level = node["PLpgSQL_stmt_raise"].get("elog_level")
+    for node in nodes(compiled.tree):
+        if node.kind == "PLpgSQL_stmt_raise":
+            level = node.fields.get("elog_level")
             return int(level) if isinstance(level, int) else None
     return None
 
@@ -123,17 +127,6 @@ def _elog_level_of(raise_stmt: str) -> int | None:
 def _error_elog_level() -> int | None:
     """``RAISE EXCEPTION``'s level, compiled once per process."""
     return _elog_level_of("RAISE EXCEPTION 'probe';")
-
-
-def _walk(node: Any):
-    """Every dict in a compiled PL/pgSQL tree, depth first."""
-    if isinstance(node, dict):
-        yield node
-        for value in node.values():
-            yield from _walk(value)
-    elif isinstance(node, list):
-        for item in node:
-            yield from _walk(item)
 
 
 def _is_catalogue(schema: str | None, relname: str) -> bool:
@@ -153,20 +146,10 @@ def _is_catalogue(schema: str | None, relname: str) -> bool:
     return schema is None and relname.startswith("pg_")
 
 
-def _relations_in(query: str) -> list[tuple[str | None, str]]:
-    """Every relation a query reads, as ``(schema, relname)``."""
-    # Reason: a PLpgSQL_expr query is a fragment the compiler produced; pglast may still reject it
-    try:
-        tree = pglast.parser.parse_sql(query)
-    except pglast.parser.ParseError:
-        return []
-    return _range_vars(tree)
-
-
 def _range_vars(tree: Any) -> list[tuple[str | None, str]]:
     """Every ``RangeVar`` reachable from ``tree``, as ``(schema, relname)``."""
     out: list[tuple[str | None, str]] = []
-    for node in _iter_nodes(tree):
+    for node in walk_nodes(tree):
         if type(node).__name__ != "RangeVar":
             continue
         rel = getattr(node, "relname", None)
@@ -175,8 +158,8 @@ def _range_vars(tree: Any) -> list[tuple[str | None, str]]:
     return out
 
 
-def _user_relations(query: str, derivations: dict[str, set[str]] | None = None) -> list[str]:
-    """Relations in a query that are **empty** on a schema-only database.
+def _user_relations(tree: Any, derivations: dict[str, set[str]] | None = None) -> list[str]:
+    """Relations in a parsed fragment that are **empty** on a schema-only database.
 
     Excluded: the catalogue (see :func:`_is_catalogue`), and any relation this
     migration builds from the catalogue (see :func:`_catalogue_derived`). A
@@ -184,7 +167,7 @@ def _user_relations(query: str, derivations: dict[str, set[str]] | None = None) 
     ``search_path`` to a user table.
     """
     names: list[str] = []
-    for schema, rel in _relations_in(query):
+    for schema, rel in _range_vars(tree):
         if _is_catalogue(schema, rel):
             continue
         qualified = f"{schema}.{rel}" if schema else rel
@@ -277,37 +260,32 @@ _TARGET_ATTR = {
 }
 
 
-def _iter_nodes(node: Any):
-    """Every pglast AST node reachable from ``node``."""
-    if isinstance(node, tuple | list):
-        for item in node:
-            yield from _iter_nodes(item)
-        return
-    if not hasattr(node, "__slots__"):
-        return
-    yield node
-    for slot in node.__slots__:
-        yield from _iter_nodes(getattr(node, slot, None))
-
-
-def _counted_variables(block: Any, derivations: dict[str, set[str]]) -> dict[str, str]:
-    """Variables assigned by a ``SELECT ... INTO`` over a user relation.
+def _counted_variables(read: list[Fragment], derivations: dict[str, set[str]]) -> dict[str, str]:
+    """Variables assigned from a user relation: ``SELECT … INTO v`` or ``v := (SELECT …)``.
 
     Maps the variable's name to the relation it counted, which is what a
     finding prints.
     """
     counted: dict[str, str] = {}
-    for node in _walk(block):
-        stmt = node.get("PLpgSQL_stmt_execsql")
-        if not stmt or not stmt.get("into"):
+    for fragment in read:
+        targets = _assigned(fragment)
+        if not targets or fragment.tree is None:
             continue
-        query = stmt.get("sqlstmt", {}).get("PLpgSQL_expr", {}).get("query", "")
-        relations = _user_relations(query, derivations)
+        relations = _user_relations(fragment.tree, derivations)
         if not relations:
             continue
-        for target in _into_targets(stmt.get("target")):
+        for target in targets:
             counted[target] = relations[0]
     return counted
+
+
+def _assigned(fragment: Fragment) -> list[str]:
+    """The variables a fragment's statement writes: its ``INTO`` targets or its ``:=`` target."""
+    if fragment.mode is Mode.ASSIGNMENT:
+        return [fragment.target] if fragment.target else []
+    if fragment.kind == "PLpgSQL_stmt_execsql" and fragment.node.get("into"):
+        return _into_targets(fragment.node.get("target"))
+    return []
 
 
 def _into_targets(target: Any) -> list[str]:
@@ -328,33 +306,32 @@ def _into_targets(target: Any) -> list[str]:
     return [f["name"] for f in row.get("fields", []) if f.get("name")]
 
 
-def _raises_at_error(body: Any, error_level: int) -> dict | None:
+def _raises_at_error(body: Any, error_level: int) -> Mapping[str, Any] | None:
     """The first ERROR-level ``RAISE`` in this branch, if any."""
-    for node in _walk(body):
-        raise_stmt = node.get("PLpgSQL_stmt_raise")
-        if raise_stmt is not None and raise_stmt.get("elog_level") == error_level:
-            return raise_stmt
+    for node in nodes(body):
+        if node.kind == "PLpgSQL_stmt_raise" and node.fields.get("elog_level") == error_level:
+            return node.fields
     return None
 
 
 def _assertions_in(
-    tree: Any,
+    read: list[Fragment],
     file: Path,
     error_level: int,
     line_base: int,
     lines: list[str],
     derivations: dict[str, set[str]],
 ) -> list[DataAssertion]:
-    counted = _counted_variables(tree, derivations)
+    counted = _counted_variables(read, derivations)
     if not counted:
         return []
 
     found: list[DataAssertion] = []
-    for node in _walk(tree):
-        stmt_if = node.get("PLpgSQL_stmt_if")
-        if not stmt_if:
+    for fragment in read:
+        if (fragment.kind, fragment.slot) != ("PLpgSQL_stmt_if", "cond"):
             continue
-        condition = stmt_if.get("cond", {}).get("PLpgSQL_expr", {}).get("query", "")
+        stmt_if = fragment.node
+        condition = fragment.text
         guarded = [name for name in counted if _reads(condition, name)]
         if not guarded:
             continue
@@ -375,7 +352,9 @@ def _assertions_in(
     return found
 
 
-def _absolute_line(raise_stmt: dict, stmt_if: dict, line_base: int, lines: list[str]) -> int:
+def _absolute_line(
+    raise_stmt: Mapping[str, Any], stmt_if: Mapping[str, Any], line_base: int, lines: list[str]
+) -> int:
     """The ``RAISE``'s line in the **file**, not in its statement or its body.
 
     ``parse_plpgsql`` is handed one statement at a time and counts from the
@@ -498,7 +477,10 @@ def scan_sql(sql: str, file: Path) -> AssertionScan:
         except (pglast.parser.ParseError, json.JSONDecodeError):
             unparseable = unparseable or _defines_plpgsql(text)
             continue
-        found.extend(_assertions_in(compiled.tree, file, error_level, line, lines, derivations))
+        read = list(fragments(compiled))
+        found.extend(_assertions_in(read, file, error_level, line, lines, derivations))
+        # A fragment that did not parse may be the count a guard reads.
+        unparseable = unparseable or any(fragment.finding for fragment in read)
     return AssertionScan(file=file, assertions=found, unparseable=unparseable)
 
 

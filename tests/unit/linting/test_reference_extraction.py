@@ -17,7 +17,7 @@ cannot be resolved statically, an ``EXECUTE`` of a built string above all, is
 
 from __future__ import annotations
 
-from confiture.core.linting.references import Reference, referenced_objects
+from confiture.core.linting.references import Reference, read_references, referenced_objects
 
 ISSUE_246 = """CREATE OR REPLACE FUNCTION app.fn_report()
 RETURNS VOID LANGUAGE plpgsql AS $$
@@ -205,3 +205,57 @@ def test_a_c_language_routine_has_no_sql_body() -> None:
 def test_unparseable_sql_yields_nothing_rather_than_raising() -> None:
     """The linter reports a parse failure once, as ``UNPARSEABLE``; this is not its job."""
     assert referenced_objects("CREATE FUNCTION (((;") == []
+
+
+ISSUE_363 = """CREATE FUNCTION app.fn_assign(p int) RETURNS int LANGUAGE plpgsql AS $$
+DECLARE v int; v_result int;
+BEGIN
+    v_result := core.x(p);
+    v := f(v_result) + 1;
+    RETURN v;
+END;
+$$;
+"""
+
+
+def test_a_call_made_by_assignment_is_a_reference() -> None:
+    """#363: neither ``v := f()`` nor ``SELECT v := f()`` is SQL, so both were dropped."""
+    refs = {(r.schema, r.name): r.line for r in referenced_objects(ISSUE_363)}
+
+    assert refs == {("core", "x"): 4, (None, "f"): 5}
+
+
+def test_a_statement_inside_a_loop_over_a_dynamic_query_is_read() -> None:
+    """Only the string ``EXECUTE`` runs is unknowable; the loop body is ordinary SQL."""
+    sql = """CREATE FUNCTION app.fn_loop() RETURNS void LANGUAGE plpgsql AS $$
+DECLARE r record;
+BEGIN
+    FOR r IN EXECUTE 'SELECT 1' LOOP
+        PERFORM app.fn_inside(r);
+    END LOOP;
+END;
+$$;
+"""
+
+    refs = referenced_objects(sql)
+
+    assert [r.dynamic for r in refs] == [True, False]
+    assert ("app", "fn_inside") in _names(refs)
+
+
+def test_a_fragment_that_cannot_be_read_is_named_with_its_line(monkeypatch) -> None:
+    """A slot the reader has no reading for is reported, never passed off as read."""
+    from confiture.core import plpgsql_fragments
+
+    slots = dict(plpgsql_fragments.SLOTS)
+    del slots[("PLpgSQL_stmt_assign", "expr")]
+    monkeypatch.setattr(plpgsql_fragments, "SLOTS", slots)
+
+    scan = read_references(ISSUE_363)
+
+    assert [(r.referrer, r.line) for r in scan.unread_fragments] == [
+        ("app.fn_assign(integer)", 4),
+        ("app.fn_assign(integer)", 5),
+    ]
+    assert scan.unread_fragments[0].name == "no reading for PLpgSQL_stmt_assign.expr"
+    assert scan.references == []

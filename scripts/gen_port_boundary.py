@@ -66,6 +66,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "model_facts.py": (CRATE, TRANSFORM),
     "parser_info.py": (CRATE, TRANSFORM),
     "path_globs.py": (CRATE, TRANSFORM),
+    "plpgsql_fragments.py": (CRATE, TRANSFORM),
     "plpgsql_parse.py": (CRATE, TRANSFORM),
     "replica": (CRATE, TRANSFORM),
     "risk_tier.py": (CRATE, TRANSFORM),

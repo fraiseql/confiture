@@ -108,6 +108,49 @@ def test_the_message_says_which_object_is_missing(in_tmp: Path) -> None:
     assert "no file in the build creates it" in messages
 
 
+class TestACallMadeByAssignment:
+    """#363: a routine named only on the right of `:=` was never a reference."""
+
+    ROUTINE = """CREATE FUNCTION app.fn_total(p int) RETURNS int LANGUAGE plpgsql AS $$
+DECLARE v int;
+BEGIN
+    v := app.fn_missing(p) + 1;
+    RETURN v;
+END;
+$$;
+"""
+
+    def test_it_is_reported(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": self.ROUTINE})
+
+        (finding,) = _findings()
+
+        assert finding["location"] == "app.fn_total(integer) -> app.fn_missing"
+        assert finding["line"] == 4
+
+    def test_a_statement_the_reader_cannot_read_degrades_the_rule(
+        self, in_tmp: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Reported with the routine, the file and the line — never read as clean."""
+        from confiture.core import plpgsql_fragments
+
+        slots = dict(plpgsql_fragments.SLOTS)
+        del slots[("PLpgSQL_stmt_assign", "expr")]
+        monkeypatch.setattr(plpgsql_fragments, "SLOTS", slots)
+        _project(in_tmp, {"001_schema.sql": ISSUE_246_SCHEMA, "010_fn.sql": self.ROUTINE})
+
+        result = runner.invoke(
+            app, ["lint", "--select", "build_003", "--format", "json", "--fail-on", "never"]
+        )
+
+        reasons = [d["reason"] for d in json.loads(result.stdout)["degraded"]]
+        assert any(
+            reason.startswith("could not read 1 statement in a routine body")
+            and "app.fn_total(integer) at db/schema/010_fn.sql:4" in reason
+            for reason in reasons
+        ), reasons
+
+
 def test_a_forward_reference_within_one_build_resolves(in_tmp: Path) -> None:
     """The inventory is the whole build: file order is not resolution order."""
     _project(

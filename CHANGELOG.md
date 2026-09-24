@@ -88,6 +88,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   where it wrote an empty file and `write_copy_seed` an empty `COPY` block.
 - Both seed writers refuse a column named twice, which PostgreSQL would have refused
   at load time.
+- **`build_003` reads a call made by assignment** (#363). A PL/pgSQL fragment was
+  parsed as written and then as `SELECT <fragment>`, and for `v := app.fn_x(p)` both
+  are syntax errors, so every call or relation named only on the right of `:=` (or
+  `=`) was never a reference. Each fragment is now read the way the statement it sits
+  in writes it — a query, an expression, or an assignment split at its top-level `:=`
+  by the SQL scanner — through one reader, `core/plpgsql_fragments.py`. **`build_003`
+  may report findings on a tree it passed before**: calls and relations it could not
+  see. It reads more in two other places too: the `USING` parameters of a dynamic
+  `EXECUTE`, and the body of a `FOR … IN EXECUTE` loop, were marked dynamic with the
+  string they iterate and dropped. A statement the reader cannot parse is a `degraded`
+  entry naming the routine, file and line.
+- **`migrate validate --check-data-assertions` sees a count assigned with `:=`**.
+  `v := (SELECT count(*) FROM t); IF v > 0 THEN RAISE EXCEPTION …` is reported like its
+  `SELECT count(*) INTO v` twin, and a statement in a body that cannot be parsed puts
+  the file under `unanalysed`, where it was read as having no assertion. The check may
+  report findings it did not before.
 
 - **The archaeology guard reads a phase in any case** (#310). Its patterns were
   case-sensitive, so `phase 05` in a docstring or an xfail reason named the plan

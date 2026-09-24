@@ -603,3 +603,50 @@ class TestSchemaOnlyIsNotEmpty:
     def test_the_incident_still_reports(self) -> None:
         """The regression guard for all of the above."""
         assert len(find_data_assertions(INCIDENT, HERE)) == 1
+
+
+class TestACountAssignedWithColonEquals:
+    """`v := (SELECT count(*) …)` is the same count as `SELECT count(*) INTO v` (#363)."""
+
+    ASSIGNED = """
+DO $$
+DECLARE v_ok int;
+BEGIN
+  v_ok := (SELECT count(*) FROM catalog.tb_field WHERE identifier = 'a');
+  IF v_ok <> 1 THEN
+    RAISE EXCEPTION 'expected 1 field, got %', v_ok;
+  END IF;
+END $$;
+"""
+
+    def test_it_is_found_like_its_select_into_twin(self) -> None:
+        (f,) = find_data_assertions(self.ASSIGNED, HERE)
+
+        assert (f.variable, f.relation, f.line) == ("v_ok", "catalog.tb_field", 7)
+
+    def test_a_catalogue_count_by_assignment_is_not_flagged(self) -> None:
+        sql = self.ASSIGNED.replace("catalog.tb_field", "pg_catalog.pg_class")
+
+        assert find_data_assertions(sql, HERE) == []
+
+    def test_an_assignment_that_reads_no_relation_is_not_a_count(self) -> None:
+        sql = self.ASSIGNED.replace(
+            "(SELECT count(*) FROM catalog.tb_field WHERE identifier = 'a')", "f(1)"
+        )
+
+        assert find_data_assertions(sql, HERE) == []
+
+
+def test_a_fragment_the_reader_cannot_read_makes_the_file_unanalysed(monkeypatch) -> None:
+    """Its count may be the one a guard reads: say the file was not read, not that it is clean."""
+    from confiture.core import plpgsql_fragments
+    from confiture.core.data_assertions import scan_sql
+
+    slots = dict(plpgsql_fragments.SLOTS)
+    del slots[("PLpgSQL_stmt_assign", "expr")]
+    monkeypatch.setattr(plpgsql_fragments, "SLOTS", slots)
+
+    scan = scan_sql(TestACountAssignedWithColonEquals.ASSIGNED, HERE)
+
+    assert scan.unparseable
+    assert scan.assertions == []

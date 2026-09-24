@@ -22,7 +22,7 @@ app.mutation_response`` is the convention for every mutation in a FraiseQL
 schema, so without the repair the routines left analysable are the ones with no
 write logic in them (#270).
 
-Nothing downstream of the parse reads a type. :mod:`confiture.core.linting.references`
+Nothing downstream of the parse reads a type. :mod:`confiture.core.plpgsql_fragments`
 wants the tree's ``lineno``s and its ``PLpgSQL_expr`` query strings, and a datum's
 ``typname`` is never consulted by anything. The qualifier is the only part the
 compiler looks up, so the qualifier is **blanked with spaces** — every offset and
