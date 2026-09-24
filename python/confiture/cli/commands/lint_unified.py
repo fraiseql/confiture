@@ -16,6 +16,7 @@ from confiture.cli.options import (
     format_option,
 )
 from confiture.core import linting as _core_linting
+from confiture.core.builder import files_under
 from confiture.core.linting.libraries.generate import tree_violations
 from confiture.core.linting.schema_linter import (
     LintConfig as LinterConfig,
@@ -57,7 +58,7 @@ def _unified_tree_findings(
     answer to "which files is this rule about".
     """
     if schema_dir is not None:
-        files = sorted(f for f in schema_dir.rglob("*.sql") if f.is_file())
+        files = files_under(schema_dir) if schema_dir.is_dir() else []
         roots = [schema_dir]
     else:
         files, roots = env_ddl_files(env, Path())

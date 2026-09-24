@@ -22,6 +22,7 @@ import psycopg
 from confiture.config.environment import Environment
 from confiture.core import builder as _core_builder
 from confiture.core import sql_lexer
+from confiture.core.builder import files_under
 from confiture.core.linting.inventory import (
     Inventory,
     SchemaObject,
@@ -948,7 +949,7 @@ class SchemaLinter:
 
         report = LintReport()
         for violation in tree_violations(
-            sorted(f for f in schema_dir.rglob("*.sql") if f.is_file()),
+            files_under(schema_dir) if schema_dir.is_dir() else [],
             schema_dirs=[schema_dir],
             overrides_dir=overrides_dir,
         ):

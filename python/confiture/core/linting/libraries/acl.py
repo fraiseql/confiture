@@ -22,6 +22,7 @@ from pathlib import Path
 
 from confiture.config.environment import AclExpectation, AclGrant
 from confiture.core import sql_lexer
+from confiture.core.builder import files_under
 from confiture.core.idempotency.python_migration_extractor import extract_sql_from_python_migration
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.migration_grant_extractor import (
@@ -106,9 +107,7 @@ def _load_global_grants(
     if grant_dir is None or not grant_dir.exists():
         return []
     grants: list[tuple[str, str, str, frozenset[str]]] = []
-    for sql_file in sorted(grant_dir.rglob("*.sql")):
-        if not sql_file.is_file():
-            continue
+    for sql_file in files_under(grant_dir):
         grants.extend(extractor.extract_grants(sql_file.read_text()))
     return grants
 
