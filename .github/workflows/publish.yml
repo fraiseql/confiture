@@ -182,7 +182,7 @@ jobs:
         # lockstep with quality-gate.yml's type-check job.
         uv venv
         uv sync --locked --no-install-project --all-extras
-        uv pip install 'ty==0.0.81'
+        uv pip install 'ty==0.0.83'
     - name: Run ty (Astral's type checker)
       run: uv run --no-sync ty check python/confiture/
 
