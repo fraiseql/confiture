@@ -9,64 +9,63 @@ function was never updated.
 
 from __future__ import annotations
 
+from confiture.core.schema_sources import read_schema
 from confiture.core.seed.validation.prep_seed.level_3_resolvers import (
     Level3ResolutionValidator,
 )
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
+    PrepSeedViolation,
     ViolationSeverity,
 )
+from confiture.core.seed.validation.prep_seed.resolvers import find_resolvers
+
+TABLES = """
+CREATE TABLE prep_seed.tb_manufacturer (id UUID PRIMARY KEY, name TEXT);
+CREATE TABLE catalog.tb_manufacturer (id UUID, pk_manufacturer BIGINT PRIMARY KEY, name TEXT);
+CREATE TABLE prep_seed.tb_product (id UUID PRIMARY KEY, fk_manufacturer_id UUID, name TEXT);
+CREATE TABLE catalog.tb_product (
+    id UUID, pk_product BIGINT PRIMARY KEY, fk_manufacturer BIGINT, name TEXT
+);
+"""
+
+
+def _validate(function: str) -> list[PrepSeedViolation]:
+    read = read_schema(TABLES + function)
+    (resolver,) = find_resolvers(read, catalog_schema="catalog")
+    return Level3ResolutionValidator(read.model).validate(resolver)
+
+
+def _drift(violations: list[PrepSeedViolation]) -> PrepSeedViolation:
+    return next(v for v in violations if v.pattern == PrepSeedPattern.SCHEMA_DRIFT_IN_RESOLVER)
+
+
+WRONG_SCHEMA = """
+CREATE FUNCTION fn_resolve_tb_manufacturer() RETURNS void AS $$
+BEGIN
+    INSERT INTO tenant.tb_manufacturer (id, name)  -- Wrong schema!
+    SELECT id, name FROM prep_seed.tb_manufacturer;
+END;
+$$ LANGUAGE plpgsql;
+"""
 
 
 class TestLevel3ResolutionValidator:
     """Test Level 3 resolution function validation."""
-
-    def test_validator_initialization(self) -> None:
-        """Can create a Level3ResolutionValidator."""
-        validator = Level3ResolutionValidator()
-        assert validator is not None
 
     def test_detects_schema_drift_tenant_to_catalog(self) -> None:
         """CRITICAL: Detects when resolution function references wrong schema.
 
         This is the bug that caused 360 test failures.
         """
-        # Resolution function referencing wrong schema
-        func_body = """
-        CREATE FUNCTION fn_resolve_tb_manufacturer() RETURNS void AS $$
-        BEGIN
-            INSERT INTO tenant.tb_manufacturer (id, name)  -- Wrong schema!
-            SELECT id, name FROM prep_seed.tb_manufacturer;
-        END;
-        $$ LANGUAGE plpgsql;
-        """
-
-        validator = Level3ResolutionValidator()
-
-        # Mock the database lookup to say table is in catalog
-        validator.get_table_schema = lambda t: "catalog"  # type: ignore
-
-        violations = validator.validate_function(
-            func_name="fn_resolve_tb_manufacturer",
-            func_body=func_body,
-            expected_table="tb_manufacturer",
-        )
-
-        # Should detect the schema drift
-        assert any(v.pattern == PrepSeedPattern.SCHEMA_DRIFT_IN_RESOLVER for v in violations)
-
-        # Should be CRITICAL severity
-        drift_violation = next(
-            v for v in violations if v.pattern == PrepSeedPattern.SCHEMA_DRIFT_IN_RESOLVER
-        )
-        assert drift_violation.severity == ViolationSeverity.CRITICAL
-        assert "tenant" in drift_violation.message
-        assert "catalog" in drift_violation.message
+        drift = _drift(_validate(WRONG_SCHEMA))
+        assert drift.severity == ViolationSeverity.CRITICAL
+        assert "tenant" in drift.message
+        assert "catalog" in drift.message
 
     def test_detects_missing_fk_transformation(self) -> None:
         """Detects missing JOIN for FK transformation."""
-        # Resolution function missing JOIN for manufacturer FK
-        func_body = """
+        violations = _validate("""
         CREATE FUNCTION fn_resolve_tb_product() RETURNS void AS $$
         BEGIN
             INSERT INTO catalog.tb_product (id, fk_manufacturer, name)
@@ -74,24 +73,12 @@ class TestLevel3ResolutionValidator:
             -- Missing: JOIN for fk_manufacturer_id
         END;
         $$ LANGUAGE plpgsql;
-        """
-
-        validator = Level3ResolutionValidator()
-        validator.get_table_schema = lambda t: "catalog"  # type: ignore
-
-        violations = validator.validate_function(
-            func_name="fn_resolve_tb_product",
-            func_body=func_body,
-            expected_table="tb_product",
-            fk_columns=["fk_manufacturer_id"],  # FK in prep_seed
-        )
-
-        # Should detect missing FK transformation
+        """)
         assert any(v.pattern == PrepSeedPattern.MISSING_FK_TRANSFORMATION for v in violations)
 
     def test_passes_valid_resolution_function(self) -> None:
         """Valid resolution function passes validation."""
-        func_body = """
+        violations = _validate("""
         CREATE FUNCTION fn_resolve_tb_product() RETURNS void AS $$
         BEGIN
             INSERT INTO catalog.tb_product (id, fk_manufacturer, name)
@@ -103,24 +90,12 @@ class TestLevel3ResolutionValidator:
             LEFT JOIN catalog.tb_manufacturer m ON m.id = p.fk_manufacturer_id;
         END;
         $$ LANGUAGE plpgsql;
-        """
-
-        validator = Level3ResolutionValidator()
-        validator.get_table_schema = lambda t: "catalog"  # type: ignore
-
-        violations = validator.validate_function(
-            func_name="fn_resolve_tb_product",
-            func_body=func_body,
-            expected_table="tb_product",
-            fk_columns=["fk_manufacturer_id"],
-        )
-
-        # Should have no violations for a valid function
-        assert len(violations) == 0
+        """)
+        assert violations == []
 
     def test_detects_multiple_issues(self) -> None:
         """Can detect multiple issues in one function."""
-        func_body = """
+        violations = _validate("""
         CREATE FUNCTION fn_resolve_tb_product() RETURNS void AS $$
         BEGIN
             INSERT INTO tenant.tb_product (id, fk_manufacturer, name)
@@ -128,75 +103,52 @@ class TestLevel3ResolutionValidator:
             -- Wrong schema AND missing FK transformation
         END;
         $$ LANGUAGE plpgsql;
-        """
-
-        validator = Level3ResolutionValidator()
-        validator.get_table_schema = lambda t: "catalog"  # type: ignore
-
-        violations = validator.validate_function(
-            func_name="fn_resolve_tb_product",
-            func_body=func_body,
-            expected_table="tb_product",
-            fk_columns=["fk_manufacturer_id"],
-        )
-
-        # Should detect both issues
+        """)
         patterns = {v.pattern for v in violations}
         assert PrepSeedPattern.SCHEMA_DRIFT_IN_RESOLVER in patterns
         assert PrepSeedPattern.MISSING_FK_TRANSFORMATION in patterns
 
-    def test_schema_drift_violation_has_impact_description(self) -> None:
-        """Schema drift violations include impact description."""
-        func_body = """
-        CREATE FUNCTION fn_resolve_tb_manufacturer() RETURNS void AS $$
+    def test_a_foreign_key_names_the_parent_table(self) -> None:
+        """A declared foreign key says which table the column points at, not its name."""
+        read = read_schema(
+            TABLES.replace("fk_manufacturer_id UUID,", "fk_maker_id UUID,").replace(
+                "fk_manufacturer BIGINT,", "fk_maker BIGINT,"
+            )
+            + "ALTER TABLE prep_seed.tb_product ADD FOREIGN KEY (fk_maker_id)"
+            " REFERENCES prep_seed.tb_manufacturer (id);\n"
+            + """
+            CREATE FUNCTION fn_resolve_tb_product() RETURNS void AS $$
+            BEGIN
+                INSERT INTO catalog.tb_product (id, fk_maker, name)
+                SELECT p.id, m.pk_manufacturer, p.name
+                FROM prep_seed.tb_product p
+                JOIN catalog.tb_manufacturer m ON m.id = p.fk_maker_id;
+            END;
+            $$ LANGUAGE plpgsql;
+            """
+        )
+        (resolver,) = find_resolvers(read, catalog_schema="catalog")
+        assert Level3ResolutionValidator(read.model).validate(resolver) == []
+
+    def test_a_table_the_schema_does_not_define_is_not_drift(self) -> None:
+        violations = _validate("""
+        CREATE FUNCTION fn_resolve_tb_elsewhere() RETURNS void AS $$
         BEGIN
-            INSERT INTO tenant.tb_manufacturer (id, name)
-            SELECT id, name FROM prep_seed.tb_manufacturer;
+            INSERT INTO audit.tb_elsewhere (id) SELECT id FROM prep_seed.tb_product;
         END;
         $$ LANGUAGE plpgsql;
-        """
+        """)
+        assert violations == []
 
-        validator = Level3ResolutionValidator()
-        validator.get_table_schema = lambda t: "catalog"  # type: ignore
-
-        violations = validator.validate_function(
-            func_name="fn_resolve_tb_manufacturer",
-            func_body=func_body,
-            expected_table="tb_manufacturer",
-        )
-
-        drift_violation = next(
-            v for v in violations if v.pattern == PrepSeedPattern.SCHEMA_DRIFT_IN_RESOLVER
-        )
-
-        # Should describe impact (dependent tables)
-        assert drift_violation.impact is not None
-        assert "dependent" in drift_violation.impact.lower()
+    def test_schema_drift_violation_has_impact_description(self) -> None:
+        """Schema drift violations include impact description."""
+        drift = _drift(_validate(WRONG_SCHEMA))
+        assert drift.impact is not None
+        assert "dependent" in drift.impact.lower()
 
     def test_auto_fix_available_for_schema_drift(self) -> None:
         """Schema drift violations are auto-fixable."""
-        func_body = """
-        CREATE FUNCTION fn_resolve_tb_manufacturer() RETURNS void AS $$
-        BEGIN
-            INSERT INTO tenant.tb_manufacturer (id, name)
-            SELECT id, name FROM prep_seed.tb_manufacturer;
-        END;
-        $$ LANGUAGE plpgsql;
-        """
-
-        validator = Level3ResolutionValidator()
-        validator.get_table_schema = lambda t: "catalog"  # type: ignore
-
-        violations = validator.validate_function(
-            func_name="fn_resolve_tb_manufacturer",
-            func_body=func_body,
-            expected_table="tb_manufacturer",
-        )
-
-        drift_violation = next(
-            v for v in violations if v.pattern == PrepSeedPattern.SCHEMA_DRIFT_IN_RESOLVER
-        )
-
-        assert drift_violation.fix_available is True
-        assert drift_violation.suggestion is not None
-        assert "catalog.tb_manufacturer" in drift_violation.suggestion
+        drift = _drift(_validate(WRONG_SCHEMA))
+        assert drift.fix_available is True
+        assert drift.suggestion is not None
+        assert "catalog.tb_manufacturer" in drift.suggestion

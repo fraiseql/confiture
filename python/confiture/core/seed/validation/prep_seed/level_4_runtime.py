@@ -1,6 +1,6 @@
 """Level 4: Runtime validation.
 
-Cycles 1-4: Database connection, table existence, column types, dry-run.
+Database connection, table existence, dry-run.
 
 Validates resolution setup without actually loading data.
 Uses SAVEPOINT for safe dry-run execution.
@@ -10,13 +10,18 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from psycopg import sql
 
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
     ViolationSeverity,
 )
+
+if TYPE_CHECKING:
+    from confiture.core.seed.validation.prep_seed.resolvers import Resolver
 
 
 class Level4RuntimeValidator:
@@ -25,42 +30,33 @@ class Level4RuntimeValidator:
     Checks:
     - Database connectivity
     - Target tables exist in database
-    - Column types match expectations
     - Dry-run resolution with SAVEPOINT
 
     Example:
         >>> validator = Level4RuntimeValidator()
         >>> violations = validator.validate_runtime(
-        ...     func_name="fn_resolve_tb_manufacturer",
-        ...     target_schema="catalog",
-        ...     target_table="tb_manufacturer"
+        ...     resolver, target_schema="catalog", target_table="tb_manufacturer"
         ... )
     """
 
-    def __init__(
-        self,
-        table_exists: Callable[[str, str], bool] | None = None,
-        get_column_type: Callable[[str, str, str], str | None] | None = None,
-    ) -> None:
+    def __init__(self, table_exists: Callable[[str, str], bool] | None = None) -> None:
         """Initialize the validator.
 
         Args:
             table_exists: Optional function(schema, table) -> bool
-            get_column_type: Optional function(schema, table, column) -> type_str
         """
         self.table_exists = table_exists
-        self.get_column_type = get_column_type
 
     def validate_runtime(
         self,
-        func_name: str,
+        resolver: Resolver,
         target_schema: str,
         target_table: str,
     ) -> list[PrepSeedViolation]:
         """Validate runtime environment for resolution.
 
         Args:
-            func_name: Name of the resolution function
+            resolver: The resolution function
             target_schema: Target schema (e.g., "catalog")
             target_table: Target table (e.g., "tb_manufacturer")
 
@@ -78,51 +74,10 @@ class Level4RuntimeValidator:
                     message=(
                         f"Target table {target_schema}.{target_table} does not exist in database"
                     ),
-                    file_path=f"db/schema/functions/{func_name}.sql",
-                    line_number=1,
-                    impact="Resolution function will fail",
+                    file_path=resolver.file,
+                    line_number=resolver.line,
+                    impact=f"{resolver.name} will fail",
                     fix_available=False,
-                )
-            )
-
-        return violations
-
-    def validate_column_type(
-        self,
-        schema: str,
-        table: str,
-        column: str,
-        expected_type: str,
-    ) -> list[PrepSeedViolation]:
-        """Validate column type matches expected.
-
-        Args:
-            schema: Schema name
-            table: Table name
-            column: Column name
-            expected_type: Expected type (e.g., "BIGINT")
-
-        Returns:
-            List of violations found
-        """
-        violations: list[PrepSeedViolation] = []
-
-        if not self.get_column_type:
-            return violations
-
-        actual_type = self.get_column_type(schema, table, column)
-        if actual_type and actual_type.upper() != expected_type.upper():
-            violations.append(
-                PrepSeedViolation(
-                    pattern=PrepSeedPattern.MISSING_FK_MAPPING,
-                    severity=ViolationSeverity.ERROR,
-                    message=(
-                        f"Column {schema}.{table}.{column} has type {actual_type} "
-                        f"but expected {expected_type}"
-                    ),
-                    file_path=f"db/schema/{table}.sql",
-                    line_number=1,
-                    impact="Type mismatch may cause resolution failures",
                 )
             )
 
@@ -130,50 +85,42 @@ class Level4RuntimeValidator:
 
     def dry_run_resolution(
         self,
-        func_name: str,
+        resolver: Resolver,
         connection: Any,
         savepoint_name: str = "sp_validation",
     ) -> list[PrepSeedViolation]:
-        """Execute resolution function with SAVEPOINT (no commit).
+        """Call *resolver* inside a SAVEPOINT and roll it back: nothing it writes is kept.
+
+        The call names the routine by :attr:`Resolver.identifier` and the
+        savepoint by :class:`psycopg.sql.Identifier`, with no parameters, so a
+        mixed-case or ``%``-bearing name is the routine the DDL created.
 
         Args:
-            func_name: Name of the resolution function
+            resolver: The resolution function
             connection: Database connection
             savepoint_name: SAVEPOINT name for rollback
 
         Returns:
             List of violations found
         """
-        violations: list[PrepSeedViolation] = []
-
+        savepoint = sql.Identifier(savepoint_name)
         try:
-            # Create savepoint
-            connection.execute(f"SAVEPOINT {savepoint_name};")
-
-            # Execute resolution function
-            func_call = f"SELECT {func_name}();"
-            connection.execute(func_call)
-
-            # Rollback to savepoint (undo changes)
-            connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name};")
-
-            return violations
-
+            connection.execute(sql.SQL("SAVEPOINT {}").format(savepoint))
+            connection.execute(sql.SQL("SELECT {}()").format(resolver.identifier))
+            connection.execute(sql.SQL("ROLLBACK TO SAVEPOINT {}").format(savepoint))
         except Exception as e:  # Reason: executes a user resolution function under a savepoint; any failure is a reported violation
-            violations.append(
+            # The savepoint may not exist if creating it is what failed.
+            with contextlib.suppress(Exception):
+                connection.execute(sql.SQL("ROLLBACK TO SAVEPOINT {}").format(savepoint))
+            return [
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                     severity=ViolationSeverity.ERROR,
-                    message=(f"Resolution function {func_name} execution failed: {e!s}"),
-                    file_path=f"db/schema/functions/{func_name}.sql",
-                    line_number=1,
+                    message=f"Resolution function {resolver.name} execution failed: {e!s}",
+                    file_path=resolver.file,
+                    line_number=resolver.line,
                     impact="Resolution cannot execute",
                     fix_available=False,
                 )
-            )
-
-            # Try to rollback on error (savepoint may not exist if execute failed)
-            with contextlib.suppress(Exception):
-                connection.execute(f"ROLLBACK TO SAVEPOINT {savepoint_name};")
-
-            return violations
+            ]
+        return []

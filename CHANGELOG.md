@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `apply_seeds` records it as `ApplyResult.seed_profile`, which it never set before.
 - `tests/contract/test_platform_surface.py` pins the fields of every change variant
   and of `SeedProfile`.
+- `PrepSeedPattern.RESOLVER_NOT_READ`: part of a resolver's body could not be read, so
+  it was not checked.
 
 ### Fixed
 
@@ -104,6 +106,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SELECT count(*) INTO v` twin, and a statement in a body that cannot be parsed puts
   the file under `unanalysed`, where it was read as having no assertion. The check may
   report findings it did not before.
+
+- **Prep-seed levels 3-5 find a resolver by what the schema defines** (#385). They took
+  their resolution functions from file names, `fn_resolve*.sql`, so a tree that names
+  its files `019201004_fn_resolve_tb_x.sql`, or keeps its resolvers together, had none,
+  and the report read as a pass. A resolver is now every routine the schema defines whose
+  name starts `fn_resolve` (folded, so `"Fn_resolve_X"` is one), wherever it is written.
+  A schema that holds none is a `MISSING_RESOLVER_FUNCTION` WARNING from level 3, where
+  levels 3-5 checked nothing and said so nowhere.
+- **Level 3 reads a resolver's body, and compares it with the schema** (#385). It read
+  each file with two regexes and no table schema, so it could not report anything; given
+  real input, the regexes would have failed every resolver written with an unqualified
+  or quoted target, a `USING` join, a comma join, a subquery or a CTE. It now reads the
+  body through the one PL/pgSQL fragment reader (or pglast, for `LANGUAGE sql`) and the
+  tables through the one model: the `INSERT` target is the statement's relation, and a
+  foreign key is resolved by an equality between the parent's `id` and the prep-seed
+  `fk_<entity>_id`, the parent taken from a declared foreign key where there is one. What
+  it cannot read — a string `EXECUTE` builds, a statement pglast rejects, a body the
+  PL/pgSQL compiler refuses or in another language — is a new `RESOLVER_NOT_READ`
+  WARNING. **Level 3 may report findings on a tree it passed before.**
+- **Every level 3-5 finding names the file and line it is about**, where it named a path
+  made up from the function or table name (`db/schema/functions/<name>.sql`).
+- **Levels 4 and 5 call a resolver by the identity PostgreSQL gave it** (#375). The call
+  was an f-string of the file stem, so a resolver declared `"Fn_resolve_X"` was never
+  found, and the savepoint name was interpolated too. Both are composed with
+  `psycopg.sql.Identifier` and passed no parameters, so a `%` in a name is not a
+  placeholder. `Level4RuntimeValidator.validate_column_type`, which nothing called, is
+  gone.
 
 - **The archaeology guard reads a phase in any case** (#310). Its patterns were
   case-sensitive, so `phase 05` in a docstring or an xfail reason named the plan

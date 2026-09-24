@@ -319,28 +319,32 @@ def _statement_text(sql: str, raw: Any) -> str:
 def _routine_references(
     sql: str, raw: Any, obj: SchemaObject, constants: list[tuple[int, int]]
 ) -> list[Reference]:
-    """A function or procedure body, read by whichever parser its language needs."""
-    stmt = raw.stmt
-    language, body = routine_body(stmt)
-    if getattr(stmt, "sql_body", None) is not None:
-        # `BEGIN ATOMIC … END`: parsed with the statement, so its locations are
-        # already offsets into `sql`.
-        return _from_nodes(sql, stmt.sql_body, obj)
-    if language not in _SQL_LANGUAGES or body is None:
-        return []
-    first = _body_line(sql, stmt, constants)
-    if language == "sql":
-        # The body is one SQL text: each reference keeps its own line in it,
-        # shifted onto the file by where the body starts.
-        return _from_text(body, obj, shift=(first - 1) if first else 0, exact=first is not None)
-    at = _as_location(stmt)
-    offset = raw.stmt_location or 0
-    return _plpgsql_references(
-        _statement_text(sql, raw),
-        obj,
-        first=first,
-        body_at=None if at is None else at - offset,
+    """A function or procedure body, read by :func:`read_body`."""
+    body = read_body(sql, raw, obj, constants)
+    if body.refused is not None:
+        raise _UnreadableBody(obj.identity)
+    found: list[Reference] = []
+    for statement in body.statements:
+        found.extend(
+            _from_nodes(
+                statement.text,
+                statement.root,
+                obj,
+                line=statement.line,
+                created=statement.created,
+                exact=statement.exact,
+                offset=statement.offset,
+            )
+        )
+    found.extend(
+        _reference(None, text, DYNAMIC, line, obj, dynamic=True, exact=False)
+        for line, text in body.dynamic
     )
+    found.extend(
+        _reference(None, reason, UNREAD, line, obj, exact=body.exact)
+        for line, reason in body.unread
+    )
+    return sorted(found, key=lambda reference: reference.line)
 
 
 def _query_references(
@@ -359,75 +363,142 @@ _READERS: dict[str, Callable[[str, Any, SchemaObject, list[tuple[int, int]]], li
 }
 
 
-def _plpgsql_references(
-    statement: str, obj: SchemaObject, *, first: int | None, body_at: int | None = None
-) -> list[Reference]:
-    """Every fragment libpg_query's PL/pgSQL parser found, re-parsed as SQL.
+@dataclass(frozen=True)
+class BodyStatement:
+    """One statement or expression of a routine body, parsed, and where it is written.
+
+    Attributes:
+        root: The parse node: a statement, or the ``SELECT`` an expression was
+            read as.
+        text: The text the node's locations index into.
+        created: The raw statement when *root* is one, so what it creates (a
+            temporary table) is known; ``None`` for a body parsed with its ``CREATE``.
+        line: The line every location in the node reports — a PL/pgSQL
+            fragment's statement line — or ``None`` when each location has its own.
+        offset: Added to a location's own line in *text* to place it in the
+            frame of the text :func:`read_body` was given.
+        exact: Whether that frame is the file's, rather than the body's own.
+    """
+
+    root: Any
+    text: str
+    created: Any = None
+    line: int | None = None
+    offset: int = 0
+    exact: bool = True
+
+    def line_at(self, location: int | None) -> int:
+        """The line *location* in :attr:`root` is written on."""
+        return self.line if self.line is not None else _line_of(self.text, location) + self.offset
+
+
+@dataclass(frozen=True)
+class RoutineBody:
+    """What of one routine's body was read, and what was not.
+
+    Attributes:
+        obj: The routine.
+        language: Its ``LANGUAGE``, as written.
+        statements: Every statement and expression that parsed, in source order.
+        dynamic: ``(line, text)`` of each string ``EXECUTE`` builds at run time.
+        unread: ``(line, reason)`` of each statement that was not parsed.
+        refused: Why no parser returned the body at all, or ``None``.
+        exact: Whether the lines are the file's rather than the body's own.
+    """
+
+    obj: SchemaObject
+    language: str | None
+    statements: tuple[BodyStatement, ...] = ()
+    dynamic: tuple[tuple[int, str], ...] = ()
+    unread: tuple[tuple[int, str], ...] = ()
+    refused: str | None = None
+    exact: bool = True
+
+    @property
+    def is_sql(self) -> bool:
+        """Whether the body is SQL confiture reads, rather than a symbol or another language."""
+        return self.language in _SQL_LANGUAGES or bool(self.statements)
+
+
+def read_body(
+    sql: str, raw: Any, obj: SchemaObject, constants: list[tuple[int, int]] | None = None
+) -> RoutineBody:
+    """One ``CREATE FUNCTION``/``PROCEDURE`` statement's body, read by the parser its language needs.
+
+    *raw* is the statement as pglast returned it from *sql*; lines are counted in
+    *sql*'s frame. ``BEGIN ATOMIC`` was parsed with the statement; a ``LANGUAGE
+    sql`` body is SQL text; a PL/pgSQL body is compiled by
+    :func:`~confiture.core.plpgsql_parse.parse_body` and read fragment by
+    fragment through :mod:`confiture.core.plpgsql_fragments`. Any other language
+    comes back with no statements, and a body that is not read whole says so.
+    """
+    stmt = raw.stmt
+    language, body = routine_body(stmt)
+    if getattr(stmt, "sql_body", None) is not None:
+        return RoutineBody(obj, language or "sql", (BodyStatement(stmt.sql_body, sql),))
+    if language not in _SQL_LANGUAGES or body is None:
+        return RoutineBody(obj, language)
+    first = _body_line(sql, stmt, _string_constants(sql) if constants is None else constants)
+    exact = first is not None
+    if language == "sql":
+        return _sql_body(obj, body, first=first)
+    at = _as_location(stmt)
+    offset = raw.stmt_location or 0
+    try:
+        compiled = plpgsql_parse.parse_body(
+            _statement_text(sql, raw), body_at=None if at is None else at - offset
+        )
+    except (pglast.parser.ParseError, json.JSONDecodeError) as exc:
+        # A refusal by the PL/pgSQL compiler about this one body, which blanking
+        # a qualifier does not address (#270), or a serialisation that does not
+        # decode for a reason other than the stray brace repaired for #272:
+        # either way what the tree holds is unknown, and an unknown tree is an
+        # unread body — named, never half-read and never passed off as clean.
+        return RoutineBody(obj, language, refused=str(exc).split("\n", 1)[0], exact=exact)
+    return _plpgsql_body(obj, compiled, first=first)
+
+
+def _sql_body(obj: SchemaObject, body: str, *, first: int | None) -> RoutineBody:
+    """A ``LANGUAGE sql`` body: statements and nothing else, parsed as one text."""
+    shift = (first - 1) if first else 0
+    try:
+        raws = list(pglast.parse_sql(body) or [])
+    except pglast.parser.ParseError as exc:
+        return RoutineBody(obj, "sql", unread=((first or obj.statement_line, str(exc)),))
+    statements = tuple(
+        BodyStatement(raw.stmt, body, created=raw, offset=shift, exact=first is not None)
+        for raw in raws
+    )
+    return RoutineBody(obj, "sql", statements, exact=first is not None)
+
+
+def _plpgsql_body(
+    obj: SchemaObject, compiled: plpgsql_parse.Compiled, *, first: int | None
+) -> RoutineBody:
+    """Every fragment the compiler found: parsed, built at run time, or not read.
 
     ``parse_plpgsql`` counts from the body's first line, so *first* — that
     line's number in the file — turns each ``lineno`` into a file line. Without
-    it the reference is inexact and reports the routine's line instead. A
-    dynamic fragment yields one dynamic reference and nothing is read out of
-    the string it would have built; a fragment that did not parse yields one
-    :data:`UNREAD` entry carrying the reason.
-
-    The compiler is reached through :func:`confiture.core.plpgsql_parse.parse_body`,
-    which blanks the schema qualifiers its stubbed catalogue will not resolve —
-    with spaces, so every ``lineno`` below still counts the lines this file has.
+    it every line is the body's own, and the body says it is inexact.
     """
-    try:
-        compiled = plpgsql_parse.parse_body(statement, body_at=body_at)
-    except pglast.parser.ParseError as exc:
-        # The statement parsed as SQL — it is in `raws` — so a refusal here is
-        # the PL/pgSQL compiler's, about this one body, and not one blanking a
-        # qualifier addresses. A body that was never read is named, never
-        # passed off as clean (#270).
-        raise _UnreadableBody(obj.identity) from exc
-    except json.JSONDecodeError as exc:
-        # `libpg_query`'s serialisation did not decode, and the one defect
-        # confiture repairs — the stray brace on a trigger function's implicit
-        # `TG_` datums (#272) — is not what stopped it. So what the tree holds
-        # is unknown, and an unknown tree is an unread body: named, not
-        # half-read and not passed off as clean.
-        raise _UnreadableBody(obj.identity) from exc
-    found: list[Reference] = []
     exact = first is not None
+    statements: list[BodyStatement] = []
+    dynamic: list[tuple[int, str]] = []
+    unread: list[tuple[int, str]] = []
     for fragment in plpgsql_fragments.fragments(compiled):
         at = file_line(fragment.line, first)
         if fragment.dynamic:
-            found.append(
-                _reference(None, fragment.text, DYNAMIC, at, obj, dynamic=True, exact=False)
-            )
+            dynamic.append((at, fragment.text))
         elif fragment.tree is None:
-            found.append(_reference(None, fragment.finding or "", UNREAD, at, obj, exact=exact))
+            unread.append((at, fragment.finding or ""))
         else:
-            found.extend(
-                ref
+            statements.extend(
+                BodyStatement(raw.stmt, fragment.sql or "", created=raw, line=at, exact=exact)
                 for raw in fragment.tree
-                for ref in _from_nodes(
-                    fragment.sql or "", raw.stmt, obj, line=at, created=raw, exact=exact
-                )
             )
-    return found
-
-
-def _from_text(
-    text: str, obj: SchemaObject, *, shift: int = 0, exact: bool = True
-) -> list[Reference]:
-    """References in a ``LANGUAGE sql`` body, each at its own line plus *shift*.
-
-    The body is a list of statements, and nothing else can be written there, so
-    it is parsed as one; a body pglast rejects names nothing it can report.
-    """
-    try:
-        raws = list(pglast.parse_sql(text) or [])
-    except pglast.parser.ParseError:
-        return []
-    return [
-        ref
-        for raw in raws
-        for ref in _from_nodes(text, raw.stmt, obj, created=raw, exact=exact, offset=shift)
-    ]
+    return RoutineBody(
+        obj, "plpgsql", tuple(statements), tuple(dynamic), tuple(unread), exact=exact
+    )
 
 
 def _from_nodes(

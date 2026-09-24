@@ -1023,7 +1023,7 @@ def _model_view(obj: SchemaObject, view: View) -> View:
     )
 
 
-def _kept(group: list[SchemaObject]) -> SchemaObject:
+def kept(group: list[SchemaObject]) -> SchemaObject:
     """The definition of one object a build keeps (``duplicates.wins``)."""
     # Reason: import cycle (duplicates reads SchemaObject from this module)
     from confiture.core.linting.duplicates import wins
@@ -1044,7 +1044,7 @@ def schema_model(inventory: Inventory) -> SchemaModel:
     sequences: dict[Any, SequenceModel] = {}
     routines: dict[ObjectRef, list[Routine]] = {}
     views: dict[ObjectRef, View] = {}
-    for obj in (_kept(group) for group in group_definitions(inventory.objects)):
+    for obj in (kept(group) for group in group_definitions(inventory.objects)):
         if obj.kind == "table":
             tables[_model_ref(obj)] = _model_table(obj)
         elif obj.kind == "type" and obj.enum_values is not None:

@@ -145,17 +145,30 @@ confiture seed validate --prep-seed --level 2
 
 ### Level 3: Resolution Function Validation 🔴 CRITICAL (~3s)
 
+A resolution function is every routine the schema defines whose name starts
+`fn_resolve` — whatever the file it is written in is called, and however many share a
+file. Its body is parsed (PL/pgSQL through the compiler, `LANGUAGE sql` as SQL) and
+compared with the tables the schema declares.
+
 **What it checks:**
-- **Schema drift**: Functions reference correct schema (e.g., `catalog.tb_x`, not `tenant.tb_x`)
-- FK transformations: JOINs correctly transform UUID to BIGINT
-- NULL handling: Non-NULL FKs don't become NULL after resolution
+- **Schema drift**: each `INSERT` targets the schema its table is declared in (e.g.,
+  `catalog.tb_x`, not `tenant.tb_x`)
+- FK transformations: for each `fk_<entity>_id` of the prep-seed table, the `INSERT`
+  equates the parent's `id` with it — in a `JOIN … ON`, a comma join's `WHERE`, a
+  subquery, or through a CTE. The parent is the table a declared foreign key names, or
+  `tb_<entity>` by convention.
+- What it cannot read — a string `EXECUTE` builds, a statement the parser rejects, a
+  body in another language — is reported as not checked, never passed
+- A schema that defines no resolver at all is reported
 
 **When to use:** Pre-commit hook, mandatory check
 
 **Example violations:**
 ```
-🔴 CRITICAL: Function refs tenant.tb_x but table in catalog.tb_x
-🔴 CRITICAL: Missing JOIN for FK transformation in resolution function
+🔴 CRITICAL: fn_resolve_tb_x inserts into tenant.tb_x but the table is in catalog.tb_x
+❌ ERROR: fn_resolve_tb_x fills catalog.tb_x but never joins tb_org on fk_org_id
+⚠️ WARNING: fn_resolve_tb_x not checked: 1 statement(s) built at run time (EXECUTE)
+⚠️ WARNING: no resolution function found in db/schema
 ```
 
 **This is the most important level** - detects the schema drift that caused 360 test failures.
@@ -171,7 +184,6 @@ confiture seed validate --prep-seed --level 3
 
 **What it checks:**
 - Tables exist in target database
-- Column types match expectations
 - **Dry-run resolution without loading data** (using SAVEPOINT for safety)
 - No SQL errors in resolution logic
 
@@ -185,7 +197,6 @@ confiture seed validate --prep-seed --level 3
 **Example violations:**
 ```
 ❌ Table catalog.tb_x not found in database
-❌ Column catalog.tb_x.fk_org_id type is INT, expected BIGINT
 ❌ Resolution function fn_resolve_tb_x execution failed: <error>
 ```
 
@@ -349,7 +360,7 @@ Validate Levels 1-3 (static, ~3-5s, no database):
   name: Validate prep-seed pattern
   entry: confiture seed validate --prep-seed --static-only
   language: system
-  files: '^(db/seeds/prep|db/schema/functions/fn_resolve)'
+  files: '^(db/seeds/prep|db/schema)/'
   stages: [commit]
 ```
 
@@ -620,7 +631,7 @@ $$ LANGUAGE PLPGSQL;
 
 Use consistent naming to help validation:
 - Seed files: `db/seeds/prep/*.sql` or `db/seeds/prep_seed/*.sql`
-- Resolution functions: `db/schema/functions/fn_resolve_*.sql`
+- Resolution functions: named `fn_resolve_<table>` (the file may be called anything)
 - Schema names: `prep_seed` for preparation, `catalog`/`tenant` for final
 
 ### 3. **Documentation**

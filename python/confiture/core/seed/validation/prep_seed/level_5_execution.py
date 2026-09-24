@@ -9,7 +9,7 @@ Catches runtime issues that static analysis can't detect.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -27,6 +27,7 @@ from confiture.core.seed.validation.prep_seed.models import (
 
 if TYPE_CHECKING:
     from confiture.core.schema_model import Column, Constraint, ConstraintKind
+    from confiture.core.seed.validation.prep_seed.resolvers import Resolver
 
 
 @contextmanager
@@ -66,7 +67,7 @@ class Level5ExecutionValidator:
         >>> violations = validator.execute_full_cycle(
         ...     connection=db,
         ...     seed_files=["db/seeds/prep/test.sql"],
-        ...     resolution_functions=["fn_resolve_tb_x"],
+        ...     resolution_functions=find_resolvers(read, catalog_schema="catalog"),
         ...     tables=["tb_x"]
         ... )
     """
@@ -127,42 +128,54 @@ class Level5ExecutionValidator:
     def execute_resolutions(
         self,
         connection: Any,
-        resolution_functions: list[str],
+        resolution_functions: list[Resolver],
     ) -> list[PrepSeedViolation]:
-        """Execute resolution functions.
+        """Call each resolver, by the identity its ``CREATE`` gave it, with no parameters.
 
         Args:
             connection: Database connection
-            resolution_functions: List of resolution function names
+            resolution_functions: The resolvers, in the order they run
 
         Returns:
             List of violations found
         """
         violations: list[PrepSeedViolation] = []
 
-        for func_name in resolution_functions:
+        for resolver in resolution_functions:
             try:
-                # Execute resolution function
-                func_call = f"SELECT {func_name}();"
-                connection.execute(func_call)
-
+                connection.execute(sql.SQL("SELECT {}()").format(resolver.identifier))
             except Exception as e:  # Reason: executes a user resolution function; any failure is a reported violation
                 violations.append(
                     PrepSeedViolation(
                         pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                         severity=ViolationSeverity.ERROR,
-                        message=(f"Error executing {func_name}: {e!s}"),
-                        file_path=f"db/schema/functions/{func_name}.sql",
-                        line_number=1,
+                        message=(f"Error executing {resolver.name}: {e!s}"),
+                        file_path=resolver.file,
+                        line_number=resolver.line,
                         impact="Resolution failed",
                     )
                 )
 
         return violations
 
-    def __init__(self, catalog_schema: str = "catalog") -> None:
-        """Args: catalog_schema: schema holding the resolved (BIGINT-keyed) tables."""
+    def __init__(
+        self,
+        catalog_schema: str = "catalog",
+        locate: Callable[[str], tuple[str, int]] | None = None,
+    ) -> None:
+        """Args:
+        catalog_schema: schema holding the resolved (BIGINT-keyed) tables.
+        locate: ``(file, line)`` a catalog table is created on, for a finding
+            about it; without one a finding names the table itself.
+        """
         self.catalog_schema = catalog_schema
+        self._locate = locate
+
+    def _at(self, table: str) -> tuple[str, int]:
+        """Where a finding about ``<catalog>.<table>`` points."""
+        if self._locate is not None:
+            return self._locate(table)
+        return f"{self.catalog_schema}.{table}", 1
 
     def _relation(self, table: str) -> sql.Identifier:
         return sql.Identifier(self.catalog_schema, table)
@@ -235,8 +248,8 @@ class Level5ExecutionValidator:
                                     f"{self.catalog_schema}.{table}.{column} "
                                     f"after resolution"
                                 ),
-                                file_path=f"db/schema/{table}.sql",
-                                line_number=1,
+                                file_path=self._at(table)[0],
+                                line_number=self._at(table)[1],
                                 impact=(
                                     "Data integrity compromised - foreign key constraint violated"
                                 ),
@@ -284,8 +297,8 @@ class Level5ExecutionValidator:
                                     f"Duplicate identifier {identifier} "
                                     f"found {count} times in {table}"
                                 ),
-                                file_path=f"db/schema/{table}.sql",
-                                line_number=1,
+                                file_path=self._at(table)[0],
+                                line_number=self._at(table)[1],
                                 impact="Unique constraint violated",
                             )
                         )
@@ -334,8 +347,8 @@ class Level5ExecutionValidator:
                                     f"NOT NULL constraint violation in {table}.{column}: "
                                     f"found {null_count} NULL values"
                                 ),
-                                file_path=f"db/schema/{table}.sql",
-                                line_number=1,
+                                file_path=self._at(table)[0],
+                                line_number=self._at(table)[1],
                                 impact="Data integrity compromised - NOT NULL constraint violated",
                             )
                         )
@@ -383,8 +396,8 @@ class Level5ExecutionValidator:
                                     f"CHECK constraint violation in {table}.{name}: "
                                     f"found {violation_count} violations"
                                 ),
-                                file_path=f"db/schema/{table}.sql",
-                                line_number=1,
+                                file_path=self._at(table)[0],
+                                line_number=self._at(table)[1],
                                 impact="Data integrity compromised - CHECK constraint violated",
                             )
                         )
@@ -457,8 +470,8 @@ class Level5ExecutionValidator:
                                     f"referencing {parent_table}: "
                                     f"found {orphans} orphaned references"
                                 ),
-                                file_path=f"db/schema/{table}.sql",
-                                line_number=1,
+                                file_path=self._at(table)[0],
+                                line_number=self._at(table)[1],
                                 impact=(
                                     "Data integrity compromised - foreign key constraint violated"
                                 ),
@@ -473,7 +486,7 @@ class Level5ExecutionValidator:
         self,
         connection: Any,
         seed_files: list[str],
-        resolution_functions: list[str],
+        resolution_functions: list[Resolver],
         tables: list[str],
     ) -> list[PrepSeedViolation]:
         """Execute full seed loading and validation cycle.
@@ -481,7 +494,7 @@ class Level5ExecutionValidator:
         Args:
             connection: Database connection
             seed_files: List of seed file paths
-            resolution_functions: List of resolution function names
+            resolution_functions: The resolvers, in the order they run
             tables: List of final table names
 
         Returns:
@@ -509,7 +522,7 @@ class Level5ExecutionValidator:
         self,
         connection: Any,
         seed_files: list[str],
-        resolution_functions: list[str],
+        resolution_functions: list[Resolver],
         tables: list[str],
     ) -> list[PrepSeedViolation]:
         """Execute full seed loading and comprehensive validation cycle.
@@ -519,7 +532,7 @@ class Level5ExecutionValidator:
         Args:
             connection: Database connection
             seed_files: List of seed file paths
-            resolution_functions: List of resolution function names
+            resolution_functions: The resolvers, in the order they run
             tables: List of final table names
 
         Returns:

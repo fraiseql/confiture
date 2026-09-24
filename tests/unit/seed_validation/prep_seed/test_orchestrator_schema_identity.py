@@ -35,7 +35,7 @@ def _orchestrator(schema_dir: Path, **kwargs: object) -> PrepSeedOrchestrator:
 
 
 def _tables(orchestrator: PrepSeedOrchestrator) -> SchemaTables:
-    return orchestrator._schema_tables(orchestrator._read_schema()[0])
+    return orchestrator._schema_tables(orchestrator._read_schema().model)
 
 
 def _schema_dir(tmp_path: Path, **files: str) -> Path:

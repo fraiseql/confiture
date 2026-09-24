@@ -33,7 +33,9 @@ from collections.abc import Generator
 import psycopg
 import pytest
 
+from confiture.core.schema_sources import read_schema
 from confiture.core.seed.validation.prep_seed.level_5_execution import Level5ExecutionValidator
+from confiture.core.seed.validation.prep_seed.resolvers import find_resolvers
 
 _SCHEMA = "catalog"
 
@@ -273,6 +275,15 @@ def prep_seed_project(
     conn.commit()
 
 
+#: The resolver the fixture creates, read from its DDL the way level 5 is handed it.
+_MAKER_RESOLVER = find_resolvers(
+    read_schema(
+        "CREATE FUNCTION fn_resolve_tb_maker() RETURNS void LANGUAGE sql AS $$ SELECT 1; $$;"
+    ),
+    catalog_schema=_SCHEMA,
+)
+
+
 def test_a_valid_cycle_reports_nothing(
     prep_seed_project: tuple[psycopg.Connection, list[str]],
 ) -> None:
@@ -281,7 +292,7 @@ def test_a_valid_cycle_reports_nothing(
     violations = _validator().execute_full_cycle(
         connection=conn,
         seed_files=seeds,
-        resolution_functions=["fn_resolve_tb_maker"],
+        resolution_functions=_MAKER_RESOLVER,
         tables=["tb_maker"],
     )
     assert violations == [], [v.message for v in violations]
@@ -305,7 +316,7 @@ def test_a_valid_cycle_reports_nothing_in_comprehensive_mode(
     violations = _validator().execute_full_cycle_comprehensive(
         connection=conn,
         seed_files=seeds,
-        resolution_functions=["fn_resolve_tb_maker"],
+        resolution_functions=_MAKER_RESOLVER,
         tables=["tb_maker"],
     )
     assert violations == [], [v.message for v in violations]
