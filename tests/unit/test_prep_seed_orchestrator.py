@@ -135,13 +135,14 @@ class TestPrepSeedOrchestrator:
             mock_level1.return_value = l1
 
             l3 = MagicMock()
-            l3.validate_function.return_value = []
+            l3.validate.return_value = []
             mock_level3.return_value = l3
 
             report = orchestrator.run()
 
+        # An empty schema holds no resolver: levels 3-5 checked nothing, and say so.
         assert isinstance(report, PrepSeedReport)
-        assert report.violation_count == 0
+        assert [v.pattern for v in report.violations] == [PrepSeedPattern.MISSING_RESOLVER_FUNCTION]
 
     def test_early_exit_on_critical_violation(self, tmp_path: Path) -> None:
         """Test that orchestrator stops at CRITICAL violation when configured."""
@@ -186,7 +187,7 @@ class TestPrepSeedOrchestrator:
             mock_level1.return_value = l1
 
             l3 = MagicMock()
-            l3.validate_function.return_value = [critical_violation]
+            l3.validate.return_value = [critical_violation]
             mock_level3.return_value = l3
 
             report = orchestrator.run()
@@ -240,7 +241,7 @@ class TestPrepSeedOrchestrator:
 
             # Level 3 returns CRITICAL
             l3 = MagicMock()
-            l3.validate_function.return_value = [critical_violation]
+            l3.validate.return_value = [critical_violation]
             mock_level3.return_value = l3
 
             report = orchestrator.run()
@@ -297,7 +298,7 @@ class TestPrepSeedOrchestrator:
             mock_level1.return_value = l1
 
             l3 = MagicMock()
-            l3.validate_function.return_value = [violation3]
+            l3.validate.return_value = [violation3]
             mock_level3.return_value = l3
 
             report = orchestrator.run()

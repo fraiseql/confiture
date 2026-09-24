@@ -8,6 +8,7 @@ Integration tests with real database go in tests/integration/.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from unittest.mock import MagicMock, patch
 
 import psycopg
@@ -22,6 +23,7 @@ from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     ViolationSeverity,
 )
+from confiture.core.seed.validation.prep_seed.resolvers import Resolver
 
 
 class TestLevel5ExecutionValidator:
@@ -91,7 +93,7 @@ class TestLevel5ExecutionValidator:
         assert len(violations) > 0
         assert any("Syntax error in seed file" in v.message for v in violations)
 
-    def test_executes_resolution_functions(self) -> None:
+    def test_executes_resolution_functions(self, resolver_of: Callable[[str], Resolver]) -> None:
         """Executes resolution functions after seed loading."""
         validator = Level5ExecutionValidator()
 
@@ -108,8 +110,8 @@ class TestLevel5ExecutionValidator:
         violations = validator.execute_resolutions(
             connection=mock_conn,
             resolution_functions=[
-                "fn_resolve_tb_manufacturer",
-                "fn_resolve_tb_category",
+                resolver_of("fn_resolve_tb_manufacturer"),
+                resolver_of("fn_resolve_tb_category"),
             ],
         )
 

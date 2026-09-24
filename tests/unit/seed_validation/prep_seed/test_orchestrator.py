@@ -14,6 +14,7 @@ from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
 )
+from confiture.exceptions import SchemaError
 
 
 class TestOrchestrationConfig:
@@ -121,7 +122,7 @@ class TestSchemaTables:
 
         orchestrator = PrepSeedOrchestrator(config)
 
-        tables = orchestrator._schema_tables(orchestrator._read_schema()[0])
+        tables = orchestrator._schema_tables(orchestrator._read_schema().model)
 
         # Keyed by (schema, name): the qualifier the statement wrote decides the
         # side, and a bare name is not an identity (#317).
@@ -129,54 +130,31 @@ class TestSchemaTables:
         assert tables.prep == {}
 
 
-class TestDiscoverResolutionFunctions:
-    """Test _discover_resolution_functions() helper method."""
+class TestResolvers:
+    """The resolvers come from what the schema defines, parents first."""
 
-    def test_discover_resolution_functions_finds_fn_resolve_files(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        """Discovers fn_resolve_*.sql files."""
+    def test_every_resolver_the_schema_defines_is_found(self, tmp_path: Path) -> None:
         schema_dir = tmp_path / "schema" / "functions"
         schema_dir.mkdir(parents=True)
-
-        # Create resolution function files
         (schema_dir / "fn_resolve_tb_manufacturer.sql").write_text(
             "CREATE FUNCTION fn_resolve_tb_manufacturer() AS $$ SELECT 1; $$ LANGUAGE SQL;"
         )
         (schema_dir / "fn_resolve_tb_product.sql").write_text(
             "CREATE FUNCTION fn_resolve_tb_product() AS $$ SELECT 2; $$ LANGUAGE SQL;"
         )
-
         config = OrchestrationConfig(
-            max_level=2,
-            seeds_dir=tmp_path / "seeds",
-            schema_dir=tmp_path / "schema",
+            max_level=3, seeds_dir=tmp_path / "seeds", schema_dir=tmp_path / "schema"
         )
+        names = {r.name for r in PrepSeedOrchestrator(config)._resolvers()}
+        assert names == {"fn_resolve_tb_manufacturer", "fn_resolve_tb_product"}
 
-        orchestrator = PrepSeedOrchestrator(config)
-
-        functions = orchestrator._discover_resolution_functions()
-
-        assert "fn_resolve_tb_manufacturer" in functions
-        assert "fn_resolve_tb_product" in functions
-
-    def test_discover_resolution_functions_returns_empty_list_if_dir_missing(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        """Returns empty list if schema_dir doesn't exist."""
+    def test_a_missing_schema_directory_is_schema_201(self, tmp_path: Path) -> None:
         config = OrchestrationConfig(
-            max_level=2,
-            seeds_dir=tmp_path / "seeds",
-            schema_dir=tmp_path / "nonexistent",
+            max_level=3, seeds_dir=tmp_path / "seeds", schema_dir=tmp_path / "nonexistent"
         )
-
-        orchestrator = PrepSeedOrchestrator(config)
-
-        functions = orchestrator._discover_resolution_functions()
-
-        assert functions == []
+        with pytest.raises(SchemaError) as caught:
+            PrepSeedOrchestrator(config)._resolvers()
+        assert caught.value.error_code == "SCHEMA_201"
 
     def test_resolvers_run_parents_first_whatever_their_names(self) -> None:
         """``fn_resolve_tb_product`` joins ``catalog.tb_vendor``: the vendor's runs first.
@@ -190,7 +168,7 @@ class TestDiscoverResolutionFunctions:
             seeds_dir=example / "db" / "seeds" / "prep",
             schema_dir=example / "db" / "schema",
         )
-        assert PrepSeedOrchestrator(config)._discover_resolution_functions() == [
+        assert [r.name for r in PrepSeedOrchestrator(config)._resolvers()] == [
             "fn_resolve_tb_vendor",
             "fn_resolve_tb_product",
         ]
@@ -208,7 +186,7 @@ class TestDiscoverResolutionFunctions:
                 f"CREATE FUNCTION {name}() RETURNS void LANGUAGE sql AS '';"
             )
         config = OrchestrationConfig(max_level=5, seeds_dir=tmp_path, schema_dir=schema)
-        assert PrepSeedOrchestrator(config)._discover_resolution_functions() == [
+        assert [r.name for r in PrepSeedOrchestrator(config)._resolvers()] == [
             "fn_resolve_tb_a",
             "fn_resolve_tb_b",
         ]
@@ -292,6 +270,7 @@ class TestLevel4Integration:
         tmp_path: Path,
     ) -> None:
         """Level 4 returns no violations if no resolution functions present."""
+        (tmp_path / "schema").mkdir()
         config = OrchestrationConfig(
             max_level=4,
             seeds_dir=tmp_path / "seeds",

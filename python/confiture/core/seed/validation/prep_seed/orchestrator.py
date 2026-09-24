@@ -17,10 +17,9 @@ import psycopg
 from confiture.core import live_catalog
 from confiture.core.builder import files_under
 from confiture.core.connection import Connection, create_connection, require_mode
-from confiture.core.introspection.dependency_graph import dependency_order
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import SchemaModel, Table
-from confiture.core.schema_sources import read_schema
+from confiture.core.schema_sources import SchemaRead, read_schema
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )
@@ -42,6 +41,7 @@ from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedViolation,
     ViolationSeverity,
 )
+from confiture.core.seed.validation.prep_seed.resolvers import Resolver, find_resolvers
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError, SeedError
 from confiture.models.warnings import BuildWarning
 
@@ -50,6 +50,9 @@ LEVELS = range(1, 6)
 
 #: The first level that reads the schema directory.
 FIRST_SCHEMA_LEVEL = 2
+
+#: The first level that reads the resolution functions.
+FIRST_RESOLVER_LEVEL = 3
 
 #: The first level that runs against a database.
 FIRST_DATABASE_LEVEL = 4
@@ -140,7 +143,8 @@ class PrepSeedOrchestrator:
             config: Orchestration configuration
         """
         self.config = config
-        self._schema: tuple[SchemaModel, list[BuildWarning]] | None = None
+        self._schema: SchemaRead | None = None
+        self._found: list[Resolver] | None = None
 
     def run(self) -> PrepSeedReport:
         """Run validation levels 1 through max_level.
@@ -194,8 +198,8 @@ class PrepSeedOrchestrator:
                 return report
 
         # Level 3: Resolution function validation (CRITICAL level)
-        if self.config.max_level >= 3:
-            violations = self._run_level_3()
+        if self.config.max_level >= FIRST_RESOLVER_LEVEL:
+            violations = self._no_resolver() + self._run_level_3()
             report.violations.extend(violations)
 
             if self._should_exit_early(report):
@@ -231,10 +235,6 @@ class PrepSeedOrchestrator:
                 resolution_hint="Pass the directory the schema's DDL is in, as it is on disk.",
             )
 
-    def _resolver_files(self) -> list[Path]:
-        """The schema files named for a resolver, ``fn_resolve*``, in path order."""
-        return [f for f in files_under(self.config.schema_dir) if f.name.startswith("fn_resolve")]
-
     def _seed_files(self) -> list[Path]:
         """The seed files every level reads: the tree ``seed apply`` loads, in its order."""
         return files_under(self.config.seeds_dir)
@@ -260,13 +260,13 @@ class PrepSeedOrchestrator:
             List of violations found
         """
         try:
-            model, warnings = self._read_schema()
+            read = self._read_schema()
         except SchemaError as exc:
             if exc.error_code != "DIFFER_400":
                 raise
             return [self._unparseable(exc)]
-        tables = self._schema_tables(model)
-        violations = [self._duplicate(warning) for warning in warnings]
+        tables = self._schema_tables(read.model)
+        violations = [self._duplicate(warning) for warning in read.warnings]
 
         if not tables.prep:
             violations.extend(self._nothing_to_compare(tables))
@@ -300,15 +300,39 @@ class PrepSeedOrchestrator:
         return violations
 
     def _run_level_3(self) -> list[PrepSeedViolation]:
-        """Run Level 3: Resolution function validation."""
-        validator = Level3ResolutionValidator()
-        violations: list[PrepSeedViolation] = []
+        """Run Level 3: each resolver's body against the schema's tables."""
+        resolvers = self._discovered()
+        if not resolvers:
+            return []
+        validator = Level3ResolutionValidator(
+            self._read_schema().model,
+            prep_seed_schema=self.config.prep_seed_schema,
+            catalog_schema=self.config.catalog_schema,
+        )
+        return [violation for resolver in resolvers for violation in validator.validate(resolver)]
 
-        for file_path in self._resolver_files():
-            content = _read(file_path, SchemaError)
-            violations.extend(validator.validate_function(file_path.stem, content))
-
-        return violations
+    def _no_resolver(self) -> list[PrepSeedViolation]:
+        """A schema holding no resolver: levels 3-5 checked nothing, which is not a pass."""
+        try:
+            if self._resolvers():
+                return []
+        except SchemaError as exc:
+            if exc.error_code != "DIFFER_400":
+                raise
+            return []
+        return [
+            PrepSeedViolation(
+                pattern=PrepSeedPattern.MISSING_RESOLVER_FUNCTION,
+                severity=ViolationSeverity.WARNING,
+                message=(
+                    f"no resolution function found in {self.config.schema_dir}: no routine "
+                    f"it defines is named fn_resolve*, so levels 3-5 check no resolver"
+                ),
+                file_path=str(self.config.schema_dir),
+                line_number=1,
+                impact="Resolution functions were not validated",
+            )
+        ]
 
     def _run_level_4(self) -> list[PrepSeedViolation]:
         """Run Level 4: Runtime validation.
@@ -321,16 +345,13 @@ class PrepSeedOrchestrator:
         """
         violations: list[PrepSeedViolation] = []
 
-        # Discover resolution functions
-        func_names = self._discover_resolution_functions()
-
-        if not func_names:
-            # No functions to validate
+        resolvers = self._discovered()
+        if not resolvers:
             return violations
 
         try:
             with self._database() as connection:
-                violations.extend(self._check_resolvers(connection, func_names))
+                violations.extend(self._check_resolvers(connection, resolvers))
         except Exception as e:  # Reason: level-4 reaches the database through create_connection; any failure is a CRITICAL violation, not a crash
             violations.append(
                 PrepSeedViolation(
@@ -373,7 +394,7 @@ class PrepSeedOrchestrator:
                 conn.close()
 
     def _check_resolvers(
-        self, connection: psycopg.Connection, func_names: list[str]
+        self, connection: psycopg.Connection, resolvers: list[Resolver]
     ) -> list[PrepSeedViolation]:
         """Level 4 on an open connection: each resolver's table, then a dry run."""
         violations: list[PrepSeedViolation] = []
@@ -387,29 +408,14 @@ class PrepSeedOrchestrator:
             except psycopg.Error:
                 return False
 
-        def get_column_type(schema: str, table: str, column: str) -> str | None:
-            try:
-                found = live_catalog.column(connection, schema, table, column)
-            except psycopg.Error:
-                return None
-            return found.type_text if found is not None else None
-
         # Create validator with callbacks
-        validator = Level4RuntimeValidator(
-            table_exists=table_exists,
-            get_column_type=get_column_type,
-        )
+        validator = Level4RuntimeValidator(table_exists=table_exists)
 
-        # Validate each resolution function
-        for func_name in func_names:
-            # Extract target table from function name (fn_resolve_tb_X -> tb_X)
-            target_table = func_name.replace("fn_resolve_", "")
-
-            # Validate table exists
+        for resolver in resolvers:
             runtime_violations = validator.validate_runtime(
-                func_name=func_name,
+                resolver,
                 target_schema=self.config.catalog_schema,
-                target_table=target_table,
+                target_table=resolver.table,
             )
             violations.extend(runtime_violations)
 
@@ -419,19 +425,15 @@ class PrepSeedOrchestrator:
 
             # Dry-run the resolution function with SAVEPOINT
             try:
-                dry_run_violations = validator.dry_run_resolution(
-                    func_name=func_name,
-                    connection=connection,
-                )
-                violations.extend(dry_run_violations)
+                violations.extend(validator.dry_run_resolution(resolver, connection))
             except Exception as e:  # Reason: dry-running a user resolution function; any failure is a reported violation
                 violations.append(
                     PrepSeedViolation(
                         pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                         severity=ViolationSeverity.ERROR,
-                        message=(f"Failed to validate {func_name}: {e!s}"),
-                        file_path=f"db/schema/functions/{func_name}.sql",
-                        line_number=1,
+                        message=(f"Failed to validate {resolver.name}: {e!s}"),
+                        file_path=resolver.file,
+                        line_number=resolver.line,
                         impact="Resolution function validation failed",
                     )
                 )
@@ -457,19 +459,16 @@ class PrepSeedOrchestrator:
             # No seeds to execute
             return violations
 
-        # Collect resolution functions and target tables
-        func_names = self._discover_resolution_functions()
-        target_tables = (
-            self.config.tables_to_validate
-            if self.config.tables_to_validate
-            else [fname.replace("fn_resolve_", "") for fname in func_names]
-        )
+        resolvers = self._discovered()
+        target_tables = self.config.tables_to_validate or [r.table for r in resolvers]
 
         try:
             with self._database() as connection:
                 # Every level-5 query is qualified with the configured
                 # `catalog_schema`, never a hardwired `catalog.`.
-                validator = Level5ExecutionValidator(catalog_schema=self.config.catalog_schema)
+                validator = Level5ExecutionValidator(
+                    catalog_schema=self.config.catalog_schema, locate=self._locate
+                )
                 run = (
                     validator.execute_full_cycle_comprehensive
                     if self.config.level_5_mode == "comprehensive"
@@ -479,7 +478,7 @@ class PrepSeedOrchestrator:
                     run(
                         connection=connection,
                         seed_files=seed_file_paths,
-                        resolution_functions=func_names,
+                        resolution_functions=resolvers,
                         tables=target_tables,
                     )
                 )
@@ -520,7 +519,7 @@ class PrepSeedOrchestrator:
         for file_path in self._seed_files():
             report.add_file_scanned(str(file_path))
 
-    def _read_schema(self) -> tuple[SchemaModel, list[BuildWarning]]:
+    def _read_schema(self) -> SchemaRead:
         """The schema tree as one model, read once and kept for every level that asks.
 
         The tree is read as ``confiture build`` reads it — every ``.sql`` under
@@ -615,28 +614,50 @@ class PrepSeedOrchestrator:
             )
         ]
 
-    def _discover_resolution_functions(self) -> list[str]:
-        """Resolution function names from the schema directory, parents first.
+    def _resolvers(self) -> list[Resolver]:
+        """The resolvers the schema defines, parents first, read once.
 
-        ``fn_resolve_<table>`` fills ``<catalog>.<table>`` and joins the tables it
-        references, so it runs after the resolvers of those: the catalog tables'
-        foreign-key order decides, and a resolver of no catalog table follows in
-        name order. A schema that does not parse, or whose keys form a cycle,
-        leaves the name order — level 2 reports the schema, not this.
+        A resolver is found by the name its ``CREATE`` gives it, never by the
+        file it is written in (#385).
+
+        Raises:
+            SchemaError: as :meth:`_read_schema`.
         """
-        if not self.config.schema_dir.exists():
-            return []
-        names = [f.stem for f in self._resolver_files()]
+        if self._found is None:
+            self._found = find_resolvers(
+                self._read_schema(), catalog_schema=self.config.catalog_schema
+            )
+        return self._found
+
+    def _discovered(self) -> list[Resolver]:
+        """:meth:`_resolvers` for levels 4-5: a schema that does not parse holds none.
+
+        Level 2 has reported that schema as a finding naming its file and line.
+        """
         try:
-            order = dependency_order(self._read_schema()[0])
+            return self._resolvers()
+        except SchemaError as exc:
+            if exc.error_code != "DIFFER_400":
+                raise
+            return []
+
+    def _locate(self, table: str) -> tuple[str, int]:
+        """The file and line ``<catalog>.<table>`` is created on, for a level-5 finding."""
+        catalog = self.config.catalog_schema.lower()
+        try:
+            definitions = self._read_schema().definitions
         except SchemaError:
-            return names
-        rank = {
-            f"fn_resolve_{ref.name}": position
-            for position, ref in enumerate(order)
-            if ref.schema == self.config.catalog_schema
-        }
-        return sorted(names, key=lambda name: (rank.get(name, len(rank)), name))
+            definitions = ()
+        for definition in definitions:
+            obj = definition.obj
+            if (
+                obj.kind == "table"
+                and obj.folded_name == table
+                and (obj.folded_schema or DEFAULT_SCHEMA).lower() == catalog
+                and definition.file is not None
+            ):
+                return str(definition.file), definition.line
+        return str(self.config.schema_dir), 1
 
 
 def validate_seeds(

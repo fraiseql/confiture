@@ -55,6 +55,9 @@ class PrepSeedPattern(Enum):
     UNION_UNCAST_NULL = "UNION_UNCAST_NULL"
     """Bare NULL without type cast in UNION query."""
 
+    RESOLVER_NOT_READ = "RESOLVER_NOT_READ"
+    """Part of a resolution function's body could not be read, so it was not checked."""
+
     @property
     def description(self) -> str:
         """Get human-readable description of this pattern."""
@@ -92,6 +95,9 @@ class PrepSeedPattern(Enum):
             ),
             PrepSeedPattern.UNION_UNCAST_NULL: (
                 "Bare NULL value in UNION query without type cast (e.g., NULL::timestamp)"
+            ),
+            PrepSeedPattern.RESOLVER_NOT_READ: (
+                "Resolution function body (or part of it) could not be read, so it was not checked"
             ),
         }
         return descriptions.get(self, "Prep-seed pattern violation")

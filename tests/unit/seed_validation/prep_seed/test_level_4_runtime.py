@@ -1,6 +1,6 @@
 """Tests for Level 4 - Runtime validation.
 
-Cycles 1-4: Database connection, table existence, column types, dry-run.
+Database connection, table existence, dry-run.
 
 Note: These are unit tests that mock the database.
 Integration tests with real database go in tests/integration/.
@@ -16,6 +16,7 @@ from confiture.core.seed.validation.prep_seed.level_4_runtime import (
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
 )
+from confiture.core.seed.validation.prep_seed.resolvers import Resolver
 
 
 class TestLevel4RuntimeValidator:
@@ -26,7 +27,7 @@ class TestLevel4RuntimeValidator:
         validator = Level4RuntimeValidator()
         assert validator is not None
 
-    def test_detects_missing_target_table(self) -> None:
+    def test_detects_missing_target_table(self, manufacturer_resolver: Resolver) -> None:
         """Detects when resolution target table doesn't exist in database."""
         validator = Level4RuntimeValidator()
 
@@ -34,7 +35,7 @@ class TestLevel4RuntimeValidator:
         validator.table_exists = lambda schema, table: False  # type: ignore
 
         violations = validator.validate_runtime(
-            func_name="fn_resolve_tb_manufacturer",
+            manufacturer_resolver,
             target_schema="catalog",
             target_table="tb_manufacturer",
         )
@@ -42,7 +43,7 @@ class TestLevel4RuntimeValidator:
         # Should detect missing table
         assert any(v.pattern == PrepSeedPattern.MISSING_FK_MAPPING for v in violations)
 
-    def test_passes_when_target_table_exists(self) -> None:
+    def test_passes_when_target_table_exists(self, manufacturer_resolver: Resolver) -> None:
         """Passes when target table exists in database."""
         validator = Level4RuntimeValidator()
 
@@ -50,7 +51,7 @@ class TestLevel4RuntimeValidator:
         validator.table_exists = lambda schema, table: True  # type: ignore
 
         violations = validator.validate_runtime(
-            func_name="fn_resolve_tb_manufacturer",
+            manufacturer_resolver,
             target_schema="catalog",
             target_table="tb_manufacturer",
         )
@@ -58,43 +59,7 @@ class TestLevel4RuntimeValidator:
         # Should have no violations for existing table
         assert not any(v.pattern == PrepSeedPattern.MISSING_FK_MAPPING for v in violations)
 
-    def test_detects_column_type_mismatch(self) -> None:
-        """Detects when column types don't match expected."""
-        validator = Level4RuntimeValidator()
-
-        # Mock database
-        validator.table_exists = lambda schema, table: True  # type: ignore
-        validator.get_column_type = lambda schema, table, col: "VARCHAR"  # type: ignore
-
-        # Expected type is BIGINT, but database has VARCHAR
-        violations = validator.validate_column_type(
-            schema="catalog",
-            table="tb_manufacturer",
-            column="fk_category",
-            expected_type="BIGINT",
-        )
-
-        # Should detect type mismatch
-        assert len(violations) > 0
-
-    def test_passes_for_correct_column_type(self) -> None:
-        """Passes when column type matches expected."""
-        validator = Level4RuntimeValidator()
-
-        # Mock database returning correct type
-        validator.get_column_type = lambda schema, table, col: "BIGINT"  # type: ignore
-
-        violations = validator.validate_column_type(
-            schema="catalog",
-            table="tb_manufacturer",
-            column="fk_category",
-            expected_type="BIGINT",
-        )
-
-        # Should have no violations
-        assert len(violations) == 0
-
-    def test_dry_run_execution_success(self) -> None:
+    def test_dry_run_execution_success(self, manufacturer_resolver: Resolver) -> None:
         """Dry-run execution succeeds with SAVEPOINT."""
         validator = Level4RuntimeValidator()
 
@@ -105,7 +70,7 @@ class TestLevel4RuntimeValidator:
         mock_conn.execute.return_value = mock_result
 
         violations = validator.dry_run_resolution(
-            func_name="fn_resolve_tb_manufacturer",
+            manufacturer_resolver,
             connection=mock_conn,
             savepoint_name="sp_test",
         )
@@ -115,7 +80,7 @@ class TestLevel4RuntimeValidator:
         # Should have executed the function
         mock_conn.execute.assert_called()
 
-    def test_dry_run_detects_execution_error(self) -> None:
+    def test_dry_run_detects_execution_error(self, manufacturer_resolver: Resolver) -> None:
         """Dry-run detects errors during function execution."""
         validator = Level4RuntimeValidator()
 
@@ -124,7 +89,7 @@ class TestLevel4RuntimeValidator:
         mock_conn.execute.side_effect = Exception("FOREIGN KEY constraint violation")
 
         violations = validator.dry_run_resolution(
-            func_name="fn_resolve_tb_manufacturer",
+            manufacturer_resolver,
             connection=mock_conn,
             savepoint_name="sp_test",
         )
@@ -133,7 +98,7 @@ class TestLevel4RuntimeValidator:
         assert len(violations) > 0
         assert any("constraint" in v.message.lower() for v in violations)
 
-    def test_validates_column_count_after_dry_run(self) -> None:
+    def test_validates_column_count_after_dry_run(self, manufacturer_resolver: Resolver) -> None:
         """Validates that dry-run inserted expected rows."""
         validator = Level4RuntimeValidator()
 
@@ -145,7 +110,7 @@ class TestLevel4RuntimeValidator:
         mock_conn.execute.return_value = mock_result
 
         violations = validator.dry_run_resolution(
-            func_name="fn_resolve_tb_manufacturer",
+            manufacturer_resolver,
             connection=mock_conn,
             savepoint_name="sp_test",
         )
