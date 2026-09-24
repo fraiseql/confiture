@@ -37,6 +37,7 @@ from confiture.core.schema_model import (
     ObjectRef,
     Sequence,
     Table,
+    ref_for,
 )
 from confiture.models.schema import WireChange
 from confiture.models.warnings import BuildWarning
@@ -201,8 +202,71 @@ class _Change(ABC):
         return str(self.to_wire())
 
 
+def _written_ref(kind: str, written: str) -> ObjectRef:
+    """The reference of an object a change spells ``schema.name`` or ``name``."""
+    schema, _, name = written.rpartition(".")
+    return ref_for(kind, schema or None, name)
+
+
+class _OfTable(_Change):
+    """A table added or dropped whole."""
+
+    __slots__ = ()
+
+    table: Table
+
+    @property
+    def ref(self) -> ObjectRef:
+        """The table's key in the model."""
+        return ref_for("table", self.table.schema, self.table.name)
+
+
+class _OnTable(_Change):
+    """A change to what a table holds: a column, an index or a constraint.
+
+    ``table`` is the table's spelling; :attr:`ref` is the key the model holds the
+    table under, since a column, an index and a constraint are keyed by nothing
+    of their own.
+    """
+
+    __slots__ = ()
+
+    table: str
+
+    @property
+    def ref(self) -> ObjectRef:
+        """The key of the table the change is on."""
+        return _written_ref("table", self.table)
+
+
+class _OfEnum(_Change):
+    """An enum type added or dropped whole."""
+
+    __slots__ = ()
+
+    enum: EnumType
+
+    @property
+    def ref(self) -> ObjectRef:
+        """The type's key in the model."""
+        return ref_for("type", self.enum.schema, self.enum.name)
+
+
+class _OfSequence(_Change):
+    """A sequence added or dropped whole."""
+
+    __slots__ = ()
+
+    sequence: Sequence
+
+    @property
+    def ref(self) -> ObjectRef:
+        """The sequence's key in the model."""
+        return ref_for("sequence", self.sequence.schema, self.sequence.name)
+
+
 @dataclass(frozen=True)
-class TableAdded(_Change):
+class TableAdded(_OfTable):
     """A table only the new tree declares."""
 
     WIRE: ClassVar[str] = "ADD_TABLE"
@@ -215,7 +279,7 @@ class TableAdded(_Change):
 
 
 @dataclass(frozen=True)
-class TableDropped(_Change):
+class TableDropped(_OfTable):
     """A table only the old tree declares — carried whole, so a down can recreate it."""
 
     WIRE: ClassVar[str] = "DROP_TABLE"
@@ -242,6 +306,11 @@ class TableRenamed(_Change):
     old: Table
     new: Table
 
+    @property
+    def ref(self) -> ObjectRef:
+        """The old table's key: the name the wire's ``table`` carries."""
+        return ref_for("table", self.old.schema, self.old.name)
+
     def _wire_fields(self) -> dict[str, Any]:
         return {
             "table": self.old.qualified,
@@ -252,7 +321,7 @@ class TableRenamed(_Change):
 
 
 @dataclass(frozen=True)
-class ColumnAdded(_Change):
+class ColumnAdded(_OnTable):
     """A column only the new tree declares, on a table both hold.
 
     ``table`` is the table's **spelling** — what a finding prints and what
@@ -274,7 +343,7 @@ class ColumnAdded(_Change):
 
 
 @dataclass(frozen=True)
-class ColumnDropped(_Change):
+class ColumnDropped(_OnTable):
     """A column only the old tree declares — carried whole, so a down can restore it."""
 
     WIRE: ClassVar[str] = "DROP_COLUMN"
@@ -292,7 +361,7 @@ class ColumnDropped(_Change):
 
 
 @dataclass(frozen=True)
-class ColumnRenamed(_Change):
+class ColumnRenamed(_OnTable):
     """One column under two names, on one table."""
 
     WIRE: ClassVar[str] = "RENAME_COLUMN"
@@ -307,7 +376,7 @@ class ColumnRenamed(_Change):
 
 
 @dataclass(frozen=True)
-class ColumnTypeChanged(_Change):
+class ColumnTypeChanged(_OnTable):
     """A column whose type differs, typmod included — both declarations travel."""
 
     WIRE: ClassVar[str] = "CHANGE_COLUMN_TYPE"
@@ -327,7 +396,7 @@ class ColumnTypeChanged(_Change):
 
 
 @dataclass(frozen=True)
-class ColumnNullabilityChanged(_Change):
+class ColumnNullabilityChanged(_OnTable):
     """A column that became nullable, or stopped being; ``nullable`` is the new tree's."""
 
     WIRE: ClassVar[str] = "CHANGE_COLUMN_NULLABLE"
@@ -347,7 +416,7 @@ class ColumnNullabilityChanged(_Change):
 
 
 @dataclass(frozen=True)
-class ColumnDefaultChanged(_Change):
+class ColumnDefaultChanged(_OnTable):
     """A column whose default differs; ``None`` is no default."""
 
     WIRE: ClassVar[str] = "CHANGE_COLUMN_DEFAULT"
@@ -372,7 +441,7 @@ def _index_detail(index: Index) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
-class IndexAdded(_Change):
+class IndexAdded(_OnTable):
     """An index only the new tree declares on a table both hold."""
 
     WIRE: ClassVar[str] = "ADD_INDEX"
@@ -386,7 +455,7 @@ class IndexAdded(_Change):
 
 
 @dataclass(frozen=True)
-class IndexDropped(_Change):
+class IndexDropped(_OnTable):
     """An index only the old tree declares on a table both hold."""
 
     WIRE: ClassVar[str] = "DROP_INDEX"
@@ -404,7 +473,7 @@ def _fk_wire(fk: Constraint) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
-class ForeignKeyAdded(_Change):
+class ForeignKeyAdded(_OnTable):
     """A foreign key only the new tree declares."""
 
     WIRE: ClassVar[str] = "ADD_FOREIGN_KEY"
@@ -418,7 +487,7 @@ class ForeignKeyAdded(_Change):
 
 
 @dataclass(frozen=True)
-class ForeignKeyDropped(_Change):
+class ForeignKeyDropped(_OnTable):
     """A foreign key only the old tree declares."""
 
     WIRE: ClassVar[str] = "DROP_FOREIGN_KEY"
@@ -436,7 +505,7 @@ def _check_wire(cc: Constraint) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
-class CheckConstraintAdded(_Change):
+class CheckConstraintAdded(_OnTable):
     """A CHECK only the new tree declares, or one whose predicate changed (after a drop)."""
 
     WIRE: ClassVar[str] = "ADD_CHECK_CONSTRAINT"
@@ -450,7 +519,7 @@ class CheckConstraintAdded(_Change):
 
 
 @dataclass(frozen=True)
-class CheckConstraintDropped(_Change):
+class CheckConstraintDropped(_OnTable):
     """A CHECK only the old tree declares, or one whose predicate changed (before an add)."""
 
     WIRE: ClassVar[str] = "DROP_CHECK_CONSTRAINT"
@@ -468,7 +537,7 @@ def _unique_wire(uc: Constraint) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
-class UniqueConstraintAdded(_Change):
+class UniqueConstraintAdded(_OnTable):
     """A UNIQUE constraint only the new tree declares."""
 
     WIRE: ClassVar[str] = "ADD_UNIQUE_CONSTRAINT"
@@ -482,7 +551,7 @@ class UniqueConstraintAdded(_Change):
 
 
 @dataclass(frozen=True)
-class UniqueConstraintDropped(_Change):
+class UniqueConstraintDropped(_OnTable):
     """A UNIQUE constraint only the old tree declares."""
 
     WIRE: ClassVar[str] = "DROP_UNIQUE_CONSTRAINT"
@@ -496,7 +565,7 @@ class UniqueConstraintDropped(_Change):
 
 
 @dataclass(frozen=True)
-class EnumTypeAdded(_Change):
+class EnumTypeAdded(_OfEnum):
     """An enum type only the new tree declares."""
 
     WIRE: ClassVar[str] = "ADD_ENUM_TYPE"
@@ -509,7 +578,7 @@ class EnumTypeAdded(_Change):
 
 
 @dataclass(frozen=True)
-class EnumTypeDropped(_Change):
+class EnumTypeDropped(_OfEnum):
     """An enum type only the old tree declares."""
 
     WIRE: ClassVar[str] = "DROP_ENUM_TYPE"
@@ -532,6 +601,11 @@ class EnumValuesChanged(_Change):
     added: tuple[str, ...]
     removed: tuple[str, ...]
 
+    @property
+    def ref(self) -> ObjectRef:
+        """The type's key in the model; ``enum`` is its spelling."""
+        return _written_ref("type", self.enum)
+
     def _wire_fields(self) -> dict[str, Any]:
         return {
             "table": self.enum,
@@ -540,7 +614,7 @@ class EnumValuesChanged(_Change):
 
 
 @dataclass(frozen=True)
-class SequenceAdded(_Change):
+class SequenceAdded(_OfSequence):
     """A sequence only the new tree declares."""
 
     WIRE: ClassVar[str] = "ADD_SEQUENCE"
@@ -553,7 +627,7 @@ class SequenceAdded(_Change):
 
 
 @dataclass(frozen=True)
-class SequenceDropped(_Change):
+class SequenceDropped(_OfSequence):
     """A sequence only the old tree declares."""
 
     WIRE: ClassVar[str] = "DROP_SEQUENCE"

@@ -113,6 +113,12 @@ dependency. The transaction is the caller's: confiture neither commits nor
 rolls back a connection it did not open. `isinstance` answers whether an
 object has the four methods, which is what the entry points check.
 
+Nor does confiture change a caller's connection's mode. A call that needs a
+transaction refuses a connection in autocommit, and one that needs autocommit
+refuses one that is not, each with a `CONFIG_013` naming the call and why
+(`require_mode`): switching the mode would change what the caller's
+own statements do after the call returns.
+
 #### `Connection.cursor`
 
 ```python
@@ -476,13 +482,13 @@ A bare `str` is one name.
 
 **Raises**
 
-- `DependencyCycle`: tables whose foreign keys form a cycle, named.
+- `DependencyCycleError`: tables whose foreign keys form a cycle, named.
 - `NotInModelError`: a table in *tables* the model does not hold — a `SchemaError` and a `KeyError`.
 
-### `DependencyCycle`
+### `DependencyCycleError`
 
 ```python
-class DependencyCycle(SchemaError)
+class DependencyCycleError(SchemaError)
 ```
 
 Tables whose foreign keys form a cycle: none of them can be loaded first.
@@ -770,29 +776,34 @@ Dictionary with all fields suitable for JSON output.
 
 ```python
 def validate_seeds(
-    seeds_dir: Path | str,
+    seeds: Path | str,
     *,
     schema_dir: Path | str,
     max_level: int = 3,
-    database_url: str | None = None,
+    database: str | Connection | None = None,
     prep_seed_schema: str = 'prep_seed',
     catalog_schema: str = 'catalog',
 ) -> PrepSeedReport
 ```
 
-Run prep-seed validation levels 1 through *max_level* over *seeds_dir*.
+Validate seeds written for the prep-seed pattern, levels 1 through *max_level*.
 
-Levels 1-3 read files and need no database; 4 and 5 load the seeds and run
-the resolvers against *database_url*, in a transaction they roll back.
-Nothing is printed: the report is the answer, and a file the run could not
-read is an error rather than a file that passed.
+The prep-seed pattern loads UUID-keyed rows into *prep_seed_schema* and
+resolves them into BIGINT-keyed rows in *catalog_schema*. Levels 1-3 read
+files and need no database; 4 and 5 load the seeds and run the resolvers
+against *database*, in a transaction nothing outlives: a URL's connection is
+opened, rolled back and closed here, and a caller's connection runs inside a
+savepoint rolled back on the way out. Nothing is printed: the report is the
+answer, and a file the run could not read is an error rather than a file that
+passed.
 
 **Raises**
 
-- `SeedError`: `SEED_001` for a *seeds_dir* that is not a directory, or a seed file that cannot be read as UTF-8 text.
+- `SeedError`: `SEED_001` for *seeds* that is not a directory, or a seed file that cannot be read as UTF-8 text.
 - `SchemaError`: `SCHEMA_201` for a *schema_dir* that is not a directory when a level that reads it runs (2 and up), `SCHEMA_001` for a resolver file that cannot be read as UTF-8 text.
-- `ConfigurationError`: `CONFIG_001` for a *max_level* outside 1-5.
-- `ValueError`: *max_level* of 4 or 5 without a *database_url*.
+- `ConfigurationError`: `CONFIG_001` for a *max_level* outside 1-5; `CONFIG_013` for a connection in autocommit at levels 4-5, which need a transaction to roll back.
+- `TypeError`: a *database* that is neither a URL nor a `Connection`.
+- `ValueError`: *max_level* of 4 or 5 without a *database*.
 
 ### `PrepSeedReport`
 
@@ -1055,7 +1066,7 @@ Members: `additive`, `reversible`, `lock_risky`, `destructive`, `irreversible`.
 ### `TableAdded`
 
 ```python
-class TableAdded(_Change)
+class TableAdded(_OfTable)
 ```
 
 A table only the new tree declares.
@@ -1067,7 +1078,7 @@ A table only the new tree declares.
 ### `TableDropped`
 
 ```python
-class TableDropped(_Change)
+class TableDropped(_OfTable)
 ```
 
 A table only the old tree declares — carried whole, so a down can recreate it.
@@ -1096,7 +1107,7 @@ the target of a `RENAME` is a bare name.
 ### `ColumnAdded`
 
 ```python
-class ColumnAdded(_Change)
+class ColumnAdded(_OnTable)
 ```
 
 A column only the new tree declares, on a table both hold.
@@ -1112,7 +1123,7 @@ generated DDL alters — never an identity.
 ### `ColumnDropped`
 
 ```python
-class ColumnDropped(_Change)
+class ColumnDropped(_OnTable)
 ```
 
 A column only the old tree declares — carried whole, so a down can restore it.
@@ -1125,7 +1136,7 @@ A column only the old tree declares — carried whole, so a down can restore it.
 ### `ColumnRenamed`
 
 ```python
-class ColumnRenamed(_Change)
+class ColumnRenamed(_OnTable)
 ```
 
 One column under two names, on one table.
@@ -1139,7 +1150,7 @@ One column under two names, on one table.
 ### `ColumnTypeChanged`
 
 ```python
-class ColumnTypeChanged(_Change)
+class ColumnTypeChanged(_OnTable)
 ```
 
 A column whose type differs, typmod included — both declarations travel.
@@ -1153,7 +1164,7 @@ A column whose type differs, typmod included — both declarations travel.
 ### `ColumnNullabilityChanged`
 
 ```python
-class ColumnNullabilityChanged(_Change)
+class ColumnNullabilityChanged(_OnTable)
 ```
 
 A column that became nullable, or stopped being; `nullable` is the new tree's.
@@ -1167,7 +1178,7 @@ A column that became nullable, or stopped being; `nullable` is the new tree's.
 ### `ColumnDefaultChanged`
 
 ```python
-class ColumnDefaultChanged(_Change)
+class ColumnDefaultChanged(_OnTable)
 ```
 
 A column whose default differs; `None` is no default.
@@ -1182,7 +1193,7 @@ A column whose default differs; `None` is no default.
 ### `IndexAdded`
 
 ```python
-class IndexAdded(_Change)
+class IndexAdded(_OnTable)
 ```
 
 An index only the new tree declares on a table both hold.
@@ -1195,7 +1206,7 @@ An index only the new tree declares on a table both hold.
 ### `IndexDropped`
 
 ```python
-class IndexDropped(_Change)
+class IndexDropped(_OnTable)
 ```
 
 An index only the old tree declares on a table both hold.
@@ -1208,7 +1219,7 @@ An index only the old tree declares on a table both hold.
 ### `ForeignKeyAdded`
 
 ```python
-class ForeignKeyAdded(_Change)
+class ForeignKeyAdded(_OnTable)
 ```
 
 A foreign key only the new tree declares.
@@ -1221,7 +1232,7 @@ A foreign key only the new tree declares.
 ### `ForeignKeyDropped`
 
 ```python
-class ForeignKeyDropped(_Change)
+class ForeignKeyDropped(_OnTable)
 ```
 
 A foreign key only the old tree declares.
@@ -1234,7 +1245,7 @@ A foreign key only the old tree declares.
 ### `CheckConstraintAdded`
 
 ```python
-class CheckConstraintAdded(_Change)
+class CheckConstraintAdded(_OnTable)
 ```
 
 A CHECK only the new tree declares, or one whose predicate changed (after a drop).
@@ -1247,7 +1258,7 @@ A CHECK only the new tree declares, or one whose predicate changed (after a drop
 ### `CheckConstraintDropped`
 
 ```python
-class CheckConstraintDropped(_Change)
+class CheckConstraintDropped(_OnTable)
 ```
 
 A CHECK only the old tree declares, or one whose predicate changed (before an add).
@@ -1260,7 +1271,7 @@ A CHECK only the old tree declares, or one whose predicate changed (before an ad
 ### `UniqueConstraintAdded`
 
 ```python
-class UniqueConstraintAdded(_Change)
+class UniqueConstraintAdded(_OnTable)
 ```
 
 A UNIQUE constraint only the new tree declares.
@@ -1273,7 +1284,7 @@ A UNIQUE constraint only the new tree declares.
 ### `UniqueConstraintDropped`
 
 ```python
-class UniqueConstraintDropped(_Change)
+class UniqueConstraintDropped(_OnTable)
 ```
 
 A UNIQUE constraint only the old tree declares.
@@ -1286,7 +1297,7 @@ A UNIQUE constraint only the old tree declares.
 ### `EnumTypeAdded`
 
 ```python
-class EnumTypeAdded(_Change)
+class EnumTypeAdded(_OfEnum)
 ```
 
 An enum type only the new tree declares.
@@ -1298,7 +1309,7 @@ An enum type only the new tree declares.
 ### `EnumTypeDropped`
 
 ```python
-class EnumTypeDropped(_Change)
+class EnumTypeDropped(_OfEnum)
 ```
 
 An enum type only the old tree declares.
@@ -1324,7 +1335,7 @@ An enum both trees declare with different labels; each list is sorted.
 ### `SequenceAdded`
 
 ```python
-class SequenceAdded(_Change)
+class SequenceAdded(_OfSequence)
 ```
 
 A sequence only the new tree declares.
@@ -1336,7 +1347,7 @@ A sequence only the new tree declares.
 ### `SequenceDropped`
 
 ```python
-class SequenceDropped(_Change)
+class SequenceDropped(_OfSequence)
 ```
 
 A sequence only the old tree declares.

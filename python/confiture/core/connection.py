@@ -38,6 +38,12 @@ class Connection(Protocol):
     dependency. The transaction is the caller's: confiture neither commits nor
     rolls back a connection it did not open. ``isinstance`` answers whether an
     object has the four methods, which is what the entry points check.
+
+    Nor does confiture change a caller's connection's mode. A call that needs a
+    transaction refuses a connection in autocommit, and one that needs autocommit
+    refuses one that is not, each with a ``CONFIG_013`` naming the call and why
+    (:func:`require_mode`): switching the mode would change what the caller's
+    own statements do after the call returns.
     """
 
     def cursor(self) -> Any:
@@ -82,6 +88,28 @@ def connection_for(database: str | Connection) -> Iterator[psycopg.Connection]:
     # The Protocol names what is called on it; psycopg's own class is what the
     # readers are written against, and a psycopg connection is what meets it.
     yield cast("psycopg.Connection", database)
+
+
+def require_mode(connection: Connection, *, autocommit: bool, call: str, reason: str) -> None:
+    """Refuse a caller's *connection* whose autocommit is not what *call* needs.
+
+    A connection that has no ``autocommit`` attribute is taken to be in a
+    transaction, as a DB-API connection is.
+
+    Raises:
+        ConfigurationError: ``CONFIG_013``, naming *call* and *reason*.
+    """
+    if bool(getattr(connection, "autocommit", False)) == autocommit:
+        return
+    mode = "in autocommit" if autocommit else "in a transaction"
+    raise ConfigurationError(
+        f"{call} needs a connection {mode}: {reason}",
+        error_code="CONFIG_013",
+        resolution_hint=(
+            f"Pass a connection with autocommit {'on' if autocommit else 'off'}, or a URL: "
+            "confiture never changes the mode of a connection it did not open."
+        ),
+    )
 
 
 def load_config(config_file: Path) -> dict[str, Any]:

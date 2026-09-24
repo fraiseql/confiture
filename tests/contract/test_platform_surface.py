@@ -80,7 +80,7 @@ CHANGES = (
 READING = ("SchemaSource", "Connection", "parse_schema", "introspect", "diff", "SchemaError")
 
 #: Ordering tables by their foreign keys.
-ORDERING = ("dependency_order", "DependencyCycle")
+ORDERING = ("dependency_order", "DependencyCycleError")
 
 #: What a writer may supply to a table, and what each column must respect.
 WRITER = (
@@ -152,8 +152,8 @@ SIGNATURES: dict[str, str] = {
         "-> 'ApplyResult'"
     ),
     "validate_seeds": (
-        "(seeds_dir: 'Path | str', *, schema_dir: 'Path | str', max_level: 'int' = 3, "
-        "database_url: 'str | None' = None, prep_seed_schema: 'str' = 'prep_seed', "
+        "(seeds: 'Path | str', *, schema_dir: 'Path | str', max_level: 'int' = 3, "
+        "database: 'str | Connection | None' = None, prep_seed_schema: 'str' = 'prep_seed', "
         "catalog_schema: 'str' = 'catalog') -> 'PrepSeedReport'"
     ),
     "SchemaModel.to_json": "(self) -> 'str'",

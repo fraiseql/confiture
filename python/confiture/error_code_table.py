@@ -293,6 +293,16 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "Create or regenerate it with `confiture lint --baseline <file> --write-baseline`"
         ),
     },
+    {
+        "code": "CONFIG_013",
+        "message_template": "{call} needs a connection {mode}: {reason}",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Pass a connection in the mode the call names, or a URL: confiture never "
+            "changes the mode of a connection it did not open"
+        ),
+    },
     # ========== Default error codes for exception types ==========
     # These are the base codes used as defaults in exception __init__ methods.
     # More specific codes (e.g., MIGR_100, SCHEMA_201) are used at raise sites.

@@ -86,7 +86,7 @@ same order on every run, whatever order its files declared it in. Two rules:
 
 - A table that references itself is ordered like any other. Its rows are yours
   to order, parents first, or with the reference `NULL` and then updated.
-- Tables whose keys form a cycle raise `DependencyCycle` (`SCHEMA_202`), which
+- Tables whose keys form a cycle raise `DependencyCycleError` (`SCHEMA_202`), which
   names the tables on the cycle and not the ones merely downstream of it.
 
 `tables=[...]` orders a subset, and walks through the tables the subset depends
@@ -160,16 +160,19 @@ stdin` block streams through the driver's COPY protocol. `profile=` takes a
 `SeedProfile`, whose `include` / `exclude` are `fnmatch` globs over the **bare
 file name**, not the path globs `include_dirs` uses.
 
-`validate_seeds(seeds_dir, schema_dir=…, max_level=3)` runs the prep-seed
-validator. Levels 1 to 3 read files and need no database. Levels 4 and 5 load
-the seeds and run the resolvers against `database_url=`, in a transaction they
-roll back, parents first. Level 1 reads `INSERT` statements only, so a COPY file
+`validate_seeds(seeds, schema_dir=…, max_level=3)` validates seeds written for
+the prep-seed pattern: UUID-keyed rows in `prep_seed`, resolved into BIGINT-keyed
+rows in `catalog`. Levels 1 to 3 read files and need no database. Levels 4 and 5
+load the seeds and run the resolvers against `database=`, a URL or a connection,
+parents first, in a transaction nothing outlives: a URL's is rolled back, and a
+connection's runs inside a savepoint rolled back on the way out. Level 1 reads `INSERT` statements only, so a COPY file
 passes it unread (#366). The report's violations are `PrepSeedViolation`s, each
 with a `PrepSeedPattern` and a `ViolationSeverity`. What the validator cannot run
-it raises rather than reports: a `seeds_dir` that is not a directory, or a seed
+it raises rather than reports: a `seeds` that is not a directory, or a seed
 file that is not UTF-8 text, is a `SeedError`; a missing `schema_dir`, when a
 level that reads it runs, is a `SchemaError`; a `max_level` outside 1 to 5 is a
-`ConfigurationError`; and 4 or 5 without `database_url=` is a `ValueError`.
+`ConfigurationError`, and so is a connection in autocommit at level 4 or 5
+(`CONFIG_013`); and 4 or 5 without `database=` is a `ValueError`.
 
 ## Ids
 
@@ -198,6 +201,34 @@ not hold those; the variants that carry one hold it as a `DDLObject`.
 `tier_of(change)` gives a change's `RiskTier`, the taxonomy `migrate preflight`
 reports, or `None` where no tier applies.
 
+Every change has a `ref`: the `ObjectRef` the model keys the changed object
+under, so `model.tables[change.ref]` finds the table a column change is on. It is
+the one field every variant spells alike. The others are named for what they
+hold, so one name holds a model object in one variant and a spelling in another:
+
+| Variant | Fields | `ref` |
+|---------|--------|-------|
+| `TableAdded`, `TableDropped` | `table: Table` | the table |
+| `TableRenamed` | `old: Table`, `new: Table` | the old table |
+| `ColumnAdded`, `ColumnDropped` | `table: str`, `column: Column` | the table |
+| `ColumnRenamed` | `table: str`, `old: str`, `new: str` | the table |
+| `ColumnTypeChanged` | `table: str`, `old: Column`, `new: Column` | the table |
+| `ColumnNullabilityChanged` | `table: str`, `column: str`, `nullable: bool` | the table |
+| `ColumnDefaultChanged` | `table: str`, `column: str`, `old: str \| None`, `new: str \| None` | the table |
+| `IndexAdded`, `IndexDropped` | `table: str`, `index: Index` | the table |
+| `ForeignKeyAdded`, `ForeignKeyDropped`, `CheckConstraintAdded`, `CheckConstraintDropped`, `UniqueConstraintAdded`, `UniqueConstraintDropped` | `table: str`, `constraint: Constraint` | the table |
+| `EnumTypeAdded`, `EnumTypeDropped` | `enum: EnumType` | the type |
+| `EnumValuesChanged` | `enum: str`, `added: tuple[str, ...]`, `removed: tuple[str, ...]` | the type |
+| `SequenceAdded`, `SequenceDropped` | `sequence: Sequence` | the sequence |
+| `ObjectAdded`, `ObjectDropped` | `ref: ObjectRef`, `obj: DDLObject` | the object |
+| `ObjectReplaced` | `ref: ObjectRef`, `old: DDLObject`, `new: DDLObject` | the object |
+
+A `table: str` or `enum: str` is the spelling the author wrote, which a finding
+prints; `ref` is the identity. `ColumnAdded.column` is a `Column` and
+`ColumnNullabilityChanged.column` a column's name; `EnumTypeAdded.enum` is an
+`EnumType` and `EnumValuesChanged.enum` the type's name. Only `ref` reads the same
+in all of them.
+
 ## Errors
 
 What a call refuses it raises as confiture's own error: a `ConfiturError` with a
@@ -209,11 +240,11 @@ mistake in the call itself rather than in what it was pointed at.
 |--------|------|
 | `SchemaError` | DDL PostgreSQL's parser rejects (`DIFFER_400`), a schema path that does not exist (`SCHEMA_201`), a schema file that is not UTF-8 text |
 | `NotInModelError` | a table or column the model does not hold; a `SchemaError` and a `KeyError` both, so `except KeyError` catches it too |
-| `DependencyCycle` | tables whose foreign keys form a cycle (`SCHEMA_202`) |
+| `DependencyCycleError` | tables whose foreign keys form a cycle (`SCHEMA_202`) |
 | `SeedError` | anything a seed writer refuses, a seed path that does not exist, a seed file that fails or cannot be read, a seed transaction that fails to commit |
 | `ConfigurationError` | a URL that does not connect (`CONFIG_006`, the driver's error as its cause), a `max_level` outside 1 to 5 |
 | `TypeError` | an argument of the wrong type: a `database` that is neither a URL nor a `Connection`, a `tier_of` argument that is not a change |
-| `ValueError` | arguments that cannot run together: `parse_schema` given both a source and `env=` or neither, `diff`'s sides and `env=`, `validate_seeds` levels 4 and 5 without `database_url=` |
+| `ValueError` | arguments that cannot run together: `parse_schema` given both a source and `env=` or neither, `diff`'s sides and `env=`, `validate_seeds` levels 4 and 5 without `database=` |
 
 Where names are expected, a bare `str` is one name: `introspect(url,
 schemas="app")`, `dependency_order(model, tables="app.item")`. Where a path is

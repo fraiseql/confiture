@@ -30,7 +30,7 @@ class DependencyOrder(Generic[Node]):
     cycles: list[list[Node]]
 
 
-class DependencyCycle(SchemaError):
+class DependencyCycleError(SchemaError):
     """Tables whose foreign keys form a cycle: none of them can be loaded first."""
 
     def __init__(self, tables: tuple[ObjectRef, ...]) -> None:
@@ -186,7 +186,7 @@ def dependency_order(
     A bare ``str`` is one name.
 
     Raises:
-        DependencyCycle: tables whose foreign keys form a cycle, named.
+        DependencyCycleError: tables whose foreign keys form a cycle, named.
         NotInModelError: a table in *tables* the model does not hold — a
             ``SchemaError`` and a ``KeyError``.
     """
@@ -199,5 +199,5 @@ def dependency_order(
         graph = graph.restricted_to(wanted)
     order = graph.topological_sort()
     if order.cycles:
-        raise DependencyCycle(tuple(refs[node] for node in order.cycles[0]))
+        raise DependencyCycleError(tuple(refs[node] for node in order.cycles[0]))
     return [refs[node] for node in order.ordered if wanted is None or node in wanted]

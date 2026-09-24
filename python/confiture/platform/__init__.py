@@ -31,7 +31,7 @@ from confiture.config.environment import SeedProfile
 from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.connection import Connection
 from confiture.core.ddl_objects import DDLObject
-from confiture.core.introspection.dependency_graph import DependencyCycle, dependency_order
+from confiture.core.introspection.dependency_graph import DependencyCycleError, dependency_order
 from confiture.core.model_facts import (
     NotInModelError,
     column_facts,
@@ -116,7 +116,7 @@ __all__ = [
     "Connection",
     "Constraint",
     "DDLObject",
-    "DependencyCycle",
+    "DependencyCycleError",
     "EnumType",
     "EnumTypeAdded",
     "EnumTypeDropped",

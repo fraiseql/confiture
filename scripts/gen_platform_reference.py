@@ -51,7 +51,7 @@ SECTIONS: list[tuple[str, list[str]]] = [
             "Trigger",
         ],
     ),
-    ("Ordering", ["dependency_order", "DependencyCycle"]),
+    ("Ordering", ["dependency_order", "DependencyCycleError"]),
     (
         "What a writer may supply",
         [

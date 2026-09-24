@@ -7,14 +7,16 @@ accumulating violations, and optionally stopping early on CRITICAL violations.
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 import pglast.parser
 import psycopg
 
 from confiture.core import live_catalog
-from confiture.core.connection import create_connection
+from confiture.core.connection import Connection, create_connection, require_mode
 from confiture.core.differ import SchemaDiffer
 from confiture.core.introspection.dependency_graph import dependency_order
 from confiture.core.schema_identity import DEFAULT_SCHEMA
@@ -49,6 +51,9 @@ LEVELS = range(1, 6)
 
 #: The first level that reads the schema directory.
 FIRST_SCHEMA_LEVEL = 2
+
+#: The first level that runs against a database.
+FIRST_DATABASE_LEVEL = 4
 
 
 def _read(path: Path, error: type[ConfiturError]) -> str:
@@ -86,7 +91,11 @@ class OrchestrationConfig:
         max_level: Maximum validation level to run (1-5)
         seeds_dir: Directory containing seed files
         schema_dir: Directory containing schema files
-        database_url: Optional database URL for levels 4-5
+        database_url: Optional database URL for levels 4-5. Internal configuration,
+            so it keeps the name the CLI's option has; the seam's
+            :func:`validate_seeds` spells it ``database``.
+        connection: A caller's connection for levels 4-5, in place of a URL: used
+            inside a savepoint that is rolled back, never committed or closed
         stop_on_critical: Stop early if CRITICAL violation found (default: True)
         show_progress: Show progress indicators during validation (default: True)
         prep_seed_schema: Schema name for prep-seed tables (default: "prep_seed")
@@ -99,6 +108,7 @@ class OrchestrationConfig:
     seeds_dir: Path
     schema_dir: Path
     database_url: str | None = None
+    connection: Connection | None = None
     stop_on_critical: bool = True
     show_progress: bool = True
     prep_seed_schema: str = "prep_seed"
@@ -144,7 +154,7 @@ class PrepSeedOrchestrator:
 
         Raises:
             ConfigurationError: a max_level outside 1-5.
-            ValueError: If database_url required for max_level but not provided
+            ValueError: levels 4-5 with neither a database_url nor a connection
             SeedError: a seed file level 1 cannot read as UTF-8 text.
             SchemaError: a resolver file level 3 cannot read as UTF-8 text.
         """
@@ -154,8 +164,10 @@ class PrepSeedOrchestrator:
                 f"levels run {LEVELS.start} to {LEVELS.stop - 1}",
                 resolution_hint="Pass max_level=3 for the static levels, 5 for all of them.",
             )
-        if self.config.max_level >= 4 and not self.config.database_url:
-            msg = "database_url required for levels 4-5"
+        if self.config.max_level >= FIRST_DATABASE_LEVEL and not (
+            self.config.database_url or self.config.connection is not None
+        ):
+            msg = "database_url or connection required for levels 4-5"
             raise ValueError(msg)
 
         # Initialize report
@@ -283,10 +295,6 @@ class PrepSeedOrchestrator:
         """
         violations: list[PrepSeedViolation] = []
 
-        if not self.config.database_url:
-            # Should not reach here (checked in run()), but be safe
-            return violations
-
         # Discover resolution functions
         func_names = self._discover_resolution_functions()
 
@@ -294,69 +302,9 @@ class PrepSeedOrchestrator:
             # No functions to validate
             return violations
 
-        # Create database connection
-        connection = None
         try:
-            connection = create_connection({"database_url": self.config.database_url})
-
-            # Define callbacks for table/column lookups
-            def table_exists(schema: str, table: str) -> bool:
-                try:
-                    return live_catalog.relation_exists(
-                        connection, schema, table, kinds=live_catalog.TABLE_LIKE
-                    )
-                except psycopg.Error:
-                    return False
-
-            def get_column_type(schema: str, table: str, column: str) -> str | None:
-                try:
-                    found = live_catalog.column(connection, schema, table, column)
-                except psycopg.Error:
-                    return None
-                return found.type_text if found is not None else None
-
-            # Create validator with callbacks
-            validator = Level4RuntimeValidator(
-                table_exists=table_exists,
-                get_column_type=get_column_type,
-            )
-
-            # Validate each resolution function
-            for func_name in func_names:
-                # Extract target table from function name (fn_resolve_tb_X -> tb_X)
-                target_table = func_name.replace("fn_resolve_", "")
-
-                # Validate table exists
-                runtime_violations = validator.validate_runtime(
-                    func_name=func_name,
-                    target_schema=self.config.catalog_schema,
-                    target_table=target_table,
-                )
-                violations.extend(runtime_violations)
-
-                # Skip dry-run if table doesn't exist
-                if runtime_violations:
-                    continue
-
-                # Dry-run the resolution function with SAVEPOINT
-                try:
-                    dry_run_violations = validator.dry_run_resolution(
-                        func_name=func_name,
-                        connection=connection,
-                    )
-                    violations.extend(dry_run_violations)
-                except Exception as e:  # Reason: dry-running a user resolution function; any failure is a reported violation
-                    violations.append(
-                        PrepSeedViolation(
-                            pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
-                            severity=ViolationSeverity.ERROR,
-                            message=(f"Failed to validate {func_name}: {e!s}"),
-                            file_path=f"db/schema/functions/{func_name}.sql",
-                            line_number=1,
-                            impact="Resolution function validation failed",
-                        )
-                    )
-
+            with self._database() as connection:
+                violations.extend(self._check_resolvers(connection, func_names))
         except Exception as e:  # Reason: level-4 reaches the database through create_connection; any failure is a CRITICAL violation, not a crash
             violations.append(
                 PrepSeedViolation(
@@ -369,11 +317,98 @@ class PrepSeedOrchestrator:
                 )
             )
 
+        return violations
+
+    @contextlib.contextmanager
+    def _database(self) -> Iterator[psycopg.Connection]:
+        """The connection levels 4 and 5 run on, in a transaction nothing outlives.
+
+        A URL's connection is this run's: opened here, rolled back and closed. A
+        caller's connection runs inside a savepoint rolled back on the way out, so
+        its transaction holds afterwards what it held before; it is never
+        committed or closed here.
+        """
+        if self.config.connection is not None:
+            conn = cast("psycopg.Connection", self.config.connection)
+            conn.execute("SAVEPOINT confiture_validate_seeds")
+            try:
+                yield conn
+            finally:
+                conn.execute("ROLLBACK TO SAVEPOINT confiture_validate_seeds")
+                conn.execute("RELEASE SAVEPOINT confiture_validate_seeds")
+            return
+        conn = create_connection({"database_url": self.config.database_url})
+        try:
+            yield conn
         finally:
-            # Close connection
-            if connection:
-                with contextlib.suppress(Exception):
-                    connection.close()
+            with contextlib.suppress(Exception):
+                conn.rollback()
+            with contextlib.suppress(Exception):
+                conn.close()
+
+    def _check_resolvers(
+        self, connection: psycopg.Connection, func_names: list[str]
+    ) -> list[PrepSeedViolation]:
+        """Level 4 on an open connection: each resolver's table, then a dry run."""
+        violations: list[PrepSeedViolation] = []
+
+        # Define callbacks for table/column lookups
+        def table_exists(schema: str, table: str) -> bool:
+            try:
+                return live_catalog.relation_exists(
+                    connection, schema, table, kinds=live_catalog.TABLE_LIKE
+                )
+            except psycopg.Error:
+                return False
+
+        def get_column_type(schema: str, table: str, column: str) -> str | None:
+            try:
+                found = live_catalog.column(connection, schema, table, column)
+            except psycopg.Error:
+                return None
+            return found.type_text if found is not None else None
+
+        # Create validator with callbacks
+        validator = Level4RuntimeValidator(
+            table_exists=table_exists,
+            get_column_type=get_column_type,
+        )
+
+        # Validate each resolution function
+        for func_name in func_names:
+            # Extract target table from function name (fn_resolve_tb_X -> tb_X)
+            target_table = func_name.replace("fn_resolve_", "")
+
+            # Validate table exists
+            runtime_violations = validator.validate_runtime(
+                func_name=func_name,
+                target_schema=self.config.catalog_schema,
+                target_table=target_table,
+            )
+            violations.extend(runtime_violations)
+
+            # Skip dry-run if table doesn't exist
+            if runtime_violations:
+                continue
+
+            # Dry-run the resolution function with SAVEPOINT
+            try:
+                dry_run_violations = validator.dry_run_resolution(
+                    func_name=func_name,
+                    connection=connection,
+                )
+                violations.extend(dry_run_violations)
+            except Exception as e:  # Reason: dry-running a user resolution function; any failure is a reported violation
+                violations.append(
+                    PrepSeedViolation(
+                        pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
+                        severity=ViolationSeverity.ERROR,
+                        message=(f"Failed to validate {func_name}: {e!s}"),
+                        file_path=f"db/schema/functions/{func_name}.sql",
+                        line_number=1,
+                        impact="Resolution function validation failed",
+                    )
+                )
 
         return violations
 
@@ -387,10 +422,6 @@ class PrepSeedOrchestrator:
             List of violations found
         """
         violations: list[PrepSeedViolation] = []
-
-        if not self.config.database_url:
-            # Should not reach here (checked in run()), but be safe
-            return violations
 
         # In name order, as `seed apply` loads them: a file may reference the rows
         # of one before it.
@@ -409,39 +440,24 @@ class PrepSeedOrchestrator:
             else [fname.replace("fn_resolve_", "") for fname in func_names]
         )
 
-        # Create database connection
-        connection = None
         try:
-            connection = create_connection({"database_url": self.config.database_url})
-
-            # Start transaction for validation (will rollback)
-            connection.execute("BEGIN;")
-
-            # Create validator. Every level-5 query is qualified with the
-            # configured `catalog_schema`, never a hardwired `catalog.`.
-            validator = Level5ExecutionValidator(catalog_schema=self.config.catalog_schema)
-
-            # Choose execution mode
-            if self.config.level_5_mode == "comprehensive":
+            with self._database() as connection:
+                # Every level-5 query is qualified with the configured
+                # `catalog_schema`, never a hardwired `catalog.`.
+                validator = Level5ExecutionValidator(catalog_schema=self.config.catalog_schema)
+                run = (
+                    validator.execute_full_cycle_comprehensive
+                    if self.config.level_5_mode == "comprehensive"
+                    else validator.execute_full_cycle
+                )
                 violations.extend(
-                    validator.execute_full_cycle_comprehensive(
+                    run(
                         connection=connection,
                         seed_files=seed_file_paths,
                         resolution_functions=func_names,
                         tables=target_tables,
                     )
                 )
-            else:
-                # Standard mode (default)
-                violations.extend(
-                    validator.execute_full_cycle(
-                        connection=connection,
-                        seed_files=seed_file_paths,
-                        resolution_functions=func_names,
-                        tables=target_tables,
-                    )
-                )
-
         except Exception as e:  # Reason: level-5 executes arbitrary seed SQL; any failure is a CRITICAL violation, not a crash
             violations.append(
                 PrepSeedViolation(
@@ -453,15 +469,6 @@ class PrepSeedOrchestrator:
                     impact="Could not validate seed execution",
                 )
             )
-
-        finally:
-            # Rollback transaction (validation shouldn't persist data)
-            if connection:
-                with contextlib.suppress(Exception):
-                    connection.execute("ROLLBACK;")
-
-                with contextlib.suppress(Exception):
-                    connection.close()
 
         return violations
 
@@ -616,31 +623,43 @@ class PrepSeedOrchestrator:
 
 
 def validate_seeds(
-    seeds_dir: Path | str,
+    seeds: Path | str,
     *,
     schema_dir: Path | str,
     max_level: int = 3,
-    database_url: str | None = None,
+    database: str | Connection | None = None,
     prep_seed_schema: str = "prep_seed",
     catalog_schema: str = "catalog",
 ) -> PrepSeedReport:
-    """Run prep-seed validation levels 1 through *max_level* over *seeds_dir*.
+    """Validate seeds written for the prep-seed pattern, levels 1 through *max_level*.
 
-    Levels 1-3 read files and need no database; 4 and 5 load the seeds and run
-    the resolvers against *database_url*, in a transaction they roll back.
-    Nothing is printed: the report is the answer, and a file the run could not
-    read is an error rather than a file that passed.
+    The prep-seed pattern loads UUID-keyed rows into *prep_seed_schema* and
+    resolves them into BIGINT-keyed rows in *catalog_schema*. Levels 1-3 read
+    files and need no database; 4 and 5 load the seeds and run the resolvers
+    against *database*, in a transaction nothing outlives: a URL's connection is
+    opened, rolled back and closed here, and a caller's connection runs inside a
+    savepoint rolled back on the way out. Nothing is printed: the report is the
+    answer, and a file the run could not read is an error rather than a file that
+    passed.
 
     Raises:
-        SeedError: ``SEED_001`` for a *seeds_dir* that is not a directory, or a
-            seed file that cannot be read as UTF-8 text.
+        SeedError: ``SEED_001`` for *seeds* that is not a directory, or a seed file
+            that cannot be read as UTF-8 text.
         SchemaError: ``SCHEMA_201`` for a *schema_dir* that is not a directory when
             a level that reads it runs (2 and up), ``SCHEMA_001`` for a resolver
             file that cannot be read as UTF-8 text.
-        ConfigurationError: ``CONFIG_001`` for a *max_level* outside 1-5.
-        ValueError: *max_level* of 4 or 5 without a *database_url*.
+        ConfigurationError: ``CONFIG_001`` for a *max_level* outside 1-5;
+            ``CONFIG_013`` for a connection in autocommit at levels 4-5, which
+            need a transaction to roll back.
+        TypeError: a *database* that is neither a URL nor a :class:`Connection`.
+        ValueError: *max_level* of 4 or 5 without a *database*.
     """
-    seeds_dir, schema_dir = Path(seeds_dir), Path(schema_dir)
+    seeds_dir, schema_dir = Path(seeds), Path(schema_dir)
+    if database is not None and not isinstance(database, str | Connection):
+        raise TypeError(
+            "database must be a URL (str) or a connection meeting "
+            f"confiture.platform.Connection, not {type(database).__name__}"
+        )
     if not seeds_dir.is_dir():
         raise SeedError(
             f"Seeds directory not found: {seeds_dir}",
@@ -653,11 +672,23 @@ def validate_seeds(
             error_code="SCHEMA_201",
             resolution_hint="Pass the directory the schema's DDL is in, as it is on disk.",
         )
+    if database is None and max_level in range(FIRST_DATABASE_LEVEL, LEVELS.stop):
+        msg = f"max_level {max_level} needs a database: levels 4-5 run against one"
+        raise ValueError(msg)
+    connection = None if database is None or isinstance(database, str) else database
+    if connection is not None and max_level >= FIRST_DATABASE_LEVEL:
+        require_mode(
+            connection,
+            autocommit=False,
+            call="validate_seeds",
+            reason="levels 4 and 5 roll what they load back to a savepoint",
+        )
     config = OrchestrationConfig(
         max_level=max_level,
         seeds_dir=seeds_dir,
         schema_dir=schema_dir,
-        database_url=database_url,
+        database_url=database if isinstance(database, str) else None,
+        connection=connection,
         show_progress=False,
         prep_seed_schema=prep_seed_schema,
         catalog_schema=catalog_schema,
