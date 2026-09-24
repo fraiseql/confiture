@@ -534,6 +534,8 @@ class MigrationEngine:
 
         Raises:
             RebuildError: If schema build or DDL application fails.
+            SeedError: *apply_seeds* with a seeds directory that does not exist,
+                before anything is dropped.
         """
         return baseline_impl.rebuild(
             self,

@@ -1107,8 +1107,8 @@ confiture migrate diff [OPTIONS] [old_schema] [new_schema]
 
 | Option | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `--from` | - | str | - | Current state: a schema file, a directory of .sql files, '-' for stdin, or 'db' for the configured database (default: the first positional) |
-| `--to` | - | str | - | Desired state: a schema file, a directory of .sql files (what fraiseql's emit-ddl option writes), or '-' for stdin (default: the second positional) |
+| `--from` | - | str | - | Current state: a schema file, a directory (every .sql under it, recursively), '-' for stdin, or 'db' for the configured database (default: the first positional) |
+| `--to` | - | str | - | Desired state: a schema file, a directory (every .sql under it, recursively — what fraiseql's emit-ddl option writes), or '-' for stdin (default: the second positional) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Environment config, read for `--from db` (default: db/environments/local.yaml) |
 | `--generate` | - | Flag | off | Generate a migration from the differences: a .up.sql/.down.sql pair with --from/--to, a Python migration with positional files |
 | `--name` | - | str | - | Migration name (default: none, required with --generate) |
@@ -3650,7 +3650,7 @@ confiture seed convert [OPTIONS]
 |---|---|---|---|---|
 | `--input` | - | path | - | Input file with INSERT statements (required) |
 | `--output` | `-o` | path | - | Output file for COPY format (default: stdout) |
-| `--batch` | - | Flag | off | Process all .sql files in directory (requires --output) |
+| `--batch` | - | Flag | off | Process every .sql file under the directory, recursively (requires --output) |
 
 <!-- END GENERATED: cli confiture seed convert -->
 

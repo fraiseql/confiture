@@ -58,7 +58,7 @@ Usage (one rule directly)::
 
     from confiture.core.linting.libraries.generate import Tree001PrefixUnique
 
-    violations = Tree001PrefixUnique().check(sorted(Path("db/schema").rglob("*.sql")))
+    violations = Tree001PrefixUnique().check(files_under(Path("db/schema")))
 """
 
 from __future__ import annotations
@@ -69,6 +69,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from confiture.config.environment import DEFAULT_STATUS_WORDS
+from confiture.core.builder import files_under
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.tree_prefix import is_hex_group, prefix_value
 from confiture.core.tree_prefix import prefix_text as _raw_prefix
@@ -344,9 +345,7 @@ class Tree004OrphanedOverride:
         if not overrides_dir.exists():
             return violations
 
-        for override_file in sorted(overrides_dir.rglob("*.sql")):
-            if not override_file.is_file():
-                continue
+        for override_file in files_under(overrides_dir):
             try:
                 rel = override_file.relative_to(overrides_dir)
             except ValueError:

@@ -121,6 +121,12 @@ confiture seed validate --prep-seed --level 1
 - Trinity pattern in final tables (id UUID, pk_* BIGINT, fk_* BIGINT)
 - Self-references handled correctly
 
+Level 2 reads the schema directory as one model, the way `confiture build` reads
+it — every `.sql` under it, recursively, in path order — so an `ALTER TABLE` in
+one file folds into the table another file creates. A file PostgreSQL's parser
+rejects is a CRITICAL finding naming its file and line; a file that is not UTF-8
+text is an error naming it. Neither is skipped.
+
 **When to use:** Pre-commit hook
 
 **Example violations:**
@@ -300,8 +306,8 @@ if report.has_violations:
 ```python
 OrchestrationConfig(
     max_level: int,                      # 1-5: which levels to run
-    seeds_dir: Path,                     # Path to seed files
-    schema_dir: Path,                    # Path to schema files
+    seeds_dir: Path,                     # Seed files: every .sql under it, recursively
+    schema_dir: Path,                    # Schema files: every .sql under it, recursively
 
     # Optional
     database_url: str | None = None,     # Required for levels 4-5
@@ -315,6 +321,13 @@ OrchestrationConfig(
     level_5_mode: str = "standard",      # "standard" or "comprehensive"
 )
 ```
+
+Every level reads the same seed files: levels 1, 2 and 5 all walk `seeds_dir`
+as a tree, so a nested seed that level 1 checks is one level 5 executes. A
+`seeds_dir` that is not a directory raises `SeedError` (`SEED_001`), and from
+level 2 up a `schema_dir` that is not one raises `SchemaError` (`SCHEMA_201`) —
+from `run()`, `validate_seeds` and `confiture seed validate --prep-seed` alike.
+Nothing read is not a clean report.
 
 ### Level 5 Modes
 

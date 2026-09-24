@@ -1,7 +1,7 @@
 """Where a schema is read from: DDL text, files, a project's build, or a live database.
 
 Each source ends in the one model (``core/schema_model.py``): DDL through the lint
-inventory (``inventory.build_model``), a database through ``live_catalog.read``.
+inventory (``inventory.build_inventory``), a database through ``live_catalog.read``.
 Files are read in the order ``confiture build`` reads them, because the model is
 order-aware — a later ``ALTER`` or ``DROP`` folds into what an earlier file
 created (#301) — so a directory read here and the same directory built are one
@@ -22,29 +22,29 @@ import pglast.parser
 
 from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
-from confiture.core.differ import SchemaDiffer
-from confiture.core.linting.inventory import build_model
+from confiture.core.differ import SchemaDiffer, duplicate_warnings
+from confiture.core.linting.inventory import build_inventory, schema_model, with_triggers
 from confiture.core.live_catalog import read, user_schemas
 from confiture.core.parser_info import parse_error_line
 from confiture.core.schema_change import SchemaDiff
 from confiture.core.schema_model import SchemaModel
 from confiture.core.sql_lexer import blank_copy_blocks
 from confiture.exceptions import SchemaError
+from confiture.models.warnings import BuildWarning
 
 #: DDL text (a ``str``), one file or directory (a ``Path``), or several in order —
 #: each a ``Path`` or a ``str`` spelling one.
 SchemaSource = str | Path | Sequence[Path | str]
 
 
-def _file_text(path: Path) -> str:
+def _files(path: Path) -> list[Path]:
     if not path.exists():
         raise SchemaError(
             f"Schema source not found: {path}",
             error_code="SCHEMA_201",
             resolution_hint="Pass DDL text as a str, and a file or directory as a Path.",
         )
-    files = files_under(path) if path.is_dir() else [path]
-    return "\n".join(_read(file) for file in files)
+    return files_under(path) if path.is_dir() else [path]
 
 
 def _read(file: Path) -> str:
@@ -55,6 +55,29 @@ def _read(file: Path) -> str:
             f"Cannot read schema file {file}: {exc}",
             resolution_hint="A schema file is a readable file of UTF-8 text.",
         ) from exc
+
+
+#: One piece of a source's DDL: the file it came from (``None`` for text), and its text.
+_Segment = tuple[Path | None, str]
+
+
+def _segments(
+    source: SchemaSource | None, *, env: str | None, project_dir: Path | None
+) -> list[_Segment]:
+    """*source*'s DDL piece by piece, in the order it is read — the file each came from kept."""
+    if (source is None) == (env is None):
+        raise ValueError("Give exactly one of a schema source or an environment.")
+    if env is not None:
+        return [(None, SchemaBuilder(env=env, project_dir=project_dir).build(schema_only=True))]
+    if isinstance(source, str):
+        return [(None, source)]
+    assert source is not None
+    paths = [source] if isinstance(source, Path) else [Path(path) for path in source]
+    return [(file, _read(file)) for path in paths for file in _files(path)]
+
+
+def _joined(segments: list[_Segment]) -> str:
+    return "\n".join(text for _, text in segments)
 
 
 def schema_text(
@@ -76,27 +99,56 @@ def schema_text(
         SchemaError: ``SCHEMA_201`` for a path that does not exist, ``SCHEMA_001``
             for a file that cannot be read as UTF-8 text.
     """
-    if (source is None) == (env is None):
-        raise ValueError("Give exactly one of a schema source or an environment.")
-    if env is not None:
-        return SchemaBuilder(env=env, project_dir=project_dir).build(schema_only=True)
-    if isinstance(source, str):
-        return source
-    if isinstance(source, Path):
-        return _file_text(source)
-    assert source is not None
-    return "\n".join(_file_text(Path(path)) for path in source)
+    return _joined(_segments(source, env=env, project_dir=project_dir))
 
 
-def _model(sql: str) -> SchemaModel:
+def _where(segments: list[_Segment], line: int) -> tuple[Path | None, int]:
+    """The file and the line in it that line *line* of the joined text is."""
+    for file, text in segments:
+        lines = text.count("\n") + 1
+        if line <= lines:
+            return file, line
+        line -= lines
+    return None, line
+
+
+def _parse_error(segments: list[_Segment], sql: str, exc: Exception) -> SchemaError:
+    file, line = _where(segments, parse_error_line(sql, exc))
+    where = f"{file}:{line}" if file is not None else f"line {line}"
+    return SchemaError(
+        f"Cannot parse the schema ({where}): {exc}",
+        error_code="DIFFER_400",
+        context={"file": str(file) if file is not None else None, "line": line},
+        resolution_hint="Fix the SQL syntax in the schema; PostgreSQL rejects it as written.",
+    )
+
+
+def read_schema(
+    source: SchemaSource | None = None,
+    *,
+    env: str | None = None,
+    project_dir: Path | None = None,
+) -> tuple[SchemaModel, list[BuildWarning]]:
+    """:func:`parse_schema`'s model, and what one parse of the tree had to say beside it.
+
+    The warnings are two definitions of one table, type or sequence, resolved the
+    way the build resolves them (``DIFFER_402``) — the model holds the one the
+    build keeps, and says nothing of the other.
+
+    Raises:
+        ValueError, SchemaError: as :func:`parse_schema`; ``DIFFER_400`` names the
+            file and line PostgreSQL's parser rejected, in the message and in
+            ``context``.
+    """
+    segments = _segments(source, env=env, project_dir=project_dir)
+    sql = _joined(segments)
+    blanked = blank_copy_blocks(sql)
     try:
-        return build_model(blank_copy_blocks(sql))
+        raws = list(pglast.parser.parse_sql(blanked) or [])
+        inventory = build_inventory(blanked, raws)
     except pglast.parser.ParseError as exc:
-        raise SchemaError(
-            f"Cannot parse the schema (line {parse_error_line(sql, exc)}): {exc}",
-            error_code="DIFFER_400",
-            resolution_hint="Fix the SQL syntax in the schema; PostgreSQL rejects it as written.",
-        ) from exc
+        raise _parse_error(segments, sql, exc) from exc
+    return with_triggers(schema_model(inventory), blanked, raws), duplicate_warnings(inventory)
 
 
 def parse_schema(
@@ -117,10 +169,10 @@ def parse_schema(
     Raises:
         ValueError: unless exactly one of *source* and *env* is given.
         SchemaError: ``DIFFER_400`` when PostgreSQL's parser rejects the DDL,
-            ``SCHEMA_201`` for a path that does not exist, ``SCHEMA_001`` for a
-            file that cannot be read as UTF-8 text.
+            naming the file and line; ``SCHEMA_201`` for a path that does not
+            exist, ``SCHEMA_001`` for a file that cannot be read as UTF-8 text.
     """
-    return _model(schema_text(source, env=env, project_dir=project_dir))
+    return read_schema(source, env=env, project_dir=project_dir)[0]
 
 
 def introspect(database: str | Connection, *, schemas: Sequence[str] | None = None) -> SchemaModel:

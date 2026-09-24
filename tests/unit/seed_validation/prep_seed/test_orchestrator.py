@@ -98,29 +98,10 @@ class TestPrepSeedOrchestratorBasics:
             orchestrator.run()
 
 
-class TestParseSchemaFiles:
-    """Test _parse_schema_files() helper method."""
+class TestSchemaTables:
+    """The model's tables, sorted onto the two sides level 2 compares."""
 
-    def test_parse_schema_files_returns_empty_dict_for_nonexistent_dir(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        """Returns empty dict if schema_dir doesn't exist."""
-        config = OrchestrationConfig(
-            max_level=2,
-            seeds_dir=tmp_path / "seeds",
-            schema_dir=tmp_path / "nonexistent",
-        )
-
-        orchestrator = PrepSeedOrchestrator(config)
-
-        tables = orchestrator._parse_schema_files()
-
-        assert tables.prep == {}
-        assert tables.catalog == {}
-        assert tables.schemas_seen == set()
-
-    def test_parse_schema_files_discovers_tables_from_sql_files(
+    def test_schema_tables_come_from_the_sql_files(
         self,
         tmp_path: Path,
     ) -> None:
@@ -140,7 +121,7 @@ class TestParseSchemaFiles:
 
         orchestrator = PrepSeedOrchestrator(config)
 
-        tables = orchestrator._parse_schema_files()
+        tables = orchestrator._schema_tables(orchestrator._read_schema()[0])
 
         # Keyed by (schema, name): the qualifier the statement wrote decides the
         # side, and a bare name is not an identity (#317).
@@ -241,6 +222,7 @@ class TestLevel2Integration:
         tmp_path: Path,
     ) -> None:
         """Level 2 returns no violations if no schema files present."""
+        (tmp_path / "schema").mkdir()
         config = OrchestrationConfig(
             max_level=2,
             seeds_dir=tmp_path / "seeds",
@@ -346,6 +328,8 @@ class TestLevel5Integration:
         tmp_path: Path,
     ) -> None:
         """Level 5 returns no violations if no seed files present."""
+        (tmp_path / "seeds").mkdir()
+        (tmp_path / "schema").mkdir()
         config = OrchestrationConfig(
             max_level=5,
             seeds_dir=tmp_path / "seeds",
@@ -387,6 +371,8 @@ class TestOrchestratorFullCycle:
 
     def test_orchestrator_stops_on_critical_by_default(self, tmp_path: Path) -> None:
         """Orchestrator stops early if stop_on_critical is True and CRITICAL found."""
+        (tmp_path / "seeds").mkdir()
+        (tmp_path / "schema").mkdir()
         # This test verifies the stop_on_critical logic
         # We'll create a scenario with just Level 1 where we can control violations
         config = OrchestrationConfig(
@@ -407,6 +393,8 @@ class TestOrchestratorFullCycle:
         tmp_path: Path,
     ) -> None:
         """Orchestrator respects stop_on_critical=False."""
+        (tmp_path / "seeds").mkdir()
+        (tmp_path / "schema").mkdir()
         config = OrchestrationConfig(
             max_level=1,
             seeds_dir=tmp_path / "seeds",
@@ -507,6 +495,7 @@ class TestPrepSeedReport:
         tmp_path: Path,
     ) -> None:
         """Report accumulates violations from all executed levels."""
+        (tmp_path / "schema").mkdir()
         seeds_dir = tmp_path / "seeds"
         seeds_dir.mkdir()
 

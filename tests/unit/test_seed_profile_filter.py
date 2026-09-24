@@ -8,7 +8,7 @@ import pytest
 
 from confiture.config.environment import SeedConfig, SeedProfile
 from confiture.core.seed.applier import SeedApplier
-from confiture.exceptions import ConfigurationError
+from confiture.exceptions import ConfigurationError, SeedError
 
 
 def _seeds(tmp_path: Path, names: list[str]) -> Path:
@@ -74,3 +74,37 @@ class TestSeedConfigProfiles:
         cfg = SeedConfig(profiles={"slim": {}, "full": {}})
         with pytest.raises(ConfigurationError, match="full, slim"):
             cfg.get_profile("nope")
+
+
+class TestSeedsAreATree:
+    """The seeds directory is read as the build reads a tree (#386), globs by path."""
+
+    def _tree(self, tmp_path: Path) -> Path:
+        d = tmp_path / "seeds"
+        for rel in ["00_base.sql", "core/10_users.sql", "stats/20_big.sql", "stats/notes.md"]:
+            (d / rel).parent.mkdir(parents=True, exist_ok=True)
+            (d / rel).write_text("SELECT 1;")
+        return d
+
+    def test_a_nested_file_is_found_in_path_order(self, tmp_path: Path) -> None:
+        d = self._tree(tmp_path)
+        files = SeedApplier(seeds_dir=d).find_seed_files()
+        assert [f.relative_to(d).as_posix() for f in files] == [
+            "00_base.sql",
+            "core/10_users.sql",
+            "stats/20_big.sql",
+        ]
+
+    def test_a_filename_glob_matches_at_any_depth(self, tmp_path: Path) -> None:
+        d = self._tree(tmp_path)
+        files = SeedApplier(seeds_dir=d).find_seed_files(profile=SeedProfile(exclude=["20_*.sql"]))
+        assert [f.name for f in files] == ["00_base.sql", "10_users.sql"]
+
+    def test_a_glob_with_a_slash_is_anchored_at_the_seeds_directory(self, tmp_path: Path) -> None:
+        d = self._tree(tmp_path)
+        files = SeedApplier(seeds_dir=d).find_seed_files(profile=SeedProfile(exclude=["stats/"]))
+        assert [f.name for f in files] == ["00_base.sql", "10_users.sql"]
+
+    def test_a_missing_directory_is_an_error_not_an_empty_list(self, tmp_path: Path) -> None:
+        with pytest.raises(SeedError, match="not found"):
+            SeedApplier(seeds_dir=tmp_path / "nope").find_seed_files()

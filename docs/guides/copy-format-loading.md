@@ -75,7 +75,7 @@ Transform existing INSERT files to COPY format:
 # Convert single file
 confiture seed convert --input seeds.sql --output seeds_copy.sql
 
-# Convert entire directory
+# Convert a whole directory tree (each file written at its relative path)
 confiture seed convert --input db/seeds --batch --output db/seeds_copy
 
 # Preview conversion

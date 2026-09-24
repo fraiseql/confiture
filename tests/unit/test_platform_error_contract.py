@@ -227,3 +227,14 @@ def test_a_str_path_is_a_path_everywhere_the_seam_takes_one(tmp_path: Path) -> N
     report = platform.validate_seeds(str(seeds), schema_dir=str(tmp_path), max_level=1)
     assert [f.path for f in written] == [tmp_path / "copy.sql", tmp_path / "insert.sql"]
     assert report.violations == []
+
+
+def test_a_schema_file_the_parser_rejects_is_named_with_its_line(tmp_path: Path) -> None:
+    """``DIFFER_400`` points into the file, not into the text the tree was joined into."""
+    (tmp_path / "00_ok.sql").write_text("CREATE TABLE a (x INT);\n\n")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "10_broken.sql").write_text("-- one\n-- two\nCREATE TABLE (;\n")
+    with pytest.raises(platform.SchemaError, match=r"sub/10_broken\.sql:3") as caught:
+        platform.parse_schema(tmp_path)
+    assert caught.value.error_code == "DIFFER_400"
+    assert caught.value.context == {"file": str(tmp_path / "sub" / "10_broken.sql"), "line": 3}

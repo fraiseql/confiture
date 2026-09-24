@@ -141,7 +141,9 @@ def provision_template(
         _schema_files, seed_files = builder.categorize_sql_files()
         if seed_profile is not None:
             profile_obj = builder.env_config.seed.get_profile(seed_profile)
-            seed_files = apply_profile_filter(seed_files, profile_obj)
+            seed_files = apply_profile_filter(
+                seed_files, profile_obj, anchor=builder.base_dir.parent
+            )
         status = provisioner.provision_template(
             template,
             schema_hash=schema_hash,

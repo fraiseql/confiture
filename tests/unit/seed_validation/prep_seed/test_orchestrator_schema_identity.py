@@ -1,6 +1,6 @@
 """Level 2 reads the qualifier the statement wrote, not the file's path (#317).
 
-``_parse_schema_files`` decided which side a table was on from
+Level 2 decided which side a table was on from
 ``"prep_seed" in str(sql_file)`` and keyed the result on ``table.name``. That is
 #313's defect one module over: the schema is a fact the statement carries —
 ``Table.schema`` has held it since 1.13.0 — and a bare name is not an identity.
@@ -17,18 +17,25 @@ from pathlib import Path
 from confiture.core.seed.validation.prep_seed.orchestrator import (
     OrchestrationConfig,
     PrepSeedOrchestrator,
+    SchemaTables,
 )
 
 
 def _orchestrator(schema_dir: Path, **kwargs: object) -> PrepSeedOrchestrator:
+    seeds_dir = schema_dir.parent / "seeds"
+    seeds_dir.mkdir(exist_ok=True)
     return PrepSeedOrchestrator(
         OrchestrationConfig(
             max_level=2,
-            seeds_dir=schema_dir.parent / "seeds",
+            seeds_dir=seeds_dir,
             schema_dir=schema_dir,
             **kwargs,  # ty: ignore[invalid-argument-type]
         )
     )
+
+
+def _tables(orchestrator: PrepSeedOrchestrator) -> SchemaTables:
+    return orchestrator._schema_tables(orchestrator._read_schema()[0])
 
 
 def _schema_dir(tmp_path: Path, **files: str) -> Path:
@@ -50,7 +57,7 @@ class TestTheQualifierDecidesWhichSideATableIsOn:
             tables__all="CREATE TABLE prep_seed.tb_x (id UUID);\n"
             "CREATE TABLE catalog.tb_x (id UUID, pk_x BIGINT);",
         )
-        tables = _orchestrator(schema_dir)._parse_schema_files()
+        tables = _tables(_orchestrator(schema_dir))
         prep, catalog = tables.prep, tables.catalog
         assert [t.name for t in prep.values()] == ["tb_x"]
         assert [t.name for t in catalog.values()] == ["tb_x"]
@@ -60,7 +67,7 @@ class TestTheQualifierDecidesWhichSideATableIsOn:
             tmp_path,
             prep_seed_archive__tables="CREATE TABLE catalog.tb_y (id UUID, pk_y BIGINT);",
         )
-        tables = _orchestrator(schema_dir)._parse_schema_files()
+        tables = _tables(_orchestrator(schema_dir))
         prep, catalog = tables.prep, tables.catalog
         assert prep == {}
         assert [t.name for t in catalog.values()] == ["tb_y"]
@@ -72,7 +79,7 @@ class TestTheQualifierDecidesWhichSideATableIsOn:
             tmp_path,
             tables__twins="CREATE TABLE tenant.tb_x (id UUID);\nCREATE TABLE etl.tb_x (id UUID);",
         )
-        tables = _orchestrator(schema_dir)._parse_schema_files()
+        tables = _tables(_orchestrator(schema_dir))
         prep, catalog = tables.prep, tables.catalog
         assert (prep, catalog) == ({}, {})
 
@@ -80,7 +87,7 @@ class TestTheQualifierDecidesWhichSideATableIsOn:
         """``CREATE TABLE tb_z`` is ``public.tb_z``, which is neither side —
         unless the project configured ``public`` as one of them."""
         schema_dir = _schema_dir(tmp_path, tables__bare="CREATE TABLE tb_z (id UUID);")
-        tables = _orchestrator(schema_dir, catalog_schema="public")._parse_schema_files()
+        tables = _tables(_orchestrator(schema_dir, catalog_schema="public"))
         prep, catalog = tables.prep, tables.catalog
         assert prep == {}
         assert [t.name for t in catalog.values()] == ["tb_z"]
@@ -90,9 +97,9 @@ class TestTheQualifierDecidesWhichSideATableIsOn:
             tmp_path,
             tables__x="CREATE TABLE staging.tb_x (id UUID);\nCREATE TABLE final.tb_x (id UUID);",
         )
-        tables = _orchestrator(
-            schema_dir, prep_seed_schema="staging", catalog_schema="final"
-        )._parse_schema_files()
+        tables = _tables(
+            _orchestrator(schema_dir, prep_seed_schema="staging", catalog_schema="final")
+        )
         prep, catalog = tables.prep, tables.catalog
         assert [t.schema for t in prep.values()] == ["staging"]
         assert [t.schema for t in catalog.values()] == ["final"]
@@ -122,8 +129,8 @@ class TestIdentityIsSchemaAndName:
             a__tb_x="CREATE TABLE catalog.tb_x (id UUID, pk_x BIGINT);",
             b__tb_x="CREATE TABLE catalog.tb_x (id UUID, pk_x BIGINT, extra TEXT);",
         )
-        catalog = _orchestrator(schema_dir)._parse_schema_files().catalog
-        assert [sorted(t.columns) for t in catalog.values()] == [["id", "pk_x"]]
+        catalog = _tables(_orchestrator(schema_dir)).catalog
+        assert [sorted(c.folded for c in t.columns) for t in catalog.values()] == [["id", "pk_x"]]
 
 
 class TestTheSilenceThatWouldHaveReplacedTheHeuristic:

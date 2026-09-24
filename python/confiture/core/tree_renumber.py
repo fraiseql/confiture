@@ -46,6 +46,7 @@ import subprocess
 from pathlib import Path
 
 from confiture.core import sql_lexer
+from confiture.core.builder import files_under
 from confiture.core.tree_allocator import PrefixConfig, TreeAllocator
 from confiture.core.tree_prefix import prefix_text
 
@@ -242,7 +243,7 @@ class TreeRenumber:
         # Gather other schema files before any moves.
         other_files = [
             p.resolve()
-            for p in self.schema_dir.rglob("*.sql")
+            for p in files_under(self.schema_dir)
             if p.resolve() not in moved_old and p.resolve() not in moved_new
         ]
 

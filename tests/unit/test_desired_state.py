@@ -38,6 +38,16 @@ class TestSqlFileSource:
         assert "nope" not in text
         assert text.index("CREATE TABLE a") < text.index("CREATE TABLE b")
 
+    def test_a_directory_is_a_tree(self, tmp_path: Path) -> None:
+        """``--to <dir>`` reads the tree a build reads, not its top level (#386)."""
+        (tmp_path / "sub").mkdir()
+        (tmp_path / "a.sql").write_text("CREATE TABLE a (id int);\n")
+        (tmp_path / "sub" / "t.sql").write_text("CREATE TABLE t (id int);\n")
+
+        text = load_desired_state(str(tmp_path)).read()
+
+        assert text.index("CREATE TABLE a") < text.index("CREATE TABLE t")
+
     def test_a_file_is_read_as_is(self, tmp_path: Path) -> None:
         f = tmp_path / "target.sql"
         f.write_text("CREATE TABLE t (id int);\n")

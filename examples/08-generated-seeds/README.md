@@ -69,12 +69,12 @@ follows the convention is fraiseql-uuid's question, not this example's.
 
 ## File names and seed profiles
 
-The files are named `10_vendor.sql` and `20_product.sql`: `seed apply` loads a
-directory's files in name order, and so does level 5. A `SeedProfile` in an
-environment YAML selects files with `include` / `exclude` globs. Those are
-`fnmatch` patterns over the **bare file name**, not the gitignore-style path
-globs `include_dirs` uses under the same key names. So `include: ["*_product.sql"]`
-selects `20_product.sql` by its name alone.
+The files are named `10_vendor.sql` and `20_product.sql`: `seed apply` loads
+every file under a directory, recursively, in path order, and so does level 5. A
+`SeedProfile` in an environment YAML selects files with `include` / `exclude`
+globs — the gitignore-style path globs `include_dirs` uses, over each file's path
+below the seeds directory. A glob with no `/` matches the file name at any depth,
+so `include: ["*_product.sql"]` selects `20_product.sql` by its name alone.
 
 ## What `run.sh` checks
 

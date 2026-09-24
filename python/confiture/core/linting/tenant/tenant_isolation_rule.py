@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pglast.parser
 
+from confiture.core.builder import files_under
 from confiture.core.linting.schema_linter import LintReport, LintViolation, RuleSeverity
 from confiture.core.linting.tenant.function_parser import FunctionParser
 from confiture.core.linting.tenant.tenant_detector import TenantDetector
@@ -131,27 +132,25 @@ class TenantIsolationRule:
         view_dirs: list[Path],
         function_dirs: list[Path],
         report: LintReport,
-        pattern: str = "*.sql",
     ) -> None:
-        """Run the rule against SQL files in directories.
+        """Run the rule against every ``.sql`` under each directory, read as a tree.
 
         Args:
             view_dirs: Directories containing VIEW SQL files
             function_dirs: Directories containing function SQL files
             report: LintReport to add violations to
-            pattern: Glob pattern for SQL files (default: "*.sql")
         """
         # Collect view files
         view_paths = []
         for dir_path in view_dirs:
             if dir_path.exists():
-                view_paths.extend(dir_path.glob(pattern))
+                view_paths.extend(files_under(dir_path))
 
         # Collect function files
         function_paths = []
         for dir_path in function_dirs:
             if dir_path.exists():
-                function_paths.extend(dir_path.glob(pattern))
+                function_paths.extend(files_under(dir_path))
 
         self.run_from_files(
             view_paths=view_paths,

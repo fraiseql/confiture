@@ -6,7 +6,6 @@ sequentially (each in own savepoint) or concatenated (default behavior).
 
 from __future__ import annotations
 
-import fnmatch
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -16,29 +15,39 @@ import psycopg
 from rich.console import Console
 
 from confiture.config.environment import SeedProfile
+from confiture.core import path_globs
+from confiture.core.builder import files_under
 from confiture.core.connection import Connection, connection_for, require_mode
 from confiture.core.progress import ProgressManager
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.seed.executor import SeedExecutor, read_seed
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
+from confiture.core.seed.paths import seed_relative
 from confiture.exceptions import ConfiturError, SchemaError, SeedError, base_message
 
 
-def apply_profile_filter(files: list[Path], profile: SeedProfile) -> list[Path]:
-    """Filter *files* by a profile's include-then-exclude filename globs.
+def apply_profile_filter(
+    files: list[Path],
+    profile: SeedProfile,
+    *,
+    root: Path | None = None,
+    anchor: Path | None = None,
+) -> list[Path]:
+    """Filter *files* by a profile's include-then-exclude globs, in their order.
 
-    Order is preserved. Empty ``include`` means "start from all files".
+    The globs are ``include_dirs``' own (``core/path_globs``) over each file's
+    path relative to *root*, the seeds directory — or, for files a build
+    selected, relative to the seed directory each one's path names below
+    *anchor* (:func:`~confiture.core.seed.paths.seed_relative`), so both read
+    ``db/seeds/stats/x.sql`` as ``stats/x.sql``. A glob with no ``/`` matches the
+    filename at any depth. Empty ``include`` means "start from all files".
     """
-
-    def _matches_any(name: str, patterns: list[str]) -> bool:
-        return any(fnmatch.fnmatch(name, pat) for pat in patterns)
-
     result: list[Path] = []
     for path in files:
-        name = path.name
-        if profile.include and not _matches_any(name, profile.include):
+        rel = path.relative_to(root) if root is not None else seed_relative(path, anchor=anchor)
+        if profile.include and not path_globs.matches_any(rel, profile.include):
             continue
-        if profile.exclude and _matches_any(name, profile.exclude):
+        if path_globs.matches_any(rel, profile.exclude):
             continue
         result.append(path)
     return result
@@ -133,6 +142,7 @@ class SeedApplier:
         copy_format: bool = False,
         copy_threshold: int = 1000,
         files: list[Path] | None = None,
+        anchor: Path | None = None,
     ) -> None:
         """Initialize SeedApplier.
 
@@ -146,8 +156,11 @@ class SeedApplier:
             files: The seed files to apply, in the order given, when the caller
                 has already selected them — ``build --sequential`` applies the
                 files the build selected, through its include directories, not
-                a second discovery of its own. ``seeds_dir``'s top-level
-                ``*.sql`` when omitted.
+                a second discovery of its own. Every ``.sql`` under
+                ``seeds_dir`` when omitted, as a build reads the tree.
+            anchor: For *files*, the directory above the build's include root: a
+                profile's globs see each file's path below the first seed
+                directory under it, as ``seed apply`` would see it.
         """
         self.seeds_dir = Path(seeds_dir)
         self.env = env or "local"
@@ -158,32 +171,40 @@ class SeedApplier:
         self.copy_format = copy_format
         self.copy_threshold = copy_threshold
         self.files = files
+        self.anchor = anchor
 
     def find_seed_files(self, profile: SeedProfile | None = None) -> list[Path]:
-        """Discover and return sorted seed files, optionally filtered by *profile*.
+        """The seed files to apply, in order, filtered by *profile* when one is given.
 
-        Returns the files the caller selected, in its order, or else the SQL
-        files in sorted order from the (top-level, non-recursive) seeds
-        directory. Non-SQL files are ignored. When *profile* is None nothing is
-        filtered out.
+        The files the caller selected, in its order, or else every ``.sql``
+        under the seeds directory, sorted by path — the tree a build reads from
+        a bare ``include_dirs`` entry (``builder.files_under``).
 
         Args:
             profile: Optional seed profile selecting an include/exclude subset by
-                filename glob.
+                path glob, relative to the seeds directory.
 
         Returns:
-            List of Path objects for SQL files in sorted order.
+            The seed files in the order they are applied.
+
+        Raises:
+            SeedError: a seeds directory that does not exist — a misspelt one
+                applies nothing, and says so.
         """
         if self.files is not None:
-            sql_files = list(self.files)
-        elif not self.seeds_dir.exists():
-            return []
-        else:
-            # Find all .sql files (top-level only — globs match filenames)
-            sql_files = sorted(self.seeds_dir.glob("*.sql"))
+            if profile is None:
+                return list(self.files)
+            return apply_profile_filter(list(self.files), profile, anchor=self.anchor)
+        if not self.seeds_dir.is_dir():
+            raise SeedError(
+                f"Seeds directory not found: {self.seeds_dir}",
+                seed_file=str(self.seeds_dir),
+                resolution_hint="Pass the directory the seed files are in, as it is on disk.",
+            )
+        sql_files = files_under(self.seeds_dir)
         if profile is None:
             return sql_files
-        return apply_profile_filter(sql_files, profile)
+        return apply_profile_filter(sql_files, profile, root=self.seeds_dir)
 
     def apply_sequential(
         self,
@@ -314,12 +335,12 @@ def apply_seeds(
 ) -> ApplyResult:
     """Apply seed files in order: one transaction, a savepoint per file.
 
-    *seeds* is a directory — its top-level ``.sql`` files, sorted, filtered by
-    *profile*'s filename globs — or the files themselves, in the order given; a
-    ``str`` is the path it spells. A file is a script as ``psql`` reads one:
-    statements, and ``COPY … FROM stdin`` blocks streamed through the driver's
-    COPY protocol. Every path is checked before the database is reached, so a
-    misspelt one applies nothing.
+    *seeds* is a directory — every ``.sql`` under it, recursively, sorted by
+    path as a build reads a tree, filtered by *profile*'s path globs — or the
+    files themselves, in the order given; a ``str`` is the path it spells. A
+    file is a script as ``psql`` reads one: statements, and ``COPY … FROM
+    stdin`` blocks streamed through the driver's COPY protocol. Every path is
+    checked before the database is reached, so a misspelt one applies nothing.
 
     The transaction: each file runs in a savepoint of its own
     (:class:`SeedExecutor`), so a failed file is undone and nothing before it.

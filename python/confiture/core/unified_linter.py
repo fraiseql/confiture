@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from confiture.core.builder import files_under
 from confiture.models.lint import LintSeverity
 from confiture.models.unified_lint import UnifiedLintIssue, UnifiedLintResult
 
@@ -137,7 +138,7 @@ class UnifiedLinter:
         expanded: list[Path] = []
         for f in target_files:
             if f.is_dir():
-                expanded.extend(sorted(f.rglob("*.sql")))
+                expanded.extend(files_under(f))
             else:
                 expanded.append(f)
         target_files = expanded

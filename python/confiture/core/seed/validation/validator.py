@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from confiture.core.builder import files_under
 from confiture.core.seed.validation.models import (
     SeedValidationPattern,
     SeedValidationReport,
@@ -16,6 +17,7 @@ from confiture.core.seed.validation.models import (
 from confiture.core.seed.validation.patterns import (
     detect_seed_issues,
 )
+from confiture.exceptions import SeedError
 
 
 class SeedValidator:
@@ -104,34 +106,36 @@ class SeedValidator:
         sql = file_path.read_text(encoding="utf-8")
         return self.validate_sql(sql, file_path=str(file_path))
 
-    def validate_directory(
-        self,
-        directory: Path,
-        pattern: str = "*.sql",
-        recursive: bool = False,
-    ) -> SeedValidationReport:
-        """Validate all seed files in a directory.
+    def validate_directory(self, directory: Path) -> SeedValidationReport:
+        """Validate every seed file in *directory*, read as a tree.
+
+        Every ``.sql`` under *directory*, sorted by path — the tree a build reads
+        from a bare ``include_dirs`` entry (``builder.files_under``).
 
         Args:
             directory: Directory containing seed files
-            pattern: Glob pattern to match files (default: "*.sql")
-            recursive: If True, scan subdirectories recursively
 
         Returns:
             SeedValidationReport combining violations from all files
-        """
-        report = SeedValidationReport()
 
-        # Find all matching files
-        glob_pattern = f"**/{pattern}" if recursive else pattern
-        files = sorted(directory.glob(glob_pattern))
+        Raises:
+            SeedError: a *directory* that does not exist — nothing read is not
+                a clean result.
+        """
+        if not directory.is_dir():
+            raise SeedError(
+                f"Seeds directory not found: {directory}",
+                seed_file=str(directory),
+                resolution_hint="Pass the directory the seed files are in, as it is on disk.",
+            )
+        report = SeedValidationReport()
+        files = files_under(directory)
 
         for file_path in files:
-            if file_path.is_file():
-                file_report = self.validate_file(file_path)
-                for violation in file_report.violations:
-                    report.add_violation(violation)
-                for scanned_file in file_report.scanned_files:
-                    report.add_file_scanned(scanned_file)
+            file_report = self.validate_file(file_path)
+            for violation in file_report.violations:
+                report.add_violation(violation)
+            for scanned_file in file_report.scanned_files:
+                report.add_file_scanned(scanned_file)
 
         return report

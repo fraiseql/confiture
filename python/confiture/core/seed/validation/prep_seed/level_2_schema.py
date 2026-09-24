@@ -1,13 +1,15 @@
 """Level 2: Schema consistency validation.
 
-Cycles 4-7: Validates schema mapping, FK types, trinity pattern, self-references.
+Validates schema mapping, FK types, trinity pattern, self-references — over the
+tables of the one schema model (``core/schema_model.py``) the whole tree reads
+into.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
+from confiture.core.schema_model import Table
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
@@ -15,26 +17,8 @@ from confiture.core.seed.validation.prep_seed.models import (
 )
 
 
-@dataclass
-class TableDefinition:
-    """Definition of a table from schema."""
-
-    name: str
-    schema: str
-    columns: dict[str, str]  # column_name -> type
-
-
-class SchemaMapping:
-    """Mapping between prep_seed and final tables."""
-
-    def __init__(
-        self,
-        prep_table: TableDefinition,
-        final_table: TableDefinition,
-    ) -> None:
-        """Initialize mapping."""
-        self.prep_table = prep_table
-        self.final_table = final_table
+def _column_names(table: Table) -> list[str]:
+    return [column.folded for column in table.columns]
 
 
 class Level2SchemaValidator:
@@ -53,7 +37,7 @@ class Level2SchemaValidator:
 
     def __init__(
         self,
-        get_final_table: Callable[[str], TableDefinition | None] | None = None,
+        get_final_table: Callable[[str], Table | None] | None = None,
     ) -> None:
         """Initialize the validator.
 
@@ -64,7 +48,7 @@ class Level2SchemaValidator:
 
     def validate_schema_mapping(
         self,
-        prep_table: TableDefinition,
+        prep_table: Table,
     ) -> list[PrepSeedViolation]:
         """Validate schema mapping for a prep_seed table.
 
@@ -111,7 +95,7 @@ class Level2SchemaValidator:
 
     def _validate_trinity_pattern(
         self,
-        final_table: TableDefinition,
+        final_table: Table,
     ) -> list[PrepSeedViolation]:
         """Validate trinity pattern in final table.
 
@@ -123,7 +107,7 @@ class Level2SchemaValidator:
         violations: list[PrepSeedViolation] = []
 
         # Check for id UUID
-        if "id" not in final_table.columns:
+        if final_table.column("id") is None:
             violations.append(
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_MAPPING,
@@ -137,7 +121,7 @@ class Level2SchemaValidator:
 
         # Check for pk_* BIGINT
         pk_col = f"pk_{final_table.name[3:]}"  # Remove tb_ prefix
-        if pk_col not in final_table.columns:
+        if final_table.column(pk_col) is None:
             violations.append(
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_MAPPING,
@@ -156,20 +140,20 @@ class Level2SchemaValidator:
 
     def _validate_fk_mappings(
         self,
-        prep_table: TableDefinition,
-        final_table: TableDefinition,
+        prep_table: Table,
+        final_table: Table,
     ) -> list[PrepSeedViolation]:
         """Validate FK column mappings between prep_seed and final."""
         violations: list[PrepSeedViolation] = []
 
         # Find all FK columns in prep_seed
-        for col_name in prep_table.columns:
+        for col_name in _column_names(prep_table):
             if col_name.startswith("fk_") and col_name.endswith("_id"):
                 # Expected final column name (without _id suffix)
                 final_col = col_name[:-3]  # Remove _id
 
                 # Check if final column exists
-                if final_col not in final_table.columns:
+                if final_table.column(final_col) is None:
                     violations.append(
                         PrepSeedViolation(
                             pattern=PrepSeedPattern.MISSING_FK_MAPPING,
@@ -190,7 +174,7 @@ class Level2SchemaValidator:
 
     def detect_self_references(
         self,
-        table: TableDefinition,
+        table: Table,
     ) -> list[PrepSeedViolation]:
         """Detect self-referencing FK columns.
 
@@ -202,7 +186,7 @@ class Level2SchemaValidator:
 
         table_basename = table.name[3:]  # Remove tb_ prefix
 
-        for col_name in table.columns:
+        for col_name in _column_names(table):
             if col_name.startswith("fk_") and col_name.endswith("_id"):
                 # Extract referenced table from column name
                 # fk_parent_product_id -> parent_product

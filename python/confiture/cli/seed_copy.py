@@ -11,6 +11,7 @@ from rich.table import Table
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console
 from confiture.cli.options import output_option
+from confiture.core.builder import files_under
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 from confiture.error_codes import FINDINGS, SUCCESS
 from confiture.exceptions import ConfigurationError, ConfiturError, SeedError
@@ -30,7 +31,7 @@ def convert(
     batch: bool = typer.Option(
         False,
         "--batch",
-        help="Process all .sql files in directory (requires --output)",
+        help="Process every .sql file under the directory, recursively (requires --output)",
     ),
 ) -> None:
     """Transform INSERT statements to COPY format (2-10x faster).
@@ -153,14 +154,14 @@ def convert(
 def _convert_directory(
     converter: InsertToCopyConverter, input_dir: Path, output_dir: Path | None
 ) -> None:
-    """``--batch``: convert every ``*.sql`` directly in *input_dir* into *output_dir*."""
+    """``--batch``: convert every ``*.sql`` under *input_dir* into *output_dir*, path for path."""
     if not input_dir.is_dir():
         raise ConfigurationError("For --batch mode, input must be a directory.")
     if not output_dir:
         raise ConfigurationError("For --batch mode, --output is required.")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    sql_files = sorted(input_dir.glob("*.sql"))
+    sql_files = files_under(input_dir)
     if not sql_files:
         console.print(f"[yellow]⚠ No .sql files found in {input_dir}[/yellow]")
         return

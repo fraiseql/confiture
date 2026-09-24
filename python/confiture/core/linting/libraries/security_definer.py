@@ -44,6 +44,7 @@ import pglast
 import pglast.parser
 
 from confiture.core import live_catalog, sql_lexer
+from confiture.core.builder import files_under
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
 from confiture.core.linting.inventory import type_text
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
@@ -242,7 +243,7 @@ class Sec002SecurityDefinerSearchPath:
             return []
         if path.is_file():
             return [path] if path.suffix == ".sql" else []
-        return sorted(path.rglob("*.sql"))
+        return files_under(path)
 
     # ------------------------------------------------------------------ #
     # Scope filtering                                                     #

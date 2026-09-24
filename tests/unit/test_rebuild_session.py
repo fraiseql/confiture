@@ -138,6 +138,7 @@ class TestSessionSeedsDir:
         session = self._make_session()
         session._migrator = migrator
         seeds = tmp_path / "fixtures"
+        seeds.mkdir()
 
         result = session.rebuild(apply_seeds=True, seeds_dir=seeds)
 
@@ -152,3 +153,14 @@ class TestSessionSeedsDir:
         session.rebuild(apply_seeds=True)
 
         assert session._migrator.rebuild.call_args.kwargs["seeds_dir"] is None
+
+
+def test_a_missing_seeds_directory_stops_the_rebuild_before_it_drops(tmp_path):
+    """A seeds directory that is not there is refused before a schema is dropped."""
+    from confiture.core._migrator.baseline import rebuild
+    from confiture.exceptions import SeedError
+
+    migrator = MagicMock()
+    with pytest.raises(SeedError, match="not found"):
+        rebuild(migrator, drop_schemas=True, apply_seeds=True, seeds_dir=tmp_path / "nope")
+    migrator._drop_user_schemas.assert_not_called()
