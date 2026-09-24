@@ -3,7 +3,7 @@
 A default reaches drift twice — as the DDL wrote it and as ``pg_get_expr`` gives it
 back — and PostgreSQL stores it analysed: ``'x'`` in a ``text`` column comes back
 ``'x'::text``, ``1 + 2`` comes back ``(1 + 2)``, ``TRUE`` comes back ``true``.
-Compared as text, 10 of 23 shapes agreed; read as a parse tree, all 23 do. What is
+Compared as text, 10 of 24 shapes agreed; read as a parse tree, all 24 do. What is
 measured against a real server is ``tests/integration/test_default_comparison_is_measured.py``;
 this is the rule, one row per rewrite.
 """
@@ -18,6 +18,7 @@ from confiture.core.ddl_walk import canonical_default
 #: ``(column type, as the DDL writes it, as the catalog gives it back)``.
 SAME = [
     ("text", "'x'", "'x'::text"),
+    ("text", "'active'", "'active'::text"),
     ("text[]", "'{}'", "'{}'::text[]"),
     ("varchar(10)", "'ab'", "'ab'::character varying"),
     ("character varying(20)", "'active'::character varying", "'active'::character varying"),

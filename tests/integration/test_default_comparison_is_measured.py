@@ -3,12 +3,12 @@
 ``default_mismatch`` was published and never emitted (#309) because PostgreSQL
 stores a default analysed and text cannot compare the two sides: ``'x'`` comes back
 ``'x'::text``, ``TRUE`` comes back ``true``, ``1 + 2`` comes back ``(1 + 2)``.
-``ddl_walk.canonical_default`` reads both as parse trees instead. This builds 23
-defaults into a real database and holds the reader to all 23 — and holds the two
+``ddl_walk.canonical_default`` reads both as parse trees instead. This builds 24
+defaults into a real database and holds the reader to all 24 — and holds the two
 controls that must still differ, because a comparison that calls everything equal
 passes the first test just as well.
 
-Measured on PostgreSQL 18.4, 2026-09-21: compared as text, 10 of the 23 agree.
+Measured on PostgreSQL 18.4, 2026-09-21: compared as text, 10 of the 24 agree.
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from confiture.core.schema_model import Column
 #: ``(column type, default as the DDL writes it)``.
 SHAPES = [
     ("text", "'x'"),
+    ("text", "'active'"),
     ("text[]", "'{}'"),
     ("varchar(10)", "'ab'"),
     ("boolean", "TRUE"),
@@ -81,8 +82,8 @@ def build(fresh_database_factory: Callable[[str], str]) -> Callable[[str], str]:
 
 
 def test_the_shapes_are_the_ones_measured() -> None:
-    """A floor: the claim in the docstring is about 23 shapes."""
-    assert len(SHAPES) == 23
+    """A floor: the claim in the docstring is about 24 shapes."""
+    assert len(SHAPES) == 24
 
 
 def test_every_default_compares_equal_to_what_postgres_stored(
