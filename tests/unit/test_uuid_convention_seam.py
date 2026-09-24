@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from confiture.core.seed.validation.prep_seed.level_1_seed_files import Level1SeedValidator
+from confiture.core.seed.validation.prep_seed.level_1_seed_files import is_uuid_text
 
 # A canonical structured UUID (fraiseql-uuid Pattern: table=012345, type=21, ...).
 STRUCTURED_UUID = "01234521-0000-4000-8000-000000000001"
@@ -53,13 +53,12 @@ _GUIDE = _REPO / "docs" / "guides" / "building-on-confiture.md"
 
 def test_confiture_uuid_check_is_generic_rfc4122() -> None:
     """Confiture's seed UUID check accepts any RFC-4122 UUID — it is not structured."""
-    pattern = Level1SeedValidator.VALID_UUID_PATTERN
     # Accepts a random v4 UUID, a structured one, and a format-valid non-structured one.
-    assert pattern.fullmatch(str(uuid.uuid4()))
-    assert pattern.fullmatch(STRUCTURED_UUID)
-    assert pattern.fullmatch(GENERIC_ONLY_UUID)
+    assert is_uuid_text(str(uuid.uuid4()))
+    assert is_uuid_text(STRUCTURED_UUID)
+    assert is_uuid_text(GENERIC_ONLY_UUID)
     # Rejects a malformed UUID (wrong segment lengths).
-    assert pattern.fullmatch("0123-45-6789") is None
+    assert not is_uuid_text("0123-45-6789")
 
 
 def test_deleted_uuid_island_stays_deleted() -> None:
@@ -86,7 +85,7 @@ def test_the_guide_sends_ids_to_fraiseql_uuid() -> None:
     text = _GUIDE.read_text(encoding="utf-8")
     ids = text.split("## Ids", 1)[1].split("\n## ", 1)[0]
     assert "fraiseql-uuid" in ids
-    assert "VALID_UUID_PATTERN" in ids
+    assert "is_uuid_text" in ids
 
 
 def test_no_parallel_structured_pattern_copy_in_confiture() -> None:
@@ -123,11 +122,9 @@ def test_confiture_and_fraiseql_uuid_occupy_different_lanes() -> None:
     """
     fraiseql_uuid = pytest.importorskip("fraiseql_uuid")
     structured = fraiseql_uuid.Pattern.PATTERN_REGEX
-    confiture_format = Level1SeedValidator.VALID_UUID_PATTERN
-
     # Confiture accepts both; fraiseql-uuid accepts only the structured one.
-    assert confiture_format.fullmatch(STRUCTURED_UUID)
-    assert confiture_format.fullmatch(GENERIC_ONLY_UUID)
+    assert is_uuid_text(STRUCTURED_UUID)
+    assert is_uuid_text(GENERIC_ONLY_UUID)
     assert structured.match(STRUCTURED_UUID)
     assert structured.match(GENERIC_ONLY_UUID) is None
 

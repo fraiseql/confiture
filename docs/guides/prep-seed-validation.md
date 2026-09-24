@@ -95,14 +95,46 @@ when they were made; see
 **What it checks:**
 - Seed files target `prep_seed` schema, not final tables
 - FK columns use `_id` suffix (e.g., `fk_organization_id`)
-- UUID format is valid in seed data
+- UUID format is valid in the columns that hold a UUID
+- Each row holds one value per column
+- `UNION` branches have the same width, and a `NULL` is cast alike in each
+
+Level 1 reads each statement with PostgreSQL's parser: every row of a multi-row
+`INSERT … VALUES`, and every row of a `COPY … FROM stdin` block — the format
+`confiture seed convert` and `write_copy_seed` write — decoded as PostgreSQL
+decodes COPY's text format (`\N` is NULL, `\t` a tab). A finding about a value
+names the line its row is on.
+
+A UUID is judged only in a column that holds one. Given a schema directory, those
+are the columns the schema types `uuid`, and a statement that names no columns
+takes the table's in order; without one (or for a table the schema does not
+hold), the prep-seed convention names them: `id` and `fk_*_id`. The report's
+`uuid_basis` says which it was. So `'Wi-Fi Router'` in `name` and
+`'europe-5001-3'` in `slug` are not UUID findings, and a malformed UUID in row 40
+is. A value is a UUID when PostgreSQL's `uuid` input accepts it: 32 hex digits,
+8-4-4-4-12 or with a hyphen after any group of four, optionally in braces. A
+value PostgreSQL computes (`gen_random_uuid()`) is not judged.
+
+What level 1 cannot read is a finding, never a pass:
+
+| Statement | Finding |
+|---|---|
+| A file PostgreSQL's parser rejects | `SEED_UNPARSEABLE` (ERROR), naming the line |
+| `INSERT … SELECT`, `INSERT … DEFAULT VALUES` | `SEED_NOT_CHECKED` (INFO): values computed at run time |
+| `COPY … (FORMAT csv)` or `binary` | `SEED_NOT_CHECKED` (INFO): level 1 decodes the text format only |
+| `COPY … FROM '<file>'`, `UPDATE`, any other statement | `SEED_NOT_CHECKED` (INFO) |
+| `SET`, `BEGIN`/`COMMIT`/`SAVEPOINT`, `TRUNCATE`, `DELETE`, a `SELECT` | nothing: they write no row |
+
+Any finding, an INFO one included, makes `confiture seed validate --prep-seed`
+exit 1.
 
 **When to use:** Pre-commit hook
 
 **Example violations:**
 ```
-❌ Seed INSERT targets catalog.tb_x but should target prep_seed
+❌ Seed INSERT targets catalog schema but should target prep_seed
 ❌ FK column 'fk_organization' missing _id suffix (should be 'fk_organization_id')
+❌ Invalid UUID 'europe-5001-3' in prep_seed.tb_product.fk_region_id, row 3 (a UUID column by the prep-seed convention (id, fk_*_id))
 ✅ FIXABLE with --fix
 ```
 
@@ -125,7 +157,8 @@ Level 2 reads the schema directory as one model, the way `confiture build` reads
 it — every `.sql` under it, recursively, in path order — so an `ALTER TABLE` in
 one file folds into the table another file creates. A file PostgreSQL's parser
 rejects is a CRITICAL finding naming its file and line; a file that is not UTF-8
-text is an error naming it. Neither is skipped.
+text is an error naming it. Neither is skipped. Every finding names the file and
+line the table it is about is created on.
 
 **When to use:** Pre-commit hook
 
@@ -463,6 +496,8 @@ confiture seed validate --prep-seed --format json --output report.json
   "violation_count": 2,
   "files_scanned": 5,
   "scanned_files": [...],
+  "uuid_basis": "schema",
+  "rows_read": {"prep_seed.tb_vendor": 4, "prep_seed.tb_product": 12},
   "has_violations": true,
   "violations_by_severity": {
     "CRITICAL": [...],

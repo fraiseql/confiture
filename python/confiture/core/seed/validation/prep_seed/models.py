@@ -58,6 +58,15 @@ class PrepSeedPattern(Enum):
     RESOLVER_NOT_READ = "RESOLVER_NOT_READ"
     """Part of a resolution function's body could not be read, so it was not checked."""
 
+    SEED_UNPARSEABLE = "SEED_UNPARSEABLE"
+    """PostgreSQL's parser rejects the seed file, so level 1 read none of it."""
+
+    SEED_NOT_CHECKED = "SEED_NOT_CHECKED"
+    """A seed statement whose values level 1 cannot read, and why."""
+
+    SEED_ROW_WIDTH = "SEED_ROW_WIDTH"
+    """A seed row holds more or fewer values than the statement has columns."""
+
     @property
     def description(self) -> str:
         """Get human-readable description of this pattern."""
@@ -98,6 +107,16 @@ class PrepSeedPattern(Enum):
             ),
             PrepSeedPattern.RESOLVER_NOT_READ: (
                 "Resolution function body (or part of it) could not be read, so it was not checked"
+            ),
+            PrepSeedPattern.SEED_UNPARSEABLE: (
+                "PostgreSQL's parser rejects the seed file, so level 1 read none of it"
+            ),
+            PrepSeedPattern.SEED_NOT_CHECKED: (
+                "A seed statement whose values level 1 cannot read (computed at run time, "
+                "a COPY format other than text)"
+            ),
+            PrepSeedPattern.SEED_ROW_WIDTH: (
+                "A seed row holds more or fewer values than the statement has columns"
             ),
         }
         return descriptions.get(self, "Prep-seed pattern violation")
@@ -166,10 +185,16 @@ class PrepSeedReport:
     Attributes:
         violations: List of violations found
         scanned_files: List of files scanned
+        uuid_basis: What decided which columns level 1 checked as UUIDs:
+            ``"schema"`` (the columns it types ``uuid``) or ``"convention"``
+            (``id`` and ``fk_*_id``); ``None`` when level 1 did not run
+        rows_read: The rows level 1 read, per table as the seed statements name it
     """
 
     violations: list[PrepSeedViolation] = field(default_factory=list)
     scanned_files: list[str] = field(default_factory=list)
+    uuid_basis: str | None = None
+    rows_read: dict[str, int] = field(default_factory=dict)
 
     @property
     def has_violations(self) -> bool:
@@ -206,6 +231,8 @@ class PrepSeedReport:
             "violation_count": self.violation_count,
             "files_scanned": len(self.scanned_files),
             "scanned_files": self.scanned_files,
+            "uuid_basis": self.uuid_basis,
+            "rows_read": self.rows_read,
             "has_violations": self.has_violations,
             "violations_by_severity": {
                 k.name: [v.to_dict() for v in vs] for k, vs in self.violations_by_severity().items()

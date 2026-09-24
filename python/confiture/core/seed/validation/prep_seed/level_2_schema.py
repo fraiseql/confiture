@@ -38,13 +38,39 @@ class Level2SchemaValidator:
     def __init__(
         self,
         get_final_table: Callable[[str], Table | None] | None = None,
+        *,
+        locate: Callable[[Table], tuple[str, int]] | None = None,
+        locate_resolver: Callable[[Table], tuple[str, int] | None] | None = None,
+        prep_seed_schema: str = "prep_seed",
+        catalog_schema: str = "catalog",
     ) -> None:
         """Initialize the validator.
 
         Args:
             get_final_table: Optional function to look up final table by name.
+            locate: ``(file, line)`` a table is created on, for a finding about
+                it; without one a finding names the table itself.
+            locate_resolver: ``(file, line)`` of the resolver that fills a prep
+                table, when the schema defines one.
+            prep_seed_schema: The schema seeds are loaded into.
+            catalog_schema: The schema the resolvers fill.
         """
         self.get_final_table = get_final_table
+        self._locate = locate
+        self._locate_resolver = locate_resolver
+        self.prep_seed_schema = prep_seed_schema
+        self.catalog_schema = catalog_schema
+
+    def _at(self, table: Table) -> tuple[str, int]:
+        """Where a finding about *table* points."""
+        if self._locate is not None:
+            return self._locate(table)
+        return (f"{table.schema}.{table.name}" if table.schema else table.name), 1
+
+    def _resolver_or(self, table: Table) -> tuple[str, int]:
+        """The resolver that fills *table*, where the schema defines one; else *table*."""
+        found = self._locate_resolver(table) if self._locate_resolver is not None else None
+        return found or self._at(table)
 
     def validate_schema_mapping(
         self,
@@ -71,11 +97,11 @@ class Level2SchemaValidator:
                     pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                     severity=ViolationSeverity.ERROR,
                     message=(
-                        f"prep_seed.{prep_table.name} has no corresponding "
-                        f"final table catalog.{prep_table.name}"
+                        f"{self.prep_seed_schema}.{prep_table.name} has no corresponding "
+                        f"final table {self.catalog_schema}.{prep_table.name}"
                     ),
-                    file_path=f"db/schema/{prep_table.name}.sql",
-                    line_number=1,
+                    file_path=self._at(prep_table)[0],
+                    line_number=self._at(prep_table)[1],
                     impact="Final table must exist for data resolution",
                     fix_available=False,
                 )
@@ -113,8 +139,8 @@ class Level2SchemaValidator:
                     pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                     severity=ViolationSeverity.WARNING,
                     message=f"Table {final_table.name} missing 'id UUID' column",
-                    file_path=f"db/schema/{final_table.name}.sql",
-                    line_number=1,
+                    file_path=self._at(final_table)[0],
+                    line_number=self._at(final_table)[1],
                     impact="Trinity pattern incomplete",
                 )
             )
@@ -130,8 +156,8 @@ class Level2SchemaValidator:
                         f"Table {final_table.name} missing '{pk_col} BIGINT' "
                         f"(trinity pattern requires pk_* column)"
                     ),
-                    file_path=f"db/schema/{final_table.name}.sql",
-                    line_number=1,
+                    file_path=self._at(final_table)[0],
+                    line_number=self._at(final_table)[1],
                     impact="Trinity pattern incomplete",
                 )
             )
@@ -159,12 +185,12 @@ class Level2SchemaValidator:
                             pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                             severity=ViolationSeverity.ERROR,
                             message=(
-                                f"prep_seed.{prep_table.name}.{col_name} has no "
+                                f"{self.prep_seed_schema}.{prep_table.name}.{col_name} has no "
                                 f"corresponding column "
-                                f"catalog.{final_table.name}.{final_col}"
+                                f"{self.catalog_schema}.{final_table.name}.{final_col}"
                             ),
-                            file_path=f"db/schema/{prep_table.name}.sql",
-                            line_number=1,
+                            file_path=self._at(prep_table)[0],
+                            line_number=self._at(prep_table)[1],
                             impact="FK transformation will fail",
                             fix_available=True,
                         )
@@ -202,8 +228,8 @@ class Level2SchemaValidator:
                                 f"Table {table.name} has self-referencing FK "
                                 f"'{col_name}' that requires two-pass resolution"
                             ),
-                            file_path=f"db/schema/functions/fn_resolve_{table.name}.sql",
-                            line_number=1,
+                            file_path=self._resolver_or(table)[0],
+                            line_number=self._resolver_or(table)[1],
                             impact=(
                                 "Self-references must use two-pass resolution (INSERT then UPDATE)"
                             ),

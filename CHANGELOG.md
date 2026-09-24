@@ -55,6 +55,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and of `SeedProfile`.
 - `PrepSeedPattern.RESOLVER_NOT_READ`: part of a resolver's body could not be read, so
   it was not checked.
+- `PrepSeedReport.uuid_basis` (`"schema"` or `"convention"`) and
+  `PrepSeedReport.rows_read` (rows level 1 read, per table), in the JSON report too.
+- `PrepSeedPattern.SEED_UNPARSEABLE`, `SEED_NOT_CHECKED` and `SEED_ROW_WIDTH`.
+- `copy_formatter.copy_unescape` and `copy_row`: COPY's text format read back, beside
+  `copy_escape`; `sql_lexer.CopyBlock.data_start` places a block's rows in the text.
 
 ### Fixed
 
@@ -133,6 +138,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `psycopg.sql.Identifier` and passed no parameters, so a `%` in a name is not a
   placeholder. `Level4RuntimeValidator.validate_column_type`, which nothing called, is
   gone.
+
+- **Prep-seed level 1 reads each seed statement, every row of it** (#366, #387). It
+  matched `INSERT … VALUES` text with regexes, so:
+  - a `COPY … FROM stdin` seed — what `confiture seed convert` and `write_copy_seed`
+    write — was checked for nothing, and reported clean;
+  - `VALUES\s*\((.*?)\)` stopped at the first `)`: rows 2..n of a multi-row
+    `INSERT` were never read, so a malformed UUID in row 2 passed;
+  - any quoted value holding a hyphen was taken for a UUID, so a slug, a date or a
+    hyphenated name (`'north-america'`, `'2024-01-31'`, `'Wi-Fi Router'`) was an
+    ERROR.
+
+  Each statement is now read with PostgreSQL's parser, and each `COPY` block's rows are
+  decoded as PostgreSQL decodes COPY's text format, by a decoder beside the one escaper
+  (`copy_formatter.copy_unescape` / `copy_row`). Every check reads every row, and a
+  finding about a value names its row and that row's line. A UUID is checked only in a
+  column that holds one: the columns the schema types `uuid` when level 1 can read the
+  schema directory, else `id` and `fk_*_id` by the prep-seed convention; the report's
+  new `uuid_basis` says which. A value is a UUID when PostgreSQL's `uuid` input accepts
+  it (`is_uuid_text`, which replaces `Level1SeedValidator.VALID_UUID_PATTERN`). The
+  target-schema check reads the configured `prep_seed_schema`, where it read the literal
+  `prep_seed`, and applies to `COPY` too; FK naming applies to every seed statement.
+  The `UNION` checks read the parse tree (a `NULL::int` and a `NULL::int4` are one type
+  now), and the inline-comment check reads the scanner's tokens, where a hand-written
+  quote tracker stood in for a lexer. Level 1 holds no regex over SQL text
+  (`sql_keyword_regex` 45 → 44).
+
+  **Level 1 may report findings on a seed tree it passed before** — every row it never
+  read — and no longer reports the hyphenated values it used to.
+- **What level 1 cannot read is a finding.** A seed file PostgreSQL's parser rejects is
+  a new `SEED_UNPARSEABLE` ERROR naming the line, where the regexes read what they
+  could. `INSERT … SELECT`, `INSERT … DEFAULT VALUES`, a `COPY` in `csv` or `binary`
+  format, a `COPY` from a file and an `UPDATE` are a new `SEED_NOT_CHECKED` INFO
+  finding, where they passed in silence; any finding makes `seed validate --prep-seed`
+  exit 1. `SET`, transaction statements, `TRUNCATE`, `DELETE` and a `SELECT` write no
+  row and report nothing. A row holding more or fewer values than its statement's
+  columns is a new `SEED_ROW_WIDTH` ERROR.
+- **Every level 2 finding names the file and line its table is created on**, where it
+  named `db/schema/<table>.sql`, a path made up from the table's name; a
+  self-reference finding names the resolver that must handle it. Its messages name the
+  configured prep-seed and catalog schemas, where they said `prep_seed.` and
+  `catalog.`.
 
 - **The archaeology guard reads a phase in any case** (#310). Its patterns were
   case-sensitive, so `phase 05` in a docstring or an xfail reason named the plan

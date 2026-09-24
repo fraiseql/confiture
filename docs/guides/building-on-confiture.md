@@ -192,9 +192,11 @@ level that reads it runs, is a `SchemaError`; a `max_level` outside 1 to 5 is a
 
 confiture does not generate ids and keeps no copy of any id convention. A
 FraiseQL project takes its structured ids from **fraiseql-uuid**, which owns that
-pattern. Level 1's `VALID_UUID_PATTERN` checks only the generic shape, eight,
-four, four, four and twelve hex digits, as PostgreSQL's `uuid` input does.
-Neither reads the version or variant nibble, so fraiseql-semis's 32|16|16|64
+pattern. Level 1's `is_uuid_text` checks only what PostgreSQL's `uuid` input
+reads: 32 hex digits, 8-4-4-4-12 or with a hyphen after any group of four,
+optionally in braces — and only in a column that holds a UUID (the columns the
+schema types `uuid`, else `id` and `fk_*_id`). Neither reads the version or
+variant nibble, so fraiseql-semis's 32|16|16|64
 layout (`01234567-5001-0001-0000-000000000042`) loads and validates, although it
 is not RFC-4122. Take ids from the library that owns them, not from a table of
 codes copied into a generator: semis's own worked example uses a table code its

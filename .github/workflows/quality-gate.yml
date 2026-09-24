@@ -388,7 +388,13 @@ jobs:
           tests/unit/test_platform_dependency_order.py \
           tests/unit/test_platform_writer_facts.py \
           tests/unit/test_platform_seed_writers.py \
+          tests/unit/seed_validation/prep_seed/test_level_1_reads_statements.py \
+          tests/unit/seed_validation/prep_seed/test_level_1_seed_files.py \
+          tests/unit/seed_validation/prep_seed/test_union_uncast_nulls.py \
+          tests/unit/seed_validation/prep_seed/test_union_inline_comments.py \
           tests/unit/seed_validation/prep_seed/test_level_2_reads_one_model.py \
+          tests/unit/seed_validation/prep_seed/test_level_3_resolvers.py \
+          tests/unit/seed_validation/prep_seed/test_resolvers_by_definition.py \
           tests/contract/test_platform_surface.py \
           tests/unit/test_port_parity_corpus.py \
           -q

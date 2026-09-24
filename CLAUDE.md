@@ -504,7 +504,7 @@ confiture/
 │   │   ├── linting/              # Rule Library System (37 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
-│   │   ├── seed/                 # Seed data management and optimization (25 modules)
+│   │   ├── seed/                 # Seed data management and optimization (26 modules)
 │   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (16 modules)
 │   ├── models/                   # Confiture migration models
 │   │   ├── __init__.py           # Confiture migration models

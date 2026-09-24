@@ -1,62 +1,112 @@
-"""Level 1: Seed file validation.
+"""Level 1: each seed statement, read by PostgreSQL's parser, against the prep-seed pattern.
 
-Cycles 1-3: Validates seed files for:
-- Correct schema target (prep_seed, not final tables)
-- FK column naming (_id suffix required)
-- UUID format validation
-- UNION query type consistency
+Every ``INSERT … VALUES`` and every ``COPY … FROM stdin`` block is read
+(``seed_rows``), every row of it, and checked for:
+
+- its target: the prep-seed schema, not a final table;
+- FK column naming: ``fk_*`` ends in ``_id``;
+- UUID format, in the columns that hold a UUID — the columns the schema types
+  ``uuid`` when a schema is given, else ``id`` and ``fk_*_id`` by the prep-seed
+  convention — as PostgreSQL's ``uuid`` input reads it;
+- rows as wide as the statement's column list;
+- ``UNION`` branches: the same width, and a ``NULL`` typed alike in each.
+
+A statement level 1 cannot read is a finding saying so, never a pass.
 """
 
 from __future__ import annotations
 
-import re
+from typing import Literal
 
+from pglast import ast
+
+from confiture.core.ddl_walk import type_name
+from confiture.core.model_facts import NotInModelError, table_ref
+from confiture.core.schema_model import SchemaModel
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
     ViolationSeverity,
 )
+from confiture.core.seed.validation.prep_seed.seed_rows import (
+    Computed,
+    SeedParseError,
+    SeedStatements,
+    SeedWrite,
+    UnionQuery,
+    read_seed_statements,
+)
+from confiture.core.type_lattice import canonical_type
+
+#: What decided which columns hold a UUID: the schema's types, or the convention.
+UuidBasis = Literal["schema", "convention"]
+
+_HEX = frozenset("0123456789abcdefABCDEF")
+_UUID_BYTES = 16
+
+
+def is_uuid_text(text: str) -> bool:
+    """Whether PostgreSQL's ``uuid`` input accepts *text*.
+
+    Its reader (``string_to_uuid``): an optional pair of braces around 32 hex
+    digits, a hyphen allowed after any group of four. That is a superset of
+    RFC 4122's 8-4-4-4-12 and reads no version or variant nibble, so any layout
+    of 128 bits written that way is a UUID here — a structured id convention is
+    fraiseql-uuid's to check, not confiture's.
+    """
+    braces = text.startswith("{")
+    i = 1 if braces else 0
+    for byte in range(_UUID_BYTES):
+        pair = text[i : i + 2]
+        if len(pair) != 2 or not set(pair) <= _HEX:  # noqa: PLR2004 - two hex digits a byte
+            return False
+        i += 2
+        if byte % 2 == 1 and byte < _UUID_BYTES - 1 and text[i : i + 1] == "-":
+            i += 1
+    if braces:
+        if text[i : i + 1] != "}":
+            return False
+        i += 1
+    return i == len(text)
+
+
+def _by_convention(column: str) -> bool:
+    """The prep-seed convention's UUID columns: ``id`` and ``fk_*_id``."""
+    return column == "id" or (column.startswith("fk_") and column.endswith("_id"))
 
 
 class Level1SeedValidator:
     """Validates seed files for correct prep_seed patterns.
 
-    Checks:
-    - Seeds target prep_seed schema, not final tables
-    - FK columns use _id suffix
-    - UUID format in seed data
-    - UNION queries have consistent column types (Issue #29)
+    Args:
+        model: The schema's model. Given, a UUID column is one it types
+            ``uuid``, and a statement naming no columns takes the table's; not
+            given, the prep-seed convention names the UUID columns.
+        prep_seed_schema: The schema seeds are written into.
 
     Example:
         >>> validator = Level1SeedValidator()
         >>> violations = validator.validate_seed_file(
-        ...     sql="INSERT INTO catalog.tb_x VALUES (...)",
-        ...     file_path="db/seeds/prep/test.sql"
+        ...     sql="INSERT INTO catalog.tb_x (id) VALUES ('not-a-uuid');",
+        ...     file_path="db/seeds/prep/test.sql",
         ... )
     """
 
-    # UUID v4 format regex
-    UUID_PATTERN = re.compile(
-        r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
-        re.IGNORECASE,
-    )
+    def __init__(
+        self, model: SchemaModel | None = None, *, prep_seed_schema: str = "prep_seed"
+    ) -> None:
+        self.model = model
+        self.prep_seed_schema = prep_seed_schema
+        #: Rows read per table, as the statements name it, across every file validated.
+        self.rows_read: dict[str, int] = {}
 
-    # Valid UUID *format* (any version, for acceptance). This is a generic
-    # RFC-4122 check only — confiture does NOT own the FraiseQL structured
-    # pattern-UUID convention ({table}{type}-{func}-4{scen}-8{...}-{inst}); that
-    # lives canonically in `fraiseql-uuid` (ECO-rec2). The convention seam is
-    # guarded by tests/unit/test_uuid_convention_seam.py.
-    VALID_UUID_PATTERN = re.compile(
-        r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-        re.IGNORECASE,
-    )
+    @property
+    def uuid_basis(self) -> UuidBasis:
+        """What decides which columns hold a UUID."""
+        return "schema" if self.model is not None else "convention"
 
-    def validate_seed_file(
-        self,
-        sql: str,
-        file_path: str,
-    ) -> list[PrepSeedViolation]:
-        """Validate a seed file.
+    def validate_seed_file(self, sql: str, file_path: str) -> list[PrepSeedViolation]:
+        """Every finding in one seed file.
 
         Args:
             sql: SQL content of the seed file
@@ -65,426 +115,235 @@ class Level1SeedValidator:
         Returns:
             List of violations found
         """
+        try:
+            statements = read_seed_statements(sql)
+        except SeedParseError as exc:
+            return [
+                PrepSeedViolation(
+                    pattern=PrepSeedPattern.SEED_UNPARSEABLE,
+                    severity=ViolationSeverity.ERROR,
+                    message=f"PostgreSQL's parser rejects this seed file: {exc}",
+                    file_path=file_path,
+                    line_number=exc.line,
+                    impact="Level 1 read nothing in this file, and PostgreSQL will not load it",
+                )
+            ]
         violations: list[PrepSeedViolation] = []
+        for write in statements.writes:
+            self.rows_read[write.qualified] = self.rows_read.get(write.qualified, 0) + len(
+                write.rows
+            )
+            violations.extend(self._target(write, file_path))
+            violations.extend(self._fk_naming(write, file_path))
+            violations.extend(self._rows(write, file_path))
+        violations.extend(self._unread(statements, file_path))
+        for union in statements.unions:
+            violations.extend(_union_findings(union, file_path))
+        violations.extend(
+            PrepSeedViolation(
+                pattern=PrepSeedPattern.UNION_INLINE_COMMENT,
+                severity=ViolationSeverity.WARNING,
+                message="Inline comment after UNION breaks SQL concatenation",
+                file_path=file_path,
+                line_number=line,
+                fix_available=True,
+                suggestion="Move comment to line before UNION or remove it",
+            )
+            for line in statements.union_comment_lines
+        )
+        return sorted(violations, key=lambda v: v.line_number)
 
-        # Check INSERT schema target
-        violations.extend(self._validate_schema_target(sql, file_path))
+    def _target(self, write: SeedWrite, file_path: str) -> list[PrepSeedViolation]:
+        if write.schema is None or write.schema.lower() == self.prep_seed_schema.lower():
+            return []
+        verb = "INSERT" if write.form == "insert" else "COPY"
+        return [
+            PrepSeedViolation(
+                pattern=PrepSeedPattern.PREP_SEED_TARGET_MISMATCH,
+                severity=ViolationSeverity.ERROR,
+                message=(
+                    f"Seed {verb} targets {write.schema} schema but should target "
+                    f"{self.prep_seed_schema}"
+                ),
+                file_path=file_path,
+                line_number=write.line,
+                impact=f"Will not load data into {self.prep_seed_schema} tables",
+                fix_available=True,
+                suggestion=f"Write {write.table} into {self.prep_seed_schema}.{write.table}",
+            )
+        ]
 
-        # Check FK naming conventions
-        violations.extend(self._validate_fk_naming(sql, file_path))
+    @staticmethod
+    def _fk_naming(write: SeedWrite, file_path: str) -> list[PrepSeedViolation]:
+        return [
+            PrepSeedViolation(
+                pattern=PrepSeedPattern.INVALID_FK_NAMING,
+                severity=ViolationSeverity.WARNING,
+                message=f"FK column '{col}' missing _id suffix (should be '{col}_id')",
+                file_path=file_path,
+                line_number=write.line,
+                impact="FK column naming convention not followed for prep_seed",
+                fix_available=True,
+                suggestion=f"Rename column to '{col}_id'",
+            )
+            for col in write.columns or ()
+            if col.startswith("fk_") and not col.endswith("_id")
+        ]
 
-        # Check UUID format
-        violations.extend(self._validate_uuid_format(sql, file_path))
+    def _columns(self, write: SeedWrite) -> tuple[tuple[str, ...] | None, frozenset[str] | None]:
+        """The statement's columns, and the ones the schema types ``uuid``.
 
-        # Check UNION type consistency
-        violations.extend(self._validate_union_type_consistency(sql, file_path))
+        The columns are the statement's own, else the table's in the schema;
+        ``None`` when neither names them. The typed set is ``None`` when the
+        schema does not hold the table — the convention then names the UUID
+        columns.
+        """
+        if self.model is not None:
+            try:
+                table = self.model.tables[table_ref(self.model, write.qualified)]
+            except NotInModelError:
+                return write.columns, None
+            typed = frozenset(c.folded for c in table.columns if c.type_key == "uuid")
+            return write.columns or tuple(c.folded for c in table.columns), typed
+        return write.columns, None
 
-        # Check for inline comments after UNION ALL (Issue #40)
-        violations.extend(self._validate_union_inline_comments(sql, file_path))
-
-        # Check for uncast NULL values in UNION (Issue #40)
-        violations.extend(self._validate_union_uncast_nulls(sql, file_path))
-
-        return violations
-
-    def _validate_schema_target(self, sql: str, file_path: str) -> list[PrepSeedViolation]:
-        """Check that INSERTs target prep_seed schema."""
+    def _rows(self, write: SeedWrite, file_path: str) -> list[PrepSeedViolation]:
+        columns, typed = self._columns(write)
+        if columns is None:
+            return [
+                self._not_checked(
+                    file_path,
+                    write.line,
+                    f"{write.qualified}: the statement names no columns and the schema "
+                    "does not hold the table, so no value can be matched to its column",
+                )
+            ]
+        basis = (
+            "a column typed uuid in the schema"
+            if typed is not None
+            else "a UUID column by the prep-seed convention (id, fk_*_id)"
+        )
         violations: list[PrepSeedViolation] = []
-
-        # Find all INSERT INTO schema.table statements
-        insert_pattern = r"INSERT\s+INTO\s+(\w+)\.(\w+)"
-        for match in re.finditer(insert_pattern, sql, re.IGNORECASE):
-            schema = match.group(1)
-            line_number = sql[: match.start()].count("\n") + 1
-
-            # Check if schema is NOT prep_seed
-            if schema.lower() != "prep_seed":
+        for row in write.rows:
+            if len(row.values) != len(columns):
                 violations.append(
                     PrepSeedViolation(
-                        pattern=PrepSeedPattern.PREP_SEED_TARGET_MISMATCH,
+                        pattern=PrepSeedPattern.SEED_ROW_WIDTH,
                         severity=ViolationSeverity.ERROR,
                         message=(
-                            f"Seed INSERT targets {schema} schema but should target prep_seed"
+                            f"{write.qualified} row {row.number} holds {len(row.values)} "
+                            f"value(s) for {len(columns)} column(s)"
                         ),
                         file_path=file_path,
-                        line_number=line_number,
-                        impact="Will not load data into prep_seed tables",
-                        fix_available=True,
-                        suggestion=f"Change INSERT INTO {schema}. to INSERT INTO prep_seed.",
+                        line_number=row.line,
+                        impact="PostgreSQL refuses the row, and the statement with it",
                     )
                 )
-
-        return violations
-
-    def _validate_fk_naming(self, sql: str, file_path: str) -> list[PrepSeedViolation]:
-        """Check that FK columns use _id suffix."""
-        violations: list[PrepSeedViolation] = []
-
-        # Find INSERT INTO prep_seed.table with column list
-        insert_pattern = r"INSERT\s+INTO\s+prep_seed\.\w+\s*\((.*?)\)\s*VALUES"
-        for match in re.finditer(insert_pattern, sql, re.IGNORECASE | re.DOTALL):
-            columns_str = match.group(1)
-            line_number = sql[: match.start()].count("\n") + 1
-
-            # Parse column names
-            columns = [col.strip() for col in columns_str.split(",")]
-
-            # Check each FK column
-            violations.extend(
-                PrepSeedViolation(
-                    pattern=PrepSeedPattern.INVALID_FK_NAMING,
-                    severity=ViolationSeverity.WARNING,
-                    message=(f"FK column '{col}' missing _id suffix (should be '{col}_id')"),
-                    file_path=file_path,
-                    line_number=line_number,
-                    impact=("FK column naming convention not followed for prep_seed"),
-                    fix_available=True,
-                    suggestion=f"Rename column to '{col}_id'",
-                )
-                for col in columns
-                if col.lower().startswith("fk_") and not col.lower().endswith("_id")
-            )
-
-        return violations
-
-    def _validate_uuid_format(self, sql: str, file_path: str) -> list[PrepSeedViolation]:
-        """Check UUID format in seed data."""
-        violations: list[PrepSeedViolation] = []
-
-        # Find all quoted strings that look like they should be UUIDs
-        # Pattern: single-quoted strings in VALUES clauses
-        values_pattern = r"VALUES\s*\((.*?)\)"
-        for match in re.finditer(values_pattern, sql, re.IGNORECASE | re.DOTALL):
-            values_str = match.group(1)
-            line_number = sql[: match.start()].count("\n") + 1
-
-            # Find all quoted strings
-            quoted_pattern = r"'([^']*?)'"
-            for quoted_match in re.finditer(quoted_pattern, values_str):
-                value = quoted_match.group(1)
-
-                # Check if it looks like it should be a UUID
-                # Either: has hyphens (indicates UUID attempt), or looks like hex
-                looks_like_uuid = "-" in value or (
-                    len(value) >= 32 and all(c in "0123456789abcdefABCDEF-" for c in value)
-                )
-
-                if looks_like_uuid and not self.VALID_UUID_PATTERN.match(value):
-                    violations.append(
-                        PrepSeedViolation(
-                            pattern=PrepSeedPattern.INVALID_UUID_FORMAT,
-                            severity=ViolationSeverity.ERROR,
-                            message=(
-                                f"Invalid UUID format: '{value}' (expected: 8-4-4-4-12 hex digits)"
-                            ),
-                            file_path=file_path,
-                            line_number=line_number,
-                            impact="UUID values must be valid for data integrity",
-                            fix_available=False,
-                            suggestion="Use valid UUID format (see RFC 4122)",
-                        )
-                    )
-
-        return violations
-
-    def _validate_union_type_consistency(self, sql: str, file_path: str) -> list[PrepSeedViolation]:
-        """Check UNION queries have consistent column types.
-
-        Detects cases where UNION branches have type mismatches, particularly:
-        - NULL vs NULL::type (most common from Issue #29)
-        - Untyped vs typed literals
-
-        Args:
-            sql: SQL content of seed file
-            file_path: Path to seed file for error reporting
-
-        Returns:
-            List of violations found
-        """
-        violations: list[PrepSeedViolation] = []
-
-        # Pre-filter: Skip if no UNION keyword (fast path)
-        if not re.search(r"\bUNION\s+(?:ALL\s+)?", sql, re.IGNORECASE):
-            return violations
-
-        # Find all UNION query blocks
-        # Pattern: SELECT ... UNION [ALL] SELECT ...
-        union_pattern = r"(?:INSERT\s+INTO\s+\w+\.\w+\s*\([^)]*\)\s+)?(SELECT\s+[^;]+?\s+UNION\s+(?:ALL\s+)?SELECT\s+[^;]+)"
-        for match in re.finditer(union_pattern, sql, re.IGNORECASE | re.DOTALL):
-            full_query = match.group(1)
-            line_number = sql[: match.start()].count("\n") + 1
-
-            # Extract branches: split by UNION or UNION ALL
-            branches = re.split(r"\s+UNION\s+(?:ALL\s+)?", full_query, flags=re.IGNORECASE)
-
-            if len(branches) < 2:
                 continue
-
-            # Extract columns from each branch
-            base_columns = self._extract_select_columns_from_text(branches[0])
-
-            for branch_num, branch in enumerate(branches[1:], start=2):
-                branch_columns = self._extract_select_columns_from_text(branch)
-
-                # Check column count
-                if len(base_columns) != len(branch_columns):
-                    violations.append(
-                        PrepSeedViolation(
-                            pattern=PrepSeedPattern.UNION_TYPE_MISMATCH,
-                            severity=ViolationSeverity.ERROR,
-                            message=(
-                                f"UNION branch {branch_num} has {len(branch_columns)} columns "
-                                f"but base branch has {len(base_columns)} columns"
-                            ),
-                            file_path=file_path,
-                            line_number=line_number,
-                            impact="PostgreSQL will reject: 'each UNION query must have same number of columns'",
-                            fix_available=False,
-                            suggestion="Ensure all UNION branches have same column count",
-                        )
-                    )
+            for column, value in zip(columns, row.values, strict=True):
+                holds_uuid = column in typed if typed is not None else _by_convention(column)
+                if not holds_uuid or value is None or isinstance(value, Computed):
                     continue
-
-                # Check type consistency for each column
-                for col_idx, (base_col, branch_col) in enumerate(
-                    zip(base_columns, branch_columns, strict=True), start=1
-                ):
-                    type_issue = self._detect_type_mismatch(base_col, branch_col)
-
-                    if type_issue:
-                        violations.append(
-                            PrepSeedViolation(
-                                pattern=PrepSeedPattern.UNION_TYPE_MISMATCH,
-                                severity=ViolationSeverity.ERROR,
-                                message=(
-                                    f"UNION branch {branch_num} column {col_idx}: {type_issue}"
-                                ),
-                                file_path=file_path,
-                                line_number=line_number,
-                                impact="PostgreSQL will reject: 'UNION types cannot be matched'",
-                                fix_available=True,
-                                suggestion=f"Change '{branch_col.strip()}' to '{base_col.strip()}' for type consistency",
-                            )
-                        )
-
+                if is_uuid_text(value):
+                    continue
+                violations.append(
+                    PrepSeedViolation(
+                        pattern=PrepSeedPattern.INVALID_UUID_FORMAT,
+                        severity=ViolationSeverity.ERROR,
+                        message=(
+                            f"Invalid UUID '{value}' in {write.qualified}.{column}, "
+                            f"row {row.number} ({basis}): expected 32 hex digits, "
+                            "8-4-4-4-12"
+                        ),
+                        file_path=file_path,
+                        line_number=row.line,
+                        impact="PostgreSQL's uuid input refuses the value",
+                        fix_available=False,
+                        suggestion="Use valid UUID format (see RFC 4122)",
+                    )
+                )
         return violations
 
-    def _extract_select_columns_from_text(self, select_clause: str) -> list[str]:
-        """Extract column expressions from a SELECT clause text.
-
-        Args:
-            select_clause: Text of SELECT clause (e.g., "SELECT col1, NULL::type, col2")
-
-        Returns:
-            List of column expression strings
-        """
-        # Remove leading/trailing whitespace
-        clause = select_clause.strip()
-
-        # Remove SELECT keyword
-        clause = re.sub(r"^\s*SELECT\s+", "", clause, flags=re.IGNORECASE)
-
-        # Remove FROM and everything after
-        clause = re.sub(
-            r"\s+(FROM|WHERE|GROUP|HAVING|ORDER|LIMIT).*$",
-            "",
-            clause,
-            flags=re.IGNORECASE | re.DOTALL,
+    @staticmethod
+    def _not_checked(file_path: str, line: int, reason: str) -> PrepSeedViolation:
+        return PrepSeedViolation(
+            pattern=PrepSeedPattern.SEED_NOT_CHECKED,
+            severity=ViolationSeverity.INFO,
+            message=f"Not checked: {reason}",
+            file_path=file_path,
+            line_number=line,
+            impact="Level 1 did not check the values this statement writes",
         )
 
-        # Split by comma, respecting nested parentheses
-        columns: list[str] = []
-        current_col: list[str] = []
-        paren_depth = 0
+    def _unread(self, statements: SeedStatements, file_path: str) -> list[PrepSeedViolation]:
+        return [self._not_checked(file_path, u.line, u.reason) for u in statements.unread]
 
-        for char in clause:
-            if char == "(":
-                paren_depth += 1
-                current_col.append(char)
-            elif char == ")":
-                paren_depth -= 1
-                current_col.append(char)
-            elif char == "," and paren_depth == 0:
-                # Column separator
-                col_text = "".join(current_col).strip()
-                if col_text:
-                    columns.append(col_text)
-                current_col = []
-            else:
-                current_col.append(char)
 
-        # Add final column
-        col_text = "".join(current_col).strip()
-        if col_text:
-            columns.append(col_text)
+def _null_type(expr: object) -> tuple[bool, str | None]:
+    """Whether *expr* is a NULL, and the type it is cast to (``None`` for a bare one)."""
+    if isinstance(expr, ast.A_Const):
+        return bool(expr.isnull), None
+    if isinstance(expr, ast.TypeCast):
+        is_null, _ = _null_type(expr.arg)
+        return (True, canonical_type(type_name(expr.typeName))) if is_null else (False, None)
+    return False, None
 
-        return columns
 
-    def _detect_type_mismatch(self, col1: str, col2: str) -> str | None:
-        """Detect type inconsistency between two column expressions.
+def _union_findings(union: UnionQuery, file_path: str) -> list[PrepSeedViolation]:
+    """A UNION's branches against its first: the same width, and each NULL typed alike."""
+    violations: list[PrepSeedViolation] = []
 
-        Focus on Issue #29 pattern: NULL vs NULL::type
-
-        Args:
-            col1: Column expression from base branch
-            col2: Column expression from comparison branch
-
-        Returns:
-            Description of mismatch if found, None if consistent
-        """
-        col1_clean = col1.strip()
-        col2_clean = col2.strip()
-
-        # Pattern: NULL vs NULL::type
-        null_pattern = r"^NULL(?:::(\w+(?:\(\d+(?:,\s*\d+)?\))?))?$"
-        match1 = re.match(null_pattern, col1_clean, re.IGNORECASE)
-        match2 = re.match(null_pattern, col2_clean, re.IGNORECASE)
-
-        if match1 and match2:
-            type1 = match1.group(1)  # None if untyped NULL
-            type2 = match2.group(1)
-
-            # One typed, one untyped
-            if (type1 is None) != (type2 is None):
-                typed = type1 or type2
-                return f"NULL type mismatch: 'NULL' vs 'NULL::{typed}'"
-
-            # Both typed but different types
-            if type1 and type2 and type1.lower() != type2.lower():
-                return f"NULL type mismatch: 'NULL::{type1}' vs 'NULL::{type2}'"
-
-        return None  # No mismatch detected
-
-    def _validate_union_inline_comments(
-        self,
-        sql: str,
-        file_path: str,
-    ) -> list[PrepSeedViolation]:
-        """Check for inline comments after UNION that break concatenation.
-
-        Detects pattern: UNION [ALL] -- comment (inline comment on same line as UNION)
-
-        Args:
-            sql: SQL content of seed file
-            file_path: Path to seed file for error reporting
-
-        Returns:
-            List of violations found
-        """
-        violations: list[PrepSeedViolation] = []
-
-        # Pre-filter: Skip if no UNION keyword (fast path)
-        if not re.search(r"\bUNION\s+(?:ALL\s+)?", sql, re.IGNORECASE):
-            return violations
-
-        # Pattern: UNION [ALL] followed by inline comment
-        # Match both "UNION --" and "UNION ALL --"
-        inline_comment_pattern = r"\bUNION(?:\s+ALL)?\s+--"
-
-        # Skip over strings to avoid matching inside string literals
-        in_string = False
-        quote_char = None
-        i = 0
-
-        while i < len(sql):
-            # Track string boundaries
-            if sql[i] in ("'", '"') and (i == 0 or sql[i - 1] != "\\"):
-                if not in_string:
-                    in_string = True
-                    quote_char = sql[i]
-                elif sql[i] == quote_char:
-                    in_string = False
-                    quote_char = None
-                i += 1
-                continue
-
-            # Check for pattern outside of strings
-            if not in_string:
-                match = re.match(inline_comment_pattern, sql[i:], re.IGNORECASE)
-                if match:
-                    line_number = sql[:i].count("\n") + 1
-                    violations.append(
-                        PrepSeedViolation(
-                            pattern=PrepSeedPattern.UNION_INLINE_COMMENT,
-                            severity=ViolationSeverity.WARNING,
-                            message="Inline comment after UNION breaks SQL concatenation",
-                            file_path=file_path,
-                            line_number=line_number,
-                            fix_available=True,
-                            suggestion="Move comment to line before UNION or remove it",
-                        )
-                    )
-                    i += len(match.group(0))
-                    continue
-
-            i += 1
-
-        return violations
-
-    def _validate_union_uncast_nulls(
-        self,
-        sql: str,
-        file_path: str,
-    ) -> list[PrepSeedViolation]:
-        """Check for bare NULL values in UNION without type cast.
-
-        Detects bare NULL (not NULL::type) in UNION branches. PostgreSQL requires
-        all UNION branches to have compatible types; bare NULL causes type inference
-        errors.
-
-        Args:
-            sql: SQL content of seed file
-            file_path: Path to seed file for error reporting
-
-        Returns:
-            List of violations found
-        """
-        violations: list[PrepSeedViolation] = []
-
-        # Pre-filter: Skip if no UNION keyword
-        if not re.search(r"\bUNION\s+(?:ALL\s+)?", sql, re.IGNORECASE):
-            return violations
-
-        # Find all UNION query blocks (with or without INSERT INTO)
-        union_pattern = r"(SELECT\s+[^;]+?\s+UNION\s+(?:ALL\s+)?SELECT\s+[^;]+)"
-        for match in re.finditer(union_pattern, sql, re.IGNORECASE | re.DOTALL):
-            full_query = match.group(1)
-            line_number = sql[: match.start()].count("\n") + 1
-
-            # Extract branches: split by UNION or UNION ALL
-            branches = re.split(
-                r"\s+UNION\s+(?:ALL\s+)?",
-                full_query,
-                flags=re.IGNORECASE,
+    def finding(
+        pattern: PrepSeedPattern, message: str, impact: str, suggestion: str, *, fixable: bool
+    ) -> None:
+        violations.append(
+            PrepSeedViolation(
+                pattern=pattern,
+                severity=ViolationSeverity.ERROR,
+                message=message,
+                file_path=file_path,
+                line_number=union.line,
+                impact=impact,
+                fix_available=fixable,
+                suggestion=suggestion,
             )
+        )
 
-            if len(branches) < 2:
+    base = union.branches[0]
+    for number, branch in enumerate(union.branches, start=1):
+        for col, expr in enumerate(branch, start=1):
+            if _null_type(expr) == (True, None):
+                finding(
+                    PrepSeedPattern.UNION_UNCAST_NULL,
+                    f"UNION branch {number} column {col}: NULL without type cast",
+                    "PostgreSQL cannot infer type for bare NULL in UNION",
+                    "Change 'NULL' to 'NULL::type' (e.g., NULL::timestamp)",
+                    fixable=True,
+                )
+        if number == 1:
+            continue
+        if len(branch) != len(base):
+            finding(
+                PrepSeedPattern.UNION_TYPE_MISMATCH,
+                f"UNION branch {number} has {len(branch)} columns "
+                f"but base branch has {len(base)} columns",
+                "PostgreSQL will reject: 'each UNION query must have same number of columns'",
+                "Ensure all UNION branches have same column count",
+                fixable=False,
+            )
+            continue
+        for col, (first, other) in enumerate(zip(base, branch, strict=True), start=1):
+            first_null, first_type = _null_type(first)
+            other_null, other_type = _null_type(other)
+            if not (first_null and other_null) or first_type == other_type:
                 continue
-
-            # Check each branch for bare NULLs
-            for branch_num, branch in enumerate(branches, start=1):
-                branch_columns = self._extract_select_columns_from_text(branch)
-
-                for col_idx, col_expr in enumerate(branch_columns, start=1):
-                    # Detect bare NULL (not NULL::type)
-                    col_clean = col_expr.strip()
-                    # Check for NULL at the start (may have alias after it)
-                    # Match: NULL or NULL AS alias or NULL as alias
-                    if re.match(r"^NULL(?:\s+AS\s+\w+)?$", col_clean, re.IGNORECASE):
-                        violations.append(
-                            PrepSeedViolation(
-                                pattern=PrepSeedPattern.UNION_UNCAST_NULL,
-                                severity=ViolationSeverity.ERROR,
-                                message=(
-                                    f"UNION branch {branch_num} column {col_idx}: "
-                                    "NULL without type cast"
-                                ),
-                                file_path=file_path,
-                                line_number=line_number,
-                                impact="PostgreSQL cannot infer type for bare NULL in UNION",
-                                fix_available=True,
-                                suggestion="Change 'NULL' to 'NULL::type' (e.g., NULL::timestamp)",
-                            )
-                        )
-
-        return violations
+            spelled = [f"NULL::{t}" if t else "NULL" for t in (first_type, other_type)]
+            finding(
+                PrepSeedPattern.UNION_TYPE_MISMATCH,
+                f"UNION branch {number} column {col}: NULL type mismatch: "
+                f"'{spelled[0]}' vs '{spelled[1]}'",
+                "PostgreSQL will reject: 'UNION types cannot be matched'",
+                f"Change '{spelled[1]}' to '{spelled[0]}' for type consistency",
+                fixable=True,
+            )
+    return violations
