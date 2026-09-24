@@ -842,8 +842,9 @@ IF v_ok <> 2 THEN RAISE EXCEPTION 'expected 2 fields, got %', v_ok; END IF;
 raises on the preflight every time, however correct the migration's actual
 work — and a deploy gated on the preflight aborts with it.
 
-`--check-data-assertions` finds that shape and names the file, the line, the
-variable and the relation it counted:
+`--check-data-assertions` finds that shape — and its twin
+`v_ok := (SELECT count(*) FROM catalog.tb_field …)` — and names the file, the
+line, the variable and the relation it counted:
 
 ```
 ⚠️  1 data assertion(s) inside up() — `migrate preflight` runs up() against a schema-only database
@@ -932,8 +933,8 @@ worth running at different moments, not instead of one another.
 It is static — it never connects. `.py` migrations resolve through the same
 static evaluator `--idempotent` uses, so `self.execute(SOME_CONSTANT)` is read
 and a genuinely dynamic call is *refused* rather than guessed. A refused call,
-or a PL/pgSQL body the compiler cannot read, is reported under `unanalysed`
-rather than counted as clean — "no assertions here" and "no idea" are
+a PL/pgSQL body the compiler cannot read, or a statement in one that confiture
+cannot parse, is reported under `unanalysed` rather than counted as clean — "no assertions here" and "no idea" are
 different answers.
 
 Findings in a `.py` migration point at the `self.execute(...)` call, because a

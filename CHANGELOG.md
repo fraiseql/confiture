@@ -99,6 +99,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `EXECUTE`, and the body of a `FOR … IN EXECUTE` loop, were marked dynamic with the
   string they iterate and dropped. A statement the reader cannot parse is a `degraded`
   entry naming the routine, file and line.
+- **`migrate validate --check-data-assertions` sees a count assigned with `:=`**.
+  `v := (SELECT count(*) FROM t); IF v > 0 THEN RAISE EXCEPTION …` is reported like its
+  `SELECT count(*) INTO v` twin, and a statement in a body that cannot be parsed puts
+  the file under `unanalysed`, where it was read as having no assertion. The check may
+  report findings it did not before.
 
 - **The archaeology guard reads a phase in any case** (#310). Its patterns were
   case-sensitive, so `phase 05` in a docstring or an xfail reason named the plan
