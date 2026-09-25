@@ -200,7 +200,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### What does not port
 
-6,791 lines, 9% of `core/`.
+6,832 lines, 9% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -211,6 +211,6 @@ duplicate readers were deleted. The count below is what the port translates.
 | `idempotency/static_eval/` | 1,730 | Python-bound |
 | `import_checker.py` | 493 | Python-bound |
 | `mcp_http.py` | 191 | Python-bound |
-| `mcp_server.py` | 383 | Python-bound |
+| `mcp_server.py` | 424 | Python-bound |
 
 <!-- END GENERATED: port-boundary -->

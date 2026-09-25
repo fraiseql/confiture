@@ -85,17 +85,21 @@ Privilege keywords are validated against the standard set: `SELECT`, `INSERT`, `
 
 ```sql
 -- Step 1: CREATE ROLE (only if absent from pg_roles)
-CREATE ROLE "migrator" WITH LOGIN NOCREATEROLE;
+CREATE ROLE migrator WITH LOGIN NOCREATEROLE;
 
 -- Step 2: REASSIGN OWNED (only if postgres-owned objects exist)
-REASSIGN OWNED BY postgres TO "migrator";
+REASSIGN OWNED BY postgres TO migrator;
 
 -- Step 3: ALTER DEFAULT PRIVILEGES (one per schema/role pair)
-ALTER DEFAULT PRIVILEGES FOR ROLE "migrator"
-  IN SCHEMA "tenant"
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "app";
+ALTER DEFAULT PRIVILEGES FOR ROLE migrator
+  IN SCHEMA tenant
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app;
 -- … more ALTER DEFAULT PRIVILEGES statements …
 ```
+
+An identifier is quoted only where PostgreSQL needs it: a mixed-case role configured as
+`expected_owner: '"AppOwner"'` is probed in `pg_roles` as `AppOwner` and written
+`CREATE ROLE "AppOwner"`.
 
 The entire plan runs inside a single transaction.  On any failure, the executor rolls back and raises `BootstrapError`.
 
