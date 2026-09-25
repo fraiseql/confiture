@@ -145,3 +145,70 @@ class TestThePayloadAndTheGate:
             has_ddl_changes=False, has_new_migrations=False, warnings=diff.warnings
         )
         assert [w["code"] for w in report.to_dict()["warnings"]] == ["DIFFER_402"]
+
+
+class TestAnObjectComparedByDefinitionCollapsesToo:
+    """A view, routine or trigger defined twice is one object, reported once (#407).
+
+    ``ddl_objects`` kept every definition of a bucket, so a view defined in two
+    files was two ``ADD_VIEW`` changes and two ``CREATE`` statements in a
+    generated migration, and no ``DIFFER_402`` said why.
+    """
+
+    TABLE = "CREATE TABLE t (id INT, a TEXT);\n"
+
+    def test_a_view_defined_twice_is_added_once(self) -> None:
+        new = self.TABLE + "CREATE VIEW v AS SELECT id FROM t;\n" * 2
+        changes = SchemaDiffer().compare(self.TABLE, new).changes
+        assert [str(c) for c in changes] == ["ADD VIEW v"]
+
+    def test_the_view_defined_twice_is_reported(self) -> None:
+        parsed = SchemaDiffer().parse_schema(
+            self.TABLE + "CREATE VIEW v AS SELECT id FROM t;\n" * 2
+        )
+        (warning,) = parsed.warnings
+        assert warning.code == "DIFFER_402"
+        assert warning.message.startswith("View 'v' is defined 2 times")
+        assert "fails the build" in warning.message
+
+    def test_a_later_or_replace_wins(self) -> None:
+        """The build runs both, so the object is the second definition."""
+        old = self.TABLE + "CREATE VIEW v AS SELECT id FROM t;\n"
+        new = old + "CREATE OR REPLACE VIEW v AS SELECT id, a FROM t;\n"
+        (change,) = SchemaDiffer().compare(old, new).changes
+        assert str(change) == "REPLACE VIEW v"
+        (warning,) = SchemaDiffer().parse_schema(new).warnings
+        assert "the comparison used the last definition" in warning.message
+
+    def test_a_plain_second_create_keeps_the_first(self) -> None:
+        """The build fails at the second statement, so the first is what exists."""
+        old = self.TABLE + "CREATE VIEW v AS SELECT id FROM t;\n"
+        new = old + "CREATE VIEW v AS SELECT id, a FROM t;\n"
+        assert SchemaDiffer().compare(old, new).changes == []
+
+    def test_a_routine_defined_twice_is_one_routine(self) -> None:
+        body = "CREATE OR REPLACE FUNCTION f(x bigint) RETURNS int LANGUAGE sql AS 'SELECT 1';\n"
+        respelled = body.replace("bigint", "int8")
+        changes = SchemaDiffer().compare("", body + respelled).changes
+        assert [str(c) for c in changes] == ["ADD FUNCTION f(bigint)"]
+        (warning,) = SchemaDiffer().parse_schema(body + respelled).warnings
+        # Named as the definition the build keeps: the second, spelled int8.
+        assert warning.message.startswith("Function 'f(int8)' is defined 2 times")
+
+    def test_two_overloads_are_not_a_duplicate(self) -> None:
+        """The control: a bucket holds overloads, and they stay two."""
+        sql = (
+            "CREATE FUNCTION f(x bigint) RETURNS int LANGUAGE sql AS 'SELECT 1';\n"
+            "CREATE FUNCTION f(x text) RETURNS int LANGUAGE sql AS 'SELECT 1';\n"
+        )
+        parsed = SchemaDiffer().parse_schema(sql)
+        assert parsed.warnings == []
+        assert len(SchemaDiffer().compare("", sql).changes) == 2
+
+    def test_a_trigger_defined_twice_is_one_trigger(self) -> None:
+        trigger = (
+            "CREATE FUNCTION tf() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RETURN NEW; END';\n"
+        )
+        once = "CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW EXECUTE FUNCTION tf();\n"
+        changes = SchemaDiffer().compare(self.TABLE + trigger, self.TABLE + trigger + once * 2)
+        assert [str(c) for c in changes.changes] == ["ADD TRIGGER t.trg"]

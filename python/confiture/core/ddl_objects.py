@@ -31,6 +31,7 @@ import pglast
 from pglast.stream import RawStream
 
 from confiture.core.ddl_walk import ObjectEdit, object_edits, object_kinds
+from confiture.core.linting.duplicates import CreateFlags, wins
 from confiture.core.linting.inventory import (
     DEFAULT_SCHEMA,
     KIND_KEYWORD,
@@ -518,17 +519,80 @@ def objects_in(sql: str, raws: list[Any]) -> dict[ObjectRef, list[DDLObject]]:
     still said ``v`` would put the wrong name in a generated migration. So a tree
     that renames a tracked object declares it under its old name here, while the
     lint inventory — which holds no definition to go stale — folds the rename.
+
+    An object defined more than once is **one** object: the definition a build
+    keeps (``duplicates.wins``, as the schema model decides), never each of them.
+    :func:`declared_objects` also says which were collapsed.
     """
+    return declared_objects(sql, raws).objects
+
+
+@dataclass(frozen=True)
+class Collapsed:
+    """One object a tree defines more than once: the definition kept, and why.
+
+    ``verdict`` is ``duplicates.wins``' answer — ``last``, ``first`` or
+    ``conflict`` — so a warning can say what the build does with the others.
+    """
+
+    kept: DDLObject
+    count: int
+    verdict: str
+
+
+@dataclass(frozen=True)
+class Declared:
+    """What a tree declares, bucketed by reference, and the definitions folded into one."""
+
+    objects: dict[ObjectRef, list[DDLObject]]
+    collapsed: tuple[Collapsed, ...]
+
+
+def _flags(stmt: Any) -> CreateFlags:
+    """How the statement was written: ``OR REPLACE``, ``IF NOT EXISTS``, or neither."""
+    return CreateFlags(
+        replace=bool(getattr(stmt, "replace", False)),
+        if_not_exists=bool(getattr(stmt, "if_not_exists", False)),
+    )
+
+
+def declared_objects(sql: str, raws: list[Any]) -> Declared:
+    """:func:`objects_in`, with the objects it had to fold into one reported beside it."""
     objects: dict[ObjectRef, list[DDLObject]] = {}
+    # Keyed by identity: two definitions written alike are equal, and are still two.
+    flags: dict[int, CreateFlags] = {}
     for raw in raws:
         found = object_of(sql, raw)
         if found is not None:
             objects.setdefault(found.ref, []).append(found)
+            flags[id(found)] = _flags(raw.stmt)
             continue
         for edit in object_edits(raw.stmt):
             if edit.kind == "drop":
                 _apply_drop(objects, edit)
-    return objects
+    collapsed: list[Collapsed] = []
+    for ref, bucket in objects.items():
+        kept: list[DDLObject] = []
+        for group in _same_objects(bucket):
+            verdict = wins([flags[id(obj)] for obj in group]) if len(group) > 1 else "first"
+            keep = group[-1] if verdict == "last" else group[0]
+            if len(group) > 1:
+                collapsed.append(Collapsed(kept=keep, count=len(group), verdict=verdict))
+            kept.append(keep)
+        objects[ref] = kept
+    return Declared(objects=objects, collapsed=tuple(collapsed))
+
+
+def _same_objects(bucket: list[DDLObject]) -> list[list[DDLObject]]:
+    """A bucket's definitions grouped into objects, in source order: one group per signature."""
+    groups: list[list[DDLObject]] = []
+    for obj in bucket:
+        group = next((g for g in groups if signatures_match(g[0].signature, obj.signature)), None)
+        if group is None:
+            groups.append([obj])
+        else:
+            group.append(obj)
+    return groups
 
 
 def pair_definitions(

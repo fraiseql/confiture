@@ -25,6 +25,7 @@ import pglast.parser
 
 from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
+from confiture.core.ddl_objects import declared_objects
 from confiture.core.differ import SchemaDiffer, duplicate_warnings
 from confiture.core.linting.inventory import (
     Inventory,
@@ -201,7 +202,7 @@ def read_schema(
         raise _parse_error(segments, sql, exc) from exc
     return SchemaRead(
         model=with_triggers(schema_model(inventory), blanked, raws),
-        warnings=duplicate_warnings(inventory),
+        warnings=duplicate_warnings(inventory, declared_objects(blanked, raws).collapsed),
         text=blanked,
         definitions=_definitions(inventory, raws, segments),
         _segments=tuple(segments),
