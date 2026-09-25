@@ -40,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     default. The DDL reader also took an unwritten start to be 1 for every sequence.
     A descending sequence starts at its MAXVALUE and an ascending one at its
     MINVALUE, and the model now says so.
+  - `ALTER COLUMN … TYPE` writes `USING <column>::<type>` where PostgreSQL has no
+    assignment cast, with a `-- review:` line saying that a value that does not cast
+    fails the migration. `text` → `integer` failed at apply without it. Where an
+    assignment cast exists (within the numeric, string or date/time family, or to
+    any string type) no `USING` is written. A narrowing such as `varchar(100)` →
+    `varchar(50)` then refuses a value that is too long, where an explicit cast
+    would silently truncate it. `type_lattice.has_assignment_cast` answers which
+    case applies.
 
 ## [1.20.0] - 2026-09-25
 

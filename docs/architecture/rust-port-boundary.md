@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-23,763 lines, 33% of `core/`.
+23,811 lines, 33% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -94,7 +94,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `ddl_walk.py` | 1,361 | DDL transform |
 | `destructive.py` | 170 | DDL transform |
 | `differ.py` | 708 | DDL transform |
-| `differ_sql.py` | 529 | DDL transform |
+| `differ_sql.py` | 550 | DDL transform |
 | `expand_contract.py` | 273 | DDL transform |
 | `fk_extractor.py` | 458 | DDL transform |
 | `function_body_checker.py` | 210 | DDL transform |
@@ -119,7 +119,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `sql_lexer.py` | 637 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |
-| `type_lattice.py` | 484 | DDL transform |
+| `type_lattice.py` | 511 | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 

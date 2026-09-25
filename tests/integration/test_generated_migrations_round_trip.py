@@ -116,3 +116,34 @@ class TestEnumsAndSequences:
             "SELECT increment_by, start_value, min_value, max_value FROM pg_sequences"
             " WHERE sequencename = 'desc_seq'"
         ).fetchone() == (-2, 0, -(2**63), 0)
+
+
+class TestTypeChanges:
+    """``text`` → ``integer`` has no assignment cast; the generated ``USING`` supplies one."""
+
+    def test_a_cast_type_change_round_trips_with_its_rows(
+        self, fresh_database: str, tmp_path: Path
+    ) -> None:
+        old, new = "CREATE TABLE t (n TEXT);\n", "CREATE TABLE t (n INTEGER);\n"
+        up, down = _generated(tmp_path, old, new)
+        conn = psycopg.connect(fresh_database, autocommit=True)
+        _apply(conn, old)
+        conn.execute("INSERT INTO t VALUES ('7'), ('42')")
+        _apply(conn, up)
+        assert conn.execute("SELECT sum(n) FROM t").fetchone() == (49,)
+        _apply(conn, down)
+        _apply(conn, up)
+        assert conn.execute("SELECT pg_typeof(n)::text FROM t LIMIT 1").fetchone() == ("integer",)
+
+    def test_a_narrowing_refuses_a_value_rather_than_truncate_it(
+        self, fresh_database: str, tmp_path: Path
+    ) -> None:
+        """No ``USING``: an explicit ``::varchar(3)`` would cut ``'abcdef'`` to ``'abc'``."""
+        old, new = "CREATE TABLE t (s VARCHAR(10));\n", "CREATE TABLE t (s VARCHAR(3));\n"
+        up, _ = _generated(tmp_path, old, new)
+        conn = psycopg.connect(fresh_database, autocommit=True)
+        _apply(conn, old)
+        conn.execute("INSERT INTO t VALUES ('abcdef')")
+        with pytest.raises(psycopg.errors.StringDataRightTruncation):
+            _apply(conn, up)
+        assert conn.execute("SELECT s FROM t").fetchone() == ("abcdef",)

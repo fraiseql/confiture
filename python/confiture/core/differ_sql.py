@@ -57,7 +57,8 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.core.schema_model import Constraint, EnumType, Sequence, Table
+from confiture.core.schema_model import Column, Constraint, EnumType, Sequence, Table
+from confiture.core.type_lattice import has_assignment_cast
 
 #: The kinds compared by definition that a migration is derived for, created and
 #: dropped — the ones ``migrate diff --generate`` writes (#288). The rest —
@@ -183,6 +184,26 @@ def _default(table: str, column: str, default: str | None) -> str:
     return f"ALTER TABLE {table} ALTER COLUMN {column} {clause};\n"
 
 
+def _retype(table: str, old: Column, new: Column) -> str:
+    """``ALTER COLUMN … TYPE``, with ``USING`` where PostgreSQL has no assignment cast.
+
+    Where it has one — within a family, or to a string type — the statement needs
+    none, and must not have one: an explicit ``::varchar(50)`` truncates a value
+    the assignment cast would refuse. Where it has none (``text`` → ``integer``),
+    the statement fails without ``USING``, so the value is cast explicitly and a
+    review line says the cast can fail on data.
+    """
+    before, after = column_type(old), column_type(new)
+    statement = f"ALTER TABLE {table} ALTER COLUMN {old.folded} TYPE {after}"
+    if has_assignment_cast(before, after):
+        return f"{statement};\n"
+    return (
+        f"-- review: {before} to {after} has no assignment cast; each value is cast"
+        " explicitly, and one that does not cast fails the migration\n"
+        f"{statement} USING {old.folded}::{after};\n"
+    )
+
+
 def _column_up(change: ColumnChange) -> str:
     match change:
         case ColumnAdded(table, column):
@@ -192,7 +213,7 @@ def _column_up(change: ColumnChange) -> str:
         case ColumnRenamed(table, old, new):
             return f"ALTER TABLE {table} RENAME COLUMN {old} TO {new};\n"
         case ColumnTypeChanged(table, old, new):
-            return f"ALTER TABLE {table} ALTER COLUMN {old.folded} TYPE {column_type(new)};\n"
+            return _retype(table, old, new)
         case ColumnNullabilityChanged(table, column, nullable):
             return _nullability(table, column, nullable=nullable)
         case ColumnDefaultChanged(table, column, _, new):
@@ -210,8 +231,8 @@ def _column_down(change: ColumnChange) -> str:
             return f"ALTER TABLE {table} ADD COLUMN {column.folded} {column_body(column)};\n"
         case ColumnRenamed(table, old, new):
             return f"ALTER TABLE {table} RENAME COLUMN {new} TO {old};\n"
-        case ColumnTypeChanged(table, old, _):
-            return f"ALTER TABLE {table} ALTER COLUMN {old.folded} TYPE {column_type(old)};\n"
+        case ColumnTypeChanged(table, old, new):
+            return _retype(table, new, old)
         case ColumnNullabilityChanged(table, column, nullable):
             return _nullability(table, column, nullable=not nullable)
         case ColumnDefaultChanged(table, column, old, _):

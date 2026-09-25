@@ -275,6 +275,33 @@ def _cross_name(old: SqlType, new: SqlType) -> TypeChange:
     return TypeChange.LATERAL
 
 
+_NUMERIC = _EXACT_NUMERIC | frozenset(_FLOAT_WIDTHS)
+_TEMPORAL = frozenset({*_TEMPORAL_WIDTHS, "timestamptz"})
+#: Families whose members PostgreSQL casts to one another by assignment (``pg_cast``
+#: context ``a`` or ``i``), length and precision coercion included.
+_ASSIGNMENT_FAMILIES = (_NUMERIC, _STRING, _TEMPORAL)
+
+
+def has_assignment_cast(old: str | None, new: str | None) -> bool:
+    """Whether ``ALTER COLUMN … TYPE new`` converts an ``old`` column without ``USING``.
+
+    PostgreSQL converts by assignment within the numeric, string and date/time
+    families, and *to* any string type (an I/O conversion to a string type is an
+    assignment cast). From a string type to anything else, or across unrelated
+    types, the cast is explicit only, and the statement fails without ``USING``.
+    An array converts as its element does, at the same dimensions. A missing or
+    unreadable side answers ``False``: never assume the cast is there.
+    """
+    old_type, new_type = parse_type(old), parse_type(new)
+    if old_type is None or new_type is None or old_type.dimensions != new_type.dimensions:
+        return False
+    if old_type.name == new_type.name or new_type.name in _STRING:
+        return True
+    return any(
+        old_type.name in family and new_type.name in family for family in _ASSIGNMENT_FAMILIES
+    )
+
+
 def _string_length(sql_type: SqlType) -> int | None:
     """`text` is unconstrained; `varchar`/`char` carry their declared length."""
     return None if sql_type.name == "text" else sql_type.precision

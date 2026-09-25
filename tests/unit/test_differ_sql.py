@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import (
     ColumnAdded,
@@ -63,11 +65,32 @@ def test_a_dropped_column_is_written():
     assert sql == "ALTER TABLE users DROP COLUMN bio;\n"
 
 
-def test_alter_column_type_writes_the_new_type():
+def test_a_type_change_with_no_assignment_cast_casts_with_using():
+    """#335: ``text`` → ``integer`` has no assignment cast, so without ``USING`` it fails."""
     change = ColumnTypeChanged("users", spelled("age", "text"), spelled("age", "integer"))
-    gen = DifferSQLGenerator()
-    sql = gen.generate_up(change)
-    assert sql == "ALTER TABLE users ALTER COLUMN age TYPE integer;\n"
+    assert DifferSQLGenerator().generate_up(change) == (
+        "-- review: text to integer has no assignment cast; each value is cast explicitly,"
+        " and one that does not cast fails the migration\n"
+        "ALTER TABLE users ALTER COLUMN age TYPE integer USING age::integer;\n"
+    )
+
+
+def test_its_down_is_an_assignment_and_writes_no_using():
+    change = ColumnTypeChanged("users", spelled("age", "text"), spelled("age", "integer"))
+    assert DifferSQLGenerator().generate_down(change) == (
+        "ALTER TABLE users ALTER COLUMN age TYPE text;\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("old", "new"), [("integer", "bigint"), ("bigint", "integer"), ("varchar(100)", "varchar(50)")]
+)
+def test_a_change_within_a_family_writes_no_using(old, new):
+    """A narrowing too: ``::varchar(50)`` would truncate what the assignment cast refuses."""
+    change = ColumnTypeChanged("users", spelled("age", old), spelled("age", new))
+    assert DifferSQLGenerator().generate_up(change) == (
+        f"ALTER TABLE users ALTER COLUMN age TYPE {new};\n"
+    )
 
 
 def test_add_index_concurrently():
