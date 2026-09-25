@@ -1,7 +1,9 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:tier reversible
+-- confiture:tier destructive
+-- review: v_things's columns change (id, code → id), which CREATE OR REPLACE VIEW refuses; it is dropped and created, so its grants and comment go, and a dependent view fails the DROP
+DROP VIEW IF EXISTS v_things;
 CREATE OR REPLACE VIEW v_things AS SELECT id FROM things;
 
 -- confiture:tier destructive

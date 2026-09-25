@@ -5,6 +5,7 @@ change it cannot render. That is honest, but a view is one of the few objects
 whose whole definition the differ holds, so it can write the real statement.
 """
 
+import pglast
 import pytest
 
 from confiture.core.ddl_objects import OBJECT_KEYWORD, REPLACE_IS_AUTHORS_WORK
@@ -33,6 +34,14 @@ DERIVED = {
 TRIGGER = (
     "CREATE TRIGGER trg_touch BEFORE UPDATE ON tb_user FOR EACH ROW EXECUTE FUNCTION fn_touch();"
 )
+
+
+def _statements(sql: str) -> list:
+    return [raw.stmt for raw in pglast.parse_sql(sql)]
+
+
+def _view_columns(stmt) -> list[str]:
+    return [target.name or target.val.fields[-1].sval for target in stmt.query.targetList]
 
 
 def change_of(old_extra: str, new_extra: str, change_type: str):
@@ -65,16 +74,49 @@ class TestViewDDL:
         assert sql.startswith("CREATE OR REPLACE VIEW v_user AS")
         assert "name" in sql
 
-    def test_replace_view_rolls_back_to_the_old_definition(self):
-        """The down side is the definition that was there before, not a drop."""
+    def test_replace_view_rolls_back_by_dropping_what_or_replace_cannot_remove(self):
+        """The old view had fewer columns: ``OR REPLACE`` cannot take one away (#408)."""
         change = change_of(
             "CREATE VIEW v_user AS SELECT pk_user FROM tb_user;",
             "CREATE VIEW v_user AS SELECT pk_user, name FROM tb_user;",
             "REPLACE_VIEW",
         )
-        down = DifferSQLGenerator().generate_down(change)
-        assert down.startswith("CREATE OR REPLACE VIEW v_user AS")
-        assert "name" not in down
+        down = _statements(DifferSQLGenerator().generate_down(change))
+        assert [type(s).__name__ for s in down] == ["DropStmt", "ViewStmt"]
+        assert _view_columns(down[1]) == ["pk_user"]
+
+    def test_replace_view_rolls_back_in_place_when_the_columns_are_the_same(self):
+        change = change_of(
+            "CREATE VIEW v_user AS SELECT pk_user, name FROM tb_user;",
+            "CREATE VIEW v_user AS SELECT pk_user, name FROM tb_user WHERE pk_user > 0;",
+            "REPLACE_VIEW",
+        )
+        (down,) = _statements(DifferSQLGenerator().generate_down(change))
+        assert down.replace
+        assert down.query.whereClause is None
+
+    def test_replace_view_that_drops_a_column_is_dropped_and_created(self):
+        """The up side has the same limit: a column removed or renamed (#408)."""
+        change = change_of(
+            "CREATE VIEW v_user AS SELECT pk_user, name FROM tb_user;",
+            "CREATE VIEW v_user AS SELECT pk_user AS id FROM tb_user;",
+            "REPLACE_VIEW",
+        )
+        up = DifferSQLGenerator().generate_up(change)
+        assert "-- review:" in up
+        statements = _statements(up)
+        assert [type(s).__name__ for s in statements] == ["DropStmt", "ViewStmt"]
+        assert _view_columns(statements[1]) == ["id"]
+
+    def test_a_view_whose_columns_cannot_be_named_is_replaced_in_place(self):
+        """``*`` names nothing confiture can read; ``OR REPLACE`` is kept, as before."""
+        change = change_of(
+            "CREATE VIEW v_user AS SELECT * FROM tb_user;",
+            "CREATE VIEW v_user AS SELECT * FROM tb_user WHERE pk_user > 0;",
+            "REPLACE_VIEW",
+        )
+        (up,) = _statements(DifferSQLGenerator().generate_up(change))
+        assert up.replace
 
     def test_drop_view_drops_it(self):
         change = change_of("CREATE VIEW v_user AS SELECT pk_user FROM tb_user;", "", "DROP_VIEW")
