@@ -27,7 +27,6 @@ import psycopg
 import pytest
 from pglast import ast, parse_sql
 from pglast.visitors import Visitor
-from pydantic.errors import PydanticUserError
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -202,11 +201,6 @@ def test_pgtap_include_and_the_opt_out_flags_narrow_the_scaffold(
     assert calls[1][1][:2] == ("public", "add_one")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#360: the volatility test calls is_volatile/is_stable/is_immutable, which pgTAP "
-    "does not define (its assertion is volatility_is)",
-)
 def test_pgtap_calls_only_functions_pgtap_defines(database: str, tmp_path: Path) -> None:
     out = tmp_path / "functions.sql"
 
@@ -260,12 +254,6 @@ def test_stubs_include_keeps_only_the_matching_function(database: str, tmp_path:
     assert [node.name for node in tree.body if isinstance(node, pyast.FunctionDef)] == ["shout"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=PydanticUserError,
-    reason="#360: a JSONB result model annotates its fields Any without importing it, so the "
-    "model is never fully defined and model_validate raises",
-)
 def test_stubs_for_a_jsonb_function_return_its_model(
     fresh_database: str, tmp_path: Path, load_module
 ) -> None:
@@ -285,10 +273,6 @@ def test_stubs_for_a_jsonb_function_return_its_model(
     assert (summary.id, summary.label) == (5, "x")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#360: --format is read and ignored: dataclass and typeddict both render the pydantic model",
-)
 def test_stubs_dataclass_format_writes_no_pydantic_model(
     fresh_database: str, tmp_path: Path
 ) -> None:
@@ -306,6 +290,40 @@ def test_stubs_dataclass_format_writes_no_pydantic_model(
 
     assert result.exit_code == 0, result.output
     assert "BaseModel" not in out.read_text()
+
+
+@pytest.mark.parametrize("output_format", ["dataclass", "typeddict"])
+def test_stubs_in_another_format_return_the_result(
+    fresh_database: str, tmp_path: Path, load_module, output_format: str
+) -> None:
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute(
+            "CREATE FUNCTION widget_summary(p_id bigint) RETURNS jsonb LANGUAGE sql "
+            "STABLE AS $$ SELECT jsonb_build_object('id', p_id, 'label', 'x') $$"
+        )
+    out = tmp_path / "stubs.py"
+
+    result = runner.invoke(
+        app,
+        ["generate", "stubs", "-d", fresh_database, "--format", output_format, "-o", str(out)],
+    )
+
+    assert result.exit_code == 0, result.output
+    stubs = load_module(out)
+    with psycopg.connect(fresh_database) as conn:
+        summary = stubs.widget_summary(conn, 5)
+    fields = summary if output_format == "typeddict" else vars(summary)
+    assert (fields["id"], fields["label"]) == (5, "x")
+
+
+def test_an_unknown_stub_format_is_refused(database: str, tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        ["generate", "stubs", "-d", database, "--format", "bogus", "-o", str(tmp_path / "s.py")],
+    )
+
+    assert result.exit_code != 0
+    assert not (tmp_path / "s.py").exists()
 
 
 def test_stubs_on_stdout_are_the_python_they_would_write(database: str, tmp_path: Path) -> None:

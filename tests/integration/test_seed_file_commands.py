@@ -167,12 +167,6 @@ def test_generate_for_a_table_that_does_not_exist_fails_and_writes_nothing(
     assert not seeds.exists()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=psycopg.errors.GeneratedAlways,
-    reason="#360: the template lists identity (GENERATED ALWAYS) and generated columns, "
-    "which accept no value",
-)
 def test_generate_leaves_out_columns_postgresql_computes(
     fresh_database_factory: Callable[[str], str], tmp_path: Path
 ) -> None:

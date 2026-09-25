@@ -9,6 +9,8 @@ from typing import Any
 import psycopg
 
 from confiture.core import live_catalog
+from confiture.core.model_facts import writable_columns
+from confiture.core.schema_model import SchemaModel, Table, ref_for
 
 
 @dataclasses.dataclass
@@ -77,18 +79,27 @@ class SeedBridge:
             return False
 
     def _get_table_columns(self, table: str, schema: str = "public") -> list[dict[str, Any]]:
-        """Introspect columns for a given table."""
+        """Introspect columns for a given table; ``writable`` is whether a writer supplies it.
 
+        Which columns those are is the seam's answer (``writable_columns``): every
+        column but an identity, a generated column and a ``serial``, which PostgreSQL
+        fills and — for ``GENERATED ALWAYS`` — refuses a value for.
+        """
         with psycopg.connect(self._database_url) as conn:
-            return [
-                {
-                    "name": column.folded,
-                    "type": column.type_text,
-                    "nullable": not column.not_null,
-                    "default": column.default,
-                }
-                for column in live_catalog.columns(conn, schema, table)
-            ]
+            found = live_catalog.columns(conn, schema, table)
+        ref = ref_for("table", schema, table)
+        model = SchemaModel(tables={ref: Table(name=table, schema=schema, columns=found)})
+        writable = {column.folded for column in writable_columns(model, ref)} if found else set()
+        return [
+            {
+                "name": column.folded,
+                "type": column.type_text,
+                "nullable": not column.not_null,
+                "default": column.default,
+                "writable": column.folded in writable,
+            }
+            for column in found
+        ]
 
     def _generate_stub_sql(
         self, table: str, columns: list[dict[str, Any]], config: SeedGenerationConfig
@@ -102,9 +113,17 @@ class SeedBridge:
             lines.append(f"-- Rows: {config.row_count}")
             lines.append("")
 
-        col_names = [c["name"] for c in columns if not c.get("default")]
+        # A column with a default is left to it; one PostgreSQL computes takes no value.
+        writable = [c["name"] for c in columns if c["writable"]]
+        col_names = [c["name"] for c in columns if c["writable"] and not c.get("default")]
+        col_names = col_names or writable
         if not col_names:
-            col_names = [c["name"] for c in columns]
+            # Every column is PostgreSQL's to fill: a row is inserted with none named.
+            lines.extend(
+                f"-- INSERT INTO {config.schema}.{table} DEFAULT VALUES;"
+                for _ in range(config.row_count)
+            )
+            return "\n".join(lines)
 
         cols_str = ", ".join(col_names)
 
