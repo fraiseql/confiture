@@ -15,7 +15,9 @@ come directly from the database so they will never collide with the
 from __future__ import annotations
 
 import json
+import re
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -32,7 +34,7 @@ from confiture.core.introspection.type_mapping import TypeMapper
 from confiture.models.mcp_models import MCPTool
 
 if TYPE_CHECKING:
-    from confiture.models.function_info import FunctionCatalog
+    from confiture.models.function_info import FunctionCatalog, FunctionInfo
 
 
 _MCP_PROTOCOL_VERSION = "2024-11-05"
@@ -154,6 +156,35 @@ def _error(msg_id: Any, code: int, message: str) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
 
 
+#: What many MCP clients accept as a tool name's length.
+_TOOL_NAME_LIMIT = 64
+
+
+def _tool_names(functions: list[FunctionInfo]) -> dict[str, FunctionInfo]:
+    """Each routine under one tool name: its own, or its own and its input types.
+
+    A name one routine holds is its tool's name, unchanged. The overloads of one
+    name are one tool each, ``f__integer`` and ``f__text``, spelled from their
+    input types with everything but ``[a-z0-9_]`` made ``_`` — and, past what a
+    client accepts, ``f__<oid>``.
+    """
+    by_name: dict[str, list[FunctionInfo]] = {}
+    for info in functions:
+        by_name.setdefault(info.name, []).append(info)
+    tools: dict[str, FunctionInfo] = {}
+    for name, overloads in by_name.items():
+        if len(overloads) == 1:
+            tools[name] = overloads[0]
+            continue
+        for info in overloads:
+            types = "_".join(p.pg_type for p in info.in_params) or "noargs"
+            tool = f"{name}__{re.sub(r'[^a-z0-9_]', '_', types.lower())}"
+            if len(tool) > _TOOL_NAME_LIMIT or tool in tools:
+                tool = f"{name}__{info.oid}"
+            tools[tool] = info
+    return tools
+
+
 class MCPServer:
     """Exposes Confiture operations and PostgreSQL stored functions as MCP tools.
 
@@ -202,6 +233,7 @@ class MCPServer:
         self._expose_confiture_tools = expose_confiture_tools
         self._catalog: FunctionCatalog | None = None
         self._pg_tools: dict[str, MCPTool] = {}
+        self._routines: dict[str, FunctionInfo] = {}
         self._mapper = TypeMapper()
         self._introspector = FunctionIntrospector(connection)
 
@@ -239,8 +271,10 @@ class MCPServer:
     def initialize(self) -> None:
         """Introspect the database and build the tool registry."""
         self._catalog = self._introspector.introspect(self._schema, name_pattern=self._name_pattern)
+        self._routines = _tool_names(self._catalog.functions)
         self._pg_tools = {
-            f.name: MCPTool.from_function_info(f, self._mapper) for f in self._catalog.functions
+            tool: replace(MCPTool.from_function_info(info, self._mapper), name=tool)
+            for tool, info in self._routines.items()
         }
 
     def list_tools(self) -> list[dict[str, Any]]:
@@ -302,18 +336,22 @@ class MCPServer:
     # ── PostgreSQL function dispatch ──────────────────────────────────────────
 
     def _call_pg_function(self, name: str, arguments: dict[str, Any]) -> Any:
-        if name not in self._pg_tools:
+        func_info = self._routines.get(name)
+        if func_info is None:
             raise ValueError(f"Unknown tool: {name!r}")
-        assert self._catalog is not None
-        func_info = next(f for f in self._catalog.functions if f.name == name)
-        args = [arguments[p.name] for p in func_info.in_params if p.name in arguments]
+        given = [p for p in func_info.in_params if p.name in arguments]
+        args = [arguments[p.name] for p in given]
         # The schema and the routine's name are identifiers, quoted whatever they
         # hold: the name is pg_proc's and the schema the caller's. A raw cursor
         # binds `$n` server-side and reads no `%` in the text, so a `%` in a name
         # is only ever part of the name (#375).
-        placeholders = sql.SQL(", ").join(sql.SQL(f"${i}") for i in range(1, len(args) + 1))
+        # Each argument is cast to the type its parameter declares, so PostgreSQL
+        # resolves exactly this overload and never a sibling of the same name.
+        placeholders = sql.SQL(", ").join(
+            sql.SQL(f"${i}::{p.pg_type}") for i, p in enumerate(given, start=1)
+        )
         statement = sql.SQL("CALL {}({})" if func_info.is_procedure else "SELECT {}({})").format(
-            sql.Identifier(self._schema, name), placeholders
+            sql.Identifier(self._schema, func_info.name), placeholders
         )
         with psycopg.RawCursor(self._conn) as cur:
             cur.execute(statement, args)
