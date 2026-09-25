@@ -1,8 +1,8 @@
 """Integration tests for the semantic grant-accompaniment engine (issue #162).
 
 These drive ``GrantAccompanimentChecker`` against a *real* git repository so
-the file-content diffing, the merge-base anchoring (D10), and the
-``.py``-at-ref read (D11) are exercised end to end — none of which MagicMock
+the file-content diffing, the merge-base anchoring, and the
+``.py``-at-ref read are exercised end to end — none of which MagicMock
 can prove.
 """
 
@@ -95,7 +95,7 @@ class TestSemanticAccompanimentRefMode:
         assert report.unmatched_grants[0]["grantee"] == "reporter"
 
     def test_python_migration_carries_grant_at_ref(self, repo: Path):
-        """D11: the .py covered-set is read from the committed ref."""
+        """The .py covered-set is read from the committed ref."""
         _init(repo)
         _write(repo, "README.md", "# r")
         _git(repo, "add", ".")
@@ -121,7 +121,7 @@ class TestSemanticAccompanimentRefMode:
         assert report.unmatched_grants == []
 
     def test_merge_base_anchoring_ignores_post_fork_base_grant(self, repo: Path):
-        """D10: a grant added on base *after* the fork must not be 'required'.
+        """A grant added on base *after* the fork must not be 'required'.
 
         Three commits: fork point, a grant added on base after it, and a
         feature branch that touches an unrelated file. The feature branch
@@ -161,7 +161,7 @@ class TestSemanticAccompanimentRefMode:
         assert report.is_valid is True
 
     def test_unmodeled_grant_without_migration_fails(self, repo: Path):
-        """D9 end-to-end: an unmodeled object class degrades and fails sans migration."""
+        """An unmodeled object class degrades and fails sans migration."""
         _init(repo)
         _write(repo, "README.md", "# r")
         _git(repo, "add", ".")

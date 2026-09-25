@@ -1,4 +1,4 @@
-"""A type schema written on one side and left off the other still names one type (D9).
+"""A type schema written on one side and left off the other still names one type.
 
 `COMMENT ON FUNCTION app.f(custom_t)` documents `CREATE FUNCTION app.f(x
 app.custom_t)`, because PostgreSQL resolves the bare name through

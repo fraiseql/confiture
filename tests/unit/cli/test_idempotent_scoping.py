@@ -118,7 +118,7 @@ class TestUnscopedBehaviourUnchanged:
     """The 0.36.0 contract. These must pass on unmodified code and after.
 
     `--base-ref` defaults to the truthy string "origin/main", so threading it
-    unconditionally would scope every run — and, per D3, make a plain
+    unconditionally would scope every run — and make a plain
     `--idempotent` in a non-git tree exit 7.  The `meta`-has-no-`scope`
     assertion below is the direct regression guard for that.
     """
@@ -390,7 +390,7 @@ class TestShallowClone:
 
 
 class TestStagedScoping:
-    """T4/D4: base..HEAD cannot see a pre-commit change; --staged can."""
+    """Base..HEAD cannot see a pre-commit change; --staged can."""
 
     def test_staged_migration_is_validated(self, repo: Path) -> None:
         _migration(repo, "20260104000000", "delta", idempotent=False)

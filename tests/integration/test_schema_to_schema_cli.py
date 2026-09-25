@@ -628,7 +628,7 @@ def test_verify_before_migrating_reports_the_missing_rows_and_exits_1(
 def test_verify_counts_a_renamed_table_against_its_source_table(
     source: str, target: str, renamed: Path
 ) -> None:
-    """The mapping ``migrate`` read says where each table came from (#359, D10)."""
+    """The mapping ``migrate`` read says where each table came from (#359)."""
     _setup(source, target)
     _migrate(source, target, renamed)
 

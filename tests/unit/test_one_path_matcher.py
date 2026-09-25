@@ -24,7 +24,7 @@ PACKAGE = Path(confiture.__file__).resolve().parent
 REPO = Path(__file__).resolve().parents[2]
 MATCHER = PACKAGE / "core" / "path_globs.py"
 
-# Modules that glob something that is not a path, with the reason. D6.
+# Modules that glob something that is not a path, with the reason.
 ALLOWED: dict[str, str] = {
     "core/drift.py": (
         "`--check-acls` / `--check-ownership` scope by object name — `relname` and "

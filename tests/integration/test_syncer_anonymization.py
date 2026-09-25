@@ -20,7 +20,7 @@ from confiture.core.syncer import (
 
 @pytest.fixture(autouse=True)
 def _anonymization_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keyed strategies refuse to run without the per-deployment secret (D8)."""
+    """Keyed strategies refuse to run without the per-deployment secret."""
     monkeypatch.setenv("ANONYMIZATION_SECRET", "integration-test-secret")
 
 

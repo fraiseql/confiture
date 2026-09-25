@@ -216,7 +216,7 @@ class TestAccompanimentReportsAParseFailure:
     into it.
 
     The other half is gone. `is_valid` is now False, because pglast has been the
-    only parser since D13 (0.50.0) and the sqlparse token limit these tests were
+    only parser since 0.50.0 and the sqlparse token limit these tests were
     written against cannot occur. What reaches this branch is a schema
     PostgreSQL rejects, which `confiture build` would refuse too — so the gate
     saying "passed" was saying something it had no way to know (#288).

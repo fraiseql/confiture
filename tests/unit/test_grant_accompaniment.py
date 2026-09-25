@@ -445,7 +445,7 @@ class TestSemanticGrantMatching:
         assert report.is_valid is False
         assert len(report.unmatched_grants) == 1
 
-    # ---- D9 silent-pass set: degrade + note, fail without a migration ----
+    # ---- silent-pass set: degrade + note, fail without a migration ----
 
     def test_unmodeled_database_grant_fails_without_migration(self):
         checker = self._checker(

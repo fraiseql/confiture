@@ -382,7 +382,7 @@ def _sql_type(type_node: Any) -> str | None:
     database hold — and the answer is one array.
 
     A *user* schema qualifier stays: ``app.custom_t`` and ``other.custom_t`` are
-    two types (D9).
+    two types.
     """
     if type_node is None:
         return None

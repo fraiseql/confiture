@@ -198,7 +198,7 @@ def test_scoped_flag_judges_only_the_selected_files(repo: Path) -> None:
 
 
 def test_empty_scope_with_the_flag_stays_a_pass(repo: Path) -> None:
-    """D4: the flag fails on files it could not read, not on having none to read."""
+    """The flag fails on files it could not read, not on having none to read."""
     base = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
     _git(repo, "checkout", "-b", "feature")
     (repo / "README.md").write_text("docs\n")

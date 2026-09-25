@@ -78,7 +78,7 @@ Output looks like:
 `own_001` is AST-only — pairwise `CREATE` ↔ `ALTER … OWNER TO` matching across realistic
 PostgreSQL SQL (dollar-quoted strings, CHECK-constraint literals, multi-statement
 `DO $$ … $$` blocks) is too brittle to ship as a regex. pglast is a **dependency** since
-0.50.0 (D13), so the rule always runs — there is no parser-absent path and no skip notice.
+0.50.0, so the rule always runs — there is no parser-absent path and no skip notice.
 The `[ast]` extra survives as an empty alias, purely so an older command line still
 resolves; it adds nothing.
 

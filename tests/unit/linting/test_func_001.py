@@ -9,7 +9,7 @@ function and a procedure that share a name don't collide (PostgreSQL
 keeps them in separate namespaces), and overloads with different
 parameter types are not flagged.
 
-AST-only, and pglast is a dependency (D13) — the rule always runs. There
+AST-only, and pglast is a dependency — the rule always runs. There
 is no skip notice, and a file pglast rejects is reported rather than passed
 over.
 """
@@ -365,7 +365,7 @@ class TestTwoSpellingsAreOneSignature:
 
 
 class TestABareTypeMatchesAnySchema:
-    """A type schema on one definition and not the other is still one signature (D9).
+    """A type schema on one definition and not the other is still one signature.
 
     The same rule the inventory applies to `doc_002` and `build_001`: a missing
     schema matches any schema, because PostgreSQL resolves the bare spelling

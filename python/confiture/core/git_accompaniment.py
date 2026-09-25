@@ -185,7 +185,7 @@ class MigrationAccompanimentChecker:
         try:
             diff = self.differ.compare_refs(base_ref, target_ref)
         except Exception as exc:  # Reason: the parse failure is reported as a failed check, naming the statement, rather than raised
-            # pglast is the only parser (D13), so what lands here is a
+            # pglast is the only parser, so what lands here is a
             # schema PostgreSQL rejects — one `confiture build` would refuse too.
             # It is reported rather than raised so the error names the statement,
             # and `is_valid` is False because a check that could not run has not

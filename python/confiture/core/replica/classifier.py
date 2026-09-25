@@ -296,7 +296,7 @@ class OperationClassifier:
     def classify(self, sql: str) -> list[DdlOperation]:
         """Return the ordered DDL operations in ``sql``.
 
-        Parses with pglast, the one parser (D13).
+        Parses with pglast, the one parser.
         """
         # pglast.parser.ParseError propagates: the caller reports the file as
         # unclassifiable instead of reading a guess.

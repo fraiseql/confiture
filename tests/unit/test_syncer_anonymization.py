@@ -7,7 +7,7 @@ but with ``"default-secret"`` as the key when ``ANONYMIZATION_SECRET`` was
 unset, which is the same thing with extra steps.  And ``random.seed(pii)``
 pushed the PII into the interpreter-wide RNG state.
 
-D8: the secret is mandatory.  Every keyed pseudonym goes through one
+The secret is mandatory.  Every keyed pseudonym goes through one
 ``Pseudonymizer`` (HMAC-SHA256 under ``ANONYMIZATION_SECRET``); an unset or
 empty secret is a ``ConfigurationError`` before any row is read.
 """

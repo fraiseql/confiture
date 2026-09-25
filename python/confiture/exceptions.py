@@ -817,14 +817,13 @@ class SeedError(ConfiturError):
 
 
 class UnsafeOperationError(ConfiturError):
-    """Raised when a destructive DDL operation is attempted without force flag.
+    """``DDL_001``: deprecated, and raised by nothing since 1.21.0.
 
-    Raised when:
-    - DROP TABLE, DROP COLUMN, or other destructive operations are requested
-    - The force_destructive flag is not set
-
-    Example:
-        >>> raise UnsafeOperationError("DROP TABLE is destructive. Use --force.")
+    It was the generator's refusal of a destructive statement without a force
+    flag. Every generated drop now goes through the one destructive gate
+    (``migration.destructive``), which refuses with ``DIFFER_401``. The class and
+    its code stay because the error codebook is frozen at 1.0.0: a caller that
+    catches it keeps working, and both go at the next major version.
     """
 
     def __init__(

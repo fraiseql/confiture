@@ -589,7 +589,7 @@ class SchemaLinter:
         """``build_003`` and ``build_004``: what the bodies and clauses name, against the build.
 
         One read of every file's references, asked two questions. ``build_003``:
-        is the object created at all — three tiers, in order (D4): the build
+        is the object created at all — three tiers, in order: the build
         inventory, then ``lint.ignore_objects``, then, only for what is still
         outstanding, a live database, the one thing that can answer for an
         object created by a migration or owned by an extension; a tier that
@@ -837,7 +837,7 @@ class SchemaLinter:
         them would leave a duplicate defined in the broken file unreported with
         nothing saying so.
 
-        This is the channel a `--baseline` does not touch (D6): a project can
+        This is the channel a `--baseline` does not touch: a project can
         record the `UNPARSEABLE` finding as known, and the blindness still says
         so on every run.
         """

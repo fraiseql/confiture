@@ -5,8 +5,8 @@ meta-command scan and the non-transactional analyzer — must stay cheap on a 50
 file full of dollar-quoted ``DO`` blocks (the shape that defeated the regex
 splitters). ``import confiture`` must stay lazy, and ``confiture --help`` — the
 whole CLI's import graph — must not grow quietly: function-level imports are
-hoisted unless their measured start-up cost earns a ``# Reason:`` (D8 of the
-residue plan). The bounds are loose enough for a slow CI runner; the measured
+hoisted unless their measured start-up cost earns a ``# Reason:``.
+The bounds are loose enough for a slow CI runner; the measured
 numbers are printed so a regression shows in the log before it trips the bound.
 """
 

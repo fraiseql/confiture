@@ -48,7 +48,7 @@ def test_worst_tier_of_nothing_is_none():
 def test_worst_tier_skips_unclassified_entries():
     """An unclassifiable change must not mask a classified one.
 
-    Per the plan's D4 ruling: `unknown` never dominates the aggregate, or one
+    `unknown` never dominates the aggregate, or one
     unreadable `.py` migration would conceal a `DROP TABLE`.
     """
     assert worst_tier([None, RiskTier.IRREVERSIBLE, None]) is RiskTier.IRREVERSIBLE

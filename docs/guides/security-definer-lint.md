@@ -42,7 +42,7 @@ confiture migrate validate \
   --config db/environments/local.yaml
 ```
 
-Uses pglast, which is a dependency (D13) — nothing to install, and no
+Uses pglast, which is a dependency — nothing to install, and no
 parser-absent path for the scan to skip through.
 
 ### Live catalog scan

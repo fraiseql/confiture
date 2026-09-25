@@ -1,6 +1,6 @@
 """Validate ``migrate validate --require-grant-migration --format json`` output (issue #162).
 
-This schema is NOT part of the fraisier adapter contract (D13) — it is a
+This schema is NOT part of the fraisier adapter contract — it is a
 standalone, completeness schema for the grant gate's JSON failure envelope.
 """
 

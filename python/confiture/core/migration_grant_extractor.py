@@ -131,7 +131,7 @@ class GrantStatement:
 
 @dataclass(frozen=True)
 class UnrepresentableGrant:
-    """A parse-clean privilege change the extractor refuses to key (D9).
+    """A parse-clean privilege change the extractor refuses to key.
 
     Never silently dropped: the semantic gate degrades to file-presence and
     surfaces a note for each of these rather than passing a grant that would
@@ -232,7 +232,7 @@ class MigrationGrantExtractor:
         :class:`GrantStatement` rows (fanned out one per object × grantee ×
         privilege, across table / schema-wide / sequence / function objects)
         **and** an explicit list of :class:`UnrepresentableGrant` markers for
-        everything that parses cleanly but can't be keyed (D9): unmodeled
+        everything that parses cleanly but can't be keyed: unmodeled
         object classes (``ON DATABASE``/``LANGUAGE``/``TYPE``/…), ``ALTER
         DEFAULT PRIVILEGES``, column-level privileges, dynamic SQL, and parse
         failures. Nothing privilege-shaped is ever silently dropped and the
@@ -258,7 +258,7 @@ class MigrationGrantExtractor:
         try:
             self._statements_pglast(sql, statements, unrepresentable)
         except pglast.parser.ParseError as exc:
-            # Reported, never raised: the semantic engine degrades honestly (D9).
+            # Reported, never raised: the semantic engine degrades honestly.
             statements.clear()
             unrepresentable.append(
                 UnrepresentableGrant(

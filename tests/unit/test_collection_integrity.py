@@ -95,7 +95,7 @@ def test_every_test_directory_is_a_layer() -> None:
     ``tests/migration_testing`` was a parallel tree with its own database
     convention (``DATABASE_URL``), its own connection handling and 114 tests of
     PostgreSQL rather than of confiture; the collection clean-up folded what mattered
-    into the layers (D2).
+    into the layers.
     """
     tests_root = REPO_ROOT / "tests"
     stray = sorted(

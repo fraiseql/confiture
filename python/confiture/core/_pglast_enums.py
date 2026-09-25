@@ -17,7 +17,7 @@ Resolving by name makes the binding version-independent. The declarative
 declared, so ``tests/unit/test_pglast_enum_binding.py`` picks it up
 automatically rather than needing to be kept in sync by hand.
 
-pglast is a dependency (D13), so this module imports it at module scope.
+pglast is a dependency, so this module imports it at module scope.
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def member(enum_name: str, member_name: str) -> int:
 
     Returns a unique never-matching sentinel when the member has disappeared
     upstream, which is also recorded in :data:`MISSING_MEMBERS`. pglast itself is
-    a dependency (D13) and imported at module scope, so "not installed" is not a
+    a dependency and imported at module scope, so "not installed" is not a
     case this has to answer for.
     """
     try:

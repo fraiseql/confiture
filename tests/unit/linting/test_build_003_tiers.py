@@ -1,4 +1,4 @@
-"""How ``build_003`` stays quiet about a legitimate reference, and says when it cannot (D4).
+"""How ``build_003`` stays quiet about a legitimate reference, and says when it cannot.
 
 Tier (a) is the build inventory. It is complete for a project whose objects all
 come from the DDL tree and wrong for every other kind — an object created by a

@@ -111,7 +111,7 @@ class TestTheSeedFileCostsNothing:
 
 
 class TestTheParseTextIsNotTheBuild:
-    """Two strings, because two consumers want different things (D4).
+    """Two strings, because two consumers want different things.
 
     `bodies.diagnose()` materialises the build into a throwaway database through
     the COPY-aware psql applier, and `tenant_001` scans it as text. Blanking the

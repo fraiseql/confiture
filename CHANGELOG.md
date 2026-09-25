@@ -14,6 +14,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Deprecated
+
+- **`UnsafeOperationError` and `DDL_001`** are raised by nothing since 1.21.0. Every
+  generated drop goes through the one destructive gate, which refuses with
+  `DIFFER_401`. Both stay, because the error codebook is frozen at 1.0.0, and they
+  go at the next major version.
+
+### Security
+
+- **An MCP tool name reaches exactly one thing.** `confiture mcp` listed a routine
+  named like a built-in (`confiture__migrate_down`) as a second tool of that name,
+  and a call by that name ran the built-in. An overload's generated name
+  (`f__integer`) could also be overwritten by a routine holding it outright,
+  depending on catalogue order. Every name two tools would share is now
+  `<name>__<oid>`.
+- **`--no-confiture-tools` disables the built-ins.** It hid them from `tools/list`,
+  but a `tools/call` naming one still ran it, `confiture__migrate_up` included.
+
 ## [1.22.0] - 2026-09-25
 
 **Every leaf does what its help says.** A command whose help promised one thing

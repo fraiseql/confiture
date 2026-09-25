@@ -369,7 +369,7 @@ def same_type(written: str | None, other: str | None) -> bool:
     schema that is visible through ``search_path``, so a DDL that spelled
     ``public.citext`` meets a live ``citext``. Two schemas that both say
     something and disagree are two types — ``app.custom_t`` and
-    ``other.custom_t`` (D9).
+    ``other.custom_t``.
 
     That wildcard is the rule
     :func:`confiture.core.linting.inventory.types_match` applies to a routine's
@@ -460,7 +460,7 @@ def types_match(a: tuple[str | None, str], b: tuple[str | None, str]) -> bool:
     the other matches, because PostgreSQL resolves the bare spelling through
     ``search_path`` and lands on the same type. Two schemas that are both
     present and disagree never match: ``app.custom_t`` and ``other.custom_t``
-    are two types (D9).
+    are two types.
     """
     if a[1] != b[1]:
         return False

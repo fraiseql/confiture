@@ -5,7 +5,7 @@ day nobody schedules. A baseline file records the *identity* of every
 current finding — ``rule_id``, object kind and qualified name, plus the file
 for file-scoped rules, never a line number — and a later run fails only on
 identities the file does not know. When findings disappear the file is
-rewritten without them (D12), so the ratchet only ever tightens;
+rewritten without them, so the ratchet only ever tightens;
 ``--write-baseline`` creates or resets it.
 """
 

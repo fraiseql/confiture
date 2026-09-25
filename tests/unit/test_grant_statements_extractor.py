@@ -4,7 +4,7 @@ The semantic grant-accompaniment engine (issue #162) needs more than the
 table-only ``extract_grants`` shape: it must recognize GRANT **and** REVOKE
 across table / schema-wide / sequence / function objects, and — crucially —
 must NEVER silently drop a privilege change it can't represent. Anything
-parse-clean-but-unmodeled lands in ``GrantExtraction.unrepresentable`` (D9),
+parse-clean-but-unmodeled lands in ``GrantExtraction.unrepresentable``,
 so the gate degrades to file-presence rather than passing a grant that never
 reaches production.
 
@@ -183,7 +183,7 @@ def test_all_in_schema_does_not_match_individual_object() -> None:
 
 
 # ---------------------------------------------------------------------------
-# D12 — grantee case folding is consistent across backends
+# grantee case folding is consistent across backends
 # ---------------------------------------------------------------------------
 
 
@@ -226,7 +226,7 @@ def test_grant_option_excluded_from_match_key() -> None:
 
 
 # ---------------------------------------------------------------------------
-# D9 — the unrepresentable channel (the load-bearing safety property)
+# the unrepresentable channel (the load-bearing safety property)
 # ---------------------------------------------------------------------------
 
 
@@ -278,7 +278,7 @@ def test_unmodeled_does_not_swallow_a_neighbouring_table_grant() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Legacy extract_grants must stay byte-compatible (D6)
+# Legacy extract_grants must stay byte-compatible
 # ---------------------------------------------------------------------------
 
 

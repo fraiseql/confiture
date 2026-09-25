@@ -4,7 +4,7 @@ A baseline records the identity of every finding a schema has today —
 ``rule_id``, object kind and qualified name, plus the file for file-scoped
 rules, never a line number — and a later run fails only on identities the
 file does not know, printing only those. When a rule's set shrinks the file
-is rewritten (D12), so the ratchet only ever tightens; ``--write-baseline``
+is rewritten, so the ratchet only ever tightens; ``--write-baseline``
 creates or resets it.
 """
 

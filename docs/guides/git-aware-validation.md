@@ -335,7 +335,7 @@ The command has a 30-second timeout per git operation. If hitting timeout:
 ```
 
 **Why**: pglast — PostgreSQL's own parser, via `libpg_query` — rejected a
-statement in the schema tree. Since it is the only parser confiture has (D13),
+statement in the schema tree. Since it is the only parser confiture has,
 that means PostgreSQL itself would reject it: `confiture build` would fail on
 the same file.
 

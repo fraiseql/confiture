@@ -10,7 +10,7 @@ objects the migration did not itself create.  Three severity tiers:
      ``requires_superuser=True``  → WARNING.
   3. Bare ``ALTER OWNER``, no guard                 → ERROR.
 
-AST-only, and pglast is a dependency (D13) — the rule always runs. There is
+AST-only, and pglast is a dependency — the rule always runs. There is
 no skip notice: a file pglast rejects is reported rather than passed over.
 """
 

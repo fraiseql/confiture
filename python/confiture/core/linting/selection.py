@@ -286,7 +286,7 @@ def apply_baseline(
     Returns the ``BaselineDiff`` (``None`` without ``--baseline``). ``--write-baseline``
     records every current finding and leaves nothing to report; otherwise findings
     the file knows are dropped from the report, identities no longer found are
-    removed from the file (D12), and what remains is new.
+    removed from the file, and what remains is new.
     """
     if baseline is None:
         return None

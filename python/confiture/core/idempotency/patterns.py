@@ -1,6 +1,6 @@
 """Non-idempotent pattern detection: the catalog, and the one entry point.
 
-pglast is the parser (D13). :func:`detect_non_idempotent_patterns` walks the
+pglast is the parser. :func:`detect_non_idempotent_patterns` walks the
 AST (``ast_detector``) and lets a ``pglast.parser.ParseError`` propagate, so a
 file PostgreSQL rejects is reported as unparseable instead of being scanned by
 something less exact. :data:`PATTERN_CATALOG` is what ``--list-patterns``

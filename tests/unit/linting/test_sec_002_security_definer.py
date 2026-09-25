@@ -342,7 +342,7 @@ def test_unparseable_file_is_reported_not_skipped(tmp_path: Path) -> None:
     """Unparseable SQL is one UNPARSEABLE finding, never a clean result.
 
     At `error` since 1.9.0: a file this rule could not read is not an `info`
-    about the files it could (#274, D10).
+    about the files it could (#274).
     """
     f = _write(tmp_path, "bad.sql", "THIS IS NOT SQL $$$$$$$$;\n")
     violations = _make_rule().check([f])
