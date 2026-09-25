@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-09-25
+
+**The build lint knows the order a build runs in, and says so by default.** A
+schema tree can define every object it uses and still fail to build: a view, a
+`LANGUAGE sql` body or a `DEFAULT` that names an object a later file creates
+(#383), or two files sharing a numeric prefix whose load order the rest of their
+names decides (#384). `build_004` reports the first and `tree_001` the second.
+Both are on by default at `error`, so `confiture lint` may fail on a tree that
+passed 1.19.0. Each `build_004` finding is an order PostgreSQL refuses, checked
+against a real server in both orders. `--ignore build_004` or `--ignore tree_001`
+turns a rule off for one run, and `--baseline` adopts what a tree already has.
+
 ### Added
 
 - **`build_004`: a statement needs, when it runs, an object the build creates later**
