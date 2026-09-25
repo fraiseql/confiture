@@ -29,7 +29,7 @@ from confiture.core.ddl_clauses import (
     named,
 )
 from confiture.core.ddl_clauses import constraint_body as _clause
-from confiture.core.ddl_objects import OBJECT_KEYWORD, DDLObject, drop_statement
+from confiture.core.ddl_objects import OBJECT_KEYWORD, DDLObject, drop_statement, output_columns
 from confiture.core.schema_change import (
     CheckConstraintAdded,
     CheckConstraintDropped,
@@ -133,6 +133,29 @@ def _creating(obj: DDLObject, change: SchemaChange) -> str:
     return (
         f"DO $confiture$\nBEGIN\n    {statement}"
         "EXCEPTION WHEN duplicate_object THEN NULL;\nEND\n$confiture$;\n"
+    )
+
+
+def _replacing(before: DDLObject, after: DDLObject, change: SchemaChange) -> str:
+    """*after*'s definition over *before*'s: in place where PostgreSQL allows it.
+
+    ``CREATE OR REPLACE VIEW`` keeps a view's columns and may only add some at the
+    end; one removed or renamed is refused. A view whose columns do not extend
+    the old ones is dropped and created instead. When either side's columns
+    cannot be named (``*``), ``OR REPLACE`` is kept: PostgreSQL decides.
+    """
+    statement = _statement(after.create_sql, change)
+    if after.ref.kind != "view":
+        return statement
+    old, new = output_columns(before), output_columns(after)
+    if old is None or new is None or new[: len(old)] == old:
+        return statement
+    return (
+        f"-- review: {after.ref.qualified}'s columns change ({', '.join(old)} → "
+        f"{', '.join(new)}), which CREATE OR REPLACE VIEW refuses; it is dropped and "
+        "created, so its grants and comment go, and a dependent view fails the DROP\n"
+        + _drop("VIEW", after.ref.qualified)
+        + statement
     )
 
 
@@ -604,8 +627,8 @@ def _definition_up(change: DefinitionChange) -> str | None:
             return _creating(obj, change)
         case ObjectDropped(_, obj) if kind in DERIVED_KINDS:
             return _dropping(obj)
-        case ObjectReplaced(_, _, new) if kind in _REPLACED_BY_DEFINITION:
-            return _statement(new.create_sql, change)
+        case ObjectReplaced(_, old, new) if kind in _REPLACED_BY_DEFINITION:
+            return _replacing(old, new, change)
         case ObjectReplaced(_, _, new) if kind in REPLACED_BY_DROP_AND_CREATE:
             return _drop(keyword, name) + _statement(new.create_sql, change)
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
@@ -641,8 +664,8 @@ def _definition_down(change: DefinitionChange) -> str | None:
             return _dropping(obj)
         case ObjectDropped(_, obj) if kind in DERIVED_KINDS:
             return _creating(obj, change)
-        case ObjectReplaced(_, old, _) if kind in _REPLACED_BY_DEFINITION:
-            return _statement(old.create_sql, change)
+        case ObjectReplaced(_, old, new) if kind in _REPLACED_BY_DEFINITION:
+            return _replacing(new, old, change)
         case ObjectReplaced(_, old, _) if kind in REPLACED_BY_DROP_AND_CREATE:
             return _drop(keyword, name) + _statement(old.create_sql, change)
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():

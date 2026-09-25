@@ -414,6 +414,46 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
     )
 
 
+def output_columns(obj: DDLObject) -> tuple[str, ...] | None:
+    """The names of the columns a view outputs, in order; ``None`` where the parse cannot tell.
+
+    The names PostgreSQL gives them: an explicit column list first, then each
+    target's alias, the column a reference or a cast of one reads, or the
+    function a call names. A ``*``, an expression PostgreSQL would call
+    ``?column?`` and a ``VALUES`` list name nothing confiture can read.
+    """
+    stmt: Any = pglast.parse_sql(obj.create_sql)[0].stmt
+    if type(stmt).__name__ != "ViewStmt":
+        return None
+    query = stmt.query
+    while query.larg is not None:
+        query = query.larg
+    if not query.targetList:
+        return None
+    names = [_output_name(target) for target in query.targetList]
+    aliases = [alias.sval for alias in stmt.aliases or ()]
+    names[: len(aliases)] = aliases
+    named = tuple(name for name in names if name is not None)
+    return named if len(named) == len(names) else None
+
+
+def _output_name(target: Any) -> str | None:
+    """A target's output column name, as PostgreSQL's ``FigureColname`` gives it."""
+    if target.name:
+        return target.name
+    node = target.val
+    while type(node).__name__ == "TypeCast":
+        node = node.arg
+    match type(node).__name__:
+        case "ColumnRef":
+            last = node.fields[-1]
+            return last.sval if type(last).__name__ == "String" else None
+        case "FuncCall":
+            return node.funcname[-1].sval
+        case _:
+            return None
+
+
 def drop_statement(obj: DDLObject) -> str | None:
     """``DROP <kind> IF EXISTS <name>`` for a kind this module reads itself; ``None`` otherwise.
 

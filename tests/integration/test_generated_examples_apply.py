@@ -31,12 +31,7 @@ TREES = sorted(
 
 #: A pair whose down file PostgreSQL refuses, with the reason. Each entry is
 #: asserted to still fail; the day it applies, the entry goes.
-UNDONE: dict[str, str] = {
-    "every-change": (
-        "the down of REPLACE_VIEW restores a view with fewer columns, and CREATE OR "
-        "REPLACE VIEW cannot drop a column from a view"
-    ),
-}
+UNDONE: dict[str, str] = {}
 
 
 def _apply(conn: psycopg.Connection, path: Path) -> None:

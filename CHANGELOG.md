@@ -32,6 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   later one is `CREATE OR REPLACE`, otherwise the first. `DIFFER_402` names it
   (`View 'v' is defined 2 times …`), in `migrate diff` and in the seam's
   `diff`/`parse_schema` warnings. Two overloads of one routine are still two.
+- **A replaced view's migration applies both ways** (#408). `migrate diff
+  --generate` wrote every `REPLACE_VIEW` as `CREATE OR REPLACE VIEW`, which
+  PostgreSQL refuses when a column is removed or renamed, since it may only add
+  columns at the end. The down of a view that gained a column always did that,
+  and so did the up of one that lost or renamed one. `ddl_objects.output_columns`
+  names a view's columns from its parse. A side whose columns do not extend the
+  other's is now `DROP VIEW` then `CREATE VIEW`, under a `-- review:` line saying
+  what the drop costs (grants, comment, and a dependent view fails it), and the
+  statement is tiered `destructive`. When a side's columns cannot be named (`*`),
+  `OR REPLACE` is kept. The `every-change` example's down now applies.
 
 ### Security
 
