@@ -102,8 +102,10 @@ when they were made; see
 Level 1 reads each statement with PostgreSQL's parser: every row of a multi-row
 `INSERT … VALUES`, and every row of a `COPY … FROM stdin` block — the format
 `confiture seed convert` and `write_copy_seed` write — decoded as PostgreSQL
-decodes COPY's text format (`\N` is NULL, `\t` a tab). A finding about a value
-names the line its row is on.
+decodes COPY's text format (`\N` is NULL, `\t` a tab) or its CSV format (quotes,
+`DELIMITER`, `QUOTE`, `ESCAPE`, `NULL`, `FORCE_NULL`, `FORCE_NOT_NULL`, `HEADER`,
+and a quoted field that spans lines). A finding about a value names the line its
+row starts on.
 
 A UUID is judged only in a column that holds one. Given a schema directory, those
 are the columns the schema types `uuid`, and a statement that names no columns
@@ -119,9 +121,9 @@ What level 1 cannot read is a finding, never a pass:
 
 | Statement | Finding |
 |---|---|
-| A file PostgreSQL's parser rejects | `SEED_UNPARSEABLE` (ERROR), naming the line |
+| A file PostgreSQL's parser rejects, or a CSV block it would refuse (an unclosed quote, a `HEADER match` that does not match) | `SEED_UNPARSEABLE` (ERROR), naming the line |
 | `INSERT … SELECT`, `INSERT … DEFAULT VALUES` | `SEED_NOT_CHECKED` (INFO): values computed at run time |
-| `COPY … (FORMAT csv)` or `binary` | `SEED_NOT_CHECKED` (INFO): level 1 decodes the text format only |
+| `COPY … (FORMAT binary)`, a CSV `COPY` with a `DEFAULT` marker, or a `FORCE_NULL`/`FORCE_NOT_NULL` naming a column the statement does not list | `SEED_NOT_CHECKED` (INFO) |
 | `COPY … FROM '<file>'`, `UPDATE`, any other statement | `SEED_NOT_CHECKED` (INFO) |
 | `SET`, `BEGIN`/`COMMIT`/`SAVEPOINT`, `TRUNCATE`, `DELETE`, a `SELECT` | nothing: they write no row |
 
