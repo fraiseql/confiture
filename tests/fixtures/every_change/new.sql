@@ -24,9 +24,11 @@ CREATE TABLE things (
     pid INT,
     code TEXT,
     qty INT,
+    span TSRANGE,
     CONSTRAINT things_new_fk FOREIGN KEY (pid) REFERENCES parent (id) ON DELETE CASCADE,
     CONSTRAINT things_new_ck CHECK (qty >= 0),
-    CONSTRAINT things_new_uq UNIQUE (code, qty)
+    CONSTRAINT things_new_uq UNIQUE (code, qty),
+    CONSTRAINT things_new_ex EXCLUDE USING gist (span WITH &&) WHERE (qty > 0)
 );
 CREATE INDEX things_new_ix ON things (code, qty);
 

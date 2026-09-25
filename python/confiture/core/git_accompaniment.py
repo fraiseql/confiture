@@ -24,6 +24,8 @@ from confiture.core.schema_change import (
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
+    ExclusionConstraintAdded,
+    ExclusionConstraintDropped,
     ForeignKeyAdded,
     ForeignKeyDropped,
     IndexAdded,
@@ -83,6 +85,8 @@ def is_body_change(change: SchemaChange) -> bool:
             | CheckConstraintDropped()
             | UniqueConstraintAdded()
             | UniqueConstraintDropped()
+            | ExclusionConstraintAdded()
+            | ExclusionConstraintDropped()
         ):
             return False
         case (

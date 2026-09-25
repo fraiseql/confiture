@@ -21,7 +21,13 @@ from __future__ import annotations
 
 from typing import assert_never
 
-from confiture.core.ddl_clauses import column_body, column_element, column_type, named
+from confiture.core.ddl_clauses import (
+    column_body,
+    column_element,
+    column_type,
+    index_element,
+    named,
+)
 from confiture.core.ddl_clauses import constraint_body as _clause
 from confiture.core.ddl_objects import OBJECT_KEYWORD, DDLObject, drop_statement
 from confiture.core.schema_change import (
@@ -39,6 +45,8 @@ from confiture.core.schema_change import (
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
+    ExclusionConstraintAdded,
+    ExclusionConstraintDropped,
     ForeignKeyAdded,
     ForeignKeyDropped,
     IndexAdded,
@@ -160,6 +168,7 @@ def _table_constraints(table: Table) -> list[Constraint]:
         *table.constraints_of("foreign_key"),
         *table.constraints_of("unique"),
         *table.constraints_of("check"),
+        *table.constraints_of("exclusion"),
     ]
     return [c for c in listed if (c.expression if c.kind == "check" else c.columns)]
 
@@ -277,15 +286,9 @@ def _column_down(change: ColumnChange) -> str:
             assert_never(change)
 
 
-def _index_element(key: str, options: str) -> str:
-    """One key of a ``CREATE INDEX``: a column bare, an expression in its own parentheses."""
-    element = key if key.isidentifier() else f"({key})"
-    return f"{element} {options}" if options else element
-
-
 def _index_keys(index: Index) -> str:
     options = index.key_options or ("",) * len(index.columns)
-    return ", ".join(_index_element(k, o) for k, o in zip(index.columns, options, strict=True))
+    return ", ".join(index_element(k, o) for k, o in zip(index.columns, options, strict=True))
 
 
 def _index_statement(index: Index, table: str, *, concurrently: bool) -> str:
@@ -363,7 +366,9 @@ def _add_constraint(
     change: CheckConstraintAdded
     | CheckConstraintDropped
     | UniqueConstraintAdded
-    | UniqueConstraintDropped,
+    | UniqueConstraintDropped
+    | ExclusionConstraintAdded
+    | ExclusionConstraintDropped,
     missing: str,
 ) -> str:
     body = _clause(change.constraint)
@@ -378,7 +383,9 @@ def _drop_constraint(
     | CheckConstraintAdded
     | CheckConstraintDropped
     | UniqueConstraintAdded
-    | UniqueConstraintDropped,
+    | UniqueConstraintDropped
+    | ExclusionConstraintAdded
+    | ExclusionConstraintDropped,
 ) -> str:
     if not change.constraint.name:
         return _unnamed(change, "constraint")
@@ -397,7 +404,14 @@ def _table_object_up(change: TableObjectChange) -> str:
             return _add_constraint(change, "a CHECK expression")
         case UniqueConstraintAdded():
             return _add_constraint(change, "a column list")
-        case ForeignKeyDropped() | CheckConstraintDropped() | UniqueConstraintDropped():
+        case ExclusionConstraintAdded():
+            return _add_constraint(change, "its elements")
+        case (
+            ForeignKeyDropped()
+            | CheckConstraintDropped()
+            | UniqueConstraintDropped()
+            | ExclusionConstraintDropped()
+        ):
             return _drop_constraint(change)
         case _:
             assert_never(change)
@@ -421,7 +435,14 @@ def _table_object_down(change: TableObjectChange) -> str | None:
             return _add_constraint(change, "a CHECK expression")
         case UniqueConstraintDropped():
             return _add_constraint(change, "a column list")
-        case ForeignKeyAdded() | CheckConstraintAdded() | UniqueConstraintAdded():
+        case ExclusionConstraintDropped():
+            return _add_constraint(change, "its elements")
+        case (
+            ForeignKeyAdded()
+            | CheckConstraintAdded()
+            | UniqueConstraintAdded()
+            | ExclusionConstraintAdded()
+        ):
             return _drop_constraint(change) if change.constraint.name else None
         case _:
             assert_never(change)
@@ -500,6 +521,8 @@ class DifferSQLGenerator:
                 | CheckConstraintDropped()
                 | UniqueConstraintAdded()
                 | UniqueConstraintDropped()
+                | ExclusionConstraintAdded()
+                | ExclusionConstraintDropped()
             ):
                 return _table_object_up(change)
             case (
@@ -538,6 +561,8 @@ class DifferSQLGenerator:
                 | CheckConstraintDropped()
                 | UniqueConstraintAdded()
                 | UniqueConstraintDropped()
+                | ExclusionConstraintAdded()
+                | ExclusionConstraintDropped()
             ):
                 return _table_object_down(change)
             case (

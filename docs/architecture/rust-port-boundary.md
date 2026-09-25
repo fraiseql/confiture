@@ -81,21 +81,21 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-24,206 lines, 33% of `core/`.
+24,363 lines, 33% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `_pglast_enums.py` | 142 | DDL transform |
-| `change_order.py` | 180 | DDL transform |
-| `change_set/` | 1,257 | DDL transform |
+| `change_order.py` | 184 | DDL transform |
+| `change_set/` | 1,267 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 546 | DDL transform |
-| `ddl_clauses.py` | 105 | DDL transform |
+| `ddl_clauses.py` | 137 | DDL transform |
 | `ddl_objects.py` | 558 | DDL transform |
 | `ddl_walk.py` | 1,417 | DDL transform |
-| `destructive.py` | 170 | DDL transform |
-| `differ.py` | 708 | DDL transform |
-| `differ_sql.py` | 626 | DDL transform |
+| `destructive.py` | 180 | DDL transform |
+| `differ.py` | 731 | DDL transform |
+| `differ_sql.py` | 651 | DDL transform |
 | `expand_contract.py` | 273 | DDL transform |
 | `fk_extractor.py` | 458 | DDL transform |
 | `function_body_checker.py` | 210 | DDL transform |
@@ -114,7 +114,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `plpgsql_parse.py` | 400 | DDL transform |
 | `replica/` | 740 | DDL transform |
 | `risk_tier.py` | 76 | DDL transform |
-| `schema_change.py` | 846 | DDL transform |
+| `schema_change.py` | 899 | DDL transform |
 | `schema_identity.py` | 23 | DDL transform |
 | `schema_model.py` | 757 | DDL transform |
 | `sql_lexer.py` | 637 | DDL transform |
@@ -124,7 +124,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-40,948 lines, 56% of `core/`.
+40,952 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -149,7 +149,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_body_drift.py` | 211 | database orchestration |
 | `function_signature_drift.py` | 375 | database orchestration |
 | `git.py` | 521 | neutral |
-| `git_accompaniment.py` | 344 | neutral |
+| `git_accompaniment.py` | 348 | neutral |
 | `git_schema.py` | 258 | neutral |
 | `grant_accompaniment.py` | 380 | database orchestration |
 | `introspection/` | 303 | database orchestration |

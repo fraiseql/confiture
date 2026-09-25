@@ -42,10 +42,12 @@ CREATE TABLE IF NOT EXISTS things (
     pid INTEGER,
     code TEXT,
     qty INTEGER,
+    span TSRANGE,
     PRIMARY KEY (id),
     CONSTRAINT things_old_fk FOREIGN KEY (pid) REFERENCES parent (id),
     CONSTRAINT things_old_uq UNIQUE (code),
-    CONSTRAINT things_old_ck CHECK (qty > 0)
+    CONSTRAINT things_old_ck CHECK (qty > 0),
+    CONSTRAINT things_old_ex EXCLUDE USING gist (span WITH &&)
 );
 CREATE INDEX IF NOT EXISTS things_old_ix ON things (code);
 

@@ -63,6 +63,8 @@ CHANGES = (
     "CheckConstraintDropped",
     "UniqueConstraintAdded",
     "UniqueConstraintDropped",
+    "ExclusionConstraintAdded",
+    "ExclusionConstraintDropped",
     "EnumTypeAdded",
     "EnumTypeDropped",
     "EnumValuesChanged",
@@ -342,6 +344,8 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
     "CheckConstraintDropped": (("table", "str"), ("constraint", "Constraint")),
     "UniqueConstraintAdded": (("table", "str"), ("constraint", "Constraint")),
     "UniqueConstraintDropped": (("table", "str"), ("constraint", "Constraint")),
+    "ExclusionConstraintAdded": (("table", "str"), ("constraint", "Constraint")),
+    "ExclusionConstraintDropped": (("table", "str"), ("constraint", "Constraint")),
     "EnumTypeAdded": (("enum", "EnumType"),),
     "EnumTypeDropped": (("enum", "EnumType"),),
     "EnumValuesChanged": (

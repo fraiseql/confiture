@@ -33,6 +33,8 @@ from confiture.core.schema_change import (
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
+    ExclusionConstraintAdded,
+    ExclusionConstraintDropped,
     ForeignKeyAdded,
     ForeignKeyDropped,
     IndexAdded,
@@ -118,6 +120,8 @@ def _rank(change: SchemaChange) -> int:
             | CheckConstraintDropped()
             | UniqueConstraintAdded()
             | UniqueConstraintDropped()
+            | ExclusionConstraintAdded()
+            | ExclusionConstraintDropped()
         ):
             return _ALTERED
         case _:

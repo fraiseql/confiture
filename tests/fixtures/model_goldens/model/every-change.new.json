@@ -291,6 +291,20 @@
           "raw_sql_type": "INTEGER",
           "type_key": "integer",
           "type_text": "integer"
+        },
+        {
+          "default": null,
+          "folded": "span",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 28,
+          "name": "span",
+          "not_null": false,
+          "primary_key": false,
+          "raw_sql_type": "TSRANGE",
+          "type_key": "tsrange",
+          "type_text": "tsrange"
         }
       ],
       "constraints": [
@@ -362,6 +376,25 @@
           "ref_columns": [],
           "ref_table": null,
           "where": null
+        },
+        {
+          "columns": [
+            "span"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "exclusion",
+          "method": "gist",
+          "name": "things_new_ex",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [
+            "&&"
+          ],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": "qty > 0"
         }
       ],
       "indexes": [

@@ -49,6 +49,8 @@ from confiture.core.schema_change import (
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
+    ExclusionConstraintAdded,
+    ExclusionConstraintDropped,
     ForeignKeyAdded,
     ForeignKeyDropped,
     IndexAdded,
@@ -130,11 +132,17 @@ def _table_object_tier(change: TableObjectChange) -> RiskTier | None:
         case ForeignKeyAdded(_, constraint):
             # Added NOT VALID and validated separately — when it has a name to validate by.
             return tier_for_add_constraint(not_valid=bool(constraint.name))
-        case CheckConstraintAdded() | UniqueConstraintAdded():
+        case CheckConstraintAdded() | UniqueConstraintAdded() | ExclusionConstraintAdded():
+            # An EXCLUDE builds its index under the lock; it has no NOT VALID.
             return tier_for_add_constraint(not_valid=False)
         case IndexDropped():
             return _TIER_BY_KIND["drop_index"]
-        case ForeignKeyDropped() | CheckConstraintDropped() | UniqueConstraintDropped():
+        case (
+            ForeignKeyDropped()
+            | CheckConstraintDropped()
+            | UniqueConstraintDropped()
+            | ExclusionConstraintDropped()
+        ):
             return _TIER_BY_KIND["drop_constraint"]
         case _:
             assert_never(change)
@@ -203,6 +211,8 @@ def tier_of(change: SchemaChange) -> RiskTier | None:
             | CheckConstraintDropped()
             | UniqueConstraintAdded()
             | UniqueConstraintDropped()
+            | ExclusionConstraintAdded()
+            | ExclusionConstraintDropped()
         ):
             return _table_object_tier(change)
         case (

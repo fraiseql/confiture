@@ -1059,6 +1059,8 @@ SchemaChange = (
     | CheckConstraintDropped
     | UniqueConstraintAdded
     | UniqueConstraintDropped
+    | ExclusionConstraintAdded
+    | ExclusionConstraintDropped
     | EnumTypeAdded
     | EnumTypeDropped
     | EnumValuesChanged
@@ -1315,6 +1317,32 @@ class UniqueConstraintDropped(_OnTable)
 ```
 
 A UNIQUE constraint only the old tree declares.
+
+| Field | Type | Default |
+|---|---|---|
+| `table` | `str` | required |
+| `constraint` | `Constraint` | required |
+
+### `ExclusionConstraintAdded`
+
+```python
+class ExclusionConstraintAdded(_OnTable)
+```
+
+An EXCLUDE constraint only the new tree declares, or one that changed (after a drop).
+
+| Field | Type | Default |
+|---|---|---|
+| `table` | `str` | required |
+| `constraint` | `Constraint` | required |
+
+### `ExclusionConstraintDropped`
+
+```python
+class ExclusionConstraintDropped(_OnTable)
+```
+
+An EXCLUDE constraint only the old tree declares, or one that changed (before an add).
 
 | Field | Type | Default |
 |---|---|---|

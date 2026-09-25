@@ -32,6 +32,8 @@ from confiture.core.schema_change import (
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
+    ExclusionConstraintAdded,
+    ExclusionConstraintDropped,
     ForeignKeyAdded,
     ForeignKeyDropped,
     IndexAdded,
@@ -102,7 +104,13 @@ def no_rollback(change: SchemaChange) -> str:
     target = ".".join(part for part in (wire.table, wire.column) if part)
     reason = f"no rollback derived for {wire.type} {target}".rstrip()
     if (
-        isinstance(change, ForeignKeyAdded | CheckConstraintAdded | UniqueConstraintAdded)
+        isinstance(
+            change,
+            ForeignKeyAdded
+            | CheckConstraintAdded
+            | UniqueConstraintAdded
+            | ExclusionConstraintAdded,
+        )
         and not change.constraint.name
     ):
         reason += ": the constraint is unnamed, and PostgreSQL chooses its name when it is added"
@@ -151,6 +159,8 @@ def data_loss_reason(change: SchemaChange) -> str | None:
             | CheckConstraintDropped()
             | UniqueConstraintAdded()
             | UniqueConstraintDropped()
+            | ExclusionConstraintAdded()
+            | ExclusionConstraintDropped()
         ):
             return None
         case EnumTypeAdded() | EnumTypeDropped() | EnumValuesChanged() | SequenceAdded():

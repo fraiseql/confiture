@@ -34,6 +34,8 @@ from confiture.core.schema_change import (
     EnumTypeAdded,
     EnumTypeDropped,
     EnumValuesChanged,
+    ExclusionConstraintAdded,
+    ExclusionConstraintDropped,
     ForeignKeyAdded,
     ForeignKeyDropped,
     IndexAdded,
@@ -343,6 +345,7 @@ class SchemaDiffer:
             changes.extend(self._compare_foreign_keys(old_table, new_table))
             changes.extend(self._compare_check_constraints(old_table, new_table))
             changes.extend(self._compare_unique_constraints(old_table, new_table))
+            changes.extend(self._compare_exclusion_constraints(old_table, new_table))
 
         return changes
 
@@ -564,6 +567,26 @@ class SchemaDiffer:
             dropped=UniqueConstraintDropped,
             table=old_table.qualified,
             identity=("columns",),
+        )
+
+    def _compare_exclusion_constraints(
+        self, old_table: Table, new_table: Table
+    ) -> list[SchemaChange]:
+        """Detect added, dropped and changed EXCLUDE constraints.
+
+        Compared whole, as a CHECK is: every part is the parser's rendering, so two
+        spellings of one constraint are one, and PostgreSQL has no way to alter one
+        in place — a change is its drop and its add.
+        """
+        parts = ("columns", "operators", "method", "where", "key_options")
+        return self._compare_named_objects(
+            old=list(old_table.constraints_of("exclusion")),
+            new=list(new_table.constraints_of("exclusion")),
+            added=ExclusionConstraintAdded,
+            dropped=ExclusionConstraintDropped,
+            table=old_table.qualified,
+            identity=parts,
+            compared=parts,
         )
 
     def _compare_enum_types(

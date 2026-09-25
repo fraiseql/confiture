@@ -58,6 +58,8 @@ __all__ = [
     "EnumTypeAdded",
     "EnumTypeDropped",
     "EnumValuesChanged",
+    "ExclusionConstraintAdded",
+    "ExclusionConstraintDropped",
     "ForeignKeyAdded",
     "ForeignKeyDropped",
     "IndexAdded",
@@ -564,6 +566,47 @@ class UniqueConstraintDropped(_OnTable):
         return {"table": self.table, "details": _unique_wire(self.constraint)}
 
 
+def _exclusion_wire(ec: Constraint) -> dict[str, Any]:
+    options = ec.key_options or ("",) * len(ec.columns)
+    return {
+        "name": ec.name,
+        "method": ec.method,
+        "elements": [
+            {"element": f"{element} {option}".rstrip(), "operator": operator}
+            for element, option, operator in zip(ec.columns, options, ec.operators, strict=True)
+        ],
+        "where": ec.where,
+    }
+
+
+@dataclass(frozen=True)
+class ExclusionConstraintAdded(_OnTable):
+    """An EXCLUDE constraint only the new tree declares, or one that changed (after a drop)."""
+
+    WIRE: ClassVar[str] = "ADD_EXCLUSION_CONSTRAINT"
+    TEMPLATE: ClassVar[str] = "ADD EXCLUSION CONSTRAINT {name} ON {table}"
+
+    table: str
+    constraint: Constraint
+
+    def _wire_fields(self) -> dict[str, Any]:
+        return {"table": self.table, "details": _exclusion_wire(self.constraint)}
+
+
+@dataclass(frozen=True)
+class ExclusionConstraintDropped(_OnTable):
+    """An EXCLUDE constraint only the old tree declares, or one that changed (before an add)."""
+
+    WIRE: ClassVar[str] = "DROP_EXCLUSION_CONSTRAINT"
+    TEMPLATE: ClassVar[str] = "DROP EXCLUSION CONSTRAINT {name}"
+
+    table: str
+    constraint: Constraint
+
+    def _wire_fields(self) -> dict[str, Any]:
+        return {"table": self.table, "details": _exclusion_wire(self.constraint)}
+
+
 @dataclass(frozen=True)
 class EnumTypeAdded(_OfEnum):
     """An enum type only the new tree declares."""
@@ -750,6 +793,8 @@ SchemaChange = (
     | CheckConstraintDropped
     | UniqueConstraintAdded
     | UniqueConstraintDropped
+    | ExclusionConstraintAdded
+    | ExclusionConstraintDropped
     | EnumTypeAdded
     | EnumTypeDropped
     | EnumValuesChanged
@@ -781,6 +826,8 @@ TableObjectChange = (
     | CheckConstraintDropped
     | UniqueConstraintAdded
     | UniqueConstraintDropped
+    | ExclusionConstraintAdded
+    | ExclusionConstraintDropped
 )
 EnumOrSequenceChange = (
     EnumTypeAdded | EnumTypeDropped | EnumValuesChanged | SequenceAdded | SequenceDropped
@@ -804,8 +851,14 @@ _SUMMARY: tuple[tuple[str, tuple[type[SchemaChange], ...]], ...] = (
     ("indexes_dropped", (IndexDropped,)),
     ("foreign_keys_added", (ForeignKeyAdded,)),
     ("foreign_keys_dropped", (ForeignKeyDropped,)),
-    ("constraints_added", (CheckConstraintAdded, UniqueConstraintAdded)),
-    ("constraints_dropped", (CheckConstraintDropped, UniqueConstraintDropped)),
+    (
+        "constraints_added",
+        (CheckConstraintAdded, UniqueConstraintAdded, ExclusionConstraintAdded),
+    ),
+    (
+        "constraints_dropped",
+        (CheckConstraintDropped, UniqueConstraintDropped, ExclusionConstraintDropped),
+    ),
     ("enum_types_added", (EnumTypeAdded,)),
     ("enum_types_dropped", (EnumTypeDropped,)),
     ("sequences_added", (SequenceAdded,)),

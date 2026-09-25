@@ -27,9 +27,11 @@ CREATE TABLE things (
     pid INT,
     code TEXT,
     qty INT,
+    span TSRANGE,
     CONSTRAINT things_old_fk FOREIGN KEY (pid) REFERENCES parent (id),
     CONSTRAINT things_old_ck CHECK (qty > 0),
-    CONSTRAINT things_old_uq UNIQUE (code)
+    CONSTRAINT things_old_uq UNIQUE (code),
+    CONSTRAINT things_old_ex EXCLUDE USING gist (span WITH &&)
 );
 CREATE INDEX things_old_ix ON things (code);
 
