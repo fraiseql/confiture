@@ -88,7 +88,6 @@ def test_mcp_server_handle_tools_call():
     mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
     mock_cursor.__exit__ = MagicMock(return_value=False)
     mock_cursor.fetchone.return_value = (42,)
-    server._conn.cursor.return_value = mock_cursor
 
     msg = {
         "jsonrpc": "2.0",
@@ -96,7 +95,8 @@ def test_mcp_server_handle_tools_call():
         "method": "tools/call",
         "params": {"name": "add", "arguments": {"x": 1, "y": 2}},
     }
-    response = server.handle_message(msg)
+    with patch("confiture.core.mcp_server.psycopg.RawCursor", return_value=mock_cursor):
+        response = server.handle_message(msg)
     assert response["id"] == 3
     content = response["result"]["content"]
     assert len(content) == 1
@@ -317,10 +317,12 @@ def test_a_routine_is_called_by_its_name_as_an_identifier():
     server = MCPServer(MagicMock(), schema="Tools", expose_confiture_tools=False)
     with patch.object(server._introspector, "introspect", return_value=catalog):
         server.initialize()
-    cursor = server._conn.cursor.return_value.__enter__.return_value
+    raw = MagicMock()
+    cursor = raw.return_value.__enter__.return_value
     cursor.fetchone.return_value = (1,)
 
-    server.call_tool(name, {})
+    with patch("confiture.core.mcp_server.psycopg.RawCursor", raw):
+        server.call_tool(name, {})
 
     statement = cursor.execute.call_args.args[0]
     text = statement if isinstance(statement, str) else statement.as_string()

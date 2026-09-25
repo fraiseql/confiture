@@ -54,7 +54,7 @@ def call(database: str) -> Iterator[object]:
     connections: list[psycopg.Connection] = []
 
     def _call(schema: str, name: str, arguments: dict[str, object] | None = None) -> object:
-        conn = psycopg.connect(database)
+        conn = psycopg.connect(database, autocommit=True)
         connections.append(conn)
         server = MCPServer(conn, schema=schema, expose_confiture_tools=False)
         server.initialize()
@@ -92,3 +92,37 @@ def test_a_mixed_case_schema_and_name_call_that_routine(call) -> None:
 
 def test_arguments_are_bound_to_the_named_routine(call) -> None:
     assert call("Tools", "Add", {"x": 40, "y": 2}) == 42
+
+
+def test_a_percent_in_a_routine_name_is_part_of_the_name(database: str, call) -> None:
+    """#375: psycopg read ``%f`` in the composed call as a placeholder once arguments came."""
+    with psycopg.connect(database, autocommit=True) as conn:
+        conn.execute(
+            sql.SQL(
+                "CREATE FUNCTION {}(x int) RETURNS int LANGUAGE sql AS 'SELECT x * 100'"
+            ).format(sql.Identifier("public", "pct%fn"))
+        )
+    assert call("public", "pct%fn", {"x": 7}) == 700
+
+
+def test_each_overload_is_its_own_tool_and_reaches_its_own_body(database: str) -> None:
+    """#375: a call picked the first overload of a name, whatever its arguments."""
+    with psycopg.connect(database, autocommit=True) as conn:
+        conn.execute('CREATE SCHEMA "Over"')
+        conn.execute(
+            """CREATE FUNCTION "Over".f(x int) RETURNS text LANGUAGE sql AS $$SELECT 'int'$$"""
+        )
+        conn.execute(
+            """CREATE FUNCTION "Over".f(x text) RETURNS text LANGUAGE sql AS $$SELECT 'text'$$"""
+        )
+        conn.execute("""CREATE FUNCTION "Over".g() RETURNS text LANGUAGE sql AS $$SELECT 'g'$$""")
+    server = MCPServer.from_url(database, schema="Over", expose_confiture_tools=False)
+    try:
+        server.initialize()
+        names = sorted(tool["name"] for tool in server.list_tools())
+        assert names == ["f__integer", "f__text", "g"]
+        assert server.call_tool("f__integer", {"x": 1}) == "int"
+        assert server.call_tool("f__text", {"x": "1"}) == "text"
+        assert server.call_tool("g", {}) == "g"
+    finally:
+        server.close()

@@ -23,6 +23,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An MCP tool call is one statement: committed when it returns, rolled back when it
+  raises** (#373). Both transports opened their connection with autocommit off, and
+  nothing committed or rolled back. A write an agent made was invisible to every
+  other session and lost when the server stopped; the connection sat `idle in
+  transaction` holding the call's locks; and one failed call failed every call after
+  it. `MCPServer.from_url` opens the connection in autocommit and owns it, so after a
+  connection-level error it reconnects for the next call; both `confiture mcp`
+  transports use it. A connection a library caller hands `MCPServer` is never
+  switched: one in a transaction is refused with `CONFIG_013`, as `apply_seeds`
+  refuses an autocommit one. A volatile routine's tool description, and `confiture
+  mcp --help`, say that a lost response is an unknown outcome.
+- **A configured role is compared by what PostgreSQL holds** (#375).
+  `ownership.expected_owner: '"AppOwner"'` is the SQL spelling of the role
+  `AppOwner`. Four consumers compared the spelling with the role: `bootstrap` planned
+  `CREATE ROLE` on every run, `own_001` flagged every object (and refused a quoted
+  `-- confiture:run-as`), `migrate fix --ownership` never recognised the line it
+  wrote, and `drift --check-ownership` reported every relation as wrongly owned.
+  `OwnershipExpectation.owner_identity` / `owner_spelling` split the two, and the YAML
+  is unchanged.
+- **MCP calls a routine by its exact overload, whatever its name holds** (#375). A `%`
+  in a routine's name was read as a psycopg placeholder once arguments were passed;
+  routines are called through a `RawCursor`. A call picked the first overload of a
+  name; overloaded routines are now one tool each (`f__integer`, `f__text`), and each
+  argument is cast to its parameter's type.
+- **One identifier quoter** (#375). `schema_identity.quote_identifier` quotes an
+  identifier written into text only where PostgreSQL needs it, from pglast's own
+  keyword lists; `identifier_identity` reads one back. The idempotency suggestions
+  asked Python's `keyword.iskeyword`, so a suggested guard for a table named `user` or
+  `order` did not parse. `bootstrap`'s statements now write a lower-case role bare
+  (`CREATE ROLE migrator`), which PostgreSQL reads the same way.
+  `tests/unit/test_one_identifier_quoter.py` fails on a quote doubled by hand anywhere
+  else.
 - **`lint-unified` reports its tools, and what they found where they found it** (#358).
   - A missing squawk or sqlfluff was reported as a clean run: `No issues found.`,
     naming neither tool. A check that was asked for and could not run is now named in

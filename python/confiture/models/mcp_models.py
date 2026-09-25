@@ -48,8 +48,15 @@ class MCPTool:
             }
             if not param.has_default:
                 required.append(param.name)
+        description = f"Call {info.qualified_name} ({info.volatility.value})"
+        if info.volatility.value.lower() == "volatile":
+            # It may write: a response that never arrives is an unknown outcome.
+            description += (
+                ". Committed when it returns; if no response arrives, whether it ran is "
+                "unknown — check before calling it again"
+            )
         return cls(
             name=info.name,
-            description=f"Call {info.qualified_name} ({info.volatility.value})",
+            description=description,
             input_schema={"type": "object", "properties": props, "required": required},
         )

@@ -152,7 +152,7 @@ class OwnershipFixer:
             indent = self._leading_indent(lines, create.line - 1)
             alter_line = (
                 f"{indent}ALTER {alter_form} {qualified} "
-                f"OWNER TO {self.expectation.expected_owner};\n"
+                f"OWNER TO {self.expectation.owner_spelling};\n"
             )
             lines.insert(insert_idx, alter_line)
         return "".join(lines)
@@ -174,7 +174,7 @@ class OwnershipFixer:
         if not self.expectation.lint_enabled:
             return []
         run_as = self._rule._extract_run_as(sql)
-        if run_as == self.expectation.expected_owner:
+        if run_as == self.expectation.owner_identity:
             return []
 
         creates, alters = self._rule._walk_ast(sql)
@@ -196,7 +196,7 @@ class OwnershipFixer:
             qualified = f"{create.schema}.{create.relname}"
             if self._rule._matches_ignore(qualified):
                 continue
-            if alter_index.get((create.schema, create.relname)) == self.expectation.expected_owner:
+            if alter_index.get((create.schema, create.relname)) == self.expectation.owner_identity:
                 continue
             result.append((create, create.relkind))
         return result

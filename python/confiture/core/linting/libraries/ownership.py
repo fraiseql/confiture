@@ -38,6 +38,7 @@ from confiture.core import sql_lexer
 from confiture.core.idempotency._ast_visitor import _first_keyword_pos
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
+from confiture.core.schema_identity import identifier_identity
 
 # Default schema for unqualified identifiers in PostgreSQL.
 _DEFAULT_SCHEMA = "public"
@@ -140,7 +141,7 @@ class Own001OwnershipCoverage:
 
         # Front-matter ``-- confiture:run-as <role>`` short-circuit.
         run_as = self._extract_run_as(text)
-        if run_as == self.expectation.expected_owner:
+        if run_as == self.expectation.owner_identity:
             return []
 
         creates, alters = self._walk_ast(text)
@@ -173,8 +174,9 @@ class Own001OwnershipCoverage:
             if self._matches_ignore(qualified):
                 continue
 
+            # pglast has folded the OWNER TO role to what PostgreSQL holds.
             owner = alter_index.get((create.schema, create.relname))
-            if owner == self.expectation.expected_owner:
+            if owner == self.expectation.owner_identity:
                 continue
 
             violations.append(
@@ -204,7 +206,7 @@ class Own001OwnershipCoverage:
 
     @staticmethod
     def _extract_run_as(text: str) -> str | None:
-        """Return the declared role from a top-of-file ``-- confiture:run-as`` directive.
+        """Return the role a top-of-file ``-- confiture:run-as`` directive declares, as an identity.
 
         The first ``run-as`` directive whose argument is an identifier wins.
         The directive may sit anywhere in the file but is typically used as
@@ -215,8 +217,9 @@ class Own001OwnershipCoverage:
             if directive.name != _RUN_AS or not directive.argument:
                 continue
             role = directive.argument.split()[0]
-            if role.isidentifier():
-                return role
+            quoted = len(role) > 1 and role.startswith('"') and role.endswith('"')
+            if quoted or role.isidentifier():
+                return identifier_identity(role)
         return None
 
     @staticmethod
@@ -387,7 +390,7 @@ class Own002BareAlterOwner:
         relevant_alters = [
             (alter, was_guarded)
             for alter, was_guarded in alter_records
-            if alter.new_owner == self.expectation.expected_owner
+            if alter.new_owner == self.expectation.owner_identity
             and alter.schema in self._scope_schemas
         ]
         if not relevant_alters:

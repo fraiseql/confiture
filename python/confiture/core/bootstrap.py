@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING
 
 import psycopg
 
+from confiture.core.schema_identity import identifier_identity, quote_identifier
 from confiture.exceptions import BootstrapError, BootstrapScopeError
 
 if TYPE_CHECKING:
@@ -165,7 +166,7 @@ class BootstrapPlanner:
         steps: list[BootstrapStep] = []
 
         # Step 1: role creation.
-        if not self._role_exists(conn, self.ownership.expected_owner):
+        if not self._role_exists(conn, self.ownership.owner_identity):
             steps.append(self._step_create_role())
 
         # Step 2: REASSIGN OWNED — gated by scope check.
@@ -202,10 +203,9 @@ class BootstrapPlanner:
     # ------------------------------------------------------------------ #
 
     def _step_create_role(self) -> BootstrapStep:
-        # Role names go through quote_ident at execute time — never
-        # parameterized via %s.  We pre-render with the validated
-        # identifier here for display.
-        role = _quote_ident(self.ownership.expected_owner)
+        # A role cannot be a %s parameter: the statement carries the role's
+        # identity, quoted by the one identifier quoter.
+        role = quote_identifier(self.ownership.owner_identity)
         return BootstrapStep(
             label="create_role",
             sql=f"CREATE ROLE {role} WITH LOGIN NOCREATEROLE",
@@ -213,7 +213,7 @@ class BootstrapPlanner:
         )
 
     def _step_reassign_owned(self) -> BootstrapStep:
-        role = _quote_ident(self.ownership.expected_owner)
+        role = quote_identifier(self.ownership.owner_identity)
         return BootstrapStep(
             label="reassign_owned",
             sql=f"REASSIGN OWNED BY postgres TO {role}",
@@ -227,15 +227,15 @@ class BootstrapPlanner:
     def _steps_default_privileges(self) -> list[BootstrapStep]:
         if self.ownership.default_privileges is None:
             return []
-        role = _quote_ident(self.ownership.expected_owner)
+        role = quote_identifier(self.ownership.owner_identity)
         steps: list[BootstrapStep] = []
         for schema, role_privs in self.ownership.default_privileges.items():
-            schema_ident = _quote_ident(schema)
+            schema_ident = quote_identifier(_key_name(schema))
             for grantee, privs in role_privs.items():
                 # Privilege keywords are validated by OwnershipExpectation's
                 # Pydantic validator — they're known constants here.
                 upper_privs = ", ".join(p.upper() for p in privs)
-                grantee_ident = _quote_ident(grantee)
+                grantee_ident = quote_identifier(_key_name(grantee))
                 steps.append(
                     BootstrapStep(
                         label=f"default_privileges_{schema}_{grantee}",
@@ -325,21 +325,16 @@ class BootstrapExecutor:
         )
 
 
-def _quote_ident(ident: str) -> str:
-    """*ident* as one double-quoted PostgreSQL identifier, whatever it holds.
+def _key_name(key: str) -> str:
+    """A ``default_privileges`` key's name: ``"Name"`` is ``Name``, anything else the name itself.
 
-    The config spells a mixed-case role ``"Name"``, the way SQL writes the
-    identifier ``Name``: a value that is exactly one quoted identifier — its
-    inner quotes doubled — is kept as written. Any other value is the name
-    itself, and its quotes are doubled, so nothing in it can end the
-    identifier; ``default_privileges`` keys are not validated before they
-    reach here.
+    The keys are not validated as identifiers before they reach here: only a key
+    that is exactly one quoted identifier — no quote inside it but a doubled one —
+    is read as one. Any other key, a bare one included, is taken as written.
     """
-    inner = ident[1:-1]
-    if inner and ident[0] == ident[-1] == '"' and '"' not in inner.replace('""', ""):
-        return ident
-    escaped = ident.replace('"', '""')
-    return f'"{escaped}"'
+    inner = key[1:-1]
+    one_quoted = len(key) > 1 and key[0] == key[-1] == '"' and '"' not in inner.replace('""', "")
+    return identifier_identity(key) if one_quoted else key
 
 
 __all__ = [

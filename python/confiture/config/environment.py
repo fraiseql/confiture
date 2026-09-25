@@ -57,6 +57,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from confiture.config._env_vars import expand_env_vars
+from confiture.core.schema_identity import identifier_identity
 from confiture.exceptions import ConfigurationError
 from confiture.url_redaction import redact_url
 
@@ -745,6 +746,16 @@ class OwnershipExpectation(BaseModel):
     lint_enabled: bool = True
     bootstrap_connection_url: str | None = None
     default_privileges: dict[str, dict[str, list[str]]] | None = None
+
+    @property
+    def owner_identity(self) -> str:
+        """The role PostgreSQL holds: ``AppOwner`` for ``'"AppOwner"'``. Compare this."""
+        return identifier_identity(self.expected_owner)
+
+    @property
+    def owner_spelling(self) -> str:
+        """How SQL writes the role: ``expected_owner`` as the YAML wrote it. Write this."""
+        return self.expected_owner
 
     @field_validator("expected_owner")
     @classmethod
