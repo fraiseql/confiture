@@ -151,10 +151,6 @@ def test_the_schema_linter_and_tree_rules_run_without_the_external_tools(project
 
 
 @pytest.mark.usefixtures("without_tools")
-@pytest.mark.xfail(
-    strict=True,
-    reason="#358: a schema finding's file is the environment name ('local'), not the file it is in",
-)
 def test_a_schema_finding_names_the_file_it_is_in(project: Path) -> None:
     result = runner.invoke(app, ["lint-unified", "--check", "schema", "--format", "json"])
 

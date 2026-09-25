@@ -34,12 +34,12 @@ from confiture.models.lint import LintSeverity
 from confiture.models.unified_lint import UnifiedLintIssue, UnifiedLintResult
 
 
-def _violation_to_unified_issue(v, tool: str, file=None):
-    """Convert a LintViolation to a UnifiedLintIssue."""
+def _violation_to_unified_issue(v, tool: str):
+    """Convert a LintViolation to a UnifiedLintIssue, at the file and line it names."""
 
     return UnifiedLintIssue(
         tool=tool,
-        file=file if file is not None else (v.file_path or v.object_name),
+        file=v.file_path or v.object_name,
         line=v.line_number,
         message=v.message,
         severity=LintSeverity(v.severity.value),
@@ -146,7 +146,7 @@ def lint_unified(
         try:
             linter_report = schema_linter.lint()
             all_issues.extend(
-                _violation_to_unified_issue(v, "schema", file=env)
+                _violation_to_unified_issue(project_relative(v, Path()), "schema")
                 for v in linter_report.errors + linter_report.warnings + linter_report.info
             )
         # Reason: lint-unified skips a linter that fails for any reason and says so
