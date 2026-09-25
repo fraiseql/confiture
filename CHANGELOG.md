@@ -22,7 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     text mode and listed under a new `skipped` key in `--format json` (additive:
     `{check, tool, reason}`). So is a file sqlfluff failed on, and a schema or tree
     check that raised; those used to print their note to stdout even in JSON mode.
-    The exit code is unchanged: a skipped check alone exits 0.
+    Such a run now exits 2 (`error_codes.NOT_RUN`), even where another check found
+    an error: the report is incomplete, not clean. A run that asked for all four
+    checks and exited 0 without squawk or sqlfluff installed now exits 2; pass
+    `--check schema --check tree` to ask only for what the environment can run.
   - No squawk finding ever reached the report. `SquawkRunner` parsed a shape squawk
     2.x does not emit, and its unit test fed it an invented output in that shape.
     squawk 2.x's flat list is parsed now, and its `line`, which squawk counts from 0,

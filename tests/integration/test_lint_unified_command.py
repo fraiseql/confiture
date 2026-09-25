@@ -9,9 +9,10 @@ cases — and a two-table schema tree.
 
 With the external tools taken away (``squawk`` off ``PATH``, ``sqlfluff``
 unimportable), the file pins what the command reports: no issue from either tool,
-and each check that could not run named under ``skipped`` — never "No issues
-found." — while the schema linter and the tree rules still run and still fail the
-run on an error. Where a tool is installed, the file pins that its findings reach
+each check that could not run named under ``skipped`` — never "No issues
+found." — and exit 2 (``NOT_RUN``), even where another check found an error,
+while the schema linter and the tree rules still run and, asked for alone, still
+fail the run on an error. Where a tool is installed, the file pins that its findings reach
 the report at their own file and line; those tests skip where it is not, and the
 unit tests parse the tools' recorded output (``tests/fixtures/unified_lint/``) in
 every environment.
@@ -30,7 +31,7 @@ import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from confiture.error_codes import FINDINGS
+from confiture.error_codes import FINDINGS, NOT_RUN
 
 pytestmark = pytest.mark.integration
 
@@ -102,7 +103,7 @@ def test_the_tool_checks_report_no_issue_when_squawk_and_sqlfluff_are_missing(
         ["lint-unified", "--check", "safety", "--check", "format", MIGRATION, "--format", "json"],
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == NOT_RUN, result.output
     payload = _json(result.stdout)
     assert payload["summary"] == {"total": 0, "errors": 0, "warnings": 0, "info": 0}
     assert payload["issues"] == []
@@ -118,7 +119,7 @@ def test_a_missing_tool_is_named_rather_than_reported_clean(project: Path) -> No
         app, ["lint-unified", "--check", "safety", "--check", "format", MIGRATION]
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == NOT_RUN, result.output
     assert "squawk" in result.output
     assert "sqlfluff" in result.output
     assert "No issues found." not in result.output
@@ -130,10 +131,13 @@ def test_the_schema_linter_and_tree_rules_run_without_the_external_tools(project
         "CREATE TABLE gadget (id BIGINT PRIMARY KEY);\n"
     )
 
-    result = runner.invoke(app, ["lint-unified", MIGRATION, "--format", "json"])
+    result = runner.invoke(
+        app, ["lint-unified", "--check", "schema", "--check", "tree", MIGRATION, "--format", "json"]
+    )
 
     assert result.exit_code == FINDINGS, result.output
     payload = _json(result.stdout)
+    assert payload["skipped"] == []
     assert {issue["tool"] for issue in payload["issues"]} == {"schema", "tree"}
     assert sorted(issue["message"] for issue in _by_tool(payload, "schema")) == [
         "Table 'gadget' should have a COMMENT describing its purpose",
@@ -142,6 +146,20 @@ def test_the_schema_linter_and_tree_rules_run_without_the_external_tools(project
     (tree,) = _by_tool(payload, "tree")
     assert (tree["rule"], tree["severity"]) == ("tree_001", "error")
     assert "10_gadget.sql, 10_widget.sql" in tree["message"]
+
+
+@pytest.mark.usefixtures("without_tools")
+def test_a_check_that_did_not_run_outweighs_the_errors_the_others_found(project: Path) -> None:
+    (project / "db" / "schema" / "10_gadget.sql").write_text(
+        "CREATE TABLE gadget (id BIGINT PRIMARY KEY);\n"
+    )
+
+    result = runner.invoke(app, ["lint-unified", MIGRATION, "--format", "json"])
+
+    assert result.exit_code == NOT_RUN, result.output
+    payload = _json(result.stdout)
+    assert payload["summary"]["errors"] >= 1
+    assert {s["tool"] for s in payload["skipped"]} == {"squawk", "sqlfluff"}
 
 
 @pytest.mark.usefixtures("without_tools")

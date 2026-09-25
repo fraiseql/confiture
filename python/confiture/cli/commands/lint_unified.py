@@ -29,7 +29,7 @@ from confiture.core.linting.selection import (
     project_relative,
 )
 from confiture.core.unified_linter import UnifiedLinter
-from confiture.error_codes import FINDINGS
+from confiture.error_codes import FINDINGS, NOT_RUN
 from confiture.models.lint import LintSeverity
 from confiture.models.unified_lint import SkippedCheck, UnifiedLintIssue, UnifiedLintResult
 
@@ -109,8 +109,9 @@ def lint_unified(
 
     Squawk and SQLFluff are not installed with confiture. A check whose tool is
     missing, or which fails, does not run and is not reported clean: it is named
-    as skipped, in text and under ``skipped`` in JSON, and the run still exits 0
-    unless another check found an error.
+    as skipped, in text and under ``skipped`` in JSON, and the run exits 2 even
+    when another check found an error — the report is incomplete. Ask only for
+    the checks this environment can run (``--check schema --check tree``).
 
     EXAMPLES:
       confiture lint-unified db/migrations/
@@ -202,5 +203,7 @@ def lint_unified(
 
 
 def _exit_on_errors(result: UnifiedLintResult, *, fail_on_error: bool) -> None:
+    if result.skipped:
+        raise typer.Exit(NOT_RUN)
     if fail_on_error and result.has_errors:
         raise typer.Exit(FINDINGS)  # success-signal: lint found errors

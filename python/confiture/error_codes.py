@@ -308,6 +308,11 @@ SUCCESS: Final = 0
 FINDINGS: Final = 1
 #: The flags make no sense together. Click exits 2 for its own usage errors; so do we.
 USAGE: Final = 2
+#: A check the command was asked to run could not run — a tool not installed, a
+#: linter that raised. The report is incomplete, not clean, whatever the checks that
+#: did run found. The integer is ``USAGE``'s: the run was asked for something this
+#: environment cannot do.
+NOT_RUN: Final = 2
 #: An error with no registered code: the exit a ``ConfiturError`` that carries none
 #: takes, and so the exit of any exception ``fail()`` has to wrap.
 FAILURE: Final = 1
