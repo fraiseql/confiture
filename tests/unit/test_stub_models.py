@@ -6,7 +6,7 @@ from datetime import UTC
 
 from confiture.core.introspection.type_mapping import TypeMapper
 from confiture.models.function_info import FunctionInfo, FunctionParam, Volatility
-from confiture.models.stub_models import StubFile, StubFunction, _to_pascal_case
+from confiture.models.stub_models import StubFile, StubFormat, StubFunction, _to_pascal_case
 
 
 def _make_info(
@@ -50,7 +50,7 @@ def test_stub_function_from_function_info_scalar():
     assert stub.name == "add"
     assert stub.python_params == [("x", "int"), ("y", "int")]
     assert stub.python_return == "int"
-    assert stub.pydantic_model is None
+    assert stub.result_model is None
 
 
 def test_stub_function_from_procedure():
@@ -66,10 +66,9 @@ def test_stub_function_jsonb_with_inference():
     source = "RETURN jsonb_build_object('booking_id', v_id, 'state', v_state)"
     info = _make_info(name="create_booking", return_type="jsonb", source=source)
     stub = StubFunction.from_function_info(info, mapper)
-    assert stub.pydantic_model_name == "CreateBookingResult"
+    assert stub.result_model == "CreateBookingResult"
     assert stub.python_return == "CreateBookingResult"
-    assert stub.pydantic_model is not None
-    assert "class CreateBookingResult" in stub.pydantic_model
+    assert "class CreateBookingResult(BaseModel):" in stub.render_model(StubFormat.PYDANTIC)
 
 
 def test_stub_function_jsonb_without_inference():
@@ -77,7 +76,7 @@ def test_stub_function_jsonb_without_inference():
     info = _make_info(name="get_data", return_type="jsonb", source="RETURN result;")
     stub = StubFunction.from_function_info(info, mapper)
     assert stub.python_return == "dict[str, Any]"
-    assert stub.pydantic_model is None
+    assert stub.result_model is None
 
 
 def test_stub_function_render_function():
