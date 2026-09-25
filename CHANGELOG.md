@@ -44,7 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   adopt it with `--baseline`. The rest of the `tree` family stays opt-in.
   `examples/07-comment-validation` carried `20_views.sql`, a byte-identical copy of
   `20_views_safe.sql` that `build_001` already reported; it is gone, and its
-  README's broken file is numbered `30_`.
+  README's broken file is numbered `30_`. Its recorded `migrate diff` goldens held
+  each of the example's two views twice, one per copy; they now hold each once.
 
 ## [1.19.0] - 2026-09-25
 
