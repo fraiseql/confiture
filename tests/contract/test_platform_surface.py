@@ -281,7 +281,12 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("failed_files", "list[str]"),
         ("seed_profile", "str | None"),
     ),
-    "PrepSeedReport": (("violations", "list[PrepSeedViolation]"), ("scanned_files", "list[str]")),
+    "PrepSeedReport": (
+        ("violations", "list[PrepSeedViolation]"),
+        ("scanned_files", "list[str]"),
+        ("uuid_basis", "str | None"),
+        ("rows_read", "dict[str, int]"),
+    ),
     "PrepSeedViolation": (
         ("pattern", "PrepSeedPattern"),
         ("severity", "ViolationSeverity"),

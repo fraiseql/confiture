@@ -86,6 +86,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_RULE",
         "OBJECT_FOREIGN_TABLE",
     ),
+    "SetOperation": ("SETOP_NONE",),
     "VariableSetKind": (
         "VAR_SET_VALUE",
         "VAR_SET_CURRENT",

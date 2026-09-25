@@ -163,16 +163,16 @@ def parse(sql: str) -> list[ParsedStatement]:
     """Every top-level statement with its source location. Raises ``pglast.parser.ParseError``."""
     tree = pglast.parse_sql(sql)
     out: list[ParsedStatement] = []
+    # Statements come in source order: count the newlines since the last one, not
+    # from the top each time, or a file of many statements is quadratic.
+    pos, line = 0, 1
     for raw in tree or []:
         location = raw.stmt_location or 0
         start = skip_leading_comments(sql, location)
+        line += sql.count("\n", pos, start)
+        pos = start
         out.append(
-            ParsedStatement(
-                stmt=raw.stmt,
-                location=location,
-                length=raw.stmt_len or 0,
-                line=sql.count("\n", 0, start) + 1,
-            )
+            ParsedStatement(stmt=raw.stmt, location=location, length=raw.stmt_len or 0, line=line)
         )
     return out
 
@@ -561,13 +561,16 @@ class CopyBlock:
 
     ``start`` / ``end`` are its offsets in the text, ``end`` just past the ``\\.``
     line (the end of the text when there is none). ``statement`` runs from
-    ``COPY`` to the end of its line; ``data`` is the rows, the terminator left out.
+    ``COPY`` to the end of its line; ``data`` is the rows, the terminator left out,
+    and ``data_start`` the offset of its first character, so a row's line in the
+    text is known.
     """
 
     start: int
     end: int
     statement: str
     data: str
+    data_start: int
 
 
 def copy_blocks(sql: str) -> list[CopyBlock]:
@@ -586,7 +589,13 @@ def copy_blocks(sql: str) -> list[CopyBlock]:
         if last.rstrip("\r") == _COPY_TERMINATOR:
             data = f"{body}\n" if body else ""
         found.append(
-            CopyBlock(start=start, end=end, statement=sql[start:data_start].strip(), data=data)
+            CopyBlock(
+                start=start,
+                end=end,
+                statement=sql[start:data_start].strip(),
+                data=data,
+                data_start=data_start,
+            )
         )
     return found
 

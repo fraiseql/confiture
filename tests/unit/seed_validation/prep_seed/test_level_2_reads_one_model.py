@@ -89,3 +89,53 @@ def test_a_resolver_file_is_not_skipped_by_its_name(tmp_path: Path) -> None:
     """What a file defines decides, not what it is called."""
     messages = _run(tmp_path, **{"10_prep.sql": PREP, "fn_resolve_tb_x.sql": CATALOG})
     assert not [m for m in messages if "no corresponding final table" in m], messages
+
+
+def _findings(tmp_path: Path, **files: str) -> list:
+    schema = tmp_path / "schema"
+    for name, content in files.items():
+        path = schema / name.replace("__", "/")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    seeds = tmp_path / "seeds"
+    seeds.mkdir()
+    config = OrchestrationConfig(max_level=2, seeds_dir=seeds, schema_dir=schema)
+    return PrepSeedOrchestrator(config).run().violations
+
+
+def test_a_finding_names_the_file_and_line_the_table_is_created_on(tmp_path: Path) -> None:
+    """The file a table is in is what the schema read says, never ``db/schema/<table>.sql``."""
+    found = _findings(
+        tmp_path,
+        **{
+            "prep__tables.sql": "-- prep\n\n" + PREP,
+            "catalog__all.sql": "CREATE SCHEMA catalog;\n"
+            + "CREATE TABLE catalog.tb_x (id UUID);\n",
+        },
+    )
+    by_message = {v.message.split(" ", 2)[1]: v for v in found}
+    places = {
+        (Path(v.file_path).relative_to(tmp_path / "schema").as_posix(), v.line_number)
+        for v in found
+    }
+    assert places == {("prep/tables.sql", 3), ("catalog/all.sql", 2)}, by_message
+
+
+def test_a_prep_table_without_a_final_table_is_found_where_it_is_created(tmp_path: Path) -> None:
+    (missing,) = _findings(tmp_path, **{"a__b.sql": "\n" + PREP})
+    assert "no corresponding final table catalog.tb_x" in missing.message
+    assert (Path(missing.file_path).name, missing.line_number) == ("b.sql", 2)
+
+
+def test_a_self_reference_names_the_resolver_that_must_handle_it(tmp_path: Path) -> None:
+    found = _findings(
+        tmp_path,
+        **{
+            "10.sql": "CREATE TABLE prep_seed.tb_node (id UUID, fk_parent_node_id UUID);\n"
+            "CREATE TABLE catalog.tb_node (id UUID, pk_node BIGINT, fk_parent_node BIGINT);\n",
+            "fn__resolve.sql": "\n\nCREATE FUNCTION catalog.fn_resolve_tb_node() RETURNS void "
+            "LANGUAGE sql AS $$ SELECT 1 $$;\n",
+        },
+    )
+    (self_ref,) = [v for v in found if "self-referencing" in v.message]
+    assert (Path(self_ref.file_path).name, self_ref.line_number) == ("resolve.sql", 3)

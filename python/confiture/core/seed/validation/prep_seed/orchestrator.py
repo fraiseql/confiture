@@ -182,7 +182,7 @@ class PrepSeedOrchestrator:
 
         # Level 1: Seed file validation
         if self.config.max_level >= 1:
-            violations = self._run_level_1()
+            violations = self._run_level_1(report)
             report.violations.extend(violations)
             self._record_scanned_files_level1(report)
 
@@ -239,16 +239,40 @@ class PrepSeedOrchestrator:
         """The seed files every level reads: the tree ``seed apply`` loads, in its order."""
         return files_under(self.config.seeds_dir)
 
-    def _run_level_1(self) -> list[PrepSeedViolation]:
-        """Run Level 1: Seed file validation."""
-        validator = Level1SeedValidator()
+    def _run_level_1(self, report: PrepSeedReport) -> list[PrepSeedViolation]:
+        """Run Level 1: every statement of every seed file, every row of it.
+
+        A UUID column is one the schema types ``uuid`` when the schema can be
+        read; otherwise the prep-seed convention names them, and the report
+        says which it was.
+        """
+        validator = Level1SeedValidator(
+            self._level_1_model(), prep_seed_schema=self.config.prep_seed_schema
+        )
         violations: list[PrepSeedViolation] = []
 
         for file_path in self._seed_files():
             content = _read(file_path, SeedError)
             violations.extend(validator.validate_seed_file(content, str(file_path)))
 
+        report.uuid_basis = validator.uuid_basis
+        report.rows_read = dict(validator.rows_read)
         return violations
+
+    def _level_1_model(self) -> SchemaModel | None:
+        """The schema's model for level 1, or ``None`` when there is none to read.
+
+        Level 1 needs no schema: a directory that is not there, or a tree that
+        cannot be read or does not parse, leaves the convention to name the UUID
+        columns, and the report's ``uuid_basis`` says so — level 2 reports that
+        tree when it runs.
+        """
+        if not self.config.schema_dir.is_dir():
+            return None
+        try:
+            return self._read_schema().model
+        except SchemaError:
+            return None
 
     def _run_level_2(self) -> list[PrepSeedViolation]:
         """Run Level 2: Schema consistency validation.
@@ -280,22 +304,15 @@ class PrepSeedOrchestrator:
         def get_final_table(table_name: str) -> Table | None:
             return tables.catalog.get((catalog_schema, table_name))
 
-        validator = Level2SchemaValidator(get_final_table=get_final_table)
-
-        for (_schema, table_name), prep_table in tables.prep.items():
-            try:
-                violations.extend(validator.validate_schema_mapping(prep_table))
-            except Exception as e:  # Reason: level-2 validation parses arbitrary seed SQL; any parser failure is a reported violation
-                violations.append(
-                    PrepSeedViolation(
-                        pattern=PrepSeedPattern.MISSING_FK_MAPPING,
-                        severity=ViolationSeverity.WARNING,
-                        message=f"Error validating schema for {table_name}: {e!s}",
-                        file_path=f"db/schema/{table_name}.sql",
-                        line_number=1,
-                        impact="Could not validate schema mappings",
-                    )
-                )
+        validator = Level2SchemaValidator(
+            get_final_table=get_final_table,
+            locate=lambda table: self._where(table.schema or DEFAULT_SCHEMA, table.name),
+            locate_resolver=self._resolver_of,
+            prep_seed_schema=self.config.prep_seed_schema,
+            catalog_schema=self.config.catalog_schema,
+        )
+        for prep_table in tables.prep.values():
+            violations.extend(validator.validate_schema_mapping(prep_table))
 
         return violations
 
@@ -643,7 +660,15 @@ class PrepSeedOrchestrator:
 
     def _locate(self, table: str) -> tuple[str, int]:
         """The file and line ``<catalog>.<table>`` is created on, for a level-5 finding."""
-        catalog = self.config.catalog_schema.lower()
+        return self._where(self.config.catalog_schema, table)
+
+    def _where(self, schema: str, table: str) -> tuple[str, int]:
+        """The file and line ``<schema>.<table>`` is created on, as the schema read found it.
+
+        A table the read holds no file for — the schema is not read, or does not
+        parse — is named as the schema directory, never as a path made up from
+        the table's name.
+        """
         try:
             definitions = self._read_schema().definitions
         except SchemaError:
@@ -653,11 +678,18 @@ class PrepSeedOrchestrator:
             if (
                 obj.kind == "table"
                 and obj.folded_name == table
-                and (obj.folded_schema or DEFAULT_SCHEMA).lower() == catalog
+                and (obj.folded_schema or DEFAULT_SCHEMA).lower() == schema.lower()
                 and definition.file is not None
             ):
                 return str(definition.file), definition.line
         return str(self.config.schema_dir), 1
+
+    def _resolver_of(self, table: Table) -> tuple[str, int] | None:
+        """The file and line of the resolver that fills *table*, when the schema defines one."""
+        for resolver in self._discovered():
+            if resolver.name == f"fn_resolve_{table.name}" and resolver.file:
+                return resolver.file, resolver.line
+        return None
 
 
 def validate_seeds(

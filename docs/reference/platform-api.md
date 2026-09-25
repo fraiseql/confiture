@@ -823,11 +823,17 @@ Report of prep_seed validation results.
 Attributes:
     violations: List of violations found
     scanned_files: List of files scanned
+    uuid_basis: What decided which columns level 1 checked as UUIDs:
+        `"schema"` (the columns it types `uuid`) or `"convention"`
+        (`id` and `fk_*_id`); `None` when level 1 did not run
+    rows_read: The rows level 1 read, per table as the seed statements name it
 
 | Field | Type | Default |
 |---|---|---|
 | `violations` | `list[PrepSeedViolation]` | empty |
 | `scanned_files` | `list[str]` | empty |
+| `uuid_basis` | `str \| None` | `None` |
+| `rows_read` | `dict[str, int]` | empty |
 
 #### `PrepSeedReport.add_violation`
 
@@ -906,7 +912,7 @@ These patterns represent issues specific to the prep_seed transformation
 pattern where UUID FKs in prep_seed schema transform to BIGINT FKs in
 final tables via resolution functions.
 
-Members: `SCHEMA_DRIFT_IN_RESOLVER`, `MISSING_FK_TRANSFORMATION`, `MISSING_RESOLVER_FUNCTION`, `MISSING_FK_MAPPING`, `PREP_SEED_TARGET_MISMATCH`, `INVALID_FK_NAMING`, `INVALID_UUID_FORMAT`, `UNION_TYPE_MISMATCH`, `NULL_FK_AFTER_RESOLUTION`, `UNIQUE_CONSTRAINT_VIOLATION`, `MISSING_SELF_REFERENCE_HANDLING`, `UNION_INLINE_COMMENT`, `UNION_UNCAST_NULL`, `RESOLVER_NOT_READ`.
+Members: `SCHEMA_DRIFT_IN_RESOLVER`, `MISSING_FK_TRANSFORMATION`, `MISSING_RESOLVER_FUNCTION`, `MISSING_FK_MAPPING`, `PREP_SEED_TARGET_MISMATCH`, `INVALID_FK_NAMING`, `INVALID_UUID_FORMAT`, `UNION_TYPE_MISMATCH`, `NULL_FK_AFTER_RESOLUTION`, `UNIQUE_CONSTRAINT_VIOLATION`, `MISSING_SELF_REFERENCE_HANDLING`, `UNION_INLINE_COMMENT`, `UNION_UNCAST_NULL`, `RESOLVER_NOT_READ`, `SEED_UNPARSEABLE`, `SEED_NOT_CHECKED`, `SEED_ROW_WIDTH`.
 
 ### `ViolationSeverity`
 
