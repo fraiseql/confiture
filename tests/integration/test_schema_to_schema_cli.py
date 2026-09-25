@@ -16,8 +16,6 @@ cleanup — a target with no FDW left in it and its migrated rows still there.
 ``--source`` / ``--target`` are spelled all three ways the command resolves them: an
 environment name (``db/environments/{name}.yaml``), a config path, and a DSN.
 
-The ``xfail(strict=True)`` tests are defects, each stated in its reason.
-
 postgres_fdw is not a trusted extension, and ``setup`` maps the connecting role with an
 empty password, which only a superuser may use: without one the tests skip.
 """
@@ -360,11 +358,6 @@ def test_setup_skip_import_creates_the_server_and_an_empty_foreign_schema(
     assert _foreign_tables(target) == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#359: a second setup fails: every CREATE is IF NOT EXISTS but IMPORT FOREIGN SCHEMA "
-    "collides with the tables the first one imported",
-)
 def test_setup_run_twice_leaves_one_fdw(source: str, target: str) -> None:
     _setup(source, target)
 
@@ -452,10 +445,6 @@ def test_analyze_recommends_a_strategy_for_every_table(source: str, target: str)
     assert {info["strategy"] for info in payload["tables"].values()} == {"fdw"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#359: analyze counts the target's tables, empty before a migration, never the source's rows",
-)
 def test_analyze_sizes_the_rows_it_is_about_to_migrate(source: str, target: str) -> None:
     _setup(source, target)
 
@@ -559,20 +548,7 @@ def test_migrate_before_setup_fails_and_writes_nothing(
 # -- migrate-table -----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "strategy",
-    [
-        "fdw",
-        pytest.param(
-            "copy",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="#359: the copy strategy reports the rows the target table holds "
-                "(SELECT count(*)), not the rows it migrated",
-            ),
-        ),
-    ],
-)
+@pytest.mark.parametrize("strategy", ["fdw", "copy"])
 def test_migrate_table_reports_the_rows_it_moved(
     source: str, target: str, tmp_path: Path, strategy: str
 ) -> None:
@@ -649,12 +625,39 @@ def test_verify_before_migrating_reports_the_missing_rows_and_exits_1(
     }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#359: verify counts old_schema.<target table>, so a table the mapping renames "
-    "(the guide's old_users -> users) cannot be verified",
-)
 def test_verify_counts_a_renamed_table_against_its_source_table(
+    source: str, target: str, renamed: Path
+) -> None:
+    """The mapping ``migrate`` read says where each table came from (#359, D10)."""
+    _setup(source, target)
+    _migrate(source, target, renamed)
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "schema-to-schema",
+            "verify",
+            "--source",
+            source,
+            "--target",
+            target,
+            "--mapping",
+            str(renamed),
+            "--tables",
+            "users",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = _json(result.stdout)
+    assert payload["tables"]["users"]["source_count"] == 3
+    assert payload["matched"] is True
+
+
+def test_verify_with_a_mapping_verifies_every_table_it_maps(
     source: str, target: str, renamed: Path
 ) -> None:
     _setup(source, target)
@@ -670,17 +673,34 @@ def test_verify_counts_a_renamed_table_against_its_source_table(
             source,
             "--target",
             target,
-            "--tables",
-            "users",
+            "--mapping",
+            str(renamed),
             "--format",
             "json",
         ],
     )
 
     assert result.exit_code == 0, result.output
-    payload = _json(result.stdout)
-    assert payload["tables"]["users"]["source_count"] == 3
-    assert payload["matched"] is True
+    assert list(_json(result.stdout)["tables"]) == ["users"]
+
+
+def test_verify_needs_tables_or_a_mapping(source: str, target: str) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "schema-to-schema",
+            "verify",
+            "--source",
+            source,
+            "--target",
+            target,
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == exit_code_of("CONFIG_001"), result.output
 
 
 # -- cleanup -----------------------------------------------------------------------------

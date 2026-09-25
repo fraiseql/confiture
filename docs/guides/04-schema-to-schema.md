@@ -62,9 +62,10 @@ confiture migrate schema-to-schema migrate \
     --target new_production \
     --mapping db/migration/column_mapping.yaml
 
-# 5. Verify
+# 5. Verify every table the mapping migrated, each against its source table
 confiture migrate schema-to-schema verify \
-    --source old_production --target new_production
+    --source old_production --target new_production \
+    --mapping db/migration/column_mapping.yaml
 
 # 6. Cutover (update app config to new_production)
 
@@ -165,11 +166,15 @@ kubectl rollout restart deployment/app
 ## Verification
 
 ```bash
-# Row count comparison
+# Row count comparison, a renamed table against its source (old_users → users)
 confiture migrate schema-to-schema verify \
     --source old_production --target new_production \
+    --mapping db/migration/column_mapping.yaml \
     --tables users,posts
 ```
+
+`--mapping` is the file `migrate` read: it says where each target table came from.
+Without it, `--tables` names tables that have the same name on both sides.
 
 ```sql
 -- Check foreign key integrity

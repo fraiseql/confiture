@@ -179,8 +179,8 @@ def up(self):
 ```bash
 confiture migrate schema-to-schema setup --source production --target production_new
 confiture migrate schema-to-schema analyze --source production --target production_new
-confiture migrate schema-to-schema migrate --source production --target production_new --strategy fdw
-confiture migrate schema-to-schema verify --source production --target production_new
+confiture migrate schema-to-schema migrate --source production --target production_new --mapping column_mapping.yaml --strategy fdw
+confiture migrate schema-to-schema verify --source production --target production_new --mapping column_mapping.yaml
 confiture migrate schema-to-schema cleanup --source production --target production_new
 ```
 

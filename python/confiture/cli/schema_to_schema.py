@@ -106,6 +106,16 @@ def _load_mapping_file(path: Path) -> dict[str, dict[str, Any]]:
     return data
 
 
+def _source_tables(spec: dict[str, dict[str, Any]]) -> dict[str, str]:
+    """``{target table: source table}``, as ``migrate`` reads each mapping entry."""
+    pairs: dict[str, str] = {}
+    for table, entry in spec.items():
+        if not isinstance(entry, dict):
+            raise ConfigurationError(f"Mapping entry for {table!r} must be a mapping.")
+        pairs[entry.get("target_table", table)] = entry.get("source_table", table)
+    return pairs
+
+
 def _migrator(source: str, target: str):
 
     return SchemaToSchemaMigrator(_resolve_connection(source), _resolve_connection(target))
@@ -121,7 +131,12 @@ def s2s_setup(
     ),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
-    """Set up the Foreign Data Wrapper from target → source."""
+    """Set up the Foreign Data Wrapper from target → source.
+
+    Safe to run again: a second run keeps the one server and user mapping and
+    re-imports the source's tables, replacing the foreign tables the first run
+    imported (never a table of your own).
+    """
     json_mode = is_json(format_output)
     m = None
     try:
@@ -140,10 +155,12 @@ def s2s_setup(
 def s2s_analyze(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
-    schema: str = typer.Option("public", "--schema", help="Schema to analyze (default: public)."),
+    schema: str = typer.Option(
+        "public", "--schema", help="The source's schema to size (default: public)."
+    ),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
-    """Analyze tables and recommend a per-table strategy (FDW vs COPY)."""
+    """Size the source's tables and recommend a per-table strategy (FDW vs COPY)."""
     json_mode = is_json(format_output)
     m = None
     try:
@@ -241,19 +258,45 @@ def s2s_migrate_table(
 def s2s_verify(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
-    tables: str = typer.Option(..., "--tables", help="Comma-separated tables to verify."),
+    tables: str | None = typer.Option(
+        None,
+        "--tables",
+        help="Comma-separated target tables to verify (default: every table --mapping maps).",
+    ),
+    mapping: Path | None = typer.Option(
+        None,
+        "--mapping",
+        help="The column-mapping YAML migrate read: where each target table came from.",
+    ),
     source_schema: str = typer.Option("old_schema", "--source-schema"),
     target_schema: str = typer.Option("public", "--target-schema"),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
-    """Verify row-count integrity between source and target (exit 1 on mismatch)."""
+    """Verify row-count integrity between source and target (exit 1 on mismatch).
+
+    A table the mapping renames (``source_table: old_users``, ``target_table:
+    users``) is counted against its source table; pass the ``--mapping`` file
+    ``migrate`` read.
+    """
     json_mode = is_json(format_output)
     m = None
     try:
-        table_list = [t.strip() for t in tables.split(",") if t.strip()]
+        sources = _source_tables(_load_mapping_file(mapping)) if mapping else {}
+        if tables:
+            table_list = [t.strip() for t in tables.split(",") if t.strip()]
+        elif sources:
+            table_list = list(sources)
+        else:
+            raise ConfigurationError(
+                "Nothing to verify: pass --tables, --mapping, or both.",
+                error_code="CONFIG_001",
+            )
         m = _migrator(source, target)
         report = m.verify_migration(
-            tables=table_list, source_schema=source_schema, target_schema=target_schema
+            tables=table_list,
+            source_schema=source_schema,
+            target_schema=target_schema,
+            source_tables=sources,
         )
         mismatches = [t for t, info in report.items() if not info.get("match", False)]
         if json_mode:

@@ -7,6 +7,7 @@ database migrations. It supports two strategies:
 2. COPY Strategy: Best for large tables (>10M rows), 10-20x faster
 """
 
+from collections.abc import Mapping
 from io import BytesIO
 from typing import Any
 
@@ -144,12 +145,40 @@ class SchemaToSchemaMigrator:
             )
         )
 
+    def _drop_imported_tables(self, cursor: psycopg.Cursor) -> None:
+        """Drop the foreign tables an earlier ``setup`` imported, so the import runs again.
+
+        Only a foreign table confiture's own server serves in the import schema is
+        dropped, and without ``CASCADE``: an object built on one fails the setup
+        rather than disappearing with it. A table the user created there is not
+        confiture's and is left alone.
+        """
+        cursor.execute(
+            """
+            SELECT c.relname
+            FROM pg_foreign_table ft
+            JOIN pg_class c ON c.oid = ft.ftrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_foreign_server s ON s.oid = ft.ftserver
+            WHERE n.nspname = %s AND s.srvname = %s
+            ORDER BY c.relname
+            """,
+            (self.foreign_schema_name, self.server_name),
+        )
+        for (table,) in cursor.fetchall():
+            cursor.execute(
+                sql.SQL("DROP FOREIGN TABLE {schema}.{table}").format(
+                    schema=sql.Identifier(self.foreign_schema_name), table=sql.Identifier(table)
+                )
+            )
+
     def _import_foreign_schema(self, cursor: psycopg.Cursor) -> None:
-        """Import foreign schema tables from source database.
+        """Import foreign schema tables from source database, replacing an earlier import.
 
         Args:
             cursor: Database cursor
         """
+        self._drop_imported_tables(cursor)
         cursor.execute(
             sql.SQL("""
                 IMPORT FOREIGN SCHEMA public
@@ -164,12 +193,16 @@ class SchemaToSchemaMigrator:
     def setup_fdw(self, skip_import: bool = False) -> None:
         """Setup Foreign Data Wrapper to source database.
 
-        This method performs the following steps:
+        This method performs the following steps, in one transaction:
         1. Creates postgres_fdw extension if not exists
         2. Creates foreign server pointing to source database
         3. Creates user mapping for authentication
         4. Creates foreign schema
-        5. Optionally imports foreign schema from source database
+        5. Optionally imports foreign schema from source database, replacing the
+           foreign tables an earlier setup imported
+
+        It can be run again: the second run leaves one server, one mapping and the
+        source's tables as they are now.
 
         Args:
             skip_import: If True, skip importing foreign schema (useful for testing)
@@ -400,14 +433,8 @@ class SchemaToSchemaMigrator:
                     # Write data from buffer
                     copy.write(buffer.getvalue())
 
-                # Get row count
-                cursor.execute(
-                    sql.SQL("SELECT COUNT(*) FROM {table}").format(
-                        table=sql.Identifier(target_table)
-                    )
-                )
-                result = cursor.fetchone()
-                rows_migrated = int(result[0]) if result else 0
+                # COPY's own count — the rows it loaded, not what the table holds now.
+                rows_migrated = max(cursor.rowcount, 0)
 
             self.target_connection.commit()
             return rows_migrated
@@ -423,16 +450,17 @@ class SchemaToSchemaMigrator:
     def analyze_tables(self, schema: str = "public") -> dict[str, dict[str, Any]]:
         """Analyze table sizes and recommend optimal migration strategy.
 
-        This method queries the target database to get row counts for all tables,
-        then recommends the optimal migration strategy (FDW or COPY) based on
-        table size.
+        This method sizes the tables of the **source** database — the rows about to
+        be migrated, which the target does not hold yet — then recommends the
+        optimal migration strategy (FDW or COPY) based on table size.
 
         Strategy selection:
         - Tables with < 10M rows → FDW strategy (better for complex transformations)
         - Tables with ≥ 10M rows → COPY strategy (10-20x faster)
 
         Args:
-            schema: Schema name to analyze (default: "public")
+            schema: The source's schema to analyze (default: "public", the one
+                ``setup`` imports)
 
         Returns:
             Dictionary mapping table names to analysis results:
@@ -467,7 +495,7 @@ class SchemaToSchemaMigrator:
         try:
             recommendations = {}
 
-            with self.target_connection.cursor() as cursor:
+            with self.source_connection.cursor() as cursor:
                 # Get all tables in the schema with their row counts
                 cursor.execute(
                     sql.SQL("""
@@ -525,6 +553,7 @@ class SchemaToSchemaMigrator:
         tables: list[str],
         source_schema: str = "old_schema",
         target_schema: str = "public",
+        source_tables: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Verify migration completeness by comparing row counts.
 
@@ -533,9 +562,11 @@ class SchemaToSchemaMigrator:
         before cutover to ensure no data loss.
 
         Args:
-            tables: List of table names to verify
+            tables: List of target table names to verify
             source_schema: Schema name containing source tables (default: "old_schema")
             target_schema: Schema name containing target tables (default: "public")
+            source_tables: ``{target table: source table}`` for a table the
+                migration renamed; a table not in it has the same name on both sides
 
         Returns:
             Dictionary mapping table names to verification results:
@@ -565,11 +596,12 @@ class SchemaToSchemaMigrator:
 
             with self.target_connection.cursor() as cursor:
                 for table_name in tables:
-                    # Count rows in source table (via foreign schema)
+                    # Count rows in source table (via foreign schema), by its own name
+                    source_name = (source_tables or {}).get(table_name, table_name)
                     cursor.execute(
                         sql.SQL("SELECT COUNT(*) FROM {schema}.{table}").format(
                             schema=sql.Identifier(source_schema),
-                            table=sql.Identifier(table_name),
+                            table=sql.Identifier(source_name),
                         )
                     )
                     source_result = cursor.fetchone()
