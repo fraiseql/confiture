@@ -16,6 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`migrate schema-to-schema` does what the guide says** (#359).
+  - `setup` can be run again. `IMPORT FOREIGN SCHEMA` collided with the tables the
+    first run imported, and failed with a hint about `CREATE TABLE IF NOT EXISTS`
+    that did not apply. A second run now replaces the foreign tables confiture's own
+    server serves in the import schema, without `CASCADE` and never a user's table,
+    and imports again in the same transaction.
+  - `analyze` sizes the **source**. It counted the target's tables, which are empty
+    before a migration, so every table was 0 rows and `copy` was never recommended.
+    `--schema` names the source's schema.
+  - The `copy` strategy (`migrate-table --strategy copy`, `migrate --strategy copy`)
+    reports the rows it moved. It reported the target table's total: with one row
+    already there, copying three reported four.
+  - `verify --mapping <file>` counts a renamed table against its source table, using
+    the same mapping file `migrate` reads. With `--mapping` and no `--tables`, it
+    verifies every table the mapping maps; with neither, it refuses (`CONFIG_001`).
+    The guide's own flow, `old_users → users`, exited 3 with `relation
+    "old_schema.users" does not exist`. The guide's examples now pass `--mapping`
+    where they rename, and `migrate` wherever it is required.
 - **`generate`, `seed generate`, `seed convert`, `introspect` and `validate-profile` do
   what their help says** (#360). Each defect was found by the leaf's first argv test.
   - `generate pgtap` wrote its volatility test with `is_volatile` / `is_stable` /

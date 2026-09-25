@@ -2777,7 +2777,8 @@ confiture migrate schema-to-schema verify [OPTIONS]
 |---|---|---|---|---|
 | `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
 | `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
-| `--tables` | - | str | - | Comma-separated tables to verify. |
+| `--tables` | - | str | - | Comma-separated target tables to verify (default: every table --mapping maps). |
+| `--mapping` | - | path | - | The column-mapping YAML migrate read: where each target table came from. |
 | `--source-schema` | - | str | `old_schema` |  |
 | `--target-schema` | - | str | `public` |  |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |

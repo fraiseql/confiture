@@ -7,6 +7,7 @@ database migrations. It supports two strategies:
 2. COPY Strategy: Best for large tables (>10M rows), 10-20x faster
 """
 
+from collections.abc import Mapping
 from io import BytesIO
 from typing import Any
 
@@ -552,6 +553,7 @@ class SchemaToSchemaMigrator:
         tables: list[str],
         source_schema: str = "old_schema",
         target_schema: str = "public",
+        source_tables: Mapping[str, str] | None = None,
     ) -> dict[str, dict[str, Any]]:
         """Verify migration completeness by comparing row counts.
 
@@ -560,9 +562,11 @@ class SchemaToSchemaMigrator:
         before cutover to ensure no data loss.
 
         Args:
-            tables: List of table names to verify
+            tables: List of target table names to verify
             source_schema: Schema name containing source tables (default: "old_schema")
             target_schema: Schema name containing target tables (default: "public")
+            source_tables: ``{target table: source table}`` for a table the
+                migration renamed; a table not in it has the same name on both sides
 
         Returns:
             Dictionary mapping table names to verification results:
@@ -592,11 +596,12 @@ class SchemaToSchemaMigrator:
 
             with self.target_connection.cursor() as cursor:
                 for table_name in tables:
-                    # Count rows in source table (via foreign schema)
+                    # Count rows in source table (via foreign schema), by its own name
+                    source_name = (source_tables or {}).get(table_name, table_name)
                     cursor.execute(
                         sql.SQL("SELECT COUNT(*) FROM {schema}.{table}").format(
                             schema=sql.Identifier(source_schema),
-                            table=sql.Identifier(table_name),
+                            table=sql.Identifier(source_name),
                         )
                     )
                     source_result = cursor.fetchone()

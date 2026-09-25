@@ -16,8 +16,6 @@ cleanup — a target with no FDW left in it and its migrated rows still there.
 ``--source`` / ``--target`` are spelled all three ways the command resolves them: an
 environment name (``db/environments/{name}.yaml``), a config path, and a DSN.
 
-The ``xfail(strict=True)`` tests are defects, each stated in its reason.
-
 postgres_fdw is not a trusted extension, and ``setup`` maps the connecting role with an
 empty password, which only a superuser may use: without one the tests skip.
 """
@@ -627,12 +625,39 @@ def test_verify_before_migrating_reports_the_missing_rows_and_exits_1(
     }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#359: verify counts old_schema.<target table>, so a table the mapping renames "
-    "(the guide's old_users -> users) cannot be verified",
-)
 def test_verify_counts_a_renamed_table_against_its_source_table(
+    source: str, target: str, renamed: Path
+) -> None:
+    """The mapping ``migrate`` read says where each table came from (#359, D10)."""
+    _setup(source, target)
+    _migrate(source, target, renamed)
+
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "schema-to-schema",
+            "verify",
+            "--source",
+            source,
+            "--target",
+            target,
+            "--mapping",
+            str(renamed),
+            "--tables",
+            "users",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = _json(result.stdout)
+    assert payload["tables"]["users"]["source_count"] == 3
+    assert payload["matched"] is True
+
+
+def test_verify_with_a_mapping_verifies_every_table_it_maps(
     source: str, target: str, renamed: Path
 ) -> None:
     _setup(source, target)
@@ -648,17 +673,34 @@ def test_verify_counts_a_renamed_table_against_its_source_table(
             source,
             "--target",
             target,
-            "--tables",
-            "users",
+            "--mapping",
+            str(renamed),
             "--format",
             "json",
         ],
     )
 
     assert result.exit_code == 0, result.output
-    payload = _json(result.stdout)
-    assert payload["tables"]["users"]["source_count"] == 3
-    assert payload["matched"] is True
+    assert list(_json(result.stdout)["tables"]) == ["users"]
+
+
+def test_verify_needs_tables_or_a_mapping(source: str, target: str) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "migrate",
+            "schema-to-schema",
+            "verify",
+            "--source",
+            source,
+            "--target",
+            target,
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.exit_code == exit_code_of("CONFIG_001"), result.output
 
 
 # -- cleanup -----------------------------------------------------------------------------
