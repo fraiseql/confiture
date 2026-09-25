@@ -211,7 +211,7 @@ REPLACE_IS_AUTHORS_WORK: dict[str, str] = {
     "domain": "a domain's constraints are altered one at a time; dropping it takes "
     "every column that uses it",
     "type": "a composite type's attributes are altered one at a time",
-    "trigger": "CREATE OR REPLACE TRIGGER needs PostgreSQL 14, and dropping one "
+    "trigger": "a constraint trigger has no CREATE OR REPLACE, and dropping one "
     "silently changes what fires during the migration itself",
     "policy": "ALTER POLICY changes a clause at a time, and a dropped policy "
     "leaves rows unprotected for the length of the transaction",

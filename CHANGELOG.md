@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **PostgreSQL 14 is the documented minimum** (was 12). A trigger `migrate diff
+  --generate` adds is written `CREATE OR REPLACE TRIGGER`, which PostgreSQL 14
+  introduced; CI already ran on 15 and 16 only. The README badge, the getting-started
+  and contributing pages and the examples README say 14+.
+
 ### Fixed
 
 - **`migrate diff --generate` writes what each change carries, under one gate** (#335).

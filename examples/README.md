@@ -358,7 +358,7 @@ Have a great example to share? We'd love to include it!
 - ✅ Complete README with step-by-step tutorial
 - ✅ Working schema and migrations
 - ✅ Sample data (optional but encouraged)
-- ✅ Tested on PostgreSQL 12+
+- ✅ Tested on PostgreSQL 14+
 - ✅ Follows Confiture best practices
 
 **How to contribute**:

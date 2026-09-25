@@ -41,7 +41,7 @@ Thank you for your interest in contributing to Confiture! This document provides
 
 - **Python 3.11+** (3.12 recommended)
 - **Rust 1.75+** (for Rust performance layer)
-- **PostgreSQL 12+** (for integration tests)
+- **PostgreSQL 14+** (for integration tests)
 - **uv** package manager (recommended)
 
 ### Development Setup
