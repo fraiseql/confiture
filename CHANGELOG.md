@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.23.1] - 2026-09-25
+
+**A webhook URL opens nothing but a webhook.** The notification transport opened
+whatever URL its configuration named, `file:` and `ftp:` included. It now sends
+over `http` or `https` only, and warns when the URL is plain `http`.
+
 ### Security
 
 - **A notification webhook is sent over http or https, nothing else.**
