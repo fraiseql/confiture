@@ -119,10 +119,11 @@ class InsertToCopyConverter:
                 continue
 
             table_name = self.validator.extract_table_name(stmt_sql)
-            columns = self.validator.extract_columns(stmt_sql)
+            # No column list is every column, in order: COPY with no list says the same.
+            columns = self.validator.extract_columns(stmt_sql) or []
             rows = self.validator.extract_rows(stmt_sql)
 
-            if table_name is None or columns is None or rows is None:
+            if table_name is None or rows is None:
                 passthrough.append(stmt_sql)
                 continue
 
@@ -146,9 +147,9 @@ class InsertToCopyConverter:
 
         for key in group_order:
             table_name, col_tuple = key
-            columns = list(col_tuple)
-            rows = [dict(zip(columns, values, strict=False)) for values in groups[key]]
-            output_parts.append(formatter.format_table(table_name, rows, columns))
+            output_parts.append(
+                formatter.format_rows(table_name, groups[key], list(col_tuple) or None)
+            )
 
         output_parts.extend(passthrough)
         combined = "\n".join(output_parts)

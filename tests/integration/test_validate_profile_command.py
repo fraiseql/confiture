@@ -7,8 +7,6 @@ it holds. Each way a profile can be wrong must be refused with the exit code
 the error registry gives its code: ``ANON_1400`` for a profile that is invalid,
 ``CONFIG_004`` for one that is not there. The command reads a file and opens no
 connection.
-
-The ``xfail`` test records a defect found while writing this file.
 """
 
 from __future__ import annotations
@@ -138,14 +136,28 @@ def test_a_missing_profile_is_a_configuration_error(tmp_path: Path) -> None:
     assert json.loads(result.stdout)["error"]["code"] == "CONFIG_004"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#360: text mode prints '[env: X]' and '[seed: N]' through Rich, which takes "
-    "them for markup and drops them",
-)
 def test_text_mode_names_the_seeds_it_found(tmp_path: Path) -> None:
     result = runner.invoke(app, ["validate-profile", str(_profile(tmp_path, _VALID))])
 
     assert result.exit_code == 0, result.output
     assert "PHONE_SEED" in result.stdout
     assert "seed: 7" in result.stdout
+
+
+def test_a_directory_is_a_configuration_error_not_an_internal_one(tmp_path: Path) -> None:
+    """#360: an uncaught IsADirectoryError came out as INTERNAL_ERROR, exit 1."""
+    result = runner.invoke(app, ["validate-profile", str(tmp_path), "--format", "json"])
+
+    assert result.exit_code == exit_code_of("CONFIG_004") == 5, result.output
+    error = json.loads(result.stdout)["error"]
+    assert error["code"] == "CONFIG_004"
+    assert "is a directory" in error["message"]
+
+
+def test_a_missing_profile_is_named_once(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app, ["validate-profile", str(tmp_path / "absent.yaml"), "--format", "json"]
+    )
+
+    message = json.loads(result.stdout)["error"]["message"]
+    assert message.count("not found") == 1, message

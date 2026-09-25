@@ -53,20 +53,25 @@ class CopyFormatter:
         Returns:
             String in PostgreSQL COPY format
         """
-        lines = []
+        return self.format_rows(
+            table_name, [[row.get(col) for col in columns] for row in rows], columns
+        )
 
-        # Add COPY header
-        column_list = ", ".join(columns)
-        lines.append(f"COPY {table_name} ({column_list}) FROM stdin;")
+    def format_rows(self, table_name: str, rows: list[list[Any]], columns: list[str] | None) -> str:
+        """Format positional rows into a COPY block.
 
-        # Add data rows
-        for row in rows:
-            values = []
-            for col in columns:
-                value = row.get(col)
-                formatted = self._format_value(value)
-                values.append(formatted)
-            lines.append("\t".join(values))
+        Args:
+            table_name: Name of the table
+            rows: Each row's values, in column order
+            columns: The column list, or ``None`` for ``COPY t FROM stdin`` — every
+                column of the table, in its order, as an ``INSERT`` without a list
+
+        Returns:
+            String in PostgreSQL COPY format
+        """
+        header = f"COPY {table_name} ({', '.join(columns)})" if columns else f"COPY {table_name}"
+        lines = [f"{header} FROM stdin;"]
+        lines.extend("\t".join(self._format_value(value) for value in row) for row in rows)
 
         # Add COPY terminator
         lines.append("\\.")

@@ -7,9 +7,6 @@ PostgreSQL's own parser once the lines ``psql`` would take as meta-commands are
 set aside, and it must name the function it tests. The stubs are compiled,
 imported, and called against the database they were generated from.
 
-The ``xfail`` tests record defects found while writing this file. Each one
-states the command line that shows it.
-
 Every test runs in a database of its own.
 """
 

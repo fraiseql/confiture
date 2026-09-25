@@ -394,7 +394,7 @@ def generate_stubs(
     output_format: StubFormat = typer.Option(
         StubFormat.PYDANTIC,
         "--format",
-        help="What a JSONB result's inferred shape is written as",
+        help="What a JSONB result's inferred shape is written as: pydantic, dataclass or typeddict",
     ),
     include: str | None = typer.Option(
         None, "--include", help="SQL LIKE pattern to filter functions"

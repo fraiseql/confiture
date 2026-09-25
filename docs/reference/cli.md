@@ -3354,7 +3354,7 @@ confiture generate stubs [OPTIONS]
 | `--database-url` | `-d` | str | - | PostgreSQL connection URL |
 | `--schema` | `-s` | str | `public` | Schema to introspect |
 | `--output` | `-o` | path | - | Write the output to this file instead of stdout |
-| `--format` | - | str | `pydantic` | Output format: pydantic\|dataclass\|typeddict |
+| `--format` | - | choice | `pydantic` | What a JSONB result's inferred shape is written as: pydantic, dataclass or typeddict |
 | `--include` | - | str | - | SQL LIKE pattern to filter functions |
 
 <!-- END GENERATED: cli confiture generate stubs -->

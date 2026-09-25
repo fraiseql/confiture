@@ -227,11 +227,9 @@ class InsertValidator:
             if not isinstance(ast, exp.Insert):
                 return None
 
-            # ast.this is a Schema, ast.this.this is the Table
-            if not hasattr(ast.this, "this"):
-                return None
-
-            table = ast.this.this
+            # With a column list ast.this is a Schema wrapping the Table; without
+            # one, it is the Table itself.
+            table = ast.this if isinstance(ast.this, exp.Table) else ast.this.this
             if isinstance(table, exp.Table):
                 # Use SQL method to get qualified name (handles schema.table)
                 return table.sql(dialect="postgres")

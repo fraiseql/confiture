@@ -7,8 +7,6 @@ foreign-key graph read from both ends. JSON comes from the whole of stdout,
 because a consumer parses the stream. YAML goes to ``--output``, and is read
 back from that file.
 
-The ``xfail`` test records a defect found while writing this file.
-
 Every test runs in a database of its own.
 """
 

@@ -124,7 +124,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-40,961 lines, 56% of `core/`.
+41,005 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -144,7 +144,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `dry_run.py` | 239 | database orchestration |
 | `dry_run_summary.py` | 156 | neutral |
 | `error_context.py` | 286 | neutral |
-| `error_handler.py` | 281 | neutral |
+| `error_handler.py` | 284 | neutral |
 | `expected_db.py` | 217 | database orchestration |
 | `function_body_drift.py` | 211 | database orchestration |
 | `function_signature_drift.py` | 375 | database orchestration |
@@ -152,7 +152,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `git_accompaniment.py` | 348 | neutral |
 | `git_schema.py` | 258 | neutral |
 | `grant_accompaniment.py` | 380 | database orchestration |
-| `introspection/` | 303 | database orchestration |
+| `introspection/` | 302 | database orchestration |
 | `introspection/type_mapping.py` | 112 | neutral |
 | `large_tables.py` | 929 | database orchestration |
 | `ledger.py` | 505 | database orchestration |
@@ -162,7 +162,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `linting/schema_linter.py` | 1,083 | database orchestration |
 | `linting/selection.py` | 369 | database orchestration |
 | `linting/unresolved.py` | 379 | database orchestration |
-| `live_catalog.py` | 878 | database orchestration |
+| `live_catalog.py` | 897 | database orchestration |
 | `locking.py` | 625 | database orchestration |
 | `migration_generator.py` | 563 | database orchestration |
 | `migration_verifier.py` | 229 | database orchestration |
@@ -182,7 +182,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_snapshot.py` | 104 | database orchestration |
 | `schema_sources.py` | 315 | database orchestration |
 | `schema_to_schema.py` | 602 | database orchestration |
-| `seed/` | 5,566 | database orchestration |
+| `seed/` | 5,589 | database orchestration |
 | `sql_path.py` | 135 | database orchestration |
 | `sql_utils.py` | 74 | neutral |
 | `ssh_tunnel.py` | 138 | database orchestration |

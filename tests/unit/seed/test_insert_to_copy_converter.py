@@ -286,3 +286,23 @@ class TestEdgeCases:
         result = converter.convert(insert_sql)
 
         assert "999999.99" in result
+
+
+class TestAnInsertWithoutAColumnList:
+    """#360: refused, though ``COPY t FROM stdin`` loads it the same way."""
+
+    def test_it_converts_to_a_copy_without_a_column_list(self) -> None:
+        result = InsertToCopyConverter().try_convert(
+            "INSERT INTO users VALUES (1, 'Alice'), (2, NULL);"
+        )
+        assert result.success, result.reason
+        assert result.copy_format == "COPY users FROM stdin;\n1\tAlice\n2\t\\N\n\\.\n"
+        assert result.rows_converted == 2
+
+    def test_it_is_kept_apart_from_a_listed_insert_into_the_same_table(self) -> None:
+        result = InsertToCopyConverter().try_convert(
+            "INSERT INTO users VALUES (1, 'Alice');\n"
+            "INSERT INTO users (id, name) VALUES (2, 'Bob');"
+        )
+        assert result.success, result.reason
+        assert result.copy_format.count("COPY users") == 2

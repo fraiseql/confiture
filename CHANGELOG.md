@@ -14,6 +14,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`generate`, `seed generate`, `seed convert`, `introspect` and `validate-profile` do
+  what their help says** (#360). Each defect was found by the leaf's first argv test.
+  - `generate pgtap` wrote its volatility test with `is_volatile` / `is_stable` /
+    `is_immutable`, which pgTAP does not define. The test was always true and emitted
+    no TAP line, while `plan(n)` counted it. It is now `volatility_is(schema, fn,
+    '<volatility>', description)`.
+  - `generate stubs`: a JSONB result's class annotated fields `Any` without importing
+    it, so calling the stub raised `PydanticUserError`. `--format` was read and
+    ignored. `dataclass` and `typeddict` now write a dataclass or a `TypedDict`, each
+    with its import and its construction, and an unknown format is refused.
+    `StubFunction` holds the result's fields (`result_model`, `result_fields`) where
+    it held pydantic source.
+  - `seed generate`'s template listed `GENERATED ALWAYS` identity and stored
+    generated columns, which take no value. It now asks `writable_columns`, and a
+    table with none is seeded `DEFAULT VALUES`.
+  - `introspect` gave a foreign key into `public.tb_owner` to `inv.tb_owner`: it
+    matched inbound keys by bare table name. The cause was lower down too.
+    `pg_get_constraintdef` leaves off any schema the session's `search_path` finds, so
+    the live reader now names a foreign key's referenced table from the catalog,
+    schema included. Every live read (`drift`, `introspect`, `migrate diff --from` a
+    database) sees a qualified reference.
+  - `validate-profile` printed `[env: …]` and `[seed: …]` through Rich, which took
+    them for markup and dropped them. The CLI's one error printer did the same to any
+    bracketed message, context value or hint, for every command: a validator's
+    `[type=value_error, …]`, a path. Both now print data as written. Given a
+    directory, it failed with `INTERNAL_ERROR`; it is now `CONFIG_004`. A missing or
+    invalid profile's message no longer says "not found" or "Invalid profile" twice.
+  - `seed convert` refused an `INSERT` with no column list, though `COPY t FROM
+    stdin` loads it: it now writes that.
+
 ## [1.21.0] - 2026-09-25
 
 **The generator writes what the model holds.** `migrate diff --generate` reported
