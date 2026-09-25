@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-09-25
+
+**What confiture reads and prints, it reads and prints whole.** Each defect was
+a reader or a printer that kept part of what it was handed. `migrate diff` kept a
+view, routine or trigger once per `CREATE`, so one defined in two files was
+generated twice (#407). A replaced view was always written as `CREATE OR
+REPLACE`, which PostgreSQL refuses once a column is removed or renamed (#408).
+`generate stubs` read a JSONB result's keys with a regex that stopped at the
+first `)` (#410). Prep-seed level 1 skipped a CSV `COPY` block (#397). The CLI
+let Rich read `[...]` in a table name, a path or a type as markup (#409). One
+MCP tool name now reaches exactly one tool, and `--no-confiture-tools` disables
+the built-ins as well as hiding them.
+
 ### Deprecated
 
 - **`UnsafeOperationError` and `DDL_001`** are raised by nothing since 1.21.0. Every
