@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-09-25
+
+**The readers read what they are given, and say what they did not.** Each of
+this release's fixes is a reader that saw less than it was handed and reported a
+pass: a seed or schema directory read one level deep, a prep-seed level 2 that
+parsed each file alone, a PL/pgSQL call made by assignment that no rule could see,
+resolvers found by file name and read by regex, and a level 1 that never looked
+at a `COPY` seed, read an `INSERT`'s first row only and took every hyphen for a
+UUID. Each now reads its input through the one parser, the one fragment reader
+and the one model, and what it cannot read is a finding. Findings may appear on
+a tree that passed 1.18.0: they were always true. `build_003`, prep-seed levels
+1-3 and `--check-data-assertions` each report more; a `SEED_NOT_CHECKED` INFO
+finding makes `seed validate --prep-seed` exit 1. The seam's renames (#374) are
+under **Changed**, with no old spelling kept.
+
 ### Changed
 
 - **`confiture.platform` spells each concept one way** (#374). Renamed outright, with
@@ -111,7 +126,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SELECT count(*) INTO v` twin, and a statement in a body that cannot be parsed puts
   the file under `unanalysed`, where it was read as having no assertion. The check may
   report findings it did not before.
-
 - **Prep-seed levels 3-5 find a resolver by what the schema defines** (#385). They took
   their resolution functions from file names, `fn_resolve*.sql`, so a tree that names
   its files `019201004_fn_resolve_tb_x.sql`, or keeps its resolvers together, had none,
@@ -138,7 +152,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `psycopg.sql.Identifier` and passed no parameters, so a `%` in a name is not a
   placeholder. `Level4RuntimeValidator.validate_column_type`, which nothing called, is
   gone.
-
 - **Prep-seed level 1 reads each seed statement, every row of it** (#366, #387). It
   matched `INSERT … VALUES` text with regexes, so:
   - a `COPY … FROM stdin` seed — what `confiture seed convert` and `write_copy_seed`
@@ -179,7 +192,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   self-reference finding names the resolver that must handle it. Its messages name the
   configured prep-seed and catalog schemas, where they said `prep_seed.` and
   `catalog.`.
-
 - **The archaeology guard reads a phase in any case** (#310). Its patterns were
   case-sensitive, so `phase 05` in a docstring or an xfail reason named the plan
   invisibly; nine such lines shipped. Under `python/` and `tests/` a numbered phase or
