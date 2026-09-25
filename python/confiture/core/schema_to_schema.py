@@ -432,14 +432,8 @@ class SchemaToSchemaMigrator:
                     # Write data from buffer
                     copy.write(buffer.getvalue())
 
-                # Get row count
-                cursor.execute(
-                    sql.SQL("SELECT COUNT(*) FROM {table}").format(
-                        table=sql.Identifier(target_table)
-                    )
-                )
-                result = cursor.fetchone()
-                rows_migrated = int(result[0]) if result else 0
+                # COPY's own count — the rows it loaded, not what the table holds now.
+                rows_migrated = max(cursor.rowcount, 0)
 
             self.target_connection.commit()
             return rows_migrated

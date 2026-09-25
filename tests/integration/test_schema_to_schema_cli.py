@@ -550,20 +550,7 @@ def test_migrate_before_setup_fails_and_writes_nothing(
 # -- migrate-table -----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "strategy",
-    [
-        "fdw",
-        pytest.param(
-            "copy",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="#359: the copy strategy reports the rows the target table holds "
-                "(SELECT count(*)), not the rows it migrated",
-            ),
-        ),
-    ],
-)
+@pytest.mark.parametrize("strategy", ["fdw", "copy"])
 def test_migrate_table_reports_the_rows_it_moved(
     source: str, target: str, tmp_path: Path, strategy: str
 ) -> None:
