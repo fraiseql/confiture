@@ -121,7 +121,12 @@ def s2s_setup(
     ),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
-    """Set up the Foreign Data Wrapper from target → source."""
+    """Set up the Foreign Data Wrapper from target → source.
+
+    Safe to run again: a second run keeps the one server and user mapping and
+    re-imports the source's tables, replacing the foreign tables the first run
+    imported (never a table of your own).
+    """
     json_mode = is_json(format_output)
     m = None
     try:

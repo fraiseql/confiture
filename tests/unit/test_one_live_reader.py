@@ -60,6 +60,10 @@ ALLOWED: dict[str, str] = {
         "plpgsql_check's diagnosis of each routine body, and the schema that extension "
         "is installed in: an analysis engine asked about resolved types (#245)"
     ),
+    "core/schema_to_schema.py": (
+        "which foreign tables confiture's own foreign server serves in its import "
+        "schema, to replace them when setup runs again: confiture's FDW bookkeeping"
+    ),
     "core/view_manager.py": (
         "the views that depend on a table's columns, saved whole — definition, "
         "indexes, comment, grants — to drop and recreate around ALTER COLUMN TYPE"

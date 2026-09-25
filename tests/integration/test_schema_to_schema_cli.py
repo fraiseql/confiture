@@ -360,11 +360,6 @@ def test_setup_skip_import_creates_the_server_and_an_empty_foreign_schema(
     assert _foreign_tables(target) == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#359: a second setup fails: every CREATE is IF NOT EXISTS but IMPORT FOREIGN SCHEMA "
-    "collides with the tables the first one imported",
-)
 def test_setup_run_twice_leaves_one_fdw(source: str, target: str) -> None:
     _setup(source, target)
 
