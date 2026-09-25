@@ -11,6 +11,7 @@ from confiture.cli.helpers import (
     console,
     emit,
 )
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     env_option,
     format_option,
@@ -189,7 +190,7 @@ def lint_unified(
             console.print("[green]No issues found.[/green]")
     else:
         for tool, tool_issues in unified_result.by_tool.items():
-            console.print(f"\n[bold]{tool}[/bold] ({len(tool_issues)} issue(s)):")
+            console.print(f"\n[bold]{verbatim(tool)}[/bold] ({len(tool_issues)} issue(s)):")
             for issue in tool_issues:
                 sev = issue.severity.value.upper()
                 loc = f"{issue.file}:{issue.line}" if issue.line else issue.file

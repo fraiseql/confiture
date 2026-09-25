@@ -24,6 +24,7 @@ from rich.console import Console
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import emit
+from confiture.cli.markup import markup, verbatim
 from confiture.cli.options import database_url_option, output_option
 from confiture.core.connection import DatabaseError, connect_url
 from confiture.core.git import GitRepository
@@ -216,7 +217,7 @@ def scaffold_functions(
     dry_tag = " [dim](dry run)[/dim]" if dry_run else ""
     for r in results:
         icon = "[yellow]~[/yellow]" if r.action == "skip" else "[green]✓[/green]"
-        console.print(f"{icon} {r.action}{dry_tag}: {r.path}")
+        console.print(f"{markup(icon)} {verbatim(r.action)}{markup(dry_tag)}: {verbatim(r.path)}")
 
 
 # ---------------------------------------------------------------------------
@@ -309,24 +310,28 @@ def renumber_path(
     else:
         dry_tag = " [dim](dry run)[/dim]" if dry_run else ""
         for plan in result.plans:
-            console.print(f"[green]→[/green] move{dry_tag}: {plan.old_path} → {plan.new_path}")
+            console.print(
+                f"[green]→[/green] move{markup(dry_tag)}: {verbatim(plan.old_path)} → {verbatim(plan.new_path)}"
+            )
         for rw in result.ref_rewrites:
             if rw.old_name != rw.new_name:
                 console.print(
-                    f"[cyan]~[/cyan] rewrite{dry_tag}: {rw.ref_file} "
-                    f"({rw.old_name} → {rw.new_name})"
+                    f"[cyan]~[/cyan] rewrite{markup(dry_tag)}: {verbatim(rw.ref_file)} "
+                    f"({verbatim(rw.old_name)} → {verbatim(rw.new_name)})"
                 )
             else:
-                console.print(f"[dim]ℹ refs:[/dim] {rw.ref_file} calls {rw.old_name}")
+                console.print(
+                    f"[dim]ℹ refs:[/dim] {verbatim(rw.ref_file)} calls {verbatim(rw.old_name)}"
+                )
         for ref_file, name in result.dangling_refs:
             console.print(
-                f"[red]⚠ dangling:[/red] {ref_file} still references '{name}' "
+                f"[red]⚠ dangling:[/red] {verbatim(ref_file)} still references '{verbatim(name)}' "
                 f"(likely inside a string literal — fix manually)"
             )
         if result.cross_repo_refs:
             console.print("[yellow]⚠ proceeded with --force despite cross-repo refs:[/yellow]")
             for p in result.cross_repo_refs:
-                console.print(f"  {p}")
+                console.print(f"  {verbatim(p)}")
 
     if result.dangling_refs:
         # success-signal: the renumber completed and already emitted its full
@@ -379,9 +384,9 @@ def generate_pgtap(
     else:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(sql)
-        console.print(f"[green]pgTAP tests written to {output}[/green]")
+        console.print(f"[green]pgTAP tests written to {verbatim(output)}[/green]")
         console.print(
-            f"[dim]{pgtap_file.function_count} function(s), {len(pgtap_file.tests)} test(s).[/dim]"
+            f"[dim]{verbatim(pgtap_file.function_count)} function(s), {len(pgtap_file.tests)} test(s).[/dim]"
         )
 
 
@@ -419,5 +424,5 @@ def generate_stubs(
     else:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(code)
-        console.print(f"[green]Generated stubs written to {output}[/green]")
+        console.print(f"[green]Generated stubs written to {verbatim(output)}[/green]")
         console.print(f"[dim]{len(stub_file.functions)} function(s) exported.[/dim]")

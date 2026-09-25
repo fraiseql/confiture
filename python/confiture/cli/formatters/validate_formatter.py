@@ -24,6 +24,7 @@ from rich.markup import escape
 
 from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import console
+from confiture.cli.markup import verbatim
 from confiture.core.linting.schema_linter import RuleSeverity
 
 
@@ -62,7 +63,9 @@ def render_acl_coverage(report: Any, *, json_mode: bool) -> dict[str, Any] | Non
         console.print(f"[red]❌ ACL coverage check failed: {len(report.errors)} violation(s)[/red]")
         for v in report.errors:
             # Escape the rule_id brackets so Rich doesn't read them as markup.
-            console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
+            console.print(
+                f"  [red]✗[/red] \\[{v.rule_id}] {verbatim(v.object_name)}: {verbatim(v.message)}"
+            )
     else:
         console.print("[green]✅ All migrations have ACL coverage[/green]")
     return None
@@ -84,7 +87,7 @@ def render_ownership_coverage(report: Any, *, json_mode: bool) -> dict[str, Any]
             color = "red" if v.severity == RuleSeverity.ERROR else "yellow"
             mark = "✗" if v.severity == RuleSeverity.ERROR else "⚠"
             console.print(
-                f"  [{color}]{mark}[/{color}] \\[{v.rule_id}] {v.object_name}: {v.message}"
+                f"  [{color}]{verbatim(mark)}[/{color}] \\[{v.rule_id}] {verbatim(v.object_name)}: {verbatim(v.message)}"
             )
     else:
         console.print("[green]✅ All migrations have ownership coverage[/green]")
@@ -106,7 +109,9 @@ def render_function_uniqueness(report: Any, *, json_mode: bool) -> dict[str, Any
             f"[red]❌ Function uniqueness check failed: {len(report.violations)} violation(s)[/red]"
         )
         for v in report.violations:
-            console.print(f"  [red]✗[/red] \\[{v.rule_id}] {v.object_name}: {v.message}")
+            console.print(
+                f"  [red]✗[/red] \\[{v.rule_id}] {verbatim(v.object_name)}: {verbatim(v.message)}"
+            )
     else:
         console.print("[green]✅ All callables have unique signatures[/green]")
     return None
@@ -146,7 +151,7 @@ def render_data_assertions(report: Any, *, json_mode: bool) -> dict[str, Any] | 
 
     if not report.has_findings:
         console.print(
-            f"[green]✅ No data assertions inside up() ({report.scanned} migration(s) "
+            f"[green]✅ No data assertions inside up() ({verbatim(report.scanned)} migration(s) "
             "scanned)[/green]"
         )
         return None
@@ -157,10 +162,10 @@ def render_data_assertions(report: Any, *, json_mode: bool) -> dict[str, Any] | 
             "`migrate preflight` runs up() against a schema-only database[/yellow]"
         )
         for a in report.assertions:
-            console.print(f"  [yellow]![/yellow] {a.file}:{a.line}")
+            console.print(f"  [yellow]![/yellow] {verbatim(a.file)}:{verbatim(a.line)}")
             console.print(
-                f"      RAISE guarded on `{a.condition}`, where `{a.variable}` counts "
-                f"{a.relation} — 0 rows there"
+                f"      RAISE guarded on `{verbatim(a.condition)}`, where `{verbatim(a.variable)}` counts "
+                f"{verbatim(a.relation)} — 0 rows there"
             )
         console.print(
             "\n  [dim]Move the assertion to a .verify.sql sidecar: `migrate verify` runs "
@@ -168,7 +173,9 @@ def render_data_assertions(report: Any, *, json_mode: bool) -> dict[str, Any] | 
             "docs/guides/migration-verification.md[/dim]"
         )
     for path in report.unanalysed:
-        console.print(f"  [dim]?[/dim] {path} — not analysed (unreadable body or dynamic SQL)")
+        console.print(
+            f"  [dim]?[/dim] {verbatim(path)} — not analysed (unreadable body or dynamic SQL)"
+        )
     return None
 
 
@@ -192,7 +199,7 @@ def render_security_definer(report: Any, *, json_mode: bool) -> dict[str, Any] |
             mark = "✗" if v.severity == RuleSeverity.ERROR else "⚠"
             loc = f" ({v.file_path}:{v.line_number})" if v.line_number else ""
             console.print(
-                f"  [{color}]{mark}[/{color}] \\[{v.rule_id}] {v.object_name}{loc}: {v.message}"
+                f"  [{color}]{verbatim(mark)}[/{color}] \\[{v.rule_id}] {verbatim(v.object_name)}{verbatim(loc)}: {verbatim(v.message)}"
             )
     else:
         console.print("[green]✅ No unpinned SECURITY DEFINER functions found[/green]")
@@ -206,17 +213,19 @@ def render_import_check(result: Any, *, json_mode: bool) -> dict[str, Any] | Non
         return {"check": "imports", **result.to_dict()}
     if result.success:
         console.print(
-            f"[green]✅ All {result.checked} Python migration(s) passed import check[/green]"
+            f"[green]✅ All {verbatim(result.checked)} Python migration(s) passed import check[/green]"
         )
         if result.skipped_sql:
-            console.print(f"  [dim]({result.skipped_sql} SQL migration(s) skipped)[/dim]")
+            console.print(f"  [dim]({verbatim(result.skipped_sql)} SQL migration(s) skipped)[/dim]")
     else:
         console.print(
-            f"[red]❌ Import check failed: {result.failed}/{result.checked} "
+            f"[red]❌ Import check failed: {verbatim(result.failed)}/{verbatim(result.checked)} "
             f"file(s) have issues[/red]"
         )
         for v in result.violations:
-            console.print(f"  [red]✗[/red] [{v.rule}] {_Path(v.file_path).name}: {v.message}")
+            console.print(
+                f"  [red]✗[/red] [{v.rule}] {verbatim(_Path(v.file_path).name)}: {verbatim(v.message)}"
+            )
     return None
 
 
@@ -259,9 +268,9 @@ def _naming_duplicates(
     console.print("[red]❌ Duplicate migration versions detected[/red]")
     console.print("[red]Multiple migration files share the same version number:[/red]\n")
     for version, files in sorted(duplicate_versions.items()):
-        console.print(f"  Version {version}:")
+        console.print(f"  Version {verbatim(version)}:")
         for f in files:
-            console.print(f"    • {f.name}")
+            console.print(f"    • {verbatim(f.name)}")
     console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
     console.print(
         "[yellow]   Use 'confiture migrate generate' to auto-assign the next version.[/yellow]"
@@ -295,11 +304,11 @@ def _naming_fixed(
     else:
         console.print("[green]✅ Fixed orphaned migration files:[/green]")
     for old_name, new_name in fixed.get("renamed", []):
-        console.print(f"  • {old_name} → {new_name}")
+        console.print(f"  • {verbatim(old_name)} → {verbatim(new_name)}")
     if fixed.get("errors"):
         console.print("[red]Errors:[/red]")
         for filename, error_msg in fixed.get("errors", []):
-            console.print(f"  ❌ {filename}: {error_msg}")
+            console.print(f"  ❌ {verbatim(filename)}: {verbatim(error_msg)}")
     return None
 
 
@@ -312,7 +321,9 @@ def _naming_orphaned(orphaned_files: list[Any], *, json_mode: bool) -> dict[str,
     console.print("[yellow]⚠️  WARNING: Orphaned migration files detected[/yellow]")
     console.print("[yellow]These SQL files exist but won't be applied by Confiture:[/yellow]")
     for orphaned_file in orphaned_files:
-        console.print(f"  • {orphaned_file.name} → rename to: {orphaned_file.stem}.up.sql")
+        console.print(
+            f"  • {verbatim(orphaned_file.name)} → rename to: {verbatim(orphaned_file.stem)}.up.sql"
+        )
     console.print()
     console.print("[cyan]To automatically fix these files, run:[/cyan]")
     console.print("[cyan]  confiture migrate validate --fix-naming[/cyan]")
@@ -351,19 +362,19 @@ def _display_body_drift_report(report: Any, *, show_diff: bool = False) -> None:
     if not report.has_drift:
         console.print(
             f"[green]✓[/green] 0 function body drift(s) detected "
-            f"({report.functions_checked} checked, "
+            f"({verbatim(report.functions_checked)} checked, "
             f"{report.detection_time_ms:.1f}ms)"
         )
         return
 
     console.print(
         f"[yellow]⚠[/yellow]  {len(report.body_drifts)} function body "
-        f"drift(s) detected ({report.functions_checked} checked)"
+        f"drift(s) detected ({verbatim(report.functions_checked)} checked)"
     )
     for drift in report.body_drifts:
-        console.print(f"\n  [bold]{drift.signature_key}[/bold]")
-        console.print(f"    Source hash:   [cyan]{drift.source_hash}[/cyan]")
-        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        console.print(f"\n  [bold]{verbatim(drift.signature_key)}[/bold]")
+        console.print(f"    Source hash:   [cyan]{verbatim(drift.source_hash)}[/cyan]")
+        console.print(f"    Database hash: [red]{verbatim(drift.db_hash)}[/red]")
         if show_diff and drift.unified_diff:
             console.print("    [dim]Unified diff (expected → live, normalised):[/dim]")
             _print_unified_diff(drift.unified_diff)
@@ -420,19 +431,19 @@ def render_replay_drift(
     if not body_report.has_drift:
         console.print(
             f"[green]✓[/green] 0 out-of-band hot-patch(es) detected "
-            f"({body_report.functions_checked} checked, {body_report.detection_time_ms:.1f}ms)"
+            f"({verbatim(body_report.functions_checked)} checked, {body_report.detection_time_ms:.1f}ms)"
         )
         return None
 
     console.print(
         f"[yellow]⚠[/yellow]  {len(body_report.body_drifts)} out-of-band hot-patch(es) "
-        f"detected ({body_report.functions_checked} checked) — live differs from a clean "
+        f"detected ({verbatim(body_report.functions_checked)} checked) — live differs from a clean "
         f"migration replay"
     )
     for drift in body_report.body_drifts:
-        console.print(f"\n  [bold]{drift.signature_key}[/bold]")
-        console.print(f"    Replayed hash: [cyan]{drift.source_hash}[/cyan]")
-        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        console.print(f"\n  [bold]{verbatim(drift.signature_key)}[/bold]")
+        console.print(f"    Replayed hash: [cyan]{verbatim(drift.source_hash)}[/cyan]")
+        console.print(f"    Database hash: [red]{verbatim(drift.db_hash)}[/red]")
         if show_diff and drift.unified_diff:
             console.print("    [dim]Unified diff (replayed → live, normalised):[/dim]")
             _print_unified_diff(drift.unified_diff)
@@ -463,19 +474,21 @@ def render_view_drift(
     if not view_report.has_drift:
         console.print(
             f"[green]✓[/green] 0 view definition drift(s) detected "
-            f"({view_report.views_checked} checked, {view_report.detection_time_ms:.1f}ms)"
+            f"({verbatim(view_report.views_checked)} checked, {view_report.detection_time_ms:.1f}ms)"
         )
         return None
 
     console.print(
         f"[yellow]⚠[/yellow]  {len(view_report.body_drifts)} view definition "
-        f"drift(s) detected ({view_report.views_checked} checked)"
+        f"drift(s) detected ({verbatim(view_report.views_checked)} checked)"
     )
     for drift in view_report.body_drifts:
         label = _RELKIND_LABEL.get(drift.relkind, drift.relkind)
-        console.print(f"\n  [bold]{drift.schema}.{drift.name}[/bold] [dim]({label})[/dim]")
-        console.print(f"    Source hash:   [cyan]{drift.source_hash}[/cyan]")
-        console.print(f"    Database hash: [red]{drift.db_hash}[/red]")
+        console.print(
+            f"\n  [bold]{verbatim(drift.schema)}.{verbatim(drift.name)}[/bold] [dim]({verbatim(label)})[/dim]"
+        )
+        console.print(f"    Source hash:   [cyan]{verbatim(drift.source_hash)}[/cyan]")
+        console.print(f"    Database hash: [red]{verbatim(drift.db_hash)}[/red]")
         if show_diff and drift.unified_diff:
             console.print("    [dim]Unified diff (expected → live, deparsed):[/dim]")
             _print_unified_diff(drift.unified_diff)

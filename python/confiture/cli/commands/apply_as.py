@@ -22,6 +22,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _get_tracking_table, connect, console, emit, is_json
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     CONFITURE_YAML,
     config_option,
@@ -158,7 +159,7 @@ def migrate_apply_as(
         )
     else:
         console.print(
-            f"[green]✅ Applied migration {applied.version} ({applied.name}) as {role!r}.[/green]"
+            f"[green]✅ Applied migration {verbatim(applied.version)} ({verbatim(applied.name)}) as {verbatim(repr(role))}.[/green]"
         )
 
 

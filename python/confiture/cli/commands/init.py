@@ -10,6 +10,7 @@ from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import (
     console,
 )
+from confiture.cli.markup import verbatim
 from confiture.core.error_handler import handle_cli_error, print_error_to_console
 from confiture.core.scaffold.project import scaffold
 
@@ -41,7 +42,7 @@ def init(
         raise typer.Exit(handle_cli_error(e)) from e
 
     console.print("[green]✅ Confiture project initialized successfully![/green]")
-    console.print(f"\n📁 Created structure in: {path.absolute()}")
+    console.print(f"\n📁 Created structure in: {verbatim(path.absolute())}")
     console.print("\n📝 Next steps:")
     console.print("  1. Edit your schema files in db/schema/")
     console.print("  2. Configure environments in db/environments/")

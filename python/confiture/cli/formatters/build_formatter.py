@@ -8,6 +8,7 @@ from pathlib import Path
 from rich.console import Console
 
 from confiture.cli.formatters.common import handle_output
+from confiture.cli.markup import verbatim
 from confiture.core.builder import SelectionReport
 from confiture.core.linting.inventory import label_for
 from confiture.models.results import BuildResult
@@ -58,24 +59,24 @@ def format_text(result: BuildResult, console: Console) -> None:
     """
     if result.success:
         console.print("[green]✅ Schema built successfully![/green]")
-        console.print(f"\n📁 Output: {result.output_path}")
+        console.print(f"\n📁 Output: {verbatim(result.output_path)}")
         console.print(f"📏 Size: {result.schema_size_bytes:,} bytes")
-        console.print(f"📊 Files: {result.files_processed}")
+        console.print(f"📊 Files: {verbatim(result.files_processed)}")
         if result.hash:
-            console.print(f"🔐 Hash: {result.hash}")
+            console.print(f"🔐 Hash: {verbatim(result.hash)}")
         if result.seed_files_applied > 0:
-            console.print(f"🌱 Seeds: {result.seed_files_applied} files applied")
+            console.print(f"🌱 Seeds: {verbatim(result.seed_files_applied)} files applied")
         if result.artifact_path:
-            console.print(f"📦 Artifact: {result.artifact_path}")
+            console.print(f"📦 Artifact: {verbatim(result.artifact_path)}")
         if result.execution_time_ms > 0:
-            console.print(f"⏱️ Time: {result.execution_time_ms}ms")
+            console.print(f"⏱️ Time: {verbatim(result.execution_time_ms)}ms")
         format_warnings(result, console)
         if result.duplicates:
             console.print(
                 f"\n[yellow]Duplicate definitions: {len(result.duplicates)} (see above)[/yellow]"
             )
     else:
-        console.print(f"[red]❌ Build failed: {result.error}[/red]")
+        console.print(f"[red]❌ Build failed: {verbatim(result.error)}[/red]")
         format_warnings(result, console)
 
 
@@ -94,7 +95,10 @@ def format_warnings(result: BuildResult, console: Console) -> None:
     console.print("\n[yellow]Warnings:[/yellow]")
     for warning in result.warnings:
         style = "yellow" if warning.severity == "warning" else "dim"
-        console.print(f"  [{style}]{warning.code} {warning.message}[/{style}]", soft_wrap=True)
+        console.print(
+            f"  [{style}]{verbatim(warning.code)} {verbatim(warning.message)}[/{style}]",
+            soft_wrap=True,
+        )
 
 
 def selection_payload(report: SelectionReport, project_dir: Path | None) -> dict:
@@ -139,13 +143,13 @@ def format_selection_report(
     payload = selection_payload(report, project_dir)
     if format_type == "text":
         console.print(
-            f"{payload['total']} file(s) selected for env '{payload['env']}' — nothing was built",
+            f"{verbatim(payload['total'])} file(s) selected for env '{verbatim(payload['env'])}' — nothing was built",
             soft_wrap=True,
         )
         for entry in payload["files"]:
             console.print(
-                f"  {entry['path']}  ← {entry['entry']} · "
-                f"order {entry['order']} · {entry['pattern']}",
+                f"  {verbatim(entry['path'])}  ← {verbatim(entry['entry'])} · "
+                f"order {verbatim(entry['order'])} · {verbatim(entry['pattern'])}",
                 soft_wrap=True,
             )
         return

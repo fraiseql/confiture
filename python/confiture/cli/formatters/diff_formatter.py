@@ -2,6 +2,7 @@
 
 from rich.console import Console
 
+from confiture.cli.markup import verbatim
 from confiture.models.results import DiffResult
 
 #: The colour of a change's line, by the verb its wire type starts with.
@@ -15,9 +16,9 @@ def print_diff_text(result: DiffResult, console: Console) -> None:
         return
 
     n = len(result.changes)
-    console.print(f"[cyan]{n} change{'s' if n != 1 else ''} detected:[/cyan]\n")
+    console.print(f"[cyan]{verbatim(n)} change{verbatim('s' if n != 1 else '')} detected:[/cyan]\n")
 
     for change in result.changes:
         verb, _, _ = change.type.partition("_")
         colour = _COLOURS.get(verb, "yellow")
-        console.print(f"  [{colour}]{change}[/{colour}]")
+        console.print(f"  [{colour}]{verbatim(change)}[/{colour}]")

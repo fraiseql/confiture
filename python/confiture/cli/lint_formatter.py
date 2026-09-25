@@ -13,6 +13,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
+from confiture.cli.markup import verbatim
 from confiture.models.lint import LintReport, LintSeverity, Violation
 
 
@@ -79,10 +80,10 @@ def format_table(report: LintReport, console: Console) -> None:
         console: Rich Console instance for rendering
     """
     # Summary section
-    console.print(f"\n[bold]Schema Linting Results[/bold] - {report.schema_name}")
-    console.print(f"Tables: {report.tables_checked} checked")
-    console.print(f"Columns: {report.columns_checked} checked")
-    console.print(f"Time: {report.execution_time_ms}ms\n")
+    console.print(f"\n[bold]Schema Linting Results[/bold] - {verbatim(report.schema_name)}")
+    console.print(f"Tables: {verbatim(report.tables_checked)} checked")
+    console.print(f"Columns: {verbatim(report.columns_checked)} checked")
+    console.print(f"Time: {verbatim(report.execution_time_ms)}ms\n")
 
     _print_statuses(report, console)
     _print_documentation(report, console)
@@ -124,16 +125,16 @@ def format_table(report: LintReport, console: Console) -> None:
 
     # Summary counts
     console.print("\n[bold]Summary:[/bold]")
-    console.print(f"  {report.errors_count} errors")
-    console.print(f"  {report.warnings_count} warnings")
-    console.print(f"  {report.info_count} info")
+    console.print(f"  {verbatim(report.errors_count)} errors")
+    console.print(f"  {verbatim(report.warnings_count)} warnings")
+    console.print(f"  {verbatim(report.info_count)} info")
 
     # Suggested fixes (if any)
     fixes = [v for v in report.violations if v.suggested_fix]
     if fixes:
         console.print("\n[bold]Suggested Fixes:[/bold]")
         for violation in fixes:
-            console.print(f"  {violation.location}: {violation.suggested_fix}")
+            console.print(f"  {verbatim(violation.location)}: {verbatim(violation.suggested_fix)}")
 
 
 #: How each status reads on the summary: "<code> <verb>: <reason>". The verb is
@@ -179,7 +180,7 @@ def _print_documentation(report: LintReport, console: Console) -> None:
         line += (
             f", median comment {lengths['p50']} chars (p10 {lengths['p10']}, p90 {lengths['p90']})"
         )
-    console.print(f"[dim]{line}[/dim]\n")
+    console.print(f"[dim]{verbatim(line)}[/dim]\n")
 
 
 def format_csv(report: LintReport) -> str:

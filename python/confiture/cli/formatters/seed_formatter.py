@@ -8,6 +8,7 @@ from pathlib import Path
 from rich.console import Console
 
 from confiture.cli.formatters.common import handle_output
+from confiture.cli.markup import verbatim
 from confiture.core.seed.applier import ApplyResult
 
 
@@ -50,12 +51,12 @@ def format_text(result: ApplyResult, console: Console) -> None:
         console: Rich console for output
     """
     console.print("\n" + "=" * 50)
-    console.print(f"Applied {result.succeeded}/{result.total} seed files")
+    console.print(f"Applied {verbatim(result.succeeded)}/{verbatim(result.total)} seed files")
 
     if result.failed > 0:
-        console.print(f"[yellow]⚠️  {result.failed} files failed[/yellow]")
+        console.print(f"[yellow]⚠️  {verbatim(result.failed)} files failed[/yellow]")
         for failed_file in result.failed_files:
-            console.print(f"  - {failed_file}")
+            console.print(f"  - {verbatim(failed_file)}")
     elif result.total > 0:
         console.print("[green]✅ All seed files applied successfully[/green]")
     else:

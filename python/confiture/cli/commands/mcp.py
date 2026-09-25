@@ -12,6 +12,7 @@ import typer
 
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console
+from confiture.cli.markup import verbatim
 from confiture.cli.options import database_url_option
 from confiture.core.connection import DatabaseError
 from confiture.core.mcp_server import MCPServer
@@ -117,5 +118,5 @@ def mcp_server(
         console.print(f"[green]MCP server ready.[/green] {len(tools)} tool(s) available.")
         console.print("[dim]Use --stdio to run in stdio mode for Claude Code integration.[/dim]")
         for t in tools:
-            console.print(f"  [cyan]{t['name']}[/cyan]: {t['description']}")
+            console.print(f"  [cyan]{verbatim(t['name'])}[/cyan]: {verbatim(t['description'])}")
         server.close()

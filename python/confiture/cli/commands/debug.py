@@ -9,6 +9,7 @@ from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, is_json
+from confiture.cli.markup import verbatim
 from confiture.cli.options import database_url_option, format_option
 from confiture.core.connection import DatabaseError, connect_url
 from confiture.core.cte_debugger import CTEDebugger
@@ -102,14 +103,14 @@ def debug_cte(
         return
 
     # Table output
-    console.print(f"[bold]CTE Debug Session[/bold]  ({session.total_ctes} CTE(s))")
+    console.print(f"[bold]CTE Debug Session[/bold]  ({verbatim(session.total_ctes)} CTE(s))")
     console.print("")
 
     for step in session.steps:
         if step.success:
             console.print(
-                f"[green]✓[/green] [bold]{step.cte_name}[/bold]  "
-                f"{step.row_count} row(s)  {step.execution_time_ms:.1f}ms"
+                f"[green]✓[/green] [bold]{verbatim(step.cte_name)}[/bold]  "
+                f"{verbatim(step.row_count)} row(s)  {step.execution_time_ms:.1f}ms"
             )
             if step.columns and step.rows:
                 tbl = Table(show_header=True, header_style="bold cyan")
@@ -119,8 +120,8 @@ def debug_cte(
                     tbl.add_row(*[str(v) for v in row])
                 console.print(tbl)
         else:
-            console.print(f"[red]✗[/red] [bold]{step.cte_name}[/bold]  ERROR")
-            console.print(f"  [red]{step.error}[/red]")
+            console.print(f"[red]✗[/red] [bold]{verbatim(step.cte_name)}[/bold]  ERROR")
+            console.print(f"  [red]{verbatim(step.error)}[/red]")
             if stop_on_error:
                 break
 
@@ -128,7 +129,7 @@ def debug_cte(
     if session.all_succeeded:
         console.print("[green]All CTE steps succeeded.[/green]")
     else:
-        console.print(f"[red]Failed at CTE: {session.failed_at}[/red]")
+        console.print(f"[red]Failed at CTE: {verbatim(session.failed_at)}[/red]")
         # success-signal: a CTE in the user's query failed (see above) — the
         # debug command itself succeeded.
         raise typer.Exit(FINDINGS)

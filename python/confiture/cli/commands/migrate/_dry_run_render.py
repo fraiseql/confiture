@@ -10,6 +10,7 @@ from typing import Any
 
 from confiture.cli.dry_run import save_text_report
 from confiture.cli.helpers import console, emit, error_console
+from confiture.cli.markup import verbatim
 
 
 def _render_dry_run_analysis(
@@ -47,7 +48,7 @@ def _render_dry_run_analysis(
             "DRY-RUN ROLLBACK ANALYSIS REPORT" if rollback else "DRY-RUN MIGRATION ANALYSIS REPORT"
         )
         save_text_report(title + "\n" + "=" * 80 + "\n\n" + text, output_file)
-        console.print(f"[green]✅ Report saved to: {output_file.absolute()}[/green]")
+        console.print(f"[green]✅ Report saved to: {verbatim(output_file.absolute())}[/green]")
 
 
 def _row_estimator(connection: Any) -> Any:

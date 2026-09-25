@@ -16,6 +16,7 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     CONFITURE_YAML,
     CheckSignatureSchemasOpt,
@@ -229,7 +230,7 @@ def _resolve_source_sql(schema_file: Path | None, config_data: Any, format_outpu
     # Reason: an auto-build failure of any kind is reported with the --schema remedy
     except Exception as build_exc:
         error_console.print(
-            f"[red]❌ --schema not provided and auto-build failed: {build_exc}[/red]\n"
+            f"[red]❌ --schema not provided and auto-build failed: {verbatim(build_exc)}[/red]\n"
             "  Either run 'confiture build' first or pass --schema explicitly."
         )
         raise typer.Exit(USAGE) from build_exc
@@ -261,7 +262,7 @@ def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> 
             )
 
     if format_output == "text":
-        console.print(f"[dim]  (connecting via SSH tunnel to {ssh_via})[/dim]")
+        console.print(f"[dim]  (connecting via SSH tunnel to {verbatim(ssh_via)})[/dim]")
     return _SshOverride(config_data, SshTunnelConfig(host=ssh_host, user=ssh_user))
 
 
@@ -279,7 +280,7 @@ def _render_clean(
             console,
         )
     else:
-        console.print(f"[green]✅ {message}[/green]")
+        console.print(f"[green]✅ {verbatim(message)}[/green]")
 
 
 def _plan_signature_fixes(
@@ -328,7 +329,7 @@ def _plan_signature_fixes(
             "(skipped — would leave function undefined):[/yellow]"
         )
         for sig in missing_source:
-            console.print(f"[yellow]    {sig}[/yellow]")
+            console.print(f"[yellow]    {verbatim(sig)}[/yellow]")
     return fix_blocks, missing_source
 
 
@@ -435,7 +436,7 @@ def _apply_fix_blocks(
         conn.commit()
     except DatabaseError as apply_exc:
         conn.rollback()
-        error_console.print(f"[red]❌ Fix failed (rolled back): {apply_exc}[/red]")
+        error_console.print(f"[red]❌ Fix failed (rolled back): {verbatim(apply_exc)}[/red]")
         raise typer.Exit(exit_code_of("SQL_001")) from apply_exc
 
 
@@ -483,11 +484,11 @@ def _render_fix_applied(
     if fix_blocks:
         console.print(f"[green]✅ Applied {len(fix_blocks)} signature fix(es):[/green]")
         for sig in applied:
-            console.print(f"[green]    {sig}[/green]")
+            console.print(f"[green]    {verbatim(sig)}[/green]")
     if body_fix_blocks:
         console.print(f"[green]✅ Applied {len(body_fix_blocks)} body drift fix(es):[/green]")
         for sig in body_applied:
-            console.print(f"[green]    {sig}[/green]")
+            console.print(f"[green]    {verbatim(sig)}[/green]")
     if has_residual:
         console.print(
             "[yellow]⚠ Residual drift detected after apply — "

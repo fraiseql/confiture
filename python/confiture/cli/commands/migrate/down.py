@@ -26,6 +26,7 @@ from confiture.cli.helpers import (
     error_console,
     is_json,
 )
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     config_option,
     database_url_option,
@@ -156,7 +157,9 @@ def migrate_down(
                 return
 
             if not is_json(format_output):
-                console.print(f"[cyan]📦 Rolling back up to {steps} migration(s)[/cyan]\n")
+                console.print(
+                    f"[cyan]📦 Rolling back up to {verbatim(steps)} migration(s)[/cyan]\n"
+                )
             env_cfg = _load_environment_if_present(config) if _db_url_override is None else None
             lock_timeout, no_lock = resolve_lock_settings(
                 env_cfg.migration.locking if env_cfg else None, lock_timeout, no_lock
@@ -241,11 +244,11 @@ def migrate_down_to(
     if is_json(format_output):
         emit(result.to_dict(), output_file, console)
     elif result.noop:
-        console.print(f"Already at {revision}; nothing to roll back.")
+        console.print(f"Already at {verbatim(revision)}; nothing to roll back.")
     else:
         verb = "Would roll back" if dry_run else "Rolled back"
         console.print(
-            f"{verb} {len(result.rolled_back)} migration(s) from {result.from_} to {revision}:"
+            f"{verbatim(verb)} {len(result.rolled_back)} migration(s) from {verbatim(result.from_)} to {verbatim(revision)}:"
         )
         for v in result.rolled_back:
-            console.print(f"  • {v}")
+            console.print(f"  • {verbatim(v)}")
