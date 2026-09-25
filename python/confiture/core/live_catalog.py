@@ -50,6 +50,7 @@ from pglast.stream import RawStream
 
 from confiture.core.ddl_walk import read_constraint, read_index, render_default, written_type
 from confiture.core.ddl_walk import type_name as ddl_type_name
+from confiture.core.schema_identity import quote_identifier
 from confiture.core.schema_model import (
     Column,
     Constraint,
@@ -177,10 +178,6 @@ _IDENTITY: dict[str, IdentityKind] = {"a": "always", "d": "by default"}
 _GENERATED: dict[str, GeneratedKind] = {"s": "stored", "v": "virtual"}
 
 
-def _quoted(identifier: str) -> str:
-    return '"' + identifier.replace('"', '""') + '"'
-
-
 def _expression(text: str) -> Any:
     """A catalog expression's parse node — so it is rendered the way DDL is."""
     select: Any = pglast.parse_sql(f"SELECT {text}")[0].stmt
@@ -222,9 +219,9 @@ def _constraint(
     A foreign key references the relation the catalog names, schema included,
     whatever ``search_path`` made the definition's text leave off.
     """
-    alter: Any = pglast.parse_sql(f"ALTER TABLE t ADD CONSTRAINT {_quoted(name)} {definition}")[
-        0
-    ].stmt
+    alter: Any = pglast.parse_sql(
+        f"ALTER TABLE t ADD CONSTRAINT {quote_identifier(name)} {definition}"
+    )[0].stmt
     read = read_constraint(alter.cmds[0].def_)
     if not isinstance(read, Constraint):
         return None

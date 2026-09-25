@@ -17,6 +17,7 @@ import pglast.parser
 from pglast.stream import RawStream
 
 from confiture.core import sql_lexer
+from confiture.core.schema_identity import identifier_identity
 
 # Keyword kinds PostgreSQL accepts as a plain identifier (``INSERT INTO user``).
 _IDENTIFIER_KINDS = frozenset({"UNRESERVED_KEYWORD", "COL_NAME_KEYWORD", "TYPE_FUNC_NAME_KEYWORD"})
@@ -69,9 +70,10 @@ def _is_identifier(token: Any) -> bool:
 
 
 def _identifier_text(sql: str, token: Any) -> str:
+    """The token's identifier: a quoted one unquoted, a bare one as written."""
     text = sql[token.start : token.end + 1]
     if text[:1] == '"' and text[-1:] == '"' and text != '"':
-        return text[1:-1].replace('""', '"')
+        return identifier_identity(text)
     return text
 
 

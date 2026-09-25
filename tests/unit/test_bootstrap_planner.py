@@ -87,8 +87,7 @@ def test_plan_includes_role_creation_when_missing() -> None:
     assert len(plan.steps) == 1
     step = plan.steps[0]
     assert step.label == "create_role"
-    assert "CREATE ROLE" in step.sql
-    assert '"migrator"' in step.sql
+    assert step.sql == "CREATE ROLE migrator WITH LOGIN NOCREATEROLE"
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +105,7 @@ def test_plan_includes_reassign_when_postgres_owns_in_scope_schemas() -> None:
     labels = [s.label for s in plan.steps]
     assert "reassign_owned" in labels
     reassign = next(s for s in plan.steps if s.label == "reassign_owned")
-    assert "REASSIGN OWNED BY postgres TO" in reassign.sql
-    assert '"migrator"' in reassign.sql
+    assert reassign.sql == "REASSIGN OWNED BY postgres TO migrator"
 
 
 # ---------------------------------------------------------------------------
@@ -165,8 +163,8 @@ def test_plan_includes_alter_default_privileges_per_schema_role() -> None:
         assert "ON TABLES TO" in s.sql
     sqls = " | ".join(s.sql for s in adp_steps)
     assert "SELECT, INSERT, UPDATE, DELETE" in sqls
-    assert '"app"' in sqls
-    assert '"readonly"' in sqls
+    assert "ON TABLES TO app" in sqls
+    assert "ON TABLES TO readonly" in sqls
 
 
 def test_plan_omits_default_privileges_when_unconfigured() -> None:
@@ -232,3 +230,10 @@ def test_a_default_privileges_statement_names_each_identifier_once(
     schema: str, grantee: str, named: tuple[str, str]
 ) -> None:
     assert _default_privileges_names(schema, grantee) == (1, ("migrator",), *[(n,) for n in named])
+
+
+def test_a_mixed_case_role_is_created_by_its_quoted_name() -> None:
+    """The one quoter writes the role's identity as SQL must: ``AppOwner`` quoted."""
+    planner = BootstrapPlanner(ownership=_make_ownership(owner='"AppOwner"'))
+    (step,) = planner.plan(_make_conn(role_exists=False, postgres_owned_schemas=[])).steps
+    assert step.sql == 'CREATE ROLE "AppOwner" WITH LOGIN NOCREATEROLE'
