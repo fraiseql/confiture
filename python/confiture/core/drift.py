@@ -393,6 +393,7 @@ _CONSTRAINT_KEYWORDS = {
     "unique": "UNIQUE",
     "check": "CHECK",
     "foreign_key": "FOREIGN KEY",
+    "exclusion": "EXCLUDE",
 }
 
 
@@ -452,8 +453,9 @@ def _same_constraint(expected: Constraint, live: Constraint) -> bool:
 
     By name when the DDL wrote one; otherwise by what it says — its columns and, for
     a foreign key, what it references (``REFERENCES p`` with no column list means the
-    referenced key, which the catalog always spells out). An unnamed CHECK matches any
-    live CHECK still unclaimed: its text is stored analysed and cannot be compared.
+    referenced key, which the catalog always spells out), for an EXCLUDE the operator
+    each element is compared with. An unnamed CHECK matches any live CHECK still
+    unclaimed: its text is stored analysed and cannot be compared.
     """
     if expected.kind != live.kind:
         return False
@@ -463,6 +465,7 @@ def _same_constraint(expected: Constraint, live: Constraint) -> bool:
         return True
     return (
         expected.columns == live.columns
+        and expected.operators == live.operators
         and identity_of(expected.ref_table) == identity_of(live.ref_table)
         and (not expected.ref_columns or expected.ref_columns == live.ref_columns)
     )

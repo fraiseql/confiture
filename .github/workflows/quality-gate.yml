@@ -378,6 +378,7 @@ jobs:
           tests/unit/test_differ_sql.py \
           tests/unit/test_differ_sql_objects.py \
           tests/unit/test_change_order.py \
+          tests/unit/test_exclusion_constraints.py \
           tests/unit/test_schema_change.py \
           tests/unit/test_schema_change_is_exhaustive.py \
           tests/unit/test_schema_change_tiers.py \

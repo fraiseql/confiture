@@ -183,3 +183,40 @@ def test_an_unnamed_index_matches_by_what_it_indexes() -> None:
     actual = model(table("t", column("code", "text"), indexes=[stored]))
 
     assert _compare(expected, actual).drift_items == []
+
+
+class TestExclusionConstraints:
+    """#322: drift sees an EXCLUDE constraint, named or not."""
+
+    NAMED = Constraint(
+        kind="exclusion", name="no_overlap", columns=("id",), operators=("&&",), method="gist"
+    )
+    UNNAMED = Constraint(kind="exclusion", columns=("id",), operators=("&&",), method="gist")
+
+    def test_one_the_database_lost_is_missing(self) -> None:
+        assert _items(_compare(_users(self.NAMED), _users())) == [
+            (DriftType.MISSING_CONSTRAINT, DriftSeverity.WARNING, "public.users.no_overlap")
+        ]
+
+    def test_an_unnamed_one_matches_the_name_postgresql_gave_it(self) -> None:
+        stored = Constraint(
+            kind="exclusion",
+            name="users_id_excl",
+            columns=("id",),
+            operators=("&&",),
+            method="gist",
+        )
+        assert _compare(_users(self.UNNAMED), _users(stored)).drift_items == []
+
+    def test_an_unnamed_one_with_another_operator_is_another_constraint(self) -> None:
+        other = Constraint(kind="exclusion", name="x", columns=("id",), operators=("=",))
+        assert [
+            i.drift_type for i in _compare(_users(self.UNNAMED), _users(other)).drift_items
+        ] == [
+            DriftType.MISSING_CONSTRAINT,
+            DriftType.EXTRA_CONSTRAINT,
+        ]
+
+    def test_an_unnamed_missing_one_is_labelled_by_what_it_says(self) -> None:
+        (item,) = _compare(_users(self.UNNAMED), _users()).drift_items
+        assert "EXCLUDE (id)" in item.message

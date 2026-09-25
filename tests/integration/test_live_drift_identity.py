@@ -150,6 +150,14 @@ MUTATIONS = [
         "core.tb_other.ck_other_id",
         id="extra-constraint",
     ),
+    # #322: an EXCLUDE is a constraint drift reads; the index behind it is PostgreSQL's.
+    pytest.param(
+        "ALTER TABLE core.tb_other ADD CONSTRAINT ex_other_id EXCLUDE USING btree (id WITH =)",
+        "extra_constraint",
+        "info",
+        "core.tb_other.ex_other_id",
+        id="extra-exclusion-constraint",
+    ),
     pytest.param(
         "DROP INDEX core.ix_widget_serial",
         "missing_index",

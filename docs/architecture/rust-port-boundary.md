@@ -124,7 +124,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-40,952 lines, 56% of `core/`.
+40,961 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -140,7 +140,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `cte_debugger.py` | 198 | database orchestration |
 | `dependent_objects.py` | 162 | database orchestration |
 | `desired_state.py` | 73 | database orchestration |
-| `drift.py` | 1,328 | database orchestration |
+| `drift.py` | 1,331 | database orchestration |
 | `dry_run.py` | 239 | database orchestration |
 | `dry_run_summary.py` | 156 | neutral |
 | `error_context.py` | 286 | neutral |
@@ -162,7 +162,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `linting/schema_linter.py` | 1,083 | database orchestration |
 | `linting/selection.py` | 369 | database orchestration |
 | `linting/unresolved.py` | 379 | database orchestration |
-| `live_catalog.py` | 872 | database orchestration |
+| `live_catalog.py` | 878 | database orchestration |
 | `locking.py` | 625 | database orchestration |
 | `migration_generator.py` | 563 | database orchestration |
 | `migration_verifier.py` | 229 | database orchestration |

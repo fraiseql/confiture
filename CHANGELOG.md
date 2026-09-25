@@ -96,6 +96,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     to an empty database, and so do its down and a second up; before, only three
     of thirteen did. This resolves the 1.15.0 "Known, not fixed" entries about
     `migrate diff --generate`.
+- **An `EXCLUDE` constraint is modelled, compared, generated and drift-checked** (#322).
+  It was the one constraint kind the model declined by name. The table parsed clean,
+  adding one reported no change in either spelling (so `migrate validate
+  --require-migration` passed green), a new table's generated `CREATE TABLE` dropped
+  it, and `confiture drift` could not see it. `Constraint` gains the `exclusion` kind:
+  its elements in `columns` (with `key_options`, as an index's keys), the `operators`
+  alongside, the access `method` and the `where` predicate. The one constraint reader
+  reads it from DDL and from `pg_get_constraintdef` alike, so a database built from a
+  tree reads back as the tree. `ADD_EXCLUSION_CONSTRAINT` and
+  `DROP_EXCLUSION_CONSTRAINT` join the change union. A change is compared whole, as a
+  CHECK's is, and an unnamed one is identified by what it says. It counts in the diff
+  summary's `constraints_added` / `constraints_dropped`. Every generated constraint
+  clause now also writes the constraint's `DEFERRABLE INITIALLY …`, which the model
+  carried and no clause wrote. The `every-change` fixture gains a range `EXCLUDE` on
+  each side, and its goldens change accordingly.
 
 ## [1.20.0] - 2026-09-25
 
