@@ -26,8 +26,6 @@ import hmac
 from typing import Any
 from urllib.parse import urlsplit
 
-import psycopg
-
 from confiture import __version__
 from confiture.core import mcp_server as _mcp_server
 
@@ -91,9 +89,8 @@ def create_app(
         msg = "HTTP mode requires 'fastapi'. Install with: uv add 'fraiseql-confiture[mcp-http]'"
         raise ImportError(msg) from e
 
-    conn = psycopg.connect(database_url)
-    server = _mcp_server.MCPServer(
-        conn,
+    server = _mcp_server.MCPServer.from_url(
+        database_url,
         schema=schema,
         name_pattern=name_pattern,
         expose_confiture_tools=expose_confiture_tools,

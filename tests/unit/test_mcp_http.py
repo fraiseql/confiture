@@ -28,22 +28,20 @@ pytest.importorskip("httpx")  # FastAPI's TestClient transport
 
 
 def _patch_backend(monkeypatch, handle_message_return):
-    """Mock psycopg.connect + MCPServer so create_app needs no real DB.
+    """Mock ``MCPServer.from_url`` so create_app needs no real DB.
 
     Returns the mock server instance so tests can assert on its calls.
     """
     from unittest.mock import MagicMock
-
-    import psycopg
-
-    monkeypatch.setattr(psycopg, "connect", MagicMock(return_value=MagicMock()))
 
     mock_server = MagicMock()
     mock_server.handle_message.return_value = handle_message_return
 
     import confiture.core.mcp_server as mcp_server_mod
 
-    monkeypatch.setattr(mcp_server_mod, "MCPServer", MagicMock(return_value=mock_server))
+    server_class = MagicMock()
+    server_class.from_url.return_value = mock_server
+    monkeypatch.setattr(mcp_server_mod, "MCPServer", server_class)
     return mock_server
 
 
@@ -172,11 +170,11 @@ def test_a_refused_token_asks_for_a_bearer_token(monkeypatch):
 
 def test_create_app_refuses_an_empty_token_before_connecting(monkeypatch):
     _patch_backend(monkeypatch, {})
-    import psycopg
+    import confiture.core.mcp_server as mcp_server_mod
 
     with pytest.raises(ValueError, match="token"):
         mcp_http.create_app(URL, token="")
-    psycopg.connect.assert_not_called()
+    mcp_server_mod.MCPServer.from_url.assert_not_called()
 
 
 def test_http_mode_serves_no_unauthenticated_schema_pages(monkeypatch):

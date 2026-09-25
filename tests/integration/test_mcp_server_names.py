@@ -54,7 +54,7 @@ def call(database: str) -> Iterator[object]:
     connections: list[psycopg.Connection] = []
 
     def _call(schema: str, name: str, arguments: dict[str, object] | None = None) -> object:
-        conn = psycopg.connect(database)
+        conn = psycopg.connect(database, autocommit=True)
         connections.append(conn)
         server = MCPServer(conn, schema=schema, expose_confiture_tools=False)
         server.initialize()

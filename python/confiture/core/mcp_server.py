@@ -24,6 +24,7 @@ from psycopg import sql
 
 from confiture import __version__
 from confiture.core import migrator as _core_migrator
+from confiture.core.connection import require_mode
 from confiture.core.drift import SchemaDriftDetector
 from confiture.core.introspection.functions import FunctionIntrospector
 from confiture.core.introspection.tables import SchemaIntrospector
@@ -163,11 +164,20 @@ class MCPServer:
     PostgreSQL stored functions in the target schema are also discovered
     automatically and registered as additional tools.
 
+    **A tool call is one statement** (#373): committed when it returns, rolled back
+    when it raises, its locks released either way. The connection must therefore be
+    in autocommit. :meth:`from_url` opens one so, and owns it — after a
+    connection-level error it reconnects for the next call. A connection a caller
+    hands in is never switched: one in a transaction is refused.
+
     Args:
-        connection: An open psycopg connection to the target database.
+        connection: An open psycopg connection to the target database, in autocommit.
         schema: PostgreSQL schema to introspect for stored functions.
         name_pattern: Optional SQL LIKE pattern to filter function names.
         expose_confiture_tools: Register built-in Confiture tools (default: True).
+
+    Raises:
+        ConfigurationError: ``CONFIG_013`` when *connection* is not in autocommit.
     """
 
     def __init__(
@@ -177,6 +187,15 @@ class MCPServer:
         name_pattern: str | None = None,
         expose_confiture_tools: bool = True,
     ) -> None:
+        require_mode(
+            connection,
+            autocommit=True,
+            call="MCPServer",
+            reason="each tool call is one statement, committed when it returns and "
+            "rolled back when it raises; in a transaction its writes and locks would "
+            "outlive it, and one error would fail every call after it",
+        )
+        self._url: str | None = None
         self._conn = connection
         self._schema = schema
         self._name_pattern = name_pattern
@@ -185,6 +204,37 @@ class MCPServer:
         self._pg_tools: dict[str, MCPTool] = {}
         self._mapper = TypeMapper()
         self._introspector = FunctionIntrospector(connection)
+
+    @classmethod
+    def from_url(
+        cls,
+        database_url: str,
+        schema: str = "public",
+        name_pattern: str | None = None,
+        expose_confiture_tools: bool = True,
+    ) -> MCPServer:
+        """A server on a connection it opens to *database_url*, in autocommit, and owns."""
+        server = cls(
+            psycopg.connect(database_url, autocommit=True),
+            schema=schema,
+            name_pattern=name_pattern,
+            expose_confiture_tools=expose_confiture_tools,
+        )
+        server._url = database_url
+        return server
+
+    def close(self) -> None:
+        """Close the connection :meth:`from_url` opened; a caller's is the caller's to close."""
+        if self._url is not None:
+            self._conn.close()
+
+    def _reconnect(self) -> None:
+        """Replace a connection this server owns once PostgreSQL has lost it."""
+        if self._url is None:
+            return
+        self._conn.close()
+        self._conn = psycopg.connect(self._url, autocommit=True)
+        self._introspector = FunctionIntrospector(self._conn)
 
     def initialize(self) -> None:
         """Introspect the database and build the tool registry."""
@@ -280,9 +330,15 @@ class MCPServer:
             "confiture__schema_introspect": self._call_schema_introspect,
             "confiture__drift_check": self._call_drift_check,
         }
-        if name in dispatch:
-            return dispatch[name](arguments)
-        return self._call_pg_function(name, arguments)
+        try:
+            if name in dispatch:
+                return dispatch[name](arguments)
+            return self._call_pg_function(name, arguments)
+        except psycopg.OperationalError:
+            # The call's outcome is unknown, not failed; the next call gets a live connection.
+            if self._conn.closed or self._conn.broken:
+                self._reconnect()
+            raise
 
     # ── JSON-RPC message handling ─────────────────────────────────────────────
 

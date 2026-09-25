@@ -13,7 +13,7 @@ import typer
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import console
 from confiture.cli.options import database_url_option
-from confiture.core.connection import DatabaseError, connect_url
+from confiture.core.connection import DatabaseError
 from confiture.core.mcp_server import MCPServer
 from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -52,7 +52,13 @@ def mcp_server(
         ),
     ),
 ) -> None:
-    """Expose Confiture operations and PostgreSQL stored functions as MCP tools."""
+    """Expose Confiture operations and PostgreSQL stored functions as MCP tools.
+
+    Each tool call is one statement on a connection in autocommit: committed when it
+    returns, rolled back when it raises, its locks released either way, and a failed
+    call never fails the next. If a response is lost, whether the call ran is unknown:
+    check before calling a routine that writes again.
+    """
 
     if port is not None:
         if not token:
@@ -85,7 +91,12 @@ def mcp_server(
         return
 
     try:
-        conn = connect_url(database_url)
+        server = MCPServer.from_url(
+            database_url,
+            schema=schema,
+            name_pattern=include,
+            expose_confiture_tools=not no_confiture_tools,
+        )
     except DatabaseError as e:
         fail(
             ConfigurationError(
@@ -96,16 +107,9 @@ def mcp_server(
             json_mode=False,
         )
 
-    server = MCPServer(
-        conn,
-        schema=schema,
-        name_pattern=include,
-        expose_confiture_tools=not no_confiture_tools,
-    )
-
     if stdio:
         server.serve_stdio()
-        conn.close()
+        server.close()
     else:
         # Default: show info and wait
         server.initialize()
@@ -114,4 +118,4 @@ def mcp_server(
         console.print("[dim]Use --stdio to run in stdio mode for Claude Code integration.[/dim]")
         for t in tools:
             console.print(f"  [cyan]{t['name']}[/cyan]: {t['description']}")
-        conn.close()
+        server.close()
