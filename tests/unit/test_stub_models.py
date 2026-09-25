@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC
 
 from confiture.core.introspection.type_mapping import TypeMapper
+from confiture.core.stub_generator import jsonb_keys
 from confiture.models.function_info import FunctionInfo, FunctionParam, Volatility
 from confiture.models.stub_models import StubFile, StubFormat, StubFunction, _to_pascal_case
 
@@ -15,6 +16,7 @@ def _make_info(
     return_type: str = "integer",
     source: str | None = None,
     is_procedure: bool = False,
+    language: str = "sql",
 ) -> FunctionInfo:
     return FunctionInfo(
         schema="public",
@@ -25,7 +27,7 @@ def _make_info(
         returns_set=False,
         volatility=Volatility.IMMUTABLE,
         is_procedure=is_procedure,
-        language="sql",
+        language=language,
         source=source,
         estimated_cost=1.0,
     )
@@ -46,7 +48,7 @@ def test_stub_function_from_function_info_scalar():
         ],
         return_type="integer",
     )
-    stub = StubFunction.from_function_info(info, mapper)
+    stub = StubFunction.from_function_info(info, mapper, jsonb_keys(info))
     assert stub.name == "add"
     assert stub.python_params == [("x", "int"), ("y", "int")]
     assert stub.python_return == "int"
@@ -56,16 +58,16 @@ def test_stub_function_from_function_info_scalar():
 def test_stub_function_from_procedure():
     mapper = TypeMapper()
     info = _make_info(name="do_work", return_type=None, is_procedure=True)
-    stub = StubFunction.from_function_info(info, mapper)
+    stub = StubFunction.from_function_info(info, mapper, jsonb_keys(info))
     assert stub.is_procedure is True
     assert stub.python_return == "None"
 
 
 def test_stub_function_jsonb_with_inference():
     mapper = TypeMapper()
-    source = "RETURN jsonb_build_object('booking_id', v_id, 'state', v_state)"
-    info = _make_info(name="create_booking", return_type="jsonb", source=source)
-    stub = StubFunction.from_function_info(info, mapper)
+    source = "BEGIN RETURN jsonb_build_object('booking_id', 1, 'state', 'new'); END"
+    info = _make_info(name="create_booking", return_type="jsonb", source=source, language="plpgsql")
+    stub = StubFunction.from_function_info(info, mapper, jsonb_keys(info))
     assert stub.result_model == "CreateBookingResult"
     assert stub.python_return == "CreateBookingResult"
     assert "class CreateBookingResult(BaseModel):" in stub.render_model(StubFormat.PYDANTIC)
@@ -73,8 +75,13 @@ def test_stub_function_jsonb_with_inference():
 
 def test_stub_function_jsonb_without_inference():
     mapper = TypeMapper()
-    info = _make_info(name="get_data", return_type="jsonb", source="RETURN result;")
-    stub = StubFunction.from_function_info(info, mapper)
+    info = _make_info(
+        name="get_data",
+        return_type="jsonb",
+        source="DECLARE result jsonb; BEGIN RETURN result; END",
+        language="plpgsql",
+    )
+    stub = StubFunction.from_function_info(info, mapper, jsonb_keys(info))
     assert stub.python_return == "dict[str, Any]"
     assert stub.result_model is None
 
@@ -85,7 +92,7 @@ def test_stub_function_render_function():
         params=[FunctionParam(name="x", pg_type="integer")],
         return_type="integer",
     )
-    stub = StubFunction.from_function_info(info, mapper)
+    stub = StubFunction.from_function_info(info, mapper, jsonb_keys(info))
     code = stub.render_function()
     assert "def add(" in code
     assert "conn: psycopg.Connection" in code
@@ -102,7 +109,7 @@ def test_stub_file_render_produces_valid_python():
         params=[FunctionParam(name="x", pg_type="integer")],
         return_type="integer",
     )
-    stub = StubFunction.from_function_info(info, mapper)
+    stub = StubFunction.from_function_info(info, mapper, jsonb_keys(info))
     stub_file = StubFile(
         schema="public",
         database="mydb",
@@ -119,9 +126,9 @@ def test_stub_file_render_includes_pydantic_model():
     from datetime import datetime
 
     mapper = TypeMapper()
-    source = "RETURN jsonb_build_object('user_id', v_id, 'name', v_name)"
+    source = "SELECT jsonb_build_object('user_id', 1, 'name', 'x')"
     info = _make_info(name="get_user", return_type="jsonb", source=source)
-    stub = StubFunction.from_function_info(info, mapper)
+    stub = StubFunction.from_function_info(info, mapper, jsonb_keys(info))
     stub_file = StubFile(
         schema="public",
         database="mydb",
@@ -131,3 +138,55 @@ def test_stub_file_render_includes_pydantic_model():
     )
     code = stub_file.render()
     assert "class GetUserResult" in code
+
+
+class TestJsonbKeysAreReadFromTheParse:
+    """The keys come from the parser, not from a regex over the source (#410)."""
+
+    @staticmethod
+    def _fields(source: str, language: str = "sql") -> tuple[str, ...]:
+        info = _make_info(name="f", return_type="jsonb", source=source, language=language)
+        return tuple(
+            name
+            for name, _ in StubFunction.from_function_info(
+                info, TypeMapper(), jsonb_keys(info)
+            ).result_fields
+        )
+
+    def test_a_nested_call_does_not_end_the_argument_list(self):
+        assert self._fields("SELECT jsonb_build_object('a', coalesce(1, 0), 'b', 2)") == ("a", "b")
+
+    def test_a_comma_in_a_string_is_not_an_argument_boundary(self):
+        assert self._fields("SELECT jsonb_build_object('a', 'x,y', 'b', 1)") == ("a", "b")
+
+    def test_a_call_in_a_comment_is_not_a_call(self):
+        assert self._fields(
+            "-- jsonb_build_object('ghost', 1)\nSELECT jsonb_build_object('a', 1)"
+        ) == ("a",)
+
+    def test_a_nested_object_is_a_value_not_more_keys(self):
+        source = "SELECT jsonb_build_object('a', jsonb_build_object('inner', 1), 'b', 2)"
+        assert self._fields(source) == ("a", "b")
+
+    def test_a_key_that_is_not_a_constant_gives_no_model(self):
+        info = _make_info(
+            name="f", return_type="jsonb", source="SELECT jsonb_build_object(lower('A'), 1)"
+        )
+        stub = StubFunction.from_function_info(info, TypeMapper(), jsonb_keys(info))
+        assert stub.result_model is None
+        assert stub.python_return == "dict[str, Any]"
+
+    def test_a_plpgsql_body_is_read_through_its_fragments(self):
+        source = (
+            "DECLARE v jsonb; BEGIN\n"
+            "  v := jsonb_build_object('id', 1, 'tag', 'x');\n"
+            "  RETURN v;\nEND"
+        )
+        assert self._fields(source, "plpgsql") == ("id", "tag")
+
+    def test_a_body_the_parser_rejects_gives_no_model(self):
+        info = _make_info(name="f", return_type="jsonb", source="SELEC jsonb_build_object('a', 1)")
+        assert (
+            StubFunction.from_function_info(info, TypeMapper(), jsonb_keys(info)).result_model
+            is None
+        )

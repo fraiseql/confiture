@@ -42,6 +42,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   what the drop costs (grants, comment, and a dependent view fails it), and the
   statement is tiered `destructive`. When a side's columns cannot be named (`*`),
   `OR REPLACE` is kept. The `every-change` example's down now applies.
+- **`generate stubs` reads a JSONB result's keys from the parse** (#410). The keys
+  were found by a regex over the body that stopped at the first `)`, split on a
+  comma inside a string, read a call in a comment, and took a nested object's keys
+  for the result's own. `stub_generator.jsonb_keys` reads every outermost
+  `jsonb_build_object` call from the parse: a `LANGUAGE sql` body as SQL, a
+  PL/pgSQL body through its compiled fragments. A key that is not a string
+  constant, or a body the parser rejects, gives no class, and the stub returns
+  `dict[str, Any]`. `StubFunction.from_function_info` takes the keys as an
+  argument, since a model does not read SQL.
 
 ### Security
 
