@@ -308,11 +308,14 @@ class MCPServer:
         func_info = next(f for f in self._catalog.functions if f.name == name)
         args = [arguments[p.name] for p in func_info.in_params if p.name in arguments]
         # The schema and the routine's name are identifiers, quoted whatever they
-        # hold: the name is pg_proc's and the schema the caller's.
+        # hold: the name is pg_proc's and the schema the caller's. A raw cursor
+        # binds `$n` server-side and reads no `%` in the text, so a `%` in a name
+        # is only ever part of the name (#375).
+        placeholders = sql.SQL(", ").join(sql.SQL(f"${i}") for i in range(1, len(args) + 1))
         statement = sql.SQL("CALL {}({})" if func_info.is_procedure else "SELECT {}({})").format(
-            sql.Identifier(self._schema, name), sql.SQL(", ").join(sql.Placeholder() * len(args))
+            sql.Identifier(self._schema, name), placeholders
         )
-        with self._conn.cursor() as cur:
+        with psycopg.RawCursor(self._conn) as cur:
             cur.execute(statement, args)
             if func_info.is_procedure:
                 return None

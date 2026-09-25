@@ -92,3 +92,14 @@ def test_a_mixed_case_schema_and_name_call_that_routine(call) -> None:
 
 def test_arguments_are_bound_to_the_named_routine(call) -> None:
     assert call("Tools", "Add", {"x": 40, "y": 2}) == 42
+
+
+def test_a_percent_in_a_routine_name_is_part_of_the_name(database: str, call) -> None:
+    """#375: psycopg read ``%f`` in the composed call as a placeholder once arguments came."""
+    with psycopg.connect(database, autocommit=True) as conn:
+        conn.execute(
+            sql.SQL("CREATE FUNCTION {}(x int) RETURNS int LANGUAGE sql AS 'SELECT x * 100'").format(
+                sql.Identifier("public", "pct%fn")
+            )
+        )
+    assert call("public", "pct%fn", {"x": 7}) == 700
