@@ -61,6 +61,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PostgreSQL would refuse (an unclosed quote, a header that does not match) is
   `SEED_UNPARSEABLE`. `FORMAT binary` and a `DEFAULT` marker are still
   `SEED_NOT_CHECKED`.
+- **The CLI prints data as written** (#409). Rich reads `[...]` in a printed string
+  as a style tag, and some 510 values that 44 CLI modules interpolated into
+  `console.print(f"…")` (and `status`, `log`, `rule`) were not escaped. A table name, a path such as
+  `db/[legacy]/x.sql`, an array type `int[]` or a rule id `[tree_001]` lost its
+  bracketed text, restyled the rest of the line, or raised `MarkupError`. Each is now
+  `verbatim(value)` (`cli/markup.py`: escaped, with its format spec); markup confiture
+  builds itself is `markup(value)`. `tests/unit/test_cli_prints_data_verbatim.py`
+  fails on a new site that is neither, whatever the console is named.
 
 ### Security
 

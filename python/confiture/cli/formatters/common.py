@@ -12,6 +12,7 @@ from typing import Any
 from rich.console import Console
 
 from confiture.cli.helpers import emit
+from confiture.cli.markup import verbatim
 
 
 def save_csv(headers: list[str], rows: list[list[Any]], output_path: Path) -> None:
@@ -56,9 +57,9 @@ def display_drift_report(report: Any, console: Console) -> None:
         return
     console.print(
         f"[yellow]⚠️  Schema drift detected[/yellow]: "
-        f"{report.critical_count} critical, "
-        f"{report.warning_count} warnings, "
-        f"{report.info_count} info"
+        f"{verbatim(report.critical_count)} critical, "
+        f"{verbatim(report.warning_count)} warnings, "
+        f"{verbatim(report.info_count)} info"
     )
 
     # Partition items so structural, ACL, and ownership drift are visually distinct.
@@ -75,9 +76,9 @@ def display_drift_report(report: Any, console: Console) -> None:
     def _emit(item: Any) -> None:
         color = "red" if item.severity.value == "critical" else "yellow"
         console.print(
-            f"  [{color}]{item.severity.value.upper()}[/{color}] "
-            f"{item.drift_type.value.upper()} "
-            f"{item.object_name}: {item.message}"
+            f"  [{color}]{verbatim(item.severity.value.upper())}[/{color}] "
+            f"{verbatim(item.drift_type.value.upper())} "
+            f"{verbatim(item.object_name)}: {verbatim(item.message)}"
         )
 
     for item in structural_items:
@@ -102,7 +103,7 @@ def display_signature_drift_report(report: Any, console: Console) -> None:
     if not report.has_drift:
         console.print(
             f"[green]✅ No stale function overloads detected "
-            f"({report.functions_checked} functions checked)[/green]"
+            f"({verbatim(report.functions_checked)} functions checked)[/green]"
         )
         return
 
@@ -110,11 +111,11 @@ def display_signature_drift_report(report: Any, console: Console) -> None:
         f"[red]❌ {len(report.stale_overloads)} stale function overload(s) detected[/red]"
     )
     for overload in report.stale_overloads:
-        console.print(f"\n  [bold]{overload.schema}.{overload.name}[/bold]")
-        console.print(f"    Stale (in DB):   [red]{overload.stale_signature}[/red]")
+        console.print(f"\n  [bold]{verbatim(overload.schema)}.{verbatim(overload.name)}[/bold]")
+        console.print(f"    Stale (in DB):   [red]{verbatim(overload.stale_signature)}[/red]")
         for src in overload.source_signatures:
-            console.print(f"    Source defines:  [green]{src}[/green]")
-        console.print(f"    [cyan]Fix: {overload.drop_sql}[/cyan]")
+            console.print(f"    Source defines:  [green]{verbatim(src)}[/green]")
+        console.print(f"    [cyan]Fix: {verbatim(overload.drop_sql)}[/cyan]")
 
     if report.missing_from_db:
         console.print(
@@ -153,6 +154,8 @@ def handle_output(
         headers, rows = csv_data
         if output_path:
             save_csv(headers, rows, output_path)
-            console.print(f"[green]✓ CSV report saved to {output_path.absolute()}[/green]")
+            console.print(
+                f"[green]✓ CSV report saved to {verbatim(output_path.absolute())}[/green]"
+            )
         else:
             print_csv(headers, rows, console)

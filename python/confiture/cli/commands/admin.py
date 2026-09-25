@@ -18,6 +18,7 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     config_option,
     database_url_option,
@@ -168,7 +169,7 @@ def _print_install_outcome(outcome: dict[str, Any]) -> None:
         console.print("  Schema: [bold]confiture[/bold]")
         console.print("  Functions:")
         for function in outcome["functions"]:
-            console.print(f"    • {function}")
+            console.print(f"    • {verbatim(function)}")
 
 
 @cli_boundary
@@ -257,7 +258,7 @@ def _print_profile(profile: Any) -> None:
     console.print(f"   Name: {escape(str(profile.name))}")
     console.print(f"   Version: {escape(str(profile.version))}")
     if profile.global_seed:
-        console.print(f"   Global Seed: {profile.global_seed}")
+        console.print(f"   Global Seed: {verbatim(profile.global_seed)}")
 
     console.print(f"\n[cyan]Strategies ({len(profile.strategies)})[/cyan]:")
     for strategy_name, strategy_def in profile.strategies.items():
@@ -382,8 +383,8 @@ def _report_absent_ledger(
         return
 
     console.print(
-        f"[yellow]⏭️  Skipped: no migration ledger found (`{tracking_table}` is "
-        f"not present in this database){note} — 0 migrations recorded, so "
+        f"[yellow]⏭️  Skipped: no migration ledger found (`{verbatim(tracking_table)}` is "
+        f"not present in this database){verbatim(note)} — 0 migrations recorded, so "
         "nothing was verified.[/yellow]"
     )
     console.print(
@@ -402,17 +403,17 @@ def _print_mismatches(mismatches: list, *, fixed: int | None) -> None:
     """
     console.print(f"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
     for m in mismatches:
-        console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
-        console.print(f"    File: {m.file_path}")
+        console.print(f"  [yellow]{verbatim(m.version)}_{verbatim(m.name)}[/yellow]")
+        console.print(f"    File: {verbatim(m.file_path)}")
         expected_preview = m.expected[:16] if m.expected else "(none)"
-        console.print(f"    Expected: {expected_preview}...")
-        console.print(f"    Actual:   {m.actual[:16]}...")
+        console.print(f"    Expected: {verbatim(expected_preview)}...")
+        console.print(f"    Actual:   {verbatim(m.actual[:16])}...")
         console.print()
     if fixed is None:
         console.print("[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]")
         return
     console.print("[yellow]⚠️  Updating stored checksums...[/yellow]")
-    console.print(f"[green]✅ Updated {fixed} checksum(s)[/green]")
+    console.print(f"[green]✅ Updated {verbatim(fixed)} checksum(s)[/green]")
 
 
 @cli_boundary
@@ -514,7 +515,9 @@ def verify_checksums(
             else:
                 _read = notable_resolution(tracking_table, ledger.resolved_name)
                 _suffix = f" (read `{_read}`)" if _read else ""
-                console.print(f"[green]✅ All migration checksums verified!{_suffix}[/green]")
+                console.print(
+                    f"[green]✅ All migration checksums verified!{verbatim(_suffix)}[/green]"
+                )
             return
 
         updated: int | None = None
@@ -614,20 +617,20 @@ def validate_config(
     if report.valid and not report.issues:
         console.print(
             f"[green]✅ Configuration valid[/green] "
-            f"({report.config_source}, {report.migration_count} migration(s))"
+            f"({verbatim(report.config_source)}, {verbatim(report.migration_count)} migration(s))"
         )
         if exit_code:
             raise typer.Exit(exit_code)
         return
 
-    error_console.print(f"[red]❌ Configuration issues ({report.config_source}):[/red]")
+    error_console.print(f"[red]❌ Configuration issues ({verbatim(report.config_source)}):[/red]")
     for issue in report.issues:
         color = "red" if issue.severity in ("error", "critical") else "yellow"
         error_console.print(
-            f"  [{color}]{issue.severity.upper()}[/{color}] {issue.code}: {issue.message}"
+            f"  [{color}]{verbatim(issue.severity.upper())}[/{color}] {verbatim(issue.code)}: {verbatim(issue.message)}"
         )
         if issue.actionable:
-            error_console.print(f"    [dim]💡 {issue.actionable}[/dim]")
+            error_console.print(f"    [dim]💡 {verbatim(issue.actionable)}[/dim]")
     if exit_code:
         raise typer.Exit(exit_code)
 
@@ -759,14 +762,14 @@ def restore(
     )
 
     console.print(
-        f"[bold]Restoring[/bold] [cyan]{backup_file.name}[/cyan] → [cyan]{database}[/cyan]"
+        f"[bold]Restoring[/bold] [cyan]{verbatim(backup_file.name)}[/cyan] → [cyan]{verbatim(database)}[/cyan]"
     )
 
     def on_stderr_line(line: str) -> None:
         if "pg_restore: error:" in line:
-            console.print(f"  [red]{line}[/red]")
+            console.print(f"  [red]{verbatim(line)}[/red]")
         elif "pg_restore: warning:" in line:
-            console.print(f"  [yellow]{line}[/yellow]")
+            console.print(f"  [yellow]{verbatim(line)}[/yellow]")
 
     try:
         result = DatabaseRestorer().restore(options, on_stderr_line=on_stderr_line)
@@ -781,18 +784,20 @@ def restore(
         if result.matviews_deferred:
             if result.matviews_refreshed:
                 console.print(
-                    f"  Materialized views: {result.matviews_refreshed} refreshed after ANALYZE"
+                    f"  Materialized views: {verbatim(result.matviews_refreshed)} refreshed after ANALYZE"
                 )
             else:
                 console.print(
-                    f"  Materialized views: {result.matviews_deferred} left WITH NO DATA "
+                    f"  Materialized views: {verbatim(result.matviews_deferred)} left WITH NO DATA "
                     "(not refreshed) — refresh them after ANALYZE on your own schedule"
                 )
         if result.table_count is not None:
-            console.print(f"  Tables verified: {result.table_count} (≥ {min_tables} required)")
+            console.print(
+                f"  Tables verified: {verbatim(result.table_count)} (≥ {verbatim(min_tables)} required)"
+            )
     else:
         for err in result.errors:
-            console.print(f"[red]{err}[/red]")
+            console.print(f"[red]{verbatim(err)}[/red]")
         fail(
             RestoreError("Restore failed; see the errors above."),
             json_mode=False,

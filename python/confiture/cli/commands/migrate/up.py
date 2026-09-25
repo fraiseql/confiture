@@ -36,6 +36,7 @@ from confiture.cli.helpers import (
     error_console,
     is_json,
 )
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     config_option,
     database_url_option,
@@ -378,8 +379,8 @@ def _validate_up_flags(
     valid_mismatch_behaviors = ("fail", "warn", "ignore")
     if on_checksum_mismatch not in valid_mismatch_behaviors:
         error_console.print(
-            f"[red]❌ Error: Invalid --on-checksum-mismatch '{on_checksum_mismatch}'. "
-            f"Use one of: {', '.join(valid_mismatch_behaviors)}[/red]"
+            f"[red]❌ Error: Invalid --on-checksum-mismatch '{verbatim(on_checksum_mismatch)}'. "
+            f"Use one of: {verbatim(', '.join(valid_mismatch_behaviors))}[/red]"
         )
         raise typer.Exit(USAGE)
 
@@ -399,9 +400,9 @@ def _refuse_duplicate_versions(
     error_console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
     error_console.print("[red]Multiple migration files share the same version number:[/red]\n")
     for version, files in sorted(duplicates.items()):
-        error_console.print(f"  Version {version}:")
+        error_console.print(f"  Version {verbatim(version)}:")
         for f in files:
-            error_console.print(f"    • {f.name}")
+            error_console.print(f"    • {verbatim(f.name)}")
     error_console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
     error_console.print(
         "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
@@ -427,10 +428,10 @@ def _report_checksum_failure(error: Any, format_output: str, output_file: Path |
         fail(error, json_mode=True, output_file=output_file)
     error_console.print("[red]❌ Checksum verification failed![/red]\n")
     for m in error.mismatches:
-        error_console.print(f"  [yellow]{m.version}_{m.name}[/yellow]")
+        error_console.print(f"  [yellow]{verbatim(m.version)}_{verbatim(m.name)}[/yellow]")
         expected_preview = m.expected[:16] if m.expected else "(none)"
-        error_console.print(f"    Expected: {expected_preview}...")
-        error_console.print(f"    Actual:   {m.actual[:16]}...")
+        error_console.print(f"    Expected: {verbatim(expected_preview)}...")
+        error_console.print(f"    Actual:   {verbatim(m.actual[:16])}...")
     error_console.print(
         "\n[yellow]💡 Tip: Use 'confiture verify-checksums --fix' to update checksums, "
         "or --no-verify-checksums to skip[/yellow]"
@@ -447,7 +448,7 @@ def _report_lock_failure(
     print_error_to_console(error, error_console)
     if error.timeout:
         error_console.print(
-            f"[yellow]💡 Tip: Increase timeout with --lock-timeout {lock_timeout * 2}[/yellow]"
+            f"[yellow]💡 Tip: Increase timeout with --lock-timeout {verbatim(lock_timeout * 2)}[/yellow]"
         )
     else:
         error_console.print(
@@ -492,9 +493,11 @@ class _UpReporter:
         self._announced = True
         n = len(self.pending)
         if self.force:
-            console.print(f"[cyan]📦 Force mode: Found {n} migration(s) to apply[/cyan]\n")
+            console.print(
+                f"[cyan]📦 Force mode: Found {verbatim(n)} migration(s) to apply[/cyan]\n"
+            )
         else:
-            console.print(f"[cyan]📦 Found {n} pending migration(s)[/cyan]\n")
+            console.print(f"[cyan]📦 Found {verbatim(n)} pending migration(s)[/cyan]\n")
 
     def __call__(self, event: Any) -> None:
         kind = event.kind
@@ -508,29 +511,31 @@ class _UpReporter:
         if kind in _FIXED_LINES:
             console.print(_FIXED_LINES[kind])
         elif kind == "baseline_probe":
-            console.print(f"[cyan]🔍 {event.message}[/cyan]")
+            console.print(f"[cyan]🔍 {verbatim(event.message)}[/cyan]")
         elif kind == "baseline_detected":
-            console.print(f"[green]✓ Detected baseline: {event.version}[/green]")
-            console.print(f"[green]✅ Auto-baselined through {event.version}[/green]")
+            console.print(f"[green]✓ Detected baseline: {verbatim(event.version)}[/green]")
+            console.print(f"[green]✅ Auto-baselined through {verbatim(event.version)}[/green]")
         elif kind == "baseline_missed":
-            console.print(f"[yellow]⚠️  {event.message}[/yellow]")
+            console.print(f"[yellow]⚠️  {verbatim(event.message)}[/yellow]")
         elif kind == "applying":
             self._announce()
-            console.print(f"[cyan]⚡ Applying {event.label}...[/cyan]", end=" ")
+            console.print(f"[cyan]⚡ Applying {verbatim(event.label)}...[/cyan]", end=" ")
         elif kind == "target_reached":
-            console.print(f"[yellow]⏭️  Skipping {event.version} (after target)[/yellow]")
+            console.print(f"[yellow]⏭️  Skipping {verbatim(event.version)} (after target)[/yellow]")
         elif kind == "skipped_non_transactional":
             console.print(
-                f"[yellow]⏭️  Skipping {event.label} (non-transactional — "
+                f"[yellow]⏭️  Skipping {verbatim(event.label)} (non-transactional — "
                 "cannot run inside a SAVEPOINT)[/yellow]"
             )
         elif kind == "superuser_halt":
             self._announce()
-            console.print(f"\n[yellow]⏸  Skipping migration {event.label}:[/yellow]")
+            console.print(f"\n[yellow]⏸  Skipping migration {verbatim(event.label)}:[/yellow]")
             console.print(
                 "[dim]  requires_superuser=True.  Apply this migration separately as a superuser:[/dim]"
             )
-            console.print(f"[dim]    confiture migrate apply-as <role> {event.version}[/dim]")
+            console.print(
+                f"[dim]    confiture migrate apply-as <role> {verbatim(event.version)}[/dim]"
+            )
             console.print("[dim]  Then re-run `confiture migrate up` to resume the chain.[/dim]")
 
 

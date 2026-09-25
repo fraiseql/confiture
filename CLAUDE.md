@@ -428,6 +428,7 @@ confiture/
 │   │   ├── idempotency.py        # ``migrate validate --idempotent`` / ``migrate fix --idempotent``: scopi…
 │   │   ├── lint_formatter.py     # Output formatting for linting results
 │   │   ├── main.py               # Main CLI entry point for Confiture
+│   │   ├── markup.py             # What a Rich console prints as data, and what it prints as confiture's o…
 │   │   ├── options.py            # Shared CLI option factories and the option aliases more than one comman…
 │   │   ├── ownership.py          # ``migrate fix --ownership``: apply the ownership expectation to a live…
 │   │   ├── plugins.py            # Commands other distributions add to ``confiture``: the ``confiture.plug…
@@ -994,6 +995,16 @@ and keep the hand prose around the block; `--check` (and
 `tests/unit/docs/test_doc_sync_cli.py`) fails on a stale block, an undocumented
 flag, an example using a flag the command has not got, or a section for a
 command that does not exist.
+
+### Printing to the console
+
+Rich reads `[...]` in a printed string as markup, so a value interpolated into
+`console.print(f"…")` is written `{verbatim(value)}` (or `{verbatim(value, ".2f")}`),
+and markup confiture builds itself `{markup(value)}` — both from `cli/markup.py`.
+`tests/unit/test_cli_prints_data_verbatim.py` fails on any other interpolation in
+an f-string passed to a `print`/`log`/`status`/`rule`/`input` method under `cli/`,
+whatever the console is named; a style-tag position, `len(…)` and a numeric format
+spec need neither.
 
 ### Adding a `confiture lint` rule
 

@@ -17,6 +17,7 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.lint_formatter import format_lint_report, save_report
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     ProjectDirOpt,
     env_option,
@@ -279,7 +280,7 @@ def lint(
         config = linter_config(selected, threshold, server_url)
         if format_type == "table":
             # The banner is for humans; in json/csv mode stdout is the payload alone.
-            console.print(f"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
+            console.print(f"[cyan]🔍 Linting schema for environment: {verbatim(env)}[/cyan]")
         linter = SchemaLinter(env=env, project_dir=project_dir, config=config)
         linter_report = linter.lint()
         # LintConfig's switches are coarser than the rule codes — `check_naming`
@@ -313,7 +314,7 @@ def lint(
             formatted = format_lint_report(report, format_type="csv", console=console)
             if output:
                 save_report(report, output)
-                console.print(f"[green]✅ Report saved to: {output.absolute()}[/green]")
+                console.print(f"[green]✅ Report saved to: {verbatim(output.absolute())}[/green]")
             else:
                 # print(), not console.print(): Rich wraps long lines at the
                 # terminal width, which breaks a CSV row.
@@ -378,7 +379,7 @@ def _resolve_threshold(
         return threshold_from_aliases(fail_on_error=fail_on_error, fail_on_warning=fail_on_warning)
     if given_aliases:
         error_console.print(
-            f"[red]❌ Error: --fail-on and {', '.join(given_aliases)} both set the gate; "
+            f"[red]❌ Error: --fail-on and {verbatim(', '.join(given_aliases))} both set the gate; "
             "pass one[/red]"
         )
         raise typer.Exit(USAGE)
@@ -396,7 +397,7 @@ def _print_gate_notice(gate: Gate, format_type: str) -> None:
     if format_type != "table" or gate.reachable or gate.reason is None:
         return
     style = "dim" if gate.threshold is Threshold.NEVER else "yellow"
-    console.print(f"\n[{style}]{gate.reason}[/{style}]")
+    console.print(f"\n[{style}]{verbatim(gate.reason)}[/{style}]")
 
 
 def _print_baseline_note(diff: Any, format_type: str, *, wrote: bool) -> None:
@@ -404,11 +405,13 @@ def _print_baseline_note(diff: Any, format_type: str, *, wrote: bool) -> None:
     if format_type != "table":
         return
     if wrote:
-        console.print(f"[green]✅ Baseline written: {diff.known} finding(s) recorded[/green]")
+        console.print(
+            f"[green]✅ Baseline written: {verbatim(diff.known)} finding(s) recorded[/green]"
+        )
     elif diff.new or diff.fixed:
         console.print(
-            f"[cyan]Baseline: {diff.known} known, {len(diff.new)} new, "
-            f"{len(diff.fixed)} fixed{' (file tightened)' if diff.fixed else ''}[/cyan]"
+            f"[cyan]Baseline: {verbatim(diff.known)} known, {len(diff.new)} new, "
+            f"{len(diff.fixed)} fixed{verbatim(' (file tightened)' if diff.fixed else '')}[/cyan]"
         )
 
 
@@ -454,4 +457,4 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
     aliases = ", ".join(
         f"{old.upper()} → {new}" for old, new in sorted(LEGACY_CODE_ALIASES.items())
     )
-    console.print(f"[dim]Deprecated selectors, accepted for one minor: {aliases}.[/dim]")
+    console.print(f"[dim]Deprecated selectors, accepted for one minor: {verbatim(aliases)}.[/dim]")

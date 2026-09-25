@@ -31,6 +31,7 @@ from confiture.cli.helpers import (
     error_console,
     open_connection,
 )
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     config_option,
     database_url_option,
@@ -249,7 +250,7 @@ def _report_missing_migrations_dir(
         )
     else:
         console.print("[yellow]No migrations directory found.[/yellow]")
-        console.print(f"Expected: {migrations_dir.absolute()}")
+        console.print(f"Expected: {verbatim(migrations_dir.absolute())}")
 
 
 def _report_no_migrations(
@@ -339,7 +340,7 @@ def _probe_database(
     # Reason: status degrades to the file list when the database cannot be reached for any reason
     except Exception as e:
         if output_format != "json":
-            error_console.print(f"[yellow]⚠️  Could not connect to database: {e}[/yellow]")
+            error_console.print(f"[yellow]⚠️  Could not connect to database: {verbatim(e)}[/yellow]")
             console.print("[yellow]Showing file list only (status unknown)[/yellow]\n")
         return _StatusFacts(db_source=True, db_error=str(e), tracking_table=tracking_table)
 
@@ -484,14 +485,14 @@ def _render_status_table(
             status_display = "[dim]⚠️ unknown (no config)[/dim]"
         table.add_row(migration["version"], migration["name"], status_display)
     console.print(table)
-    console.print(f"\n📊 Total: {total} migrations", end="")
+    console.print(f"\n📊 Total: {verbatim(total)} migrations", end="")
     if facts.applied_versions:
         console.print(f" ({len(rows.applied)} applied, {len(rows.pending)} pending)")
     else:
         console.print()
     if facts.tracking_table_absent:
         console.print(
-            f"\n[yellow]⚠️  {facts.tracking_table or 'The migration ledger'} not "
+            f"\n[yellow]⚠️  {verbatim(facts.tracking_table or 'The migration ledger')} not "
             "found in this database. Migrations shown as 'pending'.[/yellow]"
         )
         console.print("[yellow]   Run `confiture migrate up` to apply all migrations, or[/yellow]")
@@ -506,7 +507,7 @@ def _render_status_table(
     if rebuild_reasons:
         console.print("\n[yellow]🔄 Rebuild recommended:[/yellow]")
         for reason in rebuild_reasons:
-            console.print(f"  • {reason}")
+            console.print(f"  • {verbatim(reason)}")
         console.print("\n[yellow]  Run: confiture migrate rebuild --drop-schemas --yes[/yellow]")
 
 
@@ -517,4 +518,4 @@ def _render_status_error(error: Exception, output_format: str, output_file: Path
     elif output_format == "csv":
         handle_output("csv", {}, (["error"], [[str(error)]]), output_file, console)
     else:
-        console.print(f"[red]❌ Error: {error}[/red]")
+        console.print(f"[red]❌ Error: {verbatim(error)}[/red]")

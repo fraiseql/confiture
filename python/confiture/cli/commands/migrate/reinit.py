@@ -9,6 +9,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, is_json
+from confiture.cli.markup import verbatim
 from confiture.cli.options import config_option, format_option, migrations_dir_option
 from confiture.core import migrator as _core_migrator
 from confiture.core.migrator import find_duplicate_migration_versions, parse_migration_filename
@@ -44,9 +45,9 @@ def _reinit_preconditions(
         if not json_mode:
             console.print("[red]Multiple migration files share the same version number:[/red]\n")
             for version, files in sorted(duplicates.items()):
-                console.print(f"  Version {version}:")
+                console.print(f"  Version {verbatim(version)}:")
                 for f in files:
-                    console.print(f"    • {f.name}")
+                    console.print(f"    • {verbatim(f.name)}")
             console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
             console.print(
                 "[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]"
@@ -75,9 +76,9 @@ def _migrations_through(
     if not json_mode:
         console.print("[yellow]Available versions:[/yellow]")
         for mf in all_migrations[:10]:
-            console.print(f"  • {parse_migration_filename(mf.name)[0]}")
+            console.print(f"  • {verbatim(parse_migration_filename(mf.name)[0])}")
         if len(all_migrations) > 10:
-            console.print(f"  ... and {len(all_migrations) - 10} more")
+            console.print(f"  ... and {verbatim(len(all_migrations) - 10)} more")
     fail(
         MigrationError(
             f"Migration version '{through}' not found",
@@ -94,14 +95,14 @@ def _print_reinit_plan(
 ) -> None:
     target_desc = f"through {through}" if through else "all files on disk"
     console.print(
-        f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {target_desc}[/cyan]\n"
+        f"\n[cyan]📋 Reinit: resetting tracking table and re-marking {verbatim(target_desc)}[/cyan]\n"
     )
-    console.print(f"  Tracking entries to delete: [bold]{current_count}[/bold]")
+    console.print(f"  Tracking entries to delete: [bold]{verbatim(current_count)}[/bold]")
     console.print(f"  Migrations to re-mark:     [bold]{len(migrations_to_mark)}[/bold]\n")
 
     for migration_file in migrations_to_mark:
         version, name = parse_migration_filename(migration_file.name)
-        console.print(f"  [dim]•[/dim] {version} {name}")
+        console.print(f"  [dim]•[/dim] {verbatim(version)} {verbatim(name)}")
 
     console.print()
 
@@ -206,12 +207,12 @@ def migrate_reinit(
         emit(result.to_dict())
     elif dry_run:
         console.print(
-            f"[cyan]📊 Would delete {result.deleted_count} tracking entries "
+            f"[cyan]📊 Would delete {verbatim(result.deleted_count)} tracking entries "
             f"and re-mark {len(result.migrations_marked)} migration(s)[/cyan]"
         )
         console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
     else:
         console.print(
-            f"[green]✅ Reinit complete: deleted {result.deleted_count} entries, "
+            f"[green]✅ Reinit complete: deleted {verbatim(result.deleted_count)} entries, "
             f"re-marked {len(result.migrations_marked)} migration(s)[/green]"
         )

@@ -10,6 +10,7 @@ from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console
+from confiture.cli.markup import verbatim
 from confiture.cli.options import output_option
 from confiture.core.builder import files_under
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
@@ -121,8 +122,8 @@ def convert(
 
         # Handle conversion result
         if not result.success:
-            console.print(f"[yellow]⚠ Cannot convert {input_file}[/yellow]")
-            console.print(f"  Reason: {result.reason}")
+            console.print(f"[yellow]⚠ Cannot convert {verbatim(input_file)}[/yellow]")
+            console.print(f"  Reason: {verbatim(result.reason)}")
             console.print(
                 "\n[dim]Tip: This INSERT statement uses SQL features that\n"
                 "cannot be converted to COPY format. You can still use\n"
@@ -134,9 +135,9 @@ def convert(
         if output_file:
             output_file.write_text(result.copy_format)
             console.print("[green]✓ Converted to COPY format[/green]")
-            console.print(f"  Input: {input_file}")
-            console.print(f"  Output: {output_file}")
-            console.print(f"  Rows: {result.rows_converted}")
+            console.print(f"  Input: {verbatim(input_file)}")
+            console.print(f"  Output: {verbatim(output_file)}")
+            console.print(f"  Rows: {verbatim(result.rows_converted)}")
         else:
             sys.stdout.write(result.copy_format or "")
 
@@ -163,7 +164,7 @@ def _convert_directory(
     output_dir.mkdir(parents=True, exist_ok=True)
     sql_files = files_under(input_dir)
     if not sql_files:
-        console.print(f"[yellow]⚠ No .sql files found in {input_dir}[/yellow]")
+        console.print(f"[yellow]⚠ No .sql files found in {verbatim(input_dir)}[/yellow]")
         return
 
     console.print(f"[bold]Processing {len(sql_files)} files...[/bold]\n")
@@ -187,9 +188,9 @@ def _convert_directory(
 
     console.print(table)
     console.print("\n[bold]Summary:[/bold]")
-    console.print(f"  Total: {report.total_files} files")
-    console.print(f"  [green]Converted: {report.successful}[/green]")
-    console.print(f"  [yellow]Skipped: {report.failed}[/yellow]")
+    console.print(f"  Total: {verbatim(report.total_files)} files")
+    console.print(f"  [green]Converted: {verbatim(report.successful)}[/green]")
+    console.print(f"  [yellow]Skipped: {verbatim(report.failed)}[/yellow]")
     console.print(f"  Success rate: {report.success_rate:.1f}%")
     if report.successful > 0:
-        console.print(f"\n[green]✓ Results saved to: {output_dir}[/green]")
+        console.print(f"\n[green]✓ Results saved to: {verbatim(output_dir)}[/green]")

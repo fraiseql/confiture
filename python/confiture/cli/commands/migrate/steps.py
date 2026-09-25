@@ -9,6 +9,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _get_tracking_table, console, emit, is_json
+from confiture.cli.markup import verbatim
 from confiture.cli.options import config_option, format_option, migrations_dir_option, output_option
 from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
@@ -87,15 +88,15 @@ def migrate_steps(
         return
     if result.resumed:
         console.print(
-            f"[green]✅ Resumed {result.resumed}: every stage done, recorded in the ledger[/green]"
+            f"[green]✅ Resumed {verbatim(result.resumed)}: every stage done, recorded in the ledger[/green]"
         )
     if not result.steps:
         console.print("No online-migration checkpoints.")
         return
     for step in result.steps:
         console.print(
-            f"  {step['migration']}  plan {step['plan_index']}  {step['stage']:<9} {step['state']:<8}"
-            f"  rows {step['rows_done']}  {step['updated_at']}"
+            f"  {verbatim(step['migration'])}  plan {verbatim(step['plan_index'])}  {verbatim(step['stage'], '<9')} {verbatim(step['state'], '<8')}"
+            f"  rows {verbatim(step['rows_done'])}  {verbatim(step['updated_at'])}"
         )
 
 

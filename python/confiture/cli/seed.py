@@ -15,6 +15,7 @@ from rich.table import Table
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.seed_formatter import format_apply_result
 from confiture.cli.helpers import connect, emit, error_console, is_json
+from confiture.cli.markup import verbatim
 from confiture.cli.options import database_url_option, env_option, format_option, output_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.cli.seed_copy import DEFAULT_SEEDS_DIR, convert
@@ -188,11 +189,11 @@ def _fix_seed_files(scanned_files: list[str], *, dry_run: bool) -> None:
         if fix_result.fixes_applied > 0:
             if dry_run:
                 console.print(
-                    f"[yellow]~ Would fix {fix_result.fixes_applied} issues in {file_path}[/yellow]"
+                    f"[yellow]~ Would fix {verbatim(fix_result.fixes_applied)} issues in {verbatim(file_path)}[/yellow]"
                 )
             else:
                 console.print(
-                    f"[green]✓ Fixed {fix_result.fixes_applied} issues in {file_path}[/green]"
+                    f"[green]✓ Fixed {verbatim(fix_result.fixes_applied)} issues in {verbatim(file_path)}[/green]"
                 )
 
 
@@ -601,12 +602,12 @@ def seed_generate(
     if format_type == "json":
         emit(result.to_dict())
     elif result.success:
-        console.print(f"[green]Seed stub generated: {result.output_path}[/green]")
+        console.print(f"[green]Seed stub generated: {verbatim(result.output_path)}[/green]")
         console.print(
-            f"[dim]{result.column_count} column(s), {result.row_count} stub row(s).[/dim]"
+            f"[dim]{verbatim(result.column_count)} column(s), {verbatim(result.row_count)} stub row(s).[/dim]"
         )
     else:
-        console.print(f"[red]Error: {result.error}[/red]")
+        console.print(f"[red]Error: {verbatim(result.error)}[/red]")
     if not result.success:
         # The result carries the failure in either format; the exit says so in both.
         raise typer.Exit(FAILURE)

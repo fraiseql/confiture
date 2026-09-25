@@ -33,6 +33,7 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import console, emit, is_json
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     CONFITURE_YAML,
     config_option,
@@ -199,7 +200,7 @@ def _render_check(plan, output_format: str) -> None:
         return
     console.print(f"[yellow]⚠ Bootstrap drift detected ({len(plan.steps)} step(s)):[/yellow]")
     for step in plan.steps:
-        console.print(f"  • [bold]{step.label}[/bold]: {step.description}")
+        console.print(f"  • [bold]{verbatim(step.label)}[/bold]: {verbatim(step.description)}")
     console.print(
         "[dim]Run `confiture bootstrap --mode plan` to see the SQL, then `--mode apply` to "
         "execute it.[/dim]"
@@ -215,8 +216,8 @@ def _render_dry_run(plan, output_format: str) -> None:
         return
     console.print(f"[cyan]🔍 Dry-run plan ({len(plan.steps)} step(s)):[/cyan]")
     for step in plan.steps:
-        console.print(f"\n[bold]{step.label}[/bold]: {step.description}")
-        console.print(f"  [dim]{step.sql};[/dim]")
+        console.print(f"\n[bold]{verbatim(step.label)}[/bold]: {verbatim(step.description)}")
+        console.print(f"  [dim]{verbatim(step.sql)};[/dim]")
 
 
 def _render_apply(result, output_format: str) -> None:
@@ -228,7 +229,7 @@ def _render_apply(result, output_format: str) -> None:
         return
     console.print(f"[green]✅ Bootstrap applied — {len(result.applied_steps)} step(s):[/green]")
     for label in result.applied_steps:
-        console.print(f"  • {label}")
+        console.print(f"  • {verbatim(label)}")
 
 
 __all__ = ["bootstrap"]

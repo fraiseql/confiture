@@ -19,6 +19,7 @@ from confiture.cli.helpers import (
     error_console,
     is_json,
 )
+from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     ProjectDirOpt,
     database_url_option,
@@ -327,7 +328,7 @@ def build(
         format_build_result(build_result, format_type, report_output, console)
         if format_type == "text":
             out.print("\n💡 Next steps:")
-            out.print(f"  • Apply schema: psql -f {output}")
+            out.print(f"  • Apply schema: psql -f {verbatim(output)}")
             out.print("  • Or use: confiture migrate up")
     except typer.Exit:
         raise  # an inner fail() already emitted its envelope
@@ -378,7 +379,7 @@ def _duplicate_gate(
     if not json_mode:
         out.print("[yellow]Duplicate definitions:[/yellow]")
         for violation in duplicate_violations(duplicates):
-            out.print(f"  ⚠️ {violation.rule_id}: {violation.message}")
+            out.print(f"  ⚠️ {verbatim(violation.rule_id)}: {verbatim(violation.message)}")
     payload = [duplicate.to_dict() for duplicate in duplicates]
     if fail:
         result = BuildResult(
@@ -448,7 +449,7 @@ def _run_build(
         ``(schema, schema_file_count, duplicates, warnings)``; the seed files
         are left to the sequential applier when ``apply_sequential``.
     """
-    out.print(f"[cyan]🔨 Building schema for environment: {env}[/cyan]")
+    out.print(f"[cyan]🔨 Building schema for environment: {verbatim(env)}[/cyan]")
 
     with ProgressManager() as progress:
         sql_files = builder.find_sql_files()
@@ -532,7 +533,7 @@ def _apply_build_overrides(
     if applied:
         out.print("[cyan]📝 Configuration overrides applied:[/cyan]")
         for label, value in applied:
-            out.print(f"  • {label}: {value}")
+            out.print(f"  • {verbatim(label)}: {verbatim(value)}")
 
 
 def _apply_seeds_sequentially(
@@ -575,7 +576,7 @@ def _apply_seeds_sequentially(
         )
     except ConfiturError as e:
         fail(e, json_mode=json_mode, output_file=report_output)
-    out.print(f"[green]✅ Applied {result.succeeded} seed files[/green]")
+    out.print(f"[green]✅ Applied {verbatim(result.succeeded)} seed files[/green]")
     if result.failed == 0:
         return result.succeeded, []
     return result.succeeded, [BuildWarning.of("SEED_002", count=result.failed)]
@@ -647,7 +648,7 @@ def _write_dump_artifact(
     path_str = str(artifact_result.artifact_path)
     if not json_mode:
         if artifact_result.skipped:
-            out.print(f"[cyan]📦 Artifact up-to-date (cache hit): {path_str}[/cyan]")
+            out.print(f"[cyan]📦 Artifact up-to-date (cache hit): {verbatim(path_str)}[/cyan]")
         else:
-            out.print(f"[green]📦 Artifact written: {path_str}[/green]")
+            out.print(f"[green]📦 Artifact written: {verbatim(path_str)}[/green]")
     return path_str, artifact_result.artifact_hash

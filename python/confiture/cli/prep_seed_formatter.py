@@ -15,6 +15,7 @@ from rich.console import Console as _Console
 from rich.table import Table
 
 from confiture.cli.helpers import emit
+from confiture.cli.markup import verbatim
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedReport,
     ViolationSeverity,
@@ -63,7 +64,7 @@ def output_table(
     console.print("\nPrep-Seed Validation Report")
     console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     console.print(f"Files scanned: {len(report.scanned_files)}")
-    console.print(f"Violations found: {report.violation_count}")
+    console.print(f"Violations found: {verbatim(report.violation_count)}")
 
     if report.has_violations:
         console.print("\n[red]Issues found:[/red]")
@@ -93,7 +94,7 @@ def output_table(
             }.get(severity, "white")
 
             console.print(
-                f"\n[{severity_color}]{severity.name}[/{severity_color}] ({len(violations)} found)"
+                f"\n[{severity_color}]{verbatim(severity.name)}[/{severity_color}] ({len(violations)} found)"
             )
 
             table = Table(show_header=True, header_style="bold")
@@ -184,6 +185,6 @@ def output_csv(
 
     if output:
         output.write_text(csv_content)
-        console.print(f"[green]✓ Report saved to {output}[/green]")
+        console.print(f"[green]✓ Report saved to {verbatim(output)}[/green]")
     else:
         console.print(csv_content)

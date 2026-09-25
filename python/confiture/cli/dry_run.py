@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from confiture.cli.helpers import emit
+from confiture.cli.markup import markup, verbatim
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -46,7 +47,7 @@ def show_report_summary(report: Any) -> None:
 
     time_str = report.total_estimated_time_ms
     disk_str = report.total_estimated_disk_mb
-    console.print(f"| Time: {time_str}ms | Disk: {disk_str:.1f}MB")
+    console.print(f"| Time: {verbatim(time_str)}ms | Disk: {disk_str:.1f}MB")
 
 
 def ask_dry_run_execute_confirmation() -> bool:
@@ -86,13 +87,13 @@ def display_dry_run_result(result, format_type: str = "text") -> None:
         # Text format
         status = "[green]✓ SUCCESS[/green]" if result.success else "[red]❌ FAILED[/red]"
 
-        console.print(f"Dry-run: {status}")
-        console.print(f"Migration: {result.migration_name}")
+        console.print(f"Dry-run: {markup(status)}")
+        console.print(f"Migration: {verbatim(result.migration_name)}")
         console.print(f"Total time: {result.total_time_ms:.1f}ms")
-        console.print(f"Confidence: {result.confidence_pct}%")
+        console.print(f"Confidence: {verbatim(result.confidence_pct)}%")
 
         if result.error:
-            console.print(f"[red]Error: {result.error}[/red]")
+            console.print(f"[red]Error: {verbatim(result.error)}[/red]")
 
         # Statement details
         if hasattr(result, "statements") and result.statements:
@@ -111,7 +112,7 @@ def display_dry_run_result(result, format_type: str = "text") -> None:
 
             console.print(table)
 
-        console.print(f"\nTotal rows affected: {result.rows_affected}")
+        console.print(f"\nTotal rows affected: {verbatim(result.rows_affected)}")
 
         if hasattr(result, "failed_statements") and result.failed_statements:
             console.print(f"[red]Failed statements: {len(result.failed_statements)}[/red]")

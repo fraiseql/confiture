@@ -41,6 +41,7 @@ from confiture.cli.formatters.validate_formatter import (
     render_signature_drift,
     render_view_drift,
 )
+from confiture.cli.markup import verbatim
 from confiture.core import migrator as _core_migrator
 from confiture.core.import_checker import ImportChecker
 from confiture.core.migrator import find_duplicate_migration_versions
@@ -388,8 +389,8 @@ def _run_security_definer(opts: ValidateOptions, ctx: ValidationContext) -> Chec
     if opts.emit_remediation is not None and report.has_violations:
         count = _security_definer.emit_remediation(report, opts.emit_remediation)
         console.print(
-            f"[dim]Remediation script ({count} statement(s)) written to "
-            f"{opts.emit_remediation}[/dim]"
+            f"[dim]Remediation script ({verbatim(count)} statement(s)) written to "
+            f"{verbatim(opts.emit_remediation)}[/dim]"
         )
     return CheckOutcome("security_definer", passed=not report.has_errors, payload=payload)
 
@@ -451,7 +452,9 @@ def _run_signatures(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
         if result.auto_built:
             console.print("[dim]  (schema auto-built from DDL files)[/dim]")
         if result.ssh_target:
-            console.print(f"[dim]  (connecting via SSH tunnel to {result.ssh_target})[/dim]")
+            console.print(
+                f"[dim]  (connecting via SSH tunnel to {verbatim(result.ssh_target)})[/dim]"
+            )
     payload = render_signature_drift(
         result.drift_report,
         result.body_report,
@@ -477,7 +480,9 @@ def _run_body_views(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutco
         if result.auto_built:
             console.print("[dim]  (schema auto-built from DDL files)[/dim]")
         if result.ssh_target:
-            console.print(f"[dim]  (connecting via SSH tunnel to {result.ssh_target})[/dim]")
+            console.print(
+                f"[dim]  (connecting via SSH tunnel to {verbatim(result.ssh_target)})[/dim]"
+            )
     payload = render_view_drift(
         result.view_report, json_mode=opts.json_mode, show_diff=opts.show_diff
     )
@@ -495,7 +500,7 @@ def _run_body_replay(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutc
         ctx=ctx,
     )
     if not opts.json_mode and result.ssh_target:
-        console.print(f"[dim]  (connecting via SSH tunnel to {result.ssh_target})[/dim]")
+        console.print(f"[dim]  (connecting via SSH tunnel to {verbatim(result.ssh_target)})[/dim]")
     payload = render_replay_drift(
         result.body_report, json_mode=opts.json_mode, show_diff=opts.show_diff
     )
