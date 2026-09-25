@@ -134,7 +134,7 @@
     },
     "Constraint": {
       "type": "object",
-      "description": "A primary key, a UNIQUE, a CHECK or a foreign key. `name` is empty where the schema wrote none; an empty `ref_columns` means the referenced primary key.",
+      "description": "A primary key, a UNIQUE, a CHECK, a foreign key or an EXCLUDE. `name` is empty where the schema wrote none; an empty `ref_columns` means the referenced primary key. An EXCLUDE's `columns` are its elements, with `operators` and `key_options` alongside.",
       "additionalProperties": false,
       "required": [
         "kind",
@@ -145,7 +145,11 @@
         "on_delete",
         "on_update",
         "expression",
-        "deferrable"
+        "deferrable",
+        "operators",
+        "method",
+        "where",
+        "key_options"
       ],
       "properties": {
         "kind": {
@@ -153,7 +157,8 @@
             "primary_key",
             "unique",
             "check",
-            "foreign_key"
+            "foreign_key",
+            "exclusion"
           ]
         },
         "name": {
@@ -201,6 +206,30 @@
             "deferred",
             null
           ]
+        },
+        "operators": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "where": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key_options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

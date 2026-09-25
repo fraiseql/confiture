@@ -123,7 +123,7 @@ ORDER BY a.attrelid, a.attnum
 _CONSTRAINTS = """
 SELECT conrelid, conname, pg_get_constraintdef(oid)
 FROM pg_constraint
-WHERE conrelid = ANY(%s) AND contype IN ('p', 'u', 'c', 'f')
+WHERE conrelid = ANY(%s) AND contype IN ('p', 'u', 'c', 'f', 'x')
 ORDER BY conrelid, conname
 """
 
@@ -370,7 +370,7 @@ SELECT k.conname, pg_get_constraintdef(k.oid)
 FROM pg_constraint k
 JOIN pg_class c ON c.oid = k.conrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = %s AND c.relname = %s AND k.contype IN ('p', 'u', 'c', 'f')
+WHERE n.nspname = %s AND c.relname = %s AND k.contype IN ('p', 'u', 'c', 'f', 'x')
 ORDER BY k.conname
 """
 
@@ -388,7 +388,13 @@ WHERE a.attnum > 0
 """
 
 #: ``pg_constraint.contype`` by the model's constraint kind.
-_CONTYPE = {"primary_key": "p", "unique": "u", "check": "c", "foreign_key": "f"}
+_CONTYPE = {
+    "primary_key": "p",
+    "unique": "u",
+    "check": "c",
+    "foreign_key": "f",
+    "exclusion": "x",
+}
 
 
 def _scalar(conn: psycopg.Connection, sql: str, params: tuple[Any, ...]) -> Any:

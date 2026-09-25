@@ -175,3 +175,17 @@ class TestRoutinesWithoutAMigration:
         _commit(repo, "the view changes, no migration")
 
         assert _check(repo).is_valid is False
+
+
+def test_an_exclusion_constraint_without_a_migration_fails_the_gate(repo: Path):
+    """#322: adding an EXCLUDE reported no change, so the gate passed green."""
+    (repo / "db" / "schema" / "10_tb_user.sql").write_text(
+        "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT,"
+        " CONSTRAINT one_name EXCLUDE USING btree (name WITH =));\n"
+    )
+    _commit(repo, "an exclusion constraint, no migration")
+
+    report = _check(repo)
+    assert report.migration_error is None
+    assert report.has_ddl_changes is True
+    assert report.is_valid is False

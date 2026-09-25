@@ -12,8 +12,8 @@
       "indexes_dropped": 1,
       "foreign_keys_added": 1,
       "foreign_keys_dropped": 1,
-      "constraints_added": 2,
-      "constraints_dropped": 2,
+      "constraints_added": 3,
+      "constraints_dropped": 3,
       "enum_types_added": 1,
       "enum_types_dropped": 1,
       "sequences_added": 1,
@@ -251,6 +251,42 @@
           "columns": [
             "code"
           ]
+        }
+      },
+      {
+        "type": "ADD_EXCLUSION_CONSTRAINT",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_new_ex",
+          "method": "gist",
+          "elements": [
+            {
+              "element": "span",
+              "operator": "&&"
+            }
+          ],
+          "where": "qty > 0"
+        }
+      },
+      {
+        "type": "DROP_EXCLUSION_CONSTRAINT",
+        "table": "things",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "things_old_ex",
+          "method": "gist",
+          "elements": [
+            {
+              "element": "span",
+              "operator": "&&"
+            }
+          ],
+          "where": null
         }
       },
       {

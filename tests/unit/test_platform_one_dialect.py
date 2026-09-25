@@ -77,6 +77,14 @@ EXAMPLES: dict[type, tuple[Callable[[], object], platform.ObjectRef]] = {
         lambda: platform.UniqueConstraintDropped("app.item", FK),
         ITEM,
     ),
+    platform.ExclusionConstraintAdded: (
+        lambda: platform.ExclusionConstraintAdded("app.item", FK),
+        ITEM,
+    ),
+    platform.ExclusionConstraintDropped: (
+        lambda: platform.ExclusionConstraintDropped("app.item", FK),
+        ITEM,
+    ),
     platform.EnumTypeAdded: (lambda: platform.EnumTypeAdded(ENUM), MOOD),
     platform.EnumTypeDropped: (lambda: platform.EnumTypeDropped(ENUM), MOOD),
     platform.EnumValuesChanged: (

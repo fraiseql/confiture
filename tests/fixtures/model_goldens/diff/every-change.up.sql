@@ -79,6 +79,12 @@ ALTER TABLE things ADD CONSTRAINT things_new_uq UNIQUE (code, qty);
 -- confiture:tier destructive
 ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_uq;
 
+-- confiture:tier lock_risky
+ALTER TABLE things ADD CONSTRAINT things_new_ex EXCLUDE USING gist (span WITH &&) WHERE (qty > 0);
+
+-- confiture:tier destructive
+ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_ex;
+
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_added AS SELECT 2 AS two;
 

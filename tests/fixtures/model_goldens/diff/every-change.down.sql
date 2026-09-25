@@ -8,6 +8,12 @@ CREATE OR REPLACE VIEW v_things AS SELECT id FROM things;
 DROP VIEW IF EXISTS v_added;
 
 -- confiture:tier lock_risky
+ALTER TABLE things ADD CONSTRAINT things_old_ex EXCLUDE USING gist (span WITH &&);
+
+-- confiture:tier destructive
+ALTER TABLE things DROP CONSTRAINT IF EXISTS things_new_ex;
+
+-- confiture:tier lock_risky
 ALTER TABLE things ADD CONSTRAINT things_old_uq UNIQUE (code);
 
 -- confiture:tier destructive

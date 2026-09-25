@@ -159,6 +159,12 @@
               "type": "INTEGER",
               "nullable": true,
               "default": null
+            },
+            {
+              "name": "span",
+              "type": "TSRANGE",
+              "nullable": true,
+              "default": null
             }
           ],
           "constraints": [

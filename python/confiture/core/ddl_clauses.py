@@ -82,15 +82,29 @@ def references(fk: Constraint) -> str | None:
     return clause
 
 
-def constraint_body(constraint: Constraint) -> str | None:
-    """The text after ``ADD`` in an ``ALTER``, and the element in a ``CREATE TABLE``.
+def index_element(key: str, options: str) -> str:
+    """One element of an index or an EXCLUDE: a column bare, an expression in parentheses."""
+    element = key if key.isidentifier() else f"({key})"
+    return f"{element} {options}" if options else element
 
-    One clause, both places: a constraint written two ways can disagree with
-    itself (#316). ``None`` when the constraint does not hold what the clause
-    needs — a CHECK with no expression, a foreign key with no referenced table —
-    because writing ``CHECK ()`` produces a migration that fails at apply, and
-    inventing the missing half one that succeeds and is wrong.
-    """
+
+def _exclusion(constraint: Constraint) -> str | None:
+    """``EXCLUDE USING gist (room_id WITH =, during WITH &&) WHERE (…)``."""
+    if not constraint.columns or len(constraint.operators) != len(constraint.columns):
+        return None
+    options = constraint.key_options or ("",) * len(constraint.columns)
+    elements = ", ".join(
+        f"{index_element(key, option)} WITH {operator}"
+        for key, option, operator in zip(
+            constraint.columns, options, constraint.operators, strict=True
+        )
+    )
+    method = f" USING {constraint.method}" if constraint.method else ""
+    where = f" WHERE ({constraint.where})" if constraint.where else ""
+    return f"EXCLUDE{method} ({elements}){where}"
+
+
+def _body(constraint: Constraint) -> str | None:
     match constraint.kind:
         case "foreign_key":
             reference = references(constraint)
@@ -102,4 +116,22 @@ def constraint_body(constraint: Constraint) -> str | None:
         case "unique" | "primary_key":
             keyword = "UNIQUE" if constraint.kind == "unique" else "PRIMARY KEY"
             return f"{keyword} ({_columns(constraint.columns)})" if constraint.columns else None
+        case "exclusion":
+            return _exclusion(constraint)
     return None
+
+
+def constraint_body(constraint: Constraint) -> str | None:
+    """The text after ``ADD`` in an ``ALTER``, and the element in a ``CREATE TABLE``.
+
+    One clause, both places: a constraint written two ways can disagree with
+    itself (#316). ``None`` when the constraint does not hold what the clause
+    needs — a CHECK with no expression, a foreign key with no referenced table —
+    because writing ``CHECK ()`` produces a migration that fails at apply, and
+    inventing the missing half one that succeeds and is wrong. A deferrable
+    constraint says so, and when it is checked.
+    """
+    body = _body(constraint)
+    if body is None or constraint.deferrable is None:
+        return body
+    return f"{body} DEFERRABLE INITIALLY {constraint.deferrable.upper()}"

@@ -90,6 +90,16 @@
         "irreversible_reason": null
       },
       {
+        "type": "ADD_EXCLUSION_CONSTRAINT",
+        "details": "ADD EXCLUSION CONSTRAINT things_new_ex ON things",
+        "irreversible_reason": null
+      },
+      {
+        "type": "DROP_EXCLUSION_CONSTRAINT",
+        "details": "DROP EXCLUSION CONSTRAINT things_old_ex",
+        "irreversible_reason": null
+      },
+      {
         "type": "ADD_ENUM_TYPE",
         "details": "ADD ENUM TYPE new_status",
         "irreversible_reason": null
@@ -130,7 +140,7 @@
         "irreversible_reason": null
       }
     ],
-    "change_count": 25,
+    "change_count": 27,
     "migration_generated": true,
     "migration_file": "<version>_golden.up.sql",
     "error": null,

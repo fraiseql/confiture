@@ -961,6 +961,32 @@ def _read_check(node: Any, _column: str | None) -> Constraint | None:
     )
 
 
+def _operator(names: Any) -> str:
+    """``&&``, or ``OPERATOR(pg_catalog.=)`` for an operator written with its schema."""
+    parts = [name.sval for name in names]
+    return parts[0] if len(parts) == 1 else f"OPERATOR({'.'.join(parts)})"
+
+
+def _read_exclusion(node: Any, _column: str | None) -> Constraint:
+    """``EXCLUDE USING <method> (<element> WITH <operator>, …) [WHERE (…)]``.
+
+    Each element is an index element — a column or an expression, with its own
+    collation, operator class and ordering — read as :func:`read_index` reads a key.
+    """
+    elements = [element for element, _ in node.exclusions]
+    options = tuple(_key_options(element) for element in elements)
+    return Constraint(
+        kind="exclusion",
+        name=node.conname or "",
+        columns=tuple(e.name if e.name else RawStream()(e.expr) for e in elements),
+        operators=tuple(_operator(operator) for _, operator in node.exclusions),
+        method=node.access_method,
+        where=RawStream()(node.where_clause) if node.where_clause is not None else None,
+        key_options=options if any(options) else (),
+        deferrable=_deferral(node),
+    )
+
+
 def _read_unique(node: Any, column: str | None) -> Constraint:
     return Constraint(
         kind="unique",
@@ -1029,6 +1055,7 @@ MODELLED_CONSTRAINTS: dict[str, Callable[[Any, str | None], _Read]] = {
     "CONSTR_CHECK": _read_check,
     "CONSTR_UNIQUE": _read_unique,
     "CONSTR_PRIMARY": _read_primary_key,
+    "CONSTR_EXCLUSION": _read_exclusion,
     "CONSTR_NOTNULL": _read_not_null,
     "CONSTR_DEFAULT": _read_default,
     "CONSTR_IDENTITY": _read_identity,
@@ -1050,10 +1077,6 @@ NOT_MODELLED_CONSTRAINTS: dict[str, str] = {
     "CONSTR_NULL": (
         "an explicit NULL restates the default; a column is nullable already, and "
         "recording it would make `c INT NULL` and `c INT` compare unequal"
-    ),
-    "CONSTR_EXCLUSION": (
-        "the model has no exclusion-constraint type, so an EXCLUDE clause is skipped "
-        "deliberately; giving it one is a new model, a change type and a generator (#322)"
     ),
     "CONSTR_ATTR_ENFORCED": (
         "NOT ENFORCED arrives as a sibling node like deferrability, and PostgreSQL 18 "

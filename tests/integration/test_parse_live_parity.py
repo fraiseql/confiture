@@ -100,3 +100,45 @@ def test_every_routine_and_view_shape_reads_back_as_itself(
     assert len(parsed["routines"]) == 10 and len(parsed["views"]) == 3, parsed
     assert len(parsed["triggers"]) == 1, parsed
     assert live == parsed, _explain(parsed, live)
+
+
+EXCLUSIONS = """
+CREATE TABLE booking (
+    room_id INT,
+    during TSRANGE,
+    note TEXT,
+    CONSTRAINT no_overlap EXCLUDE USING gist (during WITH &&) WHERE (room_id > 0),
+    EXCLUDE USING gist (during WITH &&) DEFERRABLE INITIALLY DEFERRED,
+    CONSTRAINT by_lower EXCLUDE USING btree ((lower(note)) WITH =)
+);
+"""
+
+
+def test_an_exclusion_constraint_reads_back_as_itself(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """#322: named and unnamed, with an expression, a predicate and deferral."""
+    parsed, live = _parity_of(EXCLUSIONS, fresh_database_factory)
+    (table,) = parsed["tables"]
+    assert [c["kind"] for c in table["constraints"]] == ["exclusion"] * 3, parsed
+    assert live == parsed, _explain(parsed, live)
+
+
+def test_the_issues_exclusion_constraint_reads_back_as_itself(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """``room_id WITH =`` beside a range needs ``btree_gist``'s operator class."""
+    url = fresh_database_factory("confiture_parity")
+    with psycopg.connect(url, autocommit=True) as conn:
+        available = conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'btree_gist'"
+        ).fetchone()
+    if available is None:
+        pytest.skip("btree_gist is not available on this server; the range-only case runs")
+    sql = (
+        "CREATE EXTENSION IF NOT EXISTS btree_gist;\n"
+        "CREATE TABLE tb_booking (room_id INT, during TSRANGE,"
+        " CONSTRAINT no_overlap EXCLUDE USING gist (room_id WITH =, during WITH &&));\n"
+    )
+    parsed, live = _parity_of(sql, fresh_database_factory)
+    assert live == parsed, _explain(parsed, live)

@@ -162,9 +162,12 @@ def test_a_generated_expression_is_never_read_as_a_check() -> None:
     assert constraints == ()
 
 
-def test_an_exclusion_constraint_is_declined_not_misread() -> None:
+def test_an_exclusion_constraint_is_read_whole() -> None:
+    """#322: it was declined by name; it is a constraint like the others."""
     node = _statement("CREATE TABLE t (r int4range, EXCLUDE USING gist (r WITH &&))").tableElts[1]
-    assert read_constraint(node) is None
+    assert read_constraint(node) == Constraint(
+        kind="exclusion", columns=("r",), operators=("&&",), method="gist"
+    )
 
 
 def test_a_quoted_default_is_written_back_escaped() -> None:

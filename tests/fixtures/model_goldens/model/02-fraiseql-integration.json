@@ -167,12 +167,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "pk_tb_comment",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -180,12 +184,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "uq_tb_comment_pk",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -193,14 +201,18 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "fk_tb_comment_post",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "pk_post"
           ],
-          "ref_table": "tb_post"
+          "ref_table": "tb_post",
+          "where": null
         },
         {
           "columns": [
@@ -208,14 +220,18 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "fk_tb_comment_user",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "pk_user"
           ],
-          "ref_table": "tb_user"
+          "ref_table": "tb_user",
+          "where": null
         },
         {
           "columns": [
@@ -223,36 +239,48 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "fk_tb_comment_parent",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "pk_comment"
           ],
-          "ref_table": "tb_comment"
+          "ref_table": "tb_comment",
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "length(content) >= 1",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "ck_tb_comment_content_length",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "pk_comment <> fk_parent_comment",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "ck_tb_comment_not_self_parent",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [
@@ -576,12 +604,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "pk_tb_post",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -589,12 +621,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "uq_tb_post_pk",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -602,12 +638,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "uq_tb_post_slug",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -615,58 +655,78 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "fk_tb_post_user",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "pk_user"
           ],
-          "ref_table": "tb_user"
+          "ref_table": "tb_user",
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "length(title) >= 1",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "ck_tb_post_title_length",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "slug ~ '^[a-z0-9-]+$'",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "ck_tb_post_slug_format",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "view_count >= 0",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "ck_tb_post_view_count",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "(is_published = FALSE AND published_at IS NULL) OR (is_published = TRUE AND published_at IS NOT NULL)",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "ck_tb_post_published_at",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [
@@ -957,12 +1017,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "pk_tb_user",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -970,12 +1034,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "uq_tb_user_pk",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -983,12 +1051,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "uq_tb_user_email",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -996,34 +1068,46 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "uq_tb_user_username",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "email LIKE '%@%'",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "ck_tb_user_email_format",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "length(username) >= 3 AND length(username) <= 30",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "ck_tb_user_username_length",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [
@@ -1185,12 +1269,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [
@@ -1316,12 +1404,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [
@@ -1513,12 +1605,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [

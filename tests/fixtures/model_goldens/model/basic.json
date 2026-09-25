@@ -111,12 +111,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -124,12 +128,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -137,14 +145,18 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "id"
           ],
-          "ref_table": "posts"
+          "ref_table": "posts",
+          "where": null
         },
         {
           "columns": [
@@ -152,14 +164,18 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users"
+          "ref_table": "users",
+          "where": null
         }
       ],
       "indexes": [
@@ -353,12 +369,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -366,12 +386,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -379,12 +403,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -392,14 +420,18 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users"
+          "ref_table": "users",
+          "where": null
         }
       ],
       "indexes": [
@@ -593,12 +625,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -606,12 +642,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -619,12 +659,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -632,12 +676,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -645,12 +693,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [

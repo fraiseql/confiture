@@ -315,7 +315,7 @@ of `GENERATED … AS IDENTITY`, `generated` the expression of a
 class Constraint
 ```
 
-A table constraint: a primary key, a UNIQUE, a CHECK or a foreign key.
+A table constraint: a primary key, a UNIQUE, a CHECK, a foreign key or an EXCLUDE.
 
 `name` is empty when the schema wrote none — PostgreSQL generates one at
 apply time, and nothing here invents it. `columns` are the columns it
@@ -323,6 +323,12 @@ covers, whichever of the three places the grammar allows it was written in;
 `ref_table` / `ref_columns` / `on_delete` / `on_update` describe a
 foreign key, and an empty `ref_columns` means the referenced primary key.
 `expression` is a CHECK's condition, rendered.
+
+An exclusion constraint's `columns` are its elements, each a column name or a
+rendered expression as an index's keys are, with `key_options` alongside as
+on `Index`; `operators` runs alongside too, the operator each element
+is compared with (`&&`, `OPERATOR(pg_catalog.=)`). `method` is its index
+access method and `where` its partial predicate, rendered.
 
 | Field | Type | Default |
 |---|---|---|
@@ -335,6 +341,10 @@ foreign key, and an empty `ref_columns` means the referenced primary key.
 | `on_update` | `str \| None` | `None` |
 | `expression` | `str \| None` | `None` |
 | `deferrable` | `Deferral \| None` | `None` |
+| `operators` | `tuple[str, ...]` | `()` |
+| `method` | `str \| None` | `None` |
+| `where` | `str \| None` | `None` |
+| `key_options` | `tuple[str, ...]` | `()` |
 
 ### `Index`
 
@@ -1049,6 +1059,8 @@ SchemaChange = (
     | CheckConstraintDropped
     | UniqueConstraintAdded
     | UniqueConstraintDropped
+    | ExclusionConstraintAdded
+    | ExclusionConstraintDropped
     | EnumTypeAdded
     | EnumTypeDropped
     | EnumValuesChanged
@@ -1305,6 +1317,32 @@ class UniqueConstraintDropped(_OnTable)
 ```
 
 A UNIQUE constraint only the old tree declares.
+
+| Field | Type | Default |
+|---|---|---|
+| `table` | `str` | required |
+| `constraint` | `Constraint` | required |
+
+### `ExclusionConstraintAdded`
+
+```python
+class ExclusionConstraintAdded(_OnTable)
+```
+
+An EXCLUDE constraint only the new tree declares, or one that changed (after a drop).
+
+| Field | Type | Default |
+|---|---|---|
+| `table` | `str` | required |
+| `constraint` | `Constraint` | required |
+
+### `ExclusionConstraintDropped`
+
+```python
+class ExclusionConstraintDropped(_OnTable)
+```
+
+An EXCLUDE constraint only the old tree declares, or one that changed (before an add).
 
 | Field | Type | Default |
 |---|---|---|
