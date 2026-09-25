@@ -447,10 +447,6 @@ def test_analyze_recommends_a_strategy_for_every_table(source: str, target: str)
     assert {info["strategy"] for info in payload["tables"].values()} == {"fdw"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#359: analyze counts the target's tables, empty before a migration, never the source's rows",
-)
 def test_analyze_sizes_the_rows_it_is_about_to_migrate(source: str, target: str) -> None:
     _setup(source, target)
 

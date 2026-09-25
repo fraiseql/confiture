@@ -145,10 +145,12 @@ def s2s_setup(
 def s2s_analyze(
     source: str = _SOURCE_OPTION,
     target: str = _TARGET_OPTION,
-    schema: str = typer.Option("public", "--schema", help="Schema to analyze (default: public)."),
+    schema: str = typer.Option(
+        "public", "--schema", help="The source's schema to size (default: public)."
+    ),
     format_output: str = _FORMAT_OPTION,
 ) -> None:
-    """Analyze tables and recommend a per-table strategy (FDW vs COPY)."""
+    """Size the source's tables and recommend a per-table strategy (FDW vs COPY)."""
     json_mode = is_json(format_output)
     m = None
     try:

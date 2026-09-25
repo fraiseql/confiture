@@ -455,16 +455,17 @@ class SchemaToSchemaMigrator:
     def analyze_tables(self, schema: str = "public") -> dict[str, dict[str, Any]]:
         """Analyze table sizes and recommend optimal migration strategy.
 
-        This method queries the target database to get row counts for all tables,
-        then recommends the optimal migration strategy (FDW or COPY) based on
-        table size.
+        This method sizes the tables of the **source** database — the rows about to
+        be migrated, which the target does not hold yet — then recommends the
+        optimal migration strategy (FDW or COPY) based on table size.
 
         Strategy selection:
         - Tables with < 10M rows → FDW strategy (better for complex transformations)
         - Tables with ≥ 10M rows → COPY strategy (10-20x faster)
 
         Args:
-            schema: Schema name to analyze (default: "public")
+            schema: The source's schema to analyze (default: "public", the one
+                ``setup`` imports)
 
         Returns:
             Dictionary mapping table names to analysis results:
@@ -499,7 +500,7 @@ class SchemaToSchemaMigrator:
         try:
             recommendations = {}
 
-            with self.target_connection.cursor() as cursor:
+            with self.source_connection.cursor() as cursor:
                 # Get all tables in the schema with their row counts
                 cursor.execute(
                     sql.SQL("""

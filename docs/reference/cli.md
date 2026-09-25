@@ -2659,7 +2659,7 @@ confiture migrate schema-to-schema analyze [OPTIONS]
 |---|---|---|---|---|
 | `--source` | - | str | - | Source (old) database: env name, config path, or DSN. |
 | `--target` | - | str | - | Target (new) database: env name, config path, or DSN. |
-| `--schema` | - | str | `public` | Schema to analyze (default: public). |
+| `--schema` | - | str | `public` | The source's schema to size (default: public). |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture migrate schema-to-schema analyze -->
