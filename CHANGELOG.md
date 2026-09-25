@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-09-25
+
+**The generator writes what the model holds.** `migrate diff --generate` reported
+changes it then wrote as a warning, or wrote in an order PostgreSQL refused: a drop
+it would not generate without a flag the command lacks, a constraint whose down was
+a comment, an enum or sequence recreated without its labels or options, a new table
+without its indexes, a schema created after the tables in it. Now each change is
+written as the model holds it, under the one destructive gate, and in an order
+PostgreSQL accepts. Every example tree's generated migration applies to an empty
+database, down and second up included, where three of thirteen did (#335). An
+`EXCLUDE` constraint, the one kind the model declined, is modelled, compared,
+generated and drift-checked (#322). A generated trigger is `CREATE OR REPLACE
+TRIGGER`, so PostgreSQL 14 is the documented minimum.
+
 ### Added
 
 - **An `EXCLUDE` constraint is modelled, compared, generated and drift-checked** (#322).
