@@ -522,6 +522,10 @@ Shape is identical to plain `drift` — items of type `missing_grant` / `extra_g
 
 **Schema**: [`sync.schema.json`](json-schemas/sync.schema.json) — `SyncResult.to_dict()`: rows copied per table, the total, and whether values were anonymized.
 
+### `confiture lint-unified --format json`
+
+**Schema**: [`lint-unified.schema.json`](json-schemas/lint-unified.schema.json) — `UnifiedLintResult.to_dict()`: every finding with its tool, file and 1-based line, and under `skipped` each check that was asked for and could not run (a tool not installed, a file it failed on), with the reason.
+
 ### `confiture lint --list-rules --format json`
 
 [lint-list-rules.schema.json](./json-schemas/lint-list-rules.schema.json)

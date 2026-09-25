@@ -1,0 +1,239 @@
+{
+  "outputs": {
+    "001_index_widget_label.sql": [
+      {
+        "code": "CP01",
+        "description": "Keywords must be consistently lower case.",
+        "end_file_pos": 54,
+        "end_line_no": 2,
+        "end_line_pos": 6,
+        "fixes": [
+          {
+            "edit": "alter",
+            "end_file_pos": 54,
+            "end_line_no": 2,
+            "end_line_pos": 6,
+            "start_file_pos": 49,
+            "start_line_no": 2,
+            "start_line_pos": 1,
+            "type": "replace"
+          }
+        ],
+        "name": "capitalisation.keywords",
+        "start_file_pos": 49,
+        "start_line_no": 2,
+        "start_line_pos": 1,
+        "warning": false
+      },
+      {
+        "code": "CP01",
+        "description": "Keywords must be consistently lower case.",
+        "end_file_pos": 60,
+        "end_line_no": 2,
+        "end_line_pos": 12,
+        "fixes": [
+          {
+            "edit": "table",
+            "end_file_pos": 60,
+            "end_line_no": 2,
+            "end_line_pos": 12,
+            "start_file_pos": 55,
+            "start_line_no": 2,
+            "start_line_pos": 7,
+            "type": "replace"
+          }
+        ],
+        "name": "capitalisation.keywords",
+        "start_file_pos": 55,
+        "start_line_no": 2,
+        "start_line_pos": 7,
+        "warning": false
+      },
+      {
+        "code": "CP01",
+        "description": "Keywords must be consistently lower case.",
+        "end_file_pos": 71,
+        "end_line_no": 2,
+        "end_line_pos": 23,
+        "fixes": [
+          {
+            "edit": "add",
+            "end_file_pos": 71,
+            "end_line_no": 2,
+            "end_line_pos": 23,
+            "start_file_pos": 68,
+            "start_line_no": 2,
+            "start_line_pos": 20,
+            "type": "replace"
+          }
+        ],
+        "name": "capitalisation.keywords",
+        "start_file_pos": 68,
+        "start_line_no": 2,
+        "start_line_pos": 20,
+        "warning": false
+      },
+      {
+        "code": "CP01",
+        "description": "Keywords must be consistently lower case.",
+        "end_file_pos": 78,
+        "end_line_no": 2,
+        "end_line_pos": 30,
+        "fixes": [
+          {
+            "edit": "column",
+            "end_file_pos": 78,
+            "end_line_no": 2,
+            "end_line_pos": 30,
+            "start_file_pos": 72,
+            "start_line_no": 2,
+            "start_line_pos": 24,
+            "type": "replace"
+          }
+        ],
+        "name": "capitalisation.keywords",
+        "start_file_pos": 72,
+        "start_line_no": 2,
+        "start_line_pos": 24,
+        "warning": false
+      },
+      {
+        "code": "CP01",
+        "description": "Keywords must be consistently lower case.",
+        "end_file_pos": 91,
+        "end_line_no": 2,
+        "end_line_pos": 43,
+        "fixes": [
+          {
+            "edit": "not",
+            "end_file_pos": 91,
+            "end_line_no": 2,
+            "end_line_pos": 43,
+            "start_file_pos": 88,
+            "start_line_no": 2,
+            "start_line_pos": 40,
+            "type": "replace"
+          }
+        ],
+        "name": "capitalisation.keywords",
+        "start_file_pos": 88,
+        "start_line_no": 2,
+        "start_line_pos": 40,
+        "warning": false
+      },
+      {
+        "code": "CP01",
+        "description": "Keywords must be consistently lower case.",
+        "end_file_pos": 96,
+        "end_line_no": 2,
+        "end_line_pos": 48,
+        "fixes": [
+          {
+            "edit": "null",
+            "end_file_pos": 96,
+            "end_line_no": 2,
+            "end_line_pos": 48,
+            "start_file_pos": 92,
+            "start_line_no": 2,
+            "start_line_pos": 44,
+            "type": "replace"
+          }
+        ],
+        "name": "capitalisation.keywords",
+        "start_file_pos": 92,
+        "start_line_no": 2,
+        "start_line_pos": 44,
+        "warning": false
+      }
+    ],
+    "002_two_statements_apart.sql": [
+      {
+        "code": "LT05",
+        "description": "Line is too long (83 > 80).",
+        "end_file_pos": 83,
+        "end_line_no": 1,
+        "end_line_pos": 84,
+        "fixes": [],
+        "name": "layout.long_lines",
+        "start_file_pos": 0,
+        "start_line_no": 1,
+        "start_line_pos": 1,
+        "warning": false
+      },
+      {
+        "code": "CP01",
+        "description": "Keywords must be consistently upper case.",
+        "end_file_pos": 148,
+        "end_line_no": 5,
+        "end_line_pos": 7,
+        "fixes": [
+          {
+            "edit": "SELECT",
+            "end_file_pos": 148,
+            "end_line_no": 5,
+            "end_line_pos": 7,
+            "start_file_pos": 142,
+            "start_line_no": 5,
+            "start_line_pos": 1,
+            "type": "replace"
+          }
+        ],
+        "name": "capitalisation.keywords",
+        "start_file_pos": 142,
+        "start_line_no": 5,
+        "start_line_pos": 1,
+        "warning": false
+      },
+      {
+        "code": "CP02",
+        "description": "Unquoted identifiers must be consistently lower case.",
+        "end_file_pos": 151,
+        "end_line_no": 5,
+        "end_line_pos": 10,
+        "fixes": [
+          {
+            "edit": "id",
+            "end_file_pos": 151,
+            "end_line_no": 5,
+            "end_line_pos": 10,
+            "start_file_pos": 149,
+            "start_line_no": 5,
+            "start_line_pos": 8,
+            "type": "replace"
+          }
+        ],
+        "name": "capitalisation.identifiers",
+        "start_file_pos": 149,
+        "start_line_no": 5,
+        "start_line_pos": 8,
+        "warning": false
+      },
+      {
+        "code": "CP01",
+        "description": "Keywords must be consistently upper case.",
+        "end_file_pos": 156,
+        "end_line_no": 5,
+        "end_line_pos": 15,
+        "fixes": [
+          {
+            "edit": "FROM",
+            "end_file_pos": 156,
+            "end_line_no": 5,
+            "end_line_pos": 15,
+            "start_file_pos": 152,
+            "start_line_no": 5,
+            "start_line_pos": 11,
+            "type": "replace"
+          }
+        ],
+        "name": "capitalisation.keywords",
+        "start_file_pos": 152,
+        "start_line_no": 5,
+        "start_line_pos": 11,
+        "warning": false
+      }
+    ]
+  },
+  "tool": "sqlfluff",
+  "version": "4.3.0"
+}

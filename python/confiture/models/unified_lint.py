@@ -20,11 +20,21 @@ class UnifiedLintIssue:
     rule: str | None = None
 
 
+@dataclasses.dataclass(frozen=True)
+class SkippedCheck:
+    """A check that was asked for and could not run, and why: never a clean result."""
+
+    check: str
+    tool: str
+    reason: str
+
+
 @dataclasses.dataclass
 class UnifiedLintResult:
     """Aggregated results from all linting tools."""
 
     issues: list[UnifiedLintIssue]
+    skipped: list[SkippedCheck] = dataclasses.field(default_factory=list)
 
     @property
     def has_errors(self) -> bool:
@@ -57,4 +67,5 @@ class UnifiedLintResult:
                 "info": info,
             },
             "issues": [dataclasses.asdict(i) for i in self.issues],
+            "skipped": [dataclasses.asdict(s) for s in self.skipped],
         }

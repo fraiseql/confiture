@@ -1,0 +1,142 @@
+{
+  "outputs": {
+    "001_index_widget_label.sql": [
+      {
+        "column": 0,
+        "column_end": 48,
+        "file": "001_index_widget_label.sql",
+        "help": "Use an explicit name for a concurrently created index",
+        "level": "Warning",
+        "line": 0,
+        "line_end": 0,
+        "message": "Missing `IF NOT EXISTS`, the migration can't be rerun if it fails part way through.",
+        "rule_name": "prefer-robust-stmts"
+      },
+      {
+        "column": 0,
+        "column_end": 48,
+        "file": "001_index_widget_label.sql",
+        "help": "Use `concurrently` to avoid blocking writes.",
+        "level": "Warning",
+        "line": 0,
+        "line_end": 0,
+        "message": "During normal index creation, table updates are blocked, but reads are still allowed.",
+        "rule_name": "require-concurrent-index-creation"
+      },
+      {
+        "column": 0,
+        "column_end": 48,
+        "file": "001_index_widget_label.sql",
+        "help": "Configure a `lock_timeout` before this statement. Statement requires: SHARE lock; blocking: writes, schema changes.",
+        "level": "Warning",
+        "line": 0,
+        "line_end": 0,
+        "message": "Missing `set lock_timeout` before potentially slow SHARE lock operations",
+        "rule_name": "require-lock-timeout"
+      },
+      {
+        "column": 0,
+        "column_end": 48,
+        "file": "001_index_widget_label.sql",
+        "help": "Configure a `statement_timeout` before this statement",
+        "level": "Warning",
+        "line": 0,
+        "line_end": 0,
+        "message": "Missing `set statement_timeout` before potentially slow operations",
+        "rule_name": "require-statement-timeout"
+      },
+      {
+        "column": 19,
+        "column_end": 47,
+        "file": "001_index_widget_label.sql",
+        "help": "Make the field nullable or add a non-VOLATILE DEFAULT",
+        "level": "Warning",
+        "line": 1,
+        "line_end": 1,
+        "message": "Adding a new column that is `NOT NULL` and has no default value to an existing table effectively makes it required.",
+        "rule_name": "adding-required-field"
+      },
+      {
+        "column": 19,
+        "column_end": 47,
+        "file": "001_index_widget_label.sql",
+        "help": null,
+        "level": "Warning",
+        "line": 1,
+        "line_end": 1,
+        "message": "Missing `IF NOT EXISTS`, the migration can't be rerun if it fails part way through.",
+        "rule_name": "prefer-robust-stmts"
+      },
+      {
+        "column": 35,
+        "column_end": 38,
+        "file": "001_index_widget_label.sql",
+        "help": "Use 64-bit integer values instead to prevent hitting this limit.",
+        "level": "Warning",
+        "line": 1,
+        "line_end": 1,
+        "message": "Using 32-bit integer fields can result in hitting the max `int` limit.",
+        "rule_name": "prefer-bigint-over-int"
+      }
+    ],
+    "002_two_statements_apart.sql": [
+      {
+        "column": 0,
+        "column_end": 55,
+        "file": "002_two_statements_apart.sql",
+        "help": "Configure a `lock_timeout` before this statement. Statement requires: ACCESS EXCLUSIVE lock; blocking: reads, writes, schema changes.",
+        "level": "Warning",
+        "line": 1,
+        "line_end": 1,
+        "message": "Missing `set lock_timeout` before potentially slow ACCESS EXCLUSIVE lock operations",
+        "rule_name": "require-lock-timeout"
+      },
+      {
+        "column": 0,
+        "column_end": 55,
+        "file": "002_two_statements_apart.sql",
+        "help": "Configure a `statement_timeout` before this statement",
+        "level": "Warning",
+        "line": 1,
+        "line_end": 1,
+        "message": "Missing `set statement_timeout` before potentially slow operations",
+        "rule_name": "require-statement-timeout"
+      },
+      {
+        "column": 19,
+        "column_end": 54,
+        "file": "002_two_statements_apart.sql",
+        "help": null,
+        "level": "Warning",
+        "line": 1,
+        "line_end": 1,
+        "message": "Missing transaction, the migration can't be rerun if it fails part way through.",
+        "rule_name": "prefer-robust-stmts"
+      },
+      {
+        "column": 38,
+        "column_end": 54,
+        "file": "002_two_statements_apart.sql",
+        "help": null,
+        "level": "Warning",
+        "line": 1,
+        "line_end": 1,
+        "message": "Changing a column type requires an `ACCESS EXCLUSIVE` lock on the table which blocks reads and writes while the table is rewritten. Changing the type of the column may also break other clients reading from the table.",
+        "rule_name": "changing-column-type"
+      },
+      {
+        "column": 43,
+        "column_end": 54,
+        "file": "002_two_statements_apart.sql",
+        "help": "Use a `TEXT` field with a `CHECK` constraint.",
+        "level": "Warning",
+        "line": 1,
+        "line_end": 1,
+        "message": "Changing the size of a `varchar` field requires an `ACCESS EXCLUSIVE` lock, that will prevent all reads and writes to the table.",
+        "rule_name": "prefer-text-field"
+      }
+    ]
+  },
+  "tool": "squawk",
+  "version": "2.66.0"
+}
