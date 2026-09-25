@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`lint-unified` exits 2 when a check it was asked for did not run** (#358). A
+  missing squawk or sqlfluff used to leave the exit at 0; it is now
+  `error_codes.NOT_RUN`, and it outweighs findings from the checks that did run.
+  A pipeline without those tools passes `--check schema --check tree`.
+
 ### Fixed
 
 - **`lint-unified` reports its tools, and what they found where they found it** (#358).
