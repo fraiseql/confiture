@@ -81,18 +81,18 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-24,165 lines, 33% of `core/`.
+24,206 lines, 33% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
-| `_pglast_enums.py` | 141 | DDL transform |
+| `_pglast_enums.py` | 142 | DDL transform |
 | `change_order.py` | 180 | DDL transform |
 | `change_set/` | 1,257 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 546 | DDL transform |
 | `ddl_clauses.py` | 105 | DDL transform |
 | `ddl_objects.py` | 558 | DDL transform |
-| `ddl_walk.py` | 1,394 | DDL transform |
+| `ddl_walk.py` | 1,417 | DDL transform |
 | `destructive.py` | 170 | DDL transform |
 | `differ.py` | 708 | DDL transform |
 | `differ_sql.py` | 626 | DDL transform |
@@ -116,7 +116,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `risk_tier.py` | 76 | DDL transform |
 | `schema_change.py` | 846 | DDL transform |
 | `schema_identity.py` | 23 | DDL transform |
-| `schema_model.py` | 740 | DDL transform |
+| `schema_model.py` | 757 | DDL transform |
 | `sql_lexer.py` | 637 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |

@@ -68,12 +68,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [],
@@ -104,12 +108,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [],
@@ -154,12 +162,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [],
@@ -288,12 +300,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -301,25 +317,33 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "things_new_fk",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "id"
           ],
-          "ref_table": "parent"
+          "ref_table": "parent",
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "qty >= 0",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "things_new_ck",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -328,12 +352,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "things_new_uq",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [
@@ -378,12 +406,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [],

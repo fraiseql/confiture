@@ -134,12 +134,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -147,12 +151,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -160,25 +168,33 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "pk_vendor"
           ],
-          "ref_table": "catalog.tb_vendor"
+          "ref_table": "catalog.tb_vendor",
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "price > 0",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [],
@@ -251,12 +267,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -264,12 +284,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [],
@@ -356,12 +380,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -369,25 +397,33 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "id"
           ],
-          "ref_table": "prep_seed.tb_vendor"
+          "ref_table": "prep_seed.tb_vendor",
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "price > 0",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [],
@@ -446,12 +482,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [],

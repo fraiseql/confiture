@@ -59,6 +59,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "CONSTR_PRIMARY",
         "CONSTR_UNIQUE",
         "CONSTR_FOREIGN",
+        "CONSTR_EXCLUSION",
         "CONSTR_IDENTITY",
         "CONSTR_GENERATED",
         "CONSTR_ATTR_DEFERRABLE",

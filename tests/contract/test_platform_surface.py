@@ -198,6 +198,10 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("on_update", "str | None"),
         ("expression", "str | None"),
         ("deferrable", "Deferral | None"),
+        ("operators", "tuple[str, ...]"),
+        ("method", "str | None"),
+        ("where", "str | None"),
+        ("key_options", "tuple[str, ...]"),
     ),
     "Index": (
         ("name", "str | None"),

@@ -151,12 +151,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -164,36 +168,48 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users"
+          "ref_table": "users",
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "char_length(name) >= 3 AND char_length(name) <= 100",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "projects_name_length",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "status IN ('active', 'archived', 'deleted')",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "projects_status_valid",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -202,12 +218,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "projects_owner_name_unique",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [
@@ -430,12 +450,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -443,14 +467,18 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "",
           "on_delete": "CASCADE",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "id"
           ],
-          "ref_table": "projects"
+          "ref_table": "projects",
+          "where": null
         },
         {
           "columns": [
@@ -458,58 +486,78 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "foreign_key",
+          "method": null,
           "name": "",
           "on_delete": "SET NULL",
           "on_update": null,
+          "operators": [],
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users"
+          "ref_table": "users",
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "char_length(title) >= 3 AND char_length(title) <= 200",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "tasks_title_length",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "priority IN ('low', 'medium', 'high', 'urgent')",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "tasks_priority_valid",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "status IN ('todo', 'in_progress', 'done', 'cancelled')",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "tasks_status_valid",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "(status = 'done' AND completed_at IS NOT NULL) OR (status <> 'done' AND completed_at IS NULL)",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "tasks_completed_when_done",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [
@@ -711,12 +759,16 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "primary_key",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [
@@ -724,45 +776,61 @@
           ],
           "deferrable": null,
           "expression": null,
+          "key_options": [],
           "kind": "unique",
+          "method": null,
           "name": "",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "users_email_format",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "char_length(display_name) >= 2",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "users_display_name_length",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         },
         {
           "columns": [],
           "deferrable": null,
           "expression": "char_length(bio) <= 1000",
+          "key_options": [],
           "kind": "check",
+          "method": null,
           "name": "users_bio_length",
           "on_delete": null,
           "on_update": null,
+          "operators": [],
           "ref_columns": [],
-          "ref_table": null
+          "ref_table": null,
+          "where": null
         }
       ],
       "indexes": [
