@@ -14,7 +14,6 @@ from confiture.core.schema_change import (
     SequenceDropped,
 )
 from confiture.core.schema_model import EnumType, Sequence
-from confiture.exceptions import UnsafeOperationError
 
 
 class TestAddEnumType:
@@ -51,21 +50,17 @@ class TestAddEnumType:
 
 
 class TestDropEnumType:
-    def test_raises_without_force(self):
+    def test_the_drop_is_written(self):
+        """The destructive gate decides whether it ships, as for a table (#335)."""
         change = EnumTypeDropped(EnumType("mood"))
-        with pytest.raises(UnsafeOperationError):
-            DifferSQLGenerator().generate_up(change)
+        assert DifferSQLGenerator().generate_up(change) == "DROP TYPE IF EXISTS mood;\n"
 
-    def test_generates_drop_type_with_force(self):
-        change = EnumTypeDropped(EnumType("mood"))
-        sql = DifferSQLGenerator(force_destructive=True).generate_up(change)
-        assert "DROP TYPE" in sql
-        assert "mood" in sql
-
-    def test_down_is_warning_comment(self):
-        change = EnumTypeDropped(EnumType("mood"))
-        sql = DifferSQLGenerator(force_destructive=True).generate_down(change)
-        assert "WARNING" in sql or "Cannot" in sql
+    def test_the_down_recreates_it_with_its_labels_in_order(self):
+        """#335: the change carries the labels; the down wrote a warning instead."""
+        change = EnumTypeDropped(EnumType("mood", schema="app", values=("sad", "it's ok")))
+        assert DifferSQLGenerator().generate_down(change) == (
+            "CREATE TYPE app.mood AS ENUM ('sad', 'it''s ok');\n"
+        )
 
 
 class TestChangeEnumValues:
@@ -81,6 +76,11 @@ class TestChangeEnumValues:
         sql = DifferSQLGenerator().generate_up(change)
         # Removing enum values requires DROP+RECREATE — should warn
         assert "WARNING" in sql or "sad" in sql
+
+    def test_an_added_label_derives_no_rollback(self):
+        """PostgreSQL cannot remove an enum label: the generator's directive says so."""
+        change = EnumValuesChanged("mood", added=("ecstatic",), removed=())
+        assert DifferSQLGenerator().generate_down(change) is None
 
     def test_mixed_adds_and_removes(self):
         change = EnumValuesChanged("mood", added=("ecstatic",), removed=("sad",))
@@ -109,18 +109,49 @@ class TestAddSequence:
 
 
 class TestDropSequence:
-    def test_raises_without_force(self):
+    def test_the_drop_is_written(self):
         change = SequenceDropped(Sequence("order_seq"))
-        with pytest.raises(UnsafeOperationError):
-            DifferSQLGenerator().generate_up(change)
+        assert DifferSQLGenerator().generate_up(change) == "DROP SEQUENCE IF EXISTS order_seq;\n"
 
-    def test_generates_drop_sequence_with_force(self):
-        change = SequenceDropped(Sequence("order_seq"))
-        sql = DifferSQLGenerator(force_destructive=True).generate_up(change)
-        assert "DROP SEQUENCE" in sql
-        assert "order_seq" in sql
+    def test_the_down_recreates_it_with_its_options(self):
+        change = SequenceDropped(Sequence("order_seq", start=100, increment=5))
+        assert DifferSQLGenerator().generate_down(change) == (
+            "CREATE SEQUENCE IF NOT EXISTS order_seq INCREMENT BY 5 START WITH 100;\n"
+        )
 
-    def test_down_is_warning_comment(self):
-        change = SequenceDropped(Sequence("order_seq"))
-        sql = DifferSQLGenerator(force_destructive=True).generate_down(change)
-        assert "WARNING" in sql or "Cannot" in sql
+
+class TestSequenceOptions:
+    """#335: an added sequence lost its options; each one that is not the default is written."""
+
+    @pytest.mark.parametrize(
+        ("sequence", "options"),
+        [
+            (Sequence("s"), ""),
+            # What the DDL reader and the live reader hold for a bare CREATE SEQUENCE.
+            (Sequence("s", start=1, increment=1), ""),
+            (Sequence("s", start=1, increment=1, min_value=1, max_value=2**63 - 1), ""),
+            (Sequence("s", start=1000), " START WITH 1000"),
+            (Sequence("s", start=10, min_value=10), " MINVALUE 10"),
+            (Sequence("s", max_value=2**31 - 1), " MAXVALUE 2147483647"),
+            (Sequence("s", increment=-1), " INCREMENT BY -1"),
+            (
+                Sequence("s", start=-1, increment=-1, min_value=-(2**63), max_value=-1),
+                " INCREMENT BY -1",
+            ),
+            (Sequence("s", increment=-2, max_value=0, start=0), " INCREMENT BY -2 MAXVALUE 0"),
+        ],
+    )
+    def test_only_what_differs_from_the_default_is_written(self, sequence, options):
+        assert DifferSQLGenerator().generate_up(SequenceAdded(sequence)) == (
+            f"CREATE SEQUENCE IF NOT EXISTS s{options};\n"
+        )
+
+    def test_the_differ_carries_them_from_the_ddl(self):
+        (change,) = (
+            SchemaDiffer()
+            .compare("", "CREATE SEQUENCE s START 500 INCREMENT 10 MAXVALUE 100000;")
+            .changes
+        )
+        assert DifferSQLGenerator().generate_up(change) == (
+            "CREATE SEQUENCE IF NOT EXISTS s INCREMENT BY 10 MAXVALUE 100000 START WITH 500;\n"
+        )

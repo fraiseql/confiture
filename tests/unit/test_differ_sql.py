@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import (
     ColumnAdded,
@@ -42,14 +43,12 @@ def test_schema_change_details_accepts_nested_column_list():
     assert isinstance((change.to_wire().details or {})["columns"], list)
 
 
-@pytest.mark.parametrize("force", [False, True])
-def test_a_dropped_table_is_written_whatever_force_is(force):
+def test_a_dropped_table_is_written():
     """Whether a migration may drop a table is the destructive gate's decision.
 
-    ``migration.destructive`` rules on the generated file; ``force`` governs only
-    the drop of an enum type, a sequence or a definition object.
+    ``migration.destructive`` rules on the generated file, for every kind of drop.
     """
-    sql = DifferSQLGenerator(force_destructive=force).generate_up(TableDropped(table("bookings")))
+    sql = DifferSQLGenerator().generate_up(TableDropped(table("bookings")))
     assert sql == "DROP TABLE bookings;\n"
 
 
@@ -60,19 +59,39 @@ def test_add_column_writes_the_declared_column():
     assert sql == "ALTER TABLE users ADD COLUMN bio text;\n"
 
 
-@pytest.mark.parametrize("force", [False, True])
-def test_a_dropped_column_is_written_whatever_force_is(force):
-    """As for a table: the destructive gate decides, not ``force``."""
+def test_a_dropped_column_is_written():
+    """As for a table: the destructive gate decides."""
     change = ColumnDropped("users", spelled("bio", "text"))
-    sql = DifferSQLGenerator(force_destructive=force).generate_up(change)
+    sql = DifferSQLGenerator().generate_up(change)
     assert sql == "ALTER TABLE users DROP COLUMN bio;\n"
 
 
-def test_alter_column_type_writes_the_new_type():
+def test_a_type_change_with_no_assignment_cast_casts_with_using():
+    """#335: ``text`` → ``integer`` has no assignment cast, so without ``USING`` it fails."""
     change = ColumnTypeChanged("users", spelled("age", "text"), spelled("age", "integer"))
-    gen = DifferSQLGenerator()
-    sql = gen.generate_up(change)
-    assert sql == "ALTER TABLE users ALTER COLUMN age TYPE integer;\n"
+    assert DifferSQLGenerator().generate_up(change) == (
+        "-- review: text to integer has no assignment cast; each value is cast explicitly,"
+        " and one that does not cast fails the migration\n"
+        "ALTER TABLE users ALTER COLUMN age TYPE integer USING age::integer;\n"
+    )
+
+
+def test_its_down_is_an_assignment_and_writes_no_using():
+    change = ColumnTypeChanged("users", spelled("age", "text"), spelled("age", "integer"))
+    assert DifferSQLGenerator().generate_down(change) == (
+        "ALTER TABLE users ALTER COLUMN age TYPE text;\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("old", "new"), [("integer", "bigint"), ("bigint", "integer"), ("varchar(100)", "varchar(50)")]
+)
+def test_a_change_within_a_family_writes_no_using(old, new):
+    """A narrowing too: ``::varchar(50)`` would truncate what the assignment cast refuses."""
+    change = ColumnTypeChanged("users", spelled("age", old), spelled("age", new))
+    assert DifferSQLGenerator().generate_up(change) == (
+        f"ALTER TABLE users ALTER COLUMN age TYPE {new};\n"
+    )
 
 
 def test_add_index_concurrently():
@@ -108,3 +127,65 @@ def test_generate_down_returns_none_for_a_change_with_no_rollback():
 def test_generate_up_returns_none_for_a_change_with_no_generator():
     gen = DifferSQLGenerator()
     assert gen.generate_up(RETYPED) is None
+
+
+@pytest.mark.parametrize(
+    ("ddl", "statement"),
+    [
+        (
+            "CREATE INDEX i ON t USING gin (s gin_trgm_ops);",
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t USING gin (s gin_trgm_ops);\n",
+        ),
+        (
+            "CREATE INDEX i ON t (a DESC NULLS LAST, b) WHERE b > 0;",
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t (a DESC NULLS LAST, b) WHERE b > 0;\n",
+        ),
+        (
+            "CREATE INDEX i ON t ((a + b));",
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t ((a + b));\n",
+        ),
+        (
+            "CREATE UNIQUE INDEX i ON t USING btree (lower(s));",
+            "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS i ON t ((lower(s)));\n",
+        ),
+    ],
+)
+def test_an_index_is_created_as_declared(ddl: str, statement: str) -> None:
+    """#335: the access method, the predicate and each key's options reach the statement."""
+    table = "CREATE TABLE t (a int, b int, s text);"
+    (change,) = SchemaDiffer().compare(table, table + ddl).changes
+    assert DifferSQLGenerator().generate_up(change) == statement
+
+
+class TestAnAddedTableCarriesItsIndexes:
+    """#335: a new table's indexes were in the change and never in the migration."""
+
+    DDL = (
+        "CREATE TABLE t (a int, s text);\n"
+        "CREATE INDEX ix_s ON t USING gin (s gin_trgm_ops);\n"
+        "CREATE UNIQUE INDEX ux_a ON t (a) WHERE a > 0;\n"
+    )
+
+    def test_the_up_creates_them_after_the_table(self) -> None:
+        (change,) = SchemaDiffer().compare("", self.DDL).changes
+        assert DifferSQLGenerator().generate_up(change) == (
+            "CREATE TABLE IF NOT EXISTS t (\n    a INTEGER,\n    s TEXT\n);\n"
+            "CREATE INDEX IF NOT EXISTS ix_s ON t USING gin (s gin_trgm_ops);\n"
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_a ON t (a) WHERE a > 0;\n"
+        )
+
+    def test_the_down_of_a_drop_recreates_them(self) -> None:
+        (change,) = SchemaDiffer().compare(self.DDL, "").changes
+        assert "CREATE INDEX IF NOT EXISTS ix_s ON t USING gin (s gin_trgm_ops);\n" in (
+            DifferSQLGenerator().generate_down(change)
+        )
+
+    def test_an_unnamed_one_is_named_as_missing(self) -> None:
+        (change,) = (
+            SchemaDiffer().compare("", "CREATE TABLE t (a int); CREATE INDEX ON t (a);").changes
+        )
+        assert (
+            DifferSQLGenerator()
+            .generate_up(change)
+            .endswith("-- WARNING: Cannot generate the index on t (a) without an index name\n")
+        )

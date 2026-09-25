@@ -32,7 +32,7 @@ PARENT = "CREATE TABLE b.parent (id INT PRIMARY KEY);\n"
 
 def _up(old: str, new: str, kind: type[SchemaChange]) -> str:
     change = next(c for c in SchemaDiffer().compare(old, new).changes if isinstance(c, kind))
-    return DifferSQLGenerator(force_destructive=True).generate_up(change)
+    return DifferSQLGenerator().generate_up(change)
 
 
 def _parses(sql: str) -> bool:
@@ -254,3 +254,38 @@ class TestANewTableIsGeneratedWhole:
     def test_a_table_with_no_constraints_is_unchanged(self) -> None:
         sql = _up("", "CREATE TABLE tenant.t (id INT);", TableAdded)
         assert sql.strip() == "CREATE TABLE IF NOT EXISTS tenant.t (\n    id INTEGER\n);"
+
+
+class TestTheDownOfAnAddedConstraintDropsIt:
+    """#335: the down named the constraint in a warning; it now drops it by that name."""
+
+    NAMED = (
+        "CREATE TABLE a.t (id INT, pid INT"
+        ", CONSTRAINT fk_t_parent FOREIGN KEY (pid) REFERENCES b.parent(id)"
+        ", CONSTRAINT ck_t_id CHECK (id > 0), CONSTRAINT uq_t_id UNIQUE (id));"
+    )
+    UNNAMED = "CREATE TABLE a.t (id INT CHECK (id > 0) UNIQUE, pid INT REFERENCES b.parent(id));"
+
+    def _downs(self, new: str) -> dict[type, str | None]:
+        changes = SchemaDiffer().compare(
+            PARENT + "CREATE TABLE a.t (id INT, pid INT);", PARENT + new
+        )
+        return {type(c): DifferSQLGenerator().generate_down(c) for c in changes.changes}
+
+    @pytest.mark.parametrize(
+        ("kind", "name"),
+        [
+            (ForeignKeyAdded, "fk_t_parent"),
+            (CheckConstraintAdded, "ck_t_id"),
+            (UniqueConstraintAdded, "uq_t_id"),
+        ],
+    )
+    def test_a_named_one_is_dropped_by_its_name(self, kind: type, name: str) -> None:
+        assert self._downs(self.NAMED)[kind] == (
+            f"ALTER TABLE a.t DROP CONSTRAINT IF EXISTS {name};\n"
+        )
+
+    @pytest.mark.parametrize("kind", [ForeignKeyAdded, CheckConstraintAdded, UniqueConstraintAdded])
+    def test_an_unnamed_one_derives_no_rollback(self, kind: type) -> None:
+        """PostgreSQL chooses the name at apply time; confiture never guesses it."""
+        assert self._downs(self.UNNAMED)[kind] is None

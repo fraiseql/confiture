@@ -2,6 +2,18 @@
 -- Version: <version>
 
 -- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS ren;
+
+-- confiture:tier additive
+CREATE TYPE mood AS ENUM ('sad', 'ok');
+
+-- confiture:tier additive
+CREATE TYPE retired_status AS ENUM ('a', 'b');
+
+-- confiture:tier additive
+CREATE SEQUENCE IF NOT EXISTS retired_seq;
+
+-- confiture:tier additive
 CREATE TABLE IF NOT EXISTS legacy (
     id INTEGER NOT NULL,
     PRIMARY KEY (id)
@@ -20,7 +32,7 @@ CREATE TABLE IF NOT EXISTS people (
     PRIMARY KEY (id)
 );
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS things (
     id INTEGER NOT NULL,
     legacy_flag BOOLEAN,
@@ -35,23 +47,13 @@ CREATE TABLE IF NOT EXISTS things (
     CONSTRAINT things_old_uq UNIQUE (code),
     CONSTRAINT things_old_ck CHECK (qty > 0)
 );
+CREATE INDEX IF NOT EXISTS things_old_ix ON things (code);
 
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS ren.tb_orders_archive (
     id INTEGER NOT NULL,
     PRIMARY KEY (id)
 );
-
--- confiture:tier additive
-CREATE TYPE mood AS ENUM ('sad', 'ok');
-
--- confiture:tier additive
-CREATE TYPE retired_status AS ENUM ('a', 'b');
-
--- confiture:tier additive
-CREATE SEQUENCE IF NOT EXISTS retired_seq;
-
--- WARNING: no SQL derived for: ADD SCHEMA ren. Edit this file before deploying.
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_retired AS SELECT 1 AS one;

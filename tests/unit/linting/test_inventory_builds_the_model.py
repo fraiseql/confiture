@@ -7,6 +7,8 @@ model never read: two indexes that differ only in ``USING`` were one index to it
 
 from __future__ import annotations
 
+import pytest
+
 from confiture.core.linting.inventory import build_model
 from confiture.core.schema_model import EnumType, Index, Sequence, ref_for
 
@@ -68,3 +70,23 @@ def test_a_dropped_index_leaves_its_table() -> None:
 def test_an_unqualified_relation_and_its_public_spelling_are_one() -> None:
     model = build_model("CREATE TABLE t (n INT);")
     assert ref_for("table", "public", "t") in model.tables
+
+
+@pytest.mark.parametrize(
+    ("ddl", "start"),
+    [
+        ("CREATE SEQUENCE s;", 1),
+        ("CREATE SEQUENCE s MINVALUE 10;", 10),
+        ("CREATE SEQUENCE s INCREMENT -1;", -1),
+        ("CREATE SEQUENCE s INCREMENT -2 MAXVALUE 0;", 0),
+        ("CREATE SEQUENCE s INCREMENT -2 MAXVALUE 0 START 5;", 5),
+    ],
+)
+def test_an_unwritten_start_is_where_postgresql_starts(ddl: str, start: int) -> None:
+    """At the end the sequence runs from: its MINVALUE ascending, its MAXVALUE descending.
+
+    The reader said 1 for every sequence, so a generated migration created a
+    descending one whose start lay beyond its MAXVALUE, and PostgreSQL refused it.
+    """
+    model = build_model(ddl)
+    assert model.sequences[ref_for("sequence", None, "s")].start == start

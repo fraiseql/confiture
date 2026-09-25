@@ -191,7 +191,7 @@ class TestEveryDropHasTheDownItCanDerive:
         change = next(
             c for c in SchemaDiffer().compare(self.OLD, self.NEW).changes if isinstance(c, kind)
         )
-        sql = DifferSQLGenerator(force_destructive=True).generate_down(change)
+        sql = DifferSQLGenerator().generate_down(change)
         pglast.parse_sql("\n".join(line.split("--")[0] for line in sql.splitlines()))
         return sql
 

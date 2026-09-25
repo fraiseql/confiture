@@ -990,16 +990,26 @@ def _model_table(obj: SchemaObject) -> Table:
 
 
 def _model_sequence(obj: SchemaObject) -> SequenceModel:
-    """Start and increment default to 1, as PostgreSQL defaults an ascending sequence."""
+    """Increment defaults to 1, and start to the end the sequence runs from, as PostgreSQL's do.
+
+    Ascending, that is its MINVALUE (1 unless written); descending, its MAXVALUE
+    (-1 unless written).
+    """
     options = obj.sequence_options
     start, increment = options.get("start"), options.get("increment")
+    minimum, maximum = options.get("minvalue"), options.get("maxvalue")
+    increment = 1 if increment is None else increment
+    if start is None:
+        ascending = increment > 0
+        end = minimum if ascending else maximum
+        start = end if end is not None else (1 if ascending else -1)
     return SequenceModel(
         name=obj.folded_name,
         schema=obj.folded_schema,
-        start=1 if start is None else start,
-        increment=1 if increment is None else increment,
-        min_value=options.get("minvalue"),
-        max_value=options.get("maxvalue"),
+        start=start,
+        increment=increment,
+        min_value=minimum,
+        max_value=maximum,
     )
 
 

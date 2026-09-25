@@ -610,7 +610,7 @@
         "table": "btree_gist",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE EXTENSION btree_gist",
+        "new_value": "CREATE EXTENSION IF NOT EXISTS btree_gist",
         "details": {
           "kind": "extension",
           "name": "btree_gist",
@@ -622,7 +622,7 @@
         "table": "pg_trgm",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE EXTENSION pg_trgm",
+        "new_value": "CREATE EXTENSION IF NOT EXISTS pg_trgm",
         "details": {
           "kind": "extension",
           "name": "pg_trgm",
@@ -634,7 +634,7 @@
         "table": "unaccent",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE EXTENSION unaccent",
+        "new_value": "CREATE EXTENSION IF NOT EXISTS unaccent",
         "details": {
           "kind": "extension",
           "name": "unaccent",
@@ -646,7 +646,7 @@
         "table": "uuid-ossp",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE EXTENSION \"uuid-ossp\"",
+        "new_value": "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"",
         "details": {
           "kind": "extension",
           "name": "uuid-ossp",
@@ -670,7 +670,7 @@
         "table": "tb_comment.trigger_tb_comment_updated_at",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE TRIGGER trigger_tb_comment_updated_at BEFORE UPDATE ON tb_comment FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "new_value": "CREATE OR REPLACE TRIGGER trigger_tb_comment_updated_at BEFORE UPDATE ON tb_comment FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
         "details": {
           "kind": "trigger",
           "name": "tb_comment.trigger_tb_comment_updated_at",
@@ -682,7 +682,7 @@
         "table": "tb_post.trigger_tb_post_updated_at",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE TRIGGER trigger_tb_post_updated_at BEFORE UPDATE ON tb_post FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "new_value": "CREATE OR REPLACE TRIGGER trigger_tb_post_updated_at BEFORE UPDATE ON tb_post FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
         "details": {
           "kind": "trigger",
           "name": "tb_post.trigger_tb_post_updated_at",
@@ -694,7 +694,7 @@
         "table": "tb_user.trigger_tb_user_updated_at",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE TRIGGER trigger_tb_user_updated_at BEFORE UPDATE ON tb_user FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "new_value": "CREATE OR REPLACE TRIGGER trigger_tb_user_updated_at BEFORE UPDATE ON tb_user FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
         "details": {
           "kind": "trigger",
           "name": "tb_user.trigger_tb_user_updated_at",

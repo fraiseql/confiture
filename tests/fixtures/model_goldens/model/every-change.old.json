@@ -326,6 +326,7 @@
           "columns": [
             "code"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "things_old_ix",
           "table": "things",

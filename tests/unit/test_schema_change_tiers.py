@@ -8,8 +8,8 @@ statement's ``-- confiture:tier`` directive) gives the statement the renderer wr
 for it — over every kind, and over each kind compared by definition that a
 migration is derived for.
 
-Two disagreements are declared — a type change's source, and an addition written
-``CREATE OR REPLACE`` — and each entry is asserted to **still disagree**: the day the renderer or the classifier closes one, its entry
+Three disagreements are declared — a type change's source, an addition written
+``CREATE OR REPLACE``, and an addition guarded in a ``DO`` block — and each entry is asserted to **still disagree**: the day the renderer or the classifier closes one, its entry
 fails and goes. A change the renderer writes no statement for has nothing to
 agree with and is not compared.
 """
@@ -41,6 +41,12 @@ DISAGREEMENTS: dict[str, str] = {
     ),
     "ObjectAdded[function]": "as a view: CREATE OR REPLACE, and an addition",
     "ObjectAdded[procedure]": "as a view: CREATE OR REPLACE, and an addition",
+    "ObjectAdded[domain]": (
+        "PostgreSQL has no IF NOT EXISTS for a domain, so the CREATE is guarded in a DO "
+        "block on duplicate_object (#335), and the change set does not read a DO body"
+    ),
+    "ObjectAdded[type]": "as a domain: a composite or range type's CREATE is guarded in DO",
+    "ObjectAdded[policy]": "as a domain: a policy's CREATE is guarded in DO",
 }
 
 _TABLE = "CREATE TABLE t (a int);"
@@ -65,6 +71,16 @@ _DEFINITIONS: dict[str, tuple[str, str]] = {
     ),
     "domain": ("CREATE DOMAIN d AS int;", "CREATE DOMAIN d AS int CHECK (VALUE > 0);"),
     "type": ("CREATE TYPE ct AS (a int);", "CREATE TYPE ct AS (a int, b int);"),
+    "trigger": (
+        "CREATE TRIGGER tr AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f();",
+        "CREATE TRIGGER tr AFTER UPDATE ON t FOR EACH ROW EXECUTE FUNCTION f();",
+    ),
+    "extension": ("CREATE EXTENSION pgcrypto;", "CREATE EXTENSION pgcrypto SCHEMA app;"),
+    "schema": ("CREATE SCHEMA app;", "CREATE SCHEMA app AUTHORIZATION someone;"),
+    "policy": (
+        "CREATE POLICY p ON t USING (true);",
+        "CREATE POLICY p ON t USING (a > 0);",
+    ),
 }
 
 
@@ -94,7 +110,7 @@ CHANGES = _changes()
 
 def _statement_tier(change: SchemaChange) -> tuple[bool, RiskTier | None]:
     """Whether the renderer writes a statement for *change*, and the change set's tier for it."""
-    sql = DifferSQLGenerator(force_destructive=True).generate_up(change)
+    sql = DifferSQLGenerator().generate_up(change)
     entries = classify_statements(sql) if sql else []
     return bool(entries), worst_tier(entry.tier for entry in entries)
 

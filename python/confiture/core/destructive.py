@@ -100,7 +100,13 @@ def no_rollback(change: SchemaChange) -> str:
     """The reason written when no down statement can be derived for ``change``."""
     wire = change.to_wire()
     target = ".".join(part for part in (wire.table, wire.column) if part)
-    return f"no rollback derived for {wire.type} {target}".rstrip()
+    reason = f"no rollback derived for {wire.type} {target}".rstrip()
+    if (
+        isinstance(change, ForeignKeyAdded | CheckConstraintAdded | UniqueConstraintAdded)
+        and not change.constraint.name
+    ):
+        reason += ": the constraint is unnamed, and PostgreSQL chooses its name when it is added"
+    return reason
 
 
 def irreversible_reason(change: SchemaChange, *, has_down: bool) -> str | None:
@@ -119,11 +125,12 @@ def irreversible_reason(change: SchemaChange, *, has_down: bool) -> str | None:
 def data_loss_reason(change: SchemaChange) -> str | None:
     """``data`` for a change whose rows no down file can bring back; ``None`` otherwise.
 
-    A dropped table or column is recreated by its down file, never its rows. Every
+    A dropped table or column is recreated by its down file, never its rows; a
+    dropped sequence from its options, never the position it had reached. Every
     other kind says so here, one arm per group, so a new kind is a decision.
     """
     match change:
-        case TableDropped() | ColumnDropped():
+        case TableDropped() | ColumnDropped() | SequenceDropped():
             return "data"
         case TableAdded() | TableRenamed():
             return None
@@ -146,13 +153,7 @@ def data_loss_reason(change: SchemaChange) -> str | None:
             | UniqueConstraintDropped()
         ):
             return None
-        case (
-            EnumTypeAdded()
-            | EnumTypeDropped()
-            | EnumValuesChanged()
-            | SequenceAdded()
-            | SequenceDropped()
-        ):
+        case EnumTypeAdded() | EnumTypeDropped() | EnumValuesChanged() | SequenceAdded():
             return None
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
             return None

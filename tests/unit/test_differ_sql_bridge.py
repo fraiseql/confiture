@@ -27,7 +27,7 @@ class TestDifferSQLBridgeMethods:
         return DifferSQLGenerator()
 
     def _gen_force(self) -> DifferSQLGenerator:
-        return DifferSQLGenerator(force_destructive=True)
+        return DifferSQLGenerator()
 
     # --- ADD_FOREIGN_KEY ---
 

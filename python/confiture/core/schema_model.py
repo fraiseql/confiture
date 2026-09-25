@@ -181,7 +181,10 @@ class Index:
     ``btree`` when the statement writes no ``USING``, and so does the catalog.
     ``backs_constraint`` is set on an index that exists only to back a PRIMARY KEY,
     UNIQUE or EXCLUDE constraint — PostgreSQL's, never declared by DDL, so it is
-    never *extra* to it; only the catalog knows it.
+    never *extra* to it; only the catalog knows it. ``key_options`` runs alongside
+    ``columns``: what each key's element writes after the key — its collation,
+    operator class and ordering (``gin_trgm_ops``, ``DESC NULLS LAST``), ``""``
+    for a key that writes none, and ``()`` when no key writes any.
     """
 
     name: str | None
@@ -191,6 +194,7 @@ class Index:
     where: str | None = None
     method: str | None = None
     backs_constraint: bool = False
+    key_options: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -492,7 +496,14 @@ def _constraint_from(data: dict[str, Any]) -> Constraint:
 
 
 def _index_from(data: dict[str, Any]) -> Index:
-    return Index(**{**data, "columns": tuple(data["columns"])})
+    """An index from its wire; one written before ``key_options`` existed reads as none."""
+    return Index(
+        **{
+            **data,
+            "columns": tuple(data["columns"]),
+            "key_options": tuple(data.get("key_options", ())),
+        }
+    )
 
 
 def _table_from(data: dict[str, Any]) -> Table:

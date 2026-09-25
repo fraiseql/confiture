@@ -215,7 +215,8 @@
         "unique",
         "where",
         "method",
-        "backs_constraint"
+        "backs_constraint",
+        "key_options"
       ],
       "properties": {
         "name": {
@@ -250,6 +251,13 @@
         },
         "backs_constraint": {
           "type": "boolean"
+        },
+        "key_options": {
+          "type": "array",
+          "description": "Alongside `columns`: what each key's element writes after the key (collation, operator class, ordering), `\"\"` for a key that writes none; empty when no key writes any.",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },

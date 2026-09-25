@@ -178,6 +178,7 @@
           "columns": [
             "pk_confiture"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_tb_confiture_pk_confiture",
           "table": "tb_confiture",
@@ -189,6 +190,7 @@
           "columns": [
             "slug"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_tb_confiture_slug",
           "table": "tb_confiture",
@@ -200,6 +202,7 @@
           "columns": [
             "version"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_tb_confiture_version",
           "table": "tb_confiture",
@@ -210,6 +213,9 @@
           "backs_constraint": false,
           "columns": [
             "applied_at"
+          ],
+          "key_options": [
+            "DESC"
           ],
           "method": "btree",
           "name": "idx_tb_confiture_applied_at",

@@ -412,6 +412,7 @@ confiture/
 │   │   ├── baseline_detector.py  # Baseline detector for auto-detecting migration level from a live databa…
 │   │   ├── bootstrap.py          # ``confiture bootstrap`` planner and executor (issue #137 part 1)
 │   │   ├── builder.py            # Schema builder - builds PostgreSQL schemas from DDL files
+│   │   ├── change_order.py       # The order a generated migration applies its changes in: one PostgreSQL…
 │   │   ├── checksum.py           # Migration file checksum computation and verification
 │   │   ├── connection.py         # Database connection management for CLI commands
 │   │   ├── cor_extractor.py      # Extract CREATE OR REPLACE targets from pending migrations

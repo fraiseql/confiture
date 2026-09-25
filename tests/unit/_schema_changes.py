@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from confiture.core.ddl_objects import DDLObject
-from confiture.core.schema_change import ObjectAdded, ObjectDropped, ObjectReplaced
+from confiture.core.schema_change import ObjectReplaced
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import Column, ObjectRef
 from tests.unit._schema_models import column
@@ -54,16 +54,6 @@ def ddl_object(kind: str, qualified: str, create_sql: str, **ref_facts: Any) -> 
     return DDLObject(
         ref=ref(kind, qualified, **ref_facts), definition=create_sql, create_sql=create_sql
     )
-
-
-def added(kind: str, qualified: str, create_sql: str, **ref_facts: Any) -> ObjectAdded:
-    obj = ddl_object(kind, qualified, create_sql, **ref_facts)
-    return ObjectAdded(obj.ref, obj)
-
-
-def dropped(kind: str, qualified: str, create_sql: str, **ref_facts: Any) -> ObjectDropped:
-    obj = ddl_object(kind, qualified, create_sql, **ref_facts)
-    return ObjectDropped(obj.ref, obj)
 
 
 def replaced(

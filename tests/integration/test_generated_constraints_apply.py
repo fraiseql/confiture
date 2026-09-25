@@ -48,7 +48,7 @@ NEW = (
 
 
 def _generated_up() -> str:
-    generator = DifferSQLGenerator(force_destructive=True)
+    generator = DifferSQLGenerator()
     return "\n".join(
         generator.generate_up(change) for change in SchemaDiffer().compare(OLD, NEW).changes
     )
@@ -130,7 +130,7 @@ def test_a_generated_column_keeps_its_length_and_precision(fresh_database: str) 
     """``VARCHAR(50)`` generated ``VARCHAR`` — an unbounded column where the
     schema said fifty characters. Asked back from ``format_type``, which is
     PostgreSQL's own answer rather than confiture's."""
-    generator = DifferSQLGenerator(force_destructive=True)
+    generator = DifferSQLGenerator()
     sql = "\n".join(
         generator.generate_up(change) for change in SchemaDiffer().compare(BASE, TYPED).changes
     )

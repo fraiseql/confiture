@@ -13,13 +13,14 @@ from typing import Any
 
 from confiture.core import destructive as _destructive
 from confiture.core._migrator.discovery import parse_migration_filename
+from confiture.core.change_order import apply_order
 from confiture.core.change_set import classify_statements
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.schema_change import SchemaChange, SchemaDiff
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX
 from confiture.core.sql_utils import strip_transaction_wrappers
-from confiture.exceptions import DifferError, ExternalGeneratorError, UnsafeOperationError
+from confiture.exceptions import DifferError, ExternalGeneratorError
 
 
 def _execute_call(sql: str) -> str:
@@ -73,8 +74,7 @@ class MigrationGenerator:
             migrations_dir: Directory where migration files will be created
         """
         self.migrations_dir = migrations_dir
-        # Non-destructive generator — destructive ops emit warning comments instead of raising
-        self._sql_gen = DifferSQLGenerator(force_destructive=False)
+        self._sql_gen = DifferSQLGenerator()
 
     def generate(
         self,
@@ -156,10 +156,11 @@ class MigrationGenerator:
         version = version or self._get_next_version()
         header = f"-- Migration: {name}\n-- Version: {version}\n\n"
         up_path = self.migrations_dir / f"{version}_{name}.up.sql"
-        downs = {id(change): self._change_to_down_sql(change) for change in diff.changes}
-        up_path.write_text(header + gate + self._up_statements(diff.changes, downs))
+        changes = apply_order(diff.changes)
+        downs = {id(change): self._change_to_down_sql(change) for change in changes}
+        up_path.write_text(header + gate + self._up_statements(changes, downs))
         down_path = up_path.with_name(up_path.name.replace(".up.sql", ".down.sql"))
-        down_path.write_text(header + self._down_statements(diff.changes[::-1], downs))
+        down_path.write_text(header + self._down_statements(changes[::-1], downs))
         return up_path
 
     def _gate(self, diff: SchemaDiff, policy: str) -> bool:
@@ -343,9 +344,9 @@ class MigrationGenerator:
         """
         class_name = self._to_class_name(name)
 
-        # Generate up and down statements
-        up_statements = self._generate_up_statements(diff.changes)
-        down_statements = self._generate_down_statements(diff.changes)
+        changes = apply_order(diff.changes)
+        up_statements = self._generate_up_statements(changes)
+        down_statements = self._generate_down_statements(changes)
 
         template = '''"""Migration: {name}
 
@@ -441,13 +442,10 @@ class {class_name}(Migration):
     def _change_to_up_sql(self, change: SchemaChange) -> str | None:
         """The statement *change* is, or ``None`` when none is derived.
 
-        A drop the renderer will not write unforced comes back as the warning that
-        says so, which is where a destructive change is left to the author.
+        A statement that loses data is written like any other; the destructive
+        gate (:mod:`confiture.core.destructive`) decides whether it ships.
         """
-        try:
-            sql = self._sql_gen.generate_up(change)
-        except UnsafeOperationError as exc:
-            return f"-- WARNING: {exc}"
+        sql = self._sql_gen.generate_up(change)
         return None if sql is None else sql.rstrip("\n")
 
     def run_external_generator(

@@ -252,7 +252,7 @@
         "table": "ren",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE SCHEMA ren",
+        "new_value": "CREATE SCHEMA IF NOT EXISTS ren",
         "details": {
           "kind": "schema",
           "name": "ren",

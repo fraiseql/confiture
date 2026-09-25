@@ -87,6 +87,8 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_FOREIGN_TABLE",
     ),
     "SetOperation": ("SETOP_NONE",),
+    "SortByDir": ("SORTBY_DEFAULT",),
+    "SortByNulls": ("SORTBY_NULLS_DEFAULT",),
     "VariableSetKind": (
         "VAR_SET_VALUE",
         "VAR_SET_CURRENT",

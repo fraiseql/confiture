@@ -11,10 +11,10 @@ migration.
 ``None`` from :meth:`DifferSQLGenerator.generate_up` is *no SQL derived*: the
 change is reported and the author writes its DDL. ``None`` from
 :meth:`~DifferSQLGenerator.generate_down` is *no rollback derived*, which the
-generator writes as an ``irreversible`` directive; a down this module can say more
-about — a dropped enum type it cannot recreate, an added constraint it does not yet
-drop — comes back as a ``-- WARNING:`` line instead. A statement ends with its
-semicolon and a newline.
+generator writes as an ``irreversible`` directive with its reason. A ``-- WARNING:``
+line is what this module writes where a statement would need what the change does
+not carry — an index or constraint with no name, a CHECK with no expression. A
+statement ends with its semicolon and a newline.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from typing import assert_never
 
 from confiture.core.ddl_clauses import column_body, column_element, column_type, named
 from confiture.core.ddl_clauses import constraint_body as _clause
-from confiture.core.ddl_objects import OBJECT_KEYWORD
+from confiture.core.ddl_objects import OBJECT_KEYWORD, DDLObject, drop_statement
 from confiture.core.schema_change import (
     CheckConstraintAdded,
     CheckConstraintDropped,
@@ -57,16 +57,33 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.core.schema_model import Constraint, Table
-from confiture.exceptions import UnsafeOperationError
+from confiture.core.schema_model import Column, Constraint, EnumType, Index, Sequence, Table
+from confiture.core.type_lattice import has_assignment_cast
 
 #: The kinds compared by definition that a migration is derived for, created and
-#: dropped — the ones ``migrate diff --generate`` writes (#288). The rest —
-#: a trigger, an extension, a schema, a policy, … — are reported, and the migration
-#: says ``-- WARNING: no SQL derived`` for the author to write.
+#: dropped — the ones ``migrate diff --generate`` writes (#288, #335). The rest —
+#: a rule, an event trigger, statistics, a server, … — are reported, and the
+#: migration says ``-- WARNING: no SQL derived`` for the author to write.
 DERIVED_KINDS: frozenset[str] = frozenset(
-    {"view", "matview", "function", "procedure", "aggregate", "domain", "type"}
+    {
+        "view",
+        "matview",
+        "function",
+        "procedure",
+        "aggregate",
+        "domain",
+        "type",
+        "trigger",
+        "extension",
+        "schema",
+        "policy",
+    }
 )
+
+#: The derived kinds PostgreSQL gives no ``IF NOT EXISTS`` or ``OR REPLACE``: the
+#: creating statement is guarded on ``duplicate_object`` so that the migration
+#: re-applies, as every other creation it writes does.
+_GUARDED_KINDS: frozenset[str] = frozenset({"domain", "type", "policy"})
 
 #: The kinds whose redefinition is a statement confiture writes. Every other
 #: ``REPLACE`` is in ``ddl_objects.REPLACE_IS_AUTHORS_WORK``, with its reason.
@@ -92,16 +109,30 @@ def _incomplete(change: SchemaChange, what: str) -> str:
     return f"-- WARNING: Cannot generate {wire.type} on {wire.table} without {what}\n"
 
 
-def _no_rollback(change: SchemaChange) -> str:
-    return f"-- WARNING: No automatic rollback for {change.to_wire().type}\n"
-
-
 def _statement(sql: str | None, change: SchemaChange) -> str:
     """A definition the differ captured, terminated; a warning when it has none."""
     if not sql:
         wire = change.to_wire()
         return f"-- WARNING: no definition captured for {wire.type} {wire.table}\n"
     return f"{sql.rstrip().rstrip(';')};\n"
+
+
+def _creating(obj: DDLObject, change: SchemaChange) -> str:
+    """The statement that creates *obj*, re-appliable: guarded where PostgreSQL has no clause."""
+    statement = _statement(obj.create_sql, change)
+    if obj.ref.kind not in _GUARDED_KINDS or not obj.create_sql:
+        return statement
+    return (
+        f"DO $confiture$\nBEGIN\n    {statement}"
+        "EXCEPTION WHEN duplicate_object THEN NULL;\nEND\n$confiture$;\n"
+    )
+
+
+def _dropping(obj: DDLObject) -> str:
+    """``DROP … IF EXISTS`` for *obj*: on its table where it is named per table."""
+    if (statement := drop_statement(obj)) is not None:
+        return f"{statement};\n"
+    return _drop(OBJECT_KEYWORD.get(obj.ref.kind, ""), obj.ref.qualified)
 
 
 def _drop(keyword: str, name: str) -> str:
@@ -134,7 +165,7 @@ def _table_constraints(table: Table) -> list[Constraint]:
 
 
 def _create_table(table: Table) -> str:
-    """The table the schema declared: its columns **and** its constraints.
+    """The table the schema declared: its columns, its constraints **and** its indexes.
 
     A constraint the schema left unnamed is written unnamed, exactly as the
     author wrote it; PostgreSQL generates the name either way.
@@ -147,10 +178,11 @@ def _create_table(table: Table) -> str:
         for c, body in bodies
         if body is None
     )
-    if elements:
-        joined = ",\n    ".join(elements)
-        return f"{warnings}CREATE TABLE IF NOT EXISTS {table.qualified} (\n    {joined}\n);\n"
-    return f"{warnings}CREATE TABLE IF NOT EXISTS {table.qualified} ();\n"
+    joined = ",\n    ".join(elements)
+    body = f"(\n    {joined}\n)" if elements else "()"
+    return (
+        f"{warnings}CREATE TABLE IF NOT EXISTS {table.qualified} {body};\n{_table_indexes(table)}"
+    )
 
 
 def _table_up(change: TableChange) -> str | None:
@@ -188,6 +220,26 @@ def _default(table: str, column: str, default: str | None) -> str:
     return f"ALTER TABLE {table} ALTER COLUMN {column} {clause};\n"
 
 
+def _retype(table: str, old: Column, new: Column) -> str:
+    """``ALTER COLUMN … TYPE``, with ``USING`` where PostgreSQL has no assignment cast.
+
+    Where it has one — within a family, or to a string type — the statement needs
+    none, and must not have one: an explicit ``::varchar(50)`` truncates a value
+    the assignment cast would refuse. Where it has none (``text`` → ``integer``),
+    the statement fails without ``USING``, so the value is cast explicitly and a
+    review line says the cast can fail on data.
+    """
+    before, after = column_type(old), column_type(new)
+    statement = f"ALTER TABLE {table} ALTER COLUMN {old.folded} TYPE {after}"
+    if has_assignment_cast(before, after):
+        return f"{statement};\n"
+    return (
+        f"-- review: {before} to {after} has no assignment cast; each value is cast"
+        " explicitly, and one that does not cast fails the migration\n"
+        f"{statement} USING {old.folded}::{after};\n"
+    )
+
+
 def _column_up(change: ColumnChange) -> str:
     match change:
         case ColumnAdded(table, column):
@@ -197,7 +249,7 @@ def _column_up(change: ColumnChange) -> str:
         case ColumnRenamed(table, old, new):
             return f"ALTER TABLE {table} RENAME COLUMN {old} TO {new};\n"
         case ColumnTypeChanged(table, old, new):
-            return f"ALTER TABLE {table} ALTER COLUMN {old.folded} TYPE {column_type(new)};\n"
+            return _retype(table, old, new)
         case ColumnNullabilityChanged(table, column, nullable):
             return _nullability(table, column, nullable=nullable)
         case ColumnDefaultChanged(table, column, _, new):
@@ -215,8 +267,8 @@ def _column_down(change: ColumnChange) -> str:
             return f"ALTER TABLE {table} ADD COLUMN {column.folded} {column_body(column)};\n"
         case ColumnRenamed(table, old, new):
             return f"ALTER TABLE {table} RENAME COLUMN {new} TO {old};\n"
-        case ColumnTypeChanged(table, old, _):
-            return f"ALTER TABLE {table} ALTER COLUMN {old.folded} TYPE {column_type(old)};\n"
+        case ColumnTypeChanged(table, old, new):
+            return _retype(table, new, old)
         case ColumnNullabilityChanged(table, column, nullable):
             return _nullability(table, column, nullable=not nullable)
         case ColumnDefaultChanged(table, column, old, _):
@@ -225,15 +277,55 @@ def _column_down(change: ColumnChange) -> str:
             assert_never(change)
 
 
-def _create_index(change: IndexAdded | IndexDropped) -> str:
-    index = change.index
-    if not index.name:
-        return _unnamed(change, "index")
+def _index_element(key: str, options: str) -> str:
+    """One key of a ``CREATE INDEX``: a column bare, an expression in its own parentheses."""
+    element = key if key.isidentifier() else f"({key})"
+    return f"{element} {options}" if options else element
+
+
+def _index_keys(index: Index) -> str:
+    options = index.key_options or ("",) * len(index.columns)
+    return ", ".join(_index_element(k, o) for k, o in zip(index.columns, options, strict=True))
+
+
+def _index_statement(index: Index, table: str, *, concurrently: bool) -> str:
+    """The index as declared: its access method, each key with its options, its predicate."""
     unique = "UNIQUE " if index.unique else ""
+    how = "CONCURRENTLY " if concurrently else ""
+    method = f" USING {index.method}" if index.method not in (None, "btree") else ""
+    where = f" WHERE {index.where}" if index.where else ""
     return (
-        f"CREATE {unique}INDEX CONCURRENTLY IF NOT EXISTS {index.name}"
-        f" ON {change.table} ({', '.join(index.columns)});\n"
+        f"CREATE {unique}INDEX {how}IF NOT EXISTS {index.name}"
+        f" ON {table}{method} ({_index_keys(index)}){where};\n"
     )
+
+
+def _create_index(change: IndexAdded | IndexDropped) -> str:
+    """``CONCURRENTLY``: the table exists and is in use while the index builds."""
+    if not change.index.name:
+        return _unnamed(change, "index")
+    return _index_statement(change.index, change.table, concurrently=True)
+
+
+def _table_indexes(table: Table) -> str:
+    """A table's own indexes, created with it: not ``CONCURRENTLY``, since it is empty.
+
+    One PostgreSQL creates to back a constraint is not written: the constraint
+    creates it. One the schema left unnamed cannot be created ``IF NOT EXISTS``,
+    and a migration that re-applies would add it again, so it is named as missing.
+    """
+    written = []
+    for index in table.indexes:
+        if index.backs_constraint:
+            continue
+        if index.name:
+            written.append(_index_statement(index, table.qualified, concurrently=False))
+        else:
+            written.append(
+                f"-- WARNING: Cannot generate the index on {table.qualified}"
+                f" ({_index_keys(index)}) without an index name\n"
+            )
+    return "".join(written)
 
 
 def _drop_index(change: IndexAdded | IndexDropped) -> str:
@@ -281,7 +373,12 @@ def _add_constraint(
 
 
 def _drop_constraint(
-    change: ForeignKeyDropped | CheckConstraintDropped | UniqueConstraintDropped,
+    change: ForeignKeyAdded
+    | ForeignKeyDropped
+    | CheckConstraintAdded
+    | CheckConstraintDropped
+    | UniqueConstraintAdded
+    | UniqueConstraintDropped,
 ) -> str:
     if not change.constraint.name:
         return _unnamed(change, "constraint")
@@ -306,8 +403,13 @@ def _table_object_up(change: TableObjectChange) -> str:
             assert_never(change)
 
 
-def _table_object_down(change: TableObjectChange) -> str:
-    """A drop is undone by the ``ADD`` the change already carries; an add, not yet."""
+def _table_object_down(change: TableObjectChange) -> str | None:
+    """A drop is undone by the ``ADD`` the change carries, an add by dropping what it named.
+
+    An added constraint the schema left unnamed has no rollback: PostgreSQL chooses
+    its name when it is added, and a name confiture guessed would drop nothing,
+    or something else.
+    """
     match change:
         case IndexAdded():
             return _drop_index(change)
@@ -320,7 +422,7 @@ def _table_object_down(change: TableObjectChange) -> str:
         case UniqueConstraintDropped():
             return _add_constraint(change, "a column list")
         case ForeignKeyAdded() | CheckConstraintAdded() | UniqueConstraintAdded():
-            return _no_rollback(change)
+            return _drop_constraint(change) if change.constraint.name else None
         case _:
             assert_never(change)
 
@@ -341,11 +443,39 @@ def _enum_values(change: EnumValuesChanged) -> str:
     return "".join(parts) if parts else f"-- No enum value changes for {name}\n"
 
 
+_BIGINT_MIN, _BIGINT_MAX = -(2**63), 2**63 - 1
+
+
+def _create_enum(enum: EnumType) -> str:
+    labels = ", ".join(_quoted(v) for v in enum.values)
+    return f"CREATE TYPE {enum.qualified} AS ENUM ({labels});\n"
+
+
+def _create_sequence(sequence: Sequence) -> str:
+    """``CREATE SEQUENCE IF NOT EXISTS`` with each option the model holds that is not the default.
+
+    PostgreSQL's defaults depend on the direction: an ascending sequence runs from
+    1 to the largest ``bigint``, a descending one from ``-1`` down to the smallest,
+    and either starts at the end it runs from. The live reader fills every option
+    in, so a default is recognised rather than written.
+    """
+    increment = 1 if sequence.increment is None else sequence.increment
+    low, high = (1, _BIGINT_MAX) if increment > 0 else (_BIGINT_MIN, -1)
+    minimum = low if sequence.min_value is None else sequence.min_value
+    maximum = high if sequence.max_value is None else sequence.max_value
+    start = minimum if increment > 0 else maximum
+    options = [
+        (f"INCREMENT BY {increment}", increment != 1),
+        (f"MINVALUE {minimum}", minimum != low),
+        (f"MAXVALUE {maximum}", maximum != high),
+        (f"START WITH {sequence.start}", sequence.start not in (None, start)),
+    ]
+    written = "".join(f" {option}" for option, differs in options if differs)
+    return f"CREATE SEQUENCE IF NOT EXISTS {sequence.qualified}{written};\n"
+
+
 class DifferSQLGenerator:
     """Generates the DDL for a schema change, up and down."""
-
-    def __init__(self, force_destructive: bool = False) -> None:
-        self._force = force_destructive
 
     def generate_up(self, change: SchemaChange) -> str | None:
         """The forward DDL for *change*, or ``None`` when none is derived."""
@@ -379,9 +509,9 @@ class DifferSQLGenerator:
                 | SequenceAdded()
                 | SequenceDropped()
             ):
-                return self._enum_or_sequence_up(change)
+                return _enum_or_sequence_up(change)
             case ObjectAdded() | ObjectDropped() | ObjectReplaced():
-                return self._definition_up(change)
+                return _definition_up(change)
             case _:
                 assert_never(change)
 
@@ -423,65 +553,55 @@ class DifferSQLGenerator:
             case _:
                 assert_never(change)
 
-    def _refuse(self, keyword: str, name: str) -> None:
-        """A drop is written only when the caller forced it; the generator says so otherwise."""
-        if not self._force:
-            raise UnsafeOperationError(
-                f"DROP {keyword} {name!r} is destructive. Re-run with --force to generate this DDL."
-            )
 
-    def _enum_or_sequence_up(self, change: EnumOrSequenceChange) -> str:
-        match change:
-            case EnumTypeAdded(enum):
-                labels = ", ".join(_quoted(v) for v in enum.values)
-                return f"CREATE TYPE {enum.qualified} AS ENUM ({labels});\n"
-            case EnumTypeDropped(enum):
-                self._refuse("TYPE", enum.qualified)
-                return _drop("TYPE", enum.qualified)
-            case EnumValuesChanged():
-                return _enum_values(change)
-            case SequenceAdded(sequence):
-                return f"CREATE SEQUENCE IF NOT EXISTS {sequence.qualified};\n"
-            case SequenceDropped(sequence):
-                self._refuse("SEQUENCE", sequence.qualified)
-                return _drop("SEQUENCE", sequence.qualified)
-            case _:
-                assert_never(change)
-
-    def _definition_up(self, change: DefinitionChange) -> str | None:
-        kind = change.ref.kind
-        keyword = OBJECT_KEYWORD.get(kind, "")
-        name = change.ref.qualified
-        match change:
-            case ObjectAdded(_, obj) if kind in DERIVED_KINDS:
-                return _statement(obj.create_sql, change)
-            case ObjectDropped() if kind in DERIVED_KINDS:
-                self._refuse(keyword, name)
-                return _drop(keyword, name)
-            case ObjectReplaced(_, _, new) if kind in _REPLACED_BY_DEFINITION:
-                return _statement(new.create_sql, change)
-            case ObjectReplaced(_, _, new) if kind in REPLACED_BY_DROP_AND_CREATE:
-                return _drop(keyword, name) + _statement(new.create_sql, change)
-            case ObjectAdded() | ObjectDropped() | ObjectReplaced():
-                return None
-            case _:
-                assert_never(change)
+def _enum_or_sequence_up(change: EnumOrSequenceChange) -> str:
+    match change:
+        case EnumTypeAdded(enum):
+            return _create_enum(enum)
+        case EnumTypeDropped(enum):
+            return _drop("TYPE", enum.qualified)
+        case EnumValuesChanged():
+            return _enum_values(change)
+        case SequenceAdded(sequence):
+            return _create_sequence(sequence)
+        case SequenceDropped(sequence):
+            return _drop("SEQUENCE", sequence.qualified)
+        case _:
+            assert_never(change)
 
 
-def _enum_or_sequence_down(change: EnumOrSequenceChange) -> str:
+def _definition_up(change: DefinitionChange) -> str | None:
+    kind = change.ref.kind
+    keyword = OBJECT_KEYWORD.get(kind, "")
+    name = change.ref.qualified
+    match change:
+        case ObjectAdded(_, obj) if kind in DERIVED_KINDS:
+            return _creating(obj, change)
+        case ObjectDropped(_, obj) if kind in DERIVED_KINDS:
+            return _dropping(obj)
+        case ObjectReplaced(_, _, new) if kind in _REPLACED_BY_DEFINITION:
+            return _statement(new.create_sql, change)
+        case ObjectReplaced(_, _, new) if kind in REPLACED_BY_DROP_AND_CREATE:
+            return _drop(keyword, name) + _statement(new.create_sql, change)
+        case ObjectAdded() | ObjectDropped() | ObjectReplaced():
+            return None
+        case _:
+            assert_never(change)
+
+
+def _enum_or_sequence_down(change: EnumOrSequenceChange) -> str | None:
+    """A drop comes back from what the change carries; an added label cannot be taken back."""
     match change:
         case EnumTypeAdded(enum):
             return _drop("TYPE", enum.qualified)
         case EnumTypeDropped(enum):
-            return f"-- WARNING: Cannot automatically recreate dropped enum type {enum.qualified}\n"
+            return _create_enum(enum)
         case EnumValuesChanged():
-            return _no_rollback(change)
+            return None
         case SequenceAdded(sequence):
             return _drop("SEQUENCE", sequence.qualified)
         case SequenceDropped(sequence):
-            return (
-                f"-- WARNING: Cannot automatically recreate dropped sequence {sequence.qualified}\n"
-            )
+            return _create_sequence(sequence)
         case _:
             assert_never(change)
 
@@ -492,10 +612,10 @@ def _definition_down(change: DefinitionChange) -> str | None:
     keyword = OBJECT_KEYWORD.get(kind, "")
     name = change.ref.qualified
     match change:
-        case ObjectAdded() if kind in DERIVED_KINDS:
-            return _drop(keyword, name)
+        case ObjectAdded(_, obj) if kind in DERIVED_KINDS:
+            return _dropping(obj)
         case ObjectDropped(_, obj) if kind in DERIVED_KINDS:
-            return _statement(obj.create_sql, change)
+            return _creating(obj, change)
         case ObjectReplaced(_, old, _) if kind in _REPLACED_BY_DEFINITION:
             return _statement(old.create_sql, change)
         case ObjectReplaced(_, old, _) if kind in REPLACED_BY_DROP_AND_CREATE:

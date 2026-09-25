@@ -14,6 +14,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **PostgreSQL 14 is the documented minimum** (was 12). A trigger `migrate diff
+  --generate` adds is written `CREATE OR REPLACE TRIGGER`, which PostgreSQL 14
+  introduced; CI already ran on 15 and 16 only. The README badge, the getting-started
+  and contributing pages and the examples README say 14+.
+
+### Fixed
+
+- **`migrate diff --generate` writes what each change carries, under one gate** (#335).
+  - A dropped view, materialized view, routine, domain, type, enum type or sequence
+    was refused with "Re-run with --force to generate this DDL", a flag `migrate
+    diff` does not have, while a dropped table or column went through
+    `migration.destructive`. Every drop is now written and weighed by that one gate:
+    `gated` (the default) marks the file `-- confiture:destructive`, `allow` leaves
+    it unmarked, `forbid` refuses with `DIFFER_401`. `DifferSQLGenerator` takes no
+    `force_destructive` argument any more. The `every-change` diff golden now holds
+    the three drops where it held the warning.
+  - The down of an added foreign key, CHECK or UNIQUE constraint was a `-- WARNING:
+    No automatic rollback` line. A named one is now dropped by its name (`ALTER TABLE
+    … DROP CONSTRAINT IF EXISTS <name>`). An unnamed one gets the generator's
+    `-- confiture:irreversible` directive, saying that PostgreSQL chooses the name.
+    The up statement is tiered `irreversible` accordingly.
+  - A dropped enum type's down recreates it with its labels, in order. A dropped
+    sequence's down recreates it with its options. Its up statement is declared
+    `-- confiture:irreversible data`, because the sequence comes back but its
+    position does not. An added enum label's down, which PostgreSQL cannot write,
+    is the irreversible directive instead of a warning.
+  - An added sequence is created with its options: `INCREMENT BY`, `MINVALUE`,
+    `MAXVALUE` and `START WITH`, each written only when it is not PostgreSQL's
+    default. The DDL reader also took an unwritten start to be 1 for every sequence.
+    A descending sequence starts at its MAXVALUE and an ascending one at its
+    MINVALUE, and the model now says so.
+  - `ALTER COLUMN … TYPE` writes `USING <column>::<type>` where PostgreSQL has no
+    assignment cast, with a `-- review:` line saying that a value that does not cast
+    fails the migration. `text` → `integer` failed at apply without it. Where an
+    assignment cast exists (within the numeric, string or date/time family, or to
+    any string type) no `USING` is written. A narrowing such as `varchar(100)` →
+    `varchar(50)` then refuses a value that is too long, where an explicit cast
+    would silently truncate it. `type_lattice.has_assignment_cast` answers which
+    case applies.
+  - A trigger, extension, schema or policy derived no SQL: the migration said
+    `-- WARNING: no SQL derived` for each. They are now written. An extension and a
+    schema get `IF NOT EXISTS` (except a schema with its own elements, which
+    PostgreSQL refuses beside it). A trigger gets `CREATE OR REPLACE TRIGGER`, which
+    needs PostgreSQL 14 or later. A policy, domain, composite type or range type,
+    which PostgreSQL gives no existence clause, is created inside `DO … EXCEPTION
+    WHEN duplicate_object THEN NULL`, so the migration re-applies like every other
+    creation it writes. Such a statement carries no tier directive, because the
+    change set does not read a `DO` body. A trigger or policy is dropped `ON` its
+    table. `migrate diff --format json`'s `new_value` / `old_value` for an
+    extension, schema or trigger now carries that clause, as a view's already did.
+    Redefining one of these kinds is still left to the author.
+  - `CREATE INDEX` writes the access method (`USING gin`), the partial predicate
+    (`WHERE …`), each key's collation, operator class and ordering (`s
+    gin_trgm_ops`, `a DESC NULLS LAST`), and an expression key in its own
+    parentheses. It wrote `ON t (s)`, which built a btree where the schema declared
+    a trigram `gin` index, and `ON t (a + b)`, which does not parse. The schema
+    model's `Index` gains `key_options`, alongside `columns`: what each key writes
+    after itself, read by the one index reader from DDL and from
+    `pg_get_indexdef` alike. It is in `schema-model.schema.json`, and a wire
+    written before it reads as no options.
+  - An added table's indexes were never written. The change carried them, and
+    `migrate diff --generate` from an empty database produced example 02 with none
+    of its 37 indexes. They now follow the `CREATE TABLE`, and so does a dropped
+    table's down. They are written `IF NOT EXISTS` but not `CONCURRENTLY`: the table
+    is new and empty, and the migration stays transactional. An unnamed one is
+    reported with a warning line, because it cannot be created `IF NOT EXISTS`.
+  - A generated migration runs its changes in an order PostgreSQL accepts
+    (`core/change_order.py`). It used to run them in the differ's reporting order:
+    tables first, then enum types and sequences, then everything else by kind, and
+    tables by name. So a table was created before its schema, the extension its
+    `DEFAULT` calls, its enum type and the tables its foreign keys reference, and
+    a table was dropped before the view that reads it. Now schemas and extensions
+    come first, then types and sequences, then tables ordered by their foreign
+    keys, then edits, routines, views, and triggers and policies. Drops run the
+    other way round. Tables whose foreign keys form a cycle are created without the
+    keys that close it, and those are added once every table exists. The down file
+    undoes the up in reverse. Every example tree's generated migration now applies
+    to an empty database, and so do its down and a second up; before, only three
+    of thirteen did. This resolves the 1.15.0 "Known, not fixed" entries about
+    `migrate diff --generate`.
+
 ## [1.20.0] - 2026-09-25
 
 **The build lint knows the order a build runs in, and says so by default.** A

@@ -1140,16 +1140,49 @@ def read_index(stmt: Any, *, table: str) -> Index:
     ``accessMethod`` is always set: the grammar fills in ``btree`` when the
     statement writes no ``USING``, which is also what the catalog reports.
     """
+    elements = stmt.indexParams or ()
+    options = tuple(_key_options(elem) for elem in elements)
     return Index(
         name=stmt.idxname,
         table=table,
-        columns=tuple(
-            elem.name if elem.name else RawStream()(elem.expr) for elem in stmt.indexParams or ()
-        ),
+        columns=tuple(elem.name if elem.name else RawStream()(elem.expr) for elem in elements),
         unique=bool(stmt.unique),
         where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
         method=stmt.accessMethod,
+        key_options=options if any(options) else (),
     )
+
+
+#: What an ``IndexElem`` writes after its key, each cleared to its default to
+#: print the key alone.
+_KEY_OPTION_DEFAULTS = {
+    "collation": None,
+    "opclass": None,
+    "opclassopts": None,
+    "ordering": _pg_member("SortByDir", "SORTBY_DEFAULT"),
+    "nulls_ordering": _pg_member("SortByNulls", "SORTBY_NULLS_DEFAULT"),
+}
+
+
+def _key_options(elem: Any) -> str:
+    """The text an index element writes after its key: ``COLLATE "C" text_pattern_ops DESC``.
+
+    ``RawStream`` prints the element twice — whole, then with those parts at their
+    defaults — and the difference is the options, spelled and quoted as the
+    printer spells them.
+    """
+    whole = RawStream()(elem)
+    saved = {attr: getattr(elem, attr, None) for attr in _KEY_OPTION_DEFAULTS}
+    try:
+        for attr, default in _KEY_OPTION_DEFAULTS.items():
+            if hasattr(elem, attr):
+                setattr(elem, attr, default)
+        bare = RawStream()(elem)
+    finally:
+        for attr, value in saved.items():
+            if hasattr(elem, attr):
+                setattr(elem, attr, value)
+    return whole[len(bare) :].strip()
 
 
 def added_constraint(cmd: Any) -> Any | None:

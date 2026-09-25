@@ -78,7 +78,7 @@ def test_the_renderer_groups_partition_the_union() -> None:
 @pytest.mark.parametrize("kind", sorted(KINDS, key=_kind_id), ids=_kind_id)
 def test_every_kind_is_answered_for(kind: type[SchemaChange]) -> None:
     change = SAMPLES[kind]
-    renderer = DifferSQLGenerator(force_destructive=True)
+    renderer = DifferSQLGenerator()
     rendered = [renderer.generate_up(change), renderer.generate_down(change)]
     assert all(sql.endswith("\n") for sql in rendered if sql is not None), rendered
     assert destructive.data_loss_reason(change) in (None, "data")

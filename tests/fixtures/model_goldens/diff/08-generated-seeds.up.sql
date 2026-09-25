@@ -2,6 +2,25 @@
 -- Version: <version>
 
 -- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS catalog;
+
+-- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS prep_seed;
+
+-- confiture:tier additive
+CREATE TYPE catalog.product_status AS ENUM ('draft', 'active', 'retired');
+
+-- confiture:tier additive
+CREATE TABLE IF NOT EXISTS catalog.tb_vendor (
+    id UUID NOT NULL,
+    pk_vendor BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
+    name TEXT NOT NULL,
+    country_code VARCHAR(2) NOT NULL,
+    PRIMARY KEY (pk_vendor),
+    UNIQUE (id)
+);
+
+-- confiture:tier additive
 CREATE TABLE IF NOT EXISTS catalog.tb_product (
     id UUID NOT NULL,
     pk_product BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
@@ -16,13 +35,11 @@ CREATE TABLE IF NOT EXISTS catalog.tb_product (
 );
 
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS catalog.tb_vendor (
+CREATE TABLE IF NOT EXISTS prep_seed.tb_vendor (
     id UUID NOT NULL,
-    pk_vendor BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
     name TEXT NOT NULL,
     country_code VARCHAR(2) NOT NULL,
-    PRIMARY KEY (pk_vendor),
-    UNIQUE (id)
+    PRIMARY KEY (id)
 );
 
 -- confiture:tier additive
@@ -36,17 +53,6 @@ CREATE TABLE IF NOT EXISTS prep_seed.tb_product (
     FOREIGN KEY (fk_vendor_id) REFERENCES prep_seed.tb_vendor (id),
     CHECK (price > 0)
 );
-
--- confiture:tier additive
-CREATE TABLE IF NOT EXISTS prep_seed.tb_vendor (
-    id UUID NOT NULL,
-    name TEXT NOT NULL,
-    country_code VARCHAR(2) NOT NULL,
-    PRIMARY KEY (id)
-);
-
--- confiture:tier additive
-CREATE TYPE catalog.product_status AS ENUM ('draft', 'active', 'retired');
 
 -- confiture:tier reversible
 CREATE OR REPLACE FUNCTION fn_resolve_tb_product() RETURNS void AS $$
@@ -68,7 +74,3 @@ BEGIN
     ON CONFLICT (id) DO NOTHING;
 END;
 $$ LANGUAGE plpgsql;
-
--- WARNING: no SQL derived for: ADD SCHEMA catalog. Edit this file before deploying.
-
--- WARNING: no SQL derived for: ADD SCHEMA prep_seed. Edit this file before deploying.

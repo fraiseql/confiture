@@ -106,7 +106,7 @@
         "table": "users.trigger_users_updated_at",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE TRIGGER trigger_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
+        "new_value": "CREATE OR REPLACE TRIGGER trigger_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column()",
         "details": {
           "kind": "trigger",
           "name": "users.trigger_users_updated_at",

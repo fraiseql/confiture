@@ -297,7 +297,7 @@
         "table": "catalog",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE SCHEMA catalog",
+        "new_value": "CREATE SCHEMA IF NOT EXISTS catalog",
         "details": {
           "kind": "schema",
           "name": "catalog",
@@ -309,7 +309,7 @@
         "table": "prep_seed",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE SCHEMA prep_seed",
+        "new_value": "CREATE SCHEMA IF NOT EXISTS prep_seed",
         "details": {
           "kind": "schema",
           "name": "prep_seed",

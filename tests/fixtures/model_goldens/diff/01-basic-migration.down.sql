@@ -1,9 +1,11 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:irreversible no rollback derived for ADD_EXTENSION uuid-ossp
-
--- confiture:irreversible no rollback derived for ADD_EXTENSION btree_gist
-
 -- confiture:tier irreversible
 DROP TABLE users;
+
+-- confiture:tier destructive
+DROP EXTENSION IF EXISTS "uuid-ossp";
+
+-- confiture:tier destructive
+DROP EXTENSION IF EXISTS btree_gist;

@@ -18,6 +18,7 @@ from confiture.core.type_lattice import (
     canonical_type,
     changes_rewrite_table,
     compare_types,
+    has_assignment_cast,
     parse_type,
     same_type,
 )
@@ -160,3 +161,31 @@ class TestFloatIsAPrecisionInBits:
     def test_float_is_one_type_with_its_canonical_spelling(self) -> None:
         assert same_type("float", "double precision")
         assert same_type("float(10)", "real")
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "expected"),
+    [
+        # Within a family PostgreSQL casts by assignment, length and precision included.
+        ("bigint", "integer", True),
+        ("varchar(100)", "varchar(50)", True),
+        ("text", "varchar(50)", True),
+        ("numeric(10,2)", "integer", True),
+        ("double precision", "numeric", True),
+        ("timestamptz", "date", True),
+        ("integer[]", "bigint[]", True),
+        # An I/O conversion *to* a string type is an assignment cast.
+        ("integer", "text", True),
+        ("uuid", "varchar(36)", True),
+        # From a string type, or across unrelated types, it is explicit only.
+        ("text", "integer", False),
+        ("varchar(36)", "uuid", False),
+        ("integer", "boolean", False),
+        ("text", "jsonb", False),
+        ("integer", "integer[]", False),
+        (None, "integer", False),
+    ],
+)
+def test_has_assignment_cast(old: str | None, new: str, expected: bool) -> None:
+    """Whether ``ALTER COLUMN … TYPE`` converts without ``USING`` (#335)."""
+    assert has_assignment_cast(old, new) is expected

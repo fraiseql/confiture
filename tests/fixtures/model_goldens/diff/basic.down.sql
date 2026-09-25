@@ -1,13 +1,14 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:irreversible no rollback derived for ADD_EXTENSION uuid-ossp
-
 -- confiture:tier irreversible
-DROP TABLE users;
+DROP TABLE comments;
 
 -- confiture:tier irreversible
 DROP TABLE posts;
 
 -- confiture:tier irreversible
-DROP TABLE comments;
+DROP TABLE users;
+
+-- confiture:tier destructive
+DROP EXTENSION IF EXISTS "uuid-ossp";

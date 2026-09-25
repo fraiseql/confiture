@@ -2,6 +2,9 @@
 -- Version: <version>
 
 -- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS tb_confiture (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
     pk_confiture BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
@@ -16,5 +19,7 @@ CREATE TABLE IF NOT EXISTS tb_confiture (
     UNIQUE (slug),
     UNIQUE (version)
 );
-
--- WARNING: no SQL derived for: ADD EXTENSION uuid-ossp. Edit this file before deploying.
+CREATE INDEX IF NOT EXISTS idx_tb_confiture_pk_confiture ON tb_confiture (pk_confiture);
+CREATE INDEX IF NOT EXISTS idx_tb_confiture_slug ON tb_confiture (slug);
+CREATE INDEX IF NOT EXISTS idx_tb_confiture_version ON tb_confiture (version);
+CREATE INDEX IF NOT EXISTS idx_tb_confiture_applied_at ON tb_confiture (applied_at DESC);
