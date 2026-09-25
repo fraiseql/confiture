@@ -200,13 +200,13 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### What does not port
 
-6,843 lines, 9% of `core/`.
+6,852 lines, 9% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `_migrator/loader.py` | 133 | Python-bound |
 | `anonymization/plugins/` | 302 | Python-bound |
-| `hooks/` | 3,265 | Python-bound |
+| `hooks/` | 3,274 | Python-bound |
 | `idempotency/python_migration_extractor.py` | 294 | Python-bound |
 | `idempotency/static_eval/` | 1,730 | Python-bound |
 | `import_checker.py` | 493 | Python-bound |

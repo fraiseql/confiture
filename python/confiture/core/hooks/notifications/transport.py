@@ -27,6 +27,7 @@ import ssl
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -141,8 +142,10 @@ class HttpTransport(Transport):
     """POST the payload to *url* via ``urllib.request``.
 
     Args:
-        url: Destination URL.  Must be HTTPS in production; HTTP is allowed
-            for tests but logged with a warning.
+        url: Destination URL, ``https`` or ``http``.  Any other scheme
+            (``file:``, ``ftp:``, none) raises :class:`HttpTransportError`,
+            since ``urllib`` would open it.  ``http`` is sent with a warning:
+            the URL is a bearer secret and travels unencrypted.
         timeout_seconds: Per-attempt socket-read timeout.  Does NOT cover
             DNS resolution — for that, the calling phase's hook timeout
             governs the wall-clock cap.
@@ -169,8 +172,14 @@ class HttpTransport(Transport):
         verify_tls: bool = True,
         method: str = "POST",
     ) -> None:
-        self.url = url
         self._shown_url = redact_url(url, bearer=True)
+        scheme = urllib.parse.urlsplit(url).scheme.lower()
+        if scheme not in ("http", "https"):
+            msg = f"A webhook URL must be http or https, got {self._shown_url!r}"
+            raise HttpTransportError(msg)
+        if scheme == "http":
+            logger.warning("Webhook %s is plain http: it is not encrypted", self._shown_url)
+        self.url = url
         self.timeout_seconds = timeout_seconds
         self.retry = retry or RetryPolicy()
         self.verify_tls = verify_tls

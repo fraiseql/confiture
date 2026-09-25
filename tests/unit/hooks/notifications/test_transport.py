@@ -279,3 +279,27 @@ def test_the_error_still_names_where_it_was_sent(caplog) -> None:
     error, _ = _failed_send(_mock_response(404), caplog)
 
     assert "https://hooks.slack.com/" in error
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["file:///etc/passwd", "ftp://example.com/x", "data:text/plain,x", "hooks.slack.com/x"],
+    ids=["file", "ftp", "data", "no-scheme"],
+)
+def test_a_webhook_url_that_is_not_http_is_refused(url: str) -> None:
+    with pytest.raises(HttpTransportError, match="http or https"):
+        HttpTransport(url)
+
+
+def test_a_refused_webhook_url_never_shows_its_token() -> None:
+    with pytest.raises(HttpTransportError) as excinfo:
+        HttpTransport("ftp://user:SECRETTOKEN@example.com/hook?token=SECRETTOKEN")
+
+    assert "SECRETTOKEN" not in str(excinfo.value)
+
+
+def test_a_plain_http_webhook_is_sent_with_a_warning(caplog) -> None:
+    with caplog.at_level(logging.WARNING):
+        HttpTransport("http://localhost:9/hook?token=SECRETTOKEN")
+
+    assert ("not encrypted" in caplog.text, "SECRETTOKEN" in caplog.text) == (True, False)
