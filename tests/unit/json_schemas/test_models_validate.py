@@ -28,6 +28,7 @@ from referencing.jsonschema import DRAFT202012
 
 import confiture
 from confiture.core import schema_exporter
+from confiture.models.unified_lint import SkippedCheck
 
 REPO = Path(__file__).resolve().parents[3]
 PACKAGE_SCHEMAS = Path(confiture.__file__).resolve().parent / "schemas"
@@ -129,6 +130,9 @@ FIELD_SAMPLES: dict[tuple[str, str], Any] = {
             {"code": "doc_003", "documented": 0, "undocumented": 0, "comment_length": None},
         ],
     },
+    ("UnifiedLintResult", "skipped"): [
+        SkippedCheck(check="safety", tool="squawk", reason="squawk is not installed on PATH")
+    ],
     ("BuildResult", "duplicates"): [
         {
             "rule_id": "build_001",

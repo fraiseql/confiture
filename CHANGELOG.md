@@ -14,8 +14,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`lint-unified` exits 2 when a check it was asked for did not run** (#358). A
+  missing squawk or sqlfluff used to leave the exit at 0; it is now
+  `error_codes.NOT_RUN`, and it outweighs findings from the checks that did run.
+  A pipeline without those tools passes `--check schema --check tree`.
+
 ### Fixed
 
+- **`lint-unified` reports its tools, and what they found where they found it** (#358).
+  - A missing squawk or sqlfluff was reported as a clean run: `No issues found.`,
+    naming neither tool. A check that was asked for and could not run is now named in
+    text mode and listed under a new `skipped` key in `--format json` (additive:
+    `{check, tool, reason}`). So is a file sqlfluff failed on, and a schema or tree
+    check that raised; those used to print their note to stdout even in JSON mode.
+    Such a run now exits 2 (`error_codes.NOT_RUN`), even where another check found
+    an error: the report is incomplete, not clean. A run that asked for all four
+    checks and exited 0 without squawk or sqlfluff installed now exits 2; pass
+    `--check schema --check tree` to ask only for what the environment can run.
+  - No squawk finding ever reached the report. `SquawkRunner` parsed a shape squawk
+    2.x does not emit, and its unit test fed it an invented output in that shape.
+    squawk 2.x's flat list is parsed now, and its `line`, which squawk counts from 0,
+    is reported 1-based.
+  - A sqlfluff finding carried `line: null`: sqlfluff 4 calls it `start_line_no`
+    (`line_no` is still read for older versions).
+  - A schema finding named the environment (`local`) and line 1 instead of its own
+    file and line.
+  - With no FILES, the squawk and sqlfluff checks linted nothing, though `--help` said
+    "all schema files". They now lint the schema files `--env` builds from.
+  - The parsers are tested on the tools' **recorded** output:
+    `scripts/capture_linter_outputs.py` writes `tests/fixtures/unified_lint/squawk-2.66.0.json`
+    and `sqlfluff-4.3.0.json`. The envelope is published as `lint-unified.schema.json`.
 - **`migrate schema-to-schema` does what the guide says** (#359).
   - `setup` can be run again. `IMPORT FOREIGN SCHEMA` collided with the tables the
     first run imported, and failed with a hint about `CREATE TABLE IF NOT EXISTS`

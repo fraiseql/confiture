@@ -30,6 +30,7 @@ _MODELS: dict[str, tuple[str, str]] = {
     "DriftReport": ("confiture.core.drift", "DriftReport"),
     "IntrospectionResult": ("confiture.models.introspection", "IntrospectionResult"),
     "LintReport": ("confiture.models.lint", "LintReport"),
+    "UnifiedLintResult": ("confiture.models.unified_lint", "UnifiedLintResult"),
 }
 
 MODEL_SCHEMAS: dict[str, str] = {
@@ -43,6 +44,7 @@ MODEL_SCHEMAS: dict[str, str] = {
     "DriftReport": "drift.schema.json",
     "IntrospectionResult": "introspect.schema.json",
     "LintReport": "lint.schema.json",
+    "UnifiedLintResult": "lint-unified.schema.json",
 }
 
 # Payloads a command assembles from several sources; validated by the CLI tests.

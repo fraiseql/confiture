@@ -29,17 +29,17 @@ from confiture.core.linting.selection import (
     project_relative,
 )
 from confiture.core.unified_linter import UnifiedLinter
-from confiture.error_codes import FINDINGS
+from confiture.error_codes import FINDINGS, NOT_RUN
 from confiture.models.lint import LintSeverity
-from confiture.models.unified_lint import UnifiedLintIssue, UnifiedLintResult
+from confiture.models.unified_lint import SkippedCheck, UnifiedLintIssue, UnifiedLintResult
 
 
-def _violation_to_unified_issue(v, tool: str, file=None):
-    """Convert a LintViolation to a UnifiedLintIssue."""
+def _violation_to_unified_issue(v, tool: str):
+    """Convert a LintViolation to a UnifiedLintIssue, at the file and line it names."""
 
     return UnifiedLintIssue(
         tool=tool,
-        file=file if file is not None else (v.file_path or v.object_name),
+        file=v.file_path or v.object_name,
         line=v.line_number,
         message=v.message,
         severity=LintSeverity(v.severity.value),
@@ -72,7 +72,7 @@ def _unified_tree_findings(
 def lint_unified(
     files: list[Path] = typer.Argument(
         default=None,
-        help="SQL files or directories to lint (default: all schema files)",
+        help="SQL files or directories to lint (default: the schema files --env builds from)",
     ),
     check: list[str] = typer.Option(
         None,
@@ -107,6 +107,12 @@ def lint_unified(
 ) -> None:
     """Run unified SQL lint checks (Squawk, SQLFluff, SchemaLinter, and/or tree numbering).
 
+    Squawk and SQLFluff are not installed with confiture. A check whose tool is
+    missing, or which fails, does not run and is not reported clean: it is named
+    as skipped, in text and under ``skipped`` in JSON, and the run exits 2 even
+    when another check found an error — the report is incomplete. Ask only for
+    the checks this environment can run (``--check schema --check tree``).
+
     EXAMPLES:
       confiture lint-unified db/migrations/
         Lint all SQL files in migrations directory with all available tools.
@@ -134,11 +140,14 @@ def lint_unified(
     run_tool_checks = checks is None or any(c in (checks or []) for c in ("safety", "format"))
 
     all_issues: list = []
+    skipped: list[SkippedCheck] = []
 
     if run_tool_checks:
-        linter = UnifiedLinter()
-        result = linter.run(files=list(files) if files else None, checks=checks, git_diff=git_diff)
+        # No FILES: the schema files the environment builds from, as --help says.
+        targets = list(files) if files else (None if git_diff else env_ddl_files(env, Path())[0])
+        result = UnifiedLinter().run(files=targets, checks=checks, git_diff=git_diff)
         all_issues.extend(result.issues)
+        skipped.extend(result.skipped)
 
     if run_schema:
         schema_config = LinterConfig(enabled=True, fail_on_error=fail_on_error)
@@ -146,12 +155,12 @@ def lint_unified(
         try:
             linter_report = schema_linter.lint()
             all_issues.extend(
-                _violation_to_unified_issue(v, "schema", file=env)
+                _violation_to_unified_issue(project_relative(v, Path()), "schema")
                 for v in linter_report.errors + linter_report.warnings + linter_report.info
             )
         # Reason: lint-unified skips a linter that fails for any reason and says so
         except Exception as e:
-            console.print(f"[yellow]Schema lint skipped: {e}[/yellow]")
+            skipped.append(SkippedCheck("schema", "schema", str(e)))
 
     if run_tree:
         try:
@@ -161,14 +170,23 @@ def lint_unified(
             )
         # Reason: lint-unified skips a linter that fails for any reason and says so
         except Exception as e:
-            console.print(f"[yellow]Tree lint skipped: {e}[/yellow]")
+            skipped.append(SkippedCheck("tree", "tree", str(e)))
 
-    unified_result = UnifiedLintResult(issues=all_issues)
+    unified_result = UnifiedLintResult(issues=all_issues, skipped=skipped)
 
     if format_type == "json":
         emit(unified_result.to_dict())
-    elif not unified_result.issues:
-        console.print("[green]No issues found.[/green]")
+        _exit_on_errors(unified_result, fail_on_error=fail_on_error)
+        return
+    for skip in unified_result.skipped:
+        console.print(
+            f"Skipped {skip.check} ({skip.tool}): {skip.reason}", markup=False, style="yellow"
+        )
+    if not unified_result.issues:
+        if unified_result.skipped:
+            console.print("No issues found by the checks that ran.", style="yellow")
+        else:
+            console.print("[green]No issues found.[/green]")
     else:
         for tool, tool_issues in unified_result.by_tool.items():
             console.print(f"\n[bold]{tool}[/bold] ({len(tool_issues)} issue(s)):")
@@ -181,5 +199,11 @@ def lint_unified(
                 # uppercase codes only survived because they are not style names.
                 console.print(f"  [{sev}]{rule} {loc}: {issue.message}", markup=False)
 
-    if fail_on_error and unified_result.has_errors:
+    _exit_on_errors(unified_result, fail_on_error=fail_on_error)
+
+
+def _exit_on_errors(result: UnifiedLintResult, *, fail_on_error: bool) -> None:
+    if result.skipped:
+        raise typer.Exit(NOT_RUN)
+    if fail_on_error and result.has_errors:
         raise typer.Exit(FINDINGS)  # success-signal: lint found errors

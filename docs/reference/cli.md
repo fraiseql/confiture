@@ -3452,7 +3452,7 @@ confiture lint-unified [OPTIONS] [files]...
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `files` | path | no | SQL files or directories to lint (default: all schema files) |
+| `files` | path | no | SQL files or directories to lint (default: the schema files --env builds from) |
 
 **Options**
 

@@ -4,8 +4,8 @@ An exit integer is a contract two adapters branch on (fraisier's and
 fraisier-core's), so a command that writes ``typer.Exit(2)`` states a meaning
 nobody can read off the line: is that "no ledger", "a usage error", or a
 config path that does not exist — which every other command calls exit 5?
-Named, it is one of three outcomes that are not errors
-(``error_codes.SUCCESS``, ``FINDINGS``, ``USAGE``) or the registered code of
+Named, it is one of the outcomes that are not errors
+(``error_codes.SUCCESS``, ``FINDINGS``, ``USAGE``, ``NOT_RUN``) or the registered code of
 the error it is (``error_codes.exit_code_of("PRECON_1001")``), and the registry
 decides the integer. Any exit spelled as an integer literal under ``cli/`` —
 ``typer.Exit(2)``, ``typer.Exit(code=2)``, ``SystemExit(2)``, ``sys.exit(2)`` —

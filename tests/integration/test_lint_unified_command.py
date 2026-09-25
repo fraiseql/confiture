@@ -9,19 +9,13 @@ cases — and a two-table schema tree.
 
 With the external tools taken away (``squawk`` off ``PATH``, ``sqlfluff``
 unimportable), the file pins what the command reports: no issue from either tool,
-exit 0, while the schema linter and the tree rules still run and still fail the
-run on an error. Where a tool is installed, the file pins that its findings reach
-the report; those tests skip where it is not.
-
-Five tests are strict ``xfail``s, each a defect this file found:
-
-- a missing tool is reported as a clean run, naming neither tool;
-- a schema finding names the environment (``local``) instead of its file;
-- no finding from Squawk 2.x reaches the report: its JSON is not the shape
-  ``SquawkRunner`` parses;
-- a SQLFluff finding carries no line: SQLFluff calls it ``start_line_no``;
-- without FILES, the tool checks lint nothing, though ``--help`` says the default
-  is all schema files.
+each check that could not run named under ``skipped`` — never "No issues
+found." — and exit 2 (``NOT_RUN``), even where another check found an error,
+while the schema linter and the tree rules still run and, asked for alone, still
+fail the run on an error. Where a tool is installed, the file pins that its findings reach
+the report at their own file and line; those tests skip where it is not, and the
+unit tests parse the tools' recorded output (``tests/fixtures/unified_lint/``) in
+every environment.
 """
 
 from __future__ import annotations
@@ -37,7 +31,7 @@ import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
-from confiture.error_codes import FINDINGS
+from confiture.error_codes import FINDINGS, NOT_RUN
 
 pytestmark = pytest.mark.integration
 
@@ -109,25 +103,26 @@ def test_the_tool_checks_report_no_issue_when_squawk_and_sqlfluff_are_missing(
         ["lint-unified", "--check", "safety", "--check", "format", MIGRATION, "--format", "json"],
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == NOT_RUN, result.output
     payload = _json(result.stdout)
     assert payload["summary"] == {"total": 0, "errors": 0, "warnings": 0, "info": 0}
     assert payload["issues"] == []
+    assert [(s["check"], s["tool"]) for s in payload["skipped"]] == [
+        ("safety", "squawk"),
+        ("format", "sqlfluff"),
+    ]
 
 
 @pytest.mark.usefixtures("without_tools")
-@pytest.mark.xfail(
-    strict=True,
-    reason="#358: a missing squawk/sqlfluff is reported as 'No issues found.', naming neither tool",
-)
 def test_a_missing_tool_is_named_rather_than_reported_clean(project: Path) -> None:
     result = runner.invoke(
         app, ["lint-unified", "--check", "safety", "--check", "format", MIGRATION]
     )
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == NOT_RUN, result.output
     assert "squawk" in result.output
     assert "sqlfluff" in result.output
+    assert "No issues found." not in result.output
 
 
 @pytest.mark.usefixtures("without_tools")
@@ -136,10 +131,13 @@ def test_the_schema_linter_and_tree_rules_run_without_the_external_tools(project
         "CREATE TABLE gadget (id BIGINT PRIMARY KEY);\n"
     )
 
-    result = runner.invoke(app, ["lint-unified", MIGRATION, "--format", "json"])
+    result = runner.invoke(
+        app, ["lint-unified", "--check", "schema", "--check", "tree", MIGRATION, "--format", "json"]
+    )
 
     assert result.exit_code == FINDINGS, result.output
     payload = _json(result.stdout)
+    assert payload["skipped"] == []
     assert {issue["tool"] for issue in payload["issues"]} == {"schema", "tree"}
     assert sorted(issue["message"] for issue in _by_tool(payload, "schema")) == [
         "Table 'gadget' should have a COMMENT describing its purpose",
@@ -151,10 +149,20 @@ def test_the_schema_linter_and_tree_rules_run_without_the_external_tools(project
 
 
 @pytest.mark.usefixtures("without_tools")
-@pytest.mark.xfail(
-    strict=True,
-    reason="#358: a schema finding's file is the environment name ('local'), not the file it is in",
-)
+def test_a_check_that_did_not_run_outweighs_the_errors_the_others_found(project: Path) -> None:
+    (project / "db" / "schema" / "10_gadget.sql").write_text(
+        "CREATE TABLE gadget (id BIGINT PRIMARY KEY);\n"
+    )
+
+    result = runner.invoke(app, ["lint-unified", MIGRATION, "--format", "json"])
+
+    assert result.exit_code == NOT_RUN, result.output
+    payload = _json(result.stdout)
+    assert payload["summary"]["errors"] >= 1
+    assert {s["tool"] for s in payload["skipped"]} == {"squawk", "sqlfluff"}
+
+
+@pytest.mark.usefixtures("without_tools")
 def test_a_schema_finding_names_the_file_it_is_in(project: Path) -> None:
     result = runner.invoke(app, ["lint-unified", "--check", "schema", "--format", "json"])
 
@@ -169,10 +177,6 @@ def test_a_schema_finding_names_the_file_it_is_in(project: Path) -> None:
 
 
 @needs_squawk
-@pytest.mark.xfail(
-    strict=True,
-    reason="#358: SquawkRunner parses {filename, violations[]}; squawk 2.x emits a flat list",
-)
 def test_squawk_findings_reach_the_report(project: Path) -> None:
     result = runner.invoke(
         app, ["lint-unified", "--check", "safety", MIGRATION, "--format", "json"]
@@ -199,9 +203,6 @@ def test_sqlfluff_findings_reach_the_report(project: Path) -> None:
 
 
 @needs_sqlfluff
-@pytest.mark.xfail(
-    strict=True, reason="#358: SQLFluffRunner reads 'line_no'; sqlfluff reports 'start_line_no'"
-)
 def test_a_sqlfluff_finding_carries_its_line(project: Path) -> None:
     result = runner.invoke(
         app, ["lint-unified", "--check", "format", MIGRATION, "--format", "json"]
@@ -214,10 +215,6 @@ def test_a_sqlfluff_finding_carries_its_line(project: Path) -> None:
 
 
 @needs_sqlfluff
-@pytest.mark.xfail(
-    strict=True,
-    reason="#358: without FILES the tool checks lint nothing; --help says all schema files",
-)
 def test_without_files_the_format_check_lints_the_schema_files(project: Path) -> None:
     result = runner.invoke(app, ["lint-unified", "--check", "format", "--format", "json"])
 
