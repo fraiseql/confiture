@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from confiture.core.introspection.type_mapping import TypeMapper
     from confiture.models.function_info import FunctionInfo
-import re
-
-from confiture.models.introspection import JSONBKey
+    from confiture.models.introspection import JSONBKey
 
 
 def _to_pascal_case(name: str) -> str:
@@ -80,23 +79,14 @@ class StubFunction:
         return "\n".join(lines)
 
     @classmethod
-    def _extract_jsonb_keys(cls, source: str) -> list:
-        """Extract JSONB keys from function source using regex (no pglast required)."""
+    def from_function_info(
+        cls, info: FunctionInfo, mapper: TypeMapper, keys: Sequence[JSONBKey] = ()
+    ) -> StubFunction:
+        """Build a StubFunction from FunctionInfo.
 
-        keys: list = []
-        pattern = re.compile(r"jsonb_build_object\s*\((.*?)\)", re.DOTALL | re.IGNORECASE)
-        for match in pattern.finditer(source):
-            args_text = match.group(1)
-            args = [a.strip() for a in args_text.split(",")]
-            for i in range(0, len(args) - 1, 2):
-                key_expr = args[i].strip("'\" ")
-                value_expr = args[i + 1].strip() if i + 1 < len(args) else ""
-                keys.append(JSONBKey(key=key_expr, value_expr=value_expr))
-        return keys
-
-    @classmethod
-    def from_function_info(cls, info: FunctionInfo, mapper: TypeMapper) -> StubFunction:
-        """Build a StubFunction from FunctionInfo."""
+        *keys* are the fields of the object a JSONB result is built as, read from
+        the body by ``stub_generator.jsonb_keys``; none, and the result is a dict.
+        """
         python_params = [
             (p.name or f"arg{i}", mapper.pg_to_python(p.pg_type))
             for i, p in enumerate(info.in_params)
@@ -110,8 +100,7 @@ class StubFunction:
         result_model = None
         result_fields: tuple[tuple[str, str], ...] = ()
 
-        if info.return_type and "jsonb" in info.return_type.lower() and info.source:
-            keys = cls._extract_jsonb_keys(info.source)
+        if info.return_type and "jsonb" in info.return_type.lower():
             if keys:
                 result_model = _to_pascal_case(info.name) + "Result"
                 result_fields = tuple((key.key, _field_type(key, mapper)) for key in keys)
