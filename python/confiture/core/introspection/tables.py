@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from confiture.core import live_catalog
+from confiture.core.schema_model import identity_of
 from confiture.models.introspection import (
     FKReference,
     IntrospectedColumn,
@@ -64,13 +65,10 @@ class SchemaIntrospector:
             IntrospectionResult with the full FK graph and column details.
         """
         model = live_catalog.read(self._conn, schemas=[schema], kinds=_INTROSPECTED_KINDS)
-        tables = [
-            _introspected(table, include_hints)
-            for table in model.tables.values()
-            if all_tables or table.name.startswith("tb_")
-        ]
+        read = [t for t in model.tables.values() if all_tables or t.name.startswith("tb_")]
+        tables = [_introspected(table, include_hints) for table in read]
 
-        self._resolve_inbound_fks(tables)
+        _resolve_inbound_fks(read, tables)
 
         return IntrospectionResult(
             database=self._get_db_name(),
@@ -90,29 +88,30 @@ class SchemaIntrospector:
             row = cur.fetchone()
             return str(row[0]) if row else "unknown"
 
-    def _resolve_inbound_fks(self, tables: list[IntrospectedTable]) -> None:
-        """Populate inbound_fks on each table by inverting outbound FKs.
 
-        No additional database queries are needed: every outbound FK from
-        table A to table B becomes an inbound FK on B.
+def _resolve_inbound_fks(read: list[Table], tables: list[IntrospectedTable]) -> None:
+    """Populate inbound_fks on each table by inverting outbound FKs.
 
-        Args:
-            tables: List of IntrospectedTable objects (mutated in-place).
-        """
-        index: dict[str, IntrospectedTable] = {t.name: t for t in tables}
+    No additional database queries are needed: every outbound FK from
+    table A to table B becomes an inbound FK on B. A key is matched by the
+    identity of the table it references — ``(schema, name)``, as the live reader
+    names it — never by a bare name: a key into ``public.tb_owner`` is not a key
+    into ``inv.tb_owner`` (#313's class).
 
-        for table in tables:
-            for fk in table.outbound_fks:
-                target = index.get(fk.to_table or "")
-                if target is not None:
-                    target.inbound_fks.append(
-                        FKReference(
-                            from_table=table.name,
-                            to_table=None,
-                            via_column=fk.via_column,
-                            on_column=fk.on_column,
-                        )
-                    )
+    Args:
+        read: The model's tables, each beside its wire shape in *tables*.
+        tables: The same tables in the wire shape (mutated in-place).
+    """
+    index = {identity_of(t.qualified): wire for t, wire in zip(read, tables, strict=True)}
+    for table in read:
+        for fk in table.constraints_of("foreign_key"):
+            target = index.get(identity_of(fk.ref_table))
+            if target is None:
+                continue
+            target.inbound_fks.extend(
+                FKReference(from_table=table.name, to_table=None, via_column=via, on_column=on)
+                for via, on in zip(fk.columns, fk.ref_columns, strict=True)
+            )
 
 
 def _introspected(table: Table, include_hints: bool) -> IntrospectedTable:

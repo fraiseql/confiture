@@ -120,11 +120,16 @@ WHERE a.attrelid = ANY(%s) AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY a.attrelid, a.attnum
 """
 
+#: The referenced relation's schema and name ride along with a foreign key's
+#: definition: ``pg_get_constraintdef`` qualifies it only when ``search_path`` would
+#: not find it, so its spelling says where the *session* looks, not where the table is.
 _CONSTRAINTS = """
-SELECT conrelid, conname, pg_get_constraintdef(oid)
-FROM pg_constraint
-WHERE conrelid = ANY(%s) AND contype IN ('p', 'u', 'c', 'f', 'x')
-ORDER BY conrelid, conname
+SELECT k.conrelid, k.conname, pg_get_constraintdef(k.oid), rn.nspname, rc.relname
+FROM pg_constraint k
+LEFT JOIN pg_class rc ON rc.oid = k.confrelid
+LEFT JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+WHERE k.conrelid = ANY(%s) AND k.contype IN ('p', 'u', 'c', 'f', 'x')
+ORDER BY k.conrelid, k.conname
 """
 
 _INDEXES = """
@@ -209,13 +214,23 @@ def _column(row: tuple[Any, ...], type_node: Any) -> Column:
     )
 
 
-def _constraint(name: str, definition: str) -> Constraint | None:
-    """``pg_get_constraintdef``, read by the one constraint reader."""
+def _constraint(
+    name: str, definition: str, ref_schema: str | None = None, ref_name: str | None = None
+) -> Constraint | None:
+    """``pg_get_constraintdef``, read by the one constraint reader.
+
+    A foreign key references the relation the catalog names, schema included,
+    whatever ``search_path`` made the definition's text leave off.
+    """
     alter: Any = pglast.parse_sql(f"ALTER TABLE t ADD CONSTRAINT {_quoted(name)} {definition}")[
         0
     ].stmt
     read = read_constraint(alter.cmds[0].def_)
-    return read if isinstance(read, Constraint) else None
+    if not isinstance(read, Constraint):
+        return None
+    if read.kind == "foreign_key" and ref_schema and ref_name:
+        return replace(read, ref_table=qualified_name(ref_schema, ref_name))
+    return read
 
 
 def _with_primary_keys(columns: list[Column], constraints: list[Constraint]) -> tuple[Column, ...]:
@@ -232,8 +247,10 @@ def _tables(
     for row in conn.execute(_COLUMNS, (oids,)).fetchall():
         rows[row[0]].append(row)
     constraints: dict[int, list[Constraint]] = defaultdict(list)
-    for relid, name, definition in conn.execute(_CONSTRAINTS, (oids,)).fetchall():
-        read = _constraint(name, definition)
+    for relid, name, definition, ref_schema, ref_name in conn.execute(
+        _CONSTRAINTS, (oids,)
+    ).fetchall():
+        read = _constraint(name, definition, ref_schema, ref_name)
         if read is not None:
             constraints[relid].append(read)
     indexes: dict[int, list[tuple[Any, bool]]] = defaultdict(list)
@@ -366,10 +383,12 @@ SELECT EXISTS (
 """
 
 _CONSTRAINTS_OF = """
-SELECT k.conname, pg_get_constraintdef(k.oid)
+SELECT k.conname, pg_get_constraintdef(k.oid), rn.nspname, rc.relname
 FROM pg_constraint k
 JOIN pg_class c ON c.oid = k.conrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace
+LEFT JOIN pg_class rc ON rc.oid = k.confrelid
+LEFT JOIN pg_namespace rn ON rn.oid = rc.relnamespace
 WHERE n.nspname = %s AND c.relname = %s AND k.contype IN ('p', 'u', 'c', 'f', 'x')
 ORDER BY k.conname
 """
@@ -435,7 +454,7 @@ def constraints(conn: psycopg.Connection, schema: str, table: str) -> tuple[Cons
     with conn.cursor() as cursor:
         cursor.execute(_CONSTRAINTS_OF, (schema, table))
         rows = cursor.fetchall()
-    read_back = (_constraint(name, definition) for name, definition in rows)
+    read_back = (_constraint(*row) for row in rows)
     return tuple(c for c in read_back if c is not None)
 
 

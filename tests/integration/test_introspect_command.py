@@ -134,11 +134,6 @@ def test_yaml_for_another_schema_goes_to_the_output_file(database: str, tmp_path
     ]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="#360: inbound foreign keys are matched by bare table name, so a key into "
-    "public.tb_owner is reported as pointing at inv.tb_owner",
-)
 def test_a_key_into_another_schema_is_not_given_to_a_same_named_table(
     database: str,
 ) -> None:
