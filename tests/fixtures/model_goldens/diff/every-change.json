@@ -112,7 +112,7 @@
       {
         "type": "DROP_SEQUENCE",
         "details": "DROP SEQUENCE retired_seq",
-        "irreversible_reason": null
+        "irreversible_reason": "data"
       },
       {
         "type": "ADD_VIEW",

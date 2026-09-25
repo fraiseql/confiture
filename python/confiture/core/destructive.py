@@ -125,11 +125,12 @@ def irreversible_reason(change: SchemaChange, *, has_down: bool) -> str | None:
 def data_loss_reason(change: SchemaChange) -> str | None:
     """``data`` for a change whose rows no down file can bring back; ``None`` otherwise.
 
-    A dropped table or column is recreated by its down file, never its rows. Every
+    A dropped table or column is recreated by its down file, never its rows; a
+    dropped sequence from its options, never the position it had reached. Every
     other kind says so here, one arm per group, so a new kind is a decision.
     """
     match change:
-        case TableDropped() | ColumnDropped():
+        case TableDropped() | ColumnDropped() | SequenceDropped():
             return "data"
         case TableAdded() | TableRenamed():
             return None
@@ -152,13 +153,7 @@ def data_loss_reason(change: SchemaChange) -> str | None:
             | UniqueConstraintDropped()
         ):
             return None
-        case (
-            EnumTypeAdded()
-            | EnumTypeDropped()
-            | EnumValuesChanged()
-            | SequenceAdded()
-            | SequenceDropped()
-        ):
+        case EnumTypeAdded() | EnumTypeDropped() | EnumValuesChanged() | SequenceAdded():
             return None
         case ObjectAdded() | ObjectDropped() | ObjectReplaced():
             return None

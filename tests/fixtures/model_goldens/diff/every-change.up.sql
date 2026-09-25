@@ -65,12 +65,14 @@ CREATE TYPE new_status AS ENUM ('x', 'y');
 -- confiture:tier destructive
 DROP TYPE IF EXISTS retired_status;
 
--- confiture:tier additive
+-- confiture:irreversible no rollback derived for CHANGE_ENUM_VALUES mood
+-- confiture:tier irreversible
 ALTER TYPE mood ADD VALUE IF NOT EXISTS 'happy';
 
 -- confiture:tier additive
 CREATE SEQUENCE IF NOT EXISTS new_seq;
 
+-- confiture:irreversible data
 -- confiture:tier irreversible
 DROP SEQUENCE IF EXISTS retired_seq;
 

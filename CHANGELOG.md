@@ -30,6 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     … DROP CONSTRAINT IF EXISTS <name>`). An unnamed one gets the generator's
     `-- confiture:irreversible` directive, saying that PostgreSQL chooses the name.
     The up statement is tiered `irreversible` accordingly.
+  - A dropped enum type's down recreates it with its labels, in order. A dropped
+    sequence's down recreates it with its options. Its up statement is declared
+    `-- confiture:irreversible data`, because the sequence comes back but its
+    position does not. An added enum label's down, which PostgreSQL cannot write,
+    is the irreversible directive instead of a warning.
+  - An added sequence is created with its options: `INCREMENT BY`, `MINVALUE`,
+    `MAXVALUE` and `START WITH`, each written only when it is not PostgreSQL's
+    default. The DDL reader also took an unwritten start to be 1 for every sequence.
+    A descending sequence starts at its MAXVALUE and an ascending one at its
+    MINVALUE, and the model now says so.
 
 ## [1.20.0] - 2026-09-25
 

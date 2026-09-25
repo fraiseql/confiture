@@ -331,3 +331,13 @@ class TestAnUnnamedConstraintsDown:
             "and PostgreSQL chooses its name when it is added"
         ]
         assert "WARNING" not in down
+
+
+def test_a_dropped_sequence_declares_its_position_lost(tmp_path: Path) -> None:
+    """The down recreates the sequence from its options, never where it had got to (#335)."""
+    diff = SchemaDiffer().compare("CREATE SEQUENCE s;", "")
+    up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+        diff, name="drop_seq", version=VERSION, destructive="allow"
+    )
+    text = up.read_text()
+    assert [d.argument for d in sql_lexer.directives(text) if d.name == "irreversible"] == ["data"]

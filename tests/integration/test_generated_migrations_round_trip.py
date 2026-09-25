@@ -82,3 +82,37 @@ class TestAddedConstraints:
         _apply(conn, up)
         _apply(conn, down)
         assert _constraints(conn, "t") == set()
+
+
+class TestEnumsAndSequences:
+    """A dropped enum type or sequence comes back from what its change carries."""
+
+    OLD = (
+        "CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy');\n"
+        "CREATE SEQUENCE order_seq INCREMENT 5 START 100 MAXVALUE 100000;\n"
+    )
+
+    def test_the_down_of_a_drop_recreates_them(self, fresh_database: str, tmp_path: Path) -> None:
+        up, down = _generated(tmp_path, self.OLD, "")
+        conn = psycopg.connect(fresh_database, autocommit=True)
+        _apply(conn, self.OLD)
+        _apply(conn, up)
+        _apply(conn, down)
+        labels = conn.execute(
+            "SELECT array_agg(enumlabel ORDER BY enumsortorder) FROM pg_enum"
+            " WHERE enumtypid = 'mood'::regtype"
+        ).fetchone()
+        assert labels == (["sad", "ok", "happy"],)
+        assert conn.execute(
+            "SELECT increment_by, start_value, max_value FROM pg_sequences"
+            " WHERE sequencename = 'order_seq'"
+        ).fetchone() == (5, 100, 100000)
+        _apply(conn, up)
+
+    def test_an_added_sequence_keeps_its_options(self, fresh_database: str, tmp_path: Path) -> None:
+        new = "CREATE SEQUENCE desc_seq INCREMENT -2 MAXVALUE 0;\n" + self.OLD
+        conn = round_trip(fresh_database, tmp_path, self.OLD, new)
+        assert conn.execute(
+            "SELECT increment_by, start_value, min_value, max_value FROM pg_sequences"
+            " WHERE sequencename = 'desc_seq'"
+        ).fetchone() == (-2, 0, -(2**63), 0)

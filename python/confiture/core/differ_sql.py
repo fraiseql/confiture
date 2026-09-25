@@ -11,10 +11,10 @@ migration.
 ``None`` from :meth:`DifferSQLGenerator.generate_up` is *no SQL derived*: the
 change is reported and the author writes its DDL. ``None`` from
 :meth:`~DifferSQLGenerator.generate_down` is *no rollback derived*, which the
-generator writes as an ``irreversible`` directive; a down this module can say more
-about — a dropped enum type it cannot recreate, an added constraint it does not yet
-drop — comes back as a ``-- WARNING:`` line instead. A statement ends with its
-semicolon and a newline.
+generator writes as an ``irreversible`` directive with its reason. A ``-- WARNING:``
+line is what this module writes where a statement would need what the change does
+not carry — an index or constraint with no name, a CHECK with no expression. A
+statement ends with its semicolon and a newline.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.core.schema_model import Constraint, Table
+from confiture.core.schema_model import Constraint, EnumType, Sequence, Table
 
 #: The kinds compared by definition that a migration is derived for, created and
 #: dropped — the ones ``migrate diff --generate`` writes (#288). The rest —
@@ -89,10 +89,6 @@ def _incomplete(change: SchemaChange, what: str) -> str:
     """:func:`_unnamed`'s sibling, for a change that has a name but not a statement."""
     wire = change.to_wire()
     return f"-- WARNING: Cannot generate {wire.type} on {wire.table} without {what}\n"
-
-
-def _no_rollback(change: SchemaChange) -> str:
-    return f"-- WARNING: No automatic rollback for {change.to_wire().type}\n"
 
 
 def _statement(sql: str | None, change: SchemaChange) -> str:
@@ -350,6 +346,37 @@ def _enum_values(change: EnumValuesChanged) -> str:
     return "".join(parts) if parts else f"-- No enum value changes for {name}\n"
 
 
+_BIGINT_MIN, _BIGINT_MAX = -(2**63), 2**63 - 1
+
+
+def _create_enum(enum: EnumType) -> str:
+    labels = ", ".join(_quoted(v) for v in enum.values)
+    return f"CREATE TYPE {enum.qualified} AS ENUM ({labels});\n"
+
+
+def _create_sequence(sequence: Sequence) -> str:
+    """``CREATE SEQUENCE IF NOT EXISTS`` with each option the model holds that is not the default.
+
+    PostgreSQL's defaults depend on the direction: an ascending sequence runs from
+    1 to the largest ``bigint``, a descending one from ``-1`` down to the smallest,
+    and either starts at the end it runs from. The live reader fills every option
+    in, so a default is recognised rather than written.
+    """
+    increment = 1 if sequence.increment is None else sequence.increment
+    low, high = (1, _BIGINT_MAX) if increment > 0 else (_BIGINT_MIN, -1)
+    minimum = low if sequence.min_value is None else sequence.min_value
+    maximum = high if sequence.max_value is None else sequence.max_value
+    start = minimum if increment > 0 else maximum
+    options = [
+        (f"INCREMENT BY {increment}", increment != 1),
+        (f"MINVALUE {minimum}", minimum != low),
+        (f"MAXVALUE {maximum}", maximum != high),
+        (f"START WITH {sequence.start}", sequence.start not in (None, start)),
+    ]
+    written = "".join(f" {option}" for option, differs in options if differs)
+    return f"CREATE SEQUENCE IF NOT EXISTS {sequence.qualified}{written};\n"
+
+
 class DifferSQLGenerator:
     """Generates the DDL for a schema change, up and down."""
 
@@ -433,14 +460,13 @@ class DifferSQLGenerator:
 def _enum_or_sequence_up(change: EnumOrSequenceChange) -> str:
     match change:
         case EnumTypeAdded(enum):
-            labels = ", ".join(_quoted(v) for v in enum.values)
-            return f"CREATE TYPE {enum.qualified} AS ENUM ({labels});\n"
+            return _create_enum(enum)
         case EnumTypeDropped(enum):
             return _drop("TYPE", enum.qualified)
         case EnumValuesChanged():
             return _enum_values(change)
         case SequenceAdded(sequence):
-            return f"CREATE SEQUENCE IF NOT EXISTS {sequence.qualified};\n"
+            return _create_sequence(sequence)
         case SequenceDropped(sequence):
             return _drop("SEQUENCE", sequence.qualified)
         case _:
@@ -466,20 +492,19 @@ def _definition_up(change: DefinitionChange) -> str | None:
             assert_never(change)
 
 
-def _enum_or_sequence_down(change: EnumOrSequenceChange) -> str:
+def _enum_or_sequence_down(change: EnumOrSequenceChange) -> str | None:
+    """A drop comes back from what the change carries; an added label cannot be taken back."""
     match change:
         case EnumTypeAdded(enum):
             return _drop("TYPE", enum.qualified)
         case EnumTypeDropped(enum):
-            return f"-- WARNING: Cannot automatically recreate dropped enum type {enum.qualified}\n"
+            return _create_enum(enum)
         case EnumValuesChanged():
-            return _no_rollback(change)
+            return None
         case SequenceAdded(sequence):
             return _drop("SEQUENCE", sequence.qualified)
         case SequenceDropped(sequence):
-            return (
-                f"-- WARNING: Cannot automatically recreate dropped sequence {sequence.qualified}\n"
-            )
+            return _create_sequence(sequence)
         case _:
             assert_never(change)
 
