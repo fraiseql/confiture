@@ -51,6 +51,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   constant, or a body the parser rejects, gives no class, and the stub returns
   `dict[str, Any]`. `StubFunction.from_function_info` takes the keys as an
   argument, since a model does not read SQL.
+- **Prep-seed level 1 reads a CSV `COPY` block** (#397). A `COPY … FROM stdin
+  (FORMAT csv)` was reported `SEED_NOT_CHECKED` and none of its rows were checked.
+  `copy_formatter.copy_csv_rows` decodes it as PostgreSQL's CSV reader does: fields
+  split outside quotes, the escape character (the quote unless `ESCAPE` says
+  otherwise), `NULL` unquoted only, `FORCE_NULL`/`FORCE_NOT_NULL`, `HEADER` and
+  `HEADER match`, and a quoted field that spans lines, since a CSV row is not a
+  line. An integration test loads each case into PostgreSQL and compares. A block
+  PostgreSQL would refuse (an unclosed quote, a header that does not match) is
+  `SEED_UNPARSEABLE`. `FORMAT binary` and a `DEFAULT` marker are still
+  `SEED_NOT_CHECKED`.
 
 ### Security
 

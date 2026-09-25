@@ -232,11 +232,39 @@ def test_an_insert_select_is_reported_as_not_checked() -> None:
     assert "computed at run time" in note.message
 
 
-def test_a_csv_copy_is_reported_as_not_checked() -> None:
-    sql = "COPY prep_seed.tb_x (id) FROM stdin (FORMAT csv);\nnope\n\\.\n"
+def test_a_csv_copy_is_read_row_by_row() -> None:
+    """The issue's example (#397): a CSV row is checked like a text one."""
+    sql = (
+        "COPY prep_seed.tb_region (id, slug) FROM stdin (FORMAT csv, HEADER);\n"
+        "id,slug\n"
+        'not-a-uuid,"north,\namerica"\n'
+        f"{OK},europe\n"
+        "\\.\n"
+    )
+    (bad,) = _uuid(Level1SeedValidator().validate_seed_file(sql, "x.sql"))
+    assert bad.line_number == 3
+    assert "'not-a-uuid'" in bad.message
+
+
+def test_a_csv_row_of_the_wrong_width_is_a_finding_at_the_line_it_starts_on() -> None:
+    sql = f'COPY prep_seed.tb_x (id) FROM stdin (FORMAT csv);\n"{OK}\n",x\n\\.\n'
+    (bad,) = Level1SeedValidator().validate_seed_file(sql, "x.sql")
+    assert bad.pattern == PrepSeedPattern.SEED_ROW_WIDTH
+    assert bad.line_number == 2
+
+
+def test_a_csv_copy_with_a_default_marker_is_reported_as_not_checked() -> None:
+    sql = "COPY prep_seed.tb_x (id) FROM stdin (FORMAT csv, DEFAULT 'D');\nD\n\\.\n"
     (note,) = Level1SeedValidator().validate_seed_file(sql, "x.sql")
     assert note.pattern == PrepSeedPattern.SEED_NOT_CHECKED
-    assert "csv" in note.message.lower()
+    assert "DEFAULT" in note.message
+
+
+def test_a_binary_copy_is_still_reported_as_not_checked() -> None:
+    sql = "COPY prep_seed.tb_x (id) FROM stdin (FORMAT binary);\nnope\n\\.\n"
+    (note,) = Level1SeedValidator().validate_seed_file(sql, "x.sql")
+    assert note.pattern == PrepSeedPattern.SEED_NOT_CHECKED
+    assert "binary" in note.message
 
 
 def test_a_row_of_the_wrong_width_is_a_finding() -> None:

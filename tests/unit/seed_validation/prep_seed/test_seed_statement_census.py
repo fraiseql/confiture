@@ -34,7 +34,7 @@ REPORTED_KINDS = frozenset({"UpdateStmt"})
 #: Per shape: (rows read, statements reported as not checked); ``None`` when the
 #: parser rejects the file.
 READS: dict[str, tuple[int, int] | None] = {
-    "copy_csv.sql": (0, 1),
+    "copy_csv.sql": (1, 0),
     "copy_from_file.sql": (0, 1),
     "copy_text.sql": (2, 0),
     "insert_default_values.sql": (0, 1),

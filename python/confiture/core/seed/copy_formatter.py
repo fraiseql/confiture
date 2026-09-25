@@ -4,6 +4,8 @@ This module provides CopyFormatter to convert seed data into PostgreSQL's
 efficient COPY format for bulk loading.
 """
 
+from collections.abc import Collection, Iterator
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -184,3 +186,116 @@ def copy_row(line: str, *, delimiter: str = "\t", null: str = "\\N") -> tuple[st
         i += 1
     fields.append(line[start:])
     return tuple(None if raw == null else copy_unescape(raw) for raw in fields)
+
+
+@dataclass(frozen=True)
+class CsvOptions:
+    """A CSV ``COPY``'s options, PostgreSQL's defaults where the statement gives none.
+
+    ``escape`` is the quote unless given. ``header`` is ``True`` to skip the first
+    row, ``"match"`` to require it to name ``columns`` in order. ``force_null`` and
+    ``force_not_null`` hold column positions.
+    """
+
+    delimiter: str = ","
+    quote: str = '"'
+    escape: str | None = None
+    null: str = ""
+    header: bool | str = False
+    columns: tuple[str, ...] | None = None
+    force_null: frozenset[int] = frozenset()
+    force_not_null: frozenset[int] = frozenset()
+
+
+def copy_csv_rows(
+    data: str, options: CsvOptions | None = None
+) -> list[tuple[int, tuple[str | None, ...]]]:
+    """The rows of a CSV-format ``COPY … FROM stdin`` block, as PostgreSQL reads them.
+
+    *data* is the block's rows, read as one stream: a newline inside quotes is data,
+    so a row is not a line. Each row comes with the index of the line it starts on.
+    A field is NULL when it is unquoted and equal to the NULL string, or equal to it
+    at all in a ``force_null`` column; a ``force_not_null`` column is never NULL.
+
+    Raises:
+        ValueError: a quoted field is not closed, or a header that must match does
+            not; PostgreSQL refuses both.
+    """
+    opts = options or CsvOptions()
+    delimiter, quote, null = opts.delimiter, opts.quote, opts.null
+    header, columns = opts.header, opts.columns
+    force_null, force_not_null = opts.force_null, opts.force_not_null
+    escape = quote if opts.escape is None else opts.escape
+    rows: list[tuple[int, tuple[str | None, ...]]] = []
+    for line, fields in _csv_records(data, delimiter=delimiter, quote=quote, escape=escape):
+        values = tuple(
+            _csv_value(i, text, quoted, null, force_null, force_not_null)
+            for i, (text, quoted) in enumerate(fields)
+        )
+        rows.append((line, values))
+    if header and rows:
+        (_, names), *rows = rows
+        if header == "match" and columns is not None and tuple(names) != columns:
+            raise ValueError(f"the header names {names!r}, not the column list {columns!r}")
+    return rows
+
+
+def _csv_value(
+    index: int,
+    text: str,
+    quoted: bool,
+    null: str,
+    force_null: Collection[int],
+    force_not_null: Collection[int],
+) -> str | None:
+    if index in force_not_null:
+        return text
+    if text == null and (not quoted or index in force_null):
+        return None
+    return text
+
+
+def _csv_records(
+    data: str, *, delimiter: str, quote: str, escape: str
+) -> Iterator[tuple[int, list[tuple[str, bool]]]]:
+    """Each record of *data*: the line it starts on, and its fields as ``(text, quoted)``."""
+    line = start_line = 0
+    fields: list[tuple[str, bool]] = []
+    field: list[str] = []
+    quoted = in_quote = False
+    i = 0
+    while i < len(data):
+        char = data[i]
+        if in_quote:
+            if char == escape and i + 1 < len(data) and data[i + 1] in (escape, quote):
+                field.append(data[i + 1])
+                i += 2
+                continue
+            if char == quote:
+                in_quote = False
+            else:
+                field.append(char)
+                line += char == "\n"
+            i += 1
+            continue
+        if char == quote:
+            in_quote = quoted = True
+        elif char == delimiter:
+            fields.append(("".join(field), quoted))
+            field, quoted = [], False
+        elif char in "\r\n":
+            fields.append(("".join(field), quoted))
+            yield start_line, fields
+            if char == "\r" and data[i + 1 : i + 2] == "\n":
+                i += 1
+            line += 1
+            start_line = line
+            fields, field, quoted = [], [], False
+        else:
+            field.append(char)
+        i += 1
+    if in_quote:
+        raise ValueError(f"unterminated quoted field in the row starting on line {start_line + 1}")
+    if field or fields or quoted:
+        fields.append(("".join(field), quoted))
+        yield start_line, fields

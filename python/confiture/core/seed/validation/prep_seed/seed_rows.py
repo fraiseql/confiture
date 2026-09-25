@@ -25,7 +25,7 @@ from confiture.core import sql_lexer
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import walk_nodes
 from confiture.core.parser_info import parse_error_line
-from confiture.core.seed.copy_formatter import copy_row
+from confiture.core.seed.copy_formatter import CsvOptions, copy_csv_rows, copy_row
 
 _SETOP_NONE = _pg_member("SetOperation", "SETOP_NONE")
 
@@ -211,11 +211,13 @@ def _copy(lines: _Lines, block: sql_lexer.CopyBlock) -> SeedWrite | Unread:
         return Unread(line, "a COPY … FROM stdin that names no table")
     options = _options(stmt)
     fmt = options.get("format", "text").lower()
-    if fmt != "text":
-        return Unread(line, f"a COPY in {fmt} format: level 1 decodes the text format only")
     relation = stmt.relation
     columns = tuple(name.sval for name in stmt.attlist) if stmt.attlist else None
     first = lines.of(block.data_start)
+    if fmt == "csv":
+        return _csv_copy(stmt, block, columns, line=line, first=first)
+    if fmt != "text":
+        return Unread(line, f"a COPY in {fmt} format: level 1 decodes the text and csv formats")
     texts = block.data.split("\n")[:-1] if block.data else []
     delimiter = options.get("delimiter", "\t")
     null = options.get("null", "\\N")
@@ -224,6 +226,73 @@ def _copy(lines: _Lines, block: sql_lexer.CopyBlock) -> SeedWrite | Unread:
         for number, text in enumerate(texts, start=1)
     )
     return SeedWrite(relation.schemaname, relation.relname, columns, rows, line, "copy")
+
+
+def _csv_copy(
+    stmt: Any, block: sql_lexer.CopyBlock, columns: tuple[str, ...] | None, *, line: int, first: int
+) -> SeedWrite | Unread:
+    """A CSV ``COPY``'s rows, decoded by :func:`copy_csv_rows` with the statement's options."""
+    options = _csv_options(stmt, columns)
+    if isinstance(options, str):
+        return Unread(line, options)
+    try:
+        decoded = copy_csv_rows(block.data, options)
+    except ValueError as exc:
+        raise SeedParseError(str(exc), first) from exc
+    relation = stmt.relation
+    rows = tuple(
+        SeedRow(number, first + at, values) for number, (at, values) in enumerate(decoded, start=1)
+    )
+    return SeedWrite(relation.schemaname, relation.relname, columns, rows, line, "copy")
+
+
+def _csv_options(stmt: Any, columns: tuple[str, ...] | None) -> CsvOptions | str:
+    """The statement's CSV options, or why level 1 cannot read its rows."""
+    given = {opt.defname: opt.arg for opt in stmt.options or ()}
+    if "default" in given:
+        return "a COPY with a DEFAULT marker: level 1 does not read which fields it fills"
+    forced: dict[str, frozenset[int]] = {}
+    for name in ("force_null", "force_not_null"):
+        arg = given.get(name)
+        if arg is None:
+            forced[name] = frozenset()
+        elif columns is None:
+            return f"a COPY whose {name.upper()} names columns it does not list"
+        elif type(arg).__name__ == "A_Star":
+            forced[name] = frozenset(range(len(columns)))
+        else:
+            named = [item.sval for item in arg]
+            if not set(named) <= set(columns):
+                return f"a COPY whose {name.upper()} names a column it does not list"
+            forced[name] = frozenset(columns.index(n) for n in named)
+    text = {name: getattr(arg, "sval", None) for name, arg in given.items()}
+    return CsvOptions(
+        delimiter=text.get("delimiter") or ",",
+        quote=text.get("quote") or '"',
+        escape=text.get("escape"),
+        null=text["null"] if text.get("null") is not None else "",
+        header=_header(given),
+        columns=columns,
+        force_null=forced["force_null"],
+        force_not_null=forced["force_not_null"],
+    )
+
+
+def _header(given: dict[str, Any]) -> bool | str:
+    """``HEADER``'s value: absent is false, bare is true, then a Boolean, an Integer or a word."""
+    if "header" not in given:
+        return False
+    arg = given["header"]
+    match type(arg).__name__:
+        case "NoneType":
+            return True
+        case "Boolean":
+            return bool(arg.boolval)
+        case "Integer":
+            return bool(arg.ival)
+        case _:
+            word = arg.sval.lower()
+            return "match" if word == "match" else word in ("true", "on")
 
 
 def _set_operations(stmt: Any) -> Iterator[Any]:
