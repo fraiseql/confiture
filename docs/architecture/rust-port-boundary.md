@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-23,717 lines, 33% of `core/`.
+23,733 lines, 33% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -92,9 +92,9 @@ duplicate readers were deleted. The count below is what the port translates.
 | `ddl_clauses.py` | 105 | DDL transform |
 | `ddl_objects.py` | 506 | DDL transform |
 | `ddl_walk.py` | 1,361 | DDL transform |
-| `destructive.py` | 169 | DDL transform |
+| `destructive.py` | 175 | DDL transform |
 | `differ.py` | 708 | DDL transform |
-| `differ_sql.py` | 494 | DDL transform |
+| `differ_sql.py` | 504 | DDL transform |
 | `expand_contract.py` | 273 | DDL transform |
 | `fk_extractor.py` | 458 | DDL transform |
 | `function_body_checker.py` | 210 | DDL transform |

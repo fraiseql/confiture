@@ -312,3 +312,22 @@ def test_a_default_survives_to_the_column_definition(default: str, rendered: str
     """What pg_dump writes as a default comes back as SQL, arguments and casts included."""
     table = SchemaDiffer().parse_schema(f"CREATE TABLE t (a text DEFAULT {default});").tables[0]
     assert column_definition(table.columns[0]) == f"TEXT DEFAULT {rendered}"
+
+
+class TestAnUnnamedConstraintsDown:
+    """The down of an added unnamed constraint is the generator's directive, with its reason (#335)."""
+
+    def test_the_down_file_says_why_in_a_directive(self, tmp_path: Path) -> None:
+        diff = SchemaDiffer().compare(
+            "CREATE TABLE t (id int);", "CREATE TABLE t (id int CHECK (id > 0));"
+        )
+        up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+            diff, name="check", version=VERSION
+        )
+        down = up.with_name(up.name.replace(".up.sql", ".down.sql")).read_text()
+        reasons = [d.argument for d in sql_lexer.directives(down) if d.name == "irreversible"]
+        assert reasons == [
+            "no rollback derived for ADD_CHECK_CONSTRAINT t: the constraint is unnamed, "
+            "and PostgreSQL chooses its name when it is added"
+        ]
+        assert "WARNING" not in down

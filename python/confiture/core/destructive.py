@@ -100,7 +100,13 @@ def no_rollback(change: SchemaChange) -> str:
     """The reason written when no down statement can be derived for ``change``."""
     wire = change.to_wire()
     target = ".".join(part for part in (wire.table, wire.column) if part)
-    return f"no rollback derived for {wire.type} {target}".rstrip()
+    reason = f"no rollback derived for {wire.type} {target}".rstrip()
+    if (
+        isinstance(change, ForeignKeyAdded | CheckConstraintAdded | UniqueConstraintAdded)
+        and not change.constraint.name
+    ):
+        reason += ": the constraint is unnamed, and PostgreSQL chooses its name when it is added"
+    return reason
 
 
 def irreversible_reason(change: SchemaChange, *, has_down: bool) -> str | None:

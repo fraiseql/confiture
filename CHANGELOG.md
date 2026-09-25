@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     it unmarked, `forbid` refuses with `DIFFER_401`. `DifferSQLGenerator` takes no
     `force_destructive` argument any more. The `every-change` diff golden now holds
     the three drops where it held the warning.
+  - The down of an added foreign key, CHECK or UNIQUE constraint was a `-- WARNING:
+    No automatic rollback` line. A named one is now dropped by its name (`ALTER TABLE
+    … DROP CONSTRAINT IF EXISTS <name>`). An unnamed one gets the generator's
+    `-- confiture:irreversible` directive, saying that PostgreSQL chooses the name.
+    The up statement is tiered `irreversible` accordingly.
 
 ## [1.20.0] - 2026-09-25
 

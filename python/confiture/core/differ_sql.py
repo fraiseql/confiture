@@ -280,7 +280,12 @@ def _add_constraint(
 
 
 def _drop_constraint(
-    change: ForeignKeyDropped | CheckConstraintDropped | UniqueConstraintDropped,
+    change: ForeignKeyAdded
+    | ForeignKeyDropped
+    | CheckConstraintAdded
+    | CheckConstraintDropped
+    | UniqueConstraintAdded
+    | UniqueConstraintDropped,
 ) -> str:
     if not change.constraint.name:
         return _unnamed(change, "constraint")
@@ -305,8 +310,13 @@ def _table_object_up(change: TableObjectChange) -> str:
             assert_never(change)
 
 
-def _table_object_down(change: TableObjectChange) -> str:
-    """A drop is undone by the ``ADD`` the change already carries; an add, not yet."""
+def _table_object_down(change: TableObjectChange) -> str | None:
+    """A drop is undone by the ``ADD`` the change carries, an add by dropping what it named.
+
+    An added constraint the schema left unnamed has no rollback: PostgreSQL chooses
+    its name when it is added, and a name confiture guessed would drop nothing,
+    or something else.
+    """
     match change:
         case IndexAdded():
             return _drop_index(change)
@@ -319,7 +329,7 @@ def _table_object_down(change: TableObjectChange) -> str:
         case UniqueConstraintDropped():
             return _add_constraint(change, "a column list")
         case ForeignKeyAdded() | CheckConstraintAdded() | UniqueConstraintAdded():
-            return _no_rollback(change)
+            return _drop_constraint(change) if change.constraint.name else None
         case _:
             assert_never(change)
 
