@@ -60,6 +60,7 @@ import pglast
 import pglast.parser
 
 from confiture.core import plpgsql_fragments, plpgsql_parse, sql_lexer
+from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import routine_body, walk_nodes
 from confiture.core.linting.inventory import SchemaObject, object_from_statement, split_names
 
@@ -77,6 +78,16 @@ DYNAMIC = "dynamic"
 #: Not an object either — a fragment that could not be parsed, kept so the
 #: rule can say the body was read short instead of implying it was read whole.
 UNREAD = "unread"
+
+#: When PostgreSQL resolves a name, which decides whether the object must exist
+#: before the statement that names it (``build_004``): when the body first runs
+#: (PL/pgSQL), when the statement runs (a view, a ``BEGIN ATOMIC`` body, a
+#: default, a check, an index expression, a trigger's function, a foreign key),
+#: or when it runs while ``check_function_bodies`` is on (a ``LANGUAGE sql``
+#: body written as a string, #383).
+AT_RUN = "run"
+AT_CREATE = "create"
+AT_CREATE_IF_CHECKED = "create, when function bodies are checked"
 
 #: The languages whose bodies are SQL confiture can parse. Everything else —
 #: ``c``, ``internal``, ``plpython3u``, ``plperl`` — has a body that is not SQL.
@@ -108,6 +119,14 @@ class Reference:
     referrer_line: int = 1
     dynamic: bool = False
     line_is_exact: bool = True
+    #: When PostgreSQL resolves the name: :data:`AT_RUN`, :data:`AT_CREATE` or
+    #: :data:`AT_CREATE_IF_CHECKED`.
+    resolves: str = AT_RUN
+    #: What names it, when not a body: ``DEFAULT``, ``CHECK``, ``FOREIGN KEY``, …
+    clause: str | None = None
+    #: A foreign key written in its ``CREATE TABLE``, which the builder's
+    #: two-pass mode moves to the end of the build.
+    movable: bool = False
 
     @property
     def qualified(self) -> str:
@@ -168,7 +187,7 @@ class ReferenceScan:
     """What one text's bodies name, and which of them could not be read.
 
     Attributes:
-        references: Every object named, in source order.
+        references: Every object a routine or view body names, in source order.
         unread: The identity of each routine whose body no parser returned.
             Empty for almost every schema and never empty for one with a
             trigger function, which is why it is a list and not a flag.
@@ -181,6 +200,14 @@ class ReferenceScan:
     references: list[Reference] = field(default_factory=list)
     unread: list[str] = field(default_factory=list)
     unread_fragments: list[Reference] = field(default_factory=list)
+    #: What a statement that is not a body names and PostgreSQL resolves when
+    #: the statement runs: a default, a check, a foreign key, an index
+    #: expression, a trigger's function, the table an index, trigger or
+    #: ``ALTER TABLE`` is on. Kept apart from :attr:`references`, which is what
+    #: ``build_003`` judges; ``build_004`` reads both.
+    clauses: list[Reference] = field(default_factory=list)
+    #: ``(line, on)`` for each ``SET``/``RESET check_function_bodies``, in order.
+    body_checks: list[tuple[int, bool]] = field(default_factory=list)
 
 
 def read_references(sql: str) -> ReferenceScan:
@@ -200,7 +227,9 @@ def read_references(sql: str) -> ReferenceScan:
     # question, and asking it per routine would make the cost quadratic.
     constants = _string_constants(sql)
     scan = ReferenceScan()
+    lines = _StatementLines(sql)
     for raw in raws:
+        _read_clauses(raw, lines, scan)
         obj = object_from_statement(sql, raw)
         reader = None if obj is None else _READERS.get(obj.kind)
         if obj is None or reader is None:
@@ -323,6 +352,12 @@ def _routine_references(
     body = read_body(sql, raw, obj, constants)
     if body.refused is not None:
         raise _UnreadableBody(obj.identity)
+    if getattr(raw.stmt, "sql_body", None) is not None:
+        resolves = AT_CREATE
+    elif body.language == "sql":
+        resolves = AT_CREATE_IF_CHECKED
+    else:
+        resolves = AT_RUN
     found: list[Reference] = []
     for statement in body.statements:
         found.extend(
@@ -334,6 +369,7 @@ def _routine_references(
                 created=statement.created,
                 exact=statement.exact,
                 offset=statement.offset,
+                resolves=resolves,
             )
         )
     found.extend(
@@ -351,7 +387,7 @@ def _query_references(
     sql: str, raw: Any, obj: SchemaObject, _constants: list[tuple[int, int]]
 ) -> list[Reference]:
     """A view or materialized view: its query was parsed with the statement."""
-    return _from_nodes(sql, raw.stmt.query, obj)
+    return _from_nodes(sql, raw.stmt.query, obj, resolves=AT_CREATE)
 
 
 #: Which reader each inventory kind needs. A kind that is absent has no body.
@@ -510,6 +546,7 @@ def _from_nodes(
     created: Any = None,
     exact: bool = True,
     offset: int = 0,
+    resolves: str = AT_RUN,
 ) -> list[Reference]:
     """Walk one parse tree for the relations and routines it names.
 
@@ -528,7 +565,7 @@ def _from_nodes(
         if schema is None and name in skip:
             continue
         at = line if line is not None else _line_of(text, location) + offset
-        found.append(_reference(schema, name, kind, at, obj, exact=exact))
+        found.append(_reference(schema, name, kind, at, obj, exact=exact, resolves=resolves))
     return found
 
 
@@ -573,6 +610,7 @@ def _reference(
     *,
     dynamic: bool = False,
     exact: bool = True,
+    resolves: str = AT_RUN,
 ) -> Reference:
     return Reference(
         schema=schema,
@@ -584,4 +622,134 @@ def _reference(
         referrer_line=obj.statement_line,
         dynamic=dynamic,
         line_is_exact=exact,
+        resolves=resolves,
     )
+
+
+class _StatementLines:
+    """The line each statement of one text starts on, counted on from the last one asked."""
+
+    def __init__(self, sql: str) -> None:
+        self._sql = sql
+        self._pos = 0
+        self._line = 1
+
+    def of(self, raw: Any) -> int:
+        start = sql_lexer.skip_leading_comments(self._sql, raw.stmt_location or 0)
+        if start < self._pos:
+            return _line_of(self._sql, start)
+        self._line += self._sql.count("\n", self._pos, start)
+        self._pos = start
+        return self._line
+
+
+#: The statements that name, outside any body, objects PostgreSQL resolves when
+#: they run, and the node each one is *on* (``None``: it is on nothing else).
+_CLAUSE_STATEMENTS = frozenset(
+    {"CreateStmt", "CreateTableAsStmt", "IndexStmt", "CreateTrigStmt", "AlterTableStmt"}
+)
+
+#: A ``Constraint``'s kind, as the clause a finding names.
+_CLAUSES = {
+    _pg_member("ConstrType", "CONSTR_DEFAULT"): "DEFAULT",
+    _pg_member("ConstrType", "CONSTR_CHECK"): "CHECK",
+    _pg_member("ConstrType", "CONSTR_FOREIGN"): "FOREIGN KEY",
+    _pg_member("ConstrType", "CONSTR_GENERATED"): "GENERATED",
+}
+_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
+
+
+def _clause_target(stmt: Any, kind: str) -> tuple[Any, str] | None:
+    """``(the relation the statement creates or None, what it is)`` for a clause statement."""
+    if kind == "CreateTableAsStmt":
+        return None if stmt.objtype == _MATVIEW_OBJECT else (stmt.into.rel, "table")
+    if kind == "CreateStmt":
+        return stmt.relation, "table"
+    return None, {"IndexStmt": "index", "CreateTrigStmt": "trigger"}.get(kind, "table")
+
+
+def _referrer_name(stmt: Any, own: Any) -> str:
+    """The table a statement creates or is on — an index or trigger by its own name, on it."""
+    target = stmt.relation if own is None else own
+    table = ".".join(p for p in (target.schemaname, target.relname) if p)
+    own_name = getattr(stmt, "idxname", None) or getattr(stmt, "trigname", None)
+    return f"{own_name} on {table}" if own_name else table
+
+
+def _constraint_clauses(stmt: Any, *, in_create: bool) -> tuple[dict[int, str], set[int]]:
+    """The clause each node under a constraint belongs to, and the movable foreign keys.
+
+    A foreign key written in its ``CREATE TABLE`` is one the builder's two-pass
+    mode moves to the end of the build; one added by ``ALTER TABLE`` stays put.
+    """
+    clause_of: dict[int, str] = {}
+    movable: set[int] = set()
+    for node in walk_nodes(stmt):
+        if type(node).__name__ != "Constraint" or int(node.contype) not in _CLAUSES:
+            continue
+        for part in walk_nodes((node.raw_expr, node.pktable)):
+            clause_of[id(part)] = _CLAUSES[int(node.contype)]
+        if int(node.contype) == _FOREIGN and in_create and node.pktable is not None:
+            movable.add(id(node.pktable))
+    return clause_of, movable
+
+
+def _read_clauses(raw: Any, lines: _StatementLines, scan: ReferenceScan) -> None:
+    """What one statement outside a body needs when it runs, into *scan*."""
+    stmt = raw.stmt
+    kind = type(stmt).__name__
+    if kind == "VariableSetStmt" and stmt.name == "check_function_bodies":
+        scan.body_checks.append((lines.of(raw), _guc_on(stmt)))
+        return
+    target = _clause_target(stmt, kind) if kind in _CLAUSE_STATEMENTS else None
+    if target is None:
+        return
+    own, what = target
+    line = lines.of(raw)
+    referrer = _referrer_name(stmt, own)
+    clause_of, movable = _constraint_clauses(stmt, in_create=kind == "CreateStmt")
+
+    def needs(schema: str | None, name: str, ref_kind: str, clause: str | None, node: Any) -> None:
+        scan.clauses.append(
+            Reference(
+                schema,
+                name,
+                ref_kind,
+                line,
+                referrer,
+                what,
+                line,
+                resolves=AT_CREATE,
+                clause=clause,
+                movable=id(node) in movable,
+            )
+        )
+
+    if kind == "CreateTrigStmt":
+        needs(*split_names(stmt.funcname), ROUTINE, "EXECUTE FUNCTION", stmt.funcname)
+    for node in walk_nodes(stmt):
+        named = None if node is own else _named_object(node)
+        if named is None:
+            continue
+        clause = clause_of.get(id(node))
+        if own is None and node is stmt.relation:
+            clause = "ALTER TABLE" if what == "table" else f"CREATE {what.upper()}"
+        elif clause is None and kind == "IndexStmt":
+            clause = "index expression"
+        needs(named[0], named[1], named[2], clause, node)
+
+
+_MATVIEW_OBJECT = _pg_member("ObjectType", "OBJECT_MATVIEW")
+_VAR_SET_VALUE = _pg_member("VariableSetKind", "VAR_SET_VALUE")
+
+#: How PostgreSQL spells a boolean setting that is off.
+_OFF = frozenset({"off", "false", "no", "0", "f", "n", "of", "fa", "fal", "fals"})
+
+
+def _guc_on(stmt: Any) -> bool:
+    """Whether a ``SET``/``RESET check_function_bodies`` leaves the check on."""
+    if int(stmt.kind) != _VAR_SET_VALUE or not stmt.args:
+        return True
+    value = stmt.args[0].val
+    text = str(getattr(value, "sval", None) or getattr(value, "ival", ""))
+    return text.lower() not in _OFF

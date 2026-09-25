@@ -214,6 +214,13 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="build_004",
+        family="build",
+        title="A statement needs, when it runs, an object the build creates later",
+        severity="error",
+        default_on=True,
+    ),
+    LintRule(
         code="sec_001",
         family="security",
         title="Columns that look like secrets should not be plain text",

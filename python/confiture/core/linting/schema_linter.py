@@ -177,6 +177,7 @@ class LintConfig:
         check_qualification: bool = True,
         check_qualification_relations: bool = False,
         check_references: bool = True,
+        check_forward_references: bool = True,
         check_bodies: bool = False,
         check_body_warnings: bool = False,
         check_body_classes: frozenset[str] = frozenset(),
@@ -212,6 +213,9 @@ class LintConfig:
                 adopted on its own with ``--select qual_002``.
             check_references: Report objects a body names that no file in the
                 build creates (``build_003``). On by default, like the rule.
+            check_forward_references: Report a statement that needs, when it
+                runs, an object the build creates later (``build_004``). On by
+                default, like the rule.
             check_bodies: Report plpgsql bodies that do not resolve
                 (``body_001``). Off by default, like the rule: it needs a
                 writable maintenance server carrying ``plpgsql_check``.
@@ -241,6 +245,7 @@ class LintConfig:
         self.check_qualification = check_qualification
         self.check_qualification_relations = check_qualification_relations
         self.check_references = check_references
+        self.check_forward_references = check_forward_references
         self.check_bodies = check_bodies
         self.check_body_warnings = check_body_warnings
         self.check_body_classes = check_body_classes
@@ -392,7 +397,11 @@ class SchemaLinter:
                 self._check_qualification,
                 "qual",
             ),
-            (self.config.check_references, self._check_references, "build"),
+            (
+                self.config.check_references or self.config.check_forward_references,
+                self._check_references,
+                "build",
+            ),
             (
                 self.config.check_bodies
                 or self.config.check_body_warnings
@@ -577,22 +586,40 @@ class SchemaLinter:
             report.add_violation(violation)
 
     def _check_references(self, report: LintReport) -> None:
-        """``build_003``: a body names an object no file in the build creates (#246).
+        """``build_003`` and ``build_004``: what the bodies and clauses name, against the build.
 
-        Three tiers, in order (D4): the build inventory, then
-        ``lint.ignore_objects``, then — only for what is still outstanding — a
-        live database, which is the one thing that can answer for an object
-        created by a migration or owned by an extension. A tier that could not
-        answer is reported as a degradation rather than left to be read as
-        certainty.
+        One read of every file's references, asked two questions. ``build_003``:
+        is the object created at all — three tiers, in order (D4): the build
+        inventory, then ``lint.ignore_objects``, then, only for what is still
+        outstanding, a live database, the one thing that can answer for an
+        object created by a migration or owned by an extension; a tier that
+        could not answer is reported as a degradation rather than left to be
+        read as certainty. ``build_004``: is it created before the statement
+        that needs it, in the order the build emits (#383).
         """
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
         from confiture.core.linting.references import read_references
 
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
-        from confiture.core.linting.unresolved import reference_findings, unresolved_references
+        from confiture.core.linting.unresolved import forward_references
 
         scans = [(label, read_references(text)) for label, text in self._sources()]
+        if self.config.check_forward_references:
+            for violation in forward_references(
+                scans,
+                self._file_objects or self._inventory.objects,
+                search_path=self.environment.lint.search_path,
+                two_pass=self.environment.build.two_pass,
+            ):
+                report.add_violation(violation)
+        if self.config.check_references:
+            self._check_unresolved(scans, report)
+
+    def _check_unresolved(self, scans: list[tuple[str | None, Any]], report: LintReport) -> None:
+        """``build_003``: a body names an object no file in the build creates (#246)."""
+        # Reason: import cycle (unresolved imports LintViolation from this module at module level)
+        from confiture.core.linting.unresolved import reference_findings, unresolved_references
+
         located = [(label, reference) for label, scan in scans for reference in scan.references]
         self._report_unread_bodies(scans, report)
         candidates = unresolved_references(

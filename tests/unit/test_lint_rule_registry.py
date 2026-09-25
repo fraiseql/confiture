@@ -41,6 +41,7 @@ class TestRegistryContents:
             "build_001",
             "build_002",
             "build_003",
+            "build_004",
             "sec_001",
             "qual_001",
             "qual_002",
@@ -80,6 +81,7 @@ class TestRegistryContents:
             "build_001",
             "build_002",
             "build_003",
+            "build_004",
             "sec_001",
             "qual_001",
         }
@@ -133,6 +135,7 @@ class TestSelection:
                 "build_001",
                 "build_002",
                 "build_003",
+                "build_004",
                 "sec_001",
                 "qual_001",
             }
@@ -158,6 +161,7 @@ class TestSelection:
                 "build_001",
                 "build_002",
                 "build_003",
+                "build_004",
                 "sec_001",
                 "qual_001",
                 "UNPARSEABLE",
@@ -185,6 +189,7 @@ class TestSelection:
                 "build_001",
                 "build_002",
                 "build_003",
+                "build_004",
                 "sec_001",
                 "qual_001",
             }

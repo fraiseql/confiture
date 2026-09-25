@@ -14,6 +14,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`build_004`: a statement needs, when it runs, an object the build creates later**
+  (#383). `build_003` asked whether the build creates what a body names at all; a
+  body naming an object a file creates *later* built nothing and failed at apply time
+  with `relation … does not exist`, on a line of the generated bundle. `build_004`
+  asks the same question in the order `confiture build` emits — its files in build
+  order, each top to bottom — over the same references and inventory, in the same
+  pass. It reads what PostgreSQL resolves when a statement runs: a view's or
+  `CREATE TABLE … AS`'s query, a `LANGUAGE sql` body (while `check_function_bodies`
+  is on; a `SET check_function_bodies = off` in the tree is honoured), a `BEGIN
+  ATOMIC` body, a `DEFAULT`, `CHECK`, generated column or index expression, a
+  trigger's function, a `REFERENCES` or `INHERITS`, and the table an index, trigger
+  or `ALTER TABLE` is on. A `LANGUAGE plpgsql` body is resolved when it first runs
+  and is not judged; a foreign key `build.two_pass` moves to the end is not either.
+  The finding names the referring file and line, the object, and the file and line
+  that first creates it. **It is on by default, at `error`**, with no directive to
+  silence it: each case was applied to an empty PostgreSQL in both orders, and the
+  rule reports exactly the orders PostgreSQL refuses — a finding is a build that
+  fails. `--ignore build_004` turns it off for a run.
+
 ## [1.19.0] - 2026-09-25
 
 **The readers read what they are given, and say what they did not.** Each of

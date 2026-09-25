@@ -193,6 +193,7 @@ class TestTheBlindedRulesSaySo:
             "build_001",
             "build_002",
             "build_003",
+            "build_004",
             "qual_001",
         }
 
