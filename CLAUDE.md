@@ -162,6 +162,16 @@ serialisation that decodes is returned byte for byte. Do not call
 `pglast.parse_plpgsql` directly; do not replace the oracle with a grammar; do not
 repair the JSON with a global replace.
 
+**One PL/pgSQL fragment reader** — `core/plpgsql_fragments.py` reads the SQL a compiled
+body holds. How a `PLpgSQL_expr` is read depends on the slot it sits in — a statement,
+an expression, an assignment target, a dynamic string — and `SLOTS[(node, slot)]` says
+which, so `v := (SELECT count(*) …)` and a `FOR … IN EXECUTE` body are read, and a
+fragment pglast rejects is an `UNREAD` finding, never `[]`. `fragments(compiled)` is
+what `references` (and through it build_003, build_004 and prep-seed level 3) and
+`data_assertions` read.
+`tests/unit/test_one_fragment_reader.py` fails on a module that picks a `PLpgSQL_expr`
+or its `query` out of a tree itself; its allow-list is empty.
+
 **`plpgsql_check` is an analysis engine, not a second parser** (`core/linting/bodies.py`,
 the `body` rule family). Only a built schema knows that `v_pk` is `UUID`, so the DDL is
 materialised into a throwaway database (`ExpectedSchemaDB.from_source()`) and PostgreSQL
@@ -186,6 +196,17 @@ spans zero or more components, `*` and `?` never cross a separator.
 `tests/unit/test_one_path_matcher.py`; its allow-list names the modules that match an
 *object* name instead (a seed profile's globs are over bare filenames of a flat
 listing, on purpose).
+
+**One SQL-tree walk** — `core/builder.files_under` is how confiture lists a tree of
+`.sql` files: every file under the directory, at any depth, sorted by path, the same
+answer `include_dirs` builds from. A second walk was a second answer, and each one
+disagreed with the first: level 1 read a nested seed level 5 never ran, `apply_seeds`
+loaded the top level of a tree `validate_seeds` read whole, `migrate diff --to <dir>`
+compared against a schema without its subdirectories. `tests/unit/test_one_sql_tree_walk.py`
+fails on a `glob`/`rglob` of `.sql`, an `iterdir()` that keeps `.sql` files, or an
+`os.walk` elsewhere; its allow-list, keyed
+`module:receiver`, names the directories that are flat listings read by name
+(migrations, schema snapshots, `.verify.sql` sidecars), not trees.
 
 **One DDL reader: `core/ddl_walk.py`**, shared by every walker of a DDL tree.
 - *ALTER folding.* `column_edit`, `adds_primary_key` and `object_edits` decide what an
@@ -233,6 +254,15 @@ schema. `tests/unit/test_one_object_identity.py` fails on a module that spells i
 matched within one schema (moving a table between schemas is `SET SCHEMA`). Two
 definitions of one `(schema, name)` are resolved by `duplicates.wins` — `build_001`'s
 rule, so the diff reads the tree the build produces — and reported as `DIFFER_402`.
+
+**One identifier quoter** — `core/schema_identity.quote_identifier` writes an identifier
+into generated text, quoting it when PostgreSQL's own keyword lists (pglast's
+`RESERVED` and `TYPE_FUNC_NAME`) or its characters need it; `identifier_identity` reads
+one back. A role is an identity and a spelling like any object: `OwnershipExpectation`
+carries `owner_identity` (compared) and `owner_spelling` (written). SQL that is
+*executed* is composed with `psycopg.sql.Identifier`, never with this.
+`tests/unit/test_one_identifier_quoter.py` fails on a module elsewhere that doubles a
+`"` into an identifier or undoubles one out of it; the allow-list is empty.
 
 **One schema model** — `core/schema_model.py`: `Table`, `Column`, `Constraint`,
 `Index`, `EnumType`, `Sequence`, `Routine`, `View`, `Trigger`, and the `SchemaModel` that
@@ -283,6 +313,14 @@ the model's wire from DDL or a live database, and
 [the port's boundary](docs/architecture/rust-port-boundary.md)
 (`scripts/gen_port_boundary.py`) places every `core/` module in the 2027 crate, in
 Python glue, or outside the port.
+
+**Confiture never switches a caller's connection.** A seam function or `MCPServer` that
+is handed a connection runs in the mode it arrives in: when the call needs the other
+one (`apply_seeds` and `validate_seeds` need a transaction, `MCPServer(conn)` needs
+autocommit), `core/connection.require_mode` refuses with `CONFIG_013` (exit 5) before it
+touches anything. Given a URL instead, confiture opens the connection in the mode it
+needs and owns it. Flipping `autocommit` on a caller's connection would commit, or
+abandon, work the caller has not finished.
 
 #### Python migrations: the static evaluator
 
