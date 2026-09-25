@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **A notification webhook is sent over http or https, nothing else.**
+  `HttpTransport` handed its configured URL to `urllib`, which opens `file:`
+  and `ftp:` URLs too, so a hook configured with `file:///…` read a local file.
+  Any scheme but `http`/`https` now raises `HttpTransportError` when the hook is
+  built, naming the URL redacted. A plain `http` webhook is sent with the warning
+  the docstring had always promised.
+
 ## [1.23.0] - 2026-09-25
 
 **What confiture reads and prints, it reads and prints whole.** Each defect was
