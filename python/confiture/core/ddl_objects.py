@@ -413,28 +413,41 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
     )
 
 
-def drop_on_table(obj: DDLObject) -> str | None:
-    """``DROP <kind> IF EXISTS <name> ON <table>`` for an object named per table.
+def drop_statement(obj: DDLObject) -> str | None:
+    """``DROP <kind> IF EXISTS <name>`` for a kind this module reads itself; ``None`` otherwise.
 
     A trigger, a policy and a rule are dropped ``ON`` their table, which their
-    reference's spelling (``app.t.trg``) cannot say; ``None`` for every other
-    kind. Read from ``create_sql``, the statement this module rendered. A
-    template is parsed and its names replaced in the parse nodes, so the printer
-    quotes each identifier as PostgreSQL needs it (``"Touch"``) and nothing here
-    decides that.
+    reference's spelling (``app.t.trg``) cannot say, and an extension's name may
+    need quotes its spelling lost (``"uuid-ossp"``). Read from ``create_sql``, the
+    statement this module rendered; the kinds the lint inventory models are
+    dropped by their reference's spelling, which carries a routine's arguments.
+    A template is parsed and its names replaced in the parse nodes, so the printer
+    quotes each identifier as PostgreSQL needs it and nothing here decides that.
     """
     stmt = pglast.parse_sql(obj.create_sql)[0].stmt
     spec = _EXTRA.get(type(stmt).__name__)
-    if spec is None or spec.parent_attr is None:
+    if spec is None:
         return None
-    relation = getattr(stmt, spec.parent_attr)
-    names = [relation.schemaname, relation.relname, getattr(stmt, spec.name_attr)]
-    names = [name for name in names if name]
-    table = ".".join(["t"] * (len(names) - 1))
-    template = pglast.parse_sql(f"DROP {OBJECT_KEYWORD[spec.kind]} IF EXISTS x ON {table}")
+    named = _named(getattr(stmt, spec.name_attr, None))
+    if named is None:
+        return None
+    schema, name = named
+    names = [schema, name]
+    on = ""
+    if spec.parent_attr is not None:
+        relation = getattr(stmt, spec.parent_attr)
+        names = [relation.schemaname, relation.relname, name]
+        on = " ON " + ".".join(["t"] * len([n for n in names[:2] if n]))
+    names = [n for n in names if n]
+    target = "x" if spec.parent_attr is not None else ".".join(["x"] * len(names))
+    template = pglast.parse_sql(f"DROP {OBJECT_KEYWORD[spec.kind]} IF EXISTS {target}{on}")
     drop: Any = template[0].stmt
-    for node, name in zip(drop.objects[0], names, strict=True):
-        node.sval = name
+    (written,) = drop.objects
+    nodes = [written] if type(written).__name__ == "String" else list(written)
+    if not all(type(node).__name__ == "String" for node in nodes):
+        return None  # a type's drop names a TypeName, as a composite type's spelling does
+    for node, value in zip(nodes, names, strict=True):
+        node.sval = value
     return RawStream()(drop)
 
 

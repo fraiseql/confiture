@@ -1,6 +1,12 @@
 -- Migration: golden
 -- Version: <version>
 
+-- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS catalog;
+
+-- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS prep_seed;
+
 -- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS catalog.tb_manufacturer (
     id UUID NOT NULL,
@@ -39,9 +45,3 @@ BEGIN
     TRUNCATE TABLE prep_seed.tb_manufacturer;
 END;
 $$ LANGUAGE plpgsql;
-
--- confiture:tier additive
-CREATE SCHEMA IF NOT EXISTS catalog;
-
--- confiture:tier additive
-CREATE SCHEMA IF NOT EXISTS prep_seed;

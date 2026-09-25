@@ -75,6 +75,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     table's down. They are written `IF NOT EXISTS` but not `CONCURRENTLY`: the table
     is new and empty, and the migration stays transactional. An unnamed one is
     reported with a warning line, because it cannot be created `IF NOT EXISTS`.
+  - A generated migration runs its changes in an order PostgreSQL accepts
+    (`core/change_order.py`). It used to run them in the differ's reporting order:
+    tables first, then enum types and sequences, then everything else by kind, and
+    tables by name. So a table was created before its schema, the extension its
+    `DEFAULT` calls, its enum type and the tables its foreign keys reference, and
+    a table was dropped before the view that reads it. Now schemas and extensions
+    come first, then types and sequences, then tables ordered by their foreign
+    keys, then edits, routines, views, and triggers and policies. Drops run the
+    other way round. Tables whose foreign keys form a cycle are created without the
+    keys that close it, and those are added once every table exists. The down file
+    undoes the up in reverse. Every example tree's generated migration now applies
+    to an empty database, and so do its down and a second up; before, only three
+    of thirteen did. This resolves the 1.15.0 "Known, not fixed" entries about
+    `migrate diff --generate`.
 
 ## [1.20.0] - 2026-09-25
 

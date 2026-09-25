@@ -2,6 +2,18 @@
 -- Version: <version>
 
 -- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS ren;
+
+-- confiture:tier additive
+CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy');
+
+-- confiture:tier additive
+CREATE TYPE new_status AS ENUM ('x', 'y');
+
+-- confiture:tier additive
+CREATE SEQUENCE IF NOT EXISTS new_seq;
+
+-- confiture:tier additive
 CREATE TABLE IF NOT EXISTS audit (
     id INTEGER NOT NULL,
     at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -43,18 +55,6 @@ CREATE TABLE IF NOT EXISTS ren.tb_orders_history (
     id INTEGER NOT NULL,
     PRIMARY KEY (id)
 );
-
--- confiture:tier additive
-CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy');
-
--- confiture:tier additive
-CREATE TYPE new_status AS ENUM ('x', 'y');
-
--- confiture:tier additive
-CREATE SEQUENCE IF NOT EXISTS new_seq;
-
--- confiture:tier additive
-CREATE SCHEMA IF NOT EXISTS ren;
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_added AS SELECT 2 AS two;

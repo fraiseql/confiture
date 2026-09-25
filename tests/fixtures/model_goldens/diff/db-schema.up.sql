@@ -1,6 +1,9 @@
 -- Migration: golden
 -- Version: <version>
 
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS tb_confiture (
     id UUID NOT NULL DEFAULT gen_random_uuid(),
@@ -20,6 +23,3 @@ CREATE INDEX IF NOT EXISTS idx_tb_confiture_pk_confiture ON tb_confiture (pk_con
 CREATE INDEX IF NOT EXISTS idx_tb_confiture_slug ON tb_confiture (slug);
 CREATE INDEX IF NOT EXISTS idx_tb_confiture_version ON tb_confiture (version);
 CREATE INDEX IF NOT EXISTS idx_tb_confiture_applied_at ON tb_confiture (applied_at DESC);
-
--- confiture:tier additive
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

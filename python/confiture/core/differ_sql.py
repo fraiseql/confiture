@@ -23,7 +23,7 @@ from typing import assert_never
 
 from confiture.core.ddl_clauses import column_body, column_element, column_type, named
 from confiture.core.ddl_clauses import constraint_body as _clause
-from confiture.core.ddl_objects import OBJECT_KEYWORD, DDLObject, drop_on_table
+from confiture.core.ddl_objects import OBJECT_KEYWORD, DDLObject, drop_statement
 from confiture.core.schema_change import (
     CheckConstraintAdded,
     CheckConstraintDropped,
@@ -130,8 +130,8 @@ def _creating(obj: DDLObject, change: SchemaChange) -> str:
 
 def _dropping(obj: DDLObject) -> str:
     """``DROP … IF EXISTS`` for *obj*: on its table where it is named per table."""
-    if (on_table := drop_on_table(obj)) is not None:
-        return f"{on_table};\n"
+    if (statement := drop_statement(obj)) is not None:
+        return f"{statement};\n"
     return _drop(OBJECT_KEYWORD.get(obj.ref.kind, ""), obj.ref.qualified)
 
 

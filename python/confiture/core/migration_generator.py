@@ -13,6 +13,7 @@ from typing import Any
 
 from confiture.core import destructive as _destructive
 from confiture.core._migrator.discovery import parse_migration_filename
+from confiture.core.change_order import apply_order
 from confiture.core.change_set import classify_statements
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.risk_tier import RiskTier, worst_tier
@@ -155,10 +156,11 @@ class MigrationGenerator:
         version = version or self._get_next_version()
         header = f"-- Migration: {name}\n-- Version: {version}\n\n"
         up_path = self.migrations_dir / f"{version}_{name}.up.sql"
-        downs = {id(change): self._change_to_down_sql(change) for change in diff.changes}
-        up_path.write_text(header + gate + self._up_statements(diff.changes, downs))
+        changes = apply_order(diff.changes)
+        downs = {id(change): self._change_to_down_sql(change) for change in changes}
+        up_path.write_text(header + gate + self._up_statements(changes, downs))
         down_path = up_path.with_name(up_path.name.replace(".up.sql", ".down.sql"))
-        down_path.write_text(header + self._down_statements(diff.changes[::-1], downs))
+        down_path.write_text(header + self._down_statements(changes[::-1], downs))
         return up_path
 
     def _gate(self, diff: SchemaDiff, policy: str) -> bool:
@@ -342,9 +344,9 @@ class MigrationGenerator:
         """
         class_name = self._to_class_name(name)
 
-        # Generate up and down statements
-        up_statements = self._generate_up_statements(diff.changes)
-        down_statements = self._generate_down_statements(diff.changes)
+        changes = apply_order(diff.changes)
+        up_statements = self._generate_up_statements(changes)
+        down_statements = self._generate_down_statements(changes)
 
         template = '''"""Migration: {name}
 

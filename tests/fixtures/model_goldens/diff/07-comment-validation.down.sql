@@ -8,7 +8,7 @@ DROP VIEW IF EXISTS v_user_stats;
 DROP VIEW IF EXISTS v_recent_posts;
 
 -- confiture:tier irreversible
-DROP TABLE users;
+DROP TABLE posts;
 
 -- confiture:tier irreversible
-DROP TABLE posts;
+DROP TABLE users;

@@ -43,6 +43,7 @@ PYTHON = "Python-bound"
 ROWS: dict[str, tuple[str, str]] = {
     # The crate: text in, model or verdict out; no database, no file system.
     "_pglast_enums.py": (CRATE, TRANSFORM),
+    "change_order.py": (CRATE, TRANSFORM),
     "change_set": (CRATE, TRANSFORM),
     "cor_extractor.py": (CRATE, TRANSFORM),
     "data_assertions.py": (CRATE, TRANSFORM),

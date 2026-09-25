@@ -4,25 +4,8 @@
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_things AS SELECT id FROM things;
 
--- confiture:tier reversible
-CREATE OR REPLACE VIEW v_retired AS SELECT 1 AS one;
-
 -- confiture:tier destructive
 DROP VIEW IF EXISTS v_added;
-
--- confiture:tier additive
-CREATE SEQUENCE IF NOT EXISTS retired_seq;
-
--- confiture:tier irreversible
-DROP SEQUENCE IF EXISTS new_seq;
-
--- confiture:irreversible no rollback derived for CHANGE_ENUM_VALUES mood
-
--- confiture:tier additive
-CREATE TYPE retired_status AS ENUM ('a', 'b');
-
--- confiture:tier destructive
-DROP TYPE IF EXISTS new_status;
 
 -- confiture:tier lock_risky
 ALTER TABLE things ADD CONSTRAINT things_old_uq UNIQUE (code);
@@ -69,6 +52,23 @@ ALTER TABLE people RENAME COLUMN display_name TO full_name;
 -- confiture:tier irreversible
 DROP TABLE audit;
 
+-- confiture:tier reversible
+ALTER TABLE ren.tb_orders_history RENAME TO tb_orders_archive;
+
+-- confiture:tier irreversible
+DROP SEQUENCE IF EXISTS new_seq;
+
+-- confiture:irreversible no rollback derived for CHANGE_ENUM_VALUES mood
+
+-- confiture:tier destructive
+DROP TYPE IF EXISTS new_status;
+
+-- confiture:tier additive
+CREATE SEQUENCE IF NOT EXISTS retired_seq;
+
+-- confiture:tier additive
+CREATE TYPE retired_status AS ENUM ('a', 'b');
+
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS legacy (
     id INTEGER NOT NULL,
@@ -76,4 +76,4 @@ CREATE TABLE IF NOT EXISTS legacy (
 );
 
 -- confiture:tier reversible
-ALTER TABLE ren.tb_orders_history RENAME TO tb_orders_archive;
+CREATE OR REPLACE VIEW v_retired AS SELECT 1 AS one;

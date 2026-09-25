@@ -2,17 +2,6 @@
 -- Version: <version>
 
 -- confiture:tier additive
-CREATE TABLE IF NOT EXISTS posts (
-    id SERIAL NOT NULL,
-    user_id INTEGER NOT NULL,
-    title VARCHAR(500) NOT NULL,
-    content TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
--- confiture:tier additive
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL NOT NULL,
     username VARCHAR(255) NOT NULL,
@@ -21,6 +10,17 @@ CREATE TABLE IF NOT EXISTS users (
     PRIMARY KEY (id),
     UNIQUE (username),
     UNIQUE (email)
+);
+
+-- confiture:tier additive
+CREATE TABLE IF NOT EXISTS posts (
+    id SERIAL NOT NULL,
+    user_id INTEGER NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    content TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
 -- confiture:tier reversible
