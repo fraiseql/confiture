@@ -27,6 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import pglast
 from pglast.stream import RawStream
 
 from confiture.core.ddl_walk import ObjectEdit, object_edits, object_kinds
@@ -249,7 +250,20 @@ _IDEMPOTENT_ATTR: dict[str, str] = {
     "ViewStmt": "replace",
     "CreateTableAsStmt": "if_not_exists",
     "CreateFunctionStmt": "replace",
+    "CreateExtensionStmt": "if_not_exists",
+    "CreateSchemaStmt": "if_not_exists",
+    # PostgreSQL 14 and later; a constraint trigger has no OR REPLACE at all.
+    "CreateTrigStmt": "replace",
 }
+
+
+def _clause_applies(stmt: Any) -> bool:
+    """Whether PostgreSQL accepts the node's existence clause on this statement.
+
+    ``CREATE SCHEMA … IF NOT EXISTS`` refuses the schema's own elements beside it,
+    and ``CREATE OR REPLACE CONSTRAINT TRIGGER`` does not exist.
+    """
+    return not (getattr(stmt, "schemaElts", None) or getattr(stmt, "isconstraint", False))
 
 
 @dataclass(frozen=True)
@@ -303,7 +317,7 @@ def _canonical_definition(stmt: Any) -> str:
 def _creating_statement(stmt: Any) -> str:
     """The rendering a generated migration carries, re-appliable where it can be."""
     attr = _IDEMPOTENT_ATTR.get(type(stmt).__name__)
-    if attr is None:
+    if attr is None or not _clause_applies(stmt):
         return _canonical_definition(stmt)
     wanted = dict.fromkeys(_EXISTENCE_ATTRS, False)
     wanted[attr] = True
@@ -397,6 +411,31 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
         signature=signature,
         trigger=_trigger(stmt) if ref.kind == "trigger" else None,
     )
+
+
+def drop_on_table(obj: DDLObject) -> str | None:
+    """``DROP <kind> IF EXISTS <name> ON <table>`` for an object named per table.
+
+    A trigger, a policy and a rule are dropped ``ON`` their table, which their
+    reference's spelling (``app.t.trg``) cannot say; ``None`` for every other
+    kind. Read from ``create_sql``, the statement this module rendered. A
+    template is parsed and its names replaced in the parse nodes, so the printer
+    quotes each identifier as PostgreSQL needs it (``"Touch"``) and nothing here
+    decides that.
+    """
+    stmt = pglast.parse_sql(obj.create_sql)[0].stmt
+    spec = _EXTRA.get(type(stmt).__name__)
+    if spec is None or spec.parent_attr is None:
+        return None
+    relation = getattr(stmt, spec.parent_attr)
+    names = [relation.schemaname, relation.relname, getattr(stmt, spec.name_attr)]
+    names = [name for name in names if name]
+    table = ".".join(["t"] * (len(names) - 1))
+    template = pglast.parse_sql(f"DROP {OBJECT_KEYWORD[spec.kind]} IF EXISTS x ON {table}")
+    drop: Any = template[0].stmt
+    for node, name in zip(drop.objects[0], names, strict=True):
+        node.sval = name
+    return RawStream()(drop)
 
 
 def _trigger(stmt: Any) -> Trigger:

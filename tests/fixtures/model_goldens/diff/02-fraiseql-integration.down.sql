@@ -1,22 +1,28 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:irreversible no rollback derived for ADD_TRIGGER tb_user.trigger_tb_user_updated_at
+-- confiture:tier destructive
+DROP TRIGGER IF EXISTS trigger_tb_user_updated_at ON tb_user;
 
--- confiture:irreversible no rollback derived for ADD_TRIGGER tb_post.trigger_tb_post_updated_at
+-- confiture:tier destructive
+DROP TRIGGER IF EXISTS trigger_tb_post_updated_at ON tb_post;
 
--- confiture:irreversible no rollback derived for ADD_TRIGGER tb_comment.trigger_tb_comment_updated_at
+-- confiture:tier destructive
+DROP TRIGGER IF EXISTS trigger_tb_comment_updated_at ON tb_comment;
 
 -- confiture:tier destructive
 DROP FUNCTION IF EXISTS update_updated_at_column();
 
--- confiture:irreversible no rollback derived for ADD_EXTENSION uuid-ossp
+DROP EXTENSION IF EXISTS uuid-ossp;
 
--- confiture:irreversible no rollback derived for ADD_EXTENSION unaccent
+-- confiture:tier destructive
+DROP EXTENSION IF EXISTS unaccent;
 
--- confiture:irreversible no rollback derived for ADD_EXTENSION pg_trgm
+-- confiture:tier destructive
+DROP EXTENSION IF EXISTS pg_trgm;
 
--- confiture:irreversible no rollback derived for ADD_EXTENSION btree_gist
+-- confiture:tier destructive
+DROP EXTENSION IF EXISTS btree_gist;
 
 -- confiture:tier irreversible
 DROP TABLE tv_user;

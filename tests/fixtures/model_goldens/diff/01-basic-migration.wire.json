@@ -88,7 +88,7 @@
         "table": "btree_gist",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE EXTENSION btree_gist",
+        "new_value": "CREATE EXTENSION IF NOT EXISTS btree_gist",
         "details": {
           "kind": "extension",
           "name": "btree_gist",
@@ -100,7 +100,7 @@
         "table": "uuid-ossp",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE EXTENSION \"uuid-ossp\"",
+        "new_value": "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"",
         "details": {
           "kind": "extension",
           "name": "uuid-ossp",

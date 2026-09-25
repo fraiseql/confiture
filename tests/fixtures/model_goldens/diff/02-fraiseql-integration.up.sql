@@ -101,13 +101,17 @@ CREATE TABLE IF NOT EXISTS tv_user (
     PRIMARY KEY (id)
 );
 
--- WARNING: no SQL derived for: ADD EXTENSION btree_gist. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
--- WARNING: no SQL derived for: ADD EXTENSION pg_trgm. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
--- WARNING: no SQL derived for: ADD EXTENSION unaccent. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS unaccent;
 
--- WARNING: no SQL derived for: ADD EXTENSION uuid-ossp. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- confiture:tier reversible
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS trigger AS $$
@@ -117,8 +121,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- WARNING: no SQL derived for: ADD TRIGGER tb_comment.trigger_tb_comment_updated_at. Edit this file before deploying.
+-- confiture:tier additive
+CREATE OR REPLACE TRIGGER trigger_tb_comment_updated_at BEFORE UPDATE ON tb_comment FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
--- WARNING: no SQL derived for: ADD TRIGGER tb_post.trigger_tb_post_updated_at. Edit this file before deploying.
+-- confiture:tier additive
+CREATE OR REPLACE TRIGGER trigger_tb_post_updated_at BEFORE UPDATE ON tb_post FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
--- WARNING: no SQL derived for: ADD TRIGGER tb_user.trigger_tb_user_updated_at. Edit this file before deploying.
+-- confiture:tier additive
+CREATE OR REPLACE TRIGGER trigger_tb_user_updated_at BEFORE UPDATE ON tb_user FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();

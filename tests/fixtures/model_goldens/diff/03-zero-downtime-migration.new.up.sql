@@ -22,4 +22,5 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- WARNING: no SQL derived for: ADD TRIGGER users.trigger_users_updated_at. Edit this file before deploying.
+-- confiture:tier additive
+CREATE OR REPLACE TRIGGER trigger_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();

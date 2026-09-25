@@ -55,13 +55,17 @@ CREATE TABLE IF NOT EXISTS users (
     CONSTRAINT users_bio_length CHECK (char_length(bio) <= 1000)
 );
 
--- WARNING: no SQL derived for: ADD EXTENSION btree_gist. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS btree_gist;
 
--- WARNING: no SQL derived for: ADD EXTENSION pg_trgm. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
--- WARNING: no SQL derived for: ADD EXTENSION pgcrypto. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- WARNING: no SQL derived for: ADD EXTENSION uuid-ossp. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- confiture:tier reversible
 CREATE OR REPLACE FUNCTION public.prevent_delete_project_with_tasks() RETURNS trigger AS $$
@@ -97,15 +101,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- WARNING: no SQL derived for: ADD TRIGGER projects.prevent_delete_project_with_tasks_trigger. Edit this file before deploying.
+-- confiture:tier additive
+CREATE OR REPLACE TRIGGER prevent_delete_project_with_tasks_trigger BEFORE DELETE ON projects FOR EACH ROW EXECUTE PROCEDURE prevent_delete_project_with_tasks();
 
--- WARNING: no SQL derived for: ADD TRIGGER projects.update_projects_updated_at. Edit this file before deploying.
+-- confiture:tier additive
+CREATE OR REPLACE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
--- WARNING: no SQL derived for: ADD TRIGGER tasks.set_task_completed_at_trigger. Edit this file before deploying.
+-- confiture:tier additive
+CREATE OR REPLACE TRIGGER set_task_completed_at_trigger BEFORE UPDATE ON tasks FOR EACH ROW WHEN (old.status IS DISTINCT FROM new.status) EXECUTE PROCEDURE set_task_completed_at();
 
--- WARNING: no SQL derived for: ADD TRIGGER tasks.update_tasks_updated_at. Edit this file before deploying.
+-- confiture:tier additive
+CREATE OR REPLACE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
--- WARNING: no SQL derived for: ADD TRIGGER users.update_users_updated_at. Edit this file before deploying.
+-- confiture:tier additive
+CREATE OR REPLACE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW active_user_dashboard AS SELECT u.id, u.email, u.display_name, count(DISTINCT t.id) FILTER (WHERE t.assigned_to = u.id AND t.status = 'todo') AS my_todo_tasks, count(DISTINCT t.id) FILTER (WHERE t.assigned_to = u.id AND t.status = 'in_progress') AS my_active_tasks, count(DISTINCT t.id) FILTER (WHERE t.assigned_to = u.id AND t.due_date < now() AND t.status NOT IN ('done', 'cancelled')) AS my_overdue_tasks, count(DISTINCT p.id) FILTER (WHERE p.owner_id = u.id AND p.status = 'active') AS my_active_projects, max(t.updated_at) FILTER (WHERE t.assigned_to = u.id) AS last_task_activity FROM users AS u LEFT JOIN tasks AS t ON t.assigned_to = u.id OR t.project_id IN (SELECT id FROM projects WHERE owner_id = u.id) LEFT JOIN projects AS p ON p.owner_id = u.id GROUP BY u.id, u.email, u.display_name;

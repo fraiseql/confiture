@@ -115,7 +115,7 @@
         "table": "uuid-ossp",
         "column": null,
         "old_value": null,
-        "new_value": "CREATE EXTENSION \"uuid-ossp\"",
+        "new_value": "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"",
         "details": {
           "kind": "extension",
           "name": "uuid-ossp",

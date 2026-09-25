@@ -69,6 +69,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- WARNING: no SQL derived for: ADD SCHEMA catalog. Edit this file before deploying.
+-- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS catalog;
 
--- WARNING: no SQL derived for: ADD SCHEMA prep_seed. Edit this file before deploying.
+-- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS prep_seed;

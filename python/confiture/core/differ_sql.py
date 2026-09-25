@@ -23,7 +23,7 @@ from typing import assert_never
 
 from confiture.core.ddl_clauses import column_body, column_element, column_type, named
 from confiture.core.ddl_clauses import constraint_body as _clause
-from confiture.core.ddl_objects import OBJECT_KEYWORD
+from confiture.core.ddl_objects import OBJECT_KEYWORD, DDLObject, drop_on_table
 from confiture.core.schema_change import (
     CheckConstraintAdded,
     CheckConstraintDropped,
@@ -61,12 +61,29 @@ from confiture.core.schema_model import Column, Constraint, EnumType, Sequence, 
 from confiture.core.type_lattice import has_assignment_cast
 
 #: The kinds compared by definition that a migration is derived for, created and
-#: dropped — the ones ``migrate diff --generate`` writes (#288). The rest —
-#: a trigger, an extension, a schema, a policy, … — are reported, and the migration
-#: says ``-- WARNING: no SQL derived`` for the author to write.
+#: dropped — the ones ``migrate diff --generate`` writes (#288, #335). The rest —
+#: a rule, an event trigger, statistics, a server, … — are reported, and the
+#: migration says ``-- WARNING: no SQL derived`` for the author to write.
 DERIVED_KINDS: frozenset[str] = frozenset(
-    {"view", "matview", "function", "procedure", "aggregate", "domain", "type"}
+    {
+        "view",
+        "matview",
+        "function",
+        "procedure",
+        "aggregate",
+        "domain",
+        "type",
+        "trigger",
+        "extension",
+        "schema",
+        "policy",
+    }
 )
+
+#: The derived kinds PostgreSQL gives no ``IF NOT EXISTS`` or ``OR REPLACE``: the
+#: creating statement is guarded on ``duplicate_object`` so that the migration
+#: re-applies, as every other creation it writes does.
+_GUARDED_KINDS: frozenset[str] = frozenset({"domain", "type", "policy"})
 
 #: The kinds whose redefinition is a statement confiture writes. Every other
 #: ``REPLACE`` is in ``ddl_objects.REPLACE_IS_AUTHORS_WORK``, with its reason.
@@ -98,6 +115,24 @@ def _statement(sql: str | None, change: SchemaChange) -> str:
         wire = change.to_wire()
         return f"-- WARNING: no definition captured for {wire.type} {wire.table}\n"
     return f"{sql.rstrip().rstrip(';')};\n"
+
+
+def _creating(obj: DDLObject, change: SchemaChange) -> str:
+    """The statement that creates *obj*, re-appliable: guarded where PostgreSQL has no clause."""
+    statement = _statement(obj.create_sql, change)
+    if obj.ref.kind not in _GUARDED_KINDS or not obj.create_sql:
+        return statement
+    return (
+        f"DO $confiture$\nBEGIN\n    {statement}"
+        "EXCEPTION WHEN duplicate_object THEN NULL;\nEND\n$confiture$;\n"
+    )
+
+
+def _dropping(obj: DDLObject) -> str:
+    """``DROP … IF EXISTS`` for *obj*: on its table where it is named per table."""
+    if (on_table := drop_on_table(obj)) is not None:
+        return f"{on_table};\n"
+    return _drop(OBJECT_KEYWORD.get(obj.ref.kind, ""), obj.ref.qualified)
 
 
 def _drop(keyword: str, name: str) -> str:
@@ -500,9 +535,9 @@ def _definition_up(change: DefinitionChange) -> str | None:
     name = change.ref.qualified
     match change:
         case ObjectAdded(_, obj) if kind in DERIVED_KINDS:
-            return _statement(obj.create_sql, change)
-        case ObjectDropped() if kind in DERIVED_KINDS:
-            return _drop(keyword, name)
+            return _creating(obj, change)
+        case ObjectDropped(_, obj) if kind in DERIVED_KINDS:
+            return _dropping(obj)
         case ObjectReplaced(_, _, new) if kind in _REPLACED_BY_DEFINITION:
             return _statement(new.create_sql, change)
         case ObjectReplaced(_, _, new) if kind in REPLACED_BY_DROP_AND_CREATE:
@@ -536,10 +571,10 @@ def _definition_down(change: DefinitionChange) -> str | None:
     keyword = OBJECT_KEYWORD.get(kind, "")
     name = change.ref.qualified
     match change:
-        case ObjectAdded() if kind in DERIVED_KINDS:
-            return _drop(keyword, name)
+        case ObjectAdded(_, obj) if kind in DERIVED_KINDS:
+            return _dropping(obj)
         case ObjectDropped(_, obj) if kind in DERIVED_KINDS:
-            return _statement(obj.create_sql, change)
+            return _creating(obj, change)
         case ObjectReplaced(_, old, _) if kind in _REPLACED_BY_DEFINITION:
             return _statement(old.create_sql, change)
         case ObjectReplaced(_, old, _) if kind in REPLACED_BY_DROP_AND_CREATE:

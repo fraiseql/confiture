@@ -48,6 +48,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `varchar(50)` then refuses a value that is too long, where an explicit cast
     would silently truncate it. `type_lattice.has_assignment_cast` answers which
     case applies.
+  - A trigger, extension, schema or policy derived no SQL: the migration said
+    `-- WARNING: no SQL derived` for each. They are now written. An extension and a
+    schema get `IF NOT EXISTS` (except a schema with its own elements, which
+    PostgreSQL refuses beside it). A trigger gets `CREATE OR REPLACE TRIGGER`, which
+    needs PostgreSQL 14 or later. A policy, domain, composite type or range type,
+    which PostgreSQL gives no existence clause, is created inside `DO … EXCEPTION
+    WHEN duplicate_object THEN NULL`, so the migration re-applies like every other
+    creation it writes. Such a statement carries no tier directive, because the
+    change set does not read a `DO` body. A trigger or policy is dropped `ON` its
+    table. `migrate diff --format json`'s `new_value` / `old_value` for an
+    extension, schema or trigger now carries that clause, as a view's already did.
+    Redefining one of these kinds is still left to the author.
 
 ## [1.20.0] - 2026-09-25
 

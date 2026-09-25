@@ -51,7 +51,8 @@ CREATE TYPE retired_status AS ENUM ('a', 'b');
 -- confiture:tier additive
 CREATE SEQUENCE IF NOT EXISTS retired_seq;
 
--- WARNING: no SQL derived for: ADD SCHEMA ren. Edit this file before deploying.
+-- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS ren;
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_retired AS SELECT 1 AS one;

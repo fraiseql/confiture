@@ -1,9 +1,11 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:irreversible no rollback derived for ADD_SCHEMA prep_seed
+-- confiture:tier irreversible
+DROP SCHEMA IF EXISTS prep_seed;
 
--- confiture:irreversible no rollback derived for ADD_SCHEMA catalog
+-- confiture:tier irreversible
+DROP SCHEMA IF EXISTS catalog;
 
 -- confiture:tier destructive
 DROP FUNCTION IF EXISTS fn_resolve_tb_manufacturer();

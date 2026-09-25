@@ -52,7 +52,8 @@ CREATE TYPE new_status AS ENUM ('x', 'y');
 -- confiture:tier additive
 CREATE SEQUENCE IF NOT EXISTS new_seq;
 
--- WARNING: no SQL derived for: ADD SCHEMA ren. Edit this file before deploying.
+-- confiture:tier additive
+CREATE SCHEMA IF NOT EXISTS ren;
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_added AS SELECT 2 AS two;

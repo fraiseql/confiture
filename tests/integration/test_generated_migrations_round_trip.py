@@ -147,3 +147,47 @@ class TestTypeChanges:
         with pytest.raises(psycopg.errors.StringDataRightTruncation):
             _apply(conn, up)
         assert conn.execute("SELECT s FROM t").fetchone() == ("abcdef",)
+
+
+class TestDefinitionKinds:
+    """A trigger, extension, schema, policy, domain and composite type re-apply and drop."""
+
+    OLD = (
+        "CREATE TABLE t (a INT);\n"
+        "CREATE FUNCTION fn_t() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;\n"
+    )
+    NEW = OLD + (
+        'CREATE TRIGGER "Touch" BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION fn_t();\n'
+        "CREATE EXTENSION pgcrypto;\n"
+        "CREATE SCHEMA app;\n"
+        "CREATE POLICY p_all ON t USING (a > 0);\n"
+        "CREATE DOMAIN posint AS INT CHECK (VALUE > 0);\n"
+        "CREATE TYPE pair AS (x INT, y INT);\n"
+    )
+    PRESENT = """
+        SELECT (SELECT count(*) FROM pg_trigger WHERE tgname = 'Touch')
+             + (SELECT count(*) FROM pg_extension WHERE extname = 'pgcrypto')
+             + (SELECT count(*) FROM pg_namespace WHERE nspname = 'app')
+             + (SELECT count(*) FROM pg_policy WHERE polname = 'p_all')
+             + (SELECT count(*) FROM pg_type WHERE typname IN ('posint', 'pair'))
+    """
+
+    def test_they_round_trip(self, fresh_database: str, tmp_path: Path) -> None:
+        conn = round_trip(fresh_database, tmp_path, self.OLD, self.NEW)
+        assert conn.execute(self.PRESENT).fetchone() == (6,)
+
+    def test_the_up_applies_twice(self, fresh_database: str, tmp_path: Path) -> None:
+        up, _ = _generated(tmp_path, self.OLD, self.NEW)
+        conn = psycopg.connect(fresh_database, autocommit=True)
+        _apply(conn, self.OLD)
+        _apply(conn, up)
+        _apply(conn, up)
+        assert conn.execute(self.PRESENT).fetchone() == (6,)
+
+    def test_the_down_removes_them(self, fresh_database: str, tmp_path: Path) -> None:
+        up, down = _generated(tmp_path, self.OLD, self.NEW)
+        conn = psycopg.connect(fresh_database, autocommit=True)
+        _apply(conn, self.OLD)
+        _apply(conn, up)
+        _apply(conn, down)
+        assert conn.execute(self.PRESENT).fetchone() == (0,)

@@ -17,4 +17,5 @@ CREATE TABLE IF NOT EXISTS tb_confiture (
     UNIQUE (version)
 );
 
--- WARNING: no SQL derived for: ADD EXTENSION uuid-ossp. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

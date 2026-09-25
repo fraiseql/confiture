@@ -50,4 +50,5 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE (email)
 );
 
--- WARNING: no SQL derived for: ADD EXTENSION uuid-ossp. Edit this file before deploying.
+-- confiture:tier additive
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

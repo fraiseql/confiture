@@ -7,7 +7,8 @@ DROP VIEW IF EXISTS v_things;
 -- confiture:tier destructive
 DROP VIEW IF EXISTS v_added;
 
--- confiture:irreversible no rollback derived for ADD_SCHEMA ren
+-- confiture:tier irreversible
+DROP SCHEMA IF EXISTS ren;
 
 -- confiture:tier irreversible
 DROP SEQUENCE IF EXISTS new_seq;
