@@ -124,6 +124,7 @@
           "columns": [
             "email"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
           "table": "users",
@@ -134,6 +135,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "key_options": [
+            "DESC"
           ],
           "method": "btree",
           "name": "idx_users_created_at",
@@ -146,6 +150,7 @@
           "columns": [
             "display_name"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_users_display_name",
           "table": "users",

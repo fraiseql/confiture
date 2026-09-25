@@ -1,7 +1,7 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS projects (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
     owner_id UUID NOT NULL,
@@ -16,8 +16,12 @@ CREATE TABLE IF NOT EXISTS projects (
     CONSTRAINT projects_name_length CHECK (char_length(name) >= 3 AND char_length(name) <= 100),
     CONSTRAINT projects_status_valid CHECK (status IN ('active', 'archived', 'deleted'))
 );
+CREATE INDEX IF NOT EXISTS idx_projects_owner_id ON projects (owner_id);
+CREATE INDEX IF NOT EXISTS idx_projects_status ON projects (status) WHERE status <> 'deleted';
+CREATE INDEX IF NOT EXISTS idx_projects_owner_status ON projects (owner_id, status);
+CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects (created_at DESC);
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS tasks (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
     project_id UUID NOT NULL,
@@ -38,8 +42,15 @@ CREATE TABLE IF NOT EXISTS tasks (
     CONSTRAINT tasks_status_valid CHECK (status IN ('todo', 'in_progress', 'done', 'cancelled')),
     CONSTRAINT tasks_completed_when_done CHECK ((status = 'done' AND completed_at IS NOT NULL) OR (status <> 'done' AND completed_at IS NULL))
 );
+CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks (project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks (assigned_to) WHERE assigned_to IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status);
+CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks (priority);
+CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks (due_date) WHERE due_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_tasks_project_status ON tasks (project_id, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee_status ON tasks (assigned_to, status) WHERE assigned_to IS NOT NULL;
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS users (
     id UUID NOT NULL DEFAULT uuid_generate_v4(),
     email TEXT NOT NULL,
@@ -54,6 +65,9 @@ CREATE TABLE IF NOT EXISTS users (
     CONSTRAINT users_display_name_length CHECK (char_length(display_name) >= 2),
     CONSTRAINT users_bio_length CHECK (char_length(bio) <= 1000)
 );
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_users_display_name_trgm ON users USING gin (display_name gin_trgm_ops);
 
 -- confiture:tier additive
 CREATE EXTENSION IF NOT EXISTS btree_gist;

@@ -191,3 +191,29 @@ class TestDefinitionKinds:
         _apply(conn, up)
         _apply(conn, down)
         assert conn.execute(self.PRESENT).fetchone() == (0,)
+
+
+class TestIndexes:
+    """An index lands as declared: access method, key options, expression, predicate."""
+
+    OLD = "CREATE EXTENSION IF NOT EXISTS pg_trgm;\nCREATE TABLE t (a INT, b INT, s TEXT);\n"
+    NEW = OLD + (
+        "CREATE INDEX ix_trgm ON t USING gin (s gin_trgm_ops);\n"
+        "CREATE INDEX ix_sum ON t ((a + b));\n"
+        "CREATE INDEX ix_part ON t (a DESC NULLS LAST) WHERE b > 0;\n"
+    )
+
+    def test_they_round_trip_as_declared(self, fresh_database: str, tmp_path: Path) -> None:
+        conn = round_trip(fresh_database, tmp_path, self.OLD, self.NEW)
+        definitions = dict(
+            conn.execute(
+                "SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 't'"
+            ).fetchall()
+        )
+        assert definitions == {
+            "ix_trgm": "CREATE INDEX ix_trgm ON public.t USING gin (s gin_trgm_ops)",
+            "ix_sum": "CREATE INDEX ix_sum ON public.t USING btree (((a + b)))",
+            "ix_part": (
+                "CREATE INDEX ix_part ON public.t USING btree (a DESC NULLS LAST) WHERE (b > 0)"
+            ),
+        }

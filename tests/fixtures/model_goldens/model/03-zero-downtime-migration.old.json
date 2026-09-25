@@ -138,6 +138,7 @@
           "columns": [
             "email"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
           "table": "users",
@@ -149,6 +150,7 @@
           "columns": [
             "full_name"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_users_full_name",
           "table": "users",
@@ -160,6 +162,7 @@
           "columns": [
             "created_at"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_users_created_at",
           "table": "users",

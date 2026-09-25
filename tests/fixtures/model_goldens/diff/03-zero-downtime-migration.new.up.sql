@@ -1,7 +1,7 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL NOT NULL,
     email TEXT NOT NULL,
@@ -13,6 +13,11 @@ CREATE TABLE IF NOT EXISTS users (
     PRIMARY KEY (id),
     UNIQUE (email)
 );
+CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_first_name ON users (first_name);
+CREATE INDEX IF NOT EXISTS idx_users_last_name ON users (last_name);
+CREATE INDEX IF NOT EXISTS idx_users_full_name ON users (first_name, last_name);
+CREATE INDEX IF NOT EXISTS idx_users_created_at ON users (created_at);
 
 -- confiture:tier reversible
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS trigger AS $$

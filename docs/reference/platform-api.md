@@ -349,7 +349,10 @@ expression. `method` is the access method; PostgreSQL's grammar fills in
 `btree` when the statement writes no `USING`, and so does the catalog.
 `backs_constraint` is set on an index that exists only to back a PRIMARY KEY,
 UNIQUE or EXCLUDE constraint — PostgreSQL's, never declared by DDL, so it is
-never *extra* to it; only the catalog knows it.
+never *extra* to it; only the catalog knows it. `key_options` runs alongside
+`columns`: what each key's element writes after the key — its collation,
+operator class and ordering (`gin_trgm_ops`, `DESC NULLS LAST`), `""`
+for a key that writes none, and `()` when no key writes any.
 
 | Field | Type | Default |
 |---|---|---|
@@ -360,6 +363,7 @@ never *extra* to it; only the catalog knows it.
 | `where` | `str \| None` | `None` |
 | `method` | `str \| None` | `None` |
 | `backs_constraint` | `bool` | `False` |
+| `key_options` | `tuple[str, ...]` | `()` |
 
 ### `EnumType`
 

@@ -110,6 +110,7 @@
           "columns": [
             "name"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_catalog_tb_manufacturer_name",
           "table": "catalog.tb_manufacturer",
@@ -121,6 +122,7 @@
           "columns": [
             "id"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_catalog_tb_manufacturer_id",
           "table": "catalog.tb_manufacturer",
@@ -197,6 +199,7 @@
           "columns": [
             "name"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_prep_tb_manufacturer_name",
           "table": "prep_seed.tb_manufacturer",

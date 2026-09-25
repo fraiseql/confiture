@@ -350,6 +350,7 @@
           "columns": [
             "order_id"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_order_items_order",
           "table": "order_items",
@@ -508,6 +509,7 @@
           "columns": [
             "user_id"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_orders_user",
           "table": "orders",
@@ -666,6 +668,7 @@
           "columns": [
             "order_id"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_payments_order",
           "table": "payments",
@@ -901,6 +904,7 @@
           "columns": [
             "user_id"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_tickets_user",
           "table": "support_tickets",
@@ -1020,6 +1024,7 @@
           "columns": [
             "user_id"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_sessions_user",
           "table": "user_sessions",

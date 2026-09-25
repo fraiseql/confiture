@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS people (
     PRIMARY KEY (id)
 );
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS things (
     id INTEGER NOT NULL,
     created_at TIMESTAMPTZ,
@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS things (
     CONSTRAINT things_new_uq UNIQUE (code, qty),
     CONSTRAINT things_new_ck CHECK (qty >= 0)
 );
+CREATE INDEX IF NOT EXISTS things_new_ix ON things (code, qty);
 
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS ren.tb_orders_history (

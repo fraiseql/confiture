@@ -1,7 +1,7 @@
 -- Migration: golden
 -- Version: <version>
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS catalog.tb_manufacturer (
     id UUID NOT NULL,
     pk_manufacturer BIGINT NOT NULL GENERATED ALWAYS AS IDENTITY,
@@ -10,14 +10,17 @@ CREATE TABLE IF NOT EXISTS catalog.tb_manufacturer (
     PRIMARY KEY (pk_manufacturer),
     UNIQUE (id)
 );
+CREATE INDEX IF NOT EXISTS idx_catalog_tb_manufacturer_name ON catalog.tb_manufacturer (name);
+CREATE INDEX IF NOT EXISTS idx_catalog_tb_manufacturer_id ON catalog.tb_manufacturer (id);
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS prep_seed.tb_manufacturer (
     id UUID NOT NULL,
     name TEXT NOT NULL,
     country_code VARCHAR(2) NOT NULL,
     PRIMARY KEY (id)
 );
+CREATE INDEX IF NOT EXISTS idx_prep_tb_manufacturer_name ON prep_seed.tb_manufacturer (name);
 
 -- confiture:tier reversible
 CREATE OR REPLACE FUNCTION fn_resolve_tb_manufacturer() RETURNS void AS $$

@@ -168,6 +168,7 @@
           "columns": [
             "pk_comment"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_comments_pk_comment",
           "table": "comments",
@@ -179,6 +180,7 @@
           "columns": [
             "post_id"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_comments_post_id",
           "table": "comments",
@@ -190,6 +192,7 @@
           "columns": [
             "user_id"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_comments_user_id",
           "table": "comments",
@@ -200,6 +203,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "key_options": [
+            "DESC"
           ],
           "method": "btree",
           "name": "idx_comments_created_at",
@@ -402,6 +408,7 @@
           "columns": [
             "pk_post"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_posts_pk_post",
           "table": "posts",
@@ -413,6 +420,7 @@
           "columns": [
             "slug"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_posts_slug",
           "table": "posts",
@@ -424,6 +432,7 @@
           "columns": [
             "user_id"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_posts_user_id",
           "table": "posts",
@@ -435,6 +444,9 @@
           "columns": [
             "published_at"
           ],
+          "key_options": [
+            "DESC"
+          ],
           "method": "btree",
           "name": "idx_posts_published_at",
           "table": "posts",
@@ -445,6 +457,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "key_options": [
+            "DESC"
           ],
           "method": "btree",
           "name": "idx_posts_created_at",
@@ -644,6 +659,7 @@
           "columns": [
             "pk_user"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_users_pk_user",
           "table": "users",
@@ -655,6 +671,7 @@
           "columns": [
             "slug"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_users_slug",
           "table": "users",
@@ -666,6 +683,7 @@
           "columns": [
             "username"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_users_username",
           "table": "users",
@@ -677,6 +695,7 @@
           "columns": [
             "email"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
           "table": "users",
@@ -687,6 +706,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "key_options": [
+            "DESC"
           ],
           "method": "btree",
           "name": "idx_users_created_at",

@@ -60,6 +60,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     table. `migrate diff --format json`'s `new_value` / `old_value` for an
     extension, schema or trigger now carries that clause, as a view's already did.
     Redefining one of these kinds is still left to the author.
+  - `CREATE INDEX` writes the access method (`USING gin`), the partial predicate
+    (`WHERE …`), each key's collation, operator class and ordering (`s
+    gin_trgm_ops`, `a DESC NULLS LAST`), and an expression key in its own
+    parentheses. It wrote `ON t (s)`, which built a btree where the schema declared
+    a trigram `gin` index, and `ON t (a + b)`, which does not parse. The schema
+    model's `Index` gains `key_options`, alongside `columns`: what each key writes
+    after itself, read by the one index reader from DDL and from
+    `pg_get_indexdef` alike. It is in `schema-model.schema.json`, and a wire
+    written before it reads as no options.
+  - An added table's indexes were never written. The change carried them, and
+    `migrate diff --generate` from an empty database produced example 02 with none
+    of its 37 indexes. They now follow the `CREATE TABLE`, and so does a dropped
+    table's down. They are written `IF NOT EXISTS` but not `CONCURRENTLY`: the table
+    is new and empty, and the migration stays transactional. An unnamed one is
+    reported with a warning line, because it cannot be created `IF NOT EXISTS`.
 
 ## [1.20.0] - 2026-09-25
 

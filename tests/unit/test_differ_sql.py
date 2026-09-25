@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import (
     ColumnAdded,
@@ -126,3 +127,65 @@ def test_generate_down_returns_none_for_a_change_with_no_rollback():
 def test_generate_up_returns_none_for_a_change_with_no_generator():
     gen = DifferSQLGenerator()
     assert gen.generate_up(RETYPED) is None
+
+
+@pytest.mark.parametrize(
+    ("ddl", "statement"),
+    [
+        (
+            "CREATE INDEX i ON t USING gin (s gin_trgm_ops);",
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t USING gin (s gin_trgm_ops);\n",
+        ),
+        (
+            "CREATE INDEX i ON t (a DESC NULLS LAST, b) WHERE b > 0;",
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t (a DESC NULLS LAST, b) WHERE b > 0;\n",
+        ),
+        (
+            "CREATE INDEX i ON t ((a + b));",
+            "CREATE INDEX CONCURRENTLY IF NOT EXISTS i ON t ((a + b));\n",
+        ),
+        (
+            "CREATE UNIQUE INDEX i ON t USING btree (lower(s));",
+            "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS i ON t ((lower(s)));\n",
+        ),
+    ],
+)
+def test_an_index_is_created_as_declared(ddl: str, statement: str) -> None:
+    """#335: the access method, the predicate and each key's options reach the statement."""
+    table = "CREATE TABLE t (a int, b int, s text);"
+    (change,) = SchemaDiffer().compare(table, table + ddl).changes
+    assert DifferSQLGenerator().generate_up(change) == statement
+
+
+class TestAnAddedTableCarriesItsIndexes:
+    """#335: a new table's indexes were in the change and never in the migration."""
+
+    DDL = (
+        "CREATE TABLE t (a int, s text);\n"
+        "CREATE INDEX ix_s ON t USING gin (s gin_trgm_ops);\n"
+        "CREATE UNIQUE INDEX ux_a ON t (a) WHERE a > 0;\n"
+    )
+
+    def test_the_up_creates_them_after_the_table(self) -> None:
+        (change,) = SchemaDiffer().compare("", self.DDL).changes
+        assert DifferSQLGenerator().generate_up(change) == (
+            "CREATE TABLE IF NOT EXISTS t (\n    a INTEGER,\n    s TEXT\n);\n"
+            "CREATE INDEX IF NOT EXISTS ix_s ON t USING gin (s gin_trgm_ops);\n"
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_a ON t (a) WHERE a > 0;\n"
+        )
+
+    def test_the_down_of_a_drop_recreates_them(self) -> None:
+        (change,) = SchemaDiffer().compare(self.DDL, "").changes
+        assert "CREATE INDEX IF NOT EXISTS ix_s ON t USING gin (s gin_trgm_ops);\n" in (
+            DifferSQLGenerator().generate_down(change)
+        )
+
+    def test_an_unnamed_one_is_named_as_missing(self) -> None:
+        (change,) = (
+            SchemaDiffer().compare("", "CREATE TABLE t (a int); CREATE INDEX ON t (a);").changes
+        )
+        assert (
+            DifferSQLGenerator()
+            .generate_up(change)
+            .endswith("-- WARNING: Cannot generate the index on t (a) without an index name\n")
+        )

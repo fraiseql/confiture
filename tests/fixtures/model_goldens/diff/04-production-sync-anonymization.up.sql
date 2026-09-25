@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS employees (
     PRIMARY KEY (id)
 );
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS order_items (
     id BIGINT NOT NULL,
     order_id BIGINT NOT NULL,
@@ -35,8 +35,9 @@ CREATE TABLE IF NOT EXISTS order_items (
     FOREIGN KEY (product_id) REFERENCES products (id),
     CHECK (quantity > 0)
 );
+CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items (order_id);
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS orders (
     id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -49,8 +50,9 @@ CREATE TABLE IF NOT EXISTS orders (
     FOREIGN KEY (user_id) REFERENCES users (id),
     CHECK (total_cents >= 0)
 );
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders (user_id);
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS payments (
     id BIGINT NOT NULL,
     order_id BIGINT NOT NULL,
@@ -63,6 +65,7 @@ CREATE TABLE IF NOT EXISTS payments (
     FOREIGN KEY (order_id) REFERENCES orders (id),
     CHECK (amount_cents >= 0)
 );
+CREATE INDEX IF NOT EXISTS idx_payments_order ON payments (order_id);
 
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS products (
@@ -75,7 +78,7 @@ CREATE TABLE IF NOT EXISTS products (
     CHECK (price_cents >= 0)
 );
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS support_tickets (
     id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -86,8 +89,9 @@ CREATE TABLE IF NOT EXISTS support_tickets (
     PRIMARY KEY (id),
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
+CREATE INDEX IF NOT EXISTS idx_tickets_user ON support_tickets (user_id);
 
--- confiture:tier additive
+-- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS user_sessions (
     id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
@@ -97,6 +101,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     PRIMARY KEY (id),
     FOREIGN KEY (user_id) REFERENCES users (id)
 );
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions (user_id);
 
 -- confiture:tier additive
 CREATE TABLE IF NOT EXISTS users (

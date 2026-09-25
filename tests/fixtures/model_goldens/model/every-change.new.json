@@ -343,6 +343,7 @@
             "code",
             "qty"
           ],
+          "key_options": [],
           "method": "btree",
           "name": "things_new_ix",
           "table": "things",

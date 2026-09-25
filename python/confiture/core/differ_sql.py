@@ -57,7 +57,7 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.core.schema_model import Column, Constraint, EnumType, Sequence, Table
+from confiture.core.schema_model import Column, Constraint, EnumType, Index, Sequence, Table
 from confiture.core.type_lattice import has_assignment_cast
 
 #: The kinds compared by definition that a migration is derived for, created and
@@ -165,7 +165,7 @@ def _table_constraints(table: Table) -> list[Constraint]:
 
 
 def _create_table(table: Table) -> str:
-    """The table the schema declared: its columns **and** its constraints.
+    """The table the schema declared: its columns, its constraints **and** its indexes.
 
     A constraint the schema left unnamed is written unnamed, exactly as the
     author wrote it; PostgreSQL generates the name either way.
@@ -178,10 +178,11 @@ def _create_table(table: Table) -> str:
         for c, body in bodies
         if body is None
     )
-    if elements:
-        joined = ",\n    ".join(elements)
-        return f"{warnings}CREATE TABLE IF NOT EXISTS {table.qualified} (\n    {joined}\n);\n"
-    return f"{warnings}CREATE TABLE IF NOT EXISTS {table.qualified} ();\n"
+    joined = ",\n    ".join(elements)
+    body = f"(\n    {joined}\n)" if elements else "()"
+    return (
+        f"{warnings}CREATE TABLE IF NOT EXISTS {table.qualified} {body};\n{_table_indexes(table)}"
+    )
 
 
 def _table_up(change: TableChange) -> str | None:
@@ -276,15 +277,55 @@ def _column_down(change: ColumnChange) -> str:
             assert_never(change)
 
 
-def _create_index(change: IndexAdded | IndexDropped) -> str:
-    index = change.index
-    if not index.name:
-        return _unnamed(change, "index")
+def _index_element(key: str, options: str) -> str:
+    """One key of a ``CREATE INDEX``: a column bare, an expression in its own parentheses."""
+    element = key if key.isidentifier() else f"({key})"
+    return f"{element} {options}" if options else element
+
+
+def _index_keys(index: Index) -> str:
+    options = index.key_options or ("",) * len(index.columns)
+    return ", ".join(_index_element(k, o) for k, o in zip(index.columns, options, strict=True))
+
+
+def _index_statement(index: Index, table: str, *, concurrently: bool) -> str:
+    """The index as declared: its access method, each key with its options, its predicate."""
     unique = "UNIQUE " if index.unique else ""
+    how = "CONCURRENTLY " if concurrently else ""
+    method = f" USING {index.method}" if index.method not in (None, "btree") else ""
+    where = f" WHERE {index.where}" if index.where else ""
     return (
-        f"CREATE {unique}INDEX CONCURRENTLY IF NOT EXISTS {index.name}"
-        f" ON {change.table} ({', '.join(index.columns)});\n"
+        f"CREATE {unique}INDEX {how}IF NOT EXISTS {index.name}"
+        f" ON {table}{method} ({_index_keys(index)}){where};\n"
     )
+
+
+def _create_index(change: IndexAdded | IndexDropped) -> str:
+    """``CONCURRENTLY``: the table exists and is in use while the index builds."""
+    if not change.index.name:
+        return _unnamed(change, "index")
+    return _index_statement(change.index, change.table, concurrently=True)
+
+
+def _table_indexes(table: Table) -> str:
+    """A table's own indexes, created with it: not ``CONCURRENTLY``, since it is empty.
+
+    One PostgreSQL creates to back a constraint is not written: the constraint
+    creates it. One the schema left unnamed cannot be created ``IF NOT EXISTS``,
+    and a migration that re-applies would add it again, so it is named as missing.
+    """
+    written = []
+    for index in table.indexes:
+        if index.backs_constraint:
+            continue
+        if index.name:
+            written.append(_index_statement(index, table.qualified, concurrently=False))
+        else:
+            written.append(
+                f"-- WARNING: Cannot generate the index on {table.qualified}"
+                f" ({_index_keys(index)}) without an index name\n"
+            )
+    return "".join(written)
 
 
 def _drop_index(change: IndexAdded | IndexDropped) -> str:
