@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-09-25
+
+**Every leaf does what its help says.** A command whose help promised one thing
+did another, and a first argv test was enough to show it. `generate pgtap`
+wrote a volatility test pgTAP does not define. `generate stubs` ignored
+`--format`. `seed generate` listed columns PostgreSQL computes. `introspect`
+matched a foreign key by bare table name. `validate-profile` and the error
+printer dropped bracketed text (#360). `schema-to-schema` failed on a second
+`setup`, sized the empty target, and miscounted `copy` and `verify` (#359).
+`lint-unified` reported a missing squawk or sqlfluff as a clean run, and parsed
+neither tool's real output (#358); a check that did not run now exits 2. An MCP
+tool call is one statement, committed when it returns (#373). A configured
+owner role is compared by its identity, every routine overload is its own tool,
+and confiture quotes an identifier in one place (#375).
+
 ### Changed
 
 - **`lint-unified` exits 2 when a check it was asked for did not run** (#358). A
