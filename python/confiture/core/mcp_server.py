@@ -7,9 +7,9 @@ Built-in tools (``confiture__*`` prefix):
 - ``confiture__schema_introspect`` — table / column / FK discovery
 - ``confiture__drift_check``     — live DB vs DDL drift detection
 
-PostgreSQL stored functions are also exposed automatically; their names
-come directly from the database so they will never collide with the
-``confiture__`` prefix.
+PostgreSQL stored functions are also exposed automatically, each under a tool
+name no other tool holds: a routine whose name a built-in or another routine's
+tool already holds is listed as ``<name>__<oid>``.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -161,27 +162,37 @@ _TOOL_NAME_LIMIT = 64
 
 
 def _tool_names(functions: list[FunctionInfo]) -> dict[str, FunctionInfo]:
-    """Each routine under one tool name: its own, or its own and its input types.
+    """Each routine under one tool name that no other tool holds.
 
     A name one routine holds is its tool's name, unchanged. The overloads of one
     name are one tool each, ``f__integer`` and ``f__text``, spelled from their
     input types with everything but ``[a-z0-9_]`` made ``_`` — and, past what a
-    client accepts, ``f__<oid>``.
+    client accepts, ``f__<oid>``. A name two routines would share, or a built-in
+    holds (a routine named ``confiture__migrate_down``), is ``<name>__<oid>`` for
+    every routine that wanted it, whatever order the catalogue lists them in: a
+    call by a name reaches exactly one thing.
     """
     by_name: dict[str, list[FunctionInfo]] = {}
     for info in functions:
         by_name.setdefault(info.name, []).append(info)
-    tools: dict[str, FunctionInfo] = {}
+    wanted: list[tuple[str, FunctionInfo]] = []
     for name, overloads in by_name.items():
         if len(overloads) == 1:
-            tools[name] = overloads[0]
+            wanted.append((name, overloads[0]))
             continue
         for info in overloads:
             types = "_".join(p.pg_type for p in info.in_params) or "noargs"
             tool = f"{name}__{re.sub(r'[^a-z0-9_]', '_', types.lower())}"
-            if len(tool) > _TOOL_NAME_LIMIT or tool in tools:
-                tool = f"{name}__{info.oid}"
-            tools[tool] = info
+            wanted.append((tool if len(tool) <= _TOOL_NAME_LIMIT else f"{name}__{info.oid}", info))
+    claims = Counter(tool for tool, _ in wanted)
+    taken = {tool["name"] for tool in _BUILTIN_TOOLS}
+    tools: dict[str, FunctionInfo] = {}
+    for tool, info in wanted:
+        name = f"{info.name}__{info.oid}" if claims[tool] > 1 or tool in taken else tool
+        # An oid name another routine holds outright: the oid is unique, so a suffix is too.
+        while name in tools or (name != tool and name in claims):
+            name += "_"
+        tools[name] = info
     return tools
 
 
@@ -372,7 +383,7 @@ class MCPServer:
             "confiture__drift_check": self._call_drift_check,
         }
         try:
-            if name in dispatch:
+            if name in dispatch and self._expose_confiture_tools:
                 return dispatch[name](arguments)
             return self._call_pg_function(name, arguments)
         except psycopg.OperationalError:

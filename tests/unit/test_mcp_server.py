@@ -329,3 +329,48 @@ def test_a_routine_is_called_by_its_name_as_an_identifier():
     (parsed,) = pglast.parse_sql(text)
     (target,) = parsed.stmt.targetList
     assert tuple(part.sval for part in target.val.funcname) == ("Tools", name)
+
+
+# ── A tool name is one routine's, and a hidden built-in is not callable ─────────
+
+
+def _routine(name: str, oid: int, *types: str) -> FunctionInfo:
+    return FunctionInfo(
+        schema="public",
+        name=name,
+        oid=oid,
+        params=[FunctionParam(name=f"p{i}", pg_type=t) for i, t in enumerate(types)],
+        return_type="integer",
+        returns_set=False,
+        volatility=Volatility.VOLATILE,
+        is_procedure=False,
+        language="sql",
+        source="SELECT 1",
+        estimated_cost=1.0,
+    )
+
+
+def test_a_routine_named_like_a_builtin_gets_its_oid_name() -> None:
+    """``confiture__migrate_down`` in the schema must not be a second tool of that name."""
+    from confiture.core.mcp_server import _tool_names
+
+    tools = _tool_names([_routine("confiture__migrate_down", 42)])
+    assert set(tools) == {"confiture__migrate_down__42"}
+
+
+def test_an_overload_name_a_routine_already_holds_is_not_overwritten() -> None:
+    """``f(integer)`` would be ``f__integer``, the name another routine holds outright."""
+    from confiture.core.mcp_server import _tool_names
+
+    routines = [_routine("f__integer", 1), _routine("f", 2, "integer"), _routine("f", 3, "text")]
+    for order in (routines, routines[::-1]):
+        tools = _tool_names(order)
+        assert len(tools) == 3
+        assert {info.oid for info in tools.values()} == {1, 2, 3}
+
+
+def test_a_hidden_builtin_is_not_callable() -> None:
+    """``expose_confiture_tools=False`` hides the built-ins from the list and from a call."""
+    server = _make_server(expose_confiture_tools=False)
+    with pytest.raises(ValueError, match="Unknown tool"):
+        server.call_tool("confiture__migrate_up", {})
