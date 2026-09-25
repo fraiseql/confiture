@@ -30,7 +30,7 @@ def _idempotent_backend_banner(format_output: str) -> dict[str, Any]:
         A ``meta`` dict the caller folds into its JSON payload: always
         ``{"backend": "ast"}``.
     """
-    # One parser (D13): the AST backend is the only backend. ``backend`` stays in
+    # One parser: the AST backend is the only backend. ``backend`` stays in
     # ``meta`` because the payload contract carries it.
     if format_output == "text":
         console.print("[green]✓ AST backend (pglast)[/green]")

@@ -4,7 +4,7 @@
 :func:`patterns.detect_non_idempotent_patterns` hands back, recognizing
 statements structurally with PostgreSQL's own parser (via :mod:`pglast`).
 
-This is the only backend (D13). Parse failures bubble up as
+This is the only backend. Parse failures bubble up as
 :class:`pglast.parser.ParseError`; the validator records the file as unparseable.
 
 Visitor layout

@@ -6,7 +6,7 @@ check and a passed check differed by a line of output and nothing else, and CI
 went green on a schema nothing had read.
 
 The reason recorded in the code was the sqlparse token limit, which has not been
-reachable since pglast became the only parser (D13, 0.50.0). What reaches that
+reachable since pglast became the only parser (0.50.0). What reaches that
 branch today is a schema **PostgreSQL itself rejects** — which `confiture build`
 would also refuse, and which CLAUDE.md already calls a finding rather than a
 clean result everywhere else it appears (`IDEM_UNPARSEABLE`,

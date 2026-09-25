@@ -2,7 +2,7 @@
 
 A repository should read as if written in one session. Under ``python/`` and ``tests/``
 nothing may name the plan that produced it: a numbered phase (hyphenated or not), a
-numbered cycle, an owner's decision by number, a review finding id (``ARC-02``,
+numbered cycle, an owner's decision by number or by its id (``D13``), a review finding id (``ARC-02``,
 ``LINT-07``, ``SEC-M1``), a plan step (``(P4)``), a path under the gitignored plan
 directory, or "this campaign". Nor may it carry a ``TODO`` / ``FIXME`` / ``HACK``
 marker — a real follow-up lives in the issue tracker or in a shrink-only budget.
@@ -40,10 +40,14 @@ _MARKERS = r"\b(?:" + "|".join(("TO" + "DO", "FIX" + "ME", "HA" + "CK")) + r")\b
 _REVIEW_IDS = (
     r"\b(?:ENG|ARC|ARCH|LED|SEC|DOCS|LINT|ANA|TST|OD)-[A-Z]?[0-9]{1,2}\b|\b" + "QW" + r"[0-9]\b"
 )
+#: A plan's decision by its id — ``(D13)``, ``(#246, D4)``, ``D7a`` — which names
+#: a table in a gitignored plan file no reader of the code has.
+_DECISION_ID = r"\b" + "D" + r"[0-9]{1,2}[a-z]?\b"
 _CAMPAIGN_SHAPES = (
     _BRACKET_PHASE,
     _CYCLE,
     _DECISION,
+    _DECISION_ID,
     _PLAN_DIR,
     _CAMPAIGN,
     _PLAN_STEP,
@@ -138,6 +142,9 @@ CAUGHT = (
     "(" + "LINT" + "-07)",
     "(" + "SEC" + "-M1)",
     "QW" + "4 did-you-mean",
+    "the one parser (" + "D13" + ")",
+    "(#246, " + "D4" + ")",
+    "D" + "7a: a qualified json",
 )
 
 #: The domain word, which stays.
@@ -148,6 +155,8 @@ NOT_CAUGHT = (
     "an import cycle through the migrator",
     "an OpsGenie priority of P2",
     "CONFIG_011 names the installed pglast",
+    "the byte 0xD1 in a hex dump",
+    "a 2D grid of cells",
 )
 
 

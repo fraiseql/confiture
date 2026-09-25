@@ -5,7 +5,7 @@ Before a deploy, a routine that is not in the database yet is what is about to b
 applied. After one, it is the failure the gate exists to catch. The flag is how a
 caller says which, and it ships **off** — because the informational reading is
 legitimate and a default that failed deploys would be a behaviour change nobody
-asked for (README D3).
+asked for.
 
 The verdict itself is always in the payload, flag or no flag, so a consumer never
 reconstructs it from an array.

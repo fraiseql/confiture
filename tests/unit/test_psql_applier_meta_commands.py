@@ -3,7 +3,7 @@
 ``apply_sql_via_psql`` hands schema and seed files to ``psql``, and ``psql``
 executes backslash commands: ``\\!`` runs a shell command, ``\\copy … TO PROGRAM``
 pipes data into one, ``\\i`` reads any file the operator can read.  A seed file is
-repository content; the operator host is not.  D7: hard reject, no warning mode.
+repository content; the operator host is not.  A hard reject, no warning mode.
 
 The scanner has to see the file the way ``psql`` does, or an attacker hides the
 command where the scanner is not looking:

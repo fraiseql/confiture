@@ -5,7 +5,7 @@ a widget'` — satisfies `doc_002` and tells a reader nothing. The rule is
 deliberately the narrowest mechanical band: every meaningful word of the comment
 is already a word of the name. It is `info`, opt-in, and wrong sometimes, which
 is what `--baseline` is for; the length bound the issue also offers is
-**not implemented** (D8), because a short accurate comment is common and the
+**not implemented**, because a short accurate comment is common and the
 rule would punish it.
 """
 

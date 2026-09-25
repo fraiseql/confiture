@@ -3,7 +3,7 @@
 ``plugins/sandbox.py`` rejected files that import ``os`` or ``subprocess`` and
 then executed the module with ``importlib`` — the same interpreter, the same
 privileges, no isolation. Calling that a sandbox invites someone to load a
-plugin they would not otherwise trust. D10: name it what it is (an import
+plugin they would not otherwise trust. Name it what it is (an import
 lint), say so when a plugin is loaded, and stop the docs from promising more.
 """
 

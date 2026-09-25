@@ -62,7 +62,7 @@ def test_copy_without_inline_data_is_untouched() -> None:
 
 
 def test_unparseable_schema_raises_instead_of_degrading_silently() -> None:
-    # There is no fallback parser (D13): what PostgreSQL rejects is reported,
+    # There is no fallback parser: what PostgreSQL rejects is reported,
     # never silently read by something less exact — the silent fallback is
     # what turned a blocking gate into a no-op.
     sql = "CREATE TABLE ok (id INT);\nTHIS IS NOT SQL AT ALL;\n"

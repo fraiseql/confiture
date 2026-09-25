@@ -200,9 +200,9 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "CONFIG_006": 3,  # carve-out: DB connection failed (family is otherwise 5)
     "CONFIG_007": 5,  # conflicting explicit DSN sources (#152)
     "CONFIG_008": 5,  # tracking_table is not a plain identifier
-    "CONFIG_009": 5,  # ANONYMIZATION_SECRET unset (D8: the secret is mandatory)
+    "CONFIG_009": 5,  # ANONYMIZATION_SECRET unset (the secret is mandatory)
     "CONFIG_010": 5,
-    "CONFIG_011": 5,  # installed pglast lacks enum members confiture walks (D13)
+    "CONFIG_011": 5,  # installed pglast lacks enum members confiture walks
     "CONFIG_012": 5,  # lint baseline file missing or malformed (#219)
     "CONFIG_013": 5,  # a caller's connection in the wrong mode for the call (#374)
     # MIGR family → 3, with one success-with-signal carve-out at 0.

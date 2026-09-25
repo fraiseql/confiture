@@ -7,7 +7,7 @@ mechanical rather than editorial, and the only one implemented: **every
 meaningful word of the comment is already a word of the name.**
 
 The bound the issue also offers — "shorter than 40 characters on an object with
-more than one parameter" — is deliberately not implemented (D8). A short
+more than one parameter" — is deliberately not implemented. A short
 accurate comment is common, so that rule would be wrong more often than right.
 
 What is here is a heuristic and is wrong sometimes: a comment that is correct

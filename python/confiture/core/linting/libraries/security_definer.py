@@ -13,7 +13,7 @@ they leave the function exposed to the caller's path.
 
 Static path (this module): parses the DDL source with pglast and reports
 per-file/line violations with full object names.  pglast is a dependency
-(D13), so there is no absent-parser path: a file it rejects is a finding,
+, so there is no absent-parser path: a file it rejects is a finding,
 not a skip.
 
 Live path: see :mod:`confiture.core.validation.security_definer`

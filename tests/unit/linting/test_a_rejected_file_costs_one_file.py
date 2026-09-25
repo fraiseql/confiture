@@ -8,7 +8,7 @@ usual, and the notice that says so names the file, at a severity the default gat
 can fire on.
 
 `degraded` carries the other half — which rules read a short inventory — because a
-baseline can record a finding and a baseline never sees `degraded` (D6).
+baseline can record a finding and a baseline never sees `degraded`.
 """
 
 from __future__ import annotations
@@ -258,7 +258,7 @@ class TestTheDegradedLineReadsItsOwnReason:
 
 
 class TestABaselineHidesTheFindingAndNotTheBlindness:
-    """D6: a baseline is a project's own opt-out, and it never sees `degraded`.
+    """A baseline is a project's own opt-out, and it never sees `degraded`.
 
     #274's complaint about `--baseline` is not that it makes the finding quiet —
     that is what a baseline is — but that it makes the *blindness* invisible and

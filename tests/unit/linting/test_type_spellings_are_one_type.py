@@ -176,7 +176,7 @@ class TestAFindingPrintsTheTypeAsWritten:
         assert _undocumented(_lint("--select", "doc_002")) == ["fn_c(int8)"]
 
     def test_json_does_not_leak_the_pg_catalog_qualifier(self, project: Path) -> None:
-        """`RawStream` renders a qualified `json` as `pg_catalog.json` (D7a).
+        """`RawStream` renders a qualified `json` as `pg_catalog.json`.
 
         The author wrote `json`; the message told them to write
         `COMMENT ON FUNCTION fn_j(pg_catalog.json)`. `bit` is the other one.

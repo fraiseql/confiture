@@ -1,7 +1,7 @@
 """Shared fixtures for the anonymization strategy tests.
 
 The keyed strategies read ``ANONYMIZATION_SECRET`` and refuse to run without
-it (D8). Every test here gets a fixed test secret so the strategies can be
+it. Every test here gets a fixed test secret so the strategies can be
 exercised; a test about the *absence* of the secret deletes it explicitly.
 """
 

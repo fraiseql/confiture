@@ -59,7 +59,7 @@ TWO_TYPES = [
     ("numeric(10,2)", "numeric(12,2)"),
     ("char(4)", "character(1)"),
     ("bit(3)", "bit varying(3)"),
-    # Two schemas that both say something, and disagree: two types (D9).
+    # Two schemas that both say something, and disagree: two types.
     ("app.custom_t", "other.custom_t"),
 ]
 

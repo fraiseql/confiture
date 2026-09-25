@@ -242,8 +242,8 @@ class FunctionSignatureDriftReport:
         """Whether the source declares a routine the live database has not got.
 
         Always computed and always in :meth:`to_dict`, whatever flag the caller
-        passed, so a consumer never has to reconstruct a verdict from an array
-        (README D3). ``missing_is_drift`` decides whether it *fails* a run.
+        passed, so a consumer never has to reconstruct a verdict from an array.
+        ``missing_is_drift`` decides whether it *fails* a run.
         """
         return len(self.missing_from_db) > 0
 

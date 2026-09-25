@@ -574,7 +574,7 @@ class TestIdempotencyValidatePythonMigrations:
         assert payload["has_warnings"] is True
         assert len(payload["warnings"]) == 1
         w = payload["warnings"][0]
-        assert w["kind"] == "unresolved_fstring"  # the D8 loop-variable f-string
+        assert w["kind"] == "unresolved_fstring"  # the loop-variable f-string
         assert "20260101000004_dynjson.py" in w["source_file"]
         assert isinstance(w["source_line"], int)
         assert isinstance(w["message"], str)

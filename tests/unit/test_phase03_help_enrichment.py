@@ -6,7 +6,7 @@ will see in --help, not implementation details.
 ``TestIdempotentMentionsAstExtra`` was here and is deleted rather than
 re-pointed. It required ``--help`` to name the ``[ast]`` extra or pglast,
 because ``--idempotent`` needed a parser the reader had to install. 0.50.0
-(D13) made pglast a dependency, so there is nothing for the help to warn
+ made pglast a dependency, so there is nothing for the help to warn
 about, and the sentence it pinned had become one of the untruths
 ``tests/unit/docs/test_no_optional_parser.py`` now forbids. A test that
 requires a warning about a condition that cannot arise is a test asking for

@@ -35,7 +35,7 @@ from confiture.models.git import GrantAccompanimentReport
 
 # A SET search_path naming a schema outside this set makes unqualified object
 # names ambiguous — the extractor would key them as `public`, which can
-# false-fail a correct migration. We degrade such grant files instead (D12).
+# false-fail a correct migration. We degrade such grant files instead.
 _SEARCH_PATH_RE = re.compile(r"\bSET\s+search_path\s*(?:=|TO)\s*(?P<list>[^;]+)", re.IGNORECASE)
 _SEARCH_PATH_SAFE_SCHEMAS = frozenset({"public", "pg_catalog", "$user", '"$user"'})
 
@@ -122,7 +122,7 @@ class GrantAccompanimentChecker:
         if not grant_files:
             return report
 
-        # The merge-base is the anchor for the required-set content diff (D10).
+        # The merge-base is the anchor for the required-set content diff.
         merge_base = base_ref if staged_only else self.git_repo.get_merge_base(base_ref, target_ref)
 
         required, notes = self._compute_required(grant_files, merge_base, target_ref, staged_only)
@@ -166,7 +166,7 @@ class GrantAccompanimentChecker:
                 continue
 
             # A non-public SET search_path makes unqualified objects ambiguous;
-            # degrade rather than risk false-failing a correct migration (D12).
+            # degrade rather than risk false-failing a correct migration.
             if self._search_path_ambiguous(target_content):
                 notes.append(
                     f"{grant_file.as_posix()}: SET search_path makes unqualified grants "
@@ -190,7 +190,7 @@ class GrantAccompanimentChecker:
                 required.setdefault(stmt, grant_file)
 
             # A grant that differs only by WITH GRANT OPTION yields no key
-            # change (the flag is out of the match key) — surface it (D9).
+            # change (the flag is out of the match key) — surface it.
             # Iterate the target set so `stmt` is always the target instance.
             notes.extend(
                 f"{grant_file.as_posix()}: {stmt.describe()} — only WITH GRANT OPTION "
@@ -200,14 +200,14 @@ class GrantAccompanimentChecker:
             )
 
             # A grant removed from the file (present at base, absent at target)
-            # degrades to file-presence — the check does not require a REVOKE (D8).
+            # degrades to file-presence — the check does not require a REVOKE.
             notes.extend(
                 f"{grant_file.as_posix()}: {stmt.describe()} was removed; relying on "
                 "migration presence (no automatic REVOKE-migration requirement)"
                 for stmt in base_statements - target_statements
             )
 
-            # Surface every grant the extractor couldn't represent (D9).
+            # Surface every grant the extractor couldn't represent.
             notes.extend(
                 f"{grant_file.as_posix()}: {marker.detail} ({marker.reason})"
                 for marker in target_extraction.unrepresentable
@@ -250,7 +250,7 @@ class GrantAccompanimentChecker:
         target_ref: str,
         staged_only: bool,
     ) -> tuple[set[GrantStatement], list[str]]:
-        """Extract grant statements carried by a Python migration at the right ref (D11)."""
+        """Extract grant statements carried by a Python migration at the right ref."""
         covered: set[GrantStatement] = set()
         notes: list[str] = []
 
@@ -258,8 +258,8 @@ class GrantAccompanimentChecker:
         if not isinstance(content, str):
             return covered, notes
 
-        # The blob at the target ref is analyzed as the file it will be
-        # (D11): `Path(__file__)` and migration-relative
+        # The blob at the target ref is analyzed as the file it will be:
+        # `Path(__file__)` and migration-relative
         # reads resolve where the migration lives. execute_file() targets
         # still come from the working tree — pass the repo root and note it.
         located = (

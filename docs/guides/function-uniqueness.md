@@ -110,7 +110,7 @@ The directive attaches to the *next* non-blank non-comment line.  Use it sparing
 
 `func_001` is AST-only via [pglast](https://github.com/lelit/pglast), which is a
 **dependency** — there is nothing to install and no skip path. It was an optional extra
-until 0.50.0 (D13) made it the one parser; `[ast]` survives as an empty alias so an older
+until 0.50.0 made it the one parser; `[ast]` survives as an empty alias so an older
 `fraiseql-confiture[ast]` still resolves, and installing it changes nothing.
 
 The rule never fell back to a regex detector, and still does not: a file pglast rejects is

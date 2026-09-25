@@ -11,7 +11,7 @@ the AST extractor in
 :mod:`confiture.core.idempotency.python_migration_extractor` so inline
 ``self.execute(...)`` SQL is included.
 
-This module requires ``pglast``, a dependency since 0.50.0 (D13). It raises
+This module requires ``pglast``, a dependency since 0.50.0. It raises
 :class:`ImportError` with a clean message at import time if pglast is
 not installed.
 """

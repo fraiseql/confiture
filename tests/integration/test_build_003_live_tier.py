@@ -1,4 +1,4 @@
-"""``build_003``'s live tier, against a real server (#246, D4).
+"""``build_003``'s live tier, against a real server (#246).
 
 Tier (a) is the DDL tree, and a project's objects do not all come from it: a
 migration creates some, an extension owns others. Both are real, both are

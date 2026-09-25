@@ -1,6 +1,6 @@
 """pglast is a dependency, so nothing may tell a reader to install it.
 
-`sqlparse` and a regex backend were real once. 0.50.0 (D13) made pglast the one
+`sqlparse` and a regex backend were real once. 0.50.0 made pglast the one
 parser and a **hard dependency**; `[ast]` survives only as an empty alias so an
 older `fraiseql-confiture[ast]` still resolves. `tests/unit/test_single_parser.py`
 already forbids the *code* from asking whether pglast is available: no
@@ -64,7 +64,7 @@ RECORDS = {
 
 #: Directories that evaluate alternatives rather than describe confiture. The
 #: research notes weigh sqlparse against pglast and show code for each; that is
-#: the decision D13 records, not a claim about what confiture does.
+#: the decision that made pglast the one parser, not a claim about what confiture does.
 RECORD_DIRS = ("docs/research/",)
 
 

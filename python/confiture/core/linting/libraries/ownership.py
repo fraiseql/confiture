@@ -10,7 +10,7 @@ ownership axis.
 AST-only by design — pairwise ``CREATE`` ↔ ``ALTER … OWNER TO``
 matching across realistic PostgreSQL SQL (dollar-quoted strings,
 CHECK-constraint literals, multi-statement DO blocks) is too brittle to
-ship as a regex.  pglast is a dependency (D13), so there is no
+ship as a regex.  pglast is a dependency, so there is no
 parser-absent path and no skip notice: a file pglast rejects is reported
 as unparseable rather than passed over as a green check.
 

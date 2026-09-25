@@ -163,7 +163,7 @@ def test_version_reports_the_native_extension() -> None:
 
 
 def test_build_has_one_path() -> None:
-    """D1: the Rust builder is gone; `build()` no longer branches on the separator style."""
+    """The Rust builder is gone; `build()` no longer branches on the separator style."""
     import inspect
 
     source = inspect.getsource(SchemaBuilder.build)
