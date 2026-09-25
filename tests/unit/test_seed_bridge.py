@@ -35,9 +35,15 @@ def test_seed_generation_result_to_dict(tmp_path):
 
 def _make_columns() -> list:
     return [
-        {"name": "id", "type": "uuid", "nullable": False, "default": "gen_random_uuid()"},
-        {"name": "name", "type": "text", "nullable": False, "default": None},
-        {"name": "email", "type": "text", "nullable": False, "default": None},
+        {
+            "name": "id",
+            "type": "bigint",
+            "nullable": False,
+            "default": None,
+            "writable": False,  # GENERATED ALWAYS AS IDENTITY
+        },
+        {"name": "name", "type": "text", "nullable": False, "default": None, "writable": True},
+        {"name": "email", "type": "text", "nullable": False, "default": None, "writable": True},
     ]
 
 

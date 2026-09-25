@@ -69,6 +69,9 @@ MODELS = frozenset(
         "Routine",
         "View",
         "Trigger",
+        # ``introspect``'s wire table: it holds no schema, but a foreign key's target
+        # may be in another one, so it is never matched by its bare name (#360).
+        "IntrospectedTable",
     }
 )
 

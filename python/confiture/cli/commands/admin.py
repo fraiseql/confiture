@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import typer
+from rich.markup import escape
 
 from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, resolve_database_url
 from confiture.cli.error_json import cli_boundary, fail
@@ -251,29 +252,28 @@ def _profile_summary(path: Path, profile: Any) -> dict[str, Any]:
 
 
 def _print_profile(profile: Any) -> None:
+    """The profile in text mode; every value from the file is escaped, never markup."""
     console.print("[green]✅ Valid profile![/green]")
-    console.print(f"   Name: {profile.name}")
-    console.print(f"   Version: {profile.version}")
+    console.print(f"   Name: {escape(str(profile.name))}")
+    console.print(f"   Version: {escape(str(profile.version))}")
     if profile.global_seed:
         console.print(f"   Global Seed: {profile.global_seed}")
 
     console.print(f"\n[cyan]Strategies ({len(profile.strategies)})[/cyan]:")
     for strategy_name, strategy_def in profile.strategies.items():
-        console.print(f"   • {strategy_name}: {strategy_def.type}", end="")
+        line = f"   • {strategy_name}: {strategy_def.type}"
         if strategy_def.seed_env_var:
-            console.print(f" [env: {strategy_def.seed_env_var}]")
-        else:
-            console.print()
+            line += f" [env: {strategy_def.seed_env_var}]"
+        console.print(escape(line))
 
     console.print(f"\n[cyan]Tables ({len(profile.tables)})[/cyan]:")
     for table_name, table_def in profile.tables.items():
-        console.print(f"   • {table_name}: {len(table_def.rules)} rules")
+        console.print(escape(f"   • {table_name}: {len(table_def.rules)} rules"))
         for rule in table_def.rules:
-            console.print(f"      - {rule.column} → {rule.strategy}", end="")
+            line = f"      - {rule.column} → {rule.strategy}"
             if rule.seed:
-                console.print(f" [seed: {rule.seed}]")
-            else:
-                console.print()
+                line += f" [seed: {rule.seed}]"
+            console.print(escape(line))
 
     console.print("[green]\n✅ Profile validation passed![/green]")
 
@@ -303,22 +303,29 @@ def validate_profile(
         from confiture.core.anonymization.profile import AnonymizationProfile
 
         if not json_mode:
-            console.print(f"[cyan]📋 Validating profile: {path}[/cyan]")
+            console.print(f"[cyan]📋 Validating profile: {escape(str(path))}[/cyan]")
         profile = AnonymizationProfile.load(path)
-    except FileNotFoundError as e:
+    except IsADirectoryError:
         fail(
             ConfigurationError(
-                f"Profile file not found: {e}",
+                f"Profile path is a directory, not a file: {path}",
+                error_code="CONFIG_004",
+                resolution_hint="Name the anonymization profile YAML itself.",
+            ),
+            json_mode=json_mode,
+        )
+    except FileNotFoundError as e:
+        # The loader's message names the path already; prefixing it said it twice.
+        fail(
+            ConfigurationError(
+                str(e),
                 error_code="CONFIG_004",
                 resolution_hint="Check the path to the anonymization profile YAML.",
             ),
             json_mode=json_mode,
         )
     except ValueError as e:
-        fail(
-            ConfiturError(f"Invalid profile: {e}", error_code="ANON_1400"),
-            json_mode=json_mode,
-        )
+        fail(ConfiturError(str(e), error_code="ANON_1400"), json_mode=json_mode)
     if json_mode:
         emit(_profile_summary(path, profile))
     else:

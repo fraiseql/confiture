@@ -8,7 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from confiture.core import live_catalog
-from confiture.core.introspection.tables import SchemaIntrospector, _detect_hints
+from confiture.core.introspection.tables import (
+    SchemaIntrospector,
+    _detect_hints,
+    _resolve_inbound_fks,
+)
 from confiture.core.schema_model import Column, Constraint, SchemaModel, Table, ref_for
 from confiture.models.introspection import (
     FKReference,
@@ -236,57 +240,49 @@ class TestOutboundFks:
 
 
 class TestResolveInboundFks:
-    """Tests for _resolve_inbound_fks()."""
+    """Tests for _resolve_inbound_fks(): a key is matched by the table it references."""
+
+    @staticmethod
+    def _pair(table: Table) -> tuple[Table, IntrospectedTable]:
+        return table, IntrospectedTable(table.name, [], [], [], None)
+
+    @staticmethod
+    def _fk(ref_table: str) -> Constraint:
+        return Constraint(
+            kind="foreign_key", columns=("fk_user",), ref_table=ref_table, ref_columns=("pk_user",)
+        )
 
     def test_outbound_fk_creates_inbound_on_target(self):
         """An outbound FK on tb_post creates an inbound FK on tb_user."""
-        tb_user = IntrospectedTable("tb_user", [], [], [], None)
-        tb_post = IntrospectedTable(
-            "tb_post",
-            [],
-            [
-                FKReference(
-                    from_table=None, to_table="tb_user", via_column="fk_user", on_column="pk_user"
-                )
-            ],
-            [],
-            None,
+        user = self._pair(Table("tb_user", schema="public"))
+        post = self._pair(
+            Table("tb_post", schema="public", constraints=(self._fk("public.tb_user"),))
         )
-        introspector = SchemaIntrospector(MagicMock())
-        introspector._resolve_inbound_fks([tb_user, tb_post])
+        _resolve_inbound_fks([user[0], post[0]], [user[1], post[1]])
 
-        assert len(tb_user.inbound_fks) == 1
-        inbound = tb_user.inbound_fks[0]
-        assert inbound.from_table == "tb_post"
-        assert inbound.to_table is None
-        assert inbound.via_column == "fk_user"
-        assert inbound.on_column == "pk_user"
+        assert user[1].inbound_fks == [
+            FKReference(
+                from_table="tb_post", to_table=None, via_column="fk_user", on_column="pk_user"
+            )
+        ]
 
     def test_fk_to_unknown_table_is_silently_skipped(self):
         """FK pointing outside the introspected set does not error."""
-        tb_post = IntrospectedTable(
-            "tb_post",
-            [],
-            [
-                FKReference(
-                    from_table=None, to_table="external_table", via_column="fk_ext", on_column="id"
-                )
-            ],
-            [],
-            None,
-        )
-        introspector = SchemaIntrospector(MagicMock())
-        assert introspector._resolve_inbound_fks([tb_post]) is None
-        assert tb_post.inbound_fks == []
+        post = self._pair(Table("tb_post", schema="inv", constraints=(self._fk("ext.tb_x"),)))
+        _resolve_inbound_fks([post[0]], [post[1]])
+        assert post[1].inbound_fks == []
+
+    def test_a_key_into_another_schema_is_not_given_to_a_same_named_table(self):
+        """#360: ``inv.tb_item REFERENCES public.tb_user`` is no key into ``inv.tb_user``."""
+        user = self._pair(Table("tb_user", schema="inv"))
+        item = self._pair(Table("tb_item", schema="inv", constraints=(self._fk("public.tb_user"),)))
+        _resolve_inbound_fks([user[0], item[0]], [user[1], item[1]])
+        assert user[1].inbound_fks == []
 
     def test_no_fks_leaves_inbound_empty(self):
-        """Tables with no outbound FKs keep empty inbound_fks."""
-        tb_a = IntrospectedTable("tb_a", [], [], [], None)
-        tb_b = IntrospectedTable("tb_b", [], [], [], None)
-        introspector = SchemaIntrospector(MagicMock())
-        introspector._resolve_inbound_fks([tb_a, tb_b])
-        assert tb_a.inbound_fks == []
-        assert tb_b.inbound_fks == []
+        user = self._pair(Table("tb_user", schema="public"))
+        _resolve_inbound_fks([user[0]], [user[1]])
+        assert user[1].inbound_fks == []
 
 
 class TestDetectHints:

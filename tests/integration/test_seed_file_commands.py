@@ -13,8 +13,6 @@ must be the same. The values are chosen to be hard for COPY's text format: an
 empty string beside a NULL, a tab, a newline, a backslash, the text ``\\N``,
 and a non-ASCII character.
 
-The ``xfail`` test records a defect found while writing this file.
-
 Every test runs in databases of its own.
 """
 
@@ -167,12 +165,6 @@ def test_generate_for_a_table_that_does_not_exist_fails_and_writes_nothing(
     assert not seeds.exists()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=psycopg.errors.GeneratedAlways,
-    reason="#360: the template lists identity (GENERATED ALWAYS) and generated columns, "
-    "which accept no value",
-)
 def test_generate_leaves_out_columns_postgresql_computes(
     fresh_database_factory: Callable[[str], str], tmp_path: Path
 ) -> None:
@@ -253,6 +245,24 @@ def test_convert_writes_copy_that_psql_loads_to_the_same_rows(
     apply_sql_via_psql(from_copy, sql_file=copy)
     apply_sql_via_psql(from_inserts, sql_file=inserts)
     assert _rows(from_copy) == _rows(from_inserts) == _ROWS
+
+
+@pytest.mark.usefixtures("psql_on_path")
+def test_convert_loads_an_insert_with_no_column_list(
+    fresh_database_factory: Callable[[str], str], tmp_path: Path
+) -> None:
+    """#360: refused as "No convertible INSERT statements found"; COPY loads it."""
+    inserts = tmp_path / "items.sql"
+    inserts.write_text(_INSERTS.replace(" (id, label, weight, active, price)", ""))
+    copy = tmp_path / "items_copy.sql"
+
+    result = runner.invoke(app, ["seed", "convert", "--input", str(inserts), "--output", str(copy)])
+
+    assert result.exit_code == 0, result.output
+    assert copy.read_text().startswith("COPY items FROM stdin;\n")
+    url = _database(fresh_database_factory, _ITEMS)
+    apply_sql_via_psql(url, sql_file=copy)
+    assert _rows(url) == _ROWS
 
 
 def test_convert_without_output_writes_the_same_copy_to_stdout(tmp_path: Path) -> None:

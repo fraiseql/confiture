@@ -57,7 +57,7 @@ class PgTAPTest:
 
     @classmethod
     def function_volatility(cls, info: FunctionInfo) -> PgTAPTest:
-        """Generate a test for the function's volatility."""
+        """``volatility_is``: pgTAP's one assertion on a function's volatility."""
         volatility = info.volatility.value.lower()
         return cls(
             function_name=info.name,
@@ -65,10 +65,8 @@ class PgTAPTest:
             qualified_name=info.qualified_name,
             test_name=f"function {info.qualified_name} is {volatility}",
             sql=(
-                f"SELECT is_volatile('{info.schema}', '{info.name}') IS NOT NULL\n"
-                f"    OR is_stable('{info.schema}', '{info.name}') IS NOT NULL\n"
-                f"    OR is_immutable('{info.schema}', '{info.name}') IS NOT NULL,\n"
-                f"    'Function {info.qualified_name} should have {volatility} volatility';"
+                f"SELECT volatility_is('{info.schema}', '{info.name}', '{volatility}',\n"
+                f"    'Function {info.qualified_name} should have {volatility} volatility');"
             ),
         )
 

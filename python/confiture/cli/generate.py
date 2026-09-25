@@ -35,6 +35,7 @@ from confiture.core.tree_allocator import TreeAllocator
 from confiture.core.tree_renumber import TreeRenumber
 from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.models.stub_models import StubFormat
 
 
 def _detect_repo_root(schema_dir: Path) -> Path | None:
@@ -390,10 +391,10 @@ def generate_stubs(
     database_url: str = database_url_option(...),
     schema: str = typer.Option("public", "--schema", "-s", help="Schema to introspect"),
     output: Path | None = output_option(),
-    output_format: str = typer.Option(
-        "pydantic",
+    output_format: StubFormat = typer.Option(
+        StubFormat.PYDANTIC,
         "--format",
-        help="Output format: pydantic|dataclass|typeddict",
+        help="What a JSONB result's inferred shape is written as: pydantic, dataclass or typeddict",
     ),
     include: str | None = typer.Option(
         None, "--include", help="SQL LIKE pattern to filter functions"

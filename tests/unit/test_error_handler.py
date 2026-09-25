@@ -264,3 +264,26 @@ class TestHandleCliError:
     def test_format_error_is_callable(self) -> None:
         """Test that format_error_for_cli is callable."""
         assert callable(format_error_for_cli)
+
+
+def test_a_bracketed_message_is_printed_as_written() -> None:
+    """Rich read ``[type=value_error, …]`` in a message as markup and dropped it (#360)."""
+    from io import StringIO
+
+    from rich.console import Console
+
+    from confiture.core.error_handler import print_error_to_console
+    from confiture.exceptions import ConfigurationError
+
+    out = StringIO()
+    error = ConfigurationError(
+        "Invalid profile: [type=value_error, input_value='x']",
+        error_code="CONFIG_004",
+        context={"path": "[weird]/p.yaml"},
+        resolution_hint="Fix [this] field",
+    )
+    print_error_to_console(error, Console(file=out, width=200, highlight=False))
+    text = out.getvalue()
+    assert "[type=value_error, input_value='x']" in text
+    assert "[weird]/p.yaml" in text
+    assert "Fix [this] field" in text

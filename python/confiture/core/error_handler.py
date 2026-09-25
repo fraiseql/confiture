@@ -7,6 +7,7 @@ determining the appropriate exit code based on error type and code.
 from typing import Any
 
 from rich.console import Console
+from rich.markup import escape
 
 from confiture.core.error_context import format_error_with_context
 from confiture.core.locking import LockAcquisitionError
@@ -172,18 +173,20 @@ def format_error_for_cli(error: ConfiturError) -> str:
         lines.append("[red]❌ Error[/red]")
 
     # Add message. The hint has its own 💡 line below, so take the base
-    # message rather than str(error), which appends it too (#211).
-    lines.append(error.message)
+    # message rather than str(error), which appends it too (#211). Every part
+    # that carries data is escaped: a path or a validator's `[type=…]` is text,
+    # and Rich would read it as markup and drop it.
+    lines.append(escape(error.message))
 
     # Add context if present
     if error.context:
-        context_items = [f"  {k}: {v}" for k, v in error.context.items()]
+        context_items = [f"  {escape(str(k))}: {escape(str(v))}" for k, v in error.context.items()]
         context_str = "\n".join(context_items)
         lines.append(f"[dim]Context:[/dim]\n{context_str}")
 
     # Add resolution hint if present
     if error.resolution_hint:
-        lines.append(f"[yellow]💡 {error.resolution_hint}[/yellow]")
+        lines.append(f"[yellow]💡 {escape(error.resolution_hint)}[/yellow]")
 
     return "\n".join(lines)
 
@@ -247,7 +250,7 @@ def print_error_to_console(error: Exception, error_console: Console | None = Non
     error_context = _detect_error_context(error)
     if error_context:
         formatted = format_error_with_context(error_context, base_message(error))
-        out_console.print(formatted)
+        out_console.print(formatted, markup=False)
         return
 
     # Fall back to standard error formatting
@@ -256,7 +259,7 @@ def print_error_to_console(error: Exception, error_console: Console | None = Non
         out_console.print(formatted)
     else:
         # Generic exception without special formatting
-        out_console.print(f"[red]Error: {error}[/red]")
+        out_console.print(f"[red]Error: {escape(str(error))}[/red]")
 
 
 def get_error_context(error: Exception) -> dict[str, Any]:
