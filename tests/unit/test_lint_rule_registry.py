@@ -84,6 +84,7 @@ class TestRegistryContents:
             "build_004",
             "sec_001",
             "qual_001",
+            "tree_001",
         }
 
     def test_each_legacy_flag_maps_to_exactly_one_family(self) -> None:
@@ -138,6 +139,7 @@ class TestSelection:
                 "build_004",
                 "sec_001",
                 "qual_001",
+                "tree_001",
             }
         )
 
@@ -166,6 +168,7 @@ class TestSelection:
                 "qual_001",
                 "UNPARSEABLE",
                 "replica_001",
+                "tree_001",
             }
         )
 
@@ -192,6 +195,7 @@ class TestSelection:
                 "build_004",
                 "sec_001",
                 "qual_001",
+                "tree_001",
             }
         )
 

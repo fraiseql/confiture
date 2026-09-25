@@ -32,7 +32,7 @@ Adopt a rule on a schema that already trips it with a
 | `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
 | `own_001` | own | error | off | Every created relation is paired with an ALTER … OWNER TO |
 | `own_002` | own | error | off | No bare ALTER … OWNER TO on an object the migration did not create (guarded: warning) |
-| `tree_001` | tree | error | off | No two files in one directory share a numeric prefix |
+| `tree_001` | tree | error | on | No two files in one directory share a numeric prefix |
 | `tree_002` | tree | warning | off | A numbered file carries a verb after its prefix |
 | `tree_003` | tree | warning | off | Prefixes within one directory are contiguous |
 | `tree_004` | tree | warning | off | Every file in the overrides mirror has a counterpart in the tree |
@@ -507,9 +507,24 @@ reads relations and routines, as `build_003` does.
 
 confiture builds a schema by concatenating a directory tree in path order, and
 that order decides which definition of an object wins and which objects exist
-when a later file references one. The whole family is **opt-in**
-(`--select tree`, or one code at a time), because a tree that has never been
-checked will light up; `--baseline` is the designed way to adopt it.
+when a later file references one. The family is **opt-in** (`--select tree`,
+or one code at a time), because a tree that has never been checked will light
+up; `--baseline` is the designed way to adopt it — except `tree_001`.
+
+### Why `tree_001` is on by default, at `error`
+
+Two files in one directory that share a numeric prefix load in the order the
+rest of their names decides, and nobody reads `10_views.sql` against
+`10_views_safe.sql` as a load order. Adding a third file can reorder the other
+two silently; that is `build_001`'s duplicate, or `build_004`'s forward
+reference, waiting to happen. So `tree_001` is not a naming preference, as the
+rest of the family is: it is the one arrangement that makes the build order an
+accident, and a default `confiture lint` fails on it (#384). It was an `error`
+nobody saw unless they asked for it, which read as an oversight.
+
+To keep today's behaviour on a tree that trips it, pass `--ignore tree_001`, or
+record the collisions with `--baseline lint.json --write-baseline` and fail only
+on the next one.
 
 None of these rules opens a file. They are findings about names, and each one
 carries the path — and line 1 when the entry is a file, since a name has no

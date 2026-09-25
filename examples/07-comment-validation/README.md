@@ -30,8 +30,8 @@ Comment validation detects:
 db/
 ├── schema/
 │   ├── 10_tables.sql       # Valid SQL with proper comments
-│   ├── 20_views_safe.sql   # Safe views file
-│   └── 20_views_broken.sql # UNCLOSED COMMENT (for testing)
+│   └── 20_views_safe.sql   # Safe views file
+│   (30_views_broken.sql)   # UNCLOSED COMMENT — you add it below
 ├── environments/
 │   ├── unsafe.yaml         # No validation (dangerous)
 │   ├── safe.yaml           # With validation
@@ -41,6 +41,12 @@ db/
 ```
 
 ## Quick Start
+
+First add a file that opens a block comment and never closes it:
+
+```bash
+printf -- '-- A broken file\n/* never closed\nCREATE VIEW v_broken AS SELECT 1;\n' > db/schema/30_views_broken.sql
+```
 
 ### 1. Try Unsafe Build (No Validation)
 
@@ -70,7 +76,7 @@ confiture build --validate-comments
 
 # Output:
 # ❌ Comment validation failed:
-#   db/schema/20_views_broken.sql:5 - Unclosed block comment
+#   db/schema/30_views_broken.sql:2 - Unclosed block comment
 ```
 
 ### 3. Fix and Rebuild
@@ -78,7 +84,7 @@ confiture build --validate-comments
 Remove the broken file:
 
 ```bash
-rm db/schema/20_views_broken.sql
+rm db/schema/30_views_broken.sql
 
 # Now rebuild with validation
 confiture build --env safe --validate-comments
@@ -185,7 +191,7 @@ build:
 
 ```bash
 # Set up broken schema
-touch db/schema/20_views_broken.sql
+touch db/schema/30_views_broken.sql
 
 # Try to build with validation
 confiture build --env safe --validate-comments
