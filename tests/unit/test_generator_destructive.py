@@ -9,6 +9,7 @@ statement as a ``-- confiture:tier <tier>`` directive — the tier
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -122,6 +123,60 @@ class TestTheGate:
         assert excinfo.value.error_code == "DIFFER_401"
         assert "display_name" in str(excinfo.value)
         assert list(tmp_path.iterdir()) == []
+
+
+class TestOneGate:
+    """A dropped view, type, enum type or sequence answers to the gate ``DROP TABLE`` does (#335).
+
+    The renderer refused them unless forced, with a "Re-run with --force" that
+    ``migrate diff`` has no flag for, while ``migration.destructive`` governed a
+    dropped table or column: two gates, one of them unreachable.
+    """
+
+    SCHEMA = (
+        "CREATE TYPE mood AS ENUM ('sad', 'ok');\n"
+        "CREATE SEQUENCE order_seq;\n"
+        "CREATE TABLE t (a int);\n"
+        "CREATE VIEW v AS SELECT a FROM t;\n"
+    )
+    DROPS: ClassVar[dict[str, str]] = {
+        "DROP_ENUM_TYPE": "DROP TYPE IF EXISTS mood;",
+        "DROP_SEQUENCE": "DROP SEQUENCE IF EXISTS order_seq;",
+        "DROP_VIEW": "DROP VIEW IF EXISTS v;",
+    }
+
+    def _diff(self, kind: str) -> SchemaDiff:
+        diff = SchemaDiffer().compare(self.SCHEMA, "CREATE TABLE t (a int);")
+        return SchemaDiff(changes=[c for c in diff.changes if c.to_wire().type == kind])
+
+    @pytest.mark.parametrize("kind", sorted(DROPS))
+    def test_gated_writes_the_drop_and_marks_the_file(self, tmp_path: Path, kind: str) -> None:
+        up = (
+            MigrationGenerator(migrations_dir=tmp_path)
+            .generate_sql(self._diff(kind), name="shrink", version=VERSION)
+            .read_text()
+        )
+        assert self.DROPS[kind] in up
+        assert "--force" not in up
+        assert [d.name for d in sql_lexer.directives(up) if d.name == "destructive"] == [
+            "destructive"
+        ]
+
+    @pytest.mark.parametrize("kind", sorted(DROPS))
+    def test_forbid_refuses_it(self, tmp_path: Path, kind: str) -> None:
+        with pytest.raises(DifferError) as excinfo:
+            MigrationGenerator(migrations_dir=tmp_path).generate_sql(
+                self._diff(kind), name="shrink", version=VERSION, destructive="forbid"
+            )
+        assert excinfo.value.error_code == "DIFFER_401"
+
+    def test_the_python_form_executes_it(self, tmp_path: Path) -> None:
+        path = MigrationGenerator(migrations_dir=tmp_path).generate(
+            self._diff("DROP_VIEW"), name="shrink", version=VERSION
+        )
+        text = path.read_text()
+        assert 'self.execute("DROP VIEW IF EXISTS v;")' in text
+        assert "    destructive = True" in text
 
 
 class TestPolicy:

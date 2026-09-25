@@ -142,12 +142,10 @@ class TestEnumTypeChanges:
         assert "CREATE TYPE" in sql
         assert "mood" in sql
 
-    def test_up_drop_enum_type_produces_warning_comment(self, tmp_path):
-        """MigrationGenerator has no --force; DROP_ENUM_TYPE must emit a warning comment."""
+    def test_up_drop_enum_type_is_the_drop(self, tmp_path):
+        """The destructive gate decides whether it ships, as for a table (#335)."""
         change = EnumTypeDropped(EnumType("mood", values=("happy", "sad")))
-        sql = _gen(tmp_path)._change_to_up_sql(change)
-        assert sql is not None
-        assert "WARNING" in sql.upper() or "--" in sql
+        assert _gen(tmp_path)._change_to_up_sql(change) == "DROP TYPE IF EXISTS mood;"
 
     def test_up_change_enum_values(self, tmp_path):
         change = EnumValuesChanged("mood", added=("ecstatic",), removed=())
@@ -175,12 +173,10 @@ class TestSequenceChanges:
         assert "CREATE SEQUENCE" in sql
         assert "order_seq" in sql
 
-    def test_up_drop_sequence_produces_warning_comment(self, tmp_path):
-        """MigrationGenerator has no --force; DROP_SEQUENCE must emit a warning comment."""
+    def test_up_drop_sequence_is_the_drop(self, tmp_path):
+        """The destructive gate decides whether it ships, as for a table (#335)."""
         change = SequenceDropped(Sequence("order_seq"))
-        sql = _gen(tmp_path)._change_to_up_sql(change)
-        assert sql is not None
-        assert "WARNING" in sql.upper() or "--" in sql
+        assert _gen(tmp_path)._change_to_up_sql(change) == "DROP SEQUENCE IF EXISTS order_seq;"
 
     def test_down_add_sequence(self, tmp_path):
         change = SequenceAdded(Sequence("order_seq"))

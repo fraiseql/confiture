@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import (
@@ -14,7 +12,6 @@ from confiture.core.schema_change import (
     SequenceDropped,
 )
 from confiture.core.schema_model import EnumType, Sequence
-from confiture.exceptions import UnsafeOperationError
 
 
 class TestAddEnumType:
@@ -51,20 +48,14 @@ class TestAddEnumType:
 
 
 class TestDropEnumType:
-    def test_raises_without_force(self):
+    def test_the_drop_is_written(self):
+        """The destructive gate decides whether it ships, as for a table (#335)."""
         change = EnumTypeDropped(EnumType("mood"))
-        with pytest.raises(UnsafeOperationError):
-            DifferSQLGenerator().generate_up(change)
-
-    def test_generates_drop_type_with_force(self):
-        change = EnumTypeDropped(EnumType("mood"))
-        sql = DifferSQLGenerator(force_destructive=True).generate_up(change)
-        assert "DROP TYPE" in sql
-        assert "mood" in sql
+        assert DifferSQLGenerator().generate_up(change) == "DROP TYPE IF EXISTS mood;\n"
 
     def test_down_is_warning_comment(self):
         change = EnumTypeDropped(EnumType("mood"))
-        sql = DifferSQLGenerator(force_destructive=True).generate_down(change)
+        sql = DifferSQLGenerator().generate_down(change)
         assert "WARNING" in sql or "Cannot" in sql
 
 
@@ -109,18 +100,11 @@ class TestAddSequence:
 
 
 class TestDropSequence:
-    def test_raises_without_force(self):
+    def test_the_drop_is_written(self):
         change = SequenceDropped(Sequence("order_seq"))
-        with pytest.raises(UnsafeOperationError):
-            DifferSQLGenerator().generate_up(change)
-
-    def test_generates_drop_sequence_with_force(self):
-        change = SequenceDropped(Sequence("order_seq"))
-        sql = DifferSQLGenerator(force_destructive=True).generate_up(change)
-        assert "DROP SEQUENCE" in sql
-        assert "order_seq" in sql
+        assert DifferSQLGenerator().generate_up(change) == "DROP SEQUENCE IF EXISTS order_seq;\n"
 
     def test_down_is_warning_comment(self):
         change = SequenceDropped(Sequence("order_seq"))
-        sql = DifferSQLGenerator(force_destructive=True).generate_down(change)
+        sql = DifferSQLGenerator().generate_down(change)
         assert "WARNING" in sql or "Cannot" in sql

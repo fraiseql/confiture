@@ -32,7 +32,7 @@ PARENT = "CREATE TABLE b.parent (id INT PRIMARY KEY);\n"
 
 def _up(old: str, new: str, kind: type[SchemaChange]) -> str:
     change = next(c for c in SchemaDiffer().compare(old, new).changes if isinstance(c, kind))
-    return DifferSQLGenerator(force_destructive=True).generate_up(change)
+    return DifferSQLGenerator().generate_up(change)
 
 
 def _parses(sql: str) -> bool:

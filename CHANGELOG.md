@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`migrate diff --generate` writes what each change carries, under one gate** (#335).
+  - A dropped view, materialized view, routine, domain, type, enum type or sequence
+    was refused with "Re-run with --force to generate this DDL", a flag `migrate
+    diff` does not have, while a dropped table or column went through
+    `migration.destructive`. Every drop is now written and weighed by that one gate:
+    `gated` (the default) marks the file `-- confiture:destructive`, `allow` leaves
+    it unmarked, `forbid` refuses with `DIFFER_401`. `DifferSQLGenerator` takes no
+    `force_destructive` argument any more. The `every-change` diff golden now holds
+    the three drops where it held the warning.
+
 ## [1.20.0] - 2026-09-25
 
 **The build lint knows the order a build runs in, and says so by default.** A

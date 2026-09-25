@@ -164,7 +164,7 @@ class TestBothGeneratorsEmitWhatParses:
         """Every (change type, statement) both generators write for this diff."""
         from confiture.core.migration_generator import MigrationGenerator
 
-        sql_generator = DifferSQLGenerator(force_destructive=True)
+        sql_generator = DifferSQLGenerator()
         py_generator = MigrationGenerator(tmp_path)
         emitted: list[tuple[str, str]] = []
         for change in _changes(self.OLD, self.NEW):

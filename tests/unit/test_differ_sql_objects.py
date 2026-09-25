@@ -10,7 +10,6 @@ import pytest
 from confiture.core.ddl_objects import OBJECT_KEYWORD, REPLACE_IS_AUTHORS_WORK
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DERIVED_KINDS, DifferSQLGenerator
-from confiture.exceptions import UnsafeOperationError
 from tests.unit._schema_changes import added, dropped
 
 BASE = "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT);\n"
@@ -72,14 +71,9 @@ class TestViewDDL:
         assert down.startswith("CREATE OR REPLACE VIEW v_user AS")
         assert "name" not in down
 
-    def test_drop_view_is_destructive_without_force(self):
+    def test_drop_view_drops_it(self):
         change = change_of("CREATE VIEW v_user AS SELECT pk_user FROM tb_user;", "", "DROP_VIEW")
-        with pytest.raises(UnsafeOperationError):
-            DifferSQLGenerator().generate_up(change)
-
-    def test_drop_view_with_force_drops_it(self):
-        change = change_of("CREATE VIEW v_user AS SELECT pk_user FROM tb_user;", "", "DROP_VIEW")
-        assert "DROP VIEW IF EXISTS v_user" in DifferSQLGenerator(True).generate_up(change)
+        assert "DROP VIEW IF EXISTS v_user" in DifferSQLGenerator().generate_up(change)
 
     def test_drop_view_rolls_back_by_recreating_it(self):
         change = change_of("CREATE VIEW v_user AS SELECT pk_user FROM tb_user;", "", "DROP_VIEW")
@@ -137,7 +131,7 @@ class TestTheMigrationIsNotShort:
             ("", "CREATE AGGREGATE ag (INT) (sfunc = int4pl, stype = INT);"),
             ("CREATE AGGREGATE ag (INT) (sfunc = int4pl, stype = INT);", ""),
         ]
-        generator = DifferSQLGenerator(True)
+        generator = DifferSQLGenerator()
         for old, new in pairs:
             for change in SchemaDiffer().compare(BASE + old, BASE + new).changes:
                 sql = generator.generate_up(change)
@@ -167,8 +161,8 @@ class TestTheMigrationIsNotShort:
             change = change_of(old, new, change_type)
             kind = change.ref.kind
             assert kind in REPLACE_IS_AUTHORS_WORK, f"{change_type} has no stated reason"
-            assert DifferSQLGenerator(True).generate_up(change) is None
-            assert DifferSQLGenerator(True).generate_down(change) is None
+            assert DifferSQLGenerator().generate_up(change) is None
+            assert DifferSQLGenerator().generate_down(change) is None
 
     def test_every_stated_exemption_names_a_kind_the_differ_can_emit(self):
         """A reason cannot outlive the thing it explains (the one-lexer idiom)."""
@@ -225,7 +219,7 @@ class TestRoutineDDL:
 
     def test_drop_function_names_the_overload(self):
         change = change_of(self.FN, "", "DROP_FUNCTION")
-        sql = DifferSQLGenerator(True).generate_up(change)
+        sql = DifferSQLGenerator().generate_up(change)
         assert sql.strip() == "DROP FUNCTION IF EXISTS fn_c(bigint);"
 
     def test_add_function_rolls_back_by_dropping_that_overload(self):
@@ -262,19 +256,18 @@ class TestOnlyTheDerivedKindsDeriveSQL:
     def test_a_kind_outside_them_derives_no_sql_either_way(
         self, factory, kind, qualified, create_sql
     ):
-        """Nor is its drop refused unforced: there is no statement to refuse."""
+        """There is no statement, so nothing for the gate to weigh."""
         assert kind not in DERIVED_KINDS
         change = factory(kind, qualified, create_sql)
         assert DifferSQLGenerator().generate_up(change) is None
         assert DifferSQLGenerator().generate_down(change) is None
 
     @pytest.mark.parametrize("kind", sorted(DERIVED_KINDS))
-    def test_dropping_a_derived_kind_is_destructive_without_force(self, kind):
+    def test_dropping_a_derived_kind_writes_the_drop(self, kind):
+        """The destructive gate weighs it, as it does ``DROP TABLE`` (#335)."""
         (change,) = SchemaDiffer().compare(BASE + DERIVED[kind], BASE).changes
-        with pytest.raises(UnsafeOperationError, match="--force"):
-            DifferSQLGenerator().generate_up(change)
-        forced = DifferSQLGenerator(True).generate_up(change)
-        assert forced.startswith(f"DROP {OBJECT_KEYWORD[kind]} IF EXISTS ")
+        sql = DifferSQLGenerator().generate_up(change)
+        assert sql.startswith(f"DROP {OBJECT_KEYWORD[kind]} IF EXISTS ")
 
     def test_every_add_and_drop_of_a_derived_kind_renders_and_no_other_does(self):
         """A derived kind renders a statement either way; every other kind derives none."""
@@ -290,7 +283,7 @@ class TestOnlyTheDerivedKindsDeriveSQL:
             "CREATE STATISTICS st ON pk_user, name FROM tb_user;",
             "CREATE SERVER srv FOREIGN DATA WRAPPER fdw;",
         ]
-        generator = DifferSQLGenerator(True)
+        generator = DifferSQLGenerator()
         seen = 0
         rendered: set[str] = set()
         for extra in extras:

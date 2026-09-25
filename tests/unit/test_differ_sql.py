@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import (
     ColumnAdded,
@@ -42,14 +40,12 @@ def test_schema_change_details_accepts_nested_column_list():
     assert isinstance((change.to_wire().details or {})["columns"], list)
 
 
-@pytest.mark.parametrize("force", [False, True])
-def test_a_dropped_table_is_written_whatever_force_is(force):
+def test_a_dropped_table_is_written():
     """Whether a migration may drop a table is the destructive gate's decision.
 
-    ``migration.destructive`` rules on the generated file; ``force`` governs only
-    the drop of an enum type, a sequence or a definition object.
+    ``migration.destructive`` rules on the generated file, for every kind of drop.
     """
-    sql = DifferSQLGenerator(force_destructive=force).generate_up(TableDropped(table("bookings")))
+    sql = DifferSQLGenerator().generate_up(TableDropped(table("bookings")))
     assert sql == "DROP TABLE bookings;\n"
 
 
@@ -60,11 +56,10 @@ def test_add_column_writes_the_declared_column():
     assert sql == "ALTER TABLE users ADD COLUMN bio text;\n"
 
 
-@pytest.mark.parametrize("force", [False, True])
-def test_a_dropped_column_is_written_whatever_force_is(force):
-    """As for a table: the destructive gate decides, not ``force``."""
+def test_a_dropped_column_is_written():
+    """As for a table: the destructive gate decides."""
     change = ColumnDropped("users", spelled("bio", "text"))
-    sql = DifferSQLGenerator(force_destructive=force).generate_up(change)
+    sql = DifferSQLGenerator().generate_up(change)
     assert sql == "ALTER TABLE users DROP COLUMN bio;\n"
 
 

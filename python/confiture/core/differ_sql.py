@@ -58,7 +58,6 @@ from confiture.core.schema_change import (
     UniqueConstraintDropped,
 )
 from confiture.core.schema_model import Constraint, Table
-from confiture.exceptions import UnsafeOperationError
 
 #: The kinds compared by definition that a migration is derived for, created and
 #: dropped — the ones ``migrate diff --generate`` writes (#288). The rest —
@@ -344,9 +343,6 @@ def _enum_values(change: EnumValuesChanged) -> str:
 class DifferSQLGenerator:
     """Generates the DDL for a schema change, up and down."""
 
-    def __init__(self, force_destructive: bool = False) -> None:
-        self._force = force_destructive
-
     def generate_up(self, change: SchemaChange) -> str | None:
         """The forward DDL for *change*, or ``None`` when none is derived."""
         match change:
@@ -379,9 +375,9 @@ class DifferSQLGenerator:
                 | SequenceAdded()
                 | SequenceDropped()
             ):
-                return self._enum_or_sequence_up(change)
+                return _enum_or_sequence_up(change)
             case ObjectAdded() | ObjectDropped() | ObjectReplaced():
-                return self._definition_up(change)
+                return _definition_up(change)
             case _:
                 assert_never(change)
 
@@ -423,49 +419,41 @@ class DifferSQLGenerator:
             case _:
                 assert_never(change)
 
-    def _refuse(self, keyword: str, name: str) -> None:
-        """A drop is written only when the caller forced it; the generator says so otherwise."""
-        if not self._force:
-            raise UnsafeOperationError(
-                f"DROP {keyword} {name!r} is destructive. Re-run with --force to generate this DDL."
-            )
 
-    def _enum_or_sequence_up(self, change: EnumOrSequenceChange) -> str:
-        match change:
-            case EnumTypeAdded(enum):
-                labels = ", ".join(_quoted(v) for v in enum.values)
-                return f"CREATE TYPE {enum.qualified} AS ENUM ({labels});\n"
-            case EnumTypeDropped(enum):
-                self._refuse("TYPE", enum.qualified)
-                return _drop("TYPE", enum.qualified)
-            case EnumValuesChanged():
-                return _enum_values(change)
-            case SequenceAdded(sequence):
-                return f"CREATE SEQUENCE IF NOT EXISTS {sequence.qualified};\n"
-            case SequenceDropped(sequence):
-                self._refuse("SEQUENCE", sequence.qualified)
-                return _drop("SEQUENCE", sequence.qualified)
-            case _:
-                assert_never(change)
+def _enum_or_sequence_up(change: EnumOrSequenceChange) -> str:
+    match change:
+        case EnumTypeAdded(enum):
+            labels = ", ".join(_quoted(v) for v in enum.values)
+            return f"CREATE TYPE {enum.qualified} AS ENUM ({labels});\n"
+        case EnumTypeDropped(enum):
+            return _drop("TYPE", enum.qualified)
+        case EnumValuesChanged():
+            return _enum_values(change)
+        case SequenceAdded(sequence):
+            return f"CREATE SEQUENCE IF NOT EXISTS {sequence.qualified};\n"
+        case SequenceDropped(sequence):
+            return _drop("SEQUENCE", sequence.qualified)
+        case _:
+            assert_never(change)
 
-    def _definition_up(self, change: DefinitionChange) -> str | None:
-        kind = change.ref.kind
-        keyword = OBJECT_KEYWORD.get(kind, "")
-        name = change.ref.qualified
-        match change:
-            case ObjectAdded(_, obj) if kind in DERIVED_KINDS:
-                return _statement(obj.create_sql, change)
-            case ObjectDropped() if kind in DERIVED_KINDS:
-                self._refuse(keyword, name)
-                return _drop(keyword, name)
-            case ObjectReplaced(_, _, new) if kind in _REPLACED_BY_DEFINITION:
-                return _statement(new.create_sql, change)
-            case ObjectReplaced(_, _, new) if kind in REPLACED_BY_DROP_AND_CREATE:
-                return _drop(keyword, name) + _statement(new.create_sql, change)
-            case ObjectAdded() | ObjectDropped() | ObjectReplaced():
-                return None
-            case _:
-                assert_never(change)
+
+def _definition_up(change: DefinitionChange) -> str | None:
+    kind = change.ref.kind
+    keyword = OBJECT_KEYWORD.get(kind, "")
+    name = change.ref.qualified
+    match change:
+        case ObjectAdded(_, obj) if kind in DERIVED_KINDS:
+            return _statement(obj.create_sql, change)
+        case ObjectDropped() if kind in DERIVED_KINDS:
+            return _drop(keyword, name)
+        case ObjectReplaced(_, _, new) if kind in _REPLACED_BY_DEFINITION:
+            return _statement(new.create_sql, change)
+        case ObjectReplaced(_, _, new) if kind in REPLACED_BY_DROP_AND_CREATE:
+            return _drop(keyword, name) + _statement(new.create_sql, change)
+        case ObjectAdded() | ObjectDropped() | ObjectReplaced():
+            return None
+        case _:
+            assert_never(change)
 
 
 def _enum_or_sequence_down(change: EnumOrSequenceChange) -> str:

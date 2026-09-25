@@ -19,7 +19,7 @@ from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.schema_change import SchemaChange, SchemaDiff
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX
 from confiture.core.sql_utils import strip_transaction_wrappers
-from confiture.exceptions import DifferError, ExternalGeneratorError, UnsafeOperationError
+from confiture.exceptions import DifferError, ExternalGeneratorError
 
 
 def _execute_call(sql: str) -> str:
@@ -73,8 +73,7 @@ class MigrationGenerator:
             migrations_dir: Directory where migration files will be created
         """
         self.migrations_dir = migrations_dir
-        # Non-destructive generator — destructive ops emit warning comments instead of raising
-        self._sql_gen = DifferSQLGenerator(force_destructive=False)
+        self._sql_gen = DifferSQLGenerator()
 
     def generate(
         self,
@@ -441,13 +440,10 @@ class {class_name}(Migration):
     def _change_to_up_sql(self, change: SchemaChange) -> str | None:
         """The statement *change* is, or ``None`` when none is derived.
 
-        A drop the renderer will not write unforced comes back as the warning that
-        says so, which is where a destructive change is left to the author.
+        A statement that loses data is written like any other; the destructive
+        gate (:mod:`confiture.core.destructive`) decides whether it ships.
         """
-        try:
-            sql = self._sql_gen.generate_up(change)
-        except UnsafeOperationError as exc:
-            return f"-- WARNING: {exc}"
+        sql = self._sql_gen.generate_up(change)
         return None if sql is None else sql.rstrip("\n")
 
     def run_external_generator(

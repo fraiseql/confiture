@@ -94,7 +94,7 @@ CHANGES = _changes()
 
 def _statement_tier(change: SchemaChange) -> tuple[bool, RiskTier | None]:
     """Whether the renderer writes a statement for *change*, and the change set's tier for it."""
-    sql = DifferSQLGenerator(force_destructive=True).generate_up(change)
+    sql = DifferSQLGenerator().generate_up(change)
     entries = classify_statements(sql) if sql else []
     return bool(entries), worst_tier(entry.tier for entry in entries)
 

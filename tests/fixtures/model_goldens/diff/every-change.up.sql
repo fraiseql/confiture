@@ -62,7 +62,8 @@ ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_uq;
 -- confiture:tier additive
 CREATE TYPE new_status AS ENUM ('x', 'y');
 
--- WARNING: DROP TYPE 'retired_status' is destructive. Re-run with --force to generate this DDL.
+-- confiture:tier destructive
+DROP TYPE IF EXISTS retired_status;
 
 -- confiture:tier additive
 ALTER TYPE mood ADD VALUE IF NOT EXISTS 'happy';
@@ -70,12 +71,14 @@ ALTER TYPE mood ADD VALUE IF NOT EXISTS 'happy';
 -- confiture:tier additive
 CREATE SEQUENCE IF NOT EXISTS new_seq;
 
--- WARNING: DROP SEQUENCE 'retired_seq' is destructive. Re-run with --force to generate this DDL.
+-- confiture:tier irreversible
+DROP SEQUENCE IF EXISTS retired_seq;
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_added AS SELECT 2 AS two;
 
--- WARNING: DROP VIEW 'v_retired' is destructive. Re-run with --force to generate this DDL.
+-- confiture:tier destructive
+DROP VIEW IF EXISTS v_retired;
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_things AS SELECT id, code FROM things;
