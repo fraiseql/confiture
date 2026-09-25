@@ -7,6 +7,10 @@ constant has one home and the literal ``"public"`` appears beside a schema
 variable nowhere else — ``tests/unit/test_one_object_identity.py`` fails on a
 second spelling of it (#313).
 
+A role, a schema or any other identifier written in SQL has the same split: what
+PostgreSQL holds (:func:`identifier_identity`) and how SQL writes it. Compare the
+first; write the second.
+
 Import-safe on purpose. ``core/linting/inventory`` decides object identity but
 imports pglast, and a module that only needs to resolve a bare relation name for
 a catalogue query — a batched backfill, an idempotency suggestion — should not
@@ -21,3 +25,15 @@ from __future__ import annotations
 #: Where an unqualified ``CREATE`` lands, for the purpose of deciding whether
 #: two statements define the same object: ``f()`` and ``public.f()`` are one.
 DEFAULT_SCHEMA = "public"
+
+
+def identifier_identity(written: str) -> str:
+    """The identifier PostgreSQL holds for one written in SQL.
+
+    A quoted one is itself, its quotes removed and ``""`` undoubled (``"AppOwner"``
+    is ``AppOwner``); a bare one is folded to lower case (``AppOwner`` is
+    ``appowner``). Compare identities; write the spelling.
+    """
+    if len(written) > 1 and written.startswith('"') and written.endswith('"'):
+        return written[1:-1].replace('""', '"')
+    return written.lower()

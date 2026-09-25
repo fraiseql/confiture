@@ -1257,7 +1257,7 @@ class OwnershipDriftDetector:
             )
             for schema, relname, _relkind, actual_owner in relations:
                 report.tables_checked += 1
-                if actual_owner != expectation.expected_owner:
+                if actual_owner != expectation.owner_identity:
                     qualified = f"{schema}.{relname}"
                     report.drift_items.append(
                         DriftItem(

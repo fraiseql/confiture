@@ -165,7 +165,7 @@ class BootstrapPlanner:
         steps: list[BootstrapStep] = []
 
         # Step 1: role creation.
-        if not self._role_exists(conn, self.ownership.expected_owner):
+        if not self._role_exists(conn, self.ownership.owner_identity):
             steps.append(self._step_create_role())
 
         # Step 2: REASSIGN OWNED — gated by scope check.

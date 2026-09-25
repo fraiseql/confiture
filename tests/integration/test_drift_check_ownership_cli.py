@@ -210,3 +210,35 @@ def test_check_ownership_json_output_shape(
     assert item["expected"] == "own_cli_migrator"
     assert item["actual"] == "own_cli_intruder"
     assert item["severity"] == "critical"
+
+
+def test_a_mixed_case_owner_configured_quoted_is_the_owner(
+    tmp_path: Path, own_db: psycopg.Connection, pg_url: str
+) -> None:
+    """#375: ``'"OwnCliMixed"'`` was compared, quotes and all, with pg_class's ``OwnCliMixed``."""
+    with own_db.cursor() as cur:
+        cur.execute('DROP ROLE IF EXISTS "OwnCliMixed"')
+        cur.execute('CREATE ROLE "OwnCliMixed"')
+        cur.execute('GRANT "OwnCliMixed" TO current_user')
+        cur.execute(f"CREATE TABLE {_SCHEMA}.tb_foo (id int)")
+        cur.execute(f'ALTER TABLE {_SCHEMA}.tb_foo OWNER TO "OwnCliMixed"')
+    own_db.commit()
+    cfg = _write_config(
+        tmp_path,
+        pg_url,
+        f"""
+        ownership:
+          expected_owner: '"OwnCliMixed"'
+          apply_to:
+            - schema: {_SCHEMA}
+              relkinds: [r]
+        """,
+    )
+    try:
+        result = CliRunner().invoke(app, ["drift", "--check-ownership", "--config", str(cfg)])
+        assert result.exit_code == 0, result.output
+    finally:
+        with own_db.cursor() as cur:
+            cur.execute(f"DROP TABLE IF EXISTS {_SCHEMA}.tb_foo")
+            cur.execute('DROP ROLE IF EXISTS "OwnCliMixed"')
+        own_db.commit()

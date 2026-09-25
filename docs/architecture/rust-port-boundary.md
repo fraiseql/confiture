@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-24,363 lines, 33% of `core/`.
+24,382 lines, 33% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -103,7 +103,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_signature_checker.py` | 187 | DDL transform |
 | `idempotency/` | 2,726 | DDL transform |
 | `introspection/dependency_graph.py` | 203 | DDL transform |
-| `linting/` | 8,110 | DDL transform |
+| `linting/` | 8,113 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
 | `migration_grant_extractor.py` | 525 | DDL transform |
@@ -115,7 +115,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `replica/` | 740 | DDL transform |
 | `risk_tier.py` | 76 | DDL transform |
 | `schema_change.py` | 899 | DDL transform |
-| `schema_identity.py` | 23 | DDL transform |
+| `schema_identity.py` | 39 | DDL transform |
 | `schema_model.py` | 757 | DDL transform |
 | `sql_lexer.py` | 637 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
@@ -200,7 +200,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### What does not port
 
-6,738 lines, 9% of `core/`.
+6,791 lines, 9% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -210,7 +210,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `idempotency/python_migration_extractor.py` | 294 | Python-bound |
 | `idempotency/static_eval/` | 1,730 | Python-bound |
 | `import_checker.py` | 493 | Python-bound |
-| `mcp_http.py` | 194 | Python-bound |
-| `mcp_server.py` | 327 | Python-bound |
+| `mcp_http.py` | 191 | Python-bound |
+| `mcp_server.py` | 383 | Python-bound |
 
 <!-- END GENERATED: port-boundary -->
