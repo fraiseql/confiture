@@ -266,3 +266,34 @@ class TestNoWorkflowOpensAPullRequest:
             "the organisation blocks Actions from creating pull requests, so this step "
             f"fails after the job has already done its work: {offenders}"
         )
+
+
+class TestOneToolchainSetup:
+    """Every job gets Python and uv from ``.github/actions/python-uv``.
+
+    The same setup-python / setup-uv / Rust / maturin steps were copied into twenty
+    jobs over seven workflows, so a version bump had twenty places to miss.
+    """
+
+    ACTION = "./.github/actions/python-uv"
+
+    def _jobs(self) -> list[tuple[str, str, list[str]]]:
+        jobs = []
+        for path in sorted(WORKFLOWS.glob("*.yml")):
+            data = yaml.safe_load(path.read_text())
+            for name, job in data["jobs"].items():
+                uses = [step.get("uses", "").split("@")[0] for step in job.get("steps", [])]
+                jobs.append((path.name, name, uses))
+        return jobs
+
+    def test_no_job_sets_up_python_and_uv_itself(self) -> None:
+        by_hand = [
+            f"{workflow}:{job}"
+            for workflow, job, uses in self._jobs()
+            if "actions/setup-python" in uses and "astral-sh/setup-uv" in uses
+        ]
+        assert by_hand == [], f"use {self.ACTION} instead: {by_hand}"
+
+    def test_the_action_is_used(self) -> None:
+        users = [job for _, job, uses in self._jobs() if self.ACTION in uses]
+        assert len(users) >= 10
