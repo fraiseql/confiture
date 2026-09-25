@@ -13,7 +13,12 @@ from typing import Any
 
 import pglast
 
-from confiture.core.ddl_objects import objects_in, pair_definitions
+from confiture.core.ddl_objects import (
+    OBJECT_KEYWORD,
+    Collapsed,
+    declared_objects,
+    pair_definitions,
+)
 from confiture.core.linting.duplicates import WINS_TEXT, CreateFlags, wins
 from confiture.core.linting.inventory import (
     Inventory,
@@ -113,8 +118,14 @@ def _structural(obj: SchemaObject) -> bool:
     return obj.kind in ("table", "sequence") or (obj.kind == "type" and obj.enum_values is not None)
 
 
-def duplicate_warnings(inventory: Inventory) -> list[BuildWarning]:
+def duplicate_warnings(
+    inventory: Inventory, collapsed: Iterable[Collapsed] = ()
+) -> list[BuildWarning]:
     """Say so when one ``(schema, name)`` is defined more than once in one tree.
+
+    Tables, enum types and sequences are read from *inventory*; every object
+    compared by definition — a view, a routine, a trigger — from *collapsed*,
+    ``ddl_objects.declared_objects``' account of what it folded into one.
 
     Two definitions of one ``(schema, name)`` collapse into one entry of the
     model (#313). The model keeps the definition a build keeps — a later
@@ -144,6 +155,17 @@ def duplicate_warnings(inventory: Inventory) -> list[BuildWarning]:
                     used="last" if verdict == "last" else "first",
                 )
             )
+    warnings.extend(
+        BuildWarning.of(
+            "DIFFER_402",
+            kind=OBJECT_KEYWORD[one.kept.ref.kind].capitalize(),
+            identity=one.kept.ref.display,
+            count=one.count,
+            outcome=WINS_TEXT[one.verdict],
+            used="last" if one.verdict == "last" else "first",
+        )
+        for one in collapsed
+    )
     return warnings
 
 
@@ -268,12 +290,13 @@ class SchemaDiffer:
         raws = list(pglast.parse_sql(sql) or [])
         inventory = build_inventory(sql, raws)
         model = schema_model(inventory)
+        declared = declared_objects(sql, raws)
         return ParsedSchema(
             tables=list(model.tables.values()),
             enum_types=list(model.enum_types.values()),
             sequences=list(model.sequences.values()),
-            objects=objects_in(sql, raws),
-            warnings=duplicate_warnings(inventory),
+            objects=declared.objects,
+            warnings=duplicate_warnings(inventory, declared.collapsed),
         )
 
     def compare(self, old_sql: str, new_sql: str) -> SchemaDiff:

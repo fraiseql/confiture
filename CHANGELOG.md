@@ -21,6 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DIFFER_401`. Both stay, because the error codebook is frozen at 1.0.0, and they
   go at the next major version.
 
+### Fixed
+
+- **An object defined twice is one object in `migrate diff`** (#407). A view,
+  routine, trigger or any other kind compared by its definition was kept once per
+  `CREATE`: a view defined in two files was two `ADD_VIEW` changes, and
+  `--generate` wrote it twice. No `DIFFER_402` said why, because the warning
+  covered only tables, enum types and sequences. Each is now the definition the
+  build keeps (`duplicates.wins`, the schema model's rule): the last when every
+  later one is `CREATE OR REPLACE`, otherwise the first. `DIFFER_402` names it
+  (`View 'v' is defined 2 times …`), in `migrate diff` and in the seam's
+  `diff`/`parse_schema` warnings. Two overloads of one routine are still two.
+
 ### Security
 
 - **An MCP tool name reaches exactly one thing.** `confiture mcp` listed a routine
