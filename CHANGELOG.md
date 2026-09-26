@@ -35,6 +35,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on a module that splits text on a dot; the splits left are listed with what
   they read, the type keys among them tracked in #480.
 
+### Fixed
+
+- **Generated DDL quotes a name that needs quotes** (#479). `migrate diff` /
+  `migrate generate` and `confiture.platform.diff` wrote every identifier bare,
+  so a table `"New Table"`, a column `"Mixed Col"` or `user`, an index or a
+  constraint named with a space or a capital produced a migration PostgreSQL
+  refuses — `CREATE TABLE IF NOT EXISTS New Table (Weird Id INTEGER …)`. Tables,
+  columns, indexes, constraints, enum types and sequences are now written through
+  `quote_identifier`, which leaves an ordinary name bare. An index key that is a
+  column is written as the column, not wrapped as an expression: the index reader
+  records which keys are expressions (`Index.expressions`, one flag per key, `null`
+  in a model written before). `DROP INDEX` names the index in its table's schema,
+  where a bare name dropped nothing. Checked by applying a generated migration up
+  and down on a database and reading it back. A view's or a routine's `DROP`, and
+  an enum's `ALTER TYPE … ADD VALUE`, still spell the name as the model holds it:
+  tracked in #480.
+
 ### Added
 
 - **`naming_003`: no identifier holds a dot** (#476), at `error` and on by

@@ -216,6 +216,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("method", "str | None"),
         ("backs_constraint", "bool"),
         ("key_options", "tuple[str, ...]"),
+        ("expressions", "tuple[bool, ...] | None"),
     ),
     "Table": (
         ("name", "str"),

@@ -32,15 +32,43 @@ def _model():
 def test_every_index_reaches_its_table() -> None:
     table = _model().tables[ref_for("table", "a", "t")]
     assert table.indexes == (
-        Index(name="ix_n", table=RelationName("a", "t"), columns=("n",), method="btree"),
         Index(
-            name="ux_m", table=RelationName("a", "t"), columns=("m",), unique=True, method="btree"
+            name="ix_n",
+            table=RelationName("a", "t"),
+            columns=("n",),
+            method="btree",
+            expressions=(False,),
         ),
-        Index(name="hx_n", table=RelationName("a", "t"), columns=("n",), method="hash"),
         Index(
-            name="px_n", table=RelationName("a", "t"), columns=("n",), where="n > 0", method="btree"
+            name="ux_m",
+            table=RelationName("a", "t"),
+            columns=("m",),
+            unique=True,
+            method="btree",
+            expressions=(False,),
         ),
-        Index(name="ex_m", table=RelationName("a", "t"), columns=("lower(m)",), method="btree"),
+        Index(
+            name="hx_n",
+            table=RelationName("a", "t"),
+            columns=("n",),
+            method="hash",
+            expressions=(False,),
+        ),
+        Index(
+            name="px_n",
+            table=RelationName("a", "t"),
+            columns=("n",),
+            where="n > 0",
+            method="btree",
+            expressions=(False,),
+        ),
+        Index(
+            name="ex_m",
+            table=RelationName("a", "t"),
+            columns=("lower(m)",),
+            method="btree",
+            expressions=(True,),
+        ),
     )
 
 

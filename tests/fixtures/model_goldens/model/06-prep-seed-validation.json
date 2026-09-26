@@ -118,6 +118,9 @@
           "columns": [
             "name"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_catalog_tb_manufacturer_name",
@@ -132,6 +135,9 @@
           "backs_constraint": false,
           "columns": [
             "id"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -216,6 +222,9 @@
           "backs_constraint": false,
           "columns": [
             "name"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",

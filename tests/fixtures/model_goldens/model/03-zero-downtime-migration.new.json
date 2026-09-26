@@ -160,6 +160,9 @@
           "columns": [
             "email"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
@@ -175,6 +178,9 @@
           "columns": [
             "first_name"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_users_first_name",
@@ -189,6 +195,9 @@
           "backs_constraint": false,
           "columns": [
             "last_name"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -206,6 +215,10 @@
             "first_name",
             "last_name"
           ],
+          "expressions": [
+            false,
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_users_full_name",
@@ -220,6 +233,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",

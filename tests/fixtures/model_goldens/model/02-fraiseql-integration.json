@@ -298,6 +298,9 @@
           "columns": [
             "identifier"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "uq_tb_comment_identifier",
@@ -312,6 +315,9 @@
           "backs_constraint": false,
           "columns": [
             "fk_post"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -328,6 +334,9 @@
           "columns": [
             "fk_user"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_comment_user",
@@ -343,6 +352,9 @@
           "columns": [
             "fk_parent_comment"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_comment_parent",
@@ -357,6 +369,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -375,6 +390,10 @@
           "columns": [
             "fk_post",
             "created_at"
+          ],
+          "expressions": [
+            false,
+            false
           ],
           "key_options": [
             "",
@@ -395,6 +414,10 @@
             "fk_user",
             "created_at"
           ],
+          "expressions": [
+            false,
+            false
+          ],
           "key_options": [
             "",
             "DESC"
@@ -413,6 +436,10 @@
           "columns": [
             "fk_post",
             "created_at"
+          ],
+          "expressions": [
+            false,
+            false
           ],
           "key_options": [
             "",
@@ -771,6 +798,9 @@
           "columns": [
             "identifier"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "uq_tb_post_identifier",
@@ -785,6 +815,9 @@
           "backs_constraint": false,
           "columns": [
             "fk_user"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -801,6 +834,9 @@
           "columns": [
             "slug"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_slug",
@@ -816,6 +852,9 @@
           "columns": [
             "is_published"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_published",
@@ -830,6 +869,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -848,6 +890,9 @@
           "columns": [
             "tags"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "gin",
           "name": "idx_tb_post_tags",
@@ -864,6 +909,10 @@
             "fk_user",
             "is_published"
           ],
+          "expressions": [
+            false,
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_user_published",
@@ -879,6 +928,10 @@
           "columns": [
             "is_published",
             "created_at"
+          ],
+          "expressions": [
+            false,
+            false
           ],
           "key_options": [
             "",
@@ -898,6 +951,10 @@
           "columns": [
             "fk_user",
             "updated_at"
+          ],
+          "expressions": [
+            false,
+            false
           ],
           "key_options": [
             "",
@@ -1179,6 +1236,9 @@
           "columns": [
             "identifier"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "uq_tb_user_identifier",
@@ -1193,6 +1253,9 @@
           "backs_constraint": false,
           "columns": [
             "email"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -1209,6 +1272,9 @@
           "columns": [
             "username"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_username",
@@ -1224,6 +1290,9 @@
           "columns": [
             "is_active"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_active",
@@ -1238,6 +1307,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -1255,6 +1327,9 @@
           "backs_constraint": false,
           "columns": [
             "username"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -1368,6 +1443,9 @@
           "columns": [
             "post_id"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_comment_post",
@@ -1382,6 +1460,9 @@
           "backs_constraint": false,
           "columns": [
             "author_id"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -1509,6 +1590,9 @@
           "columns": [
             "slug"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_post_slug",
@@ -1524,6 +1608,9 @@
           "columns": [
             "is_published"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_post_published",
@@ -1538,6 +1625,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -1556,6 +1646,9 @@
           "columns": [
             "to_tsvector('english', data ->> 'content')"
           ],
+          "expressions": [
+            true
+          ],
           "key_options": [],
           "method": "gin",
           "name": "idx_tv_post_content_search",
@@ -1571,6 +1664,9 @@
           "columns": [
             "to_tsvector('english', data ->> 'title')"
           ],
+          "expressions": [
+            true
+          ],
           "key_options": [],
           "method": "gin",
           "name": "idx_tv_post_title_search",
@@ -1585,6 +1681,9 @@
           "backs_constraint": false,
           "columns": [
             "data ->> 'title'"
+          ],
+          "expressions": [
+            true
           ],
           "key_options": [
             "gin_trgm_ops"
@@ -1602,6 +1701,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -1731,6 +1833,9 @@
           "columns": [
             "email"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_user_email",
@@ -1745,6 +1850,9 @@
           "backs_constraint": false,
           "columns": [
             "username"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -1761,6 +1869,9 @@
           "columns": [
             "is_active"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_user_active",
@@ -1775,6 +1886,9 @@
           "backs_constraint": false,
           "columns": [
             "username"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "gin_trgm_ops"
@@ -1792,6 +1906,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"

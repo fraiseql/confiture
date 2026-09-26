@@ -403,6 +403,7 @@ for a key that writes none, and `()` when no key writes any.
 | `method` | `str \| None` | `None` |
 | `backs_constraint` | `bool` | `False` |
 | `key_options` | `tuple[str, ...]` | `()` |
+| `expressions` | `tuple[bool, ...] \| None` | `None` |
 
 ### `EnumType`
 

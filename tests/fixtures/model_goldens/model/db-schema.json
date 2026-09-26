@@ -194,6 +194,9 @@
           "columns": [
             "pk_confiture"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_confiture_pk_confiture",
@@ -208,6 +211,9 @@
           "backs_constraint": false,
           "columns": [
             "slug"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -224,6 +230,9 @@
           "columns": [
             "version"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_confiture_version",
@@ -238,6 +247,9 @@
           "backs_constraint": false,
           "columns": [
             "applied_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"

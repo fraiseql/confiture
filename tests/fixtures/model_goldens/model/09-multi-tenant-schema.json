@@ -316,6 +316,9 @@
           "columns": [
             "created_at"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "ix_order_created_at",

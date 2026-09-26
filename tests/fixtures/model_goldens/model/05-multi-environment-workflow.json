@@ -239,6 +239,9 @@
           "columns": [
             "owner_id"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_projects_owner_id",
@@ -253,6 +256,9 @@
           "backs_constraint": false,
           "columns": [
             "status"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -270,6 +276,10 @@
             "owner_id",
             "status"
           ],
+          "expressions": [
+            false,
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_projects_owner_status",
@@ -284,6 +294,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -587,6 +600,9 @@
           "columns": [
             "project_id"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_project_id",
@@ -601,6 +617,9 @@
           "backs_constraint": false,
           "columns": [
             "assigned_to"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -617,6 +636,9 @@
           "columns": [
             "status"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_status",
@@ -632,6 +654,9 @@
           "columns": [
             "priority"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_priority",
@@ -646,6 +671,9 @@
           "backs_constraint": false,
           "columns": [
             "due_date"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -663,6 +691,10 @@
             "project_id",
             "status"
           ],
+          "expressions": [
+            false,
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_project_status",
@@ -678,6 +710,10 @@
           "columns": [
             "assigned_to",
             "status"
+          ],
+          "expressions": [
+            false,
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -881,6 +917,9 @@
           "columns": [
             "email"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
@@ -895,6 +934,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -912,6 +954,9 @@
           "backs_constraint": false,
           "columns": [
             "display_name"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "gin_trgm_ops"

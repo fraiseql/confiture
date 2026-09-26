@@ -190,6 +190,9 @@
           "columns": [
             "pk_comment"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_pk_comment",
@@ -204,6 +207,9 @@
           "backs_constraint": false,
           "columns": [
             "post_id"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -220,6 +226,9 @@
           "columns": [
             "user_id"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_user_id",
@@ -234,6 +243,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -461,6 +473,9 @@
           "columns": [
             "pk_post"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_pk_post",
@@ -475,6 +490,9 @@
           "backs_constraint": false,
           "columns": [
             "slug"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -491,6 +509,9 @@
           "columns": [
             "user_id"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_user_id",
@@ -505,6 +526,9 @@
           "backs_constraint": false,
           "columns": [
             "published_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -522,6 +546,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
@@ -747,6 +774,9 @@
           "columns": [
             "pk_user"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_users_pk_user",
@@ -761,6 +791,9 @@
           "backs_constraint": false,
           "columns": [
             "slug"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [],
           "method": "btree",
@@ -777,6 +810,9 @@
           "columns": [
             "username"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_users_username",
@@ -792,6 +828,9 @@
           "columns": [
             "email"
           ],
+          "expressions": [
+            false
+          ],
           "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
@@ -806,6 +845,9 @@
           "backs_constraint": false,
           "columns": [
             "created_at"
+          ],
+          "expressions": [
+            false
           ],
           "key_options": [
             "DESC"
