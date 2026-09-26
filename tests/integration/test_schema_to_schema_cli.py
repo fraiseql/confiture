@@ -322,7 +322,11 @@ def test_setup_imports_the_source_schema_into_the_target(source: str, target: st
     assert result.exit_code == 0, result.output
     payload = _json(result.stdout)
     assert set(payload.pop("parser")) == {"pglast", "pg_major"}
-    assert payload == {"ok": True, "command": "setup", "skip_import": False}
+    assert {k: payload[k] for k in ("ok", "command", "skip_import")} == {
+        "ok": True,
+        "command": "migrate schema-to-schema setup",
+        "skip_import": False,
+    }
     servers = _foreign_servers(target)
     assert list(servers) == [_SERVER]
     assert servers[_SERVER]["dbname"] == _db_name(source)
@@ -440,7 +444,7 @@ def test_analyze_recommends_a_strategy_for_every_table(source: str, target: str)
 
     assert result.exit_code == 0, result.output
     payload = _json(result.stdout)
-    assert payload["command"] == "analyze"
+    assert payload["command"] == "migrate schema-to-schema analyze"
     assert sorted(payload["tables"]) == ["posts", "users"]
     assert {info["strategy"] for info in payload["tables"].values()} == {"fdw"}
 
@@ -498,7 +502,10 @@ def test_migrate_moves_every_mapped_table_into_its_renamed_columns(
 
     assert result.exit_code == 0, result.output
     payload = _json(result.stdout)
-    assert (payload["command"], payload["strategy"]) == ("migrate", strategy)
+    assert (payload["command"], payload["strategy"]) == (
+        "migrate schema-to-schema migrate",
+        strategy,
+    )
     assert payload["migrated"] == {"users": 3, "posts": 2}
     assert _rows(target, "SELECT id, display_name, email FROM users ORDER BY id") == _USERS
     assert _rows(target, "SELECT id, user_id, title FROM posts ORDER BY id") == _POSTS
@@ -587,7 +594,10 @@ def test_migrate_table_reports_the_rows_it_moved(
     migrated = _rows(target, "SELECT id, display_name, email FROM users WHERE id > 0 ORDER BY id")
     assert migrated == _USERS
     payload = _json(result.stdout)
-    assert (payload["command"], payload["target_table"]) == ("migrate-table", "users")
+    assert (payload["command"], payload["target_table"]) == (
+        "migrate schema-to-schema migrate-table",
+        "users",
+    )
     assert payload["rows"] == 3
 
 
@@ -729,7 +739,7 @@ def test_cleanup_removes_the_fdw_and_keeps_the_migrated_rows(
 
     assert result.exit_code == 0, result.output
     payload = _json(result.stdout)
-    assert (payload["ok"], payload["command"]) == (True, "cleanup")
+    assert (payload["ok"], payload["command"]) == (True, "migrate schema-to-schema cleanup")
     assert _foreign_servers(target) == {}
     assert _user_mappings(target) == []
     assert "old_schema" not in _schemas(target)

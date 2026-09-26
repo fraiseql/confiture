@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "version": "003",
+  "name": "idx_label",
+  "applied_by": "app_owner",
+  "ok": true,
+  "command": "migrate apply-as",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

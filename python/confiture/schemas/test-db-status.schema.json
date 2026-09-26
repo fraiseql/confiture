@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/test-db-status.schema.json",
+  "title": "confiture test-db status --format json",
+  "description": "Whether a template database matches the current db/ content hash (TemplateStatus.to_dict). The exit code carries the verdict: 0 when state is current, 1 when stale or absent, and this shape is written in all three cases. A failure (no server, invalid name) writes the error envelope (error-envelope.schema.json) instead.",
+  "type": "object",
+  "required": [
+    "name",
+    "state",
+    "stored_hash",
+    "current_hash"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The template database name given as --template."
+    },
+    "state": {
+      "type": "string",
+      "enum": [
+        "current",
+        "stale",
+        "absent"
+      ],
+      "description": "current: the stored hash equals current_hash. stale: the template is confiture-managed but was built from another db/ tree. absent: no database of that name, or one that carries no confiture template marker (it is not a usable template)."
+    },
+    "stored_hash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The hash stamped on the template's database COMMENT when it was provisioned; null when state is absent."
+    },
+    "current_hash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The hash of the project now: the SHA-256 hex digest of the db/ tree that SchemaBuilder.compute_hash() returns. The command always computes one; null is reserved for a library caller that passes none."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "test-db status",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

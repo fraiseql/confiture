@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-schema-to-schema-migrate.schema.json",
+  "title": "confiture migrate schema-to-schema migrate --format json",
+  "description": "Rows copied into the target for every entry of the column-mapping YAML (--mapping), in the file's order, by one strategy. The CLI assembles it. A failure writes the error envelope (error-envelope.schema.json) instead of this shape.",
+  "type": "object",
+  "required": [
+    "strategy",
+    "migrated"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "strategy": {
+      "type": "string",
+      "enum": [
+        "fdw",
+        "copy"
+      ],
+      "description": "The --strategy every table was migrated with."
+    },
+    "migrated": {
+      "type": "object",
+      "description": "Rows inserted, by the mapping file's entry name (the target table unless the entry sets target_table).",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Rows inserted into the entry's target table."
+      }
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate schema-to-schema migrate",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    }
+  }
+}

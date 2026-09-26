@@ -117,12 +117,16 @@ def test_workflow_json_envelopes_are_well_formed(tmp_path) -> None:
         assert r.exit_code == 0, r.output
         payload = json.loads(r.output)
         assert set(payload.pop("parser")) == {"pglast", "pg_major"}  # the envelope, 1.16.0
-        assert payload == {"ok": True, "command": "setup", "skip_import": False}
+        assert {k: payload[k] for k in ("ok", "command", "skip_import")} == {
+            "ok": True,
+            "command": "migrate schema-to-schema setup",
+            "skip_import": False,
+        }
 
         r = runner.invoke(
             app, [*S2S, "verify", *CONN, "--tables", "users,events", "--format", "json"]
         )
         assert r.exit_code == 0, r.output
         payload = json.loads(r.output)
-        assert payload["command"] == "verify"
+        assert payload["command"] == "migrate schema-to-schema verify"
         assert payload["matched"] is True

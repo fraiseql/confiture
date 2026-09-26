@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/seed-apply.schema.json",
+  "title": "confiture seed apply --format json",
+  "description": "Result of applying the seed files in order, one savepoint per file (ApplyResult.to_dict). A file that fails without --continue-on-error rolls the run back and writes the error envelope (error-envelope.schema.json, SEED_001) instead of this shape; with --continue-on-error (or seed.continue_on_error) the run keeps the files that applied, this shape reports the ones that did not, and the exit code is 0. Per-file progress goes to stderr.",
+  "type": "object",
+  "required": [
+    "total",
+    "succeeded",
+    "failed",
+    "failed_files",
+    "success",
+    "seed_profile"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "total": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Seed files selected under the seeds directory (after --profile); 0 when there were none."
+    },
+    "succeeded": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Files that applied."
+    },
+    "failed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Files that failed; non-zero only under --continue-on-error."
+    },
+    "failed_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The failed files' names, in apply order, without their directory; empty if none failed."
+    },
+    "success": {
+      "type": "boolean",
+      "description": "True when no file failed (failed == 0)."
+    },
+    "seed_profile": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The seed profile applied (--profile, a key of seed.profiles in the environment config); null when every seed file was applied."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "seed apply",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

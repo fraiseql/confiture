@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/test-db-clone.schema.json",
+  "title": "confiture test-db clone --format json",
+  "description": "A fresh database cloned from a template with CREATE DATABASE ... WITH TEMPLATE (CloneResult.to_dict). target_url is the server URL with the clone's name as its database and its password redacted. A failure writes the error envelope (error-envelope.schema.json) instead.",
+  "type": "object",
+  "required": [
+    "template",
+    "target",
+    "target_url",
+    "tablespace",
+    "strategy"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "template": {
+      "type": "string",
+      "description": "The source template (--template)."
+    },
+    "target": {
+      "type": "string",
+      "description": "The clone database created (--target)."
+    },
+    "target_url": {
+      "type": "string",
+      "description": "A connection URL for the clone: the server URL with its database replaced by target. A password in it is written as ***, never in clear."
+    },
+    "tablespace": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The tablespace the clone landed in, or null for an on-disk clone (including a RAM clone that fell back to disk). The command asks for no tablespace, so it writes null; a library caller that passes one reads its name here."
+    },
+    "strategy": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "file_copy",
+        "wal_log",
+        null
+      ],
+      "description": "The CREATE DATABASE … STRATEGY the clone used (PostgreSQL 15+), from CONFITURE_TEST_CLONE_STRATEGY; null when none was asked for and the server's default applied."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "test-db clone",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

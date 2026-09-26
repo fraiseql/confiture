@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/install-helpers.schema.json",
+  "title": "confiture install-helpers --format json",
+  "description": "What installing the view-dependency helpers did: installed them, found them already installed (without --force), or — with --dry-run — would run the SQL it carries. A configuration or connection failure writes the error envelope (error-envelope.schema.json) instead.",
+  "oneOf": [
+    {
+      "type": "object",
+      "description": "The helpers were created (`installed`), or were present and --force was not given (`already_installed`).",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "schema",
+        "functions"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "installed",
+            "already_installed"
+          ]
+        },
+        "schema": {
+          "type": "string",
+          "const": "confiture",
+          "description": "The schema the helpers live in."
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The helper functions, as signatures: `confiture.save_and_drop_dependent_views(schemas TEXT[])` and `confiture.recreate_saved_views()`."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "install-helpers",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "--dry-run: nothing was executed; `sql` is what would be.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "schema",
+        "functions",
+        "sql"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "dry_run"
+        },
+        "schema": {
+          "type": "string",
+          "const": "confiture",
+          "description": "The schema the helpers live in."
+        },
+        "functions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The helper functions, as signatures: `confiture.save_and_drop_dependent_views(schemas TEXT[])` and `confiture.recreate_saved_views()`."
+        },
+        "sql": {
+          "type": "string",
+          "description": "The script the install runs, verbatim."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "install-helpers",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    }
+  ]
+}

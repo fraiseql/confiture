@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/test-db-prune.schema.json",
+  "title": "confiture test-db prune --format json",
+  "description": "The clones of one template that were dropped, reaping those leaked by crashed workers. Assembled by the command. A template with no clone left is not a failure: dropped is empty and the command exits 0.",
+  "type": "object",
+  "required": [
+    "template",
+    "dropped"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "template": {
+      "type": "string",
+      "description": "The template database name given as --template."
+    },
+    "dropped": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The clone databases dropped, in pg_database order; empty if none."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "test-db prune",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

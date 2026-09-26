@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-schema-to-schema-verify.schema.json",
+  "title": "confiture migrate schema-to-schema verify --format json",
+  "description": "Row counts compared between each source table, read through the foreign schema (--source-schema), and its target table (SchemaToSchemaMigrator.verify_migration). A mismatch still writes this shape, with matched false, and exits 1. The CLI assembles the envelope around it. A failure writes the error envelope (error-envelope.schema.json) instead of this shape.",
+  "type": "object",
+  "required": [
+    "tables",
+    "matched"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tables": {
+      "type": "object",
+      "description": "Each verified target table (--tables, else every table --mapping maps), by name.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_count",
+          "target_count",
+          "match",
+          "difference"
+        ],
+        "properties": {
+          "source_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Rows in the source table, by its source name when the mapping renames it."
+          },
+          "target_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Rows in the target table."
+          },
+          "match": {
+            "type": "boolean",
+            "description": "True when the two counts are equal."
+          },
+          "difference": {
+            "type": "integer",
+            "description": "target_count \u2212 source_count; negative means rows missing from the target."
+          }
+        }
+      }
+    },
+    "matched": {
+      "type": "boolean",
+      "description": "True when every table matched; false exits 1."
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate schema-to-schema verify",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    }
+  }
+}

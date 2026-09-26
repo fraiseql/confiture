@@ -22,16 +22,26 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Added
 
-- **`migrate down`, `migrate reinit` and `migrate rebuild` publish their JSON**:
-  `migrate-down.schema.json`, `migrate-reinit.schema.json`,
-  `migrate-rebuild.schema.json`, each with the shared `MigrationEntry` definition
-  in `_common.schema.json`. `rolled_back` keeps the name `migrate down-to` uses,
-  so a consumer counting it reads either command.
+- **Every command that writes JSON publishes its shape.** 45 of the 49 commands
+  whose `--format` accepts `json` now have a schema in `python/confiture/schemas/`
+  (was 20), each written against payloads the command printed in a real run and
+  kept validating by `tests/unit/json_schemas/test_captured_payloads.py`:
+  `migrate down`, `reinit` and `rebuild` (sharing a `MigrationEntry` definition;
+  `rolled_back` keeps `migrate down-to`'s name, so a consumer counting it reads
+  either command); the `test-db` family (`status` writes one shape whether the
+  template is current, stale or absent; `ram-setup`'s `action_command` is present
+  exactly when `action_required` is); all six `migrate schema-to-schema`
+  subcommands; `seed apply` and `seed generate`; `bootstrap` and
+  `migrate baseline` (one shape per mode), `diff`, `install-helpers`,
+  `validate-profile` and `migrate apply-as`. The envelope keys `ok`, `command` and
+  `parser` are declared by every schema and required by none.
 - **A guard that every command writing JSON publishes it.** Each command whose
   `--format` accepts `json` has a section in the JSON-schema reference linking a
-  schema that exists, is an alias of one, or is on a shrink-only list of the 25
-  that have none yet (the `test-db`, `seed` and `schema-to-schema` families
-  among them).
+  schema that exists, is an alias of one, or is on a shrink-only list that names
+  the defect keeping it off. Four remain: `debug cte` (a fractional
+  `execution_time_ms`), `migrate fix-signatures` (three failure paths write nothing
+  to stdout), `migrate generate` (`--verbose` prints ahead of the JSON) and
+  `seed validate` (`--fix` prints ahead of the JSON).
 - **The JSON keys consumers read are pinned** (`tests/contract/test_consumer_payload_keys.py`):
   each key a consumer reads off a payload must stay `required` in its schema —
   fraisier's `applied`, `rolled_back`, `marked`, and the error envelope's
@@ -53,6 +63,12 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Changed
 
+- **`migrate schema-to-schema`'s JSON names the command as typed.** Its six
+  subcommands wrote a bare `"command": "setup"` (and their own `ok`), overriding
+  the envelope `emit` stamps, so a payload said `setup` and the error envelope of
+  the same command `migrate schema-to-schema setup`. They now carry the full path,
+  like every other command, and a guard fails on a command that spells an
+  envelope key `emit` owns.
 - **`errors` is never empty when `success` is false** (`MigrateUpResult`, and
   `errors[]` in `migrate up --format json`). A halt now reads `Halted at
   <version>_<name>: it declares requires_superuser=True. Apply it with

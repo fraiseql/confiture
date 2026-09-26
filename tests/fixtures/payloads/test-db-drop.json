@@ -1,0 +1,10 @@
+{
+  "target": "schemas_testdb_clone2",
+  "dropped": true,
+  "ok": true,
+  "command": "test-db drop",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/test-db-ram-setup.schema.json",
+  "title": "confiture test-db ram-setup --format json",
+  "description": "The (re)creation of a tmpfs-backed tablespace for RAM clones (RamSetupResult.to_dict, plus action_command). When confiture lacks the OS rights to hand the LOCATION directory to the server's user, nothing in the catalog is touched: action_required is true, action_command names the privileged step, and the command exits 5. A refusal (a location outside the tmpfs allowlist, a non-managed database in the tablespace without --force) writes the error envelope (error-envelope.schema.json) instead.",
+  "type": "object",
+  "required": [
+    "tablespace",
+    "location",
+    "owner",
+    "recreated",
+    "action_required",
+    "dropped_databases"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tablespace": {
+      "type": "string",
+      "description": "The tablespace name (--tablespace)."
+    },
+    "location": {
+      "type": "string",
+      "description": "The tmpfs LOCATION directory (--location)."
+    },
+    "owner": {
+      "type": "string",
+      "description": "The OS user the PostgreSQL server runs as, who owns LOCATION (--owner)."
+    },
+    "recreated": {
+      "type": "boolean",
+      "description": "True when an existing tablespace was dropped and re-created (the post-reboot reset); false on a first creation, and when action_required."
+    },
+    "action_required": {
+      "type": "boolean",
+      "description": "True when LOCATION could not be prepared, so nothing was created: run action_command, then re-run."
+    },
+    "dropped_databases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The databases dropped from the tablespace before it was re-created (listed because dropping them is destructive); empty if none."
+    },
+    "action_command": {
+      "type": "string",
+      "description": "The privileged command that prepares LOCATION (`sudo install -d -o <owner> -g <owner> -m 700 <location>`). Present exactly when action_required is true."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "test-db ram-setup",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  },
+  "if": {
+    "properties": {
+      "action_required": {
+        "const": true
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "action_command"
+    ]
+  },
+  "else": {
+    "not": {
+      "required": [
+        "action_command"
+      ]
+    }
+  }
+}

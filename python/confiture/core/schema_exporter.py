@@ -21,6 +21,7 @@ from typing import Any
 # model name -> (module, class); the payload is ``instance.to_dict()``
 _MODELS: dict[str, tuple[str, str]] = {
     "MigrateUpResult": ("confiture.models.results", "MigrateUpResult"),
+    "DiffResult": ("confiture.models.results", "DiffResult"),
     "DownToResult": ("confiture.models.results", "DownToResult"),
     "MigrateDownResult": ("confiture.models.results", "MigrateDownResult"),
     "MigrateReinitResult": ("confiture.models.results", "MigrateReinitResult"),
@@ -34,10 +35,17 @@ _MODELS: dict[str, tuple[str, str]] = {
     "IntrospectionResult": ("confiture.models.introspection", "IntrospectionResult"),
     "LintReport": ("confiture.models.lint", "LintReport"),
     "UnifiedLintResult": ("confiture.models.unified_lint", "UnifiedLintResult"),
+    "TemplateStatus": ("confiture.core.test_db", "TemplateStatus"),
+    # ``test-db provision-template`` prints the same model, always ``current``.
+    "ProvisionedTemplateStatus": ("confiture.core.test_db", "TemplateStatus"),
+    "CloneResult": ("confiture.core.test_db", "CloneResult"),
+    "ApplyResult": ("confiture.core.seed.applier", "ApplyResult"),
+    "SeedGenerationResult": ("confiture.core.seed.bridge", "SeedGenerationResult"),
 }
 
 MODEL_SCHEMAS: dict[str, str] = {
     "MigrateUpResult": "migrate-up.schema.json",
+    "DiffResult": "diff.schema.json",
     "DownToResult": "migrate-down-to.schema.json",
     "MigrateDownResult": "migrate-down.schema.json",
     "MigrateReinitResult": "migrate-reinit.schema.json",
@@ -51,20 +59,35 @@ MODEL_SCHEMAS: dict[str, str] = {
     "IntrospectionResult": "introspect.schema.json",
     "LintReport": "lint.schema.json",
     "UnifiedLintResult": "lint-unified.schema.json",
+    "TemplateStatus": "test-db-status.schema.json",
+    "ProvisionedTemplateStatus": "test-db-provision-template.schema.json",
+    "CloneResult": "test-db-clone.schema.json",
+    "ApplyResult": "seed-apply.schema.json",
+    "SeedGenerationResult": "seed-generate.schema.json",
 }
 
 # Payloads a command assembles from several sources; validated by the CLI tests.
 CLI_BUILT_SCHEMAS: tuple[str, ...] = (
+    "bootstrap.schema.json",
     "build-list-files.schema.json",
     "drift-check-acls.schema.json",
     "error-envelope.schema.json",
+    "install-helpers.schema.json",
     "lint-list-rules.schema.json",
+    "migrate-apply-as.schema.json",
+    "migrate-baseline.schema.json",
     "migrate-diff.schema.json",
     "migrate-steps.schema.json",
     "migrate-fix.schema.json",
     "migrate-introspect.schema.json",
     "migrate-preflight-against.schema.json",
     "migrate-preflight.schema.json",
+    "migrate-schema-to-schema-analyze.schema.json",
+    "migrate-schema-to-schema-cleanup.schema.json",
+    "migrate-schema-to-schema-migrate-table.schema.json",
+    "migrate-schema-to-schema-migrate.schema.json",
+    "migrate-schema-to-schema-setup.schema.json",
+    "migrate-schema-to-schema-verify.schema.json",
     "migrate-status.schema.json",
     "migrate-validate-check-acl-coverage.schema.json",
     "migrate-validate-check-function-uniqueness.schema.json",
@@ -73,7 +96,12 @@ CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "migrate-validate-idempotent.schema.json",
     "migrate-validate-list-patterns.schema.json",
     "schema-dump-model.schema.json",
+    "test-db-drop.schema.json",
+    "test-db-list.schema.json",
+    "test-db-prune.schema.json",
+    "test-db-ram-setup.schema.json",
     "validate-config.schema.json",
+    "validate-profile.schema.json",
     "verify-checksums.schema.json",
 )
 

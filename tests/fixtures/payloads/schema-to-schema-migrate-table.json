@@ -1,0 +1,10 @@
+{
+  "command": "migrate schema-to-schema migrate-table",
+  "target_table": "users",
+  "rows": 3,
+  "ok": true,
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

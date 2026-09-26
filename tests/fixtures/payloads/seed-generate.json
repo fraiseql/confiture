@@ -1,0 +1,14 @@
+{
+  "table": "t",
+  "output_path": "db/seeds/dev/t.sql",
+  "row_count": 3,
+  "column_count": 2,
+  "success": true,
+  "error": null,
+  "ok": true,
+  "command": "seed generate",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

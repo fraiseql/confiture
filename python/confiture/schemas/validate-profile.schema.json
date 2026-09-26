@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/validate-profile.schema.json",
+  "title": "confiture validate-profile --format json",
+  "description": "The shape of an anonymization profile that validated: its strategies and, per table, which strategy each column gets. Never a seed: the payload says whether one is set, and a strategy's seed_env_var names a variable, not its value. A profile that is missing or invalid writes the error envelope (error-envelope.schema.json) instead — CONFIG_004 for the path, ANON_1400 for the content.",
+  "type": "object",
+  "required": [
+    "valid",
+    "path",
+    "name",
+    "version",
+    "has_global_seed",
+    "strategies",
+    "tables"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "valid": {
+      "type": "boolean",
+      "const": true,
+      "description": "Always true in this shape: an invalid profile writes the error envelope."
+    },
+    "path": {
+      "type": "string",
+      "description": "The profile file, as given on the command line."
+    },
+    "name": {
+      "type": "string",
+      "description": "The profile's `name`."
+    },
+    "version": {
+      "type": "string",
+      "description": "The profile's `version`."
+    },
+    "has_global_seed": {
+      "type": "boolean",
+      "description": "True when the profile sets `global_seed`; the seed itself is never written."
+    },
+    "strategies": {
+      "type": "object",
+      "description": "Each strategy the profile defines, by name.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "seed_env_var"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The strategy type, one of the whitelisted types (`hash`, `email`, `phone`, `redact`, …)."
+          },
+          "seed_env_var": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The environment variable the strategy reads its seed from — its name, never its value; null when it names none."
+          }
+        }
+      }
+    },
+    "tables": {
+      "type": "object",
+      "description": "Each table the profile anonymizes, by name, with its rules in file order.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "column",
+            "strategy",
+            "has_seed"
+          ],
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "strategy": {
+              "type": "string",
+              "description": "The name of a strategy under `strategies`."
+            },
+            "has_seed": {
+              "type": "boolean",
+              "description": "True when the rule sets its own `seed`; the seed itself is never written."
+            }
+          }
+        }
+      }
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "validate-profile",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

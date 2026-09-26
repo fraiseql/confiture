@@ -1,0 +1,21 @@
+{
+  "mode": "apply",
+  "success": true,
+  "error": null,
+  "applied_steps": [],
+  "plan": {
+    "steps": [],
+    "observed_postgres_owned_schemas": [],
+    "apply_to_schemas": [
+      "tenant",
+      "public"
+    ],
+    "is_empty": true
+  },
+  "ok": true,
+  "command": "bootstrap",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

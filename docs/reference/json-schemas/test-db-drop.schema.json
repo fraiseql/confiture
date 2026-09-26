@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/test-db-drop.schema.json",
+  "title": "confiture test-db drop --format json",
+  "description": "The outcome of dropping one confiture-managed clone or template (its backends are terminated first). Assembled by the command. A database that is not confiture-managed is refused without --force, and the refusal writes the error envelope (error-envelope.schema.json) instead.",
+  "type": "object",
+  "required": [
+    "target",
+    "dropped"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "The database named by --target."
+    },
+    "dropped": {
+      "type": "boolean",
+      "description": "True when the database existed and was dropped; false when it did not exist (not an error: the command exits 0)."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "test-db drop",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

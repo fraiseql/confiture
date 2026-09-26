@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-schema-to-schema-cleanup.schema.json",
+  "title": "confiture migrate schema-to-schema cleanup --format json",
+  "description": "Result of removing the foreign server and the foreign schema from the target after cutover; the migrated rows stay. The payload is the envelope alone. The CLI assembles it. A failure writes the error envelope (error-envelope.schema.json) instead of this shape.",
+  "type": "object",
+  "required": [],
+  "additionalProperties": false,
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate schema-to-schema cleanup",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    }
+  }
+}

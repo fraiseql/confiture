@@ -1,0 +1,10 @@
+{
+  "template": "schemas_testdb_tpl",
+  "dropped": [],
+  "ok": true,
+  "command": "test-db prune",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

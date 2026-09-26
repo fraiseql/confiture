@@ -130,6 +130,20 @@ FIELD_SAMPLES: dict[tuple[str, str], Any] = {
             {"code": "doc_003", "documented": 0, "undocumented": 0, "comment_length": None},
         ],
     },
+    ("DiffResult", "summary"): {
+        f"{kind}_{verb}": 1
+        for kind in (
+            "tables",
+            "columns",
+            "indexes",
+            "foreign_keys",
+            "constraints",
+            "enum_types",
+            "sequences",
+        )
+        for verb in ("added", "dropped")
+    }
+    | {"tables_renamed": 1},
     ("UnifiedLintResult", "skipped"): [
         SkippedCheck(check="safety", tool="squawk", reason="squawk is not installed on PATH")
     ],

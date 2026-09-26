@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/test-db-provision-template.schema.json",
+  "title": "confiture test-db provision-template --format json",
+  "description": "The template database just built from DDL (or restored from --from-artifact) and stamped with the db/ content hash (TemplateStatus.to_dict, the same shape test-db status writes). A template that is written is current by construction, so state is always current and the two hashes are equal. A failure (refused clobber, failed build or restore) writes the error envelope (error-envelope.schema.json) instead.",
+  "type": "object",
+  "required": [
+    "name",
+    "state",
+    "stored_hash",
+    "current_hash"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "The template database name given as --template."
+    },
+    "state": {
+      "type": "string",
+      "const": "current",
+      "description": "Always current: the template was stamped with the hash it was built from."
+    },
+    "stored_hash": {
+      "type": "string",
+      "description": "The hash stamped on the template's database COMMENT: the SHA-256 hex digest of the db/ tree that SchemaBuilder.compute_hash() returns."
+    },
+    "current_hash": {
+      "type": "string",
+      "description": "The hash the template was built from; equal to stored_hash."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "test-db provision-template",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

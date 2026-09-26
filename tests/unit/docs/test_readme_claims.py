@@ -84,13 +84,16 @@ def test_readme_does_not_claim_every_json_output_has_a_schema_unless_true() -> N
         )
 
 
-def test_readme_names_exactly_the_schema_backed_commands() -> None:
+def test_readme_names_exactly_the_commands_without_a_schema() -> None:
+    """The bullet names the exceptions; every other JSON-writing command has a schema."""
     sentence = _schema_sentence()
     named = set(re.findall(r"`([a-z][a-z0-9 -]*)`", sentence))
-    backed = _schema_backed_commands()
-    # The sentence names top-level commands and the migrate leaves; paths are dropped.
-    named = {n for n in named if not n.startswith(("python/", "docs/"))}
-    assert named == backed, (
-        f"README names {sorted(named - backed)} without a schema and omits "
-        f"{sorted(backed - named)} which have one"
+    named = {n for n in named if not n.startswith(("python/", "docs/", "tests/"))}
+    # The guard's own list, so the README and the guard cannot answer differently.
+    from tests.unit.json_schemas.test_every_json_command_has_a_schema import WITHOUT_SCHEMA
+
+    uncovered = set(WITHOUT_SCHEMA)
+    assert named == uncovered, (
+        f"README names {sorted(named - uncovered)} as lacking a schema, which have one, "
+        f"and omits {sorted(uncovered - named)}, which have none"
     )

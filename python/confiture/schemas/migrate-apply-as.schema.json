@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-apply-as.schema.json",
+  "title": "confiture migrate apply-as --format json",
+  "description": "The one migration `migrate apply-as <role> <version>` applied, connected with the URL under `apply_as.<role>.url`. A missing URL, an unknown or already-applied version, or a failed migration writes the error envelope (error-envelope.schema.json) instead.",
+  "type": "object",
+  "required": [
+    "success",
+    "version",
+    "name",
+    "applied_by"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "type": "boolean",
+      "const": true,
+      "description": "Always true in this shape: a failure writes the error envelope."
+    },
+    "version": {
+      "type": "string",
+      "description": "The version applied."
+    },
+    "name": {
+      "type": "string",
+      "description": "The migration's name."
+    },
+    "applied_by": {
+      "type": "string",
+      "description": "The role argument, as given; also recorded in the ledger row's `applied_by`."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate apply-as",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

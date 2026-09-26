@@ -1,0 +1,26 @@
+{
+  "mode": "from_db",
+  "source": "postgresql://app_owner:***@localhost/schemas_misc_source",
+  "through": null,
+  "copied": [
+    {
+      "version": "002",
+      "name": "add_note",
+      "applied_at": "2026-09-26 13:56:41.386666+02:00",
+      "execution_time_ms": 0,
+      "checksum": "0e0e93412c048094562dade707ec1792d98aa695a421400e07d0bce905814f43"
+    }
+  ],
+  "skipped": [
+    "001"
+  ],
+  "source_only": [],
+  "warnings": [],
+  "dry_run": false,
+  "ok": true,
+  "command": "migrate baseline",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}
