@@ -180,6 +180,20 @@ class TestCloneMissingTemplate:
         assert not _db_exists(provisioner, _CLONE)
 
 
+class TestCloneStrategy:
+    """#438: ``STRATEGY file_copy`` against a real server (PostgreSQL 15+)."""
+
+    def test_a_file_copy_clone_has_the_template_tables(
+        self, provisioner: TestDbProvisioner
+    ) -> None:
+        provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)
+
+        result = provisioner.clone(_TEMPLATE, _CLONE, strategy="file_copy")
+
+        assert result.strategy == "file_copy"
+        assert _tables(provisioner, _CLONE) == {"widget"}
+
+
 class TestSynchronousCommit:
     def test_clone_sets_synchronous_commit_off(self, provisioner: TestDbProvisioner) -> None:
         provisioner.provision_template(_TEMPLATE, schema_hash="h", schema_sql=_SCHEMA)

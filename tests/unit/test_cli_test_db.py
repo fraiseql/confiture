@@ -43,6 +43,12 @@ def _project(tmp_path: Path) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_clone_strategy_in_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``test-db clone`` reads CONFITURE_TEST_CLONE_STRATEGY; these tests pin the default."""
+    monkeypatch.delenv("CONFITURE_TEST_CLONE_STRATEGY", raising=False)
+
+
 class TestClone:
     @patch("confiture.cli.test_db.TestDbProvisioner")
     def test_clone_invokes_provisioner(self, mock_cls: MagicMock) -> None:
@@ -64,7 +70,9 @@ class TestClone:
             ],
         )
         assert result.exit_code == 0
-        prov.clone.assert_called_once_with("tmpl", "c0", sync_commit_off=True, max_concurrency=None)
+        prov.clone.assert_called_once_with(
+            "tmpl", "c0", sync_commit_off=True, max_concurrency=None, strategy=None
+        )
         assert '"target": "c0"' in result.stdout
 
     @patch("confiture.cli.test_db.TestDbProvisioner")
@@ -87,7 +95,7 @@ class TestClone:
         )
         assert result.exit_code == 0
         prov.clone.assert_called_once_with(
-            "tmpl", "c0", sync_commit_off=False, max_concurrency=None
+            "tmpl", "c0", sync_commit_off=False, max_concurrency=None, strategy=None
         )
 
     @patch("confiture.cli.test_db.TestDbProvisioner")
@@ -110,7 +118,9 @@ class TestClone:
             ],
         )
         assert result.exit_code == 0
-        prov.clone.assert_called_once_with("tmpl", "c0", sync_commit_off=True, max_concurrency=3)
+        prov.clone.assert_called_once_with(
+            "tmpl", "c0", sync_commit_off=True, max_concurrency=3, strategy=None
+        )
 
     @patch("confiture.cli.test_db.TestDbProvisioner")
     def test_clone_json_redacts_dsn_password(self, mock_cls: MagicMock) -> None:

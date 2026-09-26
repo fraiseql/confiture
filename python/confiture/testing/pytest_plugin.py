@@ -330,7 +330,11 @@ def confiture_worker_db(
     from confiture.core.test_db import TestDbProvisioner
 
     # Reason: the pytest plugin loads in every pytest session (pytest11 entry point): core stays unimported until a fixture runs (test_testing_package_is_lazy)
-    from confiture.testing.worker_db import resolve_clone_concurrency, resolve_worker_db_name
+    from confiture.testing.worker_db import (
+        resolve_clone_concurrency,
+        resolve_clone_strategy,
+        resolve_worker_db_name,
+    )
 
     provisioner = TestDbProvisioner(confiture_test_server_url)
     target = resolve_worker_db_name(f"{confiture_template_db}_db", worker_id=confiture_worker_id)
@@ -343,6 +347,7 @@ def confiture_worker_db(
             target,
             tablespace=confiture_ram_tablespace_usable,
             max_concurrency=max_concurrency,
+            strategy=resolve_clone_strategy(),
         )
     except psycopg.OperationalError as e:
         pytest.skip(f"confiture test database unavailable: {e}")

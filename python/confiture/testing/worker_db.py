@@ -57,6 +57,7 @@ _CI_FALSEY = frozenset({"", "0", "false", "no", "off"})
 # Env override for the clone-concurrency cap (#166). A valid int: >= 1 caps
 # concurrent clones to that many; <= 0 forces unbounded. Unset or unparseable →
 # auto (throttle only on an fsync=on cluster).
+_CLONE_STRATEGY_VAR = "CONFITURE_TEST_CLONE_STRATEGY"
 _MAX_CLONE_CONCURRENCY_VAR = "CONFITURE_TEST_MAX_CLONE_CONCURRENCY"
 
 # Auto cap applied when the cluster has fsync=on and no override is set. Small
@@ -78,6 +79,24 @@ def is_ci() -> bool:
     choose ``--from-artifact``. It is not branching logic inside the fixtures.
     """
     return any(os.environ.get(var, "").strip().lower() not in _CI_FALSEY for var in _CI_ENV_VARS)
+
+
+def resolve_clone_strategy(*, env: Mapping[str, str] | None = None) -> str | None:
+    """The ``CREATE DATABASE … STRATEGY`` the worker-db fixture clones with (#438).
+
+    ``CONFITURE_TEST_CLONE_STRATEGY`` = ``file_copy`` or ``wal_log``, any case;
+    unset or empty leaves PostgreSQL's own default. A misspelt value is refused —
+    unlike the concurrency cap, where a bad value falls back to a safe default,
+    there is no safe guess at which strategy was meant.
+
+    Raises:
+        ConfigurationError: The variable names no strategy.
+    """
+    # Reason: projects import this module from conftest.py at collection time; confiture.core.test_db pulls in psycopg and the restorer, so it loads only when a fixture asks for a strategy
+    from confiture.core.test_db import validate_clone_strategy
+
+    environ = env if env is not None else os.environ
+    return validate_clone_strategy(environ.get(_CLONE_STRATEGY_VAR, ""), source=_CLONE_STRATEGY_VAR)
 
 
 def resolve_clone_concurrency(

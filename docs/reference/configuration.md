@@ -1027,6 +1027,7 @@ small set of environment variables — they are independent of the YAML config:
 | `CONFITURE_TEST_DB_URL` | `postgresql://localhost/confiture_test` | PG **server** URL the `test-db` fixtures provision against (the database component is ignored for admin work). |
 | `CONFITURE_TEST_RAM_TABLESPACE` | unset | Name of a tmpfs tablespace to place per-worker clones in (provision it with `confiture test-db ram-setup`). **Unset → on-disk clones, behaviour unchanged.** A misconfigured or post-reboot-broken tablespace degrades to disk automatically. |
 | `CONFITURE_TEST_MAX_CLONE_CONCURRENCY` | auto | Cap on concurrent per-worker clones (#166). A valid int: `>= 1` bounds clones to that many across processes; `<= 0` forces unbounded. **Unset → auto:** throttle to 2 on an `fsync=on` cluster (concurrent clones thrash WAL/checkpoint), unbounded on `fsync=off` (typical CI). Set `=1` to serialise a very large template. |
+| `CONFITURE_TEST_CLONE_STRATEGY` | unset | `file_copy` or `wal_log`: the `STRATEGY` of every per-worker clone (`CREATE DATABASE … STRATEGY`, PostgreSQL 15+), read by the fixture and by `confiture test-db clone` (#438). `file_copy` copies the template's files instead of writing them through WAL — seconds instead of tens of seconds for a large template on `fsync=on` — forces two checkpoints per clone, is not crash-safe and is not for a replicated cluster. **Unset → PostgreSQL's default** (`wal_log`). A misspelt value is refused; a strategy on a server older than 15 is refused. |
 
 ---
 
