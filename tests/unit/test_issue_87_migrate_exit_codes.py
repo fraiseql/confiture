@@ -484,10 +484,13 @@ class TestMigrateDownGenericErrors:
 
 
 class TestMigrateGenerateValidationExitCodes:
-    """Validation errors in migrate generate should exit 2."""
+    """A refused --generator is CONFIG_001, exit 5, as a refused migration name is VALID_001.
 
-    def test_missing_from_to_with_generator_exits_2(self, tmp_path):
-        """--generator without --from/--to → exit 2."""
+    Exit 2 through 1.23, with a text message on stderr even under --format json.
+    """
+
+    def test_missing_from_to_with_generator_exits_5(self, tmp_path):
+        """--generator without --from/--to → CONFIG_001."""
         _write_config(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
         _write_migrations(migrations_dir)
@@ -504,10 +507,10 @@ class TestMigrateGenerateValidationExitCodes:
                 "some_gen",
             ],
         )
-        assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}"
+        assert result.exit_code == 5, f"Expected exit 5, got {result.exit_code}"
 
-    def test_generator_not_found_exits_2(self, tmp_path):
-        """Generator not in config → exit 2."""
+    def test_generator_not_found_exits_5(self, tmp_path):
+        """Generator not in config → CONFIG_001."""
         config_file = _write_config(tmp_path)
         migrations_dir = tmp_path / "db" / "migrations"
         _write_migrations(migrations_dir)
@@ -530,4 +533,4 @@ class TestMigrateGenerateValidationExitCodes:
                 str(tmp_path / "new.sql"),
             ],
         )
-        assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}"
+        assert result.exit_code == 5, f"Expected exit 5, got {result.exit_code}"
