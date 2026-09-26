@@ -13,6 +13,7 @@ from confiture.core.schema_change import (
     TableDropped,
     TableRenamed,
 )
+from confiture.core.schema_model import RelationName
 from tests.unit._schema_changes import spelled
 from tests.unit._schema_models import table
 
@@ -43,32 +44,34 @@ class TestSchemaChange:
 
     def test_str_add_column(self):
         """Test string representation for ADD_COLUMN."""
-        change = ColumnAdded("users", spelled("email", "TEXT"))
+        change = ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT"))
         assert str(change) == "ADD COLUMN users.email"
 
     def test_str_drop_column(self):
         """Test string representation for DROP_COLUMN."""
-        change = ColumnDropped("users", spelled("old_field", "TEXT"))
+        change = ColumnDropped(RelationName(None, "users"), spelled("old_field", "TEXT"))
         assert str(change) == "DROP COLUMN users.old_field"
 
     def test_str_rename_column(self):
         """Test string representation for RENAME_COLUMN."""
-        change = ColumnRenamed("users", "email", "email_address")
+        change = ColumnRenamed(RelationName(None, "users"), "email", "email_address")
         assert str(change) == "RENAME COLUMN users.email TO email_address"
 
     def test_str_change_column_type(self):
         """Test string representation for CHANGE_COLUMN_TYPE."""
-        change = ColumnTypeChanged("users", spelled("age", "INTEGER"), spelled("age", "BIGINT"))
+        change = ColumnTypeChanged(
+            RelationName(None, "users"), spelled("age", "INTEGER"), spelled("age", "BIGINT")
+        )
         assert str(change) == "CHANGE COLUMN TYPE users.age FROM INTEGER TO BIGINT"
 
     def test_str_change_column_nullable(self):
         """Test string representation for CHANGE_COLUMN_NULLABLE."""
-        change = ColumnNullabilityChanged("users", "email", nullable=False)
+        change = ColumnNullabilityChanged(RelationName(None, "users"), "email", nullable=False)
         assert str(change) == "CHANGE COLUMN NULLABLE users.email FROM true TO false"
 
     def test_str_change_column_default(self):
         """Test string representation for CHANGE_COLUMN_DEFAULT."""
-        change = ColumnDefaultChanged("users", "created_at", None, "now()")
+        change = ColumnDefaultChanged(RelationName(None, "users"), "created_at", None, "now()")
         assert str(change) == "CHANGE COLUMN DEFAULT users.created_at"
 
 

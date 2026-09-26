@@ -29,11 +29,11 @@ from confiture.core.schema_model import (
     Constraint,
     Index,
     ObjectRef,
+    RelationName,
     RoutineKind,
     SchemaModel,
     Signature,
     Table,
-    identity_of,
     ref_for,
     routine_ref,
     trigger_ref,
@@ -456,9 +456,13 @@ def _same_constraint(expected: Constraint, live: Constraint) -> bool:
     return (
         expected.columns == live.columns
         and expected.operators == live.operators
-        and identity_of(expected.ref_table) == identity_of(live.ref_table)
+        and _identity(expected.ref_table) == _identity(live.ref_table)
         and (not expected.ref_columns or expected.ref_columns == live.ref_columns)
     )
+
+
+def _identity(relation: RelationName | None) -> tuple[str, str] | None:
+    return None if relation is None else relation.identity
 
 
 def _constraint_label(constraint: Constraint) -> str:

@@ -15,12 +15,14 @@ from pathlib import Path
 import pytest
 
 from confiture import platform
-from confiture.core.schema_model import ref_for
+from confiture.core.schema_model import RelationName, ref_for
 
 TABLE = platform.Table(name="item", schema="app")
 COLUMN = platform.Column(name="label", folded="label", line=1)
-INDEX = platform.Index(name="ix", table="app.item", columns=("label",))
-FK = platform.Constraint(kind="foreign_key", name="fk", columns=("x",), ref_table="app.other")
+INDEX = platform.Index(name="ix", table=RelationName("app", "item"), columns=("label",))
+FK = platform.Constraint(
+    kind="foreign_key", name="fk", columns=("x",), ref_table=RelationName("app", "other")
+)
 ENUM = platform.EnumType(name="mood", schema="app", values=("ok",))
 SEQUENCE = platform.Sequence(name="counter", schema="app")
 VIEW_REF = ref_for("view", "app", "v")
@@ -45,44 +47,64 @@ EXAMPLES: dict[type, tuple[Callable[[], object], platform.ObjectRef]] = {
         lambda: platform.TableRenamed(TABLE, platform.Table(name="items", schema="app")),
         ITEM,
     ),
-    platform.ColumnAdded: (lambda: platform.ColumnAdded("app.item", COLUMN), ITEM),
-    platform.ColumnDropped: (lambda: platform.ColumnDropped("app.item", COLUMN), ITEM),
-    platform.ColumnRenamed: (lambda: platform.ColumnRenamed("app.item", "a", "b"), ITEM),
+    platform.ColumnAdded: (lambda: platform.ColumnAdded(RelationName("app", "item"), COLUMN), ITEM),
+    platform.ColumnDropped: (
+        lambda: platform.ColumnDropped(RelationName("app", "item"), COLUMN),
+        ITEM,
+    ),
+    platform.ColumnRenamed: (
+        lambda: platform.ColumnRenamed(RelationName("app", "item"), "a", "b"),
+        ITEM,
+    ),
     platform.ColumnTypeChanged: (
-        lambda: platform.ColumnTypeChanged("app.item", COLUMN, COLUMN),
+        lambda: platform.ColumnTypeChanged(RelationName("app", "item"), COLUMN, COLUMN),
         ITEM,
     ),
     platform.ColumnNullabilityChanged: (
-        lambda: platform.ColumnNullabilityChanged("app.item", "label", nullable=True),
+        lambda: platform.ColumnNullabilityChanged(
+            RelationName("app", "item"), "label", nullable=True
+        ),
         ITEM,
     ),
     platform.ColumnDefaultChanged: (
-        lambda: platform.ColumnDefaultChanged("app.item", "label", None, "'x'"),
+        lambda: platform.ColumnDefaultChanged(RelationName("app", "item"), "label", None, "'x'"),
         ITEM,
     ),
-    platform.IndexAdded: (lambda: platform.IndexAdded("app.item", INDEX), ITEM),
-    platform.IndexDropped: (lambda: platform.IndexDropped("app.item", INDEX), ITEM),
-    platform.ForeignKeyAdded: (lambda: platform.ForeignKeyAdded("app.item", FK), ITEM),
-    platform.ForeignKeyDropped: (lambda: platform.ForeignKeyDropped("app.item", FK), ITEM),
-    platform.CheckConstraintAdded: (lambda: platform.CheckConstraintAdded("app.item", FK), ITEM),
+    platform.IndexAdded: (lambda: platform.IndexAdded(RelationName("app", "item"), INDEX), ITEM),
+    platform.IndexDropped: (
+        lambda: platform.IndexDropped(RelationName("app", "item"), INDEX),
+        ITEM,
+    ),
+    platform.ForeignKeyAdded: (
+        lambda: platform.ForeignKeyAdded(RelationName("app", "item"), FK),
+        ITEM,
+    ),
+    platform.ForeignKeyDropped: (
+        lambda: platform.ForeignKeyDropped(RelationName("app", "item"), FK),
+        ITEM,
+    ),
+    platform.CheckConstraintAdded: (
+        lambda: platform.CheckConstraintAdded(RelationName("app", "item"), FK),
+        ITEM,
+    ),
     platform.CheckConstraintDropped: (
-        lambda: platform.CheckConstraintDropped("app.item", FK),
+        lambda: platform.CheckConstraintDropped(RelationName("app", "item"), FK),
         ITEM,
     ),
     platform.UniqueConstraintAdded: (
-        lambda: platform.UniqueConstraintAdded("app.item", FK),
+        lambda: platform.UniqueConstraintAdded(RelationName("app", "item"), FK),
         ITEM,
     ),
     platform.UniqueConstraintDropped: (
-        lambda: platform.UniqueConstraintDropped("app.item", FK),
+        lambda: platform.UniqueConstraintDropped(RelationName("app", "item"), FK),
         ITEM,
     ),
     platform.ExclusionConstraintAdded: (
-        lambda: platform.ExclusionConstraintAdded("app.item", FK),
+        lambda: platform.ExclusionConstraintAdded(RelationName("app", "item"), FK),
         ITEM,
     ),
     platform.ExclusionConstraintDropped: (
-        lambda: platform.ExclusionConstraintDropped("app.item", FK),
+        lambda: platform.ExclusionConstraintDropped(RelationName("app", "item"), FK),
         ITEM,
     ),
     platform.EnumTypeAdded: (lambda: platform.EnumTypeAdded(ENUM), MOOD),
@@ -114,7 +136,7 @@ def test_every_change_names_its_object(variant: type) -> None:
 
 
 def test_an_unqualified_change_names_the_default_schemas_object() -> None:
-    change = platform.ColumnAdded("item", COLUMN)
+    change = platform.ColumnAdded(RelationName(None, "item"), COLUMN)
     assert change.ref == ref_for("table", None, "item")
     assert change.ref.display == "item"
 

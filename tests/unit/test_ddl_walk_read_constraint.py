@@ -16,7 +16,7 @@ import pglast
 import pytest
 
 from confiture.core.ddl_walk import ColumnFact, read_column_constraints, read_constraint
-from confiture.core.schema_model import Constraint
+from confiture.core.schema_model import Constraint, RelationName
 
 
 def _statement(sql: str) -> Any:
@@ -47,7 +47,7 @@ FK = Constraint(
     kind="foreign_key",
     name="fk",
     columns=("pid",),
-    ref_table="b.p",
+    ref_table=RelationName("b", "p"),
     ref_columns=("id",),
     on_delete="CASCADE",
 )
@@ -113,7 +113,7 @@ def test_deferrability_reads_the_same_whether_sibling_or_field() -> None:
 
 def test_an_unnamed_foreign_key_names_the_parent_primary_key_by_omission() -> None:
     _fact, (fk,) = _on_column("CREATE TABLE a.c (pid INT REFERENCES b.p)")
-    assert fk == Constraint(kind="foreign_key", columns=("pid",), ref_table="b.p")
+    assert fk == Constraint(kind="foreign_key", columns=("pid",), ref_table=RelationName("b", "p"))
 
 
 @pytest.mark.parametrize(

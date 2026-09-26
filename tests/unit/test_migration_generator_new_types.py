@@ -19,7 +19,7 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.core.schema_model import Constraint, EnumType, Sequence
+from confiture.core.schema_model import Constraint, EnumType, RelationName, Sequence
 from tests.unit._schema_models import index
 
 
@@ -33,7 +33,7 @@ FK_ORDERS_USER = Constraint(
     kind="foreign_key",
     name="fk_orders_user",
     columns=("user_id",),
-    ref_table="users",
+    ref_table=RelationName(None, "users"),
     ref_columns=("id",),
 )
 CHK_AMOUNT_POSITIVE = Constraint(kind="check", name="chk_amount_positive", expression="amount > 0")
@@ -48,20 +48,20 @@ IDX_USERS_EMAIL = index("idx_users_email", "users", "email")
 
 class TestIndexChanges:
     def test_up_add_index_generates_create_index(self, tmp_path):
-        change = IndexAdded("users", IDX_USERS_EMAIL)
+        change = IndexAdded(RelationName(None, "users"), IDX_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "CREATE" in sql and "INDEX" in sql
         assert "idx_users_email" in sql
 
     def test_up_drop_index_generates_drop_index(self, tmp_path):
-        change = IndexDropped("users", IDX_USERS_EMAIL)
+        change = IndexDropped(RelationName(None, "users"), IDX_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "DROP INDEX" in sql
 
     def test_down_add_index_generates_drop(self, tmp_path):
-        change = IndexAdded("users", IDX_USERS_EMAIL)
+        change = IndexAdded(RelationName(None, "users"), IDX_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_down_sql(change)
         assert sql is not None
         assert "DROP" in sql
@@ -74,19 +74,19 @@ class TestIndexChanges:
 
 class TestForeignKeyChanges:
     def test_up_add_foreign_key(self, tmp_path):
-        change = ForeignKeyAdded("orders", FK_ORDERS_USER)
+        change = ForeignKeyAdded(RelationName(None, "orders"), FK_ORDERS_USER)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "FOREIGN KEY" in sql
 
     def test_up_drop_foreign_key(self, tmp_path):
-        change = ForeignKeyDropped("orders", FK_ORDERS_USER)
+        change = ForeignKeyDropped(RelationName(None, "orders"), FK_ORDERS_USER)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "DROP CONSTRAINT" in sql
 
     def test_down_add_foreign_key(self, tmp_path):
-        change = ForeignKeyAdded("orders", FK_ORDERS_USER)
+        change = ForeignKeyAdded(RelationName(None, "orders"), FK_ORDERS_USER)
         sql = _gen(tmp_path)._change_to_down_sql(change)
         assert sql is not None
 
@@ -98,13 +98,13 @@ class TestForeignKeyChanges:
 
 class TestCheckConstraintChanges:
     def test_up_add_check_constraint(self, tmp_path):
-        change = CheckConstraintAdded("orders", CHK_AMOUNT_POSITIVE)
+        change = CheckConstraintAdded(RelationName(None, "orders"), CHK_AMOUNT_POSITIVE)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "CHECK" in sql
 
     def test_up_drop_check_constraint(self, tmp_path):
-        change = CheckConstraintDropped("orders", CHK_AMOUNT_POSITIVE)
+        change = CheckConstraintDropped(RelationName(None, "orders"), CHK_AMOUNT_POSITIVE)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "DROP CONSTRAINT" in sql
@@ -117,13 +117,13 @@ class TestCheckConstraintChanges:
 
 class TestUniqueConstraintChanges:
     def test_up_add_unique_constraint(self, tmp_path):
-        change = UniqueConstraintAdded("users", UQ_USERS_EMAIL)
+        change = UniqueConstraintAdded(RelationName(None, "users"), UQ_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "UNIQUE" in sql
 
     def test_up_drop_unique_constraint(self, tmp_path):
-        change = UniqueConstraintDropped("users", UQ_USERS_EMAIL)
+        change = UniqueConstraintDropped(RelationName(None, "users"), UQ_USERS_EMAIL)
         sql = _gen(tmp_path)._change_to_up_sql(change)
         assert sql is not None
         assert "DROP CONSTRAINT" in sql
@@ -192,7 +192,9 @@ class TestSequenceChanges:
 
 class TestGeneratedFileContainsNewTypes:
     def test_migration_file_includes_add_index_sql(self, tmp_path):
-        diff = SchemaDiff(changes=[IndexAdded("users", index("idx_email", "users", "email"))])
+        diff = SchemaDiff(
+            changes=[IndexAdded(RelationName(None, "users"), index("idx_email", "users", "email"))]
+        )
         gen = _gen(tmp_path)
         path = gen.generate(diff, name="add_idx_email")
         content = path.read_text()

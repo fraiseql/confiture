@@ -14,6 +14,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A relation one object names is held as its schema and its name, never one
+  dotted string** (#478). `Constraint.ref_table`, `Index.table`, the table a
+  change is on (`ColumnAdded.table` and every column, index and constraint
+  change) and the inventory's partition parent and `INHERITS` list are a
+  `RelationName(schema, name)`, now exported from `confiture.platform`. PostgreSQL
+  accepts a dot inside a quoted name, and the model used to split its
+  `schema.name` text back on the last dot, so `REFERENCES app."a.b"` named table
+  `b` in schema `app.a` to the differ, drift, prep-seed, `dependency_order` and
+  `column_facts`, and a generated `ALTER TABLE` or `REFERENCES` wrote the table
+  unquoted. The parts now come from the parser and the catalog apart, are
+  compared by `.identity`, and generated DDL writes a table through
+  `quote_identifier`. **The model's wire changes:** `ref_table` and an index's
+  `table` are `{"schema": …, "name": …}` in `SchemaModel.to_json()` and in a
+  change's `details`; `from_json` still reads a model written before. A name a
+  caller types (`column_facts(model, "app.t", …)`) is read as SQL reads it, so
+  an unquoted part is folded and `"My Table"` is quoted as in SQL. A guard fails
+  on a module that splits text on a dot; the splits left are listed with what
+  they read, the type keys among them tracked in #480.
+
 ### Added
 
 - **`naming_003`: no identifier holds a dot** (#476), at `error` and on by

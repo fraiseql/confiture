@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from confiture.core.differ import SchemaDiffer
+from confiture.core.schema_model import RelationName
 
 
 class TestLargeSchemaDoesNotCrash:
@@ -160,7 +161,7 @@ class TestPglastParser:
         assert len(tbl.constraints_of("foreign_key")) == 1
         fk = tbl.constraints_of("foreign_key")[0]
         assert fk.name == "fk_user"
-        assert fk.ref_table == "users"
+        assert fk.ref_table == RelationName(None, "users")
 
     def test_pglast_parses_inline_check_constraint(self):
         """Inline CONSTRAINT ... CHECK in CREATE TABLE body is captured."""

@@ -178,7 +178,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users",
+          "ref_table": {
+            "name": "users",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -239,7 +242,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_projects_owner_id",
-          "table": "projects",
+          "table": {
+            "name": "projects",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -251,7 +257,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_projects_status",
-          "table": "projects",
+          "table": {
+            "name": "projects",
+            "schema": null
+          },
           "unique": false,
           "where": "status <> 'deleted'"
         },
@@ -264,7 +273,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_projects_owner_status",
-          "table": "projects",
+          "table": {
+            "name": "projects",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -278,7 +290,10 @@
           ],
           "method": "btree",
           "name": "idx_projects_created_at",
-          "table": "projects",
+          "table": {
+            "name": "projects",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }
@@ -477,7 +492,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "projects",
+          "ref_table": {
+            "name": "projects",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -496,7 +514,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users",
+          "ref_table": {
+            "name": "users",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -569,7 +590,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_project_id",
-          "table": "tasks",
+          "table": {
+            "name": "tasks",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -581,7 +605,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_assigned_to",
-          "table": "tasks",
+          "table": {
+            "name": "tasks",
+            "schema": null
+          },
           "unique": false,
           "where": "assigned_to IS NOT NULL"
         },
@@ -593,7 +620,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_status",
-          "table": "tasks",
+          "table": {
+            "name": "tasks",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -605,7 +635,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_priority",
-          "table": "tasks",
+          "table": {
+            "name": "tasks",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -617,7 +650,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_due_date",
-          "table": "tasks",
+          "table": {
+            "name": "tasks",
+            "schema": null
+          },
           "unique": false,
           "where": "due_date IS NOT NULL"
         },
@@ -630,7 +666,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_project_status",
-          "table": "tasks",
+          "table": {
+            "name": "tasks",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -643,7 +682,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tasks_assignee_status",
-          "table": "tasks",
+          "table": {
+            "name": "tasks",
+            "schema": null
+          },
           "unique": false,
           "where": "assigned_to IS NOT NULL"
         }
@@ -842,7 +884,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -856,7 +901,10 @@
           ],
           "method": "btree",
           "name": "idx_users_created_at",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -870,7 +918,10 @@
           ],
           "method": "gin",
           "name": "idx_users_display_name_trgm",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }

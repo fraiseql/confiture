@@ -21,6 +21,7 @@ import pglast
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import ColumnAdded, ColumnDropped, TableDropped
+from confiture.core.schema_model import RelationName
 from tests.unit._schema_models import table
 
 ONE_COLUMN = ("CREATE TABLE tenant.t (id INT);", "CREATE TABLE tenant.t (id INT, x INT NOT NULL);")
@@ -113,7 +114,7 @@ class TestADroppedTableIsRecreatedByItsDown:
         sql = DifferSQLGenerator().generate_down(_change(*self.DROPPED, TableDropped))
         restored = SchemaDiffer().parse_schema(self.DROPPED[1] + "\n" + sql).tables[1]
         assert [(fk.columns, fk.ref_table) for fk in restored.constraints_of("foreign_key")] == [
-            (("pid",), "b.parent")
+            (("pid",), RelationName("b", "parent"))
         ]
         assert [c.name for c in restored.columns if c.primary_key] == ["id"]
 

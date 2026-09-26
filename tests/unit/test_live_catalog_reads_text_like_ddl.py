@@ -14,7 +14,7 @@ import pglast
 
 from confiture.core.ddl_walk import read_index, written_type
 from confiture.core.live_catalog import _constraint, _expression, _type_nodes
-from confiture.core.schema_model import Constraint
+from confiture.core.schema_model import Constraint, RelationName
 
 
 def test_a_foreign_key_definition_reads_as_the_ddl_would() -> None:
@@ -24,7 +24,7 @@ def test_a_foreign_key_definition_reads_as_the_ddl_would() -> None:
         kind="foreign_key",
         name="fk",
         columns=("pid",),
-        ref_table="b.p",
+        ref_table=RelationName("b", "p"),
         ref_columns=("id",),
         on_delete="CASCADE",
     )

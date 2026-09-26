@@ -155,7 +155,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "posts",
+          "ref_table": {
+            "name": "posts",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -174,7 +177,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users",
+          "ref_table": {
+            "name": "users",
+            "schema": null
+          },
           "where": null
         }
       ],
@@ -187,7 +193,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_pk_comment",
-          "table": "comments",
+          "table": {
+            "name": "comments",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -199,7 +208,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_post_id",
-          "table": "comments",
+          "table": {
+            "name": "comments",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -211,7 +223,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_user_id",
-          "table": "comments",
+          "table": {
+            "name": "comments",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -225,7 +240,10 @@
           ],
           "method": "btree",
           "name": "idx_comments_created_at",
-          "table": "comments",
+          "table": {
+            "name": "comments",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }
@@ -430,7 +448,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users",
+          "ref_table": {
+            "name": "users",
+            "schema": null
+          },
           "where": null
         }
       ],
@@ -443,7 +464,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_pk_post",
-          "table": "posts",
+          "table": {
+            "name": "posts",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -455,7 +479,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_slug",
-          "table": "posts",
+          "table": {
+            "name": "posts",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -467,7 +494,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_user_id",
-          "table": "posts",
+          "table": {
+            "name": "posts",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -481,7 +511,10 @@
           ],
           "method": "btree",
           "name": "idx_posts_published_at",
-          "table": "posts",
+          "table": {
+            "name": "posts",
+            "schema": null
+          },
           "unique": false,
           "where": "published_at IS NOT NULL"
         },
@@ -495,7 +528,10 @@
           ],
           "method": "btree",
           "name": "idx_posts_created_at",
-          "table": "posts",
+          "table": {
+            "name": "posts",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }
@@ -714,7 +750,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_pk_user",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -726,7 +765,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_slug",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -738,7 +780,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_username",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -750,7 +795,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -764,7 +812,10 @@
           ],
           "method": "btree",
           "name": "idx_users_created_at",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }

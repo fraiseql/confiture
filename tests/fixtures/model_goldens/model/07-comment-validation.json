@@ -110,7 +110,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users",
+          "ref_table": {
+            "name": "users",
+            "schema": null
+          },
           "where": null
         }
       ],

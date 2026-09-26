@@ -16,7 +16,7 @@ from confiture.core.schema_change import (
     TableDropped,
     TableRenamed,
 )
-from confiture.core.schema_model import EnumType, Sequence
+from confiture.core.schema_model import EnumType, RelationName, Sequence
 from confiture.models.results import DiffResult
 from tests.unit._schema_changes import spelled
 from tests.unit._schema_models import index, table
@@ -46,7 +46,9 @@ class TestDiffResult:
         assert data["changes"] == []
 
     def test_diff_result_with_changes(self):
-        diff = SchemaDiff(changes=[ColumnAdded("users", spelled("bio", "TEXT"))])
+        diff = SchemaDiff(
+            changes=[ColumnAdded(RelationName(None, "users"), spelled("bio", "TEXT"))]
+        )
         result = DiffResult.from_schema_diff(diff)
         assert result.has_changes is True
         data = result.to_dict()
@@ -57,7 +59,7 @@ class TestDiffResult:
     def test_diff_result_summary_counts(self):
         diff = SchemaDiff(
             changes=[
-                ColumnAdded("users", spelled("bio", "TEXT")),
+                ColumnAdded(RelationName(None, "users"), spelled("bio", "TEXT")),
                 TableDropped(table("legacy", spelled("id", "INTEGER", nullable=False))),
             ]
         )
@@ -173,7 +175,9 @@ class TestDiffResultNullFields:
         assert seq_change["new_value"] is None
 
     def test_diff_result_to_dict_details_field_present(self):
-        diff = SchemaDiff(changes=[IndexAdded("users", index("idx_email", "users", "email"))])
+        diff = SchemaDiff(
+            changes=[IndexAdded(RelationName(None, "users"), index("idx_email", "users", "email"))]
+        )
         data = DiffResult.from_schema_diff(diff).to_dict()
         change = data["changes"][0]
         assert change["details"] is not None
@@ -187,7 +191,7 @@ class TestDiffResultSummaryRenames:
         diff = SchemaDiff(
             changes=[
                 TableRenamed(table("old"), table("new")),
-                ColumnRenamed("t", "a", "b"),
+                ColumnRenamed(RelationName(None, "t"), "a", "b"),
             ]
         )
         data = DiffResult.from_schema_diff(diff).to_dict()
@@ -265,7 +269,7 @@ class TestDiffTextRenameOutput:
 
         diff = SchemaDiff(
             changes=[
-                ColumnRenamed("users", "email", "email_address"),
+                ColumnRenamed(RelationName(None, "users"), "email", "email_address"),
                 TableRenamed(table("users"), table("accounts")),
             ]
         )

@@ -163,7 +163,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -175,7 +178,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_first_name",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -187,7 +193,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_last_name",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -200,7 +209,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_full_name",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -212,7 +224,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_created_at",
-          "table": "users",
+          "table": {
+            "name": "users",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }

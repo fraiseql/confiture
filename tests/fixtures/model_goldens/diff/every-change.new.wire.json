@@ -187,7 +187,10 @@
               "columns": [
                 "pid"
               ],
-              "ref_table": "parent",
+              "ref_table": {
+                "schema": null,
+                "name": "parent"
+              },
               "ref_columns": [
                 "id"
               ],

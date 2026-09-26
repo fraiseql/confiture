@@ -343,6 +343,7 @@ jobs:
           tests/unit/test_fragment_census.py \
           tests/unit/test_data_assertions.py \
           tests/unit/linting/test_reference_extraction.py \
+          tests/unit/test_relation_references.py \
           tests/unit/linting/test_naming_003_dotted_identifiers.py \
           tests/unit/linting/test_build_003_references.py \
           tests/unit/linting/test_build_004.py \

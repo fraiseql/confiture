@@ -14,7 +14,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from confiture.core.drift import DriftReport, DriftSeverity, DriftType, SchemaDriftDetector
-from confiture.core.schema_model import Constraint, SchemaModel
+from confiture.core.schema_model import Constraint, RelationName, SchemaModel
 from tests.unit._schema_models import column, index, model, table
 
 
@@ -148,12 +148,14 @@ def test_a_literal_and_the_cast_postgres_stores_it_with_are_one_default() -> Non
 
 def test_an_unnamed_foreign_key_matches_the_name_postgres_gave_it() -> None:
     """``REFERENCES parent`` names no constraint and no column; the catalog names both."""
-    written = Constraint(kind="foreign_key", columns=("pid",), ref_table="parent")
+    written = Constraint(
+        kind="foreign_key", columns=("pid",), ref_table=RelationName(None, "parent")
+    )
     stored = Constraint(
         kind="foreign_key",
         name="child_pid_fkey",
         columns=("pid",),
-        ref_table="public.parent",
+        ref_table=RelationName("public", "parent"),
         ref_columns=("id",),
     )
     expected = model(table("child", column("pid"), constraints=[written]))
@@ -164,9 +166,11 @@ def test_an_unnamed_foreign_key_matches_the_name_postgres_gave_it() -> None:
 
 def test_two_unnamed_foreign_keys_are_two() -> None:
     """1.14.0's rule: an unnamed constraint is identified by what it says, never by ``""``."""
-    to_a = Constraint(kind="foreign_key", columns=("a_id",), ref_table="a")
-    to_b = Constraint(kind="foreign_key", columns=("b_id",), ref_table="b")
-    live_a = Constraint(kind="foreign_key", name="t_a_id_fkey", columns=("a_id",), ref_table="a")
+    to_a = Constraint(kind="foreign_key", columns=("a_id",), ref_table=RelationName(None, "a"))
+    to_b = Constraint(kind="foreign_key", columns=("b_id",), ref_table=RelationName(None, "b"))
+    live_a = Constraint(
+        kind="foreign_key", name="t_a_id_fkey", columns=("a_id",), ref_table=RelationName(None, "a")
+    )
     columns = (column("a_id"), column("b_id"))
     expected = model(table("t", *columns, constraints=[to_a, to_b]))
     actual = model(table("t", *columns, constraints=[live_a]))

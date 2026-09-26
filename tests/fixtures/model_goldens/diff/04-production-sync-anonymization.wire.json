@@ -185,7 +185,10 @@
               "columns": [
                 "order_id"
               ],
-              "ref_table": "orders",
+              "ref_table": {
+                "schema": null,
+                "name": "orders"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -198,7 +201,10 @@
               "columns": [
                 "product_id"
               ],
-              "ref_table": "products",
+              "ref_table": {
+                "schema": null,
+                "name": "products"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -278,7 +284,10 @@
               "columns": [
                 "user_id"
               ],
-              "ref_table": "users",
+              "ref_table": {
+                "schema": null,
+                "name": "users"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -358,7 +367,10 @@
               "columns": [
                 "order_id"
               ],
-              "ref_table": "orders",
+              "ref_table": {
+                "schema": null,
+                "name": "orders"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -488,7 +500,10 @@
               "columns": [
                 "user_id"
               ],
-              "ref_table": "users",
+              "ref_table": {
+                "schema": null,
+                "name": "users"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -551,7 +566,10 @@
               "columns": [
                 "user_id"
               ],
-              "ref_table": "users",
+              "ref_table": {
+                "schema": null,
+                "name": "users"
+              },
               "ref_columns": [
                 "id"
               ],

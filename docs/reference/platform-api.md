@@ -246,6 +246,35 @@ and a dropped function (#275).
 | `signature` | `tuple[str, ...] \| None` | required |
 | `display` | `str` | required |
 
+### `RelationName`
+
+```python
+class RelationName
+```
+
+A relation one object names — a foreign key's target, an index's table, a parent.
+
+Two parts, never one string (#478). PostgreSQL accepts a dot inside a quoted
+name (`app."a.b"`), so `schema.name` text cannot be taken apart again: the
+parser hands the two over separately, the catalog reads them separately, and
+they stay that way. Both parts are as the parser holds them — an unquoted
+part already folded, a quoted one kept — and `schema` is `None` when the
+author wrote none; `identity` defaults it, which is how two references
+are compared.
+
+| Field | Type | Default |
+|---|---|---|
+| `schema` | `str \| None` | required |
+| `name` | `str` | required |
+
+#### `RelationName.ref`
+
+```python
+def ref(self, kind: str = 'table') -> ObjectRef
+```
+
+The model's key of the relation, as `ref_for` builds it.
+
 ### `Table`
 
 ```python
@@ -335,7 +364,7 @@ access method and `where` its partial predicate, rendered.
 | `kind` | `ConstraintKind` | required |
 | `name` | `str` | `''` |
 | `columns` | `tuple[str, ...]` | `()` |
-| `ref_table` | `str \| None` | `None` |
+| `ref_table` | `RelationName \| None` | `None` |
 | `ref_columns` | `tuple[str, ...]` | `()` |
 | `on_delete` | `str \| None` | `None` |
 | `on_update` | `str \| None` | `None` |
@@ -367,7 +396,7 @@ for a key that writes none, and `()` when no key writes any.
 | Field | Type | Default |
 |---|---|---|
 | `name` | `str \| None` | required |
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `columns` | `tuple[str, ...]` | required |
 | `unique` | `bool` | `False` |
 | `where` | `str \| None` | `None` |
@@ -1150,7 +1179,7 @@ generated DDL alters — never an identity.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `column` | `Column` | required |
 
 ### `ColumnDropped`
@@ -1163,7 +1192,7 @@ A column only the old tree declares — carried whole, so a down can restore it.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `column` | `Column` | required |
 
 ### `ColumnRenamed`
@@ -1176,7 +1205,7 @@ One column under two names, on one table.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `old` | `str` | required |
 | `new` | `str` | required |
 
@@ -1190,7 +1219,7 @@ A column whose type differs, typmod included — both declarations travel.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `old` | `Column` | required |
 | `new` | `Column` | required |
 
@@ -1204,7 +1233,7 @@ A column that became nullable, or stopped being; `nullable` is the new tree's.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `column` | `str` | required |
 | `nullable` | `bool` | required |
 
@@ -1218,7 +1247,7 @@ A column whose default differs; `None` is no default.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `column` | `str` | required |
 | `old` | `str \| None` | required |
 | `new` | `str \| None` | required |
@@ -1233,7 +1262,7 @@ An index only the new tree declares on a table both hold.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `index` | `Index` | required |
 
 ### `IndexDropped`
@@ -1246,7 +1275,7 @@ An index only the old tree declares on a table both hold.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `index` | `Index` | required |
 
 ### `ForeignKeyAdded`
@@ -1259,7 +1288,7 @@ A foreign key only the new tree declares.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `constraint` | `Constraint` | required |
 
 ### `ForeignKeyDropped`
@@ -1272,7 +1301,7 @@ A foreign key only the old tree declares.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `constraint` | `Constraint` | required |
 
 ### `CheckConstraintAdded`
@@ -1285,7 +1314,7 @@ A CHECK only the new tree declares, or one whose predicate changed (after a drop
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `constraint` | `Constraint` | required |
 
 ### `CheckConstraintDropped`
@@ -1298,7 +1327,7 @@ A CHECK only the old tree declares, or one whose predicate changed (before an ad
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `constraint` | `Constraint` | required |
 
 ### `UniqueConstraintAdded`
@@ -1311,7 +1340,7 @@ A UNIQUE constraint only the new tree declares.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `constraint` | `Constraint` | required |
 
 ### `UniqueConstraintDropped`
@@ -1324,7 +1353,7 @@ A UNIQUE constraint only the old tree declares.
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `constraint` | `Constraint` | required |
 
 ### `ExclusionConstraintAdded`
@@ -1337,7 +1366,7 @@ An EXCLUDE constraint only the new tree declares, or one that changed (after a d
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `constraint` | `Constraint` | required |
 
 ### `ExclusionConstraintDropped`
@@ -1350,7 +1379,7 @@ An EXCLUDE constraint only the old tree declares, or one that changed (before an
 
 | Field | Type | Default |
 |---|---|---|
-| `table` | `str` | required |
+| `table` | `RelationName` | required |
 | `constraint` | `Constraint` | required |
 
 ### `EnumTypeAdded`

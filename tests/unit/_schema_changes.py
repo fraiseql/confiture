@@ -7,7 +7,7 @@ carrying model objects, and these build them the way the differ does.
 
 Usage::
 
-    ColumnAdded("users", spelled("email", "TEXT", nullable=False))
+    ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT", nullable=False))
     TableAdded(table("users", spelled("id", "SERIAL", nullable=False, primary_key=True)))
     added("view", "public.v", "CREATE OR REPLACE VIEW public.v AS SELECT 1")
 """

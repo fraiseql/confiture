@@ -37,8 +37,8 @@ from confiture.core.schema_model import (
     GeneratedKind,
     IdentityKind,
     Index,
+    RelationName,
     Volatility,
-    qualified_name,
 )
 from confiture.core.type_lattice import canonical_type, parse_type
 
@@ -701,8 +701,8 @@ class LikeClause:
     add table facts, not column ones.
     """
 
-    #: ``schema.name`` of the source, as pglast holds it.
-    source: str
+    #: The source relation, as pglast holds it.
+    source: RelationName
     defaults: bool
     identity: bool
     generated: bool
@@ -723,7 +723,7 @@ def read_like(node: Any) -> LikeClause | None:
     """The ``LIKE`` clause *node* is, or ``None`` for any other table element."""
     if type(node).__name__ != "TableLikeClause":
         return None
-    source = qualified_relname(getattr(node, "relation", None))
+    source = relation_name(getattr(node, "relation", None))
     if source is None:
         return None
     options = enum_int(getattr(node, "options", None)) or 0
@@ -809,6 +809,14 @@ def relation_parts(relation: object) -> tuple[str | None, str | None]:
     if relation is None:
         return (None, None)
     return (getattr(relation, "schemaname", None), getattr(relation, "relname", None))
+
+
+def relation_name(relation: object) -> RelationName | None:
+    """A ``RangeVar``'s schema and name, kept apart (#478); ``None`` for no relation."""
+    relname = getattr(relation, "relname", None) if relation is not None else None
+    if not relname:
+        return None
+    return RelationName(getattr(relation, "schemaname", None), str(relname))
 
 
 def qualified_relname(relation: object) -> str | None:
@@ -987,7 +995,7 @@ def _read_foreign_key(node: Any, column: str | None) -> Constraint:
         name=node.conname or "",
         columns=_covered(node.fk_attrs, column),
         ref_table=(
-            qualified_name(getattr(pktable, "schemaname", None), pktable.relname)
+            RelationName(getattr(pktable, "schemaname", None), pktable.relname)
             if pktable is not None
             else None
         ),
@@ -1204,8 +1212,8 @@ def read_column_constraints(coldef: Any) -> tuple[ColumnFact, tuple[Constraint, 
     return fact, tuple(constraints)
 
 
-def read_index(stmt: Any, *, table: str) -> Index:
-    """What one ``CREATE INDEX`` declares, for the table spelled *table*.
+def read_index(stmt: Any, *, table: RelationName) -> Index:
+    """What one ``CREATE INDEX`` declares, on the relation *table*.
 
     The one reader of an ``IndexStmt``: the lint inventory reads a tree's
     statements with it, and ``live_catalog`` reads ``pg_get_indexdef``'s output

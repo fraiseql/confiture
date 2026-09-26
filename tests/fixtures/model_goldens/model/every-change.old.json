@@ -326,7 +326,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "parent",
+          "ref_table": {
+            "name": "parent",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -390,7 +393,10 @@
           "key_options": [],
           "method": "btree",
           "name": "things_old_ix",
-          "table": "things",
+          "table": {
+            "name": "things",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }

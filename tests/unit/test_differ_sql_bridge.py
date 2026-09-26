@@ -12,11 +12,15 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.core.schema_model import Constraint
+from confiture.core.schema_model import Constraint, RelationName
 from tests.unit._schema_models import table
 
 FK_U = Constraint(
-    kind="foreign_key", name="fk_u", columns=("user_id",), ref_table="users", ref_columns=("id",)
+    kind="foreign_key",
+    name="fk_u",
+    columns=("user_id",),
+    ref_table=RelationName(None, "users"),
+    ref_columns=("id",),
 )
 CHK_POS = Constraint(kind="check", name="chk_pos", expression="amount > 0")
 UQ_EMAIL = Constraint(kind="unique", name="uq_email", columns=("email",))
@@ -32,7 +36,7 @@ class TestDifferSQLBridgeMethods:
     # --- ADD_FOREIGN_KEY ---
 
     def test_up_add_foreign_key(self):
-        change = ForeignKeyAdded("orders", FK_U)
+        change = ForeignKeyAdded(RelationName(None, "orders"), FK_U)
         sql = self._gen().generate_up(change)
         assert "FOREIGN KEY" in sql
         assert "fk_u" in sql
@@ -40,14 +44,14 @@ class TestDifferSQLBridgeMethods:
         assert "users" in sql
 
     def test_up_add_foreign_key_with_on_delete(self):
-        change = ForeignKeyAdded("orders", replace(FK_U, on_delete="CASCADE"))
+        change = ForeignKeyAdded(RelationName(None, "orders"), replace(FK_U, on_delete="CASCADE"))
         sql = self._gen().generate_up(change)
         assert "FOREIGN KEY" in sql
 
     # --- DROP_FOREIGN_KEY ---
 
     def test_up_drop_foreign_key(self):
-        change = ForeignKeyDropped("orders", FK_U)
+        change = ForeignKeyDropped(RelationName(None, "orders"), FK_U)
         sql = self._gen().generate_up(change)
         assert "DROP CONSTRAINT" in sql
         assert "fk_u" in sql
@@ -55,7 +59,7 @@ class TestDifferSQLBridgeMethods:
     # --- ADD_CHECK_CONSTRAINT ---
 
     def test_up_add_check_constraint(self):
-        change = CheckConstraintAdded("orders", CHK_POS)
+        change = CheckConstraintAdded(RelationName(None, "orders"), CHK_POS)
         sql = self._gen().generate_up(change)
         assert "ADD CONSTRAINT" in sql
         assert "chk_pos" in sql
@@ -70,7 +74,7 @@ class TestDifferSQLBridgeMethods:
         indistinguishable from one the author chose, and with a qualified table
         it is not even a legal identifier (``chk_tenant.t``).
         """
-        change = CheckConstraintAdded("orders", Constraint(kind="check"))
+        change = CheckConstraintAdded(RelationName(None, "orders"), Constraint(kind="check"))
         sql = self._gen().generate_up(change)
         assert sql.startswith("-- WARNING:")
         assert "chk_orders" not in sql
@@ -78,7 +82,7 @@ class TestDifferSQLBridgeMethods:
     # --- DROP_CHECK_CONSTRAINT ---
 
     def test_up_drop_check_constraint(self):
-        change = CheckConstraintDropped("orders", CHK_POS)
+        change = CheckConstraintDropped(RelationName(None, "orders"), CHK_POS)
         sql = self._gen().generate_up(change)
         assert "DROP CONSTRAINT" in sql
         assert "chk_pos" in sql
@@ -86,7 +90,7 @@ class TestDifferSQLBridgeMethods:
     # --- ADD_UNIQUE_CONSTRAINT ---
 
     def test_up_add_unique_constraint(self):
-        change = UniqueConstraintAdded("users", UQ_EMAIL)
+        change = UniqueConstraintAdded(RelationName(None, "users"), UQ_EMAIL)
         sql = self._gen().generate_up(change)
         assert "ADD CONSTRAINT" in sql
         assert "uq_email" in sql
@@ -95,7 +99,7 @@ class TestDifferSQLBridgeMethods:
     # --- DROP_UNIQUE_CONSTRAINT ---
 
     def test_up_drop_unique_constraint(self):
-        change = UniqueConstraintDropped("users", UQ_EMAIL)
+        change = UniqueConstraintDropped(RelationName(None, "users"), UQ_EMAIL)
         sql = self._gen().generate_up(change)
         assert "DROP CONSTRAINT" in sql
         assert "uq_email" in sql

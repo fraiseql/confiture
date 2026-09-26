@@ -68,7 +68,10 @@
               "columns": [
                 "tenant_id"
               ],
-              "ref_table": "management.tb_organization",
+              "ref_table": {
+                "schema": "management",
+                "name": "tb_organization"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -140,7 +143,10 @@
               "columns": [
                 "tenant_id"
               ],
-              "ref_table": "management.tb_organization",
+              "ref_table": {
+                "schema": "management",
+                "name": "tb_organization"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -154,7 +160,10 @@
                 "tenant_id",
                 "fk_provider"
               ],
-              "ref_table": "app.tb_provider",
+              "ref_table": {
+                "schema": "app",
+                "name": "tb_provider"
+              },
               "ref_columns": [
                 "tenant_id",
                 "id"
@@ -227,7 +236,10 @@
               "columns": [
                 "tenant_id"
               ],
-              "ref_table": "management.tb_organization",
+              "ref_table": {
+                "schema": "management",
+                "name": "tb_organization"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -240,7 +252,10 @@
               "columns": [
                 "fk_product"
               ],
-              "ref_table": "catalog.tb_product",
+              "ref_table": {
+                "schema": "catalog",
+                "name": "tb_product"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -254,7 +269,10 @@
                 "tenant_id",
                 "fk_order"
               ],
-              "ref_table": "app.tb_order",
+              "ref_table": {
+                "schema": "app",
+                "name": "tb_order"
+              },
               "ref_columns": [
                 "tenant_id",
                 "id"
@@ -318,7 +336,10 @@
               "columns": [
                 "tenant_id"
               ],
-              "ref_table": "management.tb_organization",
+              "ref_table": {
+                "schema": "management",
+                "name": "tb_organization"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -331,7 +352,10 @@
               "columns": [
                 "fk_company"
               ],
-              "ref_table": "catalog.tb_company",
+              "ref_table": {
+                "schema": "catalog",
+                "name": "tb_company"
+              },
               "ref_columns": [
                 "id"
               ],

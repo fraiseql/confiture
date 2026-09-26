@@ -330,7 +330,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "orders",
+          "ref_table": {
+            "name": "orders",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -349,7 +352,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "products",
+          "ref_table": {
+            "name": "products",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -377,7 +383,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_order_items_order",
-          "table": "order_items",
+          "table": {
+            "name": "order_items",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }
@@ -520,7 +529,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users",
+          "ref_table": {
+            "name": "users",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -548,7 +560,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_orders_user",
-          "table": "orders",
+          "table": {
+            "name": "orders",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }
@@ -691,7 +706,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "orders",
+          "ref_table": {
+            "name": "orders",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -719,7 +737,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_payments_order",
-          "table": "payments",
+          "table": {
+            "name": "payments",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }
@@ -962,7 +983,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users",
+          "ref_table": {
+            "name": "users",
+            "schema": null
+          },
           "where": null
         }
       ],
@@ -975,7 +999,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tickets_user",
-          "table": "support_tickets",
+          "table": {
+            "name": "support_tickets",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }
@@ -1090,7 +1117,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "users",
+          "ref_table": {
+            "name": "users",
+            "schema": null
+          },
           "where": null
         }
       ],
@@ -1103,7 +1133,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_sessions_user",
-          "table": "user_sessions",
+          "table": {
+            "name": "user_sessions",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }

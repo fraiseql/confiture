@@ -62,6 +62,7 @@ from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import (
     Column,
     EnumType,
+    RelationName,
     Sequence,
     Table,
     qualified_name,
@@ -463,7 +464,7 @@ class SchemaDiffer:
         """Compare columns between two versions of the same table."""
         changes: list[SchemaChange] = []
 
-        table = old_table.qualified
+        table = old_table.relation
         # By the parser's spelling of each name, which is also what generated DDL
         # writes: an unquoted `UserId` is the column `userid`.
         old_col_map = {c.folded: c for c in old_table.columns}
@@ -512,7 +513,7 @@ class SchemaDiffer:
         return renames
 
     def _compare_column_properties(
-        self, table: str, old_col: Column, new_col: Column
+        self, table: RelationName, old_col: Column, new_col: Column
     ) -> list[SchemaChange]:
         """Compare properties of a column.
 
@@ -557,7 +558,7 @@ class SchemaDiffer:
             new=list(new_table.indexes),
             added=IndexAdded,
             dropped=IndexDropped,
-            table=old_table.qualified,
+            table=old_table.relation,
             # The access method is part of what an index *is*: a btree and a hash
             # index on one column are two indexes.
             identity=("columns", "unique", "method"),
@@ -571,7 +572,7 @@ class SchemaDiffer:
             new=list(new_table.constraints_of("foreign_key")),
             added=ForeignKeyAdded,
             dropped=ForeignKeyDropped,
-            table=old_table.qualified,
+            table=old_table.relation,
             identity=("columns", "ref_table", "ref_columns"),
         )
 
@@ -582,7 +583,7 @@ class SchemaDiffer:
             new=list(new_table.constraints_of("check")),
             added=CheckConstraintAdded,
             dropped=CheckConstraintDropped,
-            table=old_table.qualified,
+            table=old_table.relation,
             identity=("expression",),
             # The one kind whose body is compared, and the only one that can be:
             # the expression is `RawStream`'s rendering of the parsed predicate, so
@@ -601,7 +602,7 @@ class SchemaDiffer:
             new=list(new_table.constraints_of("unique")),
             added=UniqueConstraintAdded,
             dropped=UniqueConstraintDropped,
-            table=old_table.qualified,
+            table=old_table.relation,
             identity=("columns",),
         )
 
@@ -620,7 +621,7 @@ class SchemaDiffer:
             new=list(new_table.constraints_of("exclusion")),
             added=ExclusionConstraintAdded,
             dropped=ExclusionConstraintDropped,
-            table=old_table.qualified,
+            table=old_table.relation,
             identity=parts,
             compared=parts,
         )
@@ -671,9 +672,9 @@ class SchemaDiffer:
         *,
         old: list[Any],
         new: list[Any],
-        added: Callable[[str, Any], SchemaChange],
-        dropped: Callable[[str, Any], SchemaChange],
-        table: str,
+        added: Callable[[RelationName, Any], SchemaChange],
+        dropped: Callable[[RelationName, Any], SchemaChange],
+        table: RelationName,
         identity: tuple[str, ...],
         compared: tuple[str, ...] = (),
     ) -> list[SchemaChange]:

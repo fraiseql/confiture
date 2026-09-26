@@ -59,6 +59,7 @@ from confiture.core.schema_model import (
     IdentityKind,
     Index,
     ObjectRef,
+    RelationName,
     Routine,
     RoutineKind,
     SchemaModel,
@@ -66,7 +67,6 @@ from confiture.core.schema_model import (
     Trigger,
     View,
     Volatility,
-    qualified_name,
     ref_for,
     routine_ref,
     trigger_ref,
@@ -226,7 +226,7 @@ def _constraint(
     if not isinstance(read, Constraint):
         return None
     if read.kind == "foreign_key" and ref_schema and ref_name:
-        return replace(read, ref_table=qualified_name(ref_schema, ref_name))
+        return replace(read, ref_table=RelationName(ref_schema, ref_name))
     return read
 
 
@@ -256,13 +256,12 @@ def _tables(
 
     tables: dict[ObjectRef, Table] = {}
     for oid, schema, name in relations:
-        qualified = qualified_name(schema, name)
         columns = [
             _column(row, node)
             for row, node in zip(rows[oid], _type_nodes([r[2] for r in rows[oid]]), strict=True)
         ]
         index_models: list[Index] = [
-            replace(read_index(stmt, table=qualified), backs_constraint=backs)
+            replace(read_index(stmt, table=RelationName(schema, name)), backs_constraint=backs)
             for stmt, backs in indexes[oid]
         ]
         tables[ref_for("table", schema, name)] = Table(
@@ -536,13 +535,13 @@ def indexes(conn: psycopg.Connection, schemas: Sequence[str]) -> dict[ObjectRef,
     """Every index in *schemas*, by the table it is on, a constraint's own included.
 
     Read by the one index reader :func:`read` uses; each index's ``table`` is the
-    relation's ``schema.name``.
+    relation's schema and name.
     """
     found: dict[ObjectRef, list[Index]] = defaultdict(list)
     for schema, table, definition in conn.execute(_ALL_INDEXES, (list(schemas),)).fetchall():
         stmt = pglast.parse_sql(definition)[0].stmt
         found[ref_for("table", schema, table)].append(
-            read_index(stmt, table=qualified_name(schema, table))
+            read_index(stmt, table=RelationName(schema, table))
         )
     return {ref: tuple(found_on) for ref, found_on in found.items()}
 
@@ -747,7 +746,7 @@ def _views(
         if extensions or not row[5]
     ]
     on: dict[int, list[Index]] = defaultdict(list)
-    matviews = {oid: qualified_name(schema, name) for oid, schema, name, mat, *_ in rows if mat}
+    matviews = {oid: RelationName(schema, name) for oid, schema, name, mat, *_ in rows if mat}
     if indexes and matviews:
         for relid, definition, _backs in conn.execute(_INDEXES, (list(matviews),)).fetchall():
             stmt = pglast.parse_sql(definition)[0].stmt

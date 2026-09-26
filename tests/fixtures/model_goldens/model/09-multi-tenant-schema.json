@@ -106,7 +106,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "management.tb_organization",
+          "ref_table": {
+            "name": "tb_organization",
+            "schema": "management"
+          },
           "where": null
         },
         {
@@ -240,7 +243,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "management.tb_organization",
+          "ref_table": {
+            "name": "tb_organization",
+            "schema": "management"
+          },
           "where": null
         },
         {
@@ -297,7 +303,10 @@
             "tenant_id",
             "id"
           ],
-          "ref_table": "app.tb_provider",
+          "ref_table": {
+            "name": "tb_provider",
+            "schema": "app"
+          },
           "where": null
         }
       ],
@@ -310,7 +319,10 @@
           "key_options": [],
           "method": "btree",
           "name": "ix_order_created_at",
-          "table": "app.tb_order",
+          "table": {
+            "name": "tb_order",
+            "schema": "app"
+          },
           "unique": false,
           "where": null
         }
@@ -408,7 +420,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "management.tb_organization",
+          "ref_table": {
+            "name": "tb_organization",
+            "schema": "management"
+          },
           "where": null
         },
         {
@@ -427,7 +442,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "catalog.tb_product",
+          "ref_table": {
+            "name": "tb_product",
+            "schema": "catalog"
+          },
           "where": null
         },
         {
@@ -481,7 +499,10 @@
             "tenant_id",
             "id"
           ],
-          "ref_table": "app.tb_order",
+          "ref_table": {
+            "name": "tb_order",
+            "schema": "app"
+          },
           "where": null
         }
       ],
@@ -565,7 +586,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "management.tb_organization",
+          "ref_table": {
+            "name": "tb_organization",
+            "schema": "management"
+          },
           "where": null
         },
         {
@@ -584,7 +608,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "catalog.tb_company",
+          "ref_table": {
+            "name": "tb_company",
+            "schema": "catalog"
+          },
           "where": null
         },
         {

@@ -15,7 +15,7 @@ from confiture.core.schema_change import (
     TableAdded,
     TableDropped,
 )
-from confiture.core.schema_model import Constraint
+from confiture.core.schema_model import Constraint, RelationName
 from tests.unit._schema_changes import replaced, spelled
 from tests.unit._schema_models import index, table
 
@@ -53,7 +53,7 @@ def test_a_dropped_table_is_written():
 
 
 def test_add_column_writes_the_declared_column():
-    change = ColumnAdded("users", spelled("bio", "text"))
+    change = ColumnAdded(RelationName(None, "users"), spelled("bio", "text"))
     gen = DifferSQLGenerator()
     sql = gen.generate_up(change)
     assert sql == "ALTER TABLE users ADD COLUMN bio text;\n"
@@ -61,14 +61,16 @@ def test_add_column_writes_the_declared_column():
 
 def test_a_dropped_column_is_written():
     """As for a table: the destructive gate decides."""
-    change = ColumnDropped("users", spelled("bio", "text"))
+    change = ColumnDropped(RelationName(None, "users"), spelled("bio", "text"))
     sql = DifferSQLGenerator().generate_up(change)
     assert sql == "ALTER TABLE users DROP COLUMN bio;\n"
 
 
 def test_a_type_change_with_no_assignment_cast_casts_with_using():
     """#335: ``text`` → ``integer`` has no assignment cast, so without ``USING`` it fails."""
-    change = ColumnTypeChanged("users", spelled("age", "text"), spelled("age", "integer"))
+    change = ColumnTypeChanged(
+        RelationName(None, "users"), spelled("age", "text"), spelled("age", "integer")
+    )
     assert DifferSQLGenerator().generate_up(change) == (
         "-- review: text to integer has no assignment cast; each value is cast explicitly,"
         " and one that does not cast fails the migration\n"
@@ -77,7 +79,9 @@ def test_a_type_change_with_no_assignment_cast_casts_with_using():
 
 
 def test_its_down_is_an_assignment_and_writes_no_using():
-    change = ColumnTypeChanged("users", spelled("age", "text"), spelled("age", "integer"))
+    change = ColumnTypeChanged(
+        RelationName(None, "users"), spelled("age", "text"), spelled("age", "integer")
+    )
     assert DifferSQLGenerator().generate_down(change) == (
         "ALTER TABLE users ALTER COLUMN age TYPE text;\n"
     )
@@ -88,14 +92,18 @@ def test_its_down_is_an_assignment_and_writes_no_using():
 )
 def test_a_change_within_a_family_writes_no_using(old, new):
     """A narrowing too: ``::varchar(50)`` would truncate what the assignment cast refuses."""
-    change = ColumnTypeChanged("users", spelled("age", old), spelled("age", new))
+    change = ColumnTypeChanged(
+        RelationName(None, "users"), spelled("age", old), spelled("age", new)
+    )
     assert DifferSQLGenerator().generate_up(change) == (
         f"ALTER TABLE users ALTER COLUMN age TYPE {new};\n"
     )
 
 
 def test_add_index_concurrently():
-    change = IndexAdded("bookings", index("idx_bookings_user_id", "bookings", "user_id"))
+    change = IndexAdded(
+        RelationName(None, "bookings"), index("idx_bookings_user_id", "bookings", "user_id")
+    )
     gen = DifferSQLGenerator()
     sql = gen.generate_up(change)
     assert "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_bookings_user_id" in sql
@@ -105,12 +113,12 @@ def test_add_index_concurrently():
 
 def test_add_fk_constraint_uses_not_valid():
     change = ForeignKeyAdded(
-        "bookings",
+        RelationName(None, "bookings"),
         Constraint(
             kind="foreign_key",
             name="fk_user",
             columns=("user_id",),
-            ref_table="users",
+            ref_table=RelationName(None, "users"),
             ref_columns=("id",),
         ),
     )

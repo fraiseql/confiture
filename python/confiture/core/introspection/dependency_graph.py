@@ -88,8 +88,7 @@ class DependencyGraph(Generic[Node]):
         for ref, table in model.tables.items():
             node = (ref.schema, ref.name)
             targets = (
-                resolve(model.tables, fk.ref_table or "")
-                for fk in table.constraints_of("foreign_key")
+                resolve(model.tables, fk.ref_table) for fk in table.constraints_of("foreign_key")
             )
             edges[node] = {(t.schema, t.name) for t in targets if t is not None} - {node}
         return DependencyGraph(edges)

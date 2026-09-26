@@ -85,7 +85,10 @@
               "columns": [
                 "owner_id"
               ],
-              "ref_table": "users",
+              "ref_table": {
+                "schema": null,
+                "name": "users"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -202,7 +205,10 @@
               "columns": [
                 "project_id"
               ],
-              "ref_table": "projects",
+              "ref_table": {
+                "schema": null,
+                "name": "projects"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -215,7 +221,10 @@
               "columns": [
                 "assigned_to"
               ],
-              "ref_table": "users",
+              "ref_table": {
+                "schema": null,
+                "name": "users"
+              },
               "ref_columns": [
                 "id"
               ],

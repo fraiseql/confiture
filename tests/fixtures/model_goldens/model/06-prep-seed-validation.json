@@ -121,7 +121,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_catalog_tb_manufacturer_name",
-          "table": "catalog.tb_manufacturer",
+          "table": {
+            "name": "tb_manufacturer",
+            "schema": "catalog"
+          },
           "unique": false,
           "where": null
         },
@@ -133,7 +136,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_catalog_tb_manufacturer_id",
-          "table": "catalog.tb_manufacturer",
+          "table": {
+            "name": "tb_manufacturer",
+            "schema": "catalog"
+          },
           "unique": false,
           "where": null
         }
@@ -214,7 +220,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_prep_tb_manufacturer_name",
-          "table": "prep_seed.tb_manufacturer",
+          "table": {
+            "name": "tb_manufacturer",
+            "schema": "prep_seed"
+          },
           "unique": false,
           "where": null
         }

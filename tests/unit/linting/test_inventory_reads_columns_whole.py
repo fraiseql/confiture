@@ -10,7 +10,7 @@ reported a database applied verbatim from its own DDL as drifted.
 from __future__ import annotations
 
 from confiture.core.linting.inventory import build_inventory
-from confiture.core.schema_model import Column, Constraint
+from confiture.core.schema_model import Column, Constraint, RelationName
 from confiture.core.type_lattice import canonical_type
 
 DDL = """\
@@ -40,7 +40,7 @@ def test_a_table_carries_its_constraints() -> None:
         Constraint(
             kind="foreign_key",
             columns=("pid",),
-            ref_table="b.p",
+            ref_table=RelationName("b", "p"),
             ref_columns=("id",),
             on_delete="CASCADE",
         ),
@@ -97,7 +97,9 @@ def test_an_added_column_brings_its_own_clauses() -> None:
     (table,) = build_inventory(
         "CREATE TABLE t (id INT);\nALTER TABLE t ADD COLUMN pid INT NOT NULL REFERENCES p;\n"
     ).tables
-    assert table.constraints == [Constraint(kind="foreign_key", columns=("pid",), ref_table="p")]
+    assert table.constraints == [
+        Constraint(kind="foreign_key", columns=("pid",), ref_table=RelationName(None, "p"))
+    ]
     assert table.columns[-1].not_null
 
 

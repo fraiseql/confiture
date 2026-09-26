@@ -150,9 +150,9 @@ def _in_foreign_key_order(
                 closing = [
                     fk
                     for fk in table.constraints_of("foreign_key")
-                    if resolve(model.tables, fk.ref_table or "") in members - {ref}
+                    if resolve(model.tables, fk.ref_table) in members - {ref}
                 ]
-                held.extend(ForeignKeyAdded(table.qualified, fk) for fk in closing)
+                held.extend(ForeignKeyAdded(table.relation, fk) for fk in closing)
                 kept = tuple(c for c in table.constraints if c not in closing)
                 by_ref[ref] = replace(table, constraints=kept)
             continue

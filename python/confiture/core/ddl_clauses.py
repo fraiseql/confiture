@@ -14,7 +14,8 @@ renderer writes one, so neither may be where the other has to import from.
 
 from __future__ import annotations
 
-from confiture.core.schema_model import Column, Constraint
+from confiture.core.schema_identity import quote_identifier
+from confiture.core.schema_model import Column, Constraint, RelationName
 
 #: What a column with no written type is called in DDL — none from a parse.
 _UNKNOWN_TYPE = "UNKNOWN"
@@ -65,6 +66,12 @@ def _columns(names: tuple[str, ...]) -> str:
     return ", ".join(names)
 
 
+def relation(name: RelationName) -> str:
+    """A relation as SQL writes it: each part quoted when it must be, no schema invented (#478)."""
+    written = quote_identifier(name.name)
+    return f"{quote_identifier(name.schema)}.{written}" if name.schema else written
+
+
 def references(fk: Constraint) -> str | None:
     """``b.parent (id) ON DELETE CASCADE``, as the schema wrote it.
 
@@ -73,9 +80,10 @@ def references(fk: Constraint) -> str | None:
     syntax error. The referential actions are rendered because a generated
     foreign key that silently stops cascading applies cleanly and is wrong.
     """
-    if not fk.ref_table:
+    if fk.ref_table is None:
         return None
-    clause = f"{fk.ref_table} ({_columns(fk.ref_columns)})" if fk.ref_columns else fk.ref_table
+    target = relation(fk.ref_table)
+    clause = f"{target} ({_columns(fk.ref_columns)})" if fk.ref_columns else target
     for keyword, action in (("ON DELETE", fk.on_delete), ("ON UPDATE", fk.on_update)):
         if action:
             clause += f" {keyword} {action}"

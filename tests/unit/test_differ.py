@@ -1,6 +1,7 @@
 """Unit tests for SchemaDiffer (Milestone 1.9-1.10)."""
 
 from confiture.core.differ import ParsedSchema, SchemaDiffer
+from confiture.core.schema_model import RelationName
 
 
 class TestSQLParser:
@@ -408,7 +409,7 @@ class TestParseSchema:
         orders = next(t for t in result.tables if t.name == "orders")
         assert len(orders.constraints_of("foreign_key")) == 1
         assert orders.constraints_of("foreign_key")[0].name == "fk_orders_user"
-        assert orders.constraints_of("foreign_key")[0].ref_table == "users"
+        assert orders.constraints_of("foreign_key")[0].ref_table == RelationName(None, "users")
 
 
 class TestIndexDiff:
