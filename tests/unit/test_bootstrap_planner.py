@@ -48,11 +48,12 @@ def _make_conn(
 
     def execute_side_effect(query: str, params: tuple | None = None):
         result = MagicMock()
-        if "pg_roles" in query and "rolname" in query and "%s" in query:
-            result.fetchone.return_value = (1,) if role_exists else None
-        elif "pg_class" in query and "DISTINCT" in query:
+        if "rolsuper" in query:
+            # The handover scan: one superuser-owned table per listed schema.
             owned = postgres_owned_schemas or []
-            result.fetchall.return_value = [(s,) for s in owned]
+            result.fetchall.return_value = [(s, f"ALTER TABLE {s}.t") for s in owned]
+        elif "pg_roles" in query and "rolname" in query and "%s" in query:
+            result.fetchone.return_value = (1,) if role_exists else None
         else:
             result.fetchone.return_value = None
             result.fetchall.return_value = []
@@ -91,7 +92,7 @@ def test_plan_includes_role_creation_when_missing() -> None:
 
 
 # ---------------------------------------------------------------------------
-# REASSIGN OWNED step
+# Handover step: one ALTER … OWNER TO per superuser-owned object
 # ---------------------------------------------------------------------------
 
 
@@ -105,7 +106,8 @@ def test_plan_includes_reassign_when_postgres_owns_in_scope_schemas() -> None:
     labels = [s.label for s in plan.steps]
     assert "reassign_owned" in labels
     reassign = next(s for s in plan.steps if s.label == "reassign_owned")
-    assert reassign.sql == "REASSIGN OWNED BY postgres TO migrator"
+    assert reassign.sql == "ALTER TABLE tenant.t OWNER TO migrator;"
+    assert "REASSIGN" not in reassign.sql
 
 
 # ---------------------------------------------------------------------------

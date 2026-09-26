@@ -65,7 +65,7 @@
               "items": {
                 "type": "string"
               },
-              "description": "Schemas holding at least one relation owned by `postgres`, sorted."
+              "description": "Schemas holding at least one object owned by a superuser (the field keeps its historical name; `postgres` is the usual superuser), sorted."
             },
             "apply_to_schemas": {
               "type": "array",
@@ -151,7 +151,7 @@
               "items": {
                 "type": "string"
               },
-              "description": "Schemas holding at least one relation owned by `postgres`, sorted."
+              "description": "Schemas holding at least one object owned by a superuser (the field keeps its historical name; `postgres` is the usual superuser), sorted."
             },
             "apply_to_schemas": {
               "type": "array",
@@ -256,7 +256,7 @@
               "items": {
                 "type": "string"
               },
-              "description": "Schemas holding at least one relation owned by `postgres`, sorted."
+              "description": "Schemas holding at least one object owned by a superuser (the field keeps its historical name; `postgres` is the usual superuser), sorted."
             },
             "apply_to_schemas": {
               "type": "array",

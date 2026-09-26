@@ -8,8 +8,7 @@ Three modes, chosen with ``--mode``:
   Its JSON payload says ``"mode": "dry-run"``: that value is the payload's
   contract, which consumers match on, not the flag's spelling.
 - ``apply``: execute.  Refuses to proceed without ``--all-schemas``
-  if ``REASSIGN OWNED`` would affect schemas outside
-  ``ownership.apply_to``.
+  if a superuser owns objects in schemas outside ``ownership.apply_to``.
 
 Connection requirement
 ======================
@@ -21,7 +20,7 @@ that the regular migrator role typically lacks.
 
 Operational warning
 ===================
-``REASSIGN OWNED`` grabs ``AccessExclusiveLock`` on affected objects.
+``ALTER … OWNER TO`` takes ``AccessExclusiveLock`` on each object it hands over.
 Run during a maintenance window.  See ``docs/guides/bootstrap.md``.
 """
 
@@ -64,9 +63,9 @@ def bootstrap(
         False,
         "--all-schemas",
         help=(
-            "Authorize `REASSIGN OWNED` across schemas outside "
-            "`ownership.apply_to`. Required when postgres-owned objects "
-            "exist in non-scoped schemas. Use during maintenance windows."
+            "Hand over superuser-owned objects in every non-system schema, "
+            "not only `ownership.apply_to`. Required when a superuser owns "
+            "objects outside it. Use during maintenance windows."
         ),
     ),
     output_format: str = format_option("text", "json"),
@@ -75,10 +74,11 @@ def bootstrap(
 
     PROCESS:
       Connects with `ownership.bootstrap_connection_url` (superuser required),
-      enumerates postgres-owned objects, and plans up to three steps:
+      finds the objects a superuser owns, and plans up to three steps:
         1. CREATE ROLE for the canonical migrator role (if missing).
-        2. REASSIGN OWNED BY postgres TO <migrator> (database-wide).
-        3. ALTER DEFAULT PRIVILEGES per schema/role/privs.
+        2. ALTER … OWNER TO <migrator>, one per superuser-owned object in the
+           target schemas (extension members and system schemas excluded).
+        3. ALTER DEFAULT PRIVILEGES per schema/role/privs not already granted.
 
       All steps are idempotent — re-running produces an empty plan once
       the environment matches the desired state.
@@ -91,13 +91,13 @@ def bootstrap(
         ↳ Print the SQL --mode apply would run.
 
       confiture bootstrap --mode apply --env production --all-schemas
-        ↳ Execute the plan, authorizing database-wide REASSIGN OWNED.
+        ↳ Execute the plan, handing over objects in every non-system schema.
 
     SAFETY:
-      - --mode apply refuses to proceed without --all-schemas when postgres
-        owns objects in schemas outside `ownership.apply_to`.
-      - REASSIGN OWNED takes AccessExclusiveLock; run during a maintenance
-        window.
+      - --mode apply refuses to proceed without --all-schemas when a
+        superuser owns objects in schemas outside `ownership.apply_to`.
+      - ALTER … OWNER TO takes AccessExclusiveLock on each object; run
+        during a maintenance window.
     """
     json_mode = is_json(output_format)
 

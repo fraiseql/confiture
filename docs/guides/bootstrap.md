@@ -40,7 +40,7 @@ Three modes, chosen with `--mode` (1.16.0; before it, `--check`, `--dry-run` and
 |------|--------------|------------|
 | `check` (default) | Read-only | `0` no drift, `1` drift, `5` config error |
 | `plan` | None | `0` (prints SQL) |
-| `apply` | Creates role, runs `REASSIGN OWNED`, sets default privileges | `0` success, `5` config or runtime error |
+| `apply` | Creates role, hands superuser-owned objects to it, sets default privileges | `0` success, `5` config or runtime error |
 
 `--format json` reports `"mode": "check"`, `"dry-run"` or `"apply"`: the `plan` mode's
 payload keeps the value it carried before the flag was renamed.
@@ -69,7 +69,7 @@ ownership:
 
 ### `bootstrap_connection_url` (required for `bootstrap`)
 
-The bootstrap command refuses to run without this field.  Every step (`CREATE ROLE`, `REASSIGN OWNED`, `ALTER DEFAULT PRIVILEGES`) needs superuser; we don't fall back to the env's main URL because we have no safe way to detect whether it has superuser.  Make the intent explicit.
+The bootstrap command refuses to run without this field.  Every step (`CREATE ROLE`, `ALTER … OWNER TO`, `ALTER DEFAULT PRIVILEGES`) needs superuser; we don't fall back to the env's main URL because we have no safe way to detect whether it has superuser.  Make the intent explicit.
 
 `${VAR}` expansion runs at config-load time on the same terms as `expected_owner`.
 
@@ -87,8 +87,12 @@ Privilege keywords are validated against the standard set: `SELECT`, `INSERT`, `
 -- Step 1: CREATE ROLE (only if absent from pg_roles)
 CREATE ROLE migrator WITH LOGIN NOCREATEROLE;
 
--- Step 2: REASSIGN OWNED (only if postgres-owned objects exist)
-REASSIGN OWNED BY postgres TO migrator;
+-- Step 2: one ALTER … OWNER TO per object a superuser owns in the target schemas
+ALTER TABLE tenant.tb_order OWNER TO migrator;
+ALTER VIEW tenant.v_order OWNER TO migrator;
+ALTER FUNCTION tenant.fn_total(bigint) OWNER TO migrator;
+ALTER TYPE tenant.order_status OWNER TO migrator;
+ALTER SCHEMA tenant OWNER TO migrator;
 
 -- Step 3: ALTER DEFAULT PRIVILEGES (one per schema/role pair)
 ALTER DEFAULT PRIVILEGES FOR ROLE migrator
@@ -105,22 +109,37 @@ The entire plan runs inside a single transaction.  On any failure, the executor 
 
 ---
 
+## Why not `REASSIGN OWNED`
+
+`REASSIGN OWNED BY postgres TO migrator` is database-wide, and where `postgres` is
+the cluster's bootstrap superuser — the default everywhere, the official Docker image
+included — it also owns objects the system needs, so PostgreSQL refuses the whole
+statement: *cannot reassign ownership of objects owned by role postgres because they
+are required by the database system*. `bootstrap` therefore hands objects over one at
+a time, and only in the schemas it was asked about:
+
+- **What is handed over:** tables, partitioned and foreign tables, views, materialized
+  views and standalone sequences; functions, procedures and aggregates; enum, domain,
+  range and composite types; and the schemas themselves — whenever a **superuser**
+  owns them. A migration applied as a superuser leaves its objects owned by that role,
+  whatever it is called, so the scan is by `rolsuper`, not by the name `postgres`.
+- **What is left alone:** the system schemas; extension members (they belong to the
+  extension); a sequence owned by a column (it moves with its table); objects owned
+  by a role that is not a superuser.
+
 ## The `--all-schemas` safety gate
 
-`REASSIGN OWNED BY postgres TO migrator` is **database-wide** — PostgreSQL provides no per-schema variant.  When `postgres` owns objects in schemas outside `ownership.apply_to`, `bootstrap` refuses to run unless the operator passes `--all-schemas` explicitly:
+When a superuser owns objects in schemas outside `ownership.apply_to`, `bootstrap`
+refuses unless the operator passes `--all-schemas`, so a run never hands over less —
+or more — than intended:
 
 ```
-❌ `REASSIGN OWNED BY postgres TO migrator` would also flip ownership in
-schemas not covered by `ownership.apply_to`: ['analytics', 'reporting'].
-Re-run with `--all-schemas` to authorize, or extend `ownership.apply_to`
-to cover them.
-
-💡 Either add the affected schemas to ownership.apply_to in the env YAML,
-or pass --all-schemas explicitly. PostgreSQL's REASSIGN OWNED is
-database-wide; there is no per-schema variant.
+❌ Objects owned by a superuser also sit in schemas not covered by
+`ownership.apply_to`: ['analytics', 'reporting'].  Re-run with `--all-schemas`
+to hand them to 'migrator' too, or extend `ownership.apply_to` to cover them.
 ```
 
-This is conservative — most operators will want the cross-check.  If you've reviewed the affected schemas and decided the flip is fine, `--all-schemas` waves the safety off for that one invocation.
+With `--all-schemas`, every non-system schema is in scope.
 
 ---
 
@@ -129,10 +148,11 @@ This is conservative — most operators will want the cross-check.  If you've re
 Every step is a no-op on already-correct state:
 
 - `CREATE ROLE` only runs when `pg_roles` lacks the role.
-- `REASSIGN OWNED` only runs when `pg_class` has postgres-owned objects.
-- `ALTER DEFAULT PRIVILEGES` is itself idempotent at the SQL level (re-granting an existing privilege does nothing).
+- The handover lists only objects a superuser still owns.
+- `ALTER DEFAULT PRIVILEGES` is planned only when `pg_default_acl` does not already
+  grant those privileges for that schema and role.
 
-`bootstrap` (`--mode check`) after a successful `bootstrap --mode apply` exits `0`.  Re-running `--mode apply` is safe; the second run produces an empty plan for the role and reassign steps.
+`bootstrap` (`--mode check`) after a successful `bootstrap --mode apply` exits `0`.  Re-running `--mode apply` is safe; the second run's plan is empty.
 
 ---
 
@@ -140,20 +160,13 @@ Every step is a no-op on already-correct state:
 
 ### `AccessExclusiveLock`
 
-`REASSIGN OWNED` takes `AccessExclusiveLock` on every affected object.  Inside the wrapping transaction this is fine, but during the lock window other sessions block on every touched table.  **Run during a maintenance window.**
+`ALTER … OWNER TO` takes `AccessExclusiveLock` on every object it hands over.  Inside the wrapping transaction this is fine, but during the lock window other sessions block on every touched table.  **Run during a maintenance window.**
 
 ### Extensions
 
-Extension-installed objects are also owned by `postgres`.  Use `ownership.ignore` to exclude them explicitly:
-
-```yaml
-ownership:
-  ignore:
-    - "public.pg_stat_statements*"
-    - "public.uuid_*"
-```
-
-The `ignore` block is the same one `own_001` and the drift detector read; you only declare it once.
+Objects an extension installed are members of the extension (`pg_depend` records it)
+and `bootstrap` never hands them over: an extension's objects belong to it, and
+`pg_dump` recreates them from the extension, not from their owner.
 
 ### Recovery from partial failure
 
