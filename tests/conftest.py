@@ -10,7 +10,7 @@ This module provides fixtures for:
 import os
 import tempfile
 import uuid
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
@@ -225,6 +225,41 @@ def resolve_db_url(env_var: str, default: str) -> str:
     if worker_url != url:
         _ensure_worker_database(url, worker_url)
     return worker_url
+
+
+def ledger_rows_left(env_var: str = "CONFITURE_TEST_DB_URL") -> list[str]:
+    """The versions left in this worker's default ledger, ``public.tb_confiture``.
+
+    Every module that applies migrations shares one database per worker, and
+    ``--dist=loadfile`` decides at run time which modules share it. A row left
+    behind is read by whichever module runs next as *its* applied history: a
+    ``001`` with another checksum fails that module's checksum check, in some
+    runs and not others. Empty when no server answers or the worker's database
+    was never created — there is nothing to leak.
+    """
+    url = os.getenv(env_var) or DEFAULT_TEST_DB_URL
+    if pg_available(url) is not None:
+        return []
+    try:
+        with psycopg.connect(resolve_worker_db_url(url), autocommit=True) as conn:
+            if conn.execute("SELECT to_regclass('public.tb_confiture')").fetchone()[0] is None:
+                return []
+            rows = conn.execute("SELECT version FROM public.tb_confiture ORDER BY 1").fetchall()
+    except psycopg.OperationalError:
+        return []
+    return [version for (version,) in rows]
+
+
+def fail_if_ledger_left() -> Iterator[None]:
+    """Module teardown: the module leaves the default ledger as empty as it found it."""
+    yield
+    left = ledger_rows_left()
+    if left:
+        pytest.fail(
+            f"this module left {left} in public.tb_confiture; the next module on this "
+            "worker reads them as its own history. Use `clean_test_db` or "
+            "`fresh_database`, or delete what it applied."
+        )
 
 
 @pytest.fixture(scope="session")

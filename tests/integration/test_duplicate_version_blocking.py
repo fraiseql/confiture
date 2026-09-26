@@ -12,6 +12,11 @@ from confiture.cli.main import app
 
 runner = CliRunner()
 
+# `migrate up` here really applies migrations to this worker's database: each test
+# starts from, and leaves, an empty one, or the next module to apply a `001`
+# reads a checksum that is not its own.
+pytestmark = pytest.mark.usefixtures("clean_test_db")
+
 
 def _make_config_file(tmp_path, db_url):
     """Create a minimal config file pointing to test database."""

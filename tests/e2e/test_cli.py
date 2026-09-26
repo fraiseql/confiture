@@ -1,5 +1,6 @@
 """End-to-end tests for CLI commands (Milestone 1.12)."""
 
+import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -269,6 +270,9 @@ class TestMigrateDiffCommand:
         assert "add_name_column" in migration_files[0].name
 
 
+# `migrate up` and `down` read and write the ledger: each test starts from an empty
+# database, not from whatever the previous test on this worker left in it.
+@pytest.mark.usefixtures("clean_test_db")
 class TestMigrateUpCommand:
     """Test 'confiture migrate up' command (Milestone 1.13)."""
 
@@ -334,12 +338,6 @@ database_url: {test_db_url}
             exists = cursor.fetchone()[0]
             assert exists is True
 
-        # Cleanup
-        with test_db_connection.cursor() as cursor:
-            cursor.execute("DROP TABLE IF EXISTS cli_test_table")
-            cursor.execute("DELETE FROM tb_confiture WHERE version = '001'")
-        test_db_connection.commit()
-
     def test_up_with_no_pending_migrations(self, tmp_path, test_db_connection, test_db_url):
         """Should report when no migrations need to be applied."""
         migrations_dir = tmp_path / "migrations"
@@ -373,6 +371,7 @@ database_url: {test_db_url}
         assert "no pending" in result.stdout.lower() or "up to date" in result.stdout.lower()
 
 
+@pytest.mark.usefixtures("clean_test_db")
 class TestMigrateDownCommand:
     """Test 'confiture migrate down' command (Milestone 1.13)."""
 
