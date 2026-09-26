@@ -48,7 +48,8 @@ from confiture.core.linting.selection import (
     severity_escalations,
     tree_rule_findings,
 )
-from confiture.error_codes import FINDINGS, USAGE
+from confiture.error_codes import FINDINGS, NOT_RUN, USAGE
+from confiture.models.lint import LintReport
 
 FailOnOpt = Annotated[
     str | None,
@@ -100,6 +101,15 @@ WriteBaselineOpt = Annotated[
     bool,
     typer.Option(
         "--write-baseline", help="Create or reset the --baseline file from the current findings"
+    ),
+]
+RequireCompleteOpt = Annotated[
+    bool,
+    typer.Option(
+        "--require-complete",
+        help="Exit 2 (not run) when a selected rule was skipped or ran on less than the "
+        "whole schema — the rules in skipped[] and degraded[] — so a gate cannot pass "
+        "on reduced coverage",
     ),
 ]
 ListRulesOpt = Annotated[
@@ -174,6 +184,7 @@ def lint(
     ignore: IgnoreOpt = None,
     baseline: BaselineOpt = None,
     write_baseline: WriteBaselineOpt = False,
+    require_complete: RequireCompleteOpt = False,
     list_rules: ListRulesOpt = False,
     replica_safe: ReplicaSafeOpt = False,
     migrations_dir: Path = migrations_dir_option(
@@ -315,6 +326,7 @@ def lint(
         _print_gate_notice(gate, format_type)
         if baseline_diff is not None:
             _print_baseline_note(baseline_diff, format_type, wrote=write_baseline)
+        _refuse_incomplete(report, require_complete=require_complete)
         found = [v.severity.value for v in report.violations]
         new_since_baseline = baseline_diff is not None and bool(baseline_diff.new)
         # A rule that did not run has established nothing, so it is not a pass:
@@ -394,6 +406,22 @@ def _resolve_threshold(
         )
         raise typer.Exit(USAGE)
     return parse_threshold(fail_on)
+
+
+def _refuse_incomplete(report: LintReport, *, require_complete: bool) -> None:
+    """Under ``--require-complete``, exit 2 when a selected rule was skipped or degraded.
+
+    Why is printed on stderr: stdout may be the JSON payload, already written.
+    """
+    incomplete = [*report.skipped, *report.degraded]
+    if not require_complete or not incomplete:
+        return
+    for rule in incomplete:
+        error_console.print(
+            f"[red]❌ --require-complete: {verbatim(rule['code'])} {verbatim(rule['state'])}"
+            f" — {verbatim(rule['reason'])}[/red]"
+        )
+    raise typer.Exit(NOT_RUN)
 
 
 def _print_gate_notice(gate: Gate, format_type: str) -> None:

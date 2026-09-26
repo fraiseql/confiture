@@ -56,6 +56,12 @@ run and the `--dry-run-execute` rehearsal both did it.
   per clone and is not crash-safe. A misspelt strategy is refused, a strategy on
   a server older than PostgreSQL 15 is refused naming its version, the on-disk
   fallback keeps it, and `CloneResult.strategy` records it.
+- **`lint --require-complete`** (#431): a run in which a selected rule was
+  skipped, or ran on less than the whole schema (`build_003` with no database
+  answering, a rule that lost a file pglast rejected), exits 2 — not run — and
+  names each rule and why on stderr, so a CI gate cannot pass on reduced
+  coverage. The JSON already said so in `skipped[]` and `degraded[]`; the flag
+  lets the exit code say it too.
 - **`MigrateUpResult.halted`** (#422): `True` when the chain stopped at a
   `requires_superuser` migration, `False` for a completed run and for a failed
   migration. It names the other way a run ends short, beside `has_errors`. It
