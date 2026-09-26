@@ -79,7 +79,7 @@ def test_bootstrap_probes_pg_roles_for_the_role_itself() -> None:
 
     def execute(query: str, params: tuple | None = None) -> MagicMock:
         result = MagicMock()
-        if "pg_roles" in query and params:
+        if "rolname = %s" in query and params:
             probes.append(params)
             result.fetchone.return_value = (1,) if params == ("AppOwner",) else None
         else:

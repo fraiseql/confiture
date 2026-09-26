@@ -120,6 +120,19 @@ run and the `--dry-run-execute` rehearsal both did it.
   every change after the rename runs against it — and added columns are emitted in
   the order the tree declares them, so a table whose new columns come last ends up
   exactly as declared (a migrated database read back shows no drift).
+- **`bootstrap --mode apply` works on a standard cluster.** It ran
+  `REASSIGN OWNED BY postgres TO <migrator>`, which PostgreSQL refuses wherever
+  `postgres` is the bootstrap superuser — the default everywhere, Docker included —
+  because `postgres` also owns objects the system needs. It now hands each object a
+  **superuser** owns in the target schemas over with its own `ALTER … OWNER TO`
+  (tables, views, materialized views, sequences, routines, types and the schemas
+  themselves; extension members, column-owned sequences and system schemas left
+  alone), so it is exact rather than database-wide, and it no longer misses objects
+  when the superuser is not named `postgres`. A failure names the step that failed,
+  not the last one that succeeded, and `--mode check` is clean after an apply that
+  set default privileges: a default privilege already granted is no longer planned
+  again. The guide no longer says `ownership.ignore` excludes extension objects —
+  bootstrap never read it; extension members are now excluded by construction.
 - **The documented JSON matches what the commands write.** The `migrate up`
   example in the structured-output guide showed `execution_time_ms` in each
   `applied[]` entry; the key is `duration_ms`, and the example is now validated

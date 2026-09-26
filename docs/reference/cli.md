@@ -3193,7 +3193,7 @@ confiture bootstrap [OPTIONS]
 | `--config` | `-c` | path | `confiture.yaml` | Configuration file (default: confiture.yaml); --env reads db/environments/<name>.yaml |
 | `--env` | `-e` | str | - | Environment name: reads db/environments/<name>.yaml, instead of --config |
 | `--mode` | - | str | `check` | check: report drift, exit 1 if any; plan: print the SQL apply would run; apply: execute it (default: check) |
-| `--all-schemas` | - | Flag | off | Authorize `REASSIGN OWNED` across schemas outside `ownership.apply_to`. Required when postgres-owned objects exist in non-scoped schemas. Use during maintenance windows. |
+| `--all-schemas` | - | Flag | off | Hand over superuser-owned objects in every non-system schema, not only `ownership.apply_to`. Required when a superuser owns objects outside it. Use during maintenance windows. |
 | `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
 
 <!-- END GENERATED: cli confiture bootstrap -->
