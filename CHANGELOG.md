@@ -40,6 +40,14 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 - **A rehearsal that halted no longer says "all SQL executed successfully".**
   Its warning is `dry_run_execute: changes rolled back`; the halt is in `errors`.
+- **A routine with ~30 parameters no longer crashes the schema read** (#433).
+  `parse_schema`, and every command that reads a tree through it (`lint`,
+  `migrate diff`, `schema dump-model`), raised `RecursionError`. pglast's
+  `RawStream` attaches an `ancestors` chain to every node it renders, and
+  reading an argument's type deep-copied it, which followed that chain
+  through the whole statement once per argument. The copy is now shallow;
+  below the crash threshold the read was quadratic in the parameter count
+  and is now linear.
 
 ## [1.23.1] - 2026-09-25
 
