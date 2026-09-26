@@ -658,8 +658,8 @@ class TestMigrateGenerateExternalGenerator:
 
         assert result.exit_code == 3
 
-    def test_generator_without_from_exits_2(self, tmp_path):
-        """--generator without --from → clear error, exit 2 (validation error)."""
+    def test_generator_without_from_exits_5(self, tmp_path):
+        """--generator without --from → clear error, exit 5 (CONFIG_001, a configuration error)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
         to_file = tmp_path / "v2.sql"
@@ -688,11 +688,11 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 2
+        assert result.exit_code == 5
         # Error message goes to stderr (error_console); exit code is sufficient
 
-    def test_generator_without_to_exits_2(self, tmp_path):
-        """--generator without --to → clear error, exit 2 (validation error)."""
+    def test_generator_without_to_exits_5(self, tmp_path):
+        """--generator without --to → clear error, exit 5 (CONFIG_001, a configuration error)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
         from_file = tmp_path / "v1.sql"
@@ -721,11 +721,11 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 2
+        assert result.exit_code == 5
         # Error message goes to stderr (error_console); exit code is sufficient
 
-    def test_unknown_generator_name_exits_2(self, tmp_path):
-        """Unknown generator name → clear error, exit 2 (validation error)."""
+    def test_unknown_generator_name_exits_5(self, tmp_path):
+        """Unknown generator name → clear error, exit 5 (CONFIG_001, a configuration error)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
         from_file = tmp_path / "v1.sql"
@@ -758,7 +758,7 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 2
+        assert result.exit_code == 5
         # Error message goes to stderr (error_console); exit code is sufficient
 
     def test_no_generator_flag_uses_python_template(self, tmp_path):
@@ -782,8 +782,8 @@ class TestMigrateGenerateExternalGenerator:
         assert len(py_files) == 1
         assert "class AddBarColumn" in py_files[0].read_text()
 
-    def test_config_with_no_migration_generators_exits_2(self, tmp_path):
-        """Config without migration_generators key → error + exit 2 (validation error)."""
+    def test_config_with_no_migration_generators_exits_5(self, tmp_path):
+        """Config without migration_generators key → error + exit 5 (CONFIG_001, a configuration error)."""
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
         from_file = tmp_path / "v1.sql"
@@ -821,4 +821,4 @@ class TestMigrateGenerateExternalGenerator:
             ],
         )
 
-        assert result.exit_code == 2
+        assert result.exit_code == 5
