@@ -61,7 +61,16 @@ def _up(
         return session.up(**kwargs)
 
 
+def _assert_one_answer(result: MigrateUpResult) -> None:
+    """``success``, ``has_errors`` and ``halted`` never give two answers to one question."""
+    assert result.has_errors is (not result.success)
+    if result.halted:
+        assert result.has_errors
+    assert (not result.success) is bool(result.errors)
+
+
 def _assert_failed_with_errors(result: MigrateUpResult) -> None:
+    _assert_one_answer(result)
     assert result.success is False
     assert result.errors, "success=False with no errors"
     assert all(message.strip() for message in result.errors)
@@ -178,7 +187,7 @@ def test_a_superuser_halt_says_it_halted(tmp_path, rehearsal):
     result = _up(session, classes, dry_run_execute=rehearsal)
 
     assert result.halted is True
-    assert result.has_errors is True
+    _assert_one_answer(result)
 
 
 @MODES
@@ -189,6 +198,7 @@ def test_a_failed_migration_did_not_halt(tmp_path, rehearsal):
     result = _up(session, {files[0]: _migration("001", "m1")}, dry_run_execute=rehearsal)
 
     assert (result.success, result.halted) == (False, False)
+    _assert_one_answer(result)
 
 
 @MODES
@@ -198,3 +208,4 @@ def test_a_completed_run_did_not_halt(tmp_path, rehearsal):
     result = _up(session, {files[0]: _migration("001", "m1")}, dry_run_execute=rehearsal)
 
     assert (result.success, result.halted) == (True, False)
+    _assert_one_answer(result)
