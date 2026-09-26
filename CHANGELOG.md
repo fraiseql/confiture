@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 (fraiseql/fraisier#417) — started the app on a half-migrated schema. The real
 run and the `--dry-run-execute` rehearsal both did it.
 
+### Added
+
+- **`MigrateUpResult.halted`** (#422): `True` when the chain stopped at a
+  `requires_superuser` migration, `False` for a completed run and for a failed
+  migration. It names the other way a run ends short, beside `has_errors`. It
+  reads `skipped_superuser`; `success=False` with no errors cannot mean a halt,
+  because a halt now always carries its error.
+
 ### Changed
 
 - **`errors` is never empty when `success` is false** (`MigrateUpResult`, and

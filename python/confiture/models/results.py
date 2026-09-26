@@ -331,6 +331,16 @@ class MigrateUpResult:
         return not self.success
 
     @property
+    def halted(self) -> bool:
+        """True if the chain stopped at a ``requires_superuser`` migration.
+
+        The other way a run ends short beside a failed migration: the halted
+        migration is ``skipped_superuser[0]``, the versions after it are in
+        ``pending``, and ``errors`` names the ``apply-as`` that resumes it.
+        """
+        return bool(self.skipped_superuser)
+
+    @property
     def error_summary(self) -> str | None:
         """First error message, or None if no errors. Convenience for logging."""
         return self.errors[0] if self.errors else None
