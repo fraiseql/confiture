@@ -109,6 +109,27 @@ def test_another_column_referencing_the_root_points_at_another_tenant(tmp_path: 
     assert "fk_partner_org" in finding.message
 
 
+def test_a_second_reference_to_the_root_names_both_things_it_can_be(tmp_path: Path) -> None:
+    """The rule cannot tell which it is, so it names both, and the fix for each.
+
+    The row's own tenant written a second time duplicates the discriminator and can
+    disagree with it; another organisation is a counterparty, which a tenant row
+    models as a relation of its own, never as a pointer into another tenant.
+    """
+    found, _ = _fk(
+        tmp_path,
+        f"CREATE TABLE app.tb_contract (id uuid PRIMARY KEY, {SCOPED},\n"
+        "  fk_customer_org uuid REFERENCES management.tb_organization (id));\n",
+    )
+
+    (finding,) = found
+    assert "duplicates tenant_id" in finding.message
+    assert "counterparty" in finding.message
+    fix = finding.suggested_fix or ""
+    assert "drop" in fix
+    assert "global directory" in fix
+
+
 # -- the root's tenant id is the column the discriminator references --------------
 
 _SURROGATE_ROOT = (

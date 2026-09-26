@@ -808,6 +808,39 @@ judged the same way; one between two rows of the root is not judged. While the
 root's tenant id is undecided (the discriminators reference different columns of
 it), a foreign key to or from the root is not judged.
 
+A second column referencing the root is one of two things, and the finding names
+both, since the schema cannot say which:
+
+- **The row's own tenant, written again** — a `bigint` twin of a `uuid`
+  discriminator, say. It duplicates the discriminator and nothing keeps the two
+  equal: a row whose columns name two tenants is visible to the wrong one. Drop it,
+  and let the discriminator carry the foreign key.
+- **Another organisation** — a provider, a partner, a customer of the tenant. That
+  is a counterparty, and a pointer into another tenant's space is how one tenant's
+  rows come to reveal another's. Model it as a relation of the tenant's own over a
+  global directory of companies, referenced with the discriminator:
+
+  ```sql
+  CREATE TABLE catalog.tb_company (id uuid PRIMARY KEY, legal_name text, vat_id text);
+  CREATE TABLE app.tb_provider (
+      tenant_id  uuid NOT NULL REFERENCES management.tb_organization (id),
+      id         uuid NOT NULL,
+      fk_company uuid REFERENCES catalog.tb_company (id),  -- tenant → global: fine
+      PRIMARY KEY (tenant_id, id)
+  );
+  -- on the contract
+  FOREIGN KEY (tenant_id, fk_provider) REFERENCES app.tb_provider (tenant_id, id)
+  ```
+
+  Each tenant keeps its own terms with a provider, and a company's identity is
+  still stored once. A contract two tenants must both *see* is shared data, which a
+  single-valued discriminator cannot express: give each tenant its own row (a
+  `tb_contract_share (tenant_id, fk_contract)`), never a second pointer to the root.
+
+Neither is an exception to declare, so there is no directive for it; a schema
+moving to this design records today's findings in a `--baseline`, and only a new
+one fails.
+
 ## `tenant_005` — a tenant table's keys lead with the discriminator
 
 On when `db/project.yaml` declares `tenancy:`. On every tenant table (the root is

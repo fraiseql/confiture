@@ -147,6 +147,14 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Changed
 
+- **`tenant_004` names both things a second reference to the table of tenants can
+  be** (#426). A column other than the discriminator that references the root is
+  either the row's own tenant written again — it duplicates the discriminator and
+  can disagree with it: drop it — or a counterparty pointing into another tenant's
+  space: model it as a tenant relation over a global directory of companies. The
+  finding says both and gives both fixes; there is no directive to exempt it, and a
+  `--baseline` holds today's findings while a schema moves. The reference documents
+  the counterparty pattern.
 - **`migrate schema-to-schema`'s JSON names the command as typed.** Its six
   subcommands wrote a bare `"command": "setup"` (and their own `ok`), overriding
   the envelope `emit` stamps, so a payload said `setup` and the error envelope of

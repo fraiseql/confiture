@@ -107,15 +107,30 @@ def _root_crossing(
     refs: tuple[str, ...],
     tenancy_column: str,
 ) -> TenancyFinding:
-    """A column other than the discriminator referencing the table of tenants."""
-    root = f"{target.table.qualified} ({_columns((target.key or '',))})"
+    """A column other than the discriminator referencing the table of tenants.
+
+    It is one of two things, and the schema cannot say which. The row's own
+    tenant, written a second time, duplicates the discriminator and can disagree
+    with it: a row whose two columns name two tenants is visible to the wrong one.
+    Another organisation is a counterparty — a provider, a partner — and a pointer
+    into another tenant's space is how one tenant's rows come to reveal another's;
+    a counterparty is a relation of the tenant's own, over a global directory of
+    companies. Neither is an exception to declare, so there is no directive: a
+    schema moving to the design records today's findings in a ``--baseline``.
+    """
+    columns = _columns(fk.columns)
     return finding(
         source.table,
-        f"{source.table.qualified}'s foreign key ({_columns(fk.columns)}) → "
-        f"{target.table.qualified} ({_columns(refs)}) names a tenant other than "
-        f"the row's own: only {tenancy_column} references the table of tenants, at its "
-        "tenant id",
-        f"reference {root} through {tenancy_column} alone, or drop the foreign key",
+        f"{source.table.qualified}'s foreign key ({columns}) → "
+        f"{target.table.qualified} ({_columns(refs)}): only {tenancy_column} references "
+        f"the table of tenants. If {columns} is the row's own tenant, it duplicates "
+        f"{tenancy_column} and can disagree with it; if it is another organisation, "
+        "it is a counterparty pointing into another tenant's space",
+        f"the row's own tenant: drop {columns} and reference "
+        f"{target.table.qualified} ({_columns((target.key or '',))}) through "
+        f"{tenancy_column}; a counterparty: a tenant table of its own "
+        f"({tenancy_column}, id, …) over a global directory of companies, referenced "
+        f"as ({tenancy_column}, fk_…)",
         _line(source, fk),
     )
 
