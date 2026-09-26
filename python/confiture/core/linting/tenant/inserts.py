@@ -40,9 +40,11 @@ from confiture.core.linting.tenant.scope import (
     TenancyFinding,
     TenantScopes,
     object_identity,
+    spelled,
 )
 from confiture.core.linting.tenant.trace import Unread, outputs
 from confiture.core.linting.tenant.views import ViewScopes, view_definitions
+from confiture.core.schema_identity import quote_identifier
 
 if TYPE_CHECKING:
     from confiture.core.linting.inventory import Inventory, SchemaObject
@@ -136,6 +138,22 @@ def _missing(insert: Any, entry: TableScope, tree: _Tree) -> str | Unread | None
     )
 
 
+def _default(entry: TableScope, setting: str) -> str:
+    """The statement that gives the discriminator a default, cast to its declared type.
+
+    ``current_setting`` returns ``text``, which PostgreSQL does not assign to a
+    ``uuid`` column: the cast is what makes the default one it accepts (#469).
+    """
+    column = entry.column
+    if column is None:
+        return ""
+    cast = f"::{column.type_text}" if column.type_text else ""
+    return (
+        f"ALTER TABLE {spelled(entry.table)} ALTER COLUMN {quote_identifier(column.folded)} "
+        f"SET DEFAULT current_setting('app.{setting}'){cast}"
+    )
+
+
 def _finding(
     routine: SchemaObject,
     line: int,
@@ -161,8 +179,8 @@ def _judge(
     table, column = entry.table.qualified, tree.scopes.tenancy.discriminator
     line = statement.line_at(insert.relation.location) if statement.exact else None
     fix = (
-        f"name {column} in the INSERT's column list, or give {table}.{column} a default "
-        f"(DEFAULT current_setting('app.{column}'))"
+        f"name {column} in the INSERT's column list, or give it a default: "
+        f"`{_default(entry, column)}`"
     )
     if isinstance(why, Unread):
         return _finding(

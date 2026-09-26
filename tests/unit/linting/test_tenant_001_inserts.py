@@ -11,12 +11,15 @@ read is reported, never passed.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
+import pglast
 import pytest
 from tests.unit.linting.tenant_projects import SCOPED, TENANCY, findings
 
 from confiture.core.linting.rule_registry import LINT_RULES, resolve_selection
+from confiture.core.schema_identity import identifier_identity
 
 _ORDER = f"CREATE TABLE app.tb_order (id uuid NOT NULL, total numeric, {SCOPED});\n"
 
@@ -386,3 +389,61 @@ def test_a_quoted_discriminator_is_the_column_it_names(tmp_path: Path) -> None:
     )
 
     assert found == []
+
+
+# -- the suggested default is SQL PostgreSQL accepts (#469) -------------------------
+
+
+def _suggested_default(fix: str) -> str:
+    """The statement a fix quotes between backticks."""
+    (statement,) = re.findall(r"`([^`]+)`", fix)
+    return statement
+
+
+@pytest.mark.parametrize(
+    ("table", "declared", "cast"),
+    [
+        ("app.tb_order", "uuid", ("uuid",)),
+        ('app."Order Line"', "bigint", ("pg_catalog", "int8")),
+        ("app.tb_order", 'app."Tenant Key"', ("app", "Tenant Key")),
+    ],
+    ids=["uuid", "quoted-table-bigint", "quoted-domain"],
+)
+def test_the_suggested_default_is_cast_to_the_discriminators_type(
+    tmp_path: Path, table: str, declared: str, cast: tuple[str, ...]
+) -> None:
+    domain = 'CREATE DOMAIN app."Tenant Key" AS uuid;\n'
+    found, _ = _inserts(
+        tmp_path,
+        domain + f"CREATE TABLE {table} (id uuid NOT NULL, tenant_id {declared} NOT NULL "
+        "REFERENCES management.tb_organization (id));\n"
+        + _function(f"  INSERT INTO {table} (id) VALUES (gen_random_uuid());"),
+    )
+
+    (finding,) = found
+    (raw,) = pglast.parse_sql(_suggested_default(finding.suggested_fix or ""))
+    alter = raw.stmt
+    (command,) = alter.cmds
+    assert (alter.relation.schemaname, alter.relation.relname) == tuple(
+        identifier_identity(part) for part in _parts(table)
+    )
+    assert command.name == "tenant_id"
+    assert isinstance(command.def_, pglast.ast.TypeCast)
+    assert tuple(n.sval for n in command.def_.typeName.names) == cast
+
+
+def _parts(qualified: str) -> list[str]:
+    schema, _, name = qualified.partition(".")
+    return [schema, name]
+
+
+def test_the_suggested_default_silences_the_finding(tmp_path: Path) -> None:
+    table = 'CREATE TABLE app."Order Line" (id uuid NOT NULL, total numeric, ' + SCOPED + ");\n"
+    insert = _function('  INSERT INTO app."Order Line" (id, total) VALUES (gen_random_uuid(), 1);')
+    (finding,), _ = _inserts(tmp_path / "before", table + insert)
+
+    fixed, _ = _inserts(
+        tmp_path / "after", table + _suggested_default(finding.suggested_fix or "") + ";\n" + insert
+    )
+
+    assert fixed == []

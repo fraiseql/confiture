@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pglast
 import pytest
 from tests.unit.linting.tenant_projects import SCOPED, TENANCY, findings
 
@@ -239,3 +240,81 @@ def test_tenant_004_is_on_when_the_project_declares_tenancy() -> None:
 @pytest.mark.parametrize("ignored", [["tenant_004"], ["tenant"]])
 def test_ignore_still_turns_it_off(ignored: list[str]) -> None:
     assert "tenant_004" not in resolve_selection(None, ignored, declared=frozenset({"tenancy"}))
+
+
+# -- a name that needs quoting (#469) ------------------------------------------------
+
+
+def _suggested_key(fix: str) -> pglast.ast.Constraint:
+    """The ``FOREIGN KEY … REFERENCES …`` a fix leads with, as PostgreSQL parses it."""
+    clause = fix.split(";", maxsplit=1)[0]
+    (raw,) = pglast.parse_sql(f"ALTER TABLE app.t ADD {clause}")
+    (command,) = raw.stmt.cmds
+    return command.def_
+
+
+def test_a_fix_spells_a_table_that_needs_quoting_as_sql(tmp_path: Path) -> None:
+    found, _ = _fk(
+        tmp_path,
+        f'CREATE TABLE app."Order Line" (id uuid NOT NULL, {SCOPED}, PRIMARY KEY (tenant_id, id));\n'
+        f"CREATE TABLE app.tb_shipment (id uuid PRIMARY KEY, {SCOPED},\n"
+        '  fk_line uuid REFERENCES app."Order Line" (id));\n',
+    )
+
+    (finding,) = found
+    key = _suggested_key(finding.suggested_fix or "")
+    assert (key.pktable.schemaname, key.pktable.relname) == ("app", "Order Line")
+    assert tuple(n.sval for n in key.fk_attrs) == ("tenant_id", "fk_line")
+    assert tuple(n.sval for n in key.pk_attrs) == ("tenant_id", "id")
+
+
+def test_a_fix_names_the_target_that_needs_a_key_as_sql(tmp_path: Path) -> None:
+    found, _ = _fk(
+        tmp_path,
+        f'CREATE TABLE "App".tb_order (id uuid PRIMARY KEY, {SCOPED});\n'
+        f"CREATE TABLE app.tb_order_line (id uuid PRIMARY KEY, {SCOPED},\n"
+        '  fk_order uuid REFERENCES "App".tb_order (id));\n',
+        "tenancy:\n  root: management.tb_organization\n",
+    )
+
+    (finding,) = found
+    assert _suggested_key(finding.suggested_fix or "").pktable.schemaname == "App"
+    assert '"App".tb_order needs PRIMARY KEY (tenant_id, id)' in (finding.suggested_fix or "")
+
+
+def test_a_global_tables_fix_spells_its_name_as_sql(tmp_path: Path) -> None:
+    found, _ = _fk(
+        tmp_path,
+        _ORDER + 'CREATE TABLE catalog."Price List" (id uuid PRIMARY KEY,\n'
+        "  fk_order uuid REFERENCES app.tb_order);\n",
+    )
+
+    (finding,) = found
+    assert 'make catalog."Price List" tenant-scoped' in (finding.suggested_fix or "")
+
+
+def test_a_referenced_table_whose_name_holds_a_dot_is_judged(tmp_path: Path) -> None:
+    found, _ = _fk(
+        tmp_path,
+        f'CREATE TABLE app."a.b" (id uuid NOT NULL, {SCOPED}, PRIMARY KEY (tenant_id, id));\n'
+        f"CREATE TABLE app.tb_order_line (id uuid PRIMARY KEY, {SCOPED},\n"
+        '  fk uuid REFERENCES app."a.b" (id));\n',
+    )
+
+    (finding,) = found
+    key = _suggested_key(finding.suggested_fix or "")
+    assert (key.pktable.schemaname, key.pktable.relname) == ("app", "a.b")
+
+
+def test_a_schema_whose_name_holds_a_dot_is_judged(tmp_path: Path) -> None:
+    found, _ = _fk(
+        tmp_path,
+        'CREATE SCHEMA "app.v2";\n'
+        f'CREATE TABLE "app.v2".tb_order (id uuid NOT NULL, {SCOPED}, PRIMARY KEY (tenant_id, id));\n'
+        f"CREATE TABLE app.tb_order_line (id uuid PRIMARY KEY, {SCOPED},\n"
+        '  fk uuid REFERENCES "app.v2".tb_order (id));\n',
+    )
+
+    (finding,) = found
+    key = _suggested_key(finding.suggested_fix or "")
+    assert (key.pktable.schemaname, key.pktable.relname) == ("app.v2", "tb_order")
