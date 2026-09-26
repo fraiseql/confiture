@@ -37,9 +37,11 @@ from confiture.core.ddl_walk import (
     column_edit,
     object_edits,
     object_kinds,
+    qualified_relname,
     read_column_constraints,
     read_constraint,
     read_index,
+    read_like,
     render_default,
     routine_body,
     routine_options,
@@ -187,7 +189,10 @@ class SchemaObject:
     file: str | None = None
     replace: bool = False
     if_not_exists: bool = False
+    #: ``schema.parent`` of a ``PARTITION OF`` child, as pglast holds it.
     parent: str | None = None
+    #: ``schema.parent`` of each table an ``INHERITS`` names, as pglast holds it.
+    inherits: tuple[str, ...] = ()
     statement_line: int = 1
     #: What a routine or a view *is*, beyond its identity — a body, a language,
     #: a query. Its name, schema and signature are this object's own, which an
@@ -430,14 +435,18 @@ def _add_constraints(table: SchemaObject, constraints: Iterable[Constraint]) -> 
     """
     for constraint in constraints:
         table.constraints.append(constraint)
-        if constraint.kind != "primary_key":
-            continue
-        table.has_primary_key = True
-        covered = set(constraint.columns)
-        table.columns = [
-            replace(column, primary_key=True, not_null=True) if column.folded in covered else column
-            for column in table.columns
-        ]
+        if constraint.kind == "primary_key":
+            _mark_primary_key(table, constraint)
+
+
+def _mark_primary_key(table: SchemaObject, constraint: Constraint) -> None:
+    """The columns *constraint*, a primary key, covers: part of it, and ``NOT NULL``."""
+    table.has_primary_key = True
+    covered = set(constraint.columns)
+    table.columns = [
+        replace(column, primary_key=True, not_null=True) if column.folded in covered else column
+        for column in table.columns
+    ]
 
 
 def _append_column(sql: str, table: SchemaObject, node: Any) -> None:
@@ -561,6 +570,7 @@ def _table_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
         offset=offset,
         if_not_exists=bool(getattr(stmt, "if_not_exists", False)),
         parent=_parent_name(stmt),
+        inherits=_inherited_names(stmt),
     )
     for elt in stmt.tableElts or []:
         kind = type(elt).__name__
@@ -583,6 +593,14 @@ def _parent_name(stmt: Any) -> str | None:
             schema = getattr(rv, "schemaname", None)
             return f"{schema}.{name}" if schema else name
     return None
+
+
+def _inherited_names(stmt: Any) -> tuple[str, ...]:
+    """``schema.parent`` of each table an ``INHERITS`` names; ``()`` for a partition."""
+    if stmt.partbound is not None:
+        return ()
+    names = (qualified_relname(rv) for rv in getattr(stmt, "inhRelations", None) or ())
+    return tuple(name for name in names if name)
 
 
 def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
@@ -814,6 +832,46 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
             apply(sql, table, edit)
 
 
+def _held_table(inventory: Inventory, held: str, before: int | None = None) -> SchemaObject | None:
+    """The table a ``schema.name`` pglast holds names; declared before *before*, when given."""
+    schema, _, name = held.rpartition(".")
+    found = inventory.find_all(("table",), schema or None, name)
+    return next((t for t in found if before is None or t.offset < before), None)
+
+
+def _apply_like(stmt: Any, table: SchemaObject | None, inventory: Inventory) -> None:
+    """Write the columns each ``LIKE`` of a ``CREATE TABLE`` copies, where the clause stands.
+
+    It runs in statement order with the ``ALTER``s, so the source is copied as it
+    stands at this ``CREATE`` — an ``ALTER`` after it does not reach the copy, as
+    in PostgreSQL (#467). A copy is written where the table's name is: the clause
+    that made it is on that statement, and :func:`attribute_files` moves it with
+    the table. A source the tree does not declare copies nothing.
+    """
+    elements = list(stmt.tableElts or [])
+    likes = [read_like(element) for element in elements]
+    if table is None or not any(likes):
+        return
+    own = {column.folded: column for column in table.columns}
+    columns: list[SchemaColumn] = []
+    for element, like in zip(elements, likes, strict=True):
+        if like is None:
+            written = own.pop(getattr(element, "colname", None) or "", None)
+            columns.extend([written] if written is not None else [])
+            continue
+        source = _held_table(inventory, like.source, before=table.offset)
+        copied = source.columns if source is not None else []
+        columns.extend(replace(like.copy(column), line=table.line) for column in copied)
+    kept: dict[str, SchemaColumn] = {}
+    for column in (*columns, *own.values()):
+        kept.setdefault(column.folded, column)
+    table.columns = list(kept.values())
+    # `PRIMARY KEY (id)` may name a column only the copy brought.
+    for constraint in table.constraints:
+        if constraint.kind == "primary_key":
+            _mark_primary_key(table, constraint)
+
+
 def _renamed_object(obj: SchemaObject, edit: ObjectEdit) -> None:
     obj.name = edit.new_name or obj.name
     obj.folded_name = (edit.new_name or obj.folded_name).lower()
@@ -966,15 +1024,19 @@ def build_inventory(sql: str, raws: Sequence[Any] | None = None) -> Inventory:
     """
     inventory = Inventory()
     raws = list(pglast.parse_sql(sql) or []) if raws is None else list(raws)
+    created: dict[int, SchemaObject] = {}
     for raw in raws:
         obj = object_from_statement(sql, raw) or _schema_declaration(sql, raw)
         if obj is not None:
             (inventory.schemas if obj.kind == "schema" else inventory.objects).append(obj)
+            created[id(raw)] = obj
     for raw in raws:
         stmt = raw.stmt
         kind = type(stmt).__name__
         if kind == "AlterTableStmt":
             _apply_alter(sql, stmt, inventory)
+        elif kind == "CreateStmt":
+            _apply_like(stmt, created.get(id(raw)), inventory)
         elif kind == "IndexStmt":
             _apply_index(sql, raw, inventory)
         elif kind == "CommentStmt":
@@ -987,6 +1049,78 @@ def build_inventory(sql: str, raws: Sequence[Any] | None = None) -> Inventory:
             for edit in edits:
                 _apply_object_edit(inventory, edit, offset)
     return inventory
+
+
+def inherit_columns(inventory: Inventory) -> Inventory:
+    """*inventory* with each child table holding the columns PostgreSQL gives it.
+
+    An ``INHERITS`` child and a ``PARTITION OF`` child hold their parents' columns
+    for as long as they are children: a column the parent gains later reaches
+    them, so they are read from the tree's final state, parents' columns first
+    and in order, a column the child writes again merged into the one it
+    inherits. An inheritance child gets each column's type, ``NOT NULL`` and
+    default — no key, no identity, and none of the parent's constraints (#467);
+    a partition is its parent's rows, and gets every column fact.
+
+    The model the differ reads keeps a child's own columns: a migration adds a
+    column to the parent and PostgreSQL passes it down, so writing it to the
+    child as well would add it twice. This is for the readers that compare with
+    what PostgreSQL holds — drift, and the ``tenant`` rules. *inventory* is left
+    as it was: a child is replaced by a copy.
+    """
+    resolved: dict[int, list[SchemaColumn]] = {}
+
+    def columns_of(table: SchemaObject, seen: frozenset[int]) -> list[SchemaColumn]:
+        parents = (table.parent,) if table.parent else table.inherits
+        if not parents or id(table) in seen:
+            return table.columns
+        if id(table) not in resolved:
+            inherited: dict[str, SchemaColumn] = {}
+            for held in parents:
+                parent = _held_table(inventory, held)
+                for column in columns_of(parent, seen | {id(table)}) if parent else ():
+                    inherited.setdefault(column.folded, _inherited(table, column))
+            resolved[id(table)] = _merged(table, inherited)
+        return resolved[id(table)]
+
+    return Inventory(
+        objects=[
+            replace(obj, columns=columns_of(obj, frozenset())) if obj.kind == "table" else obj
+            for obj in inventory.objects
+        ],
+        schemas=inventory.schemas,
+    )
+
+
+def _inherited(child: SchemaObject, column: SchemaColumn) -> SchemaColumn:
+    """*column* of a parent, as *child* holds it; written where the child's name is."""
+    if child.is_partition:
+        return replace(column, line=child.line)
+    return replace(column, line=child.line, primary_key=False, identity=None)
+
+
+def _merged(child: SchemaObject, inherited: dict[str, SchemaColumn]) -> list[SchemaColumn]:
+    """The inherited columns, each merged with the child's own of that name, then the rest.
+
+    PostgreSQL merges a column the child declares again into the inherited one:
+    it keeps the inherited type, is ``NOT NULL`` if either says so, and takes the
+    child's default over the parent's.
+    """
+    own = {column.folded: column for column in child.columns}
+    merged = [_merge(column, own.pop(name, None)) for name, column in inherited.items()]
+    return [*merged, *own.values()]
+
+
+def _merge(inherited: SchemaColumn, written: SchemaColumn | None) -> SchemaColumn:
+    if written is None:
+        return inherited
+    return replace(
+        inherited,
+        name=written.name,
+        line=written.line,
+        not_null=inherited.not_null or written.not_null,
+        default=written.default if written.default is not None else inherited.default,
+    )
 
 
 def _model_ref(obj: SchemaObject) -> Any:
@@ -1261,13 +1395,16 @@ def attribute_files(inventory: Inventory, located: Sequence[SchemaObject]) -> No
     for obj, source in zip(inventory.objects, located, strict=False):
         if _statement_key(obj) != _statement_key(source):
             return
+        source_lines = {column.folded: column.line for column in source.columns}
+        # A column `LIKE` copied is written where the table's name is, and moves
+        # with it: the file alone cannot copy it when the source is in another.
+        moved = {obj.line: source.line}
         obj.file = source.file
         obj.line = source.line
         obj.statement_line = source.statement_line
-        source_lines = {column.folded: column.line for column in source.columns}
         obj.columns = [
-            replace(column, line=source_lines[column.folded])
-            if column.folded in source_lines
+            replace(column, line=source_lines.get(column.folded, moved.get(column.line)))
+            if column.folded in source_lines or column.line in moved
             else column
             for column in obj.columns
         ]

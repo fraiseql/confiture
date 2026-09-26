@@ -364,6 +364,8 @@ jobs:
           tests/unit/linting/test_tenant_005_unique_keys.py \
           tests/unit/linting/test_tenant_001_inserts.py \
           tests/unit/linting/test_tenant_partitions.py \
+          tests/unit/linting/test_tenant_like_and_inherits.py \
+          tests/unit/linting/test_inventory_like_and_inherits.py \
           tests/unit/test_schema_change.py \
           tests/unit/test_schema_change_is_exhaustive.py \
           tests/unit/test_schema_change_tiers.py \

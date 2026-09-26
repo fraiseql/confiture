@@ -67,7 +67,10 @@ run and the `--dry-run-execute` rehearsal both did it.
   partition takes its parent's scope and key (#466): a view reading it, an `INSERT`
   into it and a foreign key referencing it are judged as they would be against the
   parent, and each finding names the partition as written; a partition is still
-  never reported on its own for what its parent declares.
+  never reported on its own for what its parent declares. A table that gets the
+  discriminator through `LIKE` or `INHERITS` carries it (#467), with its
+  `NOT NULL` and without the foreign key, as in PostgreSQL: its finding is the
+  missing reference to the root, and every other rule judges it as tenant data.
 - **`tenant_003`: a view that reads tenant data publishes the discriminator, or is
   declared global** (#426). The output column named `tenancy.discriminator` is
   traced through the view's parse tree — aliases, `JOIN … USING`/`NATURAL`,
@@ -264,7 +267,15 @@ run and the `--dry-run-execute` rehearsal both did it.
   statement, cast to the discriminator's declared type: `ALTER TABLE
   app.tb_order ALTER COLUMN tenant_id SET DEFAULT
   current_setting('app.tenant_id')::uuid`.
-
+- **The schema model holds the columns a `LIKE` copies** (#467). `CREATE TABLE
+  c (LIKE p INCLUDING ALL)` read as a table with no columns, so `migrate diff`
+  and `drift` saw none of them. The reader now writes the copies into the table
+  at the clause's position, as the source stands at that statement, each with
+  its `NOT NULL`, and its default, identity and generation expression when the
+  clause includes them; no constraint is copied. `drift`'s expected schema also
+  gives an `INHERITS` child its parents' columns, as it already did a partition
+  (`inventory.inherit_columns`); the model the differ reads keeps an inheriting
+  child's own columns, since PostgreSQL passes a parent's new column down.
 - **Prep-seed validation checks the table each resolver fills, in whatever
   schema** (#458). Levels 2-5 took every `prep_seed.<table>` to resolve into
   `<catalog_schema>.<table>`, so a tree whose resolvers fill tables in several

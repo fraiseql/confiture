@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from confiture.core import sql_lexer
+from confiture.core.linting.inventory import inherit_columns
 from confiture.core.linting.tenant import inserts, keys, scope, views
 
 if TYPE_CHECKING:
@@ -79,8 +80,13 @@ def declarations(sources: Iterable[tuple[str | None, str]]) -> scope.Declaration
 
 
 def tree(inventory: Inventory, tenancy: TenancyConfig, sources: Sources) -> TenantTree:
-    """What every rule of the family reads, the tables classified once."""
-    return TenantTree(scopes(inventory.tables, tenancy, sources), inventory, sources)
+    """What every rule of the family reads, the tables classified once.
+
+    A table reads with the columns PostgreSQL gives it through ``INHERITS`` or
+    ``PARTITION OF`` (#467): a child of a tenant table carries the discriminator.
+    """
+    held = inherit_columns(inventory)
+    return TenantTree(scopes(held.tables, tenancy, sources), held, sources)
 
 
 def scopes(
