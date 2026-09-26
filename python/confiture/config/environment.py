@@ -804,14 +804,20 @@ class DriftConfig(BaseModel):
     column_order_severity: Literal["warning", "critical"] = "warning"
 
 
-def _read_config_yaml(config_path: Path) -> dict[str, Any]:
-    """The YAML mapping at ``config_path``; anything else is a ``ConfigurationError``."""
+def _read_config_yaml(config_path: Path, *, allow_empty: bool = False) -> dict[str, Any]:
+    """The YAML mapping at ``config_path``; anything else is a ``ConfigurationError``.
+
+    With ``allow_empty`` a file that holds no document — empty, or only comments —
+    is the empty mapping: for an optional file, that is "nothing declared".
+    """
     try:
         with Path(config_path).open() as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as e:
         raise ConfigurationError(f"Invalid YAML in {config_path}: {e}") from e
 
+    if data is None and allow_empty:
+        return {}
     if not isinstance(data, dict):
         raise ConfigurationError(
             f"Invalid config format in {config_path}: expected dictionary, got {type(data)}"

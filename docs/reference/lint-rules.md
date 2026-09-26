@@ -721,7 +721,11 @@ It reports, at `warning`:
 - a declaration that cannot hold: `tenant-global` without a reason, or a table
   declared global that carries the discriminator anyway;
 - on the root, discriminators that reference different columns of it: which one is
-  the tenant id is then undecided, and the rules that need it do not judge.
+  the tenant id is then undecided, and the rules that need it do not judge;
+- a `tenancy.root` the schema does not declare (a typo), once, on
+  `db/project.yaml`, naming the tables the discriminators do reference. No
+  discriminator is then told to reference the missing table, and a table the
+  discriminators reference is not told to carry one of its own.
 
 A column added by a later `ALTER TABLE` counts (the model folds it), and a
 partition is judged with its parent, not on its own. `--select tenant_002` on a

@@ -55,7 +55,14 @@ run and the `--dry-run-execute` rehearsal both did it.
   `-- confiture:tenant-global <reason>` line above its `CREATE TABLE`), and a
   declaration that cannot hold. Selected without a `tenancy:` block, it reports
   itself skipped, with the reason. An environment file carrying `tenancy:` is
-  refused and pointed at `db/project.yaml`.
+  refused and pointed at `db/project.yaml`. An empty or comment-only
+  `db/project.yaml` declares nothing, and `tenancy:` with no body is the block
+  with its defaults; a malformed file is `CONFIG_001`, as a malformed
+  environment file is; `discriminator` cannot be empty; `root` is read as SQL
+  reads a name, so `"my.schema".tb_org` is a qualified root; and a root the
+  schema does not declare is one `tenant_002` finding on `db/project.yaml`,
+  naming the tables the discriminators reference, instead of a finding on every
+  tenant table (#468).
 - **The `tenant` family reads one classification of the tables** (#426). Each
   table's scope — tenant, global, the root, or undecided — is decided once per lint,
   from its first definition when it is defined twice, and `tenant_002` through

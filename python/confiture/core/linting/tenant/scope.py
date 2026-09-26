@@ -30,6 +30,8 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from confiture.config.project import PROJECT_FILE
+from confiture.core import sql_lexer
 from confiture.core.linting.inventory import distinct
 from confiture.core.schema_identity import (
     DEFAULT_SCHEMA,
@@ -152,7 +154,8 @@ class TenancyFinding:
 
     table: str
     file: str | None
-    line: int
+    #: ``None`` for a finding on ``db/project.yaml`` itself, not on a statement.
+    line: int | None
     message: str
     fix: str
     #: ``False`` for what the rule could not read, so did not judge: not a
@@ -167,9 +170,15 @@ def primary_key(table: SchemaObject) -> tuple[str, ...]:
 
 
 def written_identity(qualified: str) -> tuple[str, str]:
-    """``(schema, name)`` of a written ``schema.name`` (or bare ``name``), folded."""
-    schema, _, name = qualified.rpartition(".")
-    return (identifier_identity(schema) if schema else DEFAULT_SCHEMA, identifier_identity(name))
+    """``(schema, name)`` of a written ``schema.name`` (or bare ``name``), folded.
+
+    The scanner splits it, so ``"my.schema".tb_org`` is in the schema ``my.schema``.
+    """
+    *schema, name = sql_lexer.name_parts(qualified) or [qualified]
+    return (
+        identifier_identity(schema[-1]) if schema else DEFAULT_SCHEMA,
+        identifier_identity(name),
+    )
 
 
 def _held_identities(held: str) -> Iterator[tuple[str, str]]:
@@ -333,14 +342,21 @@ def _declaration_findings(entry: TableScope, tenancy: TenancyConfig) -> Iterator
         )
 
 
-def _column_findings(entry: TableScope, tenancy: TenancyConfig) -> Iterator[TenancyFinding]:
+def _column_findings(
+    entry: TableScope, tenancy: TenancyConfig, root: str | None
+) -> Iterator[TenancyFinding]:
+    """A table outside the global schemas: its discriminator, and what it references.
+
+    *root* is ``tenancy.root`` when the tree declares it, ``None`` otherwise: a
+    reference to a table that is not there is not asked for.
+    """
     name, column = entry.table.qualified, entry.column
     if column is None:
-        root = f" REFERENCES {tenancy.root}" if tenancy.root else ""
+        references = f" REFERENCES {root}" if root else ""
         yield finding(
             entry.table,
             f"{name} has no {tenancy.discriminator} column and is not declared global",
-            f"add {tenancy.discriminator} NOT NULL{root}; or declare it global — a "
+            f"add {tenancy.discriminator} NOT NULL{references}; or declare it global — a "
             f"`-- confiture:{GLOBAL_DIRECTIVE} <reason>` line above the CREATE TABLE, or "
             "its schema in tenancy.global_schemas in db/project.yaml",
         )
@@ -352,14 +368,11 @@ def _column_findings(entry: TableScope, tenancy: TenancyConfig) -> Iterator[Tena
             f"make {tenancy.discriminator} NOT NULL",
             line=column.line,
         )
-    elif tenancy.root and not any(
-        _root_references(entry.table, column.folded, written_identity(tenancy.root))
-    ):
+    elif root and not any(_root_references(entry.table, column.folded, written_identity(root))):
         yield finding(
             entry.table,
-            f"{name}.{tenancy.discriminator} does not reference {tenancy.root}, the "
-            "table of tenants",
-            f"add FOREIGN KEY ({tenancy.discriminator}) REFERENCES {tenancy.root}",
+            f"{name}.{tenancy.discriminator} does not reference {root}, the table of tenants",
+            f"add FOREIGN KEY ({tenancy.discriminator}) REFERENCES {root}",
             line=column.line,
         )
 
@@ -379,13 +392,64 @@ def _root_findings(entry: TableScope, scopes: TenantScopes) -> Iterator[TenancyF
         )
 
 
+def _referenced_by_discriminators(scopes: TenantScopes) -> dict[tuple[str, str], str]:
+    """The tables the tenant tables' discriminators reference, by identity: their names."""
+    referenced = (
+        scopes.of(fk.ref_table)
+        for entry in scopes
+        if entry.scope is Scope.TENANT and entry.column is not None
+        for fk in entry.table.constraints
+        if fk.kind == "foreign_key" and fk.columns == (entry.column.folded,)
+    )
+    return {
+        object_identity(target.table): target.table.qualified
+        for target in referenced
+        if target is not None
+    }
+
+
+def _missing_root(scopes: TenantScopes) -> Iterator[TenancyFinding]:
+    """``tenancy.root`` names a table the tree does not declare (#468).
+
+    One finding, on ``db/project.yaml``, naming it — and naming the tables the
+    discriminators do reference, which is where the table of tenants usually is.
+    """
+    written = scopes.tenancy.root
+    referenced = sorted(_referenced_by_discriminators(scopes).values())
+    hint = (
+        f"; the {scopes.tenancy.discriminator} columns reference {', '.join(referenced)}"
+        if referenced
+        else ""
+    )
+    yield TenancyFinding(
+        str(written),
+        PROJECT_FILE.as_posix(),
+        None,
+        f"tenancy.root names {written}, which the schema does not declare, so no table "
+        "is the table of tenants",
+        f"set tenancy.root in {PROJECT_FILE.as_posix()} to the table of tenants{hint}",
+    )
+
+
 def table_findings(scopes: TenantScopes) -> Iterator[TenancyFinding]:
-    """``tenant_002``: every table whose tenancy is undecided, or declared in a way that cannot hold."""
+    """``tenant_002``: every table whose tenancy is undecided, or declared in a way that cannot hold.
+
+    A ``tenancy.root`` the tree does not declare is the one finding about the
+    root: no discriminator is told to reference it, and a table the
+    discriminators do reference — the table of tenants under another name — is
+    not told to carry a discriminator of its own.
+    """
+    root = root_identity(scopes.tenancy)
+    missing = root is not None and root not in scopes.tables
+    stand_ins = _referenced_by_discriminators(scopes) if missing else {}
+    if missing:
+        yield from _missing_root(scopes)
     for entry in scopes:
         if entry.scope is Scope.ROOT:
             yield from _root_findings(entry, scopes)
-            continue
-        if declared_global(entry.table, scopes.tenancy, scopes.declarations):
+        elif declared_global(entry.table, scopes.tenancy, scopes.declarations):
             yield from _declaration_findings(entry, scopes.tenancy)
-        else:
-            yield from _column_findings(entry, scopes.tenancy)
+        elif object_identity(entry.table) not in stand_ins:
+            yield from _column_findings(
+                entry, scopes.tenancy, None if missing else scopes.tenancy.root
+            )

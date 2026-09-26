@@ -45,7 +45,9 @@ tenancy:
 ```
 
 - **`discriminator`**: the column name; `tenant_id` when omitted.
-- **`root`**: the table of tenants, schema-qualified. Its key is the tenant id.
+- **`root`**: the table of tenants, schema-qualified, quoted as SQL quotes it
+  (`'"my.schema".tb_org'`). Its key is the tenant id. A root the schema does not
+  declare is one `tenant_002` finding on `db/project.yaml`.
 - **`global_schemas`**: schemas holding shared reference data.
 
 The block is the switch. Without it confiture assumes nothing about tenants and no

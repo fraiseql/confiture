@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-25,712 lines, 34% of `core/`.
+25,804 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -103,7 +103,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_signature_checker.py` | 187 | DDL transform |
 | `idempotency/` | 2,712 | DDL transform |
 | `introspection/dependency_graph.py` | 203 | DDL transform |
-| `linting/` | 8,982 | DDL transform |
+| `linting/` | 9,046 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
 | `migration_grant_extractor.py` | 525 | DDL transform |
@@ -117,7 +117,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_change.py` | 899 | DDL transform |
 | `schema_identity.py` | 71 | DDL transform |
 | `schema_model.py` | 757 | DDL transform |
-| `sql_lexer.py` | 637 | DDL transform |
+| `sql_lexer.py` | 665 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |
 | `type_lattice.py` | 511 | DDL transform |

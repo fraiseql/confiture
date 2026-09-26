@@ -560,8 +560,14 @@ tenancy:
   [`tenant_002`](lint-rules.md#tenant_002-every-table-carries-the-tenant-discriminator-or-is-declared-global)).
   An environment file that carries a `tenancy:` block is refused, pointing here.
 
+An empty file, or one holding only comments, declares nothing. A block written with
+no body (`tenancy:` alone) is declared, with every field at its default. `root` is
+read as SQL reads a name, so a quoted part may hold a dot
+(`root: '"my.schema".tb_org'`); `discriminator` cannot be empty.
+
 Unknown keys are refused, like everywhere else in confiture's configuration: a typo
-is never an empty success.
+is never an empty success. A malformed file is refused with `CONFIG_001` (exit 5),
+as a malformed environment file is.
 
 ## Field reference
 
@@ -791,7 +797,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `discriminator` | str | `tenant_id` | The column every tenant-scoped relation carries, ``NOT NULL``. |
-| `root` | str \| NoneType | - | The table of tenants, schema-qualified (``management.tb_organization``): its key is the tenant id, so it carries no discriminator of its own. |
+| `root` | str \| NoneType | - | The table of tenants, schema-qualified (``management.tb_organization``, or ``"my.schema".tb_org`` quoted as SQL quotes it): its key is the tenant id, so it carries no discriminator of its own. |
 | `global_schemas` | list[str] | `[]` | Schemas holding shared reference data — every relation in them is global, never tenant-scoped. |
 
 ### Complete skeleton (every field at its default)

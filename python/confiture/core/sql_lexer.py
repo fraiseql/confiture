@@ -12,6 +12,8 @@ read one way — PostgreSQL's:
 - :func:`statement_type` — the verb of a statement (``CREATE``, ``SELECT``, …).
 - :func:`tokens` — the scanner's tokens with absolute offsets, minus the data
   rows of a ``COPY … FROM stdin`` block (psql client protocol, not SQL).
+- :func:`name_parts` — the parts of a dotted name written outside SQL (a
+  configured ``schema.table``), a dot inside a quoted part kept in it.
 - :func:`code_text` — the text with everything that is not code blanked, line
   for line, for the applier's ``psql`` meta-command scan.
 - :func:`comments` / :func:`directives` — comment tokens, and the
@@ -249,6 +251,32 @@ def tokens(sql: str) -> list[Any]:
     and yields nothing.
     """
     return _lex(sql)[0]
+
+
+def name_parts(written: str) -> list[str] | None:
+    """The parts of one dotted name as written, or ``None`` when *written* is not one.
+
+    ``"my.schema".tb_org`` is ``['"my.schema"', 'tb_org']``: the scanner reads the
+    name, so a dot inside a quoted part belongs to it and is never a separator
+    (#468). Each part keeps its spelling, quotes included — fold it with
+    :func:`~confiture.core.schema_identity.identifier_identity`. A keyword is a
+    part (``app.order`` names a table); a comment, an operator, a second statement
+    or an unterminated quote is not a name.
+    """
+    toks = tokens(written)
+    rest = list(written)
+    for token in toks:
+        rest[token.start : token.end + 1] = " " * (token.end + 1 - token.start)
+    names, dots = toks[0::2], toks[1::2]
+    if (
+        not toks
+        or "".join(rest).strip()
+        or len(toks) % 2 == 0
+        or any(dot.name != "ASCII_46" for dot in dots)
+        or any(part.name != "IDENT" and part.kind == "NO_KEYWORD" for part in names)
+    ):
+        return None
+    return [written[part.start : part.end + 1] for part in names]
 
 
 def string_constants(sql: str) -> list[tuple[int, int]]:
