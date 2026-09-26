@@ -30,6 +30,9 @@ Adopt a rule on a schema that already trips it with a
 | `acl_001` | acl | error | off | Every CREATE TABLE has a matching GRANT |
 | `tenant_001` | tenant | warning | off | Function INSERTs carry the FK a tenant-scoped view requires |
 | `tenant_002` | tenant | warning | with `tenancy:` | A table carries the tenant discriminator NOT NULL, or is declared global |
+| `tenant_003` | tenant | warning | with `tenancy:` | A view reading tenant data publishes the discriminator as a plain column, or is declared global |
+| `tenant_004` | tenant | warning | with `tenancy:` | A foreign key between tenant tables carries the discriminator on both sides |
+| `tenant_005` | tenant | warning | with `tenancy:` | A tenant table's primary key and unique keys lead with the discriminator |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
 | `own_001` | own | error | off | Every created relation is paired with an ALTER … OWNER TO |
@@ -649,7 +652,17 @@ column, never an inference: a table is **tenant-scoped** because it carries
 `tenancy.root` — the table of tenants — when one is configured. It is **global**
 because its schema is listed in `tenancy.global_schemas`, or because a
 `-- confiture:tenant-global <reason>` line sits above its `CREATE TABLE`. The root
-table itself is neither.
+table itself is neither: one of its columns *is* the tenant id.
+
+That column is the one the discriminator's foreign keys reference — a root may keep
+a surrogate primary key beside the tenant id it publishes as a `UNIQUE` column, and
+`tenant_id uuid NOT NULL REFERENCES management.tb_organization (tenant_uuid)` says
+which one a tenant row carries. While no discriminator references the root yet, it
+is the root's single-column primary key. When the discriminators reference
+different columns of the root, the tenant id is undecided and is not guessed.
+`tenant_002` decides every table's scope once, and the root's tenant id with it;
+`tenant_003`, `tenant_004` and `tenant_005` read that one answer. A table defined
+twice is judged once, by its first definition.
 
 It reports, at `warning`:
 
@@ -658,12 +671,126 @@ It reports, at `warning`:
 - a nullable discriminator, at the column;
 - a discriminator that does not reference the root;
 - a declaration that cannot hold: `tenant-global` without a reason, or a table
-  declared global that carries the discriminator anyway.
+  declared global that carries the discriminator anyway;
+- on the root, discriminators that reference different columns of it: which one is
+  the tenant id is then undecided, and the rules that need it do not judge.
 
 A column added by a later `ALTER TABLE` counts (the model folds it), and a
 partition is judged with its parent, not on its own. `--select tenant_002` on a
 project with no `tenancy:` block reports the rule *skipped*, with the reason — never
 an empty pass.
+
+## `tenant_003` — a view publishes the discriminator, or is declared global
+
+On when `db/project.yaml` declares `tenancy:`, like `tenant_002`. Every view and
+materialized view that **reads a tenant relation** — a table carrying the
+discriminator, the root, or a view that is itself tenant data, directly or through
+a routine it calls — must output a column named `tenancy.discriminator` that is,
+**as a plain column**, the discriminator of a tenant relation it reads (or the
+root's tenant id, published under the discriminator's name). A view that reads
+only global relations is global without a declaration.
+
+The column is traced through the view's parse tree, never its text: `FROM`
+aliases, `JOIN … USING`/`NATURAL` merged columns, subqueries in `FROM`, CTEs
+(recursive ones included), `*` and `t.*`, and set operations, where the column at
+the same position must trace in every branch. So this publishes, branch by branch —
+standard rows fanned out to every tenant, beside a tenant's own:
+
+```sql
+CREATE VIEW app.v_paper_format AS
+SELECT o.id AS tenant_id, f.* FROM catalog.tb_paper_format f
+  CROSS JOIN management.tb_organization o
+UNION ALL
+SELECT c.tenant_id, c.id, c.label FROM app.tb_custom_paper_format c;
+```
+
+and none of these does: `coalesce(o.tenant_id, …)`, `o.tenant_id::text`, an
+aggregate over it, a `NULL` in one branch of a `UNION`, a `tenant_id` read from a
+global table, or a `count(*)` across tenants with no `tenant_id` beside it.
+
+It reports, at `warning`:
+
+- a view reading tenant data that publishes no discriminator, or one that is not a
+  plain column of a tenant relation's discriminator — naming what it reads;
+- a column the tracer could not follow — a set-returning function in `FROM`, a
+  relation the model lacks, a routine the view calls whose body could not be read —
+  with the reason: an unread view is a finding, never a clean pass;
+- a declaration that cannot hold: `tenant-global` without a reason, a view declared
+  global that publishes the discriminator anyway, or a directive on a view that
+  reads no tenant relation (stale).
+
+A view is declared global as a table is: its schema in `tenancy.global_schemas`, or
+a `-- confiture:tenant-global <reason>` line above its `CREATE [MATERIALIZED] VIEW`.
+Views over views are judged inner view first, whatever order the files list them
+in.
+
+## `tenant_004` — a foreign key cannot cross tenants
+
+On when `db/project.yaml` declares `tenancy:`, like the rest of the family. It reads
+the scope `tenant_002` decides for every table — **tenant** (it carries the
+discriminator), **global** (its schema is in `tenancy.global_schemas`, or a
+`-- confiture:tenant-global <reason>` line declares it), the **root** (`tenancy.root`)
+or **undecided** — and judges each foreign key by the scopes of its two ends:
+
+| From → to | Verdict |
+|---|---|
+| tenant → tenant | the key carries the discriminator on both sides, at the same position |
+| tenant → root | only the discriminator references the root, at its tenant id (that is `tenant_002`'s reference) |
+| global → tenant or root | a finding: a row shared by every tenant cannot point at one tenant's row |
+| tenant → global | fine |
+| to or from an undecided table | not judged; that table has its `tenant_002` finding |
+
+A key between two tenant tables that leaves the discriminator out can point at
+another tenant's row, and PostgreSQL will not stop it. Written with it, PostgreSQL
+does:
+
+```sql
+-- reported: fk_order can name tenant B's order from tenant A's line
+FOREIGN KEY (fk_order) REFERENCES app.tb_order (id)
+-- clean
+FOREIGN KEY (tenant_id, fk_order) REFERENCES app.tb_order (tenant_id, id)
+```
+
+The hint writes the composite form, and names the `PRIMARY KEY (tenant_id, id)` or
+`UNIQUE (tenant_id, id)` the target then needs when it has neither — a primary key
+that leads with the discriminator (`tenant_005`) *is* that target. A foreign key
+that names no columns references the target's primary key and is judged as such.
+Foreign keys added by a later `ALTER TABLE … ADD CONSTRAINT` count. The root's
+tenant id plays the discriminator's part: the discriminator referencing it is clean,
+any other column referencing the root — its surrogate key included — names a tenant
+that is not the row's own, and a foreign key *from* the root to a tenant table is
+judged the same way; one between two rows of the root is not judged. While the
+root's tenant id is undecided (the discriminators reference different columns of
+it), a foreign key to or from the root is not judged.
+
+## `tenant_005` — a tenant table's keys lead with the discriminator
+
+On when `db/project.yaml` declares `tenancy:`. On every tenant table (the root is
+not one), the primary key, each `UNIQUE` constraint and each unique index must have
+the discriminator as their **first** key. `UNIQUE (email)` lets one tenant's row
+block another tenant's insert, and the violation tells the second tenant the value
+exists elsewhere; `UNIQUE (email, tenant_id)` still does not lead with it and is
+reported too. A unique index on an expression, or a partial one, is judged by its
+first key the same way. Non-unique indexes are not judged: a cross-tenant sweep by
+`created_at`, or a lookup by `id` alone, legitimately wants one.
+
+A uniqueness that is platform-wide on purpose is written as its own
+`CREATE UNIQUE INDEX`, under the directive, so the exception is visible in review:
+
+```sql
+-- confiture:tenant-global one login per address across the platform
+CREATE UNIQUE INDEX ux_user_email ON app.tb_user (lower(email));
+```
+
+The directive is honest or it is a finding: without a reason, and on a unique
+index that already leads with the discriminator (stale). An inline `UNIQUE` in
+`CREATE TABLE` cannot carry it. An index finding points at its `CREATE UNIQUE
+INDEX`, in whichever file it is written.
+
+`tenant_003`, `tenant_004` and `tenant_005` report themselves *skipped*, with the
+reason, when selected in a project with no `tenancy:` block. A schema that predates
+them can adopt the family with `--ignore tenant_003,tenant_004,tenant_005` until its
+views and keys are rebuilt.
 
 ## The `body` family — a routine's body resolves, checked by PostgreSQL
 

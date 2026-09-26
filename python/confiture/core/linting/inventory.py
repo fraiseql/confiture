@@ -168,6 +168,10 @@ class SchemaObject:
     constraints: list[Constraint] = field(default_factory=list)
     #: A table's indexes, folded on from their own ``CREATE INDEX`` statements.
     indexes: list[Index] = field(default_factory=list)
+    #: The line each of those statements begins on, in the text this inventory
+    #: read — where a finding about an index points, and where a directive above
+    #: it stands.
+    index_lines: dict[Index, int] = field(default_factory=dict)
     #: An enum's labels in declaration order; ``None`` for every other kind,
     #: a composite type included.
     enum_values: tuple[str, ...] | None = None
@@ -869,14 +873,16 @@ def _targets(inventory: Inventory, edit: ObjectEdit, offset: int) -> list[Schema
 _INDEXED_KINDS = ("table", "matview")
 
 
-def _apply_index(stmt: Any, inventory: Inventory) -> None:
+def _apply_index(sql: str, raw: Any, inventory: Inventory) -> None:
     """Fold a ``CREATE INDEX`` onto the table — or materialized view — the tree declared."""
-    relation = stmt.relation
+    relation = raw.stmt.relation
     found = inventory.find_all(_INDEXED_KINDS, relation.schemaname, relation.relname)
     if not found:
         return
     target = found[0]
-    target.indexes.append(read_index(stmt, table=target.qualified))
+    index = read_index(raw.stmt, table=target.qualified)
+    target.indexes.append(index)
+    target.index_lines[index] = _line_of(sql, _statement_offset(sql, raw))
 
 
 def _drop_index(inventory: Inventory, edit: ObjectEdit) -> None:
@@ -970,7 +976,7 @@ def build_inventory(sql: str, raws: Sequence[Any] | None = None) -> Inventory:
         if kind == "AlterTableStmt":
             _apply_alter(sql, stmt, inventory)
         elif kind == "IndexStmt":
-            _apply_index(stmt, inventory)
+            _apply_index(sql, raw, inventory)
         elif kind == "CommentStmt":
             _apply_comment(stmt, inventory)
         else:

@@ -11,42 +11,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from tests.unit.linting.tenant_projects import TENANCY, findings
 
 from confiture.core.linting.rule_registry import LINT_RULES, resolve_selection
-from confiture.core.linting.schema_linter import LintConfig, SchemaLinter
-
-_ROOT = """
-CREATE SCHEMA management;
-CREATE SCHEMA app;
-CREATE SCHEMA catalog;
-CREATE TABLE management.tb_organization (id uuid PRIMARY KEY, name text NOT NULL);
-"""
-
-_TENANCY = "tenancy:\n  root: management.tb_organization\n  global_schemas: [catalog]\n"
 
 
-def _project(tmp_path: Path, project_yaml: str | None = _TENANCY) -> Path:
-    (tmp_path / "db" / "schema").mkdir(parents=True)
-    (tmp_path / "db" / "environments").mkdir()
-    (tmp_path / "db" / "environments" / "local.yaml").write_text(
-        "name: local\ndatabase_url: postgresql://localhost:1/app\n"
-        f"include_dirs:\n  - {tmp_path / 'db' / 'schema'}\n"
-    )
-    if project_yaml is not None:
-        (tmp_path / "db" / "project.yaml").write_text(project_yaml)
-    return tmp_path
-
-
-def _findings(tmp_path: Path, sql: str, project_yaml: str | None = _TENANCY):
-    linter = SchemaLinter(
-        env="local",
-        project_dir=_project(tmp_path, project_yaml),
-        config=LintConfig(check_tenant_tables=True),
-    )
-    report = linter.lint(_ROOT + sql)
-    return [
-        v for v in (*report.errors, *report.warnings, *report.info) if v.rule_id == "tenant_002"
-    ], report
+def _findings(tmp_path: Path, sql: str, project_yaml: str | None = TENANCY):
+    return findings(tmp_path, sql, "tenant_002", "check_tenant_tables", project_yaml)
 
 
 def test_a_table_carrying_the_discriminator_is_tenant_scoped(tmp_path: Path) -> None:
@@ -197,3 +168,23 @@ def test_a_table_defined_twice_is_reported_once(tmp_path: Path) -> None:
     )
 
     assert [f.object_name for f in findings] == ["app.tb_order_line"]
+
+
+def test_discriminators_that_reference_different_root_columns_are_reported(
+    tmp_path: Path,
+) -> None:
+    """Which root column is the tenant id is then undecided, and every rule that
+    needs it stops judging; the disagreement itself is the finding, on the root."""
+    findings, _ = _findings(
+        tmp_path,
+        "ALTER TABLE management.tb_organization ADD COLUMN code text NOT NULL UNIQUE;\n"
+        "CREATE TABLE app.tb_order (id uuid PRIMARY KEY, "
+        "tenant_id uuid NOT NULL REFERENCES management.tb_organization (id));\n"
+        "CREATE TABLE app.tb_invoice (id uuid PRIMARY KEY, "
+        "tenant_id text NOT NULL REFERENCES management.tb_organization (code));\n",
+    )
+
+    (finding,) = findings
+    assert finding.object_name == "management.tb_organization"
+    assert "code" in finding.message
+    assert "id" in finding.message

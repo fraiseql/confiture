@@ -12,6 +12,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -178,6 +179,9 @@ class LintConfig:
         check_seed_secrets: bool = True,
         check_tenant_isolation: bool = False,
         check_tenant_tables: bool = False,
+        check_tenant_views: bool = False,
+        check_tenant_foreign_keys: bool = False,
+        check_tenant_unique_keys: bool = False,
         check_acl_coverage: bool = True,
         check_duplicates: bool = True,
         check_qualification: bool = True,
@@ -209,7 +213,15 @@ class LintConfig:
                 (multi-tenant rule, ``tenant_001``). Opt-in (default off).
             check_tenant_tables: Every table carries the tenant discriminator
                 NOT NULL, or is declared global (``tenant_002``); needs a
-                ``tenancy:`` block in ``db/project.yaml``
+                ``tenancy:`` block in ``db/project.yaml``, as every switch of
+                the family below does.
+            check_tenant_views: Every view that reads a tenant relation publishes
+                the discriminator, traced as a plain column, or is declared global
+                (``tenant_003``).
+            check_tenant_foreign_keys: A foreign key cannot cross tenants
+                (``tenant_004``).
+            check_tenant_unique_keys: A tenant table's primary key, UNIQUEs and
+                unique indexes lead with the discriminator (``tenant_005``).
             check_acl_coverage: Allow the ACL coverage rule (``acl_001``) to run.
             check_duplicates: Report objects defined more than once in one build
                 (``build_001`` / ``build_002``).
@@ -253,6 +265,9 @@ class LintConfig:
         self.check_seed_secrets = check_seed_secrets
         self.check_tenant_isolation = check_tenant_isolation
         self.check_tenant_tables = check_tenant_tables
+        self.check_tenant_views = check_tenant_views
+        self.check_tenant_foreign_keys = check_tenant_foreign_keys
+        self.check_tenant_unique_keys = check_tenant_unique_keys
         self.check_acl_coverage = check_acl_coverage
         self.check_duplicates = check_duplicates
         self.check_qualification = check_qualification
@@ -426,7 +441,18 @@ class SchemaLinter:
                 None,
             ),
             (self.config.check_tenant_isolation, self._check_tenant_isolation, None),
-            (self.config.check_tenant_tables, self._check_tenant_tables, "tenant"),
+            (self.config.check_tenant_tables, partial(self._check_tenancy, "tenant_002"), "tenant"),
+            (self.config.check_tenant_views, partial(self._check_tenancy, "tenant_003"), "tenant"),
+            (
+                self.config.check_tenant_foreign_keys,
+                partial(self._check_tenancy, "tenant_004"),
+                "tenant",
+            ),
+            (
+                self.config.check_tenant_unique_keys,
+                partial(self._check_tenancy, "tenant_005"),
+                "tenant",
+            ),
         ):
             if enabled:
                 check(report)
@@ -1005,39 +1031,36 @@ class SchemaLinter:
             )
         return self._written_cache
 
-    def _check_tenant_tables(self, report: LintReport) -> None:
-        """``tenant_002``: a table carries the discriminator, or is declared global.
+    def _check_tenancy(self, code: str, report: LintReport) -> None:
+        """Run one rule of the ``tenant`` family over the tree's tenancy.
 
-        Without a ``tenancy:`` block the rule has nothing to judge against, and
-        says so rather than passing.
+        Every rule of the family reads the one classification of the tables
+        (:func:`~confiture.core.linting.tenant.rules.tree`). Without a
+        ``tenancy:`` block a rule has nothing to judge against, and says so
+        rather than passing.
         """
         # Reason: import cycle (the tenant package's __init__ imports tenant_isolation_rule, which imports this module)
-        from confiture.core.linting.tenant import scope as tenant_scope
+        from confiture.core.linting.tenant import rules as tenant_rules
 
         tenancy = load_project_config(self.project_dir).tenancy
         if tenancy is None:
             report.skipped.append(
                 RuleStatus(
-                    code="tenant_002",
+                    code=code,
                     state="skipped",
-                    reason="no tenancy: block in db/project.yaml, so no table can be judged",
+                    reason="no tenancy: block in db/project.yaml, so nothing can be judged",
                 )
             )
             return
-        declarations = {
-            (label, directive.statement_line): directive.argument
-            for label, text in self._sources()
-            for directive in sql_lexer.directives(text)
-            if directive.name == tenant_scope.GLOBAL_DIRECTIVE
-            and directive.statement_line is not None
-        }
-        for finding in tenant_scope.table_findings(self._inventory.tables, tenancy, declarations):
+        rule = tenant_rules.RULES[code]
+        tree = tenant_rules.tree(self._inventory, tenancy, self._sources())
+        for finding in rule.findings(tree):
             report.add_violation(
                 LintViolation(
-                    rule_id="tenant_002",
-                    rule_name="Tenant Discriminator",
+                    rule_id=code,
+                    rule_name=rule.name,
                     severity=RuleSeverity.WARNING,
-                    object_type="table",
+                    object_type=rule.kind,
                     object_name=finding.table,
                     message=finding.message,
                     suggested_fix=finding.fix,
