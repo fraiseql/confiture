@@ -29,7 +29,11 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from confiture.core.linting.inventory import distinct
-from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity
+from confiture.core.schema_identity import (
+    DEFAULT_SCHEMA,
+    identifier_identity,
+    quote_identifier,
+)
 
 if TYPE_CHECKING:
     from confiture.config.project import TenancyConfig
@@ -87,7 +91,9 @@ class TenantScopes:
 
     def of(self, held: str | None) -> TableScope | None:
         """The scope of the table a foreign key names, as the parser holds it."""
-        return self.tables.get(_held_identity(held)) if held is not None else None
+        if held is None:
+            return None
+        return next((self.tables[k] for k in _held_identities(held) if k in self.tables), None)
 
     @property
     def root(self) -> TableScope | None:
@@ -124,10 +130,24 @@ def written_identity(qualified: str) -> tuple[str, str]:
     return (identifier_identity(schema) if schema else DEFAULT_SCHEMA, identifier_identity(name))
 
 
-def _held_identity(held: str) -> tuple[str, str]:
-    """``(schema, name)`` of a ``schema.name`` the parser holds: already folded."""
-    schema, _, name = held.rpartition(".")
-    return (schema or DEFAULT_SCHEMA, name)
+def _held_identities(held: str) -> Iterator[tuple[str, str]]:
+    """Each ``(schema, name)`` a ``schema.name`` the parser holds can be: already folded.
+
+    The model holds a referenced table as one dotted string, so the dot inside
+    ``app."a.b"`` reads as the one between schema and name (#469). Every split is
+    a candidate — the last dot first, then the bare name in the default schema —
+    and the tables the tree declares decide which one it names.
+    """
+    dots = [i for i, char in enumerate(held) if char == "."]
+    for i in reversed(dots):
+        yield (held[:i], held[i + 1 :])
+    yield (DEFAULT_SCHEMA, held)
+
+
+def spelled(obj: SchemaObject) -> str:
+    """*obj*'s name as SQL writes it: each part quoted if it must be, no schema invented."""
+    name = quote_identifier(obj.folded_name)
+    return f"{quote_identifier(obj.folded_schema)}.{name}" if obj.folded_schema else name
 
 
 def object_identity(obj: SchemaObject) -> tuple[str, str]:
@@ -202,7 +222,7 @@ def _root_references(
             constraint.kind == "foreign_key"
             and constraint.columns == (column,)
             and constraint.ref_table is not None
-            and _held_identity(constraint.ref_table) == root
+            and root in _held_identities(constraint.ref_table)
         ):
             yield constraint
 

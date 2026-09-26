@@ -248,6 +248,19 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Fixed
 
+- **A `tenant` rule's suggested fix is SQL PostgreSQL accepts** (#469).
+  `tenant_004` wrote a table whose name needs quoting bare (`REFERENCES
+  app.Order Line (tenant_id, id)`); every fix now spells a table as SQL does
+  (`app."Order Line"`). A foreign key to a table whose name holds a dot
+  (`REFERENCES app."a.b" (id)`) was read as a key to table `b` in schema
+  `app.a` and reported by no rule; each split of the name the model holds is
+  now tried against the tables the tree declares. And `tenant_001` suggested
+  `DEFAULT current_setting('app.tenant_id')`, which PostgreSQL refuses on a
+  `uuid` column (`current_setting` returns `text`); it now suggests the whole
+  statement, cast to the discriminator's declared type: `ALTER TABLE
+  app.tb_order ALTER COLUMN tenant_id SET DEFAULT
+  current_setting('app.tenant_id')::uuid`.
+
 - **Prep-seed validation checks the table each resolver fills, in whatever
   schema** (#458). Levels 2-5 took every `prep_seed.<table>` to resolve into
   `<catalog_schema>.<table>`, so a tree whose resolvers fill tables in several
