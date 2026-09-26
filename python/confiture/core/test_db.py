@@ -19,6 +19,7 @@ import hashlib
 import logging
 import re
 import time
+import typing
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
@@ -109,6 +110,16 @@ class TemplateStatus:
         }
 
 
+#: How ``CREATE DATABASE`` copies the template (PostgreSQL 15+): ``wal_log`` writes
+#: it through WAL, block by block — PostgreSQL's default; ``file_copy`` copies the
+#: files and forces a checkpoint before and after — far faster for a large
+#: template, not crash-safe, and unsuited to a replicated cluster (#438).
+CloneStrategy = typing.Literal["wal_log", "file_copy"]
+_STRATEGY_SQL: dict[str, SQL] = {"wal_log": SQL("WAL_LOG"), "file_copy": SQL("FILE_COPY")}
+#: ``server_version_num`` of the first release with ``CREATE DATABASE … STRATEGY``.
+_STRATEGY_SINCE = 150000
+
+
 @dataclass
 class CloneResult:
     """Result of a template clone.
@@ -122,6 +133,7 @@ class CloneResult:
     target: str
     target_url: str
     tablespace: str | None = None
+    strategy: CloneStrategy | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -129,6 +141,7 @@ class CloneResult:
             "target": self.target,
             "target_url": self.target_url,
             "tablespace": self.tablespace,
+            "strategy": self.strategy,
         }
 
 
@@ -211,13 +224,38 @@ def _validate_identifier(name: str) -> None:
         )
 
 
-def _clone_sql(target: str, template: str, tablespace: str | None = None) -> psycopg.sql.Composed:
-    base = SQL("CREATE DATABASE {} WITH TEMPLATE {}").format(
+def _clone_sql(
+    target: str,
+    template: str,
+    tablespace: str | None = None,
+    strategy: CloneStrategy | None = None,
+) -> psycopg.sql.Composed:
+    sql = SQL("CREATE DATABASE {} WITH TEMPLATE {}").format(
         Identifier(target), Identifier(template)
     )
-    if tablespace is None:
-        return base
-    return base + SQL(" TABLESPACE {}").format(Identifier(tablespace))
+    if tablespace is not None:
+        sql += SQL(" TABLESPACE {}").format(Identifier(tablespace))
+    if strategy is not None:
+        sql += SQL(" STRATEGY ") + _STRATEGY_SQL[strategy]
+    return sql
+
+
+def validate_clone_strategy(value: str | None, *, source: str = "strategy") -> CloneStrategy | None:
+    """``value`` as a :data:`CloneStrategy`, case-insensitively; ``None``/empty stays ``None``.
+
+    A misspelt strategy is refused rather than ignored: a typo would otherwise
+    leave every clone on the slow path the caller asked to leave.
+    """
+    if not value:
+        return None
+    folded = value.strip().lower()
+    if folded not in _STRATEGY_SQL:
+        raise ConfigurationError(
+            f"Unknown clone strategy {value!r} in {source}.",
+            error_code="CONFIG_010",
+            resolution_hint="Use 'wal_log' (PostgreSQL's default) or 'file_copy'.",
+        )
+    return typing.cast(CloneStrategy, folded)
 
 
 def _create_db_sql(name: str) -> psycopg.sql.Composed:
@@ -744,6 +782,7 @@ class TestDbProvisioner:
         sync_commit_off: bool = True,
         tablespace: str | None = None,
         max_concurrency: int | None = None,
+        strategy: CloneStrategy | None = None,
     ) -> CloneResult:
         """Clone *template* into *target* via ``CREATE DATABASE … WITH TEMPLATE``.
 
@@ -777,21 +816,33 @@ class TestDbProvisioner:
                 xdist workers from firing ``CREATE DATABASE`` simultaneously and
                 thrashing WAL/checkpoint on an ``fsync=on`` cluster. ``None`` (the
                 default) or < 1 → unbounded, behaviour byte-for-byte unchanged.
+            strategy: ``"file_copy"`` or ``"wal_log"`` — ``CREATE DATABASE …
+                STRATEGY`` (PostgreSQL 15+). ``file_copy`` copies the template's files
+                instead of writing them through WAL: on a large template and an
+                ``fsync=on`` cluster, seconds instead of tens of seconds (#438). It
+                forces a checkpoint before and after, is not crash-safe, and must not
+                be used on a replicated cluster — right for a disposable test clone.
+                ``None`` (the default) writes no clause: PostgreSQL's own default,
+                ``wal_log``. Kept on the on-disk fallback and recorded on the result.
 
         Returns:
             A :class:`CloneResult`; ``result.tablespace`` is the tablespace the
             clone actually landed in (``None`` for on-disk, including a fallback).
 
         Raises:
-            ConfigurationError: On invalid identifiers.
+            ConfigurationError: On invalid identifiers, an unknown strategy, or a
+                strategy asked of a server older than PostgreSQL 15.
             SchemaError: If cloning fails after all retries.
         """
         _validate_identifier(template)
         _validate_identifier(target)
         if tablespace is not None:
             _validate_identifier(tablespace)
+        strategy = validate_clone_strategy(strategy)
 
         self._require_template_exists(template)
+        if strategy is not None:
+            self._require_strategy_support()
 
         with self._clone_concurrency_slot(template, max_concurrency):
             try:
@@ -802,6 +853,7 @@ class TestDbProvisioner:
                     retries=retries,
                     backoff=backoff,
                     sync_commit_off=sync_commit_off,
+                    strategy=strategy,
                 )
             except _TablespaceUnavailable as exc:
                 # The tmpfs probe is only a cheap gate; a post-reboot tablespace
@@ -824,7 +876,21 @@ class TestDbProvisioner:
                     retries=retries,
                     backoff=backoff,
                     sync_commit_off=sync_commit_off,
+                    strategy=strategy,
                 )
+
+    def _require_strategy_support(self) -> None:
+        """Refuse a clone strategy on a server whose ``CREATE DATABASE`` has none."""
+        with self._maintenance_conn() as conn:
+            row = conn.execute("SHOW server_version_num").fetchone()
+        version = int(row[0]) if row else 0
+        if version < _STRATEGY_SINCE:
+            raise ConfigurationError(
+                f"CREATE DATABASE … STRATEGY needs PostgreSQL 15 or later; this server "
+                f"is {version // 10000}.",
+                error_code="CONFIG_010",
+                resolution_hint="Drop the strategy: the server copies the template its only way.",
+            )
 
     def _clone_with_retries(
         self,
@@ -835,6 +901,7 @@ class TestDbProvisioner:
         retries: int,
         backoff: float,
         sync_commit_off: bool,
+        strategy: CloneStrategy | None = None,
     ) -> CloneResult:
         """Run the bounded ``ObjectInUse`` retry loop for one tablespace choice.
 
@@ -849,7 +916,7 @@ class TestDbProvisioner:
             try:
                 with self._maintenance_conn() as conn:
                     terminate_backends(conn, template)
-                    conn.execute(_clone_sql(target, template, tablespace))
+                    conn.execute(_clone_sql(target, template, tablespace, strategy))
                     self._set_comment(conn, target, _CLONE_PREFIX + template)
                     if sync_commit_off:
                         conn.execute(_alter_db_set_sql(target, "synchronous_commit", "off"))
@@ -858,6 +925,7 @@ class TestDbProvisioner:
                     target=target,
                     target_url=_replace_dbname(self.server_url, target),
                     tablespace=tablespace,
+                    strategy=strategy,
                 )
             except psycopg.errors.ObjectInUse as e:
                 last_err = e

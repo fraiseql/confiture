@@ -45,11 +45,13 @@ class _StubProvisioner:
         *,
         tablespace: str | None = None,
         max_concurrency: int | None = None,
+        strategy: str | None = None,
     ) -> object:
         _StubProvisioner.clone_calls.append(
             {
                 "template": template,
                 "target": target,
+                "strategy": strategy,
                 "tablespace": tablespace,
                 "max_concurrency": max_concurrency,
             }
@@ -137,6 +139,24 @@ class TestWorkerDbThreadsTablespace:
         _StubProvisioner.fsync_on = False
         call = self._run(ram_tablespace=None)
         assert call["max_concurrency"] == 1
+
+    def test_clones_with_the_strategy_the_environment_names(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("CONFITURE_TEST_CLONE_STRATEGY", "file_copy")
+        monkeypatch.setattr(test_db_mod, "TestDbProvisioner", _StubProvisioner)
+        _StubProvisioner.fsync_on = False
+        call = self._run(ram_tablespace=None)
+        assert call["strategy"] == "file_copy"
+
+    def test_leaves_the_strategy_to_the_server_when_unset(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("CONFITURE_TEST_CLONE_STRATEGY", raising=False)
+        monkeypatch.setattr(test_db_mod, "TestDbProvisioner", _StubProvisioner)
+        _StubProvisioner.fsync_on = False
+        call = self._run(ram_tablespace=None)
+        assert call["strategy"] is None
 
 
 class TestNoPytestExitInWorker:

@@ -36,6 +36,15 @@ run and the `--dry-run-execute` rehearsal both did it.
   each key a consumer reads off a payload must stay `required` in its schema —
   fraisier's `applied`, `rolled_back`, `marked`, and the error envelope's
   `error.code` and `error.message`.
+- **A test clone can ask for `STRATEGY file_copy`** (#438):
+  `TestDbProvisioner.clone(…, strategy="file_copy" | "wal_log")`, and
+  `CONFITURE_TEST_CLONE_STRATEGY` for the worker-db fixture and
+  `confiture test-db clone`. `file_copy` copies the template's files instead of
+  writing them through WAL — measured 35 s → 1.7 s per clone of a 1.4 GB
+  template on `fsync=on`. Explicit, never a default: it forces two checkpoints
+  per clone and is not crash-safe. A misspelt strategy is refused, a strategy on
+  a server older than PostgreSQL 15 is refused naming its version, the on-disk
+  fallback keeps it, and `CloneResult.strategy` records it.
 - **`MigrateUpResult.halted`** (#422): `True` when the chain stopped at a
   `requires_superuser` migration, `False` for a completed run and for a failed
   migration. It names the other way a run ends short, beside `has_errors`. It

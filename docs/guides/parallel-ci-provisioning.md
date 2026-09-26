@@ -337,6 +337,23 @@ The same bound is available on the raw primitive
 so only the fixture opts in adaptively. Bounding clones trades wall-clock for
 determinism — each clone completes instead of all of them timing out.
 
+Bounding **how many** clones run does nothing about what **each** costs. On
+PostgreSQL 15+ `CREATE DATABASE … WITH TEMPLATE` writes the whole template
+through WAL by default (`STRATEGY wal_log`); a 1.4 GB template measured 35 s per
+clone on `fsync=on`. `STRATEGY file_copy` copies the files instead — 1.7 s on the
+same template, and still 3–11× faster with durability off:
+
+```bash
+export CONFITURE_TEST_CLONE_STRATEGY=file_copy
+```
+
+The fixture and `confiture test-db clone` both read it
+(`provisioner.clone(…, strategy="file_copy")` on the primitive). `file_copy` forces
+a checkpoint before and after each clone and is not crash-safe — a disposable test
+clone can afford both; a replicated or shared cluster should not use it. Unset, the
+server's own default applies; a server older than PostgreSQL 15 has no `STRATEGY`
+and refuses the setting rather than ignoring it.
+
 The fastest fix remains server tuning: an ephemeral test cluster with
 `fsync=off` (below) makes concurrent clones cheap and the bound a no-op.
 

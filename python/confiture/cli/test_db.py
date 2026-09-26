@@ -20,9 +20,14 @@ from confiture.cli.options import database_url_option, env_option, format_option
 from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
 from confiture.core.seed.applier import apply_profile_filter
-from confiture.core.test_db import RamSetupResult, TemplateState, TestDbProvisioner
+from confiture.core.test_db import (
+    RamSetupResult,
+    TemplateState,
+    TestDbProvisioner,
+)
 from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError
+from confiture.testing.worker_db import resolve_clone_strategy
 
 test_db_app = typer.Typer(help="Provision isolated template/clone test databases for parallel CI.")
 
@@ -184,13 +189,20 @@ def clone(
     ),
     format_type: str = format_option("text", "json"),
 ) -> None:
-    """Clone a template into a fresh database via CREATE DATABASE … WITH TEMPLATE."""
+    """Clone a template into a fresh database via CREATE DATABASE … WITH TEMPLATE.
+
+    Set CONFITURE_TEST_CLONE_STRATEGY=file_copy to copy the template's files
+    instead of writing them through WAL (PostgreSQL 15+): far faster for a large
+    template on an fsync=on cluster, not crash-safe, not for a replicated cluster.
+    The pytest worker-db fixture reads the same variable.
+    """
     provisioner = TestDbProvisioner(_resolve_server_url(database_url, env, project_dir))
     result = provisioner.clone(
         template,
         target,
         sync_commit_off=sync_commit_off,
         max_concurrency=max_clone_concurrency,
+        strategy=resolve_clone_strategy(),
     )
     if is_json(format_type):
         payload = result.to_dict()
