@@ -131,6 +131,12 @@ FIXTURES: dict[str, Fixture] = {
         }
     ),
     "sec_001": Fixture({"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, password TEXT);\n"}),
+    "sec_003": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, password TEXT);\n"
+            "INSERT INTO tb_t (id, password) VALUES (1, 'hunter22');\n"
+        }
+    ),
     "qual_001": Fixture(
         {"010.sql": "CREATE FUNCTION fn_f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\n"}
     ),

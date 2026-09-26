@@ -46,6 +46,21 @@ run and the `--dry-run-execute` rehearsal both did it.
   `migrate baseline` (one shape per mode), `diff`, `install-helpers`,
   `validate-profile` and `migrate apply-as`. The envelope keys `ok`, `command` and
   `parser` are declared by every schema and required by none.
+- **`sec_003`: no credential is written as a literal in the tree** (#427), at
+  `warning` and on by default beside `sec_001`. `sec_001` reads column names;
+  `sec_003` reads the values a seed writes — `INSERT … VALUES` and `COPY` rows,
+  through the one seed reader — into a column named for a secret, a high-entropy
+  value in a column named for a key, and `CREATE`/`ALTER ROLE … PASSWORD`. A hash
+  or an obvious placeholder is not reported, nor a comment. A finding never repeats
+  the secret: it names the kind, the length and the row by another column, so a
+  `--baseline` can hold it without the value reaching a CI log. It reads the source
+  tree, not a bundle, and the file text the linter already read — no extra trip to
+  disk.
+- **`migrate down`, `migrate reinit` and `migrate rebuild` publish their JSON**:
+  `migrate-down.schema.json`, `migrate-reinit.schema.json`,
+  `migrate-rebuild.schema.json`, each with the shared `MigrationEntry` definition
+  in `_common.schema.json`. `rolled_back` keeps the name `migrate down-to` uses,
+  so a consumer counting it reads either command.
 - **A guard that every command writing JSON publishes it.** Each command whose
   `--format` accepts `json` has a section in the JSON-schema reference linking a
   schema that exists, is an alias of one, or is on a shrink-only list that names

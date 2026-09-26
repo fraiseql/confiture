@@ -83,6 +83,7 @@ def linter_config(
         check_references="build_003" in selected,
         check_forward_references="build_004" in selected,
         check_security="sec_001" in selected,
+        check_seed_secrets="sec_003" in selected,
         check_tenant_isolation="tenant_001" in selected,
         check_acl_coverage="acl_001" in selected,
         check_qualification="qual_001" in selected,

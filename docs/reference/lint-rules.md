@@ -24,6 +24,7 @@ Adopt a rule on a schema that already trips it with a
 | `build_003` | build | warning | on | A body references an object the build does not create |
 | `build_004` | build | error | on | A statement needs, when it runs, an object the build creates later |
 | `sec_001` | security | warning | on | Columns that look like secrets should not be plain text |
+| `sec_003` | security | warning | on | No credential is written as a literal in the tree (a seed row, a role password) |
 | `qual_001` | qual | warning | on | Routines are created schema-qualified |
 | `qual_002` | qual | warning | off | Relations and types are created schema-qualified |
 | `acl_001` | acl | error | off | Every CREATE TABLE has a matching GRANT |
@@ -606,6 +607,37 @@ confiture lint --select tree --baseline .confiture-lint-baseline.json --write-ba
 A tree finding's object *is* a path, so its identity carries the file and a
 baseline written today stays valid: fixing one collision does not retire the
 other thirty-five, and a collision added tomorrow is new.
+
+## `sec_003` — no credential written as a literal in the tree
+
+`sec_001` reads column *names*: a column named for a secret should not hold one
+in plain text. `sec_003` reads the *values*. A password committed in a seed file
+is in git history, in every developer's database and in every environment the seed
+is applied to — and it is there before any build that would ship it has run, so
+the rule reads the **source tree**, every file under the environment's
+`include_dirs`, not a built bundle.
+
+It reports, at `warning` and on by default:
+
+- a literal written into a column `sec_001` names for a secret (`password`,
+  `token`, `secret`, `api_key`, `credit_card`, `ssn`) — by `INSERT … VALUES`, every
+  row of it, or by `COPY … FROM stdin`, every row decoded;
+- a literal in a column named for a key (`signing_key`) when it looks like one:
+  16 characters or more, high-entropy, not a UUID — so `sort_key = 'by_name'` is
+  not reported;
+- `CREATE ROLE` / `ALTER ROLE … PASSWORD '<literal>'`.
+
+It does not report a password hash (bcrypt, argon2, `SCRAM-SHA-256$…`, `md5…`,
+crypt, PBKDF2, LDAP `{SSHA}`) — the point is plaintext — nor an obvious
+placeholder: an empty string, one repeated character (`xxxx`, `****`), a template
+(`<redacted>`, `{{ DB_PASSWORD }}`, `${PASSWORD}`), or `changeme` and its kin. A
+comment is not a statement, so a documented example is never read.
+
+**A finding never repeats the secret.** It gives the kind and the length, and names
+the row by its first other column — `app.tb_user.password[id=3]` — so a `--baseline`
+can hold an accepted finding without the value reaching a CI log. A tree that has
+never been checked adopts the rule the usual way: `--baseline` records today's
+findings, and only a new one fails.
 
 ## The `body` family — a routine's body resolves, checked by PostgreSQL
 

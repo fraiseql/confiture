@@ -229,6 +229,13 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="sec_003",
+        family="security",
+        title="No credential is written as a literal in the tree (a seed row, a role password)",
+        severity="warning",
+        default_on=True,
+    ),
+    LintRule(
         code="qual_001",
         family="qual",
         title="Routines are created schema-qualified",
