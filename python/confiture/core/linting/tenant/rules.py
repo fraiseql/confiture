@@ -49,7 +49,7 @@ RULES: dict[str, TenantRule] = {
     "tenant_001": TenantRule(
         "Tenant Insert",
         "function",
-        lambda tree: inserts.insert_findings(tree.scopes, tree.sources),
+        lambda tree: inserts.insert_findings(tree.scopes, tree.inventory, tree.sources),
     ),
     "tenant_002": TenantRule(
         "Tenant Discriminator", "table", lambda tree: scope.table_findings(tree.scopes)

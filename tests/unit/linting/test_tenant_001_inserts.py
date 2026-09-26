@@ -151,3 +151,191 @@ def test_tenant_001_is_on_when_the_project_declares_tenancy() -> None:
     assert rule.legacy_flag == "--check-tenant-isolation"
     assert "tenant_001" in resolve_selection(None, (), declared=frozenset({"tenancy"}))
     assert "tenant_001" not in resolve_selection(None, ())
+
+
+# -- Shapes -------------------------------------------------------------------
+
+
+def test_insert_select_is_judged_by_its_column_list(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path / "missing",
+        _ORDER
+        + _function(
+            "  INSERT INTO app.tb_order (id, total)\n"
+            "  SELECT o.id, o.total FROM app.tb_order o WHERE o.tenant_id = p_tenant;"
+        ),
+    )
+    clean, _ = _inserts(
+        tmp_path / "supplied",
+        _ORDER
+        + _function(
+            "  INSERT INTO app.tb_order (id, tenant_id, total)\n"
+            "  SELECT o.id, o.tenant_id, o.total FROM app.tb_order o;"
+        ),
+    )
+
+    assert len(found) == 1
+    assert clean == []
+
+
+def test_an_insert_with_no_column_list_supplies_the_first_columns(tmp_path: Path) -> None:
+    """``id, total, tenant_id``: three values reach the discriminator, two do not."""
+    clean, _ = _inserts(
+        tmp_path / "three",
+        _ORDER + _function("  INSERT INTO app.tb_order VALUES (gen_random_uuid(), 1, p_tenant);"),
+    )
+    short, _ = _inserts(
+        tmp_path / "two",
+        _ORDER + _function("  INSERT INTO app.tb_order VALUES (gen_random_uuid(), 1);"),
+    )
+
+    assert clean == []
+    (finding,) = short
+    assert "2 columns" in finding.message
+    assert "column 3" in finding.message
+
+
+def test_a_select_with_no_column_list_counts_its_outputs_from_the_model(tmp_path: Path) -> None:
+    """``SELECT *`` over a table the model holds supplies every one of its columns."""
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER
+        + "CREATE TABLE app.tb_order_archive (id uuid NOT NULL, total numeric, "
+        + SCOPED
+        + ");\n"
+        + _function("  INSERT INTO app.tb_order_archive SELECT * FROM app.tb_order;"),
+    )
+
+    assert found == []
+
+
+def test_a_select_whose_outputs_cannot_be_counted_is_reported_unread(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER + _function("  INSERT INTO app.tb_order SELECT * FROM app.fn_rows(p_tenant);"),
+    )
+
+    (finding,) = found
+    assert "not judged" in finding.message
+    assert "set-returning function" in finding.message
+
+
+def test_default_values_supplies_no_column(tmp_path: Path) -> None:
+    found, _ = _inserts(tmp_path, _ORDER + _function("  INSERT INTO app.tb_order DEFAULT VALUES;"))
+
+    assert len(found) == 1
+
+
+def test_an_insert_inside_a_data_modifying_cte_is_judged(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER + "CREATE FUNCTION app.fn_create_order() RETURNS uuid LANGUAGE plpgsql AS $$\n"
+        "DECLARE v_id uuid;\n"
+        "BEGIN\n"
+        "  v_id := gen_random_uuid();\n"
+        "  WITH created AS (INSERT INTO app.tb_order (id) VALUES (v_id) RETURNING id)\n"
+        "  SELECT id INTO v_id FROM created;\n"
+        "  RETURN v_id;\n"
+        "END;\n$$;\n",
+    )
+
+    (finding,) = found
+    assert finding.line_number == 11
+
+
+def test_insert_returning_into_is_judged(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER + "CREATE FUNCTION app.fn_create_order() RETURNS uuid LANGUAGE plpgsql AS $$\n"
+        "DECLARE v_id uuid;\n"
+        "BEGIN\n"
+        "  INSERT INTO app.tb_order (id) VALUES (gen_random_uuid()) RETURNING id INTO v_id;\n"
+        "  RETURN v_id;\n"
+        "END;\n$$;\n",
+    )
+
+    assert len(found) == 1
+
+
+def test_a_language_sql_body_is_judged(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER + "CREATE FUNCTION app.fn_create_order() RETURNS void LANGUAGE sql AS $$\n"
+        "  INSERT INTO app.tb_order (id) VALUES (gen_random_uuid());\n$$;\n",
+    )
+
+    (finding,) = found
+    assert finding.line_number == 8
+
+
+def test_a_procedure_is_judged(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER + "CREATE PROCEDURE app.pr_create_order() LANGUAGE plpgsql AS $$\n"
+        "BEGIN\n  INSERT INTO app.tb_order (id) VALUES (gen_random_uuid());\nEND;\n$$;\n",
+    )
+
+    assert len(found) == 1
+
+
+def test_an_unqualified_target_is_the_table_the_model_holds(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        "CREATE TABLE tb_order (id uuid NOT NULL, "
+        + SCOPED
+        + ");\n"
+        + _function("  INSERT INTO tb_order (id) VALUES (gen_random_uuid());"),
+    )
+
+    assert len(found) == 1
+
+
+def test_dynamic_execute_is_declared_unread(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER
+        + _function(
+            "  EXECUTE format('INSERT INTO %I.tb_order (id) VALUES ($1)', 'app')\n"
+            "    USING gen_random_uuid();"
+        ),
+    )
+
+    (finding,) = found
+    assert finding.line_number == 9
+    assert "run time" in finding.message
+    assert "not judged" in finding.message
+
+
+def test_a_fragment_that_cannot_be_read_is_reported_never_passed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from confiture.core import plpgsql_fragments
+
+    slots = dict(plpgsql_fragments.SLOTS)
+    del slots[("PLpgSQL_stmt_execsql", "sqlstmt")]
+    monkeypatch.setattr(plpgsql_fragments, "SLOTS", slots)
+
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER + _function("  INSERT INTO app.tb_order (id) VALUES (gen_random_uuid());"),
+    )
+
+    (finding,) = found
+    assert "no reading for PLpgSQL_stmt_execsql.sqlstmt" in finding.message
+    assert "not judged" in finding.message
+
+
+def test_a_body_the_compiler_refuses_is_reported_never_passed(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER
+        + "CREATE TYPE app.type_input AS (nom text);\n"
+        + "CREATE FUNCTION app.fn_create_order(p app.type_input[]) RETURNS void\n"
+        "LANGUAGE plpgsql AS $$\n"
+        "DECLARE r record;\n"
+        "BEGIN INSERT INTO app.tb_order (id) VALUES (gen_random_uuid()); END; $$;\n",
+    )
+
+    (finding,) = found
+    assert "could not be read" in finding.message
+    assert finding.line_number == 8
