@@ -269,7 +269,8 @@
         "where",
         "method",
         "backs_constraint",
-        "key_options"
+        "key_options",
+        "expressions"
       ],
       "properties": {
         "name": {
@@ -311,6 +312,16 @@
           "items": {
             "type": "string"
           }
+        },
+        "expressions": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "boolean"
+          },
+          "description": "Alongside `columns`: whether each key is an expression rather than a column; null where the reader recorded nothing."
         }
       }
     },

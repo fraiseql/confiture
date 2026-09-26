@@ -22,7 +22,6 @@ from __future__ import annotations
 from typing import assert_never
 
 from confiture.core.ddl_clauses import (
-    column_body,
     column_element,
     column_type,
     index_element,
@@ -66,6 +65,7 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
+from confiture.core.schema_identity import quote_identifier
 from confiture.core.schema_model import (
     Column,
     Constraint,
@@ -232,7 +232,7 @@ def _table_up(change: TableChange) -> str | None:
             return f"DROP TABLE {relation(table.relation)};\n"
         case TableRenamed(old, new):
             # `ALTER TABLE a.t RENAME TO a.t2` is a syntax error: the target is a bare name.
-            return f"ALTER TABLE {relation(old.relation)} RENAME TO {new.name};\n"
+            return f"ALTER TABLE {relation(old.relation)} RENAME TO {quote_identifier(new.name)};\n"
         case _:
             assert_never(change)
 
@@ -244,19 +244,21 @@ def _table_down(change: TableChange) -> str | None:
         case TableDropped(table):
             return _create_table(table) if table.columns else None
         case TableRenamed(old, new):
-            return f"ALTER TABLE {relation(new.relation)} RENAME TO {old.name};\n"
+            return f"ALTER TABLE {relation(new.relation)} RENAME TO {quote_identifier(old.name)};\n"
         case _:
             assert_never(change)
 
 
 def _nullability(table: RelationName, column: str, *, nullable: bool) -> str:
     verb = "DROP" if nullable else "SET"
-    return f"ALTER TABLE {relation(table)} ALTER COLUMN {column} {verb} NOT NULL;\n"
+    return (
+        f"ALTER TABLE {relation(table)} ALTER COLUMN {quote_identifier(column)} {verb} NOT NULL;\n"
+    )
 
 
 def _default(table: RelationName, column: str, default: str | None) -> str:
     clause = f"SET DEFAULT {default}" if default else "DROP DEFAULT"
-    return f"ALTER TABLE {relation(table)} ALTER COLUMN {column} {clause};\n"
+    return f"ALTER TABLE {relation(table)} ALTER COLUMN {quote_identifier(column)} {clause};\n"
 
 
 def _retype(table: RelationName, old: Column, new: Column) -> str:
@@ -269,26 +271,25 @@ def _retype(table: RelationName, old: Column, new: Column) -> str:
     review line says the cast can fail on data.
     """
     before, after = column_type(old), column_type(new)
-    statement = f"ALTER TABLE {relation(table)} ALTER COLUMN {old.folded} TYPE {after}"
+    name = quote_identifier(old.folded)
+    statement = f"ALTER TABLE {relation(table)} ALTER COLUMN {name} TYPE {after}"
     if has_assignment_cast(before, after):
         return f"{statement};\n"
     return (
         f"-- review: {before} to {after} has no assignment cast; each value is cast"
         " explicitly, and one that does not cast fails the migration\n"
-        f"{statement} USING {old.folded}::{after};\n"
+        f"{statement} USING {name}::{after};\n"
     )
 
 
 def _column_up(change: ColumnChange) -> str:
     match change:
         case ColumnAdded(table, column):
-            return (
-                f"ALTER TABLE {relation(table)} ADD COLUMN {column.folded} {column_body(column)};\n"
-            )
+            return f"ALTER TABLE {relation(table)} ADD COLUMN {column_element(column)};\n"
         case ColumnDropped(table, column):
-            return f"ALTER TABLE {relation(table)} DROP COLUMN {column.folded};\n"
+            return f"ALTER TABLE {relation(table)} DROP COLUMN {quote_identifier(column.folded)};\n"
         case ColumnRenamed(table, old, new):
-            return f"ALTER TABLE {relation(table)} RENAME COLUMN {old} TO {new};\n"
+            return f"ALTER TABLE {relation(table)} RENAME COLUMN {quote_identifier(old)} TO {quote_identifier(new)};\n"
         case ColumnTypeChanged(table, old, new):
             return _retype(table, old, new)
         case ColumnNullabilityChanged(table, column, nullable):
@@ -303,13 +304,11 @@ def _column_down(change: ColumnChange) -> str:
     """The reverse of each column change; a dropped column comes back, its rows do not."""
     match change:
         case ColumnAdded(table, column):
-            return f"ALTER TABLE {relation(table)} DROP COLUMN {column.folded};\n"
+            return f"ALTER TABLE {relation(table)} DROP COLUMN {quote_identifier(column.folded)};\n"
         case ColumnDropped(table, column):
-            return (
-                f"ALTER TABLE {relation(table)} ADD COLUMN {column.folded} {column_body(column)};\n"
-            )
+            return f"ALTER TABLE {relation(table)} ADD COLUMN {column_element(column)};\n"
         case ColumnRenamed(table, old, new):
-            return f"ALTER TABLE {relation(table)} RENAME COLUMN {new} TO {old};\n"
+            return f"ALTER TABLE {relation(table)} RENAME COLUMN {quote_identifier(new)} TO {quote_identifier(old)};\n"
         case ColumnTypeChanged(table, old, new):
             return _retype(table, new, old)
         case ColumnNullabilityChanged(table, column, nullable):
@@ -322,7 +321,11 @@ def _column_down(change: ColumnChange) -> str:
 
 def _index_keys(index: Index) -> str:
     options = index.key_options or ("",) * len(index.columns)
-    return ", ".join(index_element(k, o) for k, o in zip(index.columns, options, strict=True))
+    kinds = index.expressions or (None,) * len(index.columns)
+    return ", ".join(
+        index_element(key, option, expression)
+        for key, option, expression in zip(index.columns, options, kinds, strict=True)
+    )
 
 
 def _index_statement(index: Index, table: str, *, concurrently: bool) -> str:
@@ -332,7 +335,7 @@ def _index_statement(index: Index, table: str, *, concurrently: bool) -> str:
     method = f" USING {index.method}" if index.method not in (None, "btree") else ""
     where = f" WHERE {index.where}" if index.where else ""
     return (
-        f"CREATE {unique}INDEX {how}IF NOT EXISTS {index.name}"
+        f"CREATE {unique}INDEX {how}IF NOT EXISTS {quote_identifier(index.name or '')}"
         f" ON {table}{method} ({_index_keys(index)}){where};\n"
     )
 
@@ -368,7 +371,9 @@ def _table_indexes(table: Table) -> str:
 def _drop_index(change: IndexAdded | IndexDropped) -> str:
     if not change.index.name:
         return _unnamed(change, "index")
-    return f"DROP INDEX CONCURRENTLY IF EXISTS {change.index.name};\n"
+    # An index is in its table's schema, and a bare name would drop nothing there.
+    index = relation(RelationName(change.table.schema, change.index.name))
+    return f"DROP INDEX CONCURRENTLY IF EXISTS {index};\n"
 
 
 def _add_foreign_key(change: ForeignKeyAdded | ForeignKeyDropped) -> str:
@@ -392,7 +397,7 @@ def _add_foreign_key(change: ForeignKeyAdded | ForeignKeyDropped) -> str:
         )
     return (
         f"ALTER TABLE {relation(change.table)} ADD {clause} NOT VALID;\n"
-        f"ALTER TABLE {relation(change.table)} VALIDATE CONSTRAINT {name};\n"
+        f"ALTER TABLE {relation(change.table)} VALIDATE CONSTRAINT {quote_identifier(name)};\n"
     )
 
 
@@ -423,7 +428,7 @@ def _drop_constraint(
 ) -> str:
     if not change.constraint.name:
         return _unnamed(change, "constraint")
-    return f"ALTER TABLE {relation(change.table)} DROP CONSTRAINT IF EXISTS {change.constraint.name};\n"
+    return f"ALTER TABLE {relation(change.table)} DROP CONSTRAINT IF EXISTS {quote_identifier(change.constraint.name)};\n"
 
 
 def _table_object_up(change: TableObjectChange) -> str:
@@ -503,7 +508,7 @@ _BIGINT_MIN, _BIGINT_MAX = -(2**63), 2**63 - 1
 
 def _create_enum(enum: EnumType) -> str:
     labels = ", ".join(_quoted(v) for v in enum.values)
-    return f"CREATE TYPE {enum.qualified} AS ENUM ({labels});\n"
+    return f"CREATE TYPE {relation(RelationName(enum.schema, enum.name))} AS ENUM ({labels});\n"
 
 
 def _create_sequence(sequence: Sequence) -> str:
@@ -526,7 +531,8 @@ def _create_sequence(sequence: Sequence) -> str:
         (f"START WITH {sequence.start}", sequence.start not in (None, start)),
     ]
     written = "".join(f" {option}" for option, differs in options if differs)
-    return f"CREATE SEQUENCE IF NOT EXISTS {sequence.qualified}{written};\n"
+    name = relation(RelationName(sequence.schema, sequence.name))
+    return f"CREATE SEQUENCE IF NOT EXISTS {name}{written};\n"
 
 
 class DifferSQLGenerator:
@@ -618,13 +624,13 @@ def _enum_or_sequence_up(change: EnumOrSequenceChange) -> str:
         case EnumTypeAdded(enum):
             return _create_enum(enum)
         case EnumTypeDropped(enum):
-            return _drop("TYPE", enum.qualified)
+            return _drop("TYPE", relation(RelationName(enum.schema, enum.name)))
         case EnumValuesChanged():
             return _enum_values(change)
         case SequenceAdded(sequence):
             return _create_sequence(sequence)
         case SequenceDropped(sequence):
-            return _drop("SEQUENCE", sequence.qualified)
+            return _drop("SEQUENCE", relation(RelationName(sequence.schema, sequence.name)))
         case _:
             assert_never(change)
 
@@ -652,13 +658,13 @@ def _enum_or_sequence_down(change: EnumOrSequenceChange) -> str | None:
     """A drop comes back from what the change carries; an added label cannot be taken back."""
     match change:
         case EnumTypeAdded(enum):
-            return _drop("TYPE", enum.qualified)
+            return _drop("TYPE", relation(RelationName(enum.schema, enum.name)))
         case EnumTypeDropped(enum):
             return _create_enum(enum)
         case EnumValuesChanged():
             return None
         case SequenceAdded(sequence):
-            return _drop("SEQUENCE", sequence.qualified)
+            return _drop("SEQUENCE", relation(RelationName(sequence.schema, sequence.name)))
         case SequenceDropped(sequence):
             return _create_sequence(sequence)
         case _:

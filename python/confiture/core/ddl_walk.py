@@ -1232,6 +1232,7 @@ def read_index(stmt: Any, *, table: RelationName) -> Index:
         where=RawStream()(stmt.whereClause) if stmt.whereClause is not None else None,
         method=stmt.accessMethod,
         key_options=options if any(options) else (),
+        expressions=tuple(not elem.name for elem in elements),
     )
 
 

@@ -236,6 +236,10 @@ class Index:
     method: str | None = None
     backs_constraint: bool = False
     key_options: tuple[str, ...] = ()
+    #: Alongside ``columns``: whether each key is an expression rather than a
+    #: column. ``None`` where the reader recorded nothing (a model written
+    #: before it did), and a key shaped like an identifier is then a column.
+    expressions: tuple[bool, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -574,6 +578,9 @@ def _index_from(data: dict[str, Any]) -> Index:
             **data,
             "table": table,
             "columns": tuple(data["columns"]),
+            "expressions": (
+                None if data.get("expressions") is None else tuple(data["expressions"])
+            ),
             "key_options": tuple(data.get("key_options", ())),
         }
     )

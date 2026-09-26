@@ -48,7 +48,7 @@ def column_body(column: Column) -> str:
 
 def column_element(column: Column) -> str:
     """A column as a ``CREATE TABLE`` element: its name, then its body."""
-    return f"{column.folded} {column_body(column)}"
+    return f"{quote_identifier(column.folded)} {column_body(column)}"
 
 
 def named(name: str, body: str) -> str:
@@ -59,11 +59,11 @@ def named(name: str, body: str) -> str:
     Writing ``child_pid_fkey`` here would be inventing an identifier; omitting it
     is what the author did.
     """
-    return f"CONSTRAINT {name} {body}" if name else body
+    return f"CONSTRAINT {quote_identifier(name)} {body}" if name else body
 
 
 def _columns(names: tuple[str, ...]) -> str:
-    return ", ".join(names)
+    return ", ".join(quote_identifier(name) for name in names)
 
 
 def relation(name: RelationName) -> str:
@@ -90,9 +90,16 @@ def references(fk: Constraint) -> str | None:
     return clause
 
 
-def index_element(key: str, options: str) -> str:
-    """One element of an index or an EXCLUDE: a column bare, an expression in parentheses."""
-    element = key if key.isidentifier() else f"({key})"
+def index_element(key: str, options: str, expression: bool | None = None) -> str:
+    """One element of an index or an EXCLUDE: a column by its name, an expression in parentheses.
+
+    A column is quoted where PostgreSQL needs it (#479); an expression is the
+    parser's rendering, quoted already. *expression* is what the index reader
+    recorded; ``None`` where nothing was recorded, and then a key shaped like an
+    identifier is taken for a column.
+    """
+    is_expression = not key.isidentifier() if expression is None else expression
+    element = f"({key})" if is_expression else quote_identifier(key)
     return f"{element} {options}" if options else element
 
 
