@@ -24,6 +24,20 @@ from urllib.parse import ParseResult, unquote, urlparse, urlunparse
 
 _PASSWORD_KEY = "password"
 
+#: A URI's ``scheme://user:password@``, read the way libpq reads it: the
+#: userinfo ends at the first ``@`` or ``/``, so a password may hold ``#``,
+#: ``?``, a quote or a ``:`` — which ``urlparse`` would take for a fragment, a
+#: query or a port, and hand back only part of (#464).
+_USERINFO = re.compile(r"^(?P<head>[A-Za-z][A-Za-z0-9+.-]*://[^:/@]*):(?P<password>[^/@]*)@")
+
+
+def _without_userinfo_password(url: str) -> tuple[str, str | None]:
+    """*url* with its userinfo password removed, and that password as written."""
+    match = _USERINFO.match(url)
+    if match is None:
+        return url, None
+    return f"{match.group('head')}@{url[match.end() :]}", match.group("password")
+
 
 def _query_parts(query: str) -> list[tuple[str, str, bool]]:
     """Split a query string into ``(raw_part, raw_value, is_password)`` triples.
@@ -72,15 +86,17 @@ def redact_url(url: str, *, bearer: bool = False) -> str:
     Returns:
         The URL with its password(s) redacted (unchanged if there is none).
     """
+    match = _USERINFO.match(url)
+    if match is not None and match.group("password"):
+        url = f"{match.group('head')}:***@{url[match.end() :]}"
     parsed = urlparse(url)
     if bearer:
         return _redact_bearer(url, parsed)
     parts = _query_parts(parsed.query)
-    if not parsed.password and not any(is_pw for _, _, is_pw in parts):
+    if not any(is_pw for _, _, is_pw in parts):
         return url
     query = "&".join(f"{_PASSWORD_KEY}=***" if is_pw else raw for raw, _, is_pw in parts)
-    netloc = _netloc(parsed, password="***" if parsed.password else None)
-    return urlunparse(parsed._replace(netloc=netloc, query=query))
+    return urlunparse(parsed._replace(query=query))
 
 
 def _redact_bearer(url: str, parsed: ParseResult) -> str:
@@ -114,15 +130,17 @@ def split_password(url: str) -> tuple[str, str | None]:
     Returns:
         ``(url_without_password, password)``; ``(url, None)`` when there is none.
     """
-    parsed = urlparse(url)
+    stripped, userinfo_password = _without_userinfo_password(url)
+    parsed = urlparse(stripped)
     parts = _query_parts(parsed.query)
     query_passwords = [value for _, value, is_pw in parts if is_pw]
-    if not parsed.password and not query_passwords:
+    if not userinfo_password and not query_passwords:
         return url, None
-    raw_password = query_passwords[-1] if query_passwords else parsed.password
+    raw_password = query_passwords[-1] if query_passwords else userinfo_password
+    if not query_passwords:
+        return stripped, unquote(raw_password or "")
     query = "&".join(raw for raw, _, is_pw in parts if not is_pw)
-    netloc = _netloc(parsed, password=None)
-    return urlunparse(parsed._replace(netloc=netloc, query=query)), unquote(raw_password or "")
+    return urlunparse(parsed._replace(query=query)), unquote(raw_password or "")
 
 
 def libpq_env(password: str | None, *, extra_options: str | None = None) -> dict[str, str]:
@@ -149,8 +167,15 @@ def libpq_env(password: str | None, *, extra_options: str | None = None) -> dict
     return env
 
 
+#: A scheme that starts where no scheme character precedes it: without that
+#: boundary every offset of a long run of them is a new start, and the scan is
+#: quadratic (#464).
+_SCHEME = r"(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*://"
+#: A URL's ``user:password@`` inside free text, read as libpq reads it — the
+#: password runs to the first ``@`` or ``/``, quotes included.
+_USERINFO_IN_TEXT = re.compile(rf"({_SCHEME}[^:/@\s]*):[^/@\s]*@")
 #: A URL inside free text: a scheme, then everything up to whitespace or a quote.
-_URL_IN_TEXT = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"<>`]+")
+_URL_IN_TEXT = re.compile(rf"{_SCHEME}[^\s'\"<>`]+")
 #: libpq's keyword form, ``password=secret`` or ``password='with spaces'``.
 _CONNINFO_PASSWORD = re.compile(r"(?i)\b(password\s*=\s*)(?:'(?:[^'\\]|\\.)*'|[^\s&]+)")
 
@@ -164,21 +189,19 @@ def redact_credentials_in(text: str) -> str:
     back unchanged. The CLI's error boundary runs every error through this, so a
     message that names a DSN cannot print its password.
     """
+    text = _USERINFO_IN_TEXT.sub(r"\1:***@", text)
     text = _URL_IN_TEXT.sub(lambda match: _redact_url_in_text(match.group(0)), text)
     return _CONNINFO_PASSWORD.sub(lambda match: f"{match.group(1)}***", text)
 
 
-#: ``//user:password@`` — the userinfo of a URL ``urlparse`` cannot take apart.
-_USERINFO_PASSWORD = re.compile(r"(//[^:/@\s]*):[^@\s]*@")
-
-
 def _redact_url_in_text(url: str) -> str:
-    """:func:`redact_url`, or — for a URL it cannot parse — its userinfo masked.
+    """:func:`redact_url`, or the URL as it is when it cannot be parsed.
 
     Text quotes URLs that are not valid ones (an example with ``host:port``, a
-    truncated DSN); masking must never be the thing that fails.
+    truncated DSN); masking must never be the thing that fails, and the userinfo
+    has already been masked in the text.
     """
     try:
         return redact_url(url)
     except ValueError:
-        return _USERINFO_PASSWORD.sub(r"\1:***@", url)
+        return url

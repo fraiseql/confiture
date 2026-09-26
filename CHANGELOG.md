@@ -30,6 +30,17 @@ run and the `--dry-run-execute` rehearsal both did it.
   every interpolated value is printed through — masks credentials in what it
   prints. Both a URL's password (`user:***@`, `?password=***`) and a libpq
   keyword DSN's (`password=***`) are masked (`url_redaction.redact_credentials_in`).
+- **A password is masked however libpq would read it** (#464). A URI's
+  userinfo ends at its first `@` or `/`, so libpq connects with a password
+  holding `#`, `?`, a quote or a `:` — which `urlparse` took for a fragment, a
+  query or a port, and a URL found in text ended at the quote. `redact_url`
+  (every DSN in JSON output) left `postgresql://app:Pa#ss@db/prod` as it was,
+  and `redact_credentials_in` (the error boundary and `verbatim()`) missed those
+  and a quoted one. `split_password`, which moves a password into `PGPASSWORD`
+  so it is not on a `psql`/`pg_dump` command line, split one at the same place
+  and left the rest on it. All three now read the userinfo as libpq does, and
+  the text scan no longer rescans a long run of scheme characters from every
+  offset — it was quadratic in the length of what it masked.
 
 ### Added
 
