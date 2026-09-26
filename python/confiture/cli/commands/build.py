@@ -196,7 +196,11 @@ def build(
         ↳ Build local environment, output to db/generated/schema_local.sql
 
       confiture build --env production --show-hash
-        ↳ Build production environment and show schema hash for change detection
+        ↳ Build production and print the source fingerprint caches key on
+
+      SOURCE_DATE_EPOCH=0 confiture build --output /tmp/built.sql
+        ↳ Byte-identical to any other build of the same tree: `diff` it against
+          the committed bundle. The header's Body SHA-256 hashes what follows it.
 
       confiture build --sequential --database-url postgresql://localhost/myapp
         ↳ Build schema AND apply seed files sequentially (solves 650+ row limits)
