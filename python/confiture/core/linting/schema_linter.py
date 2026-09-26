@@ -1059,7 +1059,8 @@ class SchemaLinter:
         unjudged: list[str] = []
         for finding in rule.findings(tree):
             if not finding.judged:
-                unjudged.append(f"{finding.message} ({finding.file or 'line'}:{finding.line})")
+                where = f"{finding.file}:{finding.line}" if finding.file else f"line {finding.line}"
+                unjudged.append(f"{finding.message} ({where})")
                 continue
             report.add_violation(
                 LintViolation(

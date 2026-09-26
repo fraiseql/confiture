@@ -310,7 +310,7 @@ def test_dynamic_execute_is_declared_unread(tmp_path: Path) -> None:
 
     assert found == []
     reason = _not_judged(report)
-    assert ":9" in reason
+    assert "(line 9)" in reason
     assert "run time" in reason
     assert "not judged" in reason
 
@@ -339,17 +339,15 @@ def test_a_body_the_compiler_refuses_is_reported_never_passed(tmp_path: Path) ->
     found, report = _inserts(
         tmp_path,
         _ORDER
-        + "CREATE TYPE app.type_input AS (nom text);\n"
-        + "CREATE FUNCTION app.fn_create_order(p app.type_input[]) RETURNS void\n"
+        + "CREATE FUNCTION app.fn_create_order() RETURNS void\n"
         "LANGUAGE plpgsql AS $$\n"
-        "DECLARE r record;\n"
-        "BEGIN INSERT INTO app.tb_order (id) VALUES (gen_random_uuid()); END; $$;\n",
+        "BEGIN INSERT INTO app.tb_order (id) VALUES (gen_random_uuid()); END IF; END; $$;\n",
     )
 
     assert found == []
     reason = _not_judged(report)
     assert "could not be read" in reason
-    assert ":8" in reason
+    assert "(line 7)" in reason
 
 
 # -- Reading ------------------------------------------------------------------
