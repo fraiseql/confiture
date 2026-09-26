@@ -1,35 +1,7 @@
-"""Tenant isolation linting for multi-tenant PostgreSQL schemas.
+"""The ``tenant`` lint rules: ``tenant_id`` on every relation, or declared global.
 
-This module provides tools to detect INSERT statements in functions
-that are missing FK columns required for tenant filtering.
+One classification of the tables (:mod:`.scope`) and five rules that read it
+(:mod:`.rules`): an ``INSERT`` supplies the discriminator (``tenant_001``), a table
+carries it (``tenant_002``), a view publishes it (``tenant_003``), a foreign key
+cannot cross tenants (``tenant_004``), a unique key leads with it (``tenant_005``).
 """
-
-from confiture.core.linting.tenant.formatter import TenantIsolationFormatter
-from confiture.core.linting.tenant.function_parser import (
-    FunctionInfo,
-    FunctionParser,
-    InsertStatement,
-)
-from confiture.core.linting.tenant.insert_analyzer import InsertAnalyzer
-from confiture.core.linting.tenant.models import (
-    TenantConfig,
-    TenantRelationship,
-    TenantViolation,
-)
-from confiture.core.linting.tenant.tenant_detector import TenantDetector
-from confiture.core.linting.tenant.tenant_isolation_rule import TenantIsolationRule
-from confiture.core.linting.tenant.view_parser import ViewParser
-
-__all__ = [
-    "FunctionInfo",
-    "FunctionParser",
-    "InsertAnalyzer",
-    "InsertStatement",
-    "TenantConfig",
-    "TenantDetector",
-    "TenantIsolationFormatter",
-    "TenantIsolationRule",
-    "TenantRelationship",
-    "TenantViolation",
-    "ViewParser",
-]

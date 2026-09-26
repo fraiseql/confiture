@@ -150,7 +150,6 @@
     "python/confiture/core/idempotency/fixer.py": 20,
     "python/confiture/core/linting/libraries/acl.py": 1,
     "python/confiture/core/linting/libraries/ownership.py": 1,
-    "python/confiture/core/linting/tenant/view_parser.py": 1,
     "python/confiture/core/migration_analyzer.py": 4,
     "python/confiture/core/schema_analyzer.py": 7,
     "python/confiture/core/seed/applier.py": 1,

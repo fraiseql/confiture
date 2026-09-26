@@ -3073,7 +3073,7 @@ confiture lint [OPTIONS]
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory the migration-tree rules read — replica_001, own_001, own_002 (default: db/migrations) |
 | `--overrides-dir` | - | path | - | Overrides mirror directory. tree_004 needs it and is skipped without it: there is no conventional location to guess. |
 | `--server-url` | - | str | - | Writable PostgreSQL server the body family builds its scratch database on. Only the server is used: a throwaway database is created beside the configured one and dropped again. Defaults to the environment's own database_url. |
-| `--check-tenant-isolation` | - | Flag | off | Deprecated alias for `--select default,tenant` (tenant_001): flag function INSERTs missing the FK column a tenant-scoped view requires. |
+| `--check-tenant-isolation` | - | Flag | off | Deprecated alias for `--select default,tenant`: the tenant family (tenant_001–tenant_005), which a `tenancy:` block in db/project.yaml already turns on. |
 | `--check-security-definer` | - | Flag | off | Deprecated alias for `--select default,security-definer`. Runs sec_002 over the env's schema DDL: flag SECURITY DEFINER functions/procedures that do not pin search_path (CVE-2018-1058). No-op when the config has no `security_lint:` block or `security_lint.enabled` is false. Default severity is advisory (warning); set `security_lint.severity: error` to make it a hard gate. |
 
 <!-- END GENERATED: cli confiture lint -->

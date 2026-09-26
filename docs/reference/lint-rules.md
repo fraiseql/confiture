@@ -28,7 +28,7 @@ Adopt a rule on a schema that already trips it with a
 | `qual_001` | qual | warning | on | Routines are created schema-qualified |
 | `qual_002` | qual | warning | off | Relations and types are created schema-qualified |
 | `acl_001` | acl | error | off | Every CREATE TABLE has a matching GRANT |
-| `tenant_001` | tenant | warning | off | Function INSERTs carry the FK a tenant-scoped view requires |
+| `tenant_001` | tenant | warning | with `tenancy:` | An INSERT into a tenant table supplies the discriminator |
 | `tenant_002` | tenant | warning | with `tenancy:` | A table carries the tenant discriminator NOT NULL, or is declared global |
 | `tenant_003` | tenant | warning | with `tenancy:` | A view reading tenant data publishes the discriminator as a plain column, or is declared global |
 | `tenant_004` | tenant | warning | with `tenancy:` | A foreign key between tenant tables carries the discriminator on both sides |
@@ -643,6 +643,46 @@ can hold an accepted finding without the value reaching a CI log. A tree that ha
 never been checked adopts the rule the usual way: `--baseline` records today's
 findings, and only a new one fails.
 
+## `tenant_001` — an INSERT into a tenant table supplies the discriminator
+
+On when `db/project.yaml` declares `tenancy:`, like the rest of the family. Every
+`INSERT` in a function or procedure body — PL/pgSQL, `LANGUAGE sql`, `BEGIN ATOMIC`
+— into a **tenant table** (the scope `tenant_002` decides: it carries the
+discriminator) names the discriminator among the columns it writes, or the column
+has a default. A default is a legitimate design:
+
+```sql
+CREATE TABLE app.tb_order (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL DEFAULT current_setting('app.tenant_id')::uuid
+        REFERENCES management.tb_organization (id)
+);
+-- clean: the session's tenant fills tenant_id
+INSERT INTO app.tb_order (id) VALUES (gen_random_uuid());
+```
+
+Without one, the row is refused by `NOT NULL`, or belongs to no tenant.
+`INSERT … VALUES` and `INSERT … SELECT` are judged by their column list; an `INSERT`
+with no column list writes the table's first columns in the order the model holds
+them (`ALTER TABLE … ADD COLUMN` appends), as many as its `VALUES` row or its query
+outputs — a `SELECT *` over a table or view the model holds is counted through the
+column tracer `tenant_003` uses. `DEFAULT VALUES` writes none. A data-modifying
+CTE's `INSERT` is judged like any other; an `INSERT` into a global, root or undecided
+table is not judged, and neither is one outside a routine (a seed row).
+
+What the fragment reader cannot read is never a pass: a body the PL/pgSQL compiler
+refuses, a statement pglast rejects, a string `EXECUTE` builds at run time, and an
+`INSERT` without a column list whose query's outputs cannot be counted (a
+set-returning function in `FROM`). Each is named, with its routine and line, in the
+rule's `degraded` status — the channel `build_003` reports its unread bodies on — so
+`--require-complete` fails on it and no `--baseline` silences it: it is a limit of the
+run, not a finding about the schema. A finding names the routine and the table
+(`app.fn_create_order -> app.tb_order`), which is what a `--baseline` records.
+
+This code once meant something else — an `INSERT` missing the foreign key a
+tenant-scoped view joined on, inferred from the view's text; the CHANGELOG records
+the change.
+
 ## `tenant_002` — every table carries the tenant discriminator, or is declared global
 
 On when `db/project.yaml` declares `tenancy:` (and off otherwise: confiture assumes
@@ -787,8 +827,8 @@ index that already leads with the discriminator (stale). An inline `UNIQUE` in
 `CREATE TABLE` cannot carry it. An index finding points at its `CREATE UNIQUE
 INDEX`, in whichever file it is written.
 
-`tenant_003`, `tenant_004` and `tenant_005` report themselves *skipped*, with the
-reason, when selected in a project with no `tenancy:` block. A schema that predates
+Every rule of the family reports itself *skipped*, with the reason, when selected
+in a project with no `tenancy:` block. A schema that predates
 them can adopt the family with `--ignore tenant_003,tenant_004,tenant_005` until its
 views and keys are rebuilt.
 

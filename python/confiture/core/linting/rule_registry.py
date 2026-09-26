@@ -269,10 +269,11 @@ LINT_RULES: tuple[LintRule, ...] = (
     LintRule(
         code="tenant_001",
         family="tenant",
-        title="Function INSERTs carry the FK a tenant-scoped view requires",
+        title="An INSERT into a tenant table supplies the discriminator",
         severity="warning",
         default_on=False,
         legacy_flag="--check-tenant-isolation",
+        enabled_by="tenancy",
     ),
     LintRule(
         code="tenant_002",

@@ -280,48 +280,51 @@ rules:
 - Clarifies business logic in schema
 - Enables better code reviews
 
-### 4. Tenant Isolation Rule (`tenant_001`)
+### 4. Tenant Insert Rule (`tenant_001`)
 
-**Purpose**: Catch function `INSERT`s that would write tenant-unscoped rows
+**Purpose**: Catch routine `INSERT`s that write a row belonging to no tenant
 
-**Validates**: For each tenant-scoped view (one that derives a tenant column —
-`tenant_id`, `organization_id`, `org_id` — from a table's FK), every function
-`INSERT` into that table includes the required FK column. A missing FK column
-means rows can be created that the tenant-filtered view can never see (or that
-leak across tenants).
+**Validates**: Every `INSERT` in a function or procedure body into a **tenant table**
+— one carrying the discriminator (`tenancy.discriminator`, `tenant_id` by default), as
+`db/project.yaml`'s `tenancy:` block classifies it — names the discriminator among the
+columns it writes, unless the column has a default. An `INSERT` with no column list
+writes the table's first columns, as many as its `VALUES` row or query supplies.
 
 **Severity**: WARNING
 
-**Opt-in**: Off by default. Enable per run with `confiture lint
---check-tenant-isolation`, or in the library with
-`LintConfig(check_tenant_isolation=True)`.
+**On by default** when `db/project.yaml` declares `tenancy:`; reported *skipped*
+otherwise. `--check-tenant-isolation` (an alias for `--select default,tenant`) and
+`LintConfig(check_tenant_isolation=True)` still select it.
 
 **Example Violation**:
 
 ```sql
--- A view scopes tb_item by organization via fk_org:
-CREATE VIEW v_item AS
-SELECT i.id, i.name, o.id AS tenant_id
-FROM tb_item i
-JOIN tv_organization o ON i.fk_org = o.pk_organization;
+CREATE TABLE app.tb_item (
+    id uuid PRIMARY KEY,
+    name text,
+    tenant_id uuid NOT NULL REFERENCES management.tb_organization (id)
+);
 
--- BAD: the INSERT omits fk_org → tenant_001 violation
-CREATE FUNCTION fn_create_item() RETURNS VOID AS $$
+-- BAD: the INSERT leaves tenant_id out → tenant_001 violation
+CREATE FUNCTION app.fn_create_item(p_tenant uuid) RETURNS void AS $$
 BEGIN
-    INSERT INTO tb_item (id, name) VALUES (1, 'test');
+    INSERT INTO app.tb_item (id, name) VALUES (gen_random_uuid(), 'test');
 END;
 $$ LANGUAGE plpgsql;
 
--- GOOD: the INSERT carries the tenant FK
-CREATE FUNCTION fn_create_item() RETURNS VOID AS $$
+-- GOOD: the INSERT supplies the discriminator
+CREATE FUNCTION app.fn_create_item(p_tenant uuid) RETURNS void AS $$
 BEGIN
-    INSERT INTO tb_item (id, name, fk_org) VALUES (1, 'test', 123);
+    INSERT INTO app.tb_item (id, name, tenant_id) VALUES (gen_random_uuid(), 'test', p_tenant);
 END;
 $$ LANGUAGE plpgsql;
 ```
 
-**Why This Matters**: Tenant isolation is critical for security — it prevents
-data leaks between customers and keeps tenant-filtered views complete.
+A default such as `DEFAULT current_setting('app.tenant_id')::uuid` is a legitimate
+design: the rule does not ask for the column then.
+
+**Why This Matters**: A row with no tenant is refused by `NOT NULL`, or — without
+it — visible to no tenant and invisible to every tenant-filtered read.
 
 ### 5. MissingIndexRule
 

@@ -177,6 +177,38 @@ run and the `--dry-run-execute` rehearsal both did it.
 - **`MigrateUpResult.has_errors` is `not success`.** It was `not success and
   errors`, which a hand-built `MigrateUpResult(success=False)` still answered
   `False`.
+- **`tenant_001` keeps its code and changes its meaning** (#426): it now asks
+  whether an `INSERT` into a tenant table supplies the discriminator. It used to
+  infer tenant relationships from views whose SQL matched five regexes (with a
+  hard-coded `tenant_id`/`organization_id`/`org_id` list no configuration reached,
+  tables keyed by bare name) and report a function `INSERT` missing the foreign key
+  such a view joined on. Now a tenant table is what the `tenancy:` block
+  classifies; an `INSERT` in a function or procedure body whose columns leave
+  `tenancy.discriminator` out is the finding, unless the column has a default
+  (`DEFAULT current_setting('app.tenant_id')::uuid` is a legitimate design).
+  `INSERT … VALUES` and `INSERT … SELECT` are judged by their column list; one
+  with no column list writes the table's first columns, as many as its row or
+  query supplies (a `SELECT *` over a table the model holds is counted). Bodies are
+  read by the one PL/pgSQL fragment reader, and what it cannot read — a body the
+  compiler refuses, a statement pglast rejects, a string `EXECUTE` builds at run
+  time, a query whose outputs cannot be counted — is never a pass: each is named in
+  the rule's `degraded` status, as `build_003` names the bodies it could not read,
+  so `--require-complete` fails on it and no `--baseline` silences it. Like the rest of the family it is on with a
+  `tenancy:` block and reports itself skipped without one; `--check-tenant-isolation`
+  and `LintConfig(check_tenant_isolation=True)` still select it. A finding names
+  the routine and the table (`app.fn_create_order -> app.tb_order`), so a baseline
+  entry recorded against the old rule no longer matches: it is listed as fixed,
+  and today's findings as new, until the baseline is rewritten.
+
+### Removed
+
+- **The regex view parser and the tenancy inference behind the old `tenant_001`**:
+  `confiture.core.linting.tenant`'s `ViewParser`, `TenantDetector`,
+  `InsertAnalyzer`, `FunctionParser`, `TenantIsolationRule`,
+  `TenantIsolationFormatter` and their models (`TenantConfig`,
+  `TenantRelationship`, `TenantViolation`). The `sql_keyword_regex` budget loses
+  its entry for `view_parser.py`, and a guard fails on any use of `re` under
+  `core/linting/tenant/`.
 
 ### Fixed
 
