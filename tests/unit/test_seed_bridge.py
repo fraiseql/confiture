@@ -130,3 +130,21 @@ def test_seed_bridge_check_fraiseql_data_not_available():
         # Since fraiseql is not installed, should return False
         result = bridge._check_fraiseql_data()
         assert isinstance(result, bool)
+
+
+def test_a_table_it_cannot_read_reports_the_path_it_would_have_written(tmp_path):
+    """``output_path`` is where the stub goes — under the seed env — even when none is written."""
+    bridge = SeedBridge("postgresql://localhost/test")
+    config = SeedGenerationConfig(table="users", output_dir=tmp_path, env="test")
+
+    with patch.object(bridge, "_get_table_columns", return_value=[]):
+        missing = bridge.generate(config)
+    with patch.object(
+        bridge, "_get_table_columns", side_effect=psycopg.OperationalError("Connection refused")
+    ):
+        unreachable = bridge.generate(config)
+
+    assert (missing.output_path, unreachable.output_path) == (
+        tmp_path / "test" / "users.sql",
+        tmp_path / "test" / "users.sql",
+    )

@@ -146,13 +146,15 @@ class SeedBridge:
 
         If fraiseql-data is available, delegates to it for richer generation.
         Otherwise, produces a commented-out stub with correct column names.
+        ``output_path`` is where the stub goes, whether or not one is written.
         """
+        output_path = config.output_dir / config.env / f"{config.table}.sql"
         try:
             columns = self._get_table_columns(config.table, config.schema)
         except psycopg.Error as e:
             return SeedGenerationResult(
                 table=config.table,
-                output_path=config.output_dir / f"{config.table}.sql",
+                output_path=output_path,
                 row_count=0,
                 column_count=0,
                 success=False,
@@ -162,16 +164,14 @@ class SeedBridge:
         if not columns:
             return SeedGenerationResult(
                 table=config.table,
-                output_path=config.output_dir / f"{config.table}.sql",
+                output_path=output_path,
                 row_count=0,
                 column_count=0,
                 success=False,
                 error=f"Table {config.schema}.{config.table} not found or has no columns",
             )
 
-        output_dir = config.output_dir / config.env
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{config.table}.sql"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         if output_path.exists() and not config.overwrite:
             return SeedGenerationResult(

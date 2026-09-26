@@ -166,6 +166,10 @@ run and the `--dry-run-execute` rehearsal both did it.
   `fixes[]` — `{file, fixes_applied, written}` per file, `written: false` under
   `--dry-run` — since the `violations` are found before the fix runs and were
   otherwise the only word a consumer got. Text output is unchanged.
+- **`seed generate` reports the path it writes to.** When the table could not be
+  read (absent, no columns, no connection), `output_path` was
+  `<output-dir>/<table>.sql`, without the `<seed-env>/` directory every stub is
+  written under; it is now `<output-dir>/<seed-env>/<table>.sql` in every case.
 - **A table `migrate diff` pairs as a rename is still compared.** The differ
   emitted `RENAME TABLE` and moved on, so the renamed table's new columns,
   indexes and constraints never reached the generated migration, and the migrated
