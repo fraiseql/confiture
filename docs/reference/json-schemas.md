@@ -3,12 +3,16 @@
 > **Frozen at 1.0.0.** The published schemas are a stability contract: fields are added, never renamed or removed. A change here is a breaking change: it needs a major version and a CHANGELOG entry.
 
 The commands whose `--format json` output ships a machine-validatable JSON
-Schema are `build`, `drift` (and `drift --check-acls`), `introspect`, `lint`
-(and `lint --list-rules`), `sync`, `validate-config`, `verify-checksums` and, in
-the migrate family, `up`, `down-to`, `status`, `current`, `fix`, `introspect`,
-`preflight` (and `--against`), `validate` (every mode) and `verify` — plus the
-shared error envelope. The other JSON payloads are stable but not schema-backed
-yet; `tests/unit/docs/test_readme_claims.py` derives this list from the files. Schemas
+Schema are `bootstrap`, `build` (and `build --list-files`), `diff`, `drift` (and
+`drift --check-acls`), `install-helpers`, `introspect`, `lint` (and
+`lint --list-rules`), `lint-unified`, `schema dump-model`, `sync`,
+`validate-config`, `validate-profile`, `verify-checksums` and, in the migrate
+family, `up`, `down`, `down-to`, `apply-as`, `baseline`, `rebuild`, `reinit`,
+`status`, `current`, `diff`, `fix`, `introspect`, `preflight` (and `--against`),
+`steps`, `validate` (every mode) and `verify` — plus the shared error envelope.
+The other JSON payloads have no published schema yet;
+`tests/unit/json_schemas/test_every_json_command_has_a_schema.py` lists them, with
+the reason, and that list only shrinks. Schemas
 use Draft 2020-12 and live in `docs/reference/json-schemas/`.
 
 ## For agents and tooling
@@ -67,9 +71,11 @@ after `confiture` (`migrate up`). `ok` is `true` when the command produced its
 report and `false` in the error envelope; what the report *found* is in its own
 fields (`success`, `is_valid`, `status`). A payload that carries an `ok` of its
 own keeps it: `migrate preflight`, `migrate verify` and `verify-checksums` define
-`ok` as their verdict, and `schema-to-schema` names its step in `command`. The
-three keys come after every key the payload already had; every payload schema
-declares them, none requires them.
+`ok` as their verdict, which their schemas require. The three keys come after
+every key the payload already had. Every payload schema declares them; besides
+those verdicts, only `schema-dump-model` and `sync` require them, as they always
+have — a schema published since does not, so a consumer that validates an older
+capture is not refused for a key the envelope added later.
 
 Aside from `hints` population, schemas are additive — new optional fields
 may appear in patch releases, but documented `required` fields will not
@@ -120,6 +126,10 @@ attribute names are scheduled to follow them at 1.0.0.
 
 [validate-config.schema.json](./json-schemas/validate-config.schema.json) — `{valid, config_source, migrations_path, migration_count, issues[]}` for offline config + migrations-tree validation (#144). **Never connects to a database.** Each `issues[]` element is the shared [issue object](./json-schemas/issue-object.schema.json). Invalid config exits 5.
 
+### `confiture validate-profile <path> --format json`
+
+[validate-profile.schema.json](./json-schemas/validate-profile.schema.json) — `{valid, path, name, version, has_global_seed, strategies{}, tables{}}` for an anonymization profile that validated: each strategy's `{type, seed_env_var}` and each table's rules `{column, strategy, has_seed}`. A seed is never written, only whether one is set. An invalid profile emits the [error envelope](./json-schemas/error-envelope.schema.json) (`ANON_1400`).
+
 ### `confiture migrate current --format json`
 
 [migrate-current.schema.json](./json-schemas/migrate-current.schema.json) — `{revision, name, applied_at, checksum}` for the latest applied migration (all `null` when the tracking table is empty). An absent tracking table is an error path emitting the [error envelope](./json-schemas/error-envelope.schema.json) at exit 2.
@@ -161,6 +171,14 @@ attribute names are scheduled to follow them at 1.0.0.
 ### `confiture migrate rebuild --format json`
 
 [migrate-rebuild.schema.json](./json-schemas/migrate-rebuild.schema.json) — `{success, schemas_dropped, ddl_statements_executed, marked[], total_duration_ms, dry_run, warnings, error, seeds_applied, verified}` after dropping the schemas, building from DDL and marking every migration applied. `seeds_applied` is `null` unless `--seed` was given, `verified` `null` unless `--verify` ran.
+
+### `confiture migrate baseline --format json`
+
+[migrate-baseline.schema.json](./json-schemas/migrate-baseline.schema.json) — migrations recorded as applied without running them; `mode` names the shape. `through`: `{mode, through, dry_run, migrations[], marked_count, skipped_count}`, each entry `{version, name, status}` with `status` one of `marked`, `would_mark` (`--dry-run`), `already_applied`. `from_db`: `{mode, source, through, copied[], skipped, source_only, warnings, dry_run}` — `copied[]` holds the source ledger's rows `{version, name, applied_at, execution_time_ms, checksum}`, and `source` is the `--from-db` DSN with its password replaced by `***`.
+
+### `confiture migrate apply-as --format json`
+
+[migrate-apply-as.schema.json](./json-schemas/migrate-apply-as.schema.json) — `{success, version, name, applied_by}` for the one migration applied as `<role>` through `apply_as.<role>.url`. A missing URL, an unknown or already-applied version, or a failed migration emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
 
 ### `confiture migrate validate --list-patterns --format json`
 
@@ -492,6 +510,30 @@ Static findings + replica-forward-compat lints + execution-replay results, unifi
 }
 ```
 
+### `confiture migrate schema-to-schema setup --format json`
+
+[migrate-schema-to-schema-setup.schema.json](./json-schemas/migrate-schema-to-schema-setup.schema.json) — `{ok, command, skip_import, parser}` after creating the FDW server and user mapping on the target and, unless `--skip-import`, importing the source's `public` schema as foreign tables. In every schema-to-schema success payload `command` is the bare subcommand name (`"setup"`), where the error envelope carries the full path (`"migrate schema-to-schema setup"`).
+
+### `confiture migrate schema-to-schema analyze --format json`
+
+[migrate-schema-to-schema-analyze.schema.json](./json-schemas/migrate-schema-to-schema-analyze.schema.json) — `{command, tables, ok, parser}`: each source table by name, `{strategy, row_count, estimated_seconds}`, with `strategy` `copy` at 10,000,000 rows or more and `fdw` below.
+
+### `confiture migrate schema-to-schema migrate --format json`
+
+[migrate-schema-to-schema-migrate.schema.json](./json-schemas/migrate-schema-to-schema-migrate.schema.json) — `{command, strategy, migrated, ok, parser}`: `migrated` maps each entry of the `--mapping` YAML to the rows inserted into its target table.
+
+### `confiture migrate schema-to-schema migrate-table --format json`
+
+[migrate-schema-to-schema-migrate-table.schema.json](./json-schemas/migrate-schema-to-schema-migrate-table.schema.json) — `{command, target_table, rows, ok, parser}` for one table; the payload does not name the strategy.
+
+### `confiture migrate schema-to-schema verify --format json`
+
+[migrate-schema-to-schema-verify.schema.json](./json-schemas/migrate-schema-to-schema-verify.schema.json) — `{command, tables, matched, ok, parser}`: each target table by name, `{source_count, target_count, match, difference}`. A row-count mismatch writes the same shape with `matched: false` and exits 1.
+
+### `confiture migrate schema-to-schema cleanup --format json`
+
+[migrate-schema-to-schema-cleanup.schema.json](./json-schemas/migrate-schema-to-schema-cleanup.schema.json) — `{ok, command, parser}` alone, after dropping the foreign server and foreign schema from the target.
+
 ### `confiture drift --format json`
 
 [drift.schema.json](./json-schemas/drift.schema.json)
@@ -551,11 +593,55 @@ always exits 0, never reads a schema.
 `code` matches the `rule_id` field on lint violations, so a finding can be
 mapped back to the selector that turns it off.
 
+### `confiture diff --format json`
+
+[diff.schema.json](./json-schemas/diff.schema.json) — `DiffResult.to_dict()`: `{has_changes, summary{}, changes[]}` between two schema files. `summary` counts fifteen kinds (`tables_added`, `columns_dropped`, …), each always present; each `changes[]` entry is `{type, table, column, old_value, new_value, details}`, with the keys a kind does not use `null`. Exit 1 when `has_changes`.
+
+### `confiture bootstrap --format json`
+
+[bootstrap.schema.json](./json-schemas/bootstrap.schema.json) — the ownership plan `{steps[], observed_postgres_owned_schemas, apply_to_schemas, is_empty}` under `plan`, with `mode` naming the shape: `check` adds `drift` (exit 1 when true), `dry-run` (`--mode plan`) has the plan alone, `apply` adds `{success, error, applied_steps}`. A scope refusal or a failed apply emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
+
+### `confiture install-helpers --format json`
+
+[install-helpers.schema.json](./json-schemas/install-helpers.schema.json) — `{status, schema, functions}` with `status` `installed` or `already_installed`; `--dry-run` reports `dry_run` and adds `sql`, the script it would run.
+
 ### `confiture schema dump-model --format json`
 
 [schema-dump-model.schema.json](./json-schemas/schema-dump-model.schema.json) —
 `{model, ok, command, parser}`: the schema model below, from DDL, a project's build
 or a live database, keys sorted so the same model is the same bytes.
+
+### `confiture test-db provision-template --format json`
+
+[test-db-provision-template.schema.json](./json-schemas/test-db-provision-template.schema.json) — `{name, state, stored_hash, current_hash}` for the template just built (or restored) and stamped with the `db/` hash: `TemplateStatus.to_dict()`, the shape `test-db status` writes, with `state` always `current` and the two hashes equal.
+
+### `confiture test-db status --format json`
+
+[test-db-status.schema.json](./json-schemas/test-db-status.schema.json) — `{name, state, stored_hash, current_hash}`: `state` is `current`, `stale` or `absent` (`stored_hash` is then `null`). The exit code carries the verdict — 0 current, 1 stale or absent — and the shape is the same in all three.
+
+### `confiture test-db clone --format json`
+
+[test-db-clone.schema.json](./json-schemas/test-db-clone.schema.json) — `{template, target, target_url, tablespace}` for a clone made with `CREATE DATABASE … WITH TEMPLATE`. `target_url` has its password redacted; `tablespace` is `null` for an on-disk clone.
+
+### `confiture test-db drop --format json`
+
+[test-db-drop.schema.json](./json-schemas/test-db-drop.schema.json) — `{target, dropped}`: `dropped` is `false`, at exit 0, when the database did not exist. Dropping a database that is not confiture-managed without `--force` writes the [error envelope](./json-schemas/error-envelope.schema.json).
+
+### `confiture test-db list --format json`
+
+[test-db-list.schema.json](./json-schemas/test-db-list.schema.json) — `{databases[]}`, each `{name, kind, detail}`: every confiture-managed database on the server, whichever project made it. `detail` is a template's `db/` hash or a clone's template name.
+
+### `confiture test-db prune --format json`
+
+[test-db-prune.schema.json](./json-schemas/test-db-prune.schema.json) — `{template, dropped[]}`: the clones of the template that were dropped; empty, at exit 0, when none was left.
+
+### `confiture test-db ram-setup --format json`
+
+[test-db-ram-setup.schema.json](./json-schemas/test-db-ram-setup.schema.json) — `{tablespace, location, owner, recreated, action_required, dropped_databases[]}` after (re)creating a tmpfs tablespace. When confiture cannot hand the location to the server's OS user, nothing is created: `action_required` is `true`, `action_command` names the privileged step, and the command exits 5.
+### `confiture seed apply --format json`
+[seed-apply.schema.json](./json-schemas/seed-apply.schema.json) — `{total, succeeded, failed, failed_files[], success, seed_profile}`: the seed files selected, how many applied, the names of those that failed (only under `--continue-on-error`, which exits 0), and the `--profile` applied or `null`. A file that fails without `--continue-on-error` rolls the run back and emits the [error envelope](./json-schemas/error-envelope.schema.json) (`SEED_001`) instead.
+### `confiture seed generate --format json`
+[seed-generate.schema.json](./json-schemas/seed-generate.schema.json) — `{table, output_path, row_count, column_count, success, error}`: the stub written, or, with `success: false` and exit 1, why none was (the table not found, the file already there without `--overwrite`).
 
 ### The schema model (`confiture.platform`)
 

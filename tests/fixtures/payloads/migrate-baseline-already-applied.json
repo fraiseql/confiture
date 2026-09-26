@@ -1,0 +1,25 @@
+{
+  "mode": "through",
+  "through": "002",
+  "dry_run": false,
+  "migrations": [
+    {
+      "version": "001",
+      "name": "t",
+      "status": "already_applied"
+    },
+    {
+      "version": "002",
+      "name": "add_note",
+      "status": "already_applied"
+    }
+  ],
+  "marked_count": 0,
+  "skipped_count": 2,
+  "ok": true,
+  "command": "migrate baseline",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

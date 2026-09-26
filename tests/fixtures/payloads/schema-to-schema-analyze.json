@@ -1,0 +1,20 @@
+{
+  "command": "migrate schema-to-schema analyze",
+  "tables": {
+    "posts": {
+      "strategy": "fdw",
+      "row_count": 2,
+      "estimated_seconds": 0.001
+    },
+    "users": {
+      "strategy": "fdw",
+      "row_count": 3,
+      "estimated_seconds": 0.001
+    }
+  },
+  "ok": true,
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

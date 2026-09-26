@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/seed-generate.schema.json",
+  "title": "confiture seed generate --format json",
+  "description": "Result of writing a commented-out INSERT stub for one table (SeedGenerationResult.to_dict). A stub the command declined to write (the table is not found or has no columns, the file exists without --overwrite, the introspection query failed) is this shape with success false and error set, and exits 1; a failure outside generation writes the error envelope (error-envelope.schema.json) instead.",
+  "type": "object",
+  "required": [
+    "table",
+    "output_path",
+    "row_count",
+    "column_count",
+    "success",
+    "error"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "table": {
+      "type": "string",
+      "description": "The table named on the command line, as given (unqualified; --schema names its schema)."
+    },
+    "output_path": {
+      "type": "string",
+      "description": "The stub file, <output-dir>/<seed-env>/<table>.sql, written or already present. When the table could not be read the path is <output-dir>/<table>.sql, without the seed-env directory, and no file is written."
+    },
+    "row_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Stub rows written (--rows); 0 when no stub was written."
+    },
+    "column_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Columns the table has; 0 when the table could not be read."
+    },
+    "success": {
+      "type": "boolean",
+      "description": "True when the stub was written."
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Why no stub was written; null on success."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "seed generate",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

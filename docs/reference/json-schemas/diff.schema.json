@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/diff.schema.json",
+  "title": "confiture diff --format json",
+  "description": "Result of comparing two SQL schema files (DiffResult.to_dict): every structural change from --from to --to, and how many of each counted kind. Exit 0 when has_changes is false, 1 when it is true. A file that is missing or that pglast rejects writes the error envelope (error-envelope.schema.json) instead of this shape.",
+  "type": "object",
+  "required": [
+    "has_changes",
+    "summary",
+    "changes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "has_changes": {
+      "type": "boolean",
+      "description": "True when changes is non-empty; the exit code says the same (1)."
+    },
+    "summary": {
+      "type": "object",
+      "description": "How many changes of each counted kind. Every key is always present, zero when there is none. Kinds outside these counts (views, routines, triggers, column type and nullability edits, …) appear in changes only.",
+      "required": [
+        "tables_added",
+        "tables_dropped",
+        "tables_renamed",
+        "columns_added",
+        "columns_dropped",
+        "indexes_added",
+        "indexes_dropped",
+        "foreign_keys_added",
+        "foreign_keys_dropped",
+        "constraints_added",
+        "constraints_dropped",
+        "enum_types_added",
+        "enum_types_dropped",
+        "sequences_added",
+        "sequences_dropped"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tables_added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tables_dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tables_renamed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "columns_added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "columns_dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "indexes_added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "indexes_dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "foreign_keys_added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "foreign_keys_dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "constraints_added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "constraints_dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "enum_types_added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "enum_types_dropped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sequences_added": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sequences_dropped": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "changes": {
+      "type": "array",
+      "description": "Each change as the wire carries it (WireChange), in the order the differ reports them. Every key is always present; the ones a kind does not use are null.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "table",
+          "column",
+          "old_value",
+          "new_value",
+          "details"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "The change kind as the wire spells it (`ADD_TABLE`, `DROP_COLUMN`, `CHANGE_COLUMN_TYPE`, `RENAME_TABLE`, `ADD_INDEX`, `ADD_UNIQUE_CONSTRAINT`, `ADD_ENUM_TYPE`, `ADD_SEQUENCE`, `ADD_FUNCTION`, `REPLACE_VIEW`, …): one per variant of the change union in confiture.core.schema_change."
+          },
+          "table": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The object the change is on, spelled as the schema file spells it — a table, or the enum type, sequence, view or routine itself (`fn_one()`). Confiture never adds a `public.` qualifier the file did not write. Null for a kind that names no object."
+          },
+          "column": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The column, for a column-level change; null otherwise."
+          },
+          "old_value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The value before, as text: a column's type (`INTEGER`), its nullability (`false`), a renamed table's old name, a replaced object's old definition. Null when the kind has no before."
+          },
+          "new_value": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The value after, as text: a column's type and default (`TEXT DEFAULT 'none'`), its nullability (`true`), a renamed table's new name, a routine's or view's `CREATE OR REPLACE` definition. Null when the kind has no after."
+          },
+          "details": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The variant's model objects, serialised, for kinds that carry more than a value: a whole table's `columns` and `constraints` (ADD_TABLE, DROP_TABLE), an index's `name`, `columns` and `unique`, a constraint's `name` and `columns`, a rename's `old_name` and `new_name`, an object's `kind`, `name` and `keyword`. Null for a column-level change."
+          }
+        }
+      }
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "diff",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

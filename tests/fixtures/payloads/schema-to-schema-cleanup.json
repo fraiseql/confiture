@@ -1,0 +1,8 @@
+{
+  "ok": true,
+  "command": "migrate schema-to-schema cleanup",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

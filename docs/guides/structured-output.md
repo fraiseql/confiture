@@ -294,9 +294,13 @@ confiture migrate validate --fix-naming --dry-run --format json
   "succeeded": number,
   "failed": number,
   "failed_files": string[],
-  "success": boolean
+  "success": boolean,
+  "seed_profile": string | null       // --profile
 }
 ```
+
+The published contract, types and all, is
+[seed-apply.schema.json](../reference/json-schemas/seed-apply.schema.json).
 
 **CSV Columns:** `metric, value`
 

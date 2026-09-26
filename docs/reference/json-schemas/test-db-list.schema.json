@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/test-db-list.schema.json",
+  "title": "confiture test-db list --format json",
+  "description": "Every confiture-managed template and clone on the server: each database whose COMMENT carries confiture's template or clone marker, whichever project provisioned it. Assembled by the command from ManagedDatabase.to_dict. An empty list means no managed database, not a failure.",
+  "type": "object",
+  "required": [
+    "databases"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "databases": {
+      "type": "array",
+      "description": "The managed databases, in pg_database order.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "kind",
+          "detail"
+        ],
+        "description": "One managed database (ManagedDatabase.to_dict).",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The database name."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "template",
+              "clone"
+            ],
+            "description": "Which marker its COMMENT carries."
+          },
+          "detail": {
+            "type": "string",
+            "description": "For a template, the db/ content hash it was built from; for a clone, the name of the template it was cloned from."
+          }
+        }
+      }
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "test-db list",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

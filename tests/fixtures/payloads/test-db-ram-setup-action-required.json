@@ -1,0 +1,15 @@
+{
+  "tablespace": "schemas_testdb_ram",
+  "location": "/dev/shm/schemas_testdb_ram",
+  "owner": "postgres",
+  "recreated": false,
+  "action_required": true,
+  "dropped_databases": [],
+  "action_command": "sudo install -d -o postgres -g postgres -m 700 /dev/shm/schemas_testdb_ram",
+  "ok": true,
+  "command": "test-db ram-setup",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

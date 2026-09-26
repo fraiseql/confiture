@@ -1,0 +1,23 @@
+{
+  "command": "migrate schema-to-schema verify",
+  "tables": {
+    "users": {
+      "source_count": 3,
+      "target_count": 0,
+      "match": false,
+      "difference": -3
+    },
+    "posts": {
+      "source_count": 2,
+      "target_count": 0,
+      "match": false,
+      "difference": -2
+    }
+  },
+  "matched": false,
+  "ok": true,
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

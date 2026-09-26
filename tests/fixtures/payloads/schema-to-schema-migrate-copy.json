@@ -1,0 +1,13 @@
+{
+  "command": "migrate schema-to-schema migrate",
+  "strategy": "copy",
+  "migrated": {
+    "users": 3,
+    "posts": 2
+  },
+  "ok": true,
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

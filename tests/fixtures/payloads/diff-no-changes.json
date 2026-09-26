@@ -1,0 +1,27 @@
+{
+  "has_changes": false,
+  "summary": {
+    "tables_added": 0,
+    "tables_dropped": 0,
+    "tables_renamed": 0,
+    "columns_added": 0,
+    "columns_dropped": 0,
+    "indexes_added": 0,
+    "indexes_dropped": 0,
+    "foreign_keys_added": 0,
+    "foreign_keys_dropped": 0,
+    "constraints_added": 0,
+    "constraints_dropped": 0,
+    "enum_types_added": 0,
+    "enum_types_dropped": 0,
+    "sequences_added": 0,
+    "sequences_dropped": 0
+  },
+  "changes": [],
+  "ok": true,
+  "command": "diff",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

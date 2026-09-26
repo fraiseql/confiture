@@ -1,0 +1,84 @@
+{
+  "valid": true,
+  "path": "examples/anonymization_profile_example.yaml",
+  "name": "production",
+  "version": "1.0",
+  "has_global_seed": true,
+  "strategies": {
+    "email_hash": {
+      "type": "hash",
+      "seed_env_var": "ANONYMIZATION_SEED"
+    },
+    "email_mask": {
+      "type": "email",
+      "seed_env_var": "ANONYMIZATION_SEED"
+    },
+    "phone_mask": {
+      "type": "phone",
+      "seed_env_var": "ANONYMIZATION_SEED"
+    },
+    "redact": {
+      "type": "redact",
+      "seed_env_var": null
+    }
+  },
+  "tables": {
+    "users": [
+      {
+        "column": "email",
+        "strategy": "email_mask",
+        "has_seed": false
+      },
+      {
+        "column": "phone",
+        "strategy": "phone_mask",
+        "has_seed": false
+      },
+      {
+        "column": "internal_id",
+        "strategy": "email_hash",
+        "has_seed": false
+      },
+      {
+        "column": "ssn",
+        "strategy": "redact",
+        "has_seed": false
+      },
+      {
+        "column": "api_token",
+        "strategy": "email_hash",
+        "has_seed": true
+      }
+    ],
+    "orders": [
+      {
+        "column": "customer_email",
+        "strategy": "email_mask",
+        "has_seed": false
+      },
+      {
+        "column": "internal_notes",
+        "strategy": "redact",
+        "has_seed": false
+      }
+    ],
+    "payments": [
+      {
+        "column": "card_last_four",
+        "strategy": "email_hash",
+        "has_seed": false
+      },
+      {
+        "column": "cvv",
+        "strategy": "redact",
+        "has_seed": false
+      }
+    ]
+  },
+  "ok": true,
+  "command": "validate-profile",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

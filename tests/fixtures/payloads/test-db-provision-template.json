@@ -1,0 +1,12 @@
+{
+  "name": "schemas_testdb_tpl",
+  "state": "current",
+  "stored_hash": "0c4a0e652daabd0730d109c605041ad2f9fdf5f5a3b9b941d22489381094fe3e",
+  "current_hash": "0c4a0e652daabd0730d109c605041ad2f9fdf5f5a3b9b941d22489381094fe3e",
+  "ok": true,
+  "command": "test-db provision-template",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

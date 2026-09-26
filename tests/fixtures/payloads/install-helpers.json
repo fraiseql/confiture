@@ -1,0 +1,14 @@
+{
+  "status": "installed",
+  "schema": "confiture",
+  "functions": [
+    "confiture.save_and_drop_dependent_views(schemas TEXT[])",
+    "confiture.recreate_saved_views()"
+  ],
+  "ok": true,
+  "command": "install-helpers",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

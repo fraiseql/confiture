@@ -1,0 +1,13 @@
+{
+  "template": "schemas_testdb_tpl",
+  "target": "schemas_testdb_clone1",
+  "target_url": "postgresql://localhost/schemas_testdb_clone1",
+  "tablespace": null,
+  "strategy": null,
+  "ok": true,
+  "command": "test-db clone",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

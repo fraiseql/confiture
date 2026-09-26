@@ -1,0 +1,50 @@
+{
+  "mode": "apply",
+  "success": true,
+  "error": null,
+  "applied_steps": [
+    "create_role",
+    "reassign_owned",
+    "default_privileges_tenant_app",
+    "default_privileges_tenant_readonly"
+  ],
+  "plan": {
+    "steps": [
+      {
+        "label": "create_role",
+        "sql": "CREATE ROLE migrator WITH LOGIN NOCREATEROLE",
+        "description": "Create role 'migrator' (absent from pg_roles)."
+      },
+      {
+        "label": "reassign_owned",
+        "sql": "REASSIGN OWNED BY postgres TO migrator",
+        "description": "Flip ownership of every postgres-owned object to 'migrator'.  Database-wide; not schema-scoped."
+      },
+      {
+        "label": "default_privileges_tenant_app",
+        "sql": "ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA tenant GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app",
+        "description": "Grant SELECT, INSERT, UPDATE, DELETE on future tables in 'tenant' to 'app'."
+      },
+      {
+        "label": "default_privileges_tenant_readonly",
+        "sql": "ALTER DEFAULT PRIVILEGES FOR ROLE migrator IN SCHEMA tenant GRANT SELECT ON TABLES TO readonly",
+        "description": "Grant SELECT on future tables in 'tenant' to 'readonly'."
+      }
+    ],
+    "observed_postgres_owned_schemas": [
+      "public",
+      "tenant"
+    ],
+    "apply_to_schemas": [
+      "tenant",
+      "public"
+    ],
+    "is_empty": false
+  },
+  "ok": true,
+  "command": "bootstrap",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

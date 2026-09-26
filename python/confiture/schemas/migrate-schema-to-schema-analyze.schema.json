@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-schema-to-schema-analyze.schema.json",
+  "title": "confiture migrate schema-to-schema analyze --format json",
+  "description": "The source's tables in one schema (--schema, default public), sized and each given a recommended strategy (SchemaToSchemaMigrator.analyze_tables). The CLI assembles the envelope around it. A failure writes the error envelope (error-envelope.schema.json) instead of this shape.",
+  "type": "object",
+  "required": [
+    "tables"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "tables": {
+      "type": "object",
+      "description": "Each table of the source's schema, by name; empty when the schema holds none.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "strategy",
+          "row_count",
+          "estimated_seconds"
+        ],
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "fdw",
+              "copy"
+            ],
+            "description": "`copy` at 10,000,000 rows or more, `fdw` below."
+          },
+          "row_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The table's live-tuple estimate from pg_stat_user_tables, or an exact COUNT(*) when the estimate is zero or missing."
+          },
+          "estimated_seconds": {
+            "type": "number",
+            "minimum": 0,
+            "description": "row_count over the strategy's nominal throughput, rounded to 3 decimals; at least 0.001 for a non-empty table, 0 for an empty one."
+          }
+        }
+      }
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate schema-to-schema analyze",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    }
+  }
+}

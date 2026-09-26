@@ -1,0 +1,14 @@
+{
+  "table": "t",
+  "output_path": "db/seeds/dev/t.sql",
+  "row_count": 0,
+  "column_count": 2,
+  "success": false,
+  "error": "File db/seeds/dev/t.sql already exists. Use --overwrite to replace.",
+  "ok": true,
+  "command": "seed generate",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

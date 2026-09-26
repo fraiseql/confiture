@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-baseline.schema.json",
+  "title": "confiture migrate baseline --format json",
+  "description": "What `migrate baseline` recorded as applied without running it. `mode` names the shape: `through` marks the local migration files up to --through, `from_db` copies the ledger rows of another database (--from-db). With --dry-run nothing is written and the payload says what would be. A failure writes the error envelope (error-envelope.schema.json) instead.",
+  "oneOf": [
+    {
+      "type": "object",
+      "description": "--through: each local migration file up to and including the named version, and what it became.",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "through",
+        "dry_run",
+        "migrations",
+        "marked_count",
+        "skipped_count"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "through"
+        },
+        "through": {
+          "type": "string",
+          "description": "The --through version."
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "True with --dry-run: nothing was written to the ledger."
+        },
+        "migrations": {
+          "type": "array",
+          "description": "The files up to --through, in version order; empty when the migrations directory holds none.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "name",
+              "status"
+            ],
+            "properties": {
+              "version": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "marked",
+                  "would_mark",
+                  "already_applied"
+                ],
+                "description": "`marked`: recorded now. `would_mark`: --dry-run, would be recorded. `already_applied`: the ledger had it; left as it was."
+              }
+            }
+          }
+        },
+        "marked_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Entries marked, or that would be with --dry-run."
+        },
+        "skipped_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Entries already in the ledger."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate baseline",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "--from-db: the source database's ledger rows copied into this one's, for the versions present in the local migrations directory.",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "source",
+        "through",
+        "copied",
+        "skipped",
+        "source_only",
+        "warnings",
+        "dry_run"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "from_db"
+        },
+        "source": {
+          "type": "string",
+          "description": "The --from-db DSN with its password replaced by `***`."
+        },
+        "through": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The --through cap on the copy; null when none was given."
+        },
+        "copied": {
+          "type": "array",
+          "description": "The source rows copied (or, with --dry-run, that would be), in version order, as the source ledger holds them.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "version",
+              "name",
+              "applied_at",
+              "execution_time_ms",
+              "checksum"
+            ],
+            "properties": {
+              "version": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "applied_at": {
+                "type": "string",
+                "description": "When the source applied it, as Python prints a timestamptz: `2026-09-26 13:56:41.386666+02:00` (a space, not `T`, between date and time)."
+              },
+              "execution_time_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "description": "The source ledger's recorded duration, in milliseconds; null when it recorded none."
+              },
+              "checksum": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The source ledger's SHA-256 of the file; null when it recorded none."
+              }
+            }
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Versions this database's ledger already had; not copied."
+        },
+        "source_only": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Versions the source applied that no local migration file has; not copied (a warning says so)."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "What the copy left out and why — source-only versions, versions above --through; empty if none."
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "True with --dry-run: nothing was written to the ledger."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate baseline",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    }
+  ]
+}

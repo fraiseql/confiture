@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/bootstrap.schema.json",
+  "title": "confiture bootstrap --format json",
+  "description": "The ownership bootstrap: the plan that would bring the database to the ownership its config declares, and — with --mode apply — the steps executed. `mode` names the shape: `check` (the default; exit 1 when `drift`), `dry-run` (--mode plan) and `apply`. A configuration, connection or scope refusal, or a failed apply (rolled back), writes the error envelope (error-envelope.schema.json) instead.",
+  "oneOf": [
+    {
+      "type": "object",
+      "description": "--mode check: whether the plan is non-empty.",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "drift",
+        "plan"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "check"
+        },
+        "drift": {
+          "type": "boolean",
+          "description": "True when the plan has steps; the command then exits 1."
+        },
+        "plan": {
+          "type": "object",
+          "description": "The plan (BootstrapPlan.to_dict): the steps that would bring the database to the ownership the config declares.",
+          "additionalProperties": false,
+          "required": [
+            "steps",
+            "observed_postgres_owned_schemas",
+            "apply_to_schemas",
+            "is_empty"
+          ],
+          "properties": {
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "sql",
+                  "description"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "description": "`create_role`, `reassign_owned`, or `default_privileges_<schema>_<role>`."
+                  },
+                  "sql": {
+                    "type": "string",
+                    "description": "The statement the step runs."
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "The step in one sentence."
+                  }
+                }
+              },
+              "description": "In execution order."
+            },
+            "observed_postgres_owned_schemas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Schemas holding at least one relation owned by `postgres`, sorted."
+            },
+            "apply_to_schemas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "`ownership.apply_to`, in config order."
+            },
+            "is_empty": {
+              "type": "boolean",
+              "description": "True when steps is empty."
+            }
+          }
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "bootstrap",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "--mode plan: the plan, nothing executed. The value is `dry-run`, not the flag's spelling; consumers match on it.",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "plan"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "dry-run"
+        },
+        "plan": {
+          "type": "object",
+          "description": "The plan (BootstrapPlan.to_dict): the steps that would bring the database to the ownership the config declares.",
+          "additionalProperties": false,
+          "required": [
+            "steps",
+            "observed_postgres_owned_schemas",
+            "apply_to_schemas",
+            "is_empty"
+          ],
+          "properties": {
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "sql",
+                  "description"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "description": "`create_role`, `reassign_owned`, or `default_privileges_<schema>_<role>`."
+                  },
+                  "sql": {
+                    "type": "string",
+                    "description": "The statement the step runs."
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "The step in one sentence."
+                  }
+                }
+              },
+              "description": "In execution order."
+            },
+            "observed_postgres_owned_schemas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Schemas holding at least one relation owned by `postgres`, sorted."
+            },
+            "apply_to_schemas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "`ownership.apply_to`, in config order."
+            },
+            "is_empty": {
+              "type": "boolean",
+              "description": "True when steps is empty."
+            }
+          }
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "bootstrap",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "--mode apply: the plan, executed in one transaction (BootstrapResult.to_dict).",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "success",
+        "error",
+        "applied_steps",
+        "plan"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "const": "apply"
+        },
+        "success": {
+          "type": "boolean",
+          "const": true,
+          "description": "Always true in this shape: a failed apply is rolled back and writes the error envelope."
+        },
+        "error": {
+          "type": "null",
+          "description": "Always null in this shape, for the same reason."
+        },
+        "applied_steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The label of each step executed, in order; empty when the plan was."
+        },
+        "plan": {
+          "type": "object",
+          "description": "The plan (BootstrapPlan.to_dict): the steps that would bring the database to the ownership the config declares.",
+          "additionalProperties": false,
+          "required": [
+            "steps",
+            "observed_postgres_owned_schemas",
+            "apply_to_schemas",
+            "is_empty"
+          ],
+          "properties": {
+            "steps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "label",
+                  "sql",
+                  "description"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "description": "`create_role`, `reassign_owned`, or `default_privileges_<schema>_<role>`."
+                  },
+                  "sql": {
+                    "type": "string",
+                    "description": "The statement the step runs."
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "The step in one sentence."
+                  }
+                }
+              },
+              "description": "In execution order."
+            },
+            "observed_postgres_owned_schemas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Schemas holding at least one relation owned by `postgres`, sorted."
+            },
+            "apply_to_schemas": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "`ownership.apply_to`, in config order."
+            },
+            "is_empty": {
+              "type": "boolean",
+              "description": "True when steps is empty."
+            }
+          }
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "bootstrap",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    }
+  ]
+}
