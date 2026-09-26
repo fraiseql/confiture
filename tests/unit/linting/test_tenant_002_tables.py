@@ -186,3 +186,14 @@ def test_tenant_002_is_on_when_the_project_declares_tenancy() -> None:
 @pytest.mark.parametrize("ignored", [["tenant_002"], ["tenant"]])
 def test_ignore_still_turns_it_off(ignored: list[str]) -> None:
     assert "tenant_002" not in resolve_selection(None, ignored, declared=frozenset({"tenancy"}))
+
+
+def test_a_table_defined_twice_is_reported_once(tmp_path: Path) -> None:
+    """``build_001`` reports the duplicate; tenancy is a property of the object."""
+    findings, _ = _findings(
+        tmp_path,
+        "CREATE TABLE IF NOT EXISTS app.tb_order_line (id uuid PRIMARY KEY);\n"
+        "CREATE TABLE IF NOT EXISTS app.tb_order_line (id uuid PRIMARY KEY);\n",
+    )
+
+    assert [f.object_name for f in findings] == ["app.tb_order_line"]

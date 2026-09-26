@@ -11,7 +11,9 @@ finding; a declaration is honest or it is a finding too (a reason is required, a
 a table declared global cannot also carry the discriminator).
 
 A partition follows its parent: it is judged with the table it belongs to, never
-on its own.
+on its own. A table defined twice is judged once, by its first definition
+(:func:`~confiture.core.linting.inventory.distinct`); ``build_001`` reports the
+duplicate.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from confiture.core.linting.inventory import distinct
 from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity
 
 if TYPE_CHECKING:
@@ -86,7 +89,7 @@ def table_findings(
     fix_scoped = f"add {tenancy.discriminator} NOT NULL" + (
         f" REFERENCES {tenancy.root}" if tenancy.root else ""
     )
-    for table in tables:
+    for table in distinct(tables):
         if table.is_partition or table.is_temporary or _table_identity(table) == root:
             continue
         column = next((c for c in table.columns if c.folded == discriminator), None)
