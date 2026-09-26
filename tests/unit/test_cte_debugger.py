@@ -120,3 +120,37 @@ def test_cte_debugger_step_result_includes_timing():
     session = debugger.debug("WITH x AS (SELECT 1 AS v) SELECT * FROM x")
 
     assert session.steps[0].execution_time_ms >= 0
+
+
+def _cursor_conn(**cursor_attrs: object) -> MagicMock:
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.__enter__ = MagicMock(return_value=mock_cursor)
+    mock_cursor.__exit__ = MagicMock(return_value=False)
+    for name, value in cursor_attrs.items():
+        setattr(mock_cursor, name, value)
+    mock_conn.cursor.return_value = mock_cursor
+    return mock_conn
+
+
+def test_a_step_duration_is_whole_milliseconds(monkeypatch):
+    """The timing vocabulary promises integer milliseconds: 1.78 ms is 1, not 1.78."""
+    clock = iter([10.0, 10.00178])
+    monkeypatch.setattr("confiture.core.cte_debugger.time.monotonic", lambda: next(clock))
+    conn = _cursor_conn(description=[("v",)])
+    conn.cursor.return_value.fetchmany.return_value = [(1,)]
+
+    step = CTEDebugger(conn).debug("WITH x AS (SELECT 1 AS v) SELECT * FROM x").steps[0]
+
+    assert (type(step.execution_time_ms), step.execution_time_ms) == (int, 1)
+
+
+def test_a_failed_step_duration_is_whole_milliseconds(monkeypatch):
+    clock = iter([10.0, 10.00278])
+    monkeypatch.setattr("confiture.core.cte_debugger.time.monotonic", lambda: next(clock))
+    conn = _cursor_conn()
+    conn.cursor.return_value.execute.side_effect = psycopg.ProgrammingError("boom")
+
+    step = CTEDebugger(conn).debug("WITH x AS (SELECT 1) SELECT * FROM x").steps[0]
+
+    assert (type(step.execution_time_ms), step.execution_time_ms) == (int, 2)

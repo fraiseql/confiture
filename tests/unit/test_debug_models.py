@@ -11,7 +11,7 @@ def _make_step(name: str = "base", error: str | None = None) -> CTEStepResult:
         row_count=0 if error else 3,
         columns=[] if error else ["id", "name"],
         rows=[] if error else [(1, "Alice"), (2, "Bob"), (3, "Carol")],
-        execution_time_ms=5.0,
+        execution_time_ms=5,
         error=error,
     )
 
