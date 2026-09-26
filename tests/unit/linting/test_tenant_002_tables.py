@@ -168,3 +168,23 @@ def test_a_table_defined_twice_is_reported_once(tmp_path: Path) -> None:
     )
 
     assert [f.object_name for f in findings] == ["app.tb_order_line"]
+
+
+def test_discriminators_that_reference_different_root_columns_are_reported(
+    tmp_path: Path,
+) -> None:
+    """Which root column is the tenant id is then undecided, and every rule that
+    needs it stops judging; the disagreement itself is the finding, on the root."""
+    findings, _ = _findings(
+        tmp_path,
+        "ALTER TABLE management.tb_organization ADD COLUMN code text NOT NULL UNIQUE;\n"
+        "CREATE TABLE app.tb_order (id uuid PRIMARY KEY, "
+        "tenant_id uuid NOT NULL REFERENCES management.tb_organization (id));\n"
+        "CREATE TABLE app.tb_invoice (id uuid PRIMARY KEY, "
+        "tenant_id text NOT NULL REFERENCES management.tb_organization (code));\n",
+    )
+
+    (finding,) = findings
+    assert finding.object_name == "management.tb_organization"
+    assert "code" in finding.message
+    assert "id" in finding.message

@@ -671,7 +671,9 @@ It reports, at `warning`:
 - a nullable discriminator, at the column;
 - a discriminator that does not reference the root;
 - a declaration that cannot hold: `tenant-global` without a reason, or a table
-  declared global that carries the discriminator anyway.
+  declared global that carries the discriminator anyway;
+- on the root, discriminators that reference different columns of it: which one is
+  the tenant id is then undecided, and the rules that need it do not judge.
 
 A column added by a later `ALTER TABLE` counts (the model folds it), and a
 partition is judged with its parent, not on its own. `--select tenant_002` on a

@@ -203,6 +203,19 @@ def _root_references(
             yield constraint
 
 
+def referenced_root_columns(
+    root: SchemaObject, tables: Mapping[tuple[str, str], TableScope]
+) -> set[str]:
+    """The columns of the root that tenant tables' discriminators reference."""
+    return {
+        ref
+        for entry in tables.values()
+        if entry.scope is Scope.TENANT and entry.column is not None
+        for fk in _root_references(entry.table, entry.column.folded, object_identity(root))
+        for ref in fk.ref_columns or primary_key(root)
+    }
+
+
 def tenant_id_column(
     root: SchemaObject, tables: Mapping[tuple[str, str], TableScope]
 ) -> str | None:
@@ -218,13 +231,7 @@ def tenant_id_column(
     is not guessed.
     """
     primary = primary_key(root)
-    referenced = {
-        ref
-        for entry in tables.values()
-        if entry.scope is Scope.TENANT and entry.column is not None
-        for fk in _root_references(entry.table, entry.column.folded, object_identity(root))
-        for ref in fk.ref_columns or primary
-    }
+    referenced = referenced_root_columns(root, tables)
     if referenced:
         return referenced.pop() if len(referenced) == 1 else None
     return primary[0] if len(primary) == 1 else None
@@ -287,10 +294,26 @@ def _column_findings(entry: TableScope, tenancy: TenancyConfig) -> Iterator[Tena
         )
 
 
+def _root_findings(entry: TableScope, scopes: TenantScopes) -> Iterator[TenancyFinding]:
+    """The discriminators must agree on which column of the root is the tenant id."""
+    referenced = sorted(referenced_root_columns(entry.table, scopes.tables))
+    if len(referenced) > 1:
+        columns = ", ".join(referenced)
+        yield finding(
+            entry.table,
+            f"{entry.table.qualified}: the {scopes.tenancy.discriminator} columns reference "
+            f"different columns of it ({columns}), so which one is the tenant id is "
+            "undecided and the tenant rules that need it do not judge",
+            f"reference one column of {scopes.tenancy.root} from every "
+            f"{scopes.tenancy.discriminator}",
+        )
+
+
 def table_findings(scopes: TenantScopes) -> Iterator[TenancyFinding]:
     """``tenant_002``: every table whose tenancy is undecided, or declared in a way that cannot hold."""
     for entry in scopes:
         if entry.scope is Scope.ROOT:
+            yield from _root_findings(entry, scopes)
             continue
         if declared_global(entry.table, scopes.tenancy, scopes.declarations):
             yield from _declaration_findings(entry, scopes.tenancy)
