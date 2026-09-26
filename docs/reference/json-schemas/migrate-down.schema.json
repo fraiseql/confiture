@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-down.schema.json",
+  "title": "confiture migrate down --format json",
+  "description": "Result of rolling back the most recent migrations (MigrateDownResult.to_dict). rolled_back is newest \u2192 oldest and shares its name with migrate down-to's, so a consumer counting it reads either command. A failure writes the error envelope (error-envelope.schema.json) instead of this shape.",
+  "type": "object",
+  "required": [
+    "success",
+    "rolled_back",
+    "checksums_verified",
+    "total_duration_ms",
+    "warnings",
+    "error"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "rolled_back": {
+      "type": "array",
+      "items": {
+        "$ref": "_common.schema.json#/$defs/MigrationEntry"
+      },
+      "description": "Migrations rolled back, newest \u2192 oldest."
+    },
+    "checksums_verified": {
+      "type": "boolean",
+      "description": "True when the checksum verifier ran and found no mismatch."
+    },
+    "total_duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wall-clock time of the operation, in milliseconds."
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Non-fatal warning messages; empty if none."
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Always null in this shape: a command that fails writes the error envelope (error-envelope.schema.json) instead."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate down",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

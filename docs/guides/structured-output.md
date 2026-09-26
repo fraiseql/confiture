@@ -84,15 +84,22 @@ drop_index,old_users_idx
 {
   "success": boolean,
   "files_processed": number,
-  "schema_size_bytes": number,
+  "schema_size_bytes": number,        // the written file, in bytes
   "output_path": string,
   "hash": string | null,
   "execution_time_ms": number,
   "seed_files_applied": number,
-  "warnings": string[],
-  "error": string | null
+  "artifact_path": string | null,     // --dump
+  "artifact_hash": string | null,
+  "seed_profile": string | null,
+  "warnings": [{"code": string, "severity": string, "message": string, "file": string | null}],
+  "error": string | null,
+  "duplicates": object[]              // build_001 findings
 }
 ```
+
+The published contract, types and all, is
+[build.schema.json](../reference/json-schemas/build.schema.json).
 
 **CSV Columns:** `metric, value`
 
@@ -122,7 +129,7 @@ confiture build --format csv --report metrics.csv
     {
       "version": "20260403120000",
       "name": "create_users",
-      "execution_time_ms": 12,
+      "duration_ms": 12,
       "rows_affected": 0
     }
   ],

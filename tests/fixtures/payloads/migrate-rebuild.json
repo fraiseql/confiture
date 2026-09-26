@@ -1,0 +1,28 @@
+{
+  "success": true,
+  "schemas_dropped": [
+    "confiture",
+    "public"
+  ],
+  "ddl_statements_executed": 1,
+  "marked": [
+    {
+      "version": "001",
+      "name": "t",
+      "duration_ms": 0,
+      "rows_affected": 0
+    }
+  ],
+  "total_duration_ms": 6,
+  "dry_run": false,
+  "warnings": [],
+  "error": null,
+  "seeds_applied": null,
+  "verified": true,
+  "ok": true,
+  "command": "migrate rebuild",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

@@ -349,7 +349,7 @@ from confiture.models.results import MigrateUpResult
 ```python
 from confiture.models.results import MigrationApplied
 
-# Fields: version, name, execution_time_ms, rows_affected
+# Fields: version, name, duration_ms, rows_affected
 ```
 
 ### `CurrentRevision`

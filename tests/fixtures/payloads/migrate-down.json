@@ -1,0 +1,21 @@
+{
+  "success": true,
+  "rolled_back": [
+    {
+      "version": "001",
+      "name": "t",
+      "duration_ms": 0,
+      "rows_affected": 0
+    }
+  ],
+  "total_duration_ms": 0,
+  "checksums_verified": true,
+  "warnings": [],
+  "error": null,
+  "ok": true,
+  "command": "migrate down",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-reinit.schema.json",
+  "title": "confiture migrate reinit --format json",
+  "description": "Result of clearing the tracking table and re-marking the migration files as applied (MigrateReinitResult.to_dict). A failure writes the error envelope (error-envelope.schema.json) instead of this shape.",
+  "type": "object",
+  "required": [
+    "success",
+    "deleted_count",
+    "marked",
+    "dry_run",
+    "total_duration_ms",
+    "warnings",
+    "error"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "deleted_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Tracking rows removed."
+    },
+    "marked": {
+      "type": "array",
+      "items": {
+        "$ref": "_common.schema.json#/$defs/MigrationEntry"
+      },
+      "description": "Migrations re-marked as applied, oldest \u2192 newest; in --dry-run, those that would be."
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "total_duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wall-clock time of the operation, in milliseconds."
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Non-fatal warning messages; empty if none."
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Always null in this shape: a command that fails writes the error envelope (error-envelope.schema.json) instead."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate reinit",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}
