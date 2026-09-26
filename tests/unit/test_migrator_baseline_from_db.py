@@ -241,3 +241,45 @@ def test_from_db_report_never_carries_the_source_password(tmp_path) -> None:
 
     assert "hunter2" not in repr(report)
     assert report["source"].startswith("postgresql://admin:")
+
+
+def test_from_db_report_writes_applied_at_in_iso_8601(tmp_path) -> None:
+    """``applied_at`` is ISO 8601 (`T` between date and time), as every payload's timestamp."""
+    from contextlib import nullcontext
+    from datetime import UTC, datetime
+    from unittest.mock import MagicMock, patch
+
+    from confiture.cli.commands.migrate import baseline
+
+    config = tmp_path / "local.yaml"
+    config.write_text("database_url: postgresql://localhost/target\n")
+    migrator = MagicMock()
+    migrator.baseline_from_db.return_value = {
+        "copied": [
+            {
+                "version": "002",
+                "name": "add_note",
+                "applied_at": datetime(2026, 9, 26, 11, 56, 41, 386666, tzinfo=UTC),
+                "execution_time_ms": 0,
+                "checksum": None,
+            }
+        ],
+        "skipped": [],
+        "source_only": [],
+        "warnings": [],
+        "dry_run": True,
+    }
+    with (
+        patch.object(baseline, "open_connection", return_value=nullcontext(MagicMock())),
+        patch.object(baseline._core_migrator, "Migrator", return_value=migrator),
+    ):
+        report = baseline._baseline_from_db_flow(
+            from_db="postgresql://source-host/app",
+            through=None,
+            source_table=None,
+            migrations_dir=tmp_path,
+            config=config,
+            dry_run=True,
+        )
+
+    assert report["copied"][0]["applied_at"] == "2026-09-26T11:56:41.386666+00:00"
