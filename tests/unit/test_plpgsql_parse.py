@@ -368,10 +368,6 @@ $$"""
     #: majors — an unresolved type is a `PLpgSQL_rec` on 8 — so the kind is not
     #: pinned; what a consumer reads, the SQL and where it is, is.
     #:
-    #: The composite variables carry no initialiser on purpose. libpg_query
-    #: never serialises a ``PLpgSQL_rec``'s ``default_val``, and on pglast 8 a
-    #: variable of any type the stub cannot resolve is a ``PLpgSQL_rec`` —
-    #: rewritten or not; see :meth:`test_a_composite_initialiser_is_lost_unrewritten_too`.
     FRAGMENTS: ClassVar[list[tuple[str, int]]] = [
         ("tags", 5),
         ("v_items := p", 7),
@@ -425,14 +421,12 @@ $$"""
         for constructor in ("ARRAY[]", "ARRAY[1]", "ARRAY(SELECT 1)"):
             assert constructor in compiled.text
 
-    @needs_the_stub
-    def test_a_composite_initialiser_is_lost_unrewritten_too(self) -> None:
-        """A limit of the serialiser, not of the blanking — pinned so it is known.
+    def test_a_composite_initialiser_is_read_unrewritten_too(self) -> None:
+        """``v t := app.fn_x()`` needs no rewrite, and its initialiser is read (#455).
 
-        ``v t := app.fn_x()`` needs no rewrite at all, and its initialiser is
-        still not in the tree: an unresolved type is a ``PLpgSQL_rec`` on
-        pglast 8, and a record's ``default_val`` is not serialised. A row that
-        starts failing is libpg_query writing it at last.
+        On pglast 8 an unresolved type is a ``PLpgSQL_rec``, whose
+        ``default_val`` libpg_query does not serialise; the fragment reader
+        reads it from the declaration instead.
         """
         statement = (
             "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
@@ -441,7 +435,7 @@ $$"""
         compiled = parse_body(statement, body_at=_as_at(statement))
 
         assert compiled.neutralised == ()
-        assert [f.text for f in fragments(compiled)] == []
+        assert [f.text for f in fragments(compiled)] == ["app.fn_x()"]
 
     def test_no_fragment_is_unread(self) -> None:
         assert [f.finding for f in fragments(self._compiled()) if f.finding] == []

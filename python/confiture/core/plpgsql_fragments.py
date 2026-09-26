@@ -20,9 +20,14 @@ What cannot be read is a :attr:`Fragment.finding`, never a dropped fragment: a
 slot :data:`SLOTS` does not name, an assignment with no assignment token, or
 text pglast rejects. Each consumer reports it in its own terms.
 
-What the compiler does not serialise cannot be read here: a ``record``
-variable's default (``r record := f()``) comes back with no ``default_val`` on
-every supported pglast, so a call written only there is not seen.
+One slot the compiler fills but never serialises is read from the text
+instead: a ``record`` variable's initialiser (``r record := f()``) comes back
+as a ``PLpgSQL_rec`` with a name and a line and no ``default_val`` on every
+supported pglast — and on pglast 8 so does a variable of any type the compiler
+stub cannot resolve (``v app.t := f()``). The declaration starts on that line
+of the body, so the scanner reads it from there: its name, then up to the first
+``:=``, ``=`` or ``DEFAULT`` outside parentheses, then the value up to its
+``;``. A declaration not found where the compiler says is a finding (#455).
 
 This module is the one walker of a compiled PL/pgSQL tree:
 :func:`nodes` yields every node and :func:`fragments` every fragment, and
@@ -42,6 +47,7 @@ import pglast.parser
 
 from confiture.core import sql_lexer
 from confiture.core.plpgsql_parse import Compiled
+from confiture.core.schema_identity import identifier_identity
 
 #: The key the compiler gives every embedded SQL fragment.
 _EXPR = "PLpgSQL_expr"
@@ -73,6 +79,8 @@ _S, _E, _A, _D = Mode.STATEMENT, Mode.EXPRESSION, Mode.ASSIGNMENT, Mode.DYNAMIC
 SLOTS: Mapping[tuple[str, str], Mode] = {
     ("PLpgSQL_var", "default_val"): _E,
     ("PLpgSQL_var", "cursor_explicit_expr"): _S,
+    #: Filled from the declaration's text, never by the serialiser (#455).
+    ("PLpgSQL_rec", "default_val"): _E,
     ("PLpgSQL_stmt_assign", "expr"): _A,
     ("PLpgSQL_stmt_if", "cond"): _E,
     ("PLpgSQL_if_elsif", "cond"): _E,
@@ -113,6 +121,14 @@ SLOTS: Mapping[tuple[str, str], Mode] = {
 _OPENERS = frozenset({"ASCII_40", "ASCII_91"})
 _CLOSERS = frozenset({"ASCII_41", "ASCII_93"})
 _ASSIGNS = frozenset({"COLON_EQUALS", "ASCII_61"})
+
+#: A record variable, the slot its initialiser is given, and what ends a declaration.
+_REC = "PLpgSQL_rec"
+_DEFAULT_VAL = "default_val"
+_DEFAULT = "DEFAULT"
+_DECLARE = "DECLARE"
+_FOR = "FOR"
+_SEMICOLON = "ASCII_59"
 
 
 @dataclass(frozen=True)
@@ -221,6 +237,10 @@ def nodes(tree: Any, *, line: int = 1) -> Iterator[Node]:
 def fragments(compiled: Compiled) -> Iterator[Fragment]:
     """Every SQL fragment in a compiled body, each read by the slot it sits in."""
     for node in nodes(compiled.tree):
+        if node.kind == _REC and "lineno" in node.fields:
+            initialiser = _record_initialiser(compiled, node)
+            if initialiser is not None:
+                yield initialiser
         for slot, value in node.fields.items():
             for text in _expressions(value):
                 yield Fragment.read(
@@ -263,3 +283,92 @@ def _assignment(text: str) -> tuple[str, int] | None:
         elif depth == 0 and token.name in _ASSIGNS:
             return text[: token.start].strip(), token.end + 1
     return None
+
+
+def _record_initialiser(compiled: Compiled, node: Node) -> Fragment | None:
+    """A declared record variable's initialiser, read from its declaration's text.
+
+    ``None`` for a declaration with no initialiser; a finding for one that is
+    not on the line the compiler gives it.
+    """
+    name = node.fields.get("refname", "")
+    located = _declaration(compiled, name, node.line)
+    if located is None:
+        return Fragment(
+            kind=_REC,
+            slot=_DEFAULT_VAL,
+            text="",
+            line=node.line,
+            node=node.fields,
+            finding=f"record variable {name}: no declaration on body line {node.line}",
+        )
+    body, value = located
+    if value is None:
+        return None
+    written = body[value[0] : value[1]]
+    start = value[0] + len(written) - len(written.lstrip())
+    end = value[0] + len(written.rstrip())
+    line = node.line + body.count("\n", _line_start(body, node.line), start)
+    return Fragment.read(
+        kind=_REC, slot=_DEFAULT_VAL, text=body[start:end], line=line, node=node.fields
+    )
+
+
+def _declaration(
+    compiled: Compiled, name: str, line: int
+) -> tuple[str, tuple[int, int] | None] | None:
+    """``(body, value span)`` of *name*'s declaration on body *line*; ``None`` if absent.
+
+    A declaration starts a line's first token, or follows ``DECLARE`` or a
+    ``;``. Its value span is ``None`` when it ends with no initialiser, and for
+    the variable a ``FOR … IN <cursor>`` loop declares itself.
+    """
+    if compiled.body is None:
+        return None
+    body = compiled.text[compiled.body[0] : compiled.body[1]]
+    low, high = _line_start(body, line), _line_start(body, line + 1)
+    toks = sql_lexer.tokens(body)
+    loop_variable = False
+    for index, token in enumerate(toks):
+        if (
+            not low <= token.start < high
+            or identifier_identity(body[token.start : token.end + 1]) != name
+        ):
+            continue
+        previous = toks[index - 1] if index else None
+        if previous is None or previous.start < low or previous.name in {_DECLARE, _SEMICOLON}:
+            ended, value = _value(toks[index + 1 :])
+            if ended:
+                return body, value
+        loop_variable = loop_variable or (previous is not None and previous.name == _FOR)
+    return (body, None) if loop_variable else None
+
+
+def _value(toks: list[Any]) -> tuple[bool, tuple[int, int] | None]:
+    """Whether the declaration *toks* follow ends, and its initialiser's span.
+
+    The span is ``None`` for a declaration with no initialiser. One that does
+    not end — the scanner stopped before a ``;`` — is no declaration.
+    """
+    depth = 0
+    start: int | None = None
+    for token in toks:
+        if token.name in _OPENERS:
+            depth += 1
+        elif token.name in _CLOSERS:
+            depth -= 1
+        elif depth == 0 and token.name == _SEMICOLON:
+            return True, None if start is None else (start, token.start)
+        elif depth == 0 and start is None and token.name in {*_ASSIGNS, _DEFAULT}:
+            start = token.end + 1
+    return False, None
+
+
+def _line_start(text: str, line: int) -> int:
+    """The offset *line* (1-based) starts at in *text*; its length past the last."""
+    at = 0
+    for _ in range(line - 1):
+        at = text.find("\n", at) + 1
+        if at == 0:
+            return len(text)
+    return at

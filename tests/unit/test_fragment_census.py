@@ -9,8 +9,9 @@ that was not parsed unless its shape is in ``UNREAD_FRAGMENT_SHAPES`` with a
 reason. The next unread shape fails here instead of going quiet.
 
 ``SLOTS`` is pinned the other way too: one body writes every statement that
-carries SQL, so each entry is a slot this libpg_query really fills and each
-slot it fills is an entry. It runs on each pglast major in the matrix leg.
+carries SQL, so each entry is a slot this libpg_query really fills — or, for a
+record variable's initialiser, one the reader fills from the declaration — and
+each slot it fills is an entry. It runs on each pglast major in the matrix leg.
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ EVERY_SLOT = """CREATE FUNCTION app.every_slot(p int) RETURNS SETOF int LANGUAGE
 DECLARE
   v int := g();
   r record;
+  r2 record := rr();
   a int[];
   m int[];
   c CURSOR (k int) FOR SELECT * FROM t1 WHERE id = k;
