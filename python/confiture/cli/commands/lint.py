@@ -334,8 +334,22 @@ def lint(
         fail(e, json_mode=is_json(format_type), output_file=output)
 
 
+def _with_rule_catalogue(doc: str) -> str:
+    """``doc`` with its ``{rule_catalogue}`` line replaced by the registry's paragraphs.
+
+    The indent is read off that line: Python 3.13 dedents docstrings at compile
+    time, so the same source gives six spaces on 3.11 and none on 3.13.
+    """
+    lines = doc.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() == "{rule_catalogue}":
+            indent = line[: len(line) - len(line.lstrip())]
+            lines[index] = render_help_catalogue(indent=indent)
+    return "\n".join(lines)
+
+
 # The rule paragraphs come from the registry `--list-rules` prints (#430).
-lint.__doc__ = (lint.__doc__ or "").replace("      {rule_catalogue}", render_help_catalogue())
+lint.__doc__ = _with_rule_catalogue(lint.__doc__ or "")
 
 
 def _passed_explicitly(ctx: typer.Context, name: str) -> bool:
