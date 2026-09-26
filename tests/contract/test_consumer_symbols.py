@@ -355,9 +355,26 @@ MEMBERS: tuple[Members, ...] = (
     Members(
         "fraisier",
         "confiture:MigrateUpResult",
-        ("success", "migrations_applied"),
-        f"{_FRAISIER_DBOPS}:487",
+        ("migrations_applied",),
+        f"{_FRAISIER_DBOPS}:533",
         "1.14.0",
+    ),
+    # fraiseql/fraisier#417: a run that did not complete is named, not dropped —
+    # `_incomplete_reason` branches on `success` (pinned since 1.14.0) and reads
+    # the summary, the halted migration and what is left.
+    Members(
+        "fraisier",
+        "confiture:MigrateUpResult",
+        ("success", "error_summary", "skipped_superuser", "pending"),
+        f"{_FRAISIER_DBOPS}:299",
+        "1.24.0",
+    ),
+    Members(
+        "fraisier",
+        "confiture.models.results:SkippedMigration",
+        ("version", "name", "reason"),
+        f"{_FRAISIER_DBOPS}:299",
+        "1.24.0",
     ),
     Members(
         "fraisier",

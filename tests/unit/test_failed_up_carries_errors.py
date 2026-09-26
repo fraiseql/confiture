@@ -61,7 +61,16 @@ def _up(
         return session.up(**kwargs)
 
 
+def _assert_one_answer(result: MigrateUpResult) -> None:
+    """``success``, ``has_errors`` and ``halted`` never give two answers to one question."""
+    assert result.has_errors is (not result.success)
+    if result.halted:
+        assert result.has_errors
+    assert (not result.success) is bool(result.errors)
+
+
 def _assert_failed_with_errors(result: MigrateUpResult) -> None:
+    _assert_one_answer(result)
     assert result.success is False
     assert result.errors, "success=False with no errors"
     assert all(message.strip() for message in result.errors)
@@ -164,3 +173,39 @@ def test_a_rehearsal_that_halts_and_then_fails_to_release_reports_both(tmp_path)
     assert len(result.errors) == 2
     assert "Halted at 001_m1" in result.errors[0]
     assert result.errors[1] == "connection lost"
+
+
+@MODES
+def test_a_superuser_halt_says_it_halted(tmp_path, rehearsal):
+    """``halted`` names the other way a run ends short, beside ``has_errors`` (#422)."""
+    session, files = _session(tmp_path, count=2)
+    classes = {
+        files[0]: _migration("001", "m1", requires_superuser=True),
+        files[1]: _migration("002", "m2"),
+    }
+
+    result = _up(session, classes, dry_run_execute=rehearsal)
+
+    assert result.halted is True
+    _assert_one_answer(result)
+
+
+@MODES
+def test_a_failed_migration_did_not_halt(tmp_path, rehearsal):
+    session, files = _session(tmp_path, count=1)
+    session._migrator.apply.side_effect = RuntimeError("boom")
+
+    result = _up(session, {files[0]: _migration("001", "m1")}, dry_run_execute=rehearsal)
+
+    assert (result.success, result.halted) == (False, False)
+    _assert_one_answer(result)
+
+
+@MODES
+def test_a_completed_run_did_not_halt(tmp_path, rehearsal):
+    session, files = _session(tmp_path, count=1)
+
+    result = _up(session, {files[0]: _migration("001", "m1")}, dry_run_execute=rehearsal)
+
+    assert (result.success, result.halted) == (True, False)
+    _assert_one_answer(result)

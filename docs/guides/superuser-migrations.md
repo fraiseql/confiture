@@ -56,7 +56,8 @@ When `migrate up` encounters a migration with `requires_superuser=True`, it:
 3. Exits with code `1`.
 
 The run did not finish, so it is not a success: `MigrateUpResult.success` is
-`False`, `has_errors` is `True`, and `errors` names the migration that stopped
+`False`, `has_errors` is `True`, `halted` is `True` (it is `False` for a
+migration that failed), and `errors` names the migration that stopped
 the chain, the `apply-as` command and how many migrations are left in `pending`
 (the versions themselves are in `pending`, the halted one in
 `skipped_superuser`). `--dry-run-execute` halts where `up` would, and reports it
