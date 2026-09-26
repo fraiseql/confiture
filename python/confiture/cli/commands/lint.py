@@ -38,6 +38,7 @@ from confiture.core.linting.gate import (
 from confiture.core.linting.rule_registry import (
     LEGACY_CODE_ALIASES,
     LINT_RULES,
+    render_help_catalogue,
 )
 from confiture.core.linting.selection import (
     apply_baseline,
@@ -187,10 +188,9 @@ def lint(
     """Validate schema against best practices.
 
     PROCESS:
-      Runs the default rule set — naming_001, naming_002, pk_001, doc_001–doc_004,
-      build_001, build_002, sec_001, qual_001 — plus whatever `--select` adds.
-      `--list-rules` prints the full catalogue with codes and families. Results
-      in table, JSON or CSV.
+      Runs the rules on by default (listed under RULES) plus whatever `--select`
+      adds. `--list-rules` prints the full catalogue with codes and families.
+      Results in table, JSON or CSV.
 
     RULES:
       Select by code or family: `--select pk,naming`, `--select naming_001`,
@@ -198,18 +198,10 @@ def lint(
       `--select default,replica` is the usual lint plus one opt-in family.
       `--ignore` wins over `--select`; an unknown selector exits 5.
 
-      naming_001, naming_002, pk_001, doc_001–doc_004, build_001, build_002,
-      build_003, sec_001, qual_001 — on by default. build_001 is the one that
-      emits `error`, so a plain lint fails on a duplicate definition.
+      {rule_catalogue}
 
-      Opt-in, each needing its configuration as well as its selector:
-      acl_001 (`acls.lint_enabled: true`), tenant_001, replica_001, sec_002
-      (`security_lint.enabled: true`), func_001 (`function_coverage.enabled:
-      true`), own_001 / own_002 (an `ownership:` block), qual_002 (relations and
-      types created without a schema), doc_005 (a COMMENT that says only what
-      the object's own name says), and tree_001–tree_004, the DDL file-tree
-      rules — `--select tree`; tree_004 also needs `--overrides-dir`.
-      `--list-rules` prints all of it with the configuration each needs.
+      `--list-rules` prints every rule with its title and the configuration it
+      needs.
 
     EXAMPLES:
       confiture lint
@@ -340,6 +332,24 @@ def lint(
     except Exception as e:
         # The one error boundary: an envelope in JSON mode, the Rich rendering otherwise.
         fail(e, json_mode=is_json(format_type), output_file=output)
+
+
+def _with_rule_catalogue(doc: str) -> str:
+    """``doc`` with its ``{rule_catalogue}`` line replaced by the registry's paragraphs.
+
+    The indent is read off that line: Python 3.13 dedents docstrings at compile
+    time, so the same source gives six spaces on 3.11 and none on 3.13.
+    """
+    lines = doc.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() == "{rule_catalogue}":
+            indent = line[: len(line) - len(line.lstrip())]
+            lines[index] = render_help_catalogue(indent=indent)
+    return "\n".join(lines)
+
+
+# The rule paragraphs come from the registry `--list-rules` prints (#430).
+lint.__doc__ = _with_rule_catalogue(lint.__doc__ or "")
 
 
 def _passed_explicitly(ctx: typer.Context, name: str) -> bool:

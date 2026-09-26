@@ -178,8 +178,9 @@ different ways.
 `confiture lint --select tree` reports the shapes that quietly change the order
 a numbering was supposed to fix: a prefix shared by two siblings, a prefix that
 does not extend its parent's, an entry nobody numbered, and a status word in a
-name the build reads. The family is opt-in; `--baseline` adopts it on a tree
-that has never been checked.
+name the build reads. `tree_001` (a shared prefix) is on by default, at `error`;
+the rest of the family is opt-in, and `--baseline` adopts it on a tree that has
+never been checked.
 
 ---
 

@@ -129,25 +129,9 @@ confiture lint --list-rules              # table: code, family, severity, defaul
 confiture lint --list-rules --format json
 ```
 
-| Rule | Family | Default | Notes |
-|------|--------|---------|-------|
-| `naming_001` | `naming` | on | Table names snake_case |
-| `naming_002` | `naming` | on | Column names snake_case |
-| `pk_001` | `pk` | on | Table has a primary key |
-| `doc_001` | `doc` | on | Table has a COMMENT |
-| `sec_001` | `security` | on | Secret-looking columns |
-| `qual_001` | `qual` | on | Routine created without a schema |
-| `qual_002` | `qual` | opt-in | Relation or type created without a schema |
-| `acl_001` | `acl` | opt-in | Needs `acls.lint_enabled: true` |
-| `tenant_001` | `tenant` | opt-in | Multi-tenant FK isolation |
-| `replica_001` | `replica` | opt-in | Replica forward-compatibility |
-| `func_001` | `func` | opt-in | Needs `function_coverage.enabled: true` |
-| `own_001`, `own_002` | `own` | opt-in | Need an `ownership:` block |
-| `tree_001`–`tree_008` | `tree` | opt-in | DDL file-tree numbering and naming |
-| `sec_002` | `security-definer` | opt-in | Needs `security_lint.enabled: true` |
-
-The table above is a summary; [lint-rules.md](../reference/lint-rules.md) is
-generated from the registry and lists every rule.
+Every rule, its family, severity and whether it runs by default is in the
+[generated catalogue](../reference/lint-rules.md), built from the same registry
+`--list-rules` reads; a test fails if the two disagree.
 
 `sec_001` and `sec_002` share a code prefix but are different rules in different
 families — the flag that shipped `sec_002` named `security-definer`, and that is

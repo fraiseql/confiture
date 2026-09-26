@@ -19,6 +19,7 @@ catalogue and the dispatch agreeing in that direction, as
 
 from __future__ import annotations
 
+import textwrap
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
@@ -522,3 +523,65 @@ def render_rule_table() -> str:
         title = rule.title.replace("|", "\\|")
         lines.append(f"| `{rule.code}` | {rule.family} | {rule.severity} | {default} | {title} |")
     return "\n".join(lines)
+
+
+def _span(codes: Sequence[str]) -> list[str]:
+    """``doc_001``, ``doc_002``, ``doc_003`` as ``doc_001–doc_003``; gaps kept apart."""
+    spans: list[list[str]] = []
+    for code in codes:
+        family, number = code.rsplit("_", 1)
+        if spans:
+            last_family, last_number = spans[-1][-1].rsplit("_", 1)
+            if last_family == family and int(last_number) + 1 == int(number):
+                spans[-1].append(code)
+                continue
+        spans.append([code])
+    return [span[0] if len(span) == 1 else f"{span[0]}–{span[-1]}" for span in spans]
+
+
+def _grouped(rules: Iterable[LintRule]) -> list[str]:
+    """Rule codes in code order, runs of one family and one requirement spanned."""
+    parts: list[str] = []
+    ordered = sorted(rules, key=lambda rule: rule.code)
+    run: list[LintRule] = []
+    for rule in [*ordered, None]:
+        if run and (
+            rule is None
+            or rule.family != run[-1].family
+            or rule.requires_config != run[-1].requires_config
+        ):
+            spanned = ", ".join(_span([r.code for r in run]))
+            needs = run[-1].requires_config
+            parts.append(f"{spanned} ({needs})" if needs else spanned)
+            run = []
+        if rule is not None:
+            run.append(rule)
+    return parts
+
+
+def render_help_catalogue(indent: str = "      ", width: int = 84) -> str:
+    """The ``lint --help`` paragraphs saying which rules run by default (#430).
+
+    Generated from ``LINT_RULES``, the table ``--list-rules`` prints, so the help
+    cannot describe a default-on rule as opt-in again.
+    """
+    listed = [rule for rule in LINT_RULES if rule.code != UNPARSEABLE_RULE_ID]
+    default_on = [rule for rule in listed if rule.default_on]
+    failing = [rule for rule in default_on if rule.severity == "error"]
+    opt_in = [rule for rule in listed if not rule.default_on]
+    paragraphs = [
+        f"On by default: {', '.join(_grouped(default_on))}.",
+        f"Of those, {', '.join(_grouped(failing))} emit `error`, so a plain lint fails on them.",
+        "Opt-in, selected by code or family (`--select tree`), each with the "
+        f"configuration it also needs: {', '.join(_grouped(opt_in))}.",
+    ]
+    return "\n\n".join(
+        textwrap.fill(
+            p,
+            width=width,
+            initial_indent=indent,
+            subsequent_indent=indent,
+            break_on_hyphens=False,
+        )
+        for p in paragraphs
+    )
