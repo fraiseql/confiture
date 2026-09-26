@@ -147,6 +147,10 @@ FIXTURES: dict[str, Fixture] = {
         migrations={"20260908120000.up.sql": "CREATE TABLE uncovered (id int);"},
     ),
     "tenant_001": Fixture({"010.sql": _TENANT_SCHEMA}),
+    "tenant_002": Fixture(
+        {"010.sql": "CREATE TABLE tb_order_line (id INT PRIMARY KEY);\n"},
+        extra_files={"db/project.yaml": "tenancy: {}\n"},
+    ),
     "replica_001": Fixture(
         {"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, c INT);\n"},
         escalated_env_extra="infrastructure:\n  replicas:\n    - read-1\n",

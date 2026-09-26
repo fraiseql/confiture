@@ -48,6 +48,7 @@ class TestRegistryContents:
             "qual_002",
             "acl_001",
             "tenant_001",
+            "tenant_002",
             "replica_001",
             "sec_002",
             "func_001",

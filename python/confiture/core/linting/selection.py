@@ -85,6 +85,7 @@ def linter_config(
         check_security="sec_001" in selected,
         check_seed_secrets="sec_003" in selected,
         check_tenant_isolation="tenant_001" in selected,
+        check_tenant_tables="tenant_002" in selected,
         check_acl_coverage="acl_001" in selected,
         check_qualification="qual_001" in selected,
         check_qualification_relations="qual_002" in selected,
@@ -341,8 +342,12 @@ def resolve_lint_rules(
     replica_safe: bool,
     check_tenant_isolation: bool,
     check_security_definer: bool,
+    declared: frozenset[str] = frozenset(),
 ) -> frozenset[str]:
     """The rule codes this invocation applies, legacy flags folded in.
+
+    *declared* are the ``db/project.yaml`` blocks the project declares; the rules
+    they enable are part of the defaults.
 
     Each legacy flag means "the defaults *plus* this family". Expressing them
     as selectors keeps one
@@ -367,4 +372,4 @@ def resolve_lint_rules(
         # A bare legacy flag keeps the default rules; combined with --select it
         # extends whatever that selected, rather than re-adding the defaults.
         effective = (effective or [DEFAULT_SELECTOR]) + aliases
-    return resolve_selection(effective or None, ignore or ())
+    return resolve_selection(effective or None, ignore or (), declared=declared)

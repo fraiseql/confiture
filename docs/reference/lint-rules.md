@@ -29,6 +29,7 @@ Adopt a rule on a schema that already trips it with a
 | `qual_002` | qual | warning | off | Relations and types are created schema-qualified |
 | `acl_001` | acl | error | off | Every CREATE TABLE has a matching GRANT |
 | `tenant_001` | tenant | warning | off | Function INSERTs carry the FK a tenant-scoped view requires |
+| `tenant_002` | tenant | warning | with `tenancy:` | A table carries the tenant discriminator NOT NULL, or is declared global |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
 | `own_001` | own | error | off | Every created relation is paired with an ALTER … OWNER TO |
@@ -638,6 +639,31 @@ the row by its first other column — `app.tb_user.password[id=3]` — so a `--b
 can hold an accepted finding without the value reaching a CI log. A tree that has
 never been checked adopts the rule the usual way: `--baseline` records today's
 findings, and only a new one fails.
+
+## `tenant_002` — every table carries the tenant discriminator, or is declared global
+
+On when `db/project.yaml` declares `tenancy:` (and off otherwise: confiture assumes
+nothing about tenants until the project says it is tenant-scoped). Tenancy is a
+column, never an inference: a table is **tenant-scoped** because it carries
+`tenancy.discriminator` (`tenant_id` by default) `NOT NULL`, referencing
+`tenancy.root` — the table of tenants — when one is configured. It is **global**
+because its schema is listed in `tenancy.global_schemas`, or because a
+`-- confiture:tenant-global <reason>` line sits above its `CREATE TABLE`. The root
+table itself is neither.
+
+It reports, at `warning`:
+
+- a table that is neither tenant-scoped nor declared global — the decision nobody
+  made;
+- a nullable discriminator, at the column;
+- a discriminator that does not reference the root;
+- a declaration that cannot hold: `tenant-global` without a reason, or a table
+  declared global that carries the discriminator anyway.
+
+A column added by a later `ALTER TABLE` counts (the model folds it), and a
+partition is judged with its parent, not on its own. `--select tenant_002` on a
+project with no `tenancy:` block reports the rule *skipped*, with the reason — never
+an empty pass.
 
 ## The `body` family — a routine's body resolves, checked by PostgreSQL
 

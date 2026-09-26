@@ -443,7 +443,8 @@ confiture/
 │   ├── config/                   # Configuration module for Confiture
 │   │   ├── __init__.py           # Configuration module for Confiture
 │   │   ├── _env_vars.py          # Shared ``${VAR}`` expansion for Confiture YAML configuration
-│   │   └── environment.py        # Configuration models for Confiture
+│   │   ├── environment.py        # Configuration models for Confiture
+│   │   └── project.py            # The facts true in every environment of a project: ``db/project.yaml``
 │   ├── core/                     # Core migration execution and schema building components
 │   │   ├── __init__.py           # Core migration execution and schema building components
 │   │   ├── _pglast_enums.py      # Name-resolved PostgreSQL parse-node enum members (issue #192)

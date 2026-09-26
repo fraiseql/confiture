@@ -33,6 +33,18 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Added
 
+- **`db/project.yaml` and `tenant_002`: tenancy is declared once, and enforced as
+  a column** (#426, part 1). `db/project.yaml` holds what is true in every
+  environment; its `tenancy:` block (`discriminator`, `root`, `global_schemas`)
+  declares the project tenant-scoped and turns the `tenant` lint family on for
+  every run — the new `LintRule.enabled_by`, shown by `--list-rules` (whose JSON
+  gains an optional `enabled_by`). `tenant_002` reports a table that neither
+  carries the discriminator `NOT NULL`, referencing the table of tenants, nor is
+  declared global (its schema in `global_schemas`, or a
+  `-- confiture:tenant-global <reason>` line above its `CREATE TABLE`), and a
+  declaration that cannot hold. Selected without a `tenancy:` block, it reports
+  itself skipped, with the reason. An environment file carrying `tenancy:` is
+  refused and pointed at `db/project.yaml`.
 - **Every command that writes JSON publishes its shape.** All 49 commands
   whose `--format` accepts `json` now have a schema in `python/confiture/schemas/`
   (was 20), each written against payloads the command printed in a real run and
