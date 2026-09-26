@@ -12,7 +12,9 @@ The process still exits with the #146 exit code (``ConfiturError.exit_code``).
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NoReturn
 
@@ -20,6 +22,7 @@ import typer
 
 from confiture.core.parser_info import parser_stamp
 from confiture.exceptions import ConfiturError
+from confiture.url_redaction import redact_credentials_in
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -94,6 +97,39 @@ def _jsonify(value: Any) -> Any:
     return value
 
 
+def _scrub(value: Any) -> Any:
+    """Every string in *value* with its credentials masked, containers walked.
+
+    An enum is left as it is: ``ErrorSeverity`` is a ``str`` enum, and a
+    member is a name, never a credential.
+    """
+    if isinstance(value, Enum):
+        return value
+    if isinstance(value, str):
+        return redact_credentials_in(value)
+    if isinstance(value, dict):
+        return {k: _scrub(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(_scrub(v) for v in value)
+    return value
+
+
+def scrubbed(error: ConfiturError) -> ConfiturError:
+    """A copy of *error* whose message, hint, context and attributes carry no password.
+
+    Every error the CLI prints passes through here, in JSON and in text: a
+    message that interpolates a DSN — an unreachable ``--source``, a failed
+    connection — must not print the password it holds. The copy is shallow and
+    every string attribute is masked, so a subclass that renders its own
+    attributes is covered too.
+    """
+    clean = copy.copy(error)
+    clean.args = tuple(_scrub(arg) for arg in error.args)
+    for name, value in vars(error).items():
+        setattr(clean, name, _scrub(value))
+    return clean
+
+
 def emit_error_json(error: ConfiturError) -> dict[str, Any]:
     """Serialize a ConfiturError to the #145 error envelope.
 
@@ -163,7 +199,7 @@ def fail(
     # Reason: import cycle (the module is partially initialised when this import runs at module level)
     from confiture.cli.helpers import error_console as default_error_console
 
-    err = coerce_to_confiture_error(error)
+    err = scrubbed(coerce_to_confiture_error(error))
 
     if json_mode:
         emit(emit_error_json(err), output_file, console or default_console)

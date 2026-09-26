@@ -27,6 +27,7 @@ from confiture.core import connection as _core_connection
 from confiture.core.schema_to_schema import SchemaToSchemaMigrator
 from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.url_redaction import redact_url
 
 schema_to_schema_app = typer.Typer(
     help="Medium 4: zero-downtime schema migration via Foreign Data Wrapper (FDW).",
@@ -76,7 +77,7 @@ def _resolve_connection(spec: str) -> Any:
         raise
     except (_core_connection.DatabaseError, OSError) as exc:
         raise ConfigurationError(
-            f"Could not connect to '{spec}': {exc}", error_code="CONFIG_006"
+            f"Could not connect to '{redact_url(spec)}': {exc}", error_code="CONFIG_006"
         ) from exc
 
 

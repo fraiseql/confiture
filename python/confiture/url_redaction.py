@@ -19,6 +19,7 @@ Lives in ``core`` so that ``core`` modules — the ``psql`` applier and the
 from __future__ import annotations
 
 import os
+import re
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse
 
 _PASSWORD_KEY = "password"
@@ -146,3 +147,38 @@ def libpq_env(password: str | None, *, extra_options: str | None = None) -> dict
         existing = env.get("PGOPTIONS", "")
         env["PGOPTIONS"] = f"{existing} {extra_options}".strip()
     return env
+
+
+#: A URL inside free text: a scheme, then everything up to whitespace or a quote.
+_URL_IN_TEXT = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"<>`]+")
+#: libpq's keyword form, ``password=secret`` or ``password='with spaces'``.
+_CONNINFO_PASSWORD = re.compile(r"(?i)\b(password\s*=\s*)(?:'(?:[^'\\]|\\.)*'|[^\s&]+)")
+
+
+def redact_credentials_in(text: str) -> str:
+    """*text* with every password it carries masked to ``***``.
+
+    For a message that interpolates a connection string rather than being one:
+    each URL in it goes through :func:`redact_url`, and a libpq keyword DSN's
+    ``password=`` value is masked, quoted or not. Text with no credential comes
+    back unchanged. The CLI's error boundary runs every error through this, so a
+    message that names a DSN cannot print its password.
+    """
+    text = _URL_IN_TEXT.sub(lambda match: _redact_url_in_text(match.group(0)), text)
+    return _CONNINFO_PASSWORD.sub(lambda match: f"{match.group(1)}***", text)
+
+
+#: ``//user:password@`` — the userinfo of a URL ``urlparse`` cannot take apart.
+_USERINFO_PASSWORD = re.compile(r"(//[^:/@\s]*):[^@\s]*@")
+
+
+def _redact_url_in_text(url: str) -> str:
+    """:func:`redact_url`, or — for a URL it cannot parse — its userinfo masked.
+
+    Text quotes URLs that are not valid ones (an example with ``host:port``, a
+    truncated DSN); masking must never be the thing that fails.
+    """
+    try:
+        return redact_url(url)
+    except ValueError:
+        return _USERINFO_PASSWORD.sub(r"\1:***@", url)

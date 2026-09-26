@@ -20,6 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 (fraiseql/fraisier#417) — started the app on a half-migrated schema. The real
 run and the `--dry-run-execute` rehearsal both did it.
 
+### Security
+
+- **An error never prints a password.** `migrate schema-to-schema` put an
+  unreachable `--source`/`--target` DSN into its error verbatim, password
+  included, in the JSON envelope and on stderr. The site now redacts, and so do
+  the two places every CLI output passes through: the error boundary scrubs each
+  error's message, hint, context and attributes, and `verbatim()` — the wrapper
+  every interpolated value is printed through — masks credentials in what it
+  prints. Both a URL's password (`user:***@`, `?password=***`) and a libpq
+  keyword DSN's (`password=***`) are masked (`url_redaction.redact_credentials_in`).
+
 ### Added
 
 - **`migrate down`, `migrate reinit` and `migrate rebuild` publish their JSON**:
