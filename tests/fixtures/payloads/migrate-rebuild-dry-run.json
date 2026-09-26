@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "schemas_dropped": [],
+  "ddl_statements_executed": 1,
+  "marked": [
+    {
+      "version": "001",
+      "name": "t",
+      "duration_ms": 0,
+      "rows_affected": 0
+    }
+  ],
+  "total_duration_ms": 0,
+  "dry_run": true,
+  "warnings": [],
+  "error": null,
+  "seeds_applied": null,
+  "verified": null,
+  "ok": true,
+  "command": "migrate rebuild",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

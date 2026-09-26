@@ -185,6 +185,33 @@
           "type": "integer"
         }
       }
+    },
+    "MigrationEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "name",
+        "duration_ms",
+        "rows_affected"
+      ],
+      "description": "One migration a command acted on (MigrationApplied.to_dict).",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rows_affected": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

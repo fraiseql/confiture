@@ -150,6 +150,18 @@ attribute names are scheduled to follow them at 1.0.0.
 
 [migrate-down-to.schema.json](./json-schemas/migrate-down-to.schema.json) — `{from, to, rolled_back, skipped, errors}` for an absolute rollback. An invalid plan (unknown/forward target, or a missing `.down.sql`) emits the [error envelope](./json-schemas/error-envelope.schema.json) and applies nothing.
 
+### `confiture migrate down --format json`
+
+[migrate-down.schema.json](./json-schemas/migrate-down.schema.json) — `{success, rolled_back[], total_duration_ms, checksums_verified, warnings, error}` for a relative rollback (`--steps`). `rolled_back` is newest → oldest, each entry `{version, name, duration_ms, rows_affected}`; it carries the same name as `migrate down-to`'s, so a consumer counting it reads either command. A failure emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
+
+### `confiture migrate reinit --format json`
+
+[migrate-reinit.schema.json](./json-schemas/migrate-reinit.schema.json) — `{success, deleted_count, marked[], total_duration_ms, dry_run, warnings, error}` after clearing the tracking table and re-marking the migration files as applied.
+
+### `confiture migrate rebuild --format json`
+
+[migrate-rebuild.schema.json](./json-schemas/migrate-rebuild.schema.json) — `{success, schemas_dropped, ddl_statements_executed, marked[], total_duration_ms, dry_run, warnings, error, seeds_applied, verified}` after dropping the schemas, building from DDL and marking every migration applied. `seeds_applied` is `null` unless `--seed` was given, `verified` `null` unless `--verify` ran.
+
 ### `confiture migrate validate --list-patterns --format json`
 
 [migrate-validate-list-patterns.schema.json](./json-schemas/migrate-validate-list-patterns.schema.json)

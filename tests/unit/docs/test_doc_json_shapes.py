@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from pathlib import Path
 
 from doc_snippets import assert_doc_imports_resolve, fenced_after_anchor, read_doc
 
@@ -38,6 +39,24 @@ def test_migrate_up_json_keys_match_to_dict() -> None:
     assert "applied" in doc_keys and "total_duration_ms" in doc_keys
     assert "migrations_applied" not in doc_keys
     assert "total_execution_time_ms" not in doc_keys
+
+
+def test_migrate_up_json_example_validates_against_the_published_schema() -> None:
+    """The whole example, nested entries included — not only its top-level keys."""
+    import jsonschema
+    from referencing import Registry, Resource
+    from referencing.jsonschema import DRAFT202012
+
+    schemas = Path(__file__).resolve().parents[3] / "python" / "confiture" / "schemas"
+    registry = Registry().with_resources(
+        (path.name, Resource.from_contents(json.loads(path.read_text()), DRAFT202012))
+        for path in schemas.glob("*.schema.json")
+    )
+    schema = json.loads((schemas / "migrate-up.schema.json").read_text())
+    snippet = json.loads(fenced_after_anchor(read_doc(STRUCTURED_DOC), "migrate-up-json"))
+
+    validator = jsonschema.Draft202012Validator(schema, registry=registry)
+    assert [e.message for e in validator.iter_errors(snippet)] == []
 
 
 def test_dry_run_api_imports_resolve() -> None:

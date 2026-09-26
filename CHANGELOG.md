@@ -22,6 +22,20 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Added
 
+- **`migrate down`, `migrate reinit` and `migrate rebuild` publish their JSON**:
+  `migrate-down.schema.json`, `migrate-reinit.schema.json`,
+  `migrate-rebuild.schema.json`, each with the shared `MigrationEntry` definition
+  in `_common.schema.json`. `rolled_back` keeps the name `migrate down-to` uses,
+  so a consumer counting it reads either command.
+- **A guard that every command writing JSON publishes it.** Each command whose
+  `--format` accepts `json` has a section in the JSON-schema reference linking a
+  schema that exists, is an alias of one, or is on a shrink-only list of the 25
+  that have none yet (the `test-db`, `seed` and `schema-to-schema` families
+  among them).
+- **The JSON keys consumers read are pinned** (`tests/contract/test_consumer_payload_keys.py`):
+  each key a consumer reads off a payload must stay `required` in its schema —
+  fraisier's `applied`, `rolled_back`, `marked`, and the error envelope's
+  `error.code` and `error.message`.
 - **`MigrateUpResult.halted`** (#422): `True` when the chain stopped at a
   `requires_superuser` migration, `False` for a completed run and for a failed
   migration. It names the other way a run ends short, beside `has_errors`. It
@@ -46,6 +60,12 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Fixed
 
+- **The documented JSON matches what the commands write.** The `migrate up`
+  example in the structured-output guide showed `execution_time_ms` in each
+  `applied[]` entry; the key is `duration_ms`, and the example is now validated
+  against the published schema, nested entries included. The same guide's
+  `build` shape listed `warnings` as strings and left out four keys, and the
+  migrator API named `MigrationApplied`'s duration field wrongly.
 - **`build` reports the size of the file it wrote** (#429). It printed, and
   put in `schema_size_bytes`, the schema's length in characters; any non-ASCII
   text (an accented `COMMENT`, a translated label) made the file longer on disk

@@ -1,0 +1,26 @@
+{
+  "success": true,
+  "applied": [
+    {
+      "version": "001",
+      "name": "t",
+      "duration_ms": 0,
+      "rows_affected": 0
+    }
+  ],
+  "skipped": [],
+  "skipped_superuser": [],
+  "pending": [],
+  "errors": [],
+  "total_duration_ms": 0,
+  "checksums_verified": true,
+  "dry_run": false,
+  "dry_run_execute": false,
+  "warnings": [],
+  "ok": true,
+  "command": "migrate up",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

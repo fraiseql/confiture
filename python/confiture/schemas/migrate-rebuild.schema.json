@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-rebuild.schema.json",
+  "title": "confiture migrate rebuild --format json",
+  "description": "Result of dropping the schemas, building from DDL and marking every migration applied (MigrateRebuildResult.to_dict). A failure writes the error envelope (error-envelope.schema.json) instead of this shape.",
+  "type": "object",
+  "required": [
+    "success",
+    "schemas_dropped",
+    "ddl_statements_executed",
+    "marked",
+    "dry_run",
+    "seeds_applied",
+    "verified",
+    "total_duration_ms",
+    "warnings",
+    "error"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "type": "boolean"
+    },
+    "schemas_dropped": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Schemas dropped before the build; empty in --dry-run."
+    },
+    "ddl_statements_executed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "marked": {
+      "type": "array",
+      "items": {
+        "$ref": "_common.schema.json#/$defs/MigrationEntry"
+      },
+      "description": "Migrations marked as applied after the build."
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "seeds_applied": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "Seed files applied with --seed; null when seeds were not requested."
+    },
+    "verified": {
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "description": "The post-rebuild verification with --verify; null when it was not requested or in --dry-run."
+    },
+    "total_duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wall-clock time of the operation, in milliseconds."
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Non-fatal warning messages; empty if none."
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Always null in this shape: a command that fails writes the error envelope (error-envelope.schema.json) instead."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate rebuild",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

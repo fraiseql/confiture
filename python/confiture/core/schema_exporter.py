@@ -22,6 +22,9 @@ from typing import Any
 _MODELS: dict[str, tuple[str, str]] = {
     "MigrateUpResult": ("confiture.models.results", "MigrateUpResult"),
     "DownToResult": ("confiture.models.results", "DownToResult"),
+    "MigrateDownResult": ("confiture.models.results", "MigrateDownResult"),
+    "MigrateReinitResult": ("confiture.models.results", "MigrateReinitResult"),
+    "MigrateRebuildResult": ("confiture.models.results", "MigrateRebuildResult"),
     "VerifyAllResult": ("confiture.models.results", "VerifyAllResult"),
     "CurrentRevision": ("confiture.models.results", "CurrentRevision"),
     "PreflightIssue": ("confiture.models.results", "PreflightIssue"),
@@ -36,6 +39,9 @@ _MODELS: dict[str, tuple[str, str]] = {
 MODEL_SCHEMAS: dict[str, str] = {
     "MigrateUpResult": "migrate-up.schema.json",
     "DownToResult": "migrate-down-to.schema.json",
+    "MigrateDownResult": "migrate-down.schema.json",
+    "MigrateReinitResult": "migrate-reinit.schema.json",
+    "MigrateRebuildResult": "migrate-rebuild.schema.json",
     "VerifyAllResult": "migrate-verify.schema.json",
     "CurrentRevision": "migrate-current.schema.json",
     "PreflightIssue": "issue-object.schema.json",
