@@ -184,6 +184,7 @@ class TestTheBlindedRulesSaySo:
         assert degraded == {
             "naming_001",
             "naming_002",
+            "naming_003",
             "pk_001",
             "doc_001",
             "doc_002",

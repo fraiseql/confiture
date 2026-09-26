@@ -75,7 +75,7 @@ def linter_config(
         enabled=True,
         fail_on_error=threshold.rank <= Threshold.ERROR.rank,
         fail_on_warning=threshold.rank <= Threshold.WARNING.rank,
-        check_naming="naming_001" in selected or "naming_002" in selected,
+        check_naming=any(code.startswith("naming_") for code in selected),
         check_primary_keys="pk_001" in selected,
         check_documentation=any(code.startswith("doc_") for code in selected),
         check_restatements="doc_005" in selected,
