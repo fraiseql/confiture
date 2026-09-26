@@ -1,0 +1,35 @@
+{
+  "total_ctes": 2,
+  "all_succeeded": false,
+  "failed_at": "broken",
+  "steps": [
+    {
+      "cte_name": "base",
+      "row_count": 1,
+      "columns": [
+        "id"
+      ],
+      "rows": [
+        [
+          1
+        ]
+      ],
+      "execution_time_ms": 0,
+      "error": null
+    },
+    {
+      "cte_name": "broken",
+      "row_count": 0,
+      "columns": [],
+      "rows": [],
+      "execution_time_ms": 0,
+      "error": "relation \"missing_table\" does not exist\nLINE 2: broken AS (SELECT * FROM missing_table)\n                                 ^"
+    }
+  ],
+  "ok": true,
+  "command": "debug cte",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

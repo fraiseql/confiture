@@ -1,0 +1,17 @@
+{
+  "total": 3,
+  "succeeded": 1,
+  "failed": 2,
+  "failed_files": [
+    "common/02_fail.sql",
+    "dev/02_fail.sql"
+  ],
+  "success": false,
+  "seed_profile": null,
+  "ok": true,
+  "command": "seed apply",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

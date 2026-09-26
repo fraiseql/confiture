@@ -1,11 +1,13 @@
 """Tests for SeedApplier file discovery and the ephemeral ``apply_seed_files``."""
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
+from rich.console import Console
 
 from confiture.core.seed.applier import SeedApplier, apply_seed_files
-from confiture.exceptions import SchemaError
+from confiture.exceptions import SchemaError, SeedError
 
 
 class TestApplySeedFiles:
@@ -147,3 +149,51 @@ def test_find_seed_files_preserves_paths(tmp_path):
     assert len(files) == 1
     assert isinstance(files[0], Path)
     assert files[0].is_file()
+
+
+def _failing_everywhere(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fail(self, executor, seed_file, savepoint_name, transaction_mode):
+        raise SeedError(f"cannot apply {seed_file}")
+
+    monkeypatch.setattr(SeedApplier, "_apply_seed_file", fail)
+
+
+def test_failed_files_are_named_below_the_seeds_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Two failures with one file name in two directories are two entries, not one name twice."""
+    seeds_dir = tmp_path / "db" / "seeds"
+    for sub in ("common", "dev"):
+        (seeds_dir / sub).mkdir(parents=True)
+        (seeds_dir / sub / "01_users.sql").write_text("INSERT INTO users VALUES (1);")
+    (seeds_dir / "02_top.sql").write_text("INSERT INTO users VALUES (2);")
+    _failing_everywhere(monkeypatch)
+
+    applier = SeedApplier(seeds_dir=seeds_dir, connection=MagicMock(), console=Console(quiet=True))
+    result = applier.apply_sequential(continue_on_error=True)
+
+    assert result.failed_files == ["02_top.sql", "common/01_users.sql", "dev/01_users.sql"]
+
+
+def test_failed_files_a_build_selected_are_named_below_their_seed_directory(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``build --sequential`` hands the files over: each is named as ``seed apply`` would name it."""
+    seeds_dir = tmp_path / "db" / "seeds"
+    files = []
+    for sub in ("common", "dev"):
+        (seeds_dir / sub).mkdir(parents=True)
+        files.append(seeds_dir / sub / "01_users.sql")
+        files[-1].write_text("INSERT INTO users VALUES (1);")
+    _failing_everywhere(monkeypatch)
+
+    applier = SeedApplier(
+        seeds_dir=files[0].parent,
+        connection=MagicMock(),
+        console=Console(quiet=True),
+        files=files,
+        anchor=tmp_path,
+    )
+    result = applier.apply_sequential(continue_on_error=True)
+
+    assert result.failed_files == ["common/01_users.sql", "dev/01_users.sql"]

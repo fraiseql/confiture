@@ -20,7 +20,7 @@
     },
     "output_path": {
       "type": "string",
-      "description": "The stub file, <output-dir>/<seed-env>/<table>.sql, written or already present. When the table could not be read the path is <output-dir>/<table>.sql, without the seed-env directory, and no file is written."
+      "description": "The stub file, <output-dir>/<seed-env>/<table>.sql: written, already present, or \u2014 when the table could not be read \u2014 where it would have been written, and no file is."
     },
     "row_count": {
       "type": "integer",

@@ -136,7 +136,7 @@
               },
               "applied_at": {
                 "type": "string",
-                "description": "When the source applied it, as Python prints a timestamptz: `2026-09-26 13:56:41.386666+02:00` (a space, not `T`, between date and time)."
+                "description": "When the source applied it, in ISO 8601: `2026-09-26T13:56:41.386666+02:00`."
               },
               "execution_time_ms": {
                 "type": [

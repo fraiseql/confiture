@@ -180,7 +180,7 @@ class CTEDebugger:
                     row_count=len(rows),
                     columns=columns,
                     rows=list(rows),
-                    execution_time_ms=round(elapsed_ms, 2),
+                    execution_time_ms=int(elapsed_ms),
                 )
         except psycopg.Error as e:
             elapsed_ms = (time.monotonic() - start_time) * 1000
@@ -193,6 +193,6 @@ class CTEDebugger:
                 row_count=0,
                 columns=[],
                 rows=[],
-                execution_time_ms=round(elapsed_ms, 2),
+                execution_time_ms=int(elapsed_ms),
                 error=str(e),
             )

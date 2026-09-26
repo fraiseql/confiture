@@ -13,6 +13,7 @@ from pathlib import Path
 
 import psycopg
 from rich.console import Console
+from rich.markup import escape
 
 from confiture.config.environment import SeedProfile
 from confiture.core import path_globs
@@ -99,6 +100,8 @@ class ApplyResult:
     """Result of seed application.
 
     Tracks successful and failed files during sequential execution.
+    ``failed_files`` names each failed file by its path below the seeds
+    directory (:meth:`SeedApplier.seed_name`), in apply order.
     """
 
     total: int = 0
@@ -206,6 +209,21 @@ class SeedApplier:
             return sql_files
         return apply_profile_filter(sql_files, profile, root=self.seeds_dir)
 
+    def seed_name(self, seed_file: Path) -> str:
+        """How the run names *seed_file*: the path a seed profile's globs see.
+
+        Below the seeds directory (``common/01_users.sql``); for files a build
+        selected, below the first seed directory under *anchor*
+        (:func:`~confiture.core.seed.paths.seed_relative`); a file the caller
+        named, with no anchor, as it was named. Two files that share a name in
+        two directories are two names.
+        """
+        if self.files is None:
+            return seed_file.relative_to(self.seeds_dir).as_posix()
+        if self.anchor is not None:
+            return seed_relative(seed_file, anchor=self.anchor).as_posix()
+        return str(seed_file)
+
     def apply_sequential(
         self,
         continue_on_error: bool = False,
@@ -269,7 +287,7 @@ class SeedApplier:
                 if transaction_mode == "transaction":
                     self.connection.rollback()
                 result.failed += 1
-                result.failed_files.append(seed_file.name)
+                result.failed_files.append(self.seed_name(seed_file))
                 self.console.print(f"[red]✗ {e}[/red]")
                 if not continue_on_error:
                     if progress and apply_task is not None:
@@ -289,15 +307,31 @@ class SeedApplier:
     ) -> None:
         """Run one seed file (as COPY when large enough); commit in transaction mode."""
         assert self.connection is not None
-        self.console.print(f"[cyan]→ {seed_file.name}[/cyan]", end=" ")
+        self.console.print(f"[cyan]→ {self.seed_name(seed_file)}[/cyan]", end=" ")
         sql_content = read_seed(seed_file)
         if self.copy_format and count_insert_rows(sql_content) >= self.copy_threshold:
-            sql_content = InsertToCopyConverter().convert(sql_content)
-            self.console.print("[dim](COPY)[/dim]", end=" ")
+            sql_content = self._as_copy(sql_content, seed_file)
         executor.execute_sql(sql_content, savepoint_name, source=seed_file)
         if transaction_mode == "transaction":
             self.connection.commit()
         self.console.print("[green]✓[/green]")
+
+    def _as_copy(self, sql_content: str, seed_file: Path) -> str:
+        """*sql_content* as COPY when every statement in it can be; otherwise as written.
+
+        A COPY cannot say ``ON CONFLICT``, ``RETURNING`` or ``now()``: converting
+        such a statement would change what the file does (a seed that re-applies
+        cleanly would fail on a duplicate key), so a file holding one runs as
+        written and the progress line says why.
+        """
+        conversion = InsertToCopyConverter().try_convert(
+            sql_content, file_path=str(seed_file), all_or_nothing=True
+        )
+        if conversion.success and conversion.copy_format is not None:
+            self.console.print("[dim](COPY)[/dim]", end=" ")
+            return conversion.copy_format
+        self.console.print(f"[dim](INSERT: {escape(conversion.reason or '')})[/dim]", end=" ")
+        return sql_content
 
     def _print_seed_summary(self, result: ApplyResult) -> None:
         self.console.print("\n" + "=" * 50)

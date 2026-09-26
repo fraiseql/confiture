@@ -112,6 +112,11 @@ confiture seed validate --fix
 
 This modifies files in place, adding `ON CONFLICT DO NOTHING` to INSERT statements.
 
+With `--format json` these lines are not printed: the report carries them as
+`fixes[]`, one `{file, fixes_applied, written}` per file (`written` is `false`
+under `--dry-run`), so stdout holds nothing but the JSON. The report's
+`violations` are what was found before the fix ran.
+
 **Current Fix:** Adding `ON CONFLICT DO NOTHING` to INSERT statements
 
 ## Database Validation

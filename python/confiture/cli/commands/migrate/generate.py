@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 
@@ -26,13 +26,17 @@ from confiture.cli.options import (
 from confiture.core import schema_snapshot as _core_schema_snapshot
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.migrator import (
-    find_duplicate_migration_versions as _gen_find,
-)
-from confiture.core.migrator import (
+    discover_migration_files,
     parse_migration_filename,
 )
-from confiture.error_codes import SUCCESS, USAGE, exit_code_of
-from confiture.exceptions import ExternalGeneratorError, ValidationError
+from confiture.core.migrator import (
+    find_duplicate_migration_versions as _gen_find,
+)
+from confiture.error_codes import SUCCESS
+from confiture.exceptions import ConfigurationError, ValidationError
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 # A migration name becomes a filename and a class name. snake_case only: a `/`
 # or `..` would walk out of the migrations directory, anything else is not a
@@ -153,14 +157,17 @@ def migrate_generate(
             migrations_dir=migrations_dir,
             config=config,
             dry_run=dry_run,
+            format_output=format_output,
         )
         raise typer.Exit(SUCCESS)
 
     migrations_dir.mkdir(parents=True, exist_ok=True)
     generator_instance = MigrationGenerator(migrations_dir=migrations_dir)
     warnings: list[str] = []
+    # The narration is text: in JSON mode it goes to stderr, never ahead of the payload.
+    narrator = error_console if is_json(format_output) else console
     if verbose:
-        _show_scan(migrations_dir)
+        _show_scan(migrations_dir, narrator)
 
     duplicates = _gen_find(migrations_dir)
     if duplicates:
@@ -176,12 +183,12 @@ def migrate_generate(
                 console.print(f"    - {verbatim(f.name)}")
     version = generator_instance.get_next_version()
     if verbose:
-        console.print(
-            f"\n  Highest version: {verbatim(version[:-1] if int(version) > 1 else '000')}"
-        )
-        console.print(f"  Next version: {verbatim(version)}")
-        console.print(f"  Target file: {verbatim(version)}_{verbatim(name)}.py")
-        console.print()
+        existing = discover_migration_files(migrations_dir)
+        highest = parse_migration_filename(existing[-1].name)[0] if existing else "none"
+        narrator.print(f"\n  Highest version: {verbatim(highest)}")
+        narrator.print(f"  Next version: {verbatim(version)}")
+        narrator.print(f"  Target file: {verbatim(version)}_{verbatim(name)}.py")
+        narrator.print()
     class_name = generator_instance.to_class_name(name)
     filepath = migrations_dir / f"{version}_{name}.py"
     template = _MIGRATION_TEMPLATE.format(name=name, version=version, class_name=class_name)
@@ -337,19 +344,27 @@ def _run_external_generator(
     migrations_dir: Path,
     config: Path,
     dry_run: bool,
+    format_output: str,
 ) -> None:
-    """``--generator <name>``: hand the diff to a configured external generator."""
+    """``--generator <name>``: hand the diff to a configured external generator.
+
+    A refusal is a ``ConfigurationError`` and a failed generator an
+    ``ExternalGeneratorError`` (``GEN_001``); both reach the command's boundary,
+    which writes the error envelope in JSON mode.
+    """
     if from_schema is None or to_schema is None:
-        error_console.print(
-            "[red]❌ Error: --from and --to are required when --generator is used[/red]"
+        raise ConfigurationError(
+            "--from and --to are required when --generator is used",
+            resolution_hint="Pass the old schema file with --from and the new one with --to.",
         )
-        raise typer.Exit(USAGE)
     env_config = _load_environment_if_present(config)
     if env_config is None or generator not in env_config.migration.migration_generators:
-        error_console.print(
-            f"[red]❌ Error: Generator '{verbatim(generator)}' not found in migration_generators config[/red]"
+        raise ConfigurationError(
+            f"Generator '{generator}' not found in migration_generators config",
+            context={"generator": generator, "config": str(config)},
+            resolution_hint="Declare it under migration.migration_generators in the "
+            "environment file --config names.",
         )
-        raise typer.Exit(USAGE)
     gen_config = env_config.migration.migration_generators[generator]
     migrations_dir.mkdir(parents=True, exist_ok=True)
     gen_instance = MigrationGenerator(migrations_dir=migrations_dir)
@@ -362,11 +377,21 @@ def _run_external_generator(
             dry_run=dry_run,
         )
     except FileNotFoundError as exc:
-        error_console.print(f"[red]❌ Error: {verbatim(exc)}[/red]")
-        raise typer.Exit(USAGE) from exc
-    except ExternalGeneratorError as exc:
-        error_console.print(f"[red]❌ Generator error: {verbatim(exc)}[/red]")
-        raise typer.Exit(exit_code_of("GEN_001")) from exc
+        raise ConfigurationError(
+            str(exc), resolution_hint="Check the paths passed to --from and --to."
+        ) from exc
+    if is_json(format_output):
+        emit(
+            {
+                "status": "dry_run" if dry_run else "success",
+                "version": parse_migration_filename(up_sql_path.name)[0],
+                "name": name,
+                "filepath": str(up_sql_path.absolute()),
+                "generator": generator,
+                "resolved_command": resolved_cmd,
+            }
+        )
+        return
     if dry_run:
         console.print(f"[dim]Resolved command:[/] {verbatim(resolved_cmd)}")
         console.print(f"[dim]Target file:      [/] {verbatim(up_sql_path)}")
@@ -378,13 +403,13 @@ def _run_external_generator(
     console.print("  • Apply: confiture migrate up")
 
 
-def _show_scan(migrations_dir: Path) -> None:
-    console.print("[cyan]🔍 Scanning migrations directory...[/cyan]")
-    console.print(f"  Directory: {verbatim(migrations_dir.absolute())}")
-    migration_files = sorted(migrations_dir.glob("*.py"))
-    console.print(f"  Found {len(migration_files)} migration files:")
+def _show_scan(migrations_dir: Path, narrator: Console) -> None:
+    narrator.print("[cyan]🔍 Scanning migrations directory...[/cyan]")
+    narrator.print(f"  Directory: {verbatim(migrations_dir.absolute())}")
+    migration_files = discover_migration_files(migrations_dir)
+    narrator.print(f"  Found {len(migration_files)} migration files:")
     for f in migration_files:
-        console.print(
+        narrator.print(
             f"    - {verbatim(f.name)} (version: {verbatim(parse_migration_filename(f.name)[0])})"
         )
 

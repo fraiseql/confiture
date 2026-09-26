@@ -1,0 +1,14 @@
+{
+  "status": "dry_run",
+  "version": "20260926150128",
+  "name": "add_more",
+  "filepath": "/tmp/project/db/migrations/20260926150128_add_more.up.sql",
+  "generator": "copier",
+  "resolved_command": "test -f /tmp/project/old.sql && cp /tmp/project/new.sql /tmp/project/db/migrations/20260926150128_add_more.up.sql",
+  "ok": true,
+  "command": "migrate generate",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

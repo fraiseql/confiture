@@ -2,17 +2,19 @@
 
 A schema written by reading a dataclass agrees with that dataclass and nothing
 else; these files were written by the commands themselves. They were captured
-against PostgreSQL 18 with a one-migration project (``CREATE TABLE t``), by running
-each command with ``--format json`` and saving stdout unedited; the ``test-db``
-payloads against a scratch server database, the one-table ``db/schema/`` its template
-was built from, and ``ram-setup`` run by a user who cannot hand the location to the
-server's OS user. Recapture the same way when a payload changes on purpose.
 against PostgreSQL 18 with a one-migration project (``CREATE TABLE t``) — the seed
 payloads with a seed file or two for ``t`` — by running each command with
-``--format json`` and saving stdout unedited. Recapture the same way when a payload
-each command with ``--format json`` and saving stdout unedited. The ``bootstrap``
-payloads come from a throwaway cluster whose initdb superuser is not ``postgres``
-(``REASSIGN OWNED BY postgres`` refuses the objects of the one that is). Recapture
+``--format json`` and saving stdout unedited; the ``test-db`` payloads against a
+scratch server database, the one-table ``db/schema/`` its template was built from,
+and ``ram-setup`` run by a user who cannot hand the location to the server's OS
+user. The ``bootstrap`` payloads come from a throwaway cluster whose initdb
+superuser is not ``postgres`` (``REASSIGN OWNED BY postgres`` refuses the objects of
+the one that is). The ``migrate fix-signatures`` payloads come from a project whose
+``db/schema/`` declares ``app.total(bigint)`` against a database holding
+``app.total(integer)`` (and, for ``--check-body``, another body); the ``migrate
+generate`` payloads' absolute paths had the capture directory replaced with
+``/tmp/project``, the one edit made. Recapture the same way when a payload changes
+on purpose.
 """
 
 from __future__ import annotations
@@ -59,8 +61,14 @@ CAPTURED = {
     "seed-apply.json": "seed-apply.schema.json",
     "seed-apply-profile.json": "seed-apply.schema.json",
     "seed-apply-continue-on-error.json": "seed-apply.schema.json",
+    "seed-apply-continue-on-error-nested.json": "seed-apply.schema.json",
     "seed-generate.json": "seed-generate.schema.json",
     "seed-generate-refused.json": "seed-generate.schema.json",
+    "seed-validate.json": "seed-validate.schema.json",
+    "seed-validate-fix.json": "seed-validate.schema.json",
+    "seed-validate-fix-dry-run.json": "seed-validate.schema.json",
+    "seed-validate-prep-seed.json": "seed-validate.schema.json",
+    "seed-validate-prep-seed-clean.json": "seed-validate.schema.json",
     "migrate-apply-as.json": "migrate-apply-as.schema.json",
     "migrate-baseline.json": "migrate-baseline.schema.json",
     "migrate-baseline-dry-run.json": "migrate-baseline.schema.json",
@@ -78,6 +86,19 @@ CAPTURED = {
     "install-helpers-already-installed.json": "install-helpers.schema.json",
     "install-helpers-dry-run.json": "install-helpers.schema.json",
     "validate-profile.json": "validate-profile.schema.json",
+    "debug-cte.json": "debug-cte.schema.json",
+    "debug-cte-failed.json": "debug-cte.schema.json",
+    "migrate-fix-signatures-plan.json": "migrate-fix-signatures.schema.json",
+    "migrate-fix-signatures-applied.json": "migrate-fix-signatures.schema.json",
+    "migrate-fix-signatures-clean.json": "migrate-fix-signatures.schema.json",
+    "migrate-fix-signatures-check-body-plan.json": "migrate-fix-signatures.schema.json",
+    "migrate-fix-signatures-check-body-applied.json": "migrate-fix-signatures.schema.json",
+    "migrate-fix-signatures-check-body-clean.json": "migrate-fix-signatures.schema.json",
+    "migrate-generate.json": "migrate-generate.schema.json",
+    "migrate-generate-verbose-name-conflict.json": "migrate-generate.schema.json",
+    "migrate-generate-dry-run.json": "migrate-generate.schema.json",
+    "migrate-generate-generator.json": "migrate-generate.schema.json",
+    "migrate-generate-generator-dry-run.json": "migrate-generate.schema.json",
 }
 
 

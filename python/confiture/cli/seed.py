@@ -181,33 +181,58 @@ def _seed_dirs_to_validate(
     return dirs_to_validate
 
 
-def _fix_seed_files(scanned_files: list[str], *, dry_run: bool) -> None:
-    """``--fix``: rewrite each scanned file, or say what would change under ``--dry-run``."""
+def _fix_seed_files(
+    scanned_files: list[str], *, dry_run: bool, json_mode: bool
+) -> list[dict[str, Any]]:
+    """``--fix``: rewrite each scanned file, or say what would change under ``--dry-run``.
+
+    Returns one ``{file, fixes_applied, written}`` per file with a fix — the
+    ``fixes`` a JSON report carries, since stdout holds nothing but the report;
+    in text mode each is also a line.
+    """
     fixer = SeedFixer()
+    fixes: list[dict[str, Any]] = []
     for file_path in scanned_files:
         fix_result = fixer.fix_file(Path(file_path), dry_run=dry_run)
-        if fix_result.fixes_applied > 0:
-            if dry_run:
-                console.print(
-                    f"[yellow]~ Would fix {verbatim(fix_result.fixes_applied)} issues in {verbatim(file_path)}[/yellow]"
-                )
-            else:
-                console.print(
-                    f"[green]✓ Fixed {verbatim(fix_result.fixes_applied)} issues in {verbatim(file_path)}[/green]"
-                )
+        if fix_result.fixes_applied == 0:
+            continue
+        fixes.append(
+            {"file": file_path, "fixes_applied": fix_result.fixes_applied, "written": not dry_run}
+        )
+        if json_mode:
+            continue
+        if dry_run:
+            console.print(
+                f"[yellow]~ Would fix {verbatim(fix_result.fixes_applied)} issues in {verbatim(file_path)}[/yellow]"
+            )
+        else:
+            console.print(
+                f"[green]✓ Fixed {verbatim(fix_result.fixes_applied)} issues in {verbatim(file_path)}[/green]"
+            )
+    return fixes
 
 
 def _render_seed_validation(
-    all_violations: list[Any], all_files: list[str], *, format_: str, output: Path | None
+    all_violations: list[Any],
+    all_files: list[str],
+    *,
+    fixes: list[dict[str, Any]] | None,
+    format_: str,
+    output: Path | None,
 ) -> None:
-    """The validation report: JSON (to ``output`` when given) or the text table."""
+    """The validation report: JSON (to ``output`` when given) or the text table.
+
+    ``fixes`` is ``None`` without ``--fix``, and the JSON then has no ``fixes`` key.
+    """
     if format_ == "json":
-        report_dict = {
+        report_dict: dict[str, Any] = {
             "violations": [v.to_dict() for v in all_violations],
             "violation_count": len(all_violations),
             "files_scanned": len(all_files),
             "has_violations": len(all_violations) > 0,
         }
+        if fixes is not None:
+            report_dict["fixes"] = fixes
         emit(report_dict, output, console)
         return
 
@@ -326,14 +351,21 @@ def validate(
         validator = SeedValidator()
         all_violations: list[Any] = []
         all_files: list[str] = []
+        fixes: list[dict[str, Any]] | None = [] if fix else None
         for dir_path, _env_name in dirs_to_validate:
             report = validator.validate_directory(dir_path)
             all_violations.extend(report.violations)
             all_files.extend(report.scanned_files)
-            if fix:
-                _fix_seed_files(report.scanned_files, dry_run=dry_run)
+            if fixes is not None:
+                fixes.extend(
+                    _fix_seed_files(
+                        report.scanned_files, dry_run=dry_run, json_mode=is_json(format_)
+                    )
+                )
 
-        _render_seed_validation(all_violations, all_files, format_=format_, output=output)
+        _render_seed_validation(
+            all_violations, all_files, fixes=fixes, format_=format_, output=output
+        )
 
         # Exit with appropriate code
         if all_violations:

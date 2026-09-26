@@ -1,0 +1,20 @@
+{
+  "violations": [],
+  "violation_count": 0,
+  "files_scanned": 1,
+  "scanned_files": [
+    "db/seeds/prep/01_manufacturers.sql"
+  ],
+  "uuid_basis": "schema",
+  "rows_read": {
+    "prep_seed.tb_manufacturer": 4
+  },
+  "has_violations": false,
+  "violations_by_severity": {},
+  "ok": true,
+  "command": "seed validate",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

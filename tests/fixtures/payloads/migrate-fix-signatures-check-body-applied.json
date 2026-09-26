@@ -1,0 +1,22 @@
+{
+  "status": "applied",
+  "fixes_applied": 1,
+  "applied": [
+    "app.total(integer)"
+  ],
+  "missing_source": [],
+  "remaining_drift": false,
+  "remaining_stale": [],
+  "body_drift_fixes_applied": 1,
+  "body_drift_applied": [
+    "app.total(bigint)"
+  ],
+  "body_drift_missing_source": [],
+  "remaining_body_drift": false,
+  "ok": true,
+  "command": "migrate fix-signatures",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

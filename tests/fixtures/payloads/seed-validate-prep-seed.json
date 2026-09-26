@@ -1,0 +1,44 @@
+{
+  "violations": [
+    {
+      "pattern": "INVALID_UUID_FORMAT",
+      "severity": "ERROR",
+      "message": "Invalid UUID '550e8400-e29b-41d4-a716-44665544000Z' in prep_seed.tb_manufacturer.id, row 2 (a column typed uuid in the schema): expected 32 hex digits, 8-4-4-4-12",
+      "file_path": "db/seeds/prep/01_manufacturers.sql",
+      "line_number": 5,
+      "impact": "PostgreSQL's uuid input refuses the value",
+      "fix_available": false,
+      "suggestion": "Use valid UUID format (see RFC 4122)"
+    }
+  ],
+  "violation_count": 1,
+  "files_scanned": 1,
+  "scanned_files": [
+    "db/seeds/prep/01_manufacturers.sql"
+  ],
+  "uuid_basis": "schema",
+  "rows_read": {
+    "prep_seed.tb_manufacturer": 4
+  },
+  "has_violations": true,
+  "violations_by_severity": {
+    "ERROR": [
+      {
+        "pattern": "INVALID_UUID_FORMAT",
+        "severity": "ERROR",
+        "message": "Invalid UUID '550e8400-e29b-41d4-a716-44665544000Z' in prep_seed.tb_manufacturer.id, row 2 (a column typed uuid in the schema): expected 32 hex digits, 8-4-4-4-12",
+        "file_path": "db/seeds/prep/01_manufacturers.sql",
+        "line_number": 5,
+        "impact": "PostgreSQL's uuid input refuses the value",
+        "fix_available": false,
+        "suggestion": "Use valid UUID format (see RFC 4122)"
+      }
+    ]
+  },
+  "ok": true,
+  "command": "seed validate",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

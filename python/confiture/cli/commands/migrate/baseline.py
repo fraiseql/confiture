@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -58,8 +59,21 @@ def _baseline_from_db_flow(
             dry_run=dry_run,
             source_table=source_table,
         )
-    # The source DSN is printed and emitted, so never with its password.
-    return {"mode": "from_db", "source": redact_url(from_db), "through": through, **report}
+    # The source DSN is printed and emitted, so never with its password; a row's
+    # applied_at is ISO 8601, as every timestamp a payload carries.
+    copied = [{**row, "applied_at": _iso(row.get("applied_at"))} for row in report["copied"]]
+    return {
+        "mode": "from_db",
+        "source": redact_url(from_db),
+        "through": through,
+        **report,
+        "copied": copied,
+    }
+
+
+def _iso(value: Any) -> Any:
+    """A ``datetime`` as ISO 8601; anything else (``None``, a string) as it is."""
+    return value.isoformat() if isinstance(value, datetime) else value
 
 
 def _print_from_db(report: dict[str, Any]) -> None:

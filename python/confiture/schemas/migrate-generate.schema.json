@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-generate.schema.json",
+  "title": "confiture migrate generate --format json",
+  "description": "A new migration: from the Python template, or, with --generator, the `.up.sql` an external generator writes (`generator` is then present). `status` is `success`, or `dry_run` under --dry-run, when nothing is written. --verbose narrates the directory scan on stderr. An invalid name, a file that exists without --force, a --generator without --from/--to or not configured (CONFIG_001), or a generator that fails (GEN_001) writes the error envelope (error-envelope.schema.json) instead.",
+  "oneOf": [
+    {
+      "type": "object",
+      "description": "The template written.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "version",
+        "name",
+        "filepath",
+        "verify_file",
+        "class_name",
+        "migrations_dir",
+        "next_available_version",
+        "snapshot",
+        "snapshot_mode",
+        "warnings"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "success"
+        },
+        "version": {
+          "type": "string",
+          "description": "The new migration's version, a YYYYMMDDHHmmSS timestamp."
+        },
+        "name": {
+          "type": "string"
+        },
+        "filepath": {
+          "type": "string",
+          "description": "Absolute path of the migration file written (or that would be)."
+        },
+        "verify_file": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The `.verify.sql` sidecar beside it; null under --no-verify-sidecar."
+        },
+        "class_name": {
+          "type": "string"
+        },
+        "migrations_dir": {
+          "type": "string"
+        },
+        "next_available_version": {
+          "type": "string",
+          "description": "The same value as `version`."
+        },
+        "snapshot": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The schema-history snapshot written, or null (--no-snapshot, or a snapshot that failed: non-fatal)."
+        },
+        "snapshot_mode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "static",
+            "live",
+            null
+          ],
+          "description": "How the snapshot was taken; null when there is none."
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Duplicate versions in the directory, or the name already used by another version; empty if none."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate generate",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "--dry-run: the template that would be written.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "version",
+        "name",
+        "filepath",
+        "class_name",
+        "template",
+        "warnings"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "dry_run"
+        },
+        "version": {
+          "type": "string",
+          "description": "The new migration's version, a YYYYMMDDHHmmSS timestamp."
+        },
+        "name": {
+          "type": "string"
+        },
+        "filepath": {
+          "type": "string",
+          "description": "Absolute path of the migration file written (or that would be)."
+        },
+        "class_name": {
+          "type": "string"
+        },
+        "template": {
+          "type": "string"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Duplicate versions in the directory, or the name already used by another version; empty if none."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate generate",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "--generator: the `.up.sql` the external generator wrote (a `.down.sql` stub beside it).",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "version",
+        "name",
+        "filepath",
+        "generator",
+        "resolved_command"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "success"
+        },
+        "version": {
+          "type": "string",
+          "description": "The new migration's version, a YYYYMMDDHHmmSS timestamp."
+        },
+        "name": {
+          "type": "string"
+        },
+        "filepath": {
+          "type": "string",
+          "description": "Absolute path of the migration file written (or that would be)."
+        },
+        "generator": {
+          "type": "string",
+          "description": "The --generator name, from migration.migration_generators."
+        },
+        "resolved_command": {
+          "type": "string",
+          "description": "The generator's command with {from}, {to} and {output} filled in."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate generate",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "--generator --dry-run: the command that would run and the file it would write.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "version",
+        "name",
+        "filepath",
+        "generator",
+        "resolved_command"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "dry_run"
+        },
+        "version": {
+          "type": "string",
+          "description": "The new migration's version, a YYYYMMDDHHmmSS timestamp."
+        },
+        "name": {
+          "type": "string"
+        },
+        "filepath": {
+          "type": "string",
+          "description": "Absolute path of the migration file written (or that would be)."
+        },
+        "generator": {
+          "type": "string",
+          "description": "The --generator name, from migration.migration_generators."
+        },
+        "resolved_command": {
+          "type": "string",
+          "description": "The generator's command with {from}, {to} and {output} filled in."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate generate",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    }
+  ]
+}

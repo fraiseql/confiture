@@ -331,7 +331,8 @@ class TestFixSignaturesMissingConfig:
         assert result.exit_code == 5
         assert json.loads(result.stdout)["error"]["code"] == "CONFIG_004"
 
-    def test_exits_2_when_no_source_and_no_schema(self, tmp_path):
+    def test_no_schema_and_no_env_name_is_config_001(self, tmp_path):
+        """The auto-build's error, with its own code (exit 2 with no envelope through 1.23)."""
         config = tmp_path / "confiture.yaml"
         config.write_text("database:\n  url: postgresql://localhost/test\n")
 
@@ -342,4 +343,137 @@ class TestFixSignaturesMissingConfig:
                 app,
                 ["migrate", "fix-signatures", "--config", str(config)],
             )
-        assert result.exit_code == 2
+        assert result.exit_code == 5
+        assert "auto-build failed" in _strip_ansi(result.output)
+
+
+class TestFixSignaturesJsonOnEveryPath:
+    """``--format json`` writes JSON on stdout whatever the outcome."""
+
+    _NO_SOURCE_SQL = (
+        "CREATE OR REPLACE FUNCTION public.other() RETURNS int AS $$ SELECT 1 $$ LANGUAGE sql;"
+    )
+
+    def _invoke(self, tmp_path, schema_sql, *extra, conn=None):
+        config = tmp_path / "confiture.yaml"
+        config.write_text("database:\n  url: postgresql://localhost/test\n")
+        schema = tmp_path / "schema.sql"
+        schema.write_text(schema_sql)
+        with (
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures.load_config",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures.open_connection",
+                conn or _make_conn_mock(),
+            ),
+            patch("confiture.core.live_catalog.routines"),
+            patch(
+                "confiture.core.function_signature_drift.FunctionSignatureDriftDetector.compare",
+                return_value=_DRIFT_REPORT,
+            ),
+        ):
+            return runner.invoke(
+                app,
+                [
+                    "migrate",
+                    "fix-signatures",
+                    "--config",
+                    str(config),
+                    "--schema",
+                    str(schema),
+                    "--format",
+                    "json",
+                    *extra,
+                ],
+            )
+
+    def test_an_auto_build_that_fails_writes_the_error_envelope(self, tmp_path):
+        from confiture.exceptions import SchemaError
+
+        config = tmp_path / "confiture.yaml"
+        config.write_text("name: local\n")
+        with (
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures.load_config",
+                return_value={"name": "local"},
+            ),
+            patch(
+                "confiture.cli.commands.migrate.fix_signatures._core_builder.SchemaBuilder",
+                autospec=True,
+                side_effect=SchemaError(
+                    "Schema directory not found: db/schema", error_code="SCHEMA_201"
+                ),
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["migrate", "fix-signatures", "--config", str(config), "--format", "json"],
+            )
+
+        payload = json.loads(result.stdout)
+        assert (result.exit_code, payload["ok"], payload["error"]["code"]) == (
+            4,
+            False,
+            "SCHEMA_201",
+        )
+        assert "--schema" in payload["error"]["actionable"]
+
+    def test_no_stale_overload_with_a_source_is_a_report_at_exit_1(self, tmp_path):
+        result = self._invoke(tmp_path, self._NO_SOURCE_SQL)
+
+        payload = json.loads(result.stdout)
+        assert (result.exit_code, payload["status"], payload["missing_source"]) == (
+            1,
+            "unfixable",
+            ["public.get_user(integer)"],
+        )
+
+    def test_check_body_does_not_call_unfixable_drift_clean(self, tmp_path):
+        result = self._invoke(tmp_path, self._NO_SOURCE_SQL, "--check-body")
+
+        payload = json.loads(result.stdout)
+        assert (result.exit_code, payload["status"]) == (1, "unfixable")
+
+    def test_an_apply_rolled_back_writes_the_error_envelope(self, tmp_path):
+        failing_conn = MagicMock()
+        failing_conn.cursor.return_value.__enter__ = MagicMock(
+            side_effect=psycopg.OperationalError("db error")
+        )
+        failing_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(return_value=failing_conn)
+        cm.__exit__ = MagicMock(return_value=False)
+
+        result = self._invoke(
+            tmp_path, _SCHEMA_SQL, "--mode", "apply", conn=MagicMock(return_value=cm)
+        )
+
+        payload = json.loads(result.stdout)
+        assert (result.exit_code, payload["ok"], payload["error"]["code"]) == (
+            1,
+            False,
+            "SQL_001",
+        )
+        assert "rolled back" in payload["error"]["message"]
+        failing_conn.commit.assert_not_called()
+
+    def test_the_unfixable_report_is_the_published_shape(self, tmp_path):
+        """No real capture reaches it (declared and defined come from one source): validate here."""
+        from jsonschema import Draft202012Validator
+        from referencing import Registry, Resource
+        from referencing.jsonschema import DRAFT202012
+
+        from confiture.core.schema_exporter import load_schema
+
+        registry = Registry().with_resource(
+            "_common.schema.json",
+            Resource.from_contents(load_schema("_common.schema.json"), DRAFT202012),
+        )
+        validator = Draft202012Validator(
+            load_schema("migrate-fix-signatures.schema.json"), registry=registry
+        )
+        for extra in ((), ("--check-body",)):
+            payload = json.loads(self._invoke(tmp_path, self._NO_SOURCE_SQL, *extra).stdout)
+            assert [e.message for e in validator.iter_errors(payload)] == []

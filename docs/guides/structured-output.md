@@ -293,7 +293,7 @@ confiture migrate validate --fix-naming --dry-run --format json
   "total": number,
   "succeeded": number,
   "failed": number,
-  "failed_files": string[],
+  "failed_files": string[],           // paths below the seeds directory
   "success": boolean,
   "seed_profile": string | null       // --profile
 }

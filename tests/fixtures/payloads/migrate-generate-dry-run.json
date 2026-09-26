@@ -1,0 +1,15 @@
+{
+  "status": "dry_run",
+  "version": "20260926150126",
+  "name": "add_note",
+  "filepath": "/tmp/project/db/migrations/20260926150126_add_note.py",
+  "class_name": "AddNote",
+  "template": "\"\"\"Migration: add_note\n\nVersion: 20260926150126\n\nup() must survive empty tables. `confiture migrate preflight` replays pending\nmigrations against a schema-only database, so every table it sees has no rows\nin it \u2014 an assertion on data raises there, and a deploy gated on the preflight\naborts for a migration whose work was correct.\n\nAssertions about data belong in the sidecar beside this file:\n    20260926150126_add_note.verify.sql\n`confiture migrate verify` runs it separately, in a SAVEPOINT, after the\nmigration has been applied.\n\"\"\"\n\nfrom confiture.models.migration import Migration\n\n\nclass AddNote(Migration):\n    \"\"\"Migration: add_note.\"\"\"\n\n    version = \"20260926150126\"\n    name = \"add_note\"\n\n    def up(self) -> None:\n        \"\"\"Apply migration.\n\n        Schema and data changes only \u2014 no assertions on data (see the module\n        docstring). Runs against a schema-only database during\n        `migrate preflight`.\n        \"\"\"\n        # Add your forward migration SQL here\n        # Example:\n        # self.execute(\"CREATE TABLE users (id SERIAL PRIMARY KEY)\")\n        pass\n\n    def down(self) -> None:\n        \"\"\"Rollback migration.\"\"\"\n        # Add your rollback SQL here\n        # Example:\n        # self.execute(\"DROP TABLE users\")\n        pass\n",
+  "warnings": [],
+  "ok": true,
+  "command": "migrate generate",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

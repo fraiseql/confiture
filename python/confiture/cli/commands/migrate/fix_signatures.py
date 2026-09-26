@@ -42,8 +42,8 @@ from confiture.core.function_signature_drift import (
     replacing_definitions,
     schemas_to_scan,
 )
-from confiture.error_codes import FINDINGS, USAGE, exit_code_of
-from confiture.exceptions import ConfigurationError, ConfiturError
+from confiture.error_codes import FINDINGS
+from confiture.exceptions import ConfigurationError, ConfiturError, base_message
 
 if TYPE_CHECKING:
     from confiture.core.schema_model import Routine
@@ -148,15 +148,17 @@ def migrate_fix_signatures(
             fix_blocks, missing_source = _plan_signature_fixes(
                 drift_report, declared, live, definitions, format_output
             )
-            if not fix_blocks and not check_body:
-                error_console.print(
-                    "[red]❌ No fixable overloads found "
-                    "(source definitions missing for all stale overloads).[/red]"
-                )
-                raise typer.Exit(FINDINGS)
             body_fix_blocks, body_missing_source = _plan_body_fixes(
                 check_body, declared, live, definitions
             )
+            if not fix_blocks and not body_fix_blocks and (missing_source or body_missing_source):
+                _render_unfixable(
+                    missing_source,
+                    body_missing_source if check_body else None,
+                    format_output,
+                    output_file,
+                )
+                raise typer.Exit(FINDINGS)
             if not fix_blocks and not body_fix_blocks:
                 _render_clean(
                     "No signature or body drift detected.",
@@ -202,7 +204,7 @@ def migrate_fix_signatures(
         )
         if has_residual:
             raise typer.Exit(FINDINGS)
-    except typer.Exit:
+    except (typer.Exit, ConfiturError):
         raise
     # Reason: any failure below the config check is one error, rendered by the boundary
     except Exception as e:
@@ -220,20 +222,22 @@ def _resolve_source_sql(schema_file: Path | None, config_data: Any, format_outpu
             else getattr(config_data, "name", None)
         )
         if not env_name:
-            raise ValueError(
-                "Config has no 'name' field — cannot auto-build schema. Pass --schema explicitly."
+            raise ConfigurationError(
+                "Config has no 'name' field — cannot auto-build schema.",
+                error_code="CONFIG_001",
             )
         source_sql = _core_builder.SchemaBuilder(env=env_name).build(schema_only=True)
-        if format_output == "text":
-            console.print("[dim]  (schema auto-built from DDL files)[/dim]")
-        return source_sql
     # Reason: an auto-build failure of any kind is reported with the --schema remedy
     except Exception as build_exc:
-        error_console.print(
-            f"[red]❌ --schema not provided and auto-build failed: {verbatim(build_exc)}[/red]\n"
-            "  Either run 'confiture build' first or pass --schema explicitly."
-        )
-        raise typer.Exit(USAGE) from build_exc
+        raise ConfiturError(
+            f"--schema not provided and auto-build failed: {base_message(build_exc)}",
+            error_code=getattr(build_exc, "error_code", None) or "SCHEMA_001",
+            resolution_hint="Pass --schema explicitly, or fix what stops the auto-build "
+            "('confiture build' shows it).",
+        ) from build_exc
+    if format_output == "text":
+        console.print("[dim]  (schema auto-built from DDL files)[/dim]")
+    return source_sql
 
 
 def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> Any:
@@ -281,6 +285,34 @@ def _render_clean(
         )
     else:
         console.print(f"[green]✅ {verbatim(message)}[/green]")
+
+
+def _render_unfixable(
+    missing_source: list[str],
+    body_missing_source: list[str] | None,
+    format_output: str,
+    output_file: Path | None,
+) -> None:
+    """Drift remains and no stale overload or drifted body has a source definition."""
+    message = "No fixable drift: source definitions are missing for every stale overload."
+    if format_output == "json":
+        emit(
+            {
+                "status": "unfixable",
+                "message": message,
+                "fixes_applied": 0,
+                "missing_source": missing_source,
+                **(
+                    {"body_drift_missing_source": body_missing_source}
+                    if body_missing_source is not None
+                    else {}
+                ),
+            },
+            output_file,
+            console,
+        )
+    else:
+        error_console.print(f"[red]❌ {verbatim(message)}[/red]")
 
 
 def _plan_signature_fixes(
@@ -436,8 +468,11 @@ def _apply_fix_blocks(
         conn.commit()
     except DatabaseError as apply_exc:
         conn.rollback()
-        error_console.print(f"[red]❌ Fix failed (rolled back): {verbatim(apply_exc)}[/red]")
-        raise typer.Exit(exit_code_of("SQL_001")) from apply_exc
+        raise ConfiturError(
+            f"Fix failed (rolled back): {apply_exc}",
+            error_code="SQL_001",
+            resolution_hint="Nothing was changed; fix the definition the error names and rerun.",
+        ) from apply_exc
 
 
 def _render_fix_applied(

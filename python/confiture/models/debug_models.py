@@ -14,7 +14,7 @@ class CTEStepResult:
     row_count: int
     columns: list[str]
     rows: list[tuple[Any, ...]]
-    execution_time_ms: float
+    execution_time_ms: int
     error: str | None = None
 
     @property

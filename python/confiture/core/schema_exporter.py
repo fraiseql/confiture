@@ -41,6 +41,7 @@ _MODELS: dict[str, tuple[str, str]] = {
     "CloneResult": ("confiture.core.test_db", "CloneResult"),
     "ApplyResult": ("confiture.core.seed.applier", "ApplyResult"),
     "SeedGenerationResult": ("confiture.core.seed.bridge", "SeedGenerationResult"),
+    "CTEDebugSession": ("confiture.models.debug_models", "CTEDebugSession"),
 }
 
 MODEL_SCHEMAS: dict[str, str] = {
@@ -64,6 +65,7 @@ MODEL_SCHEMAS: dict[str, str] = {
     "CloneResult": "test-db-clone.schema.json",
     "ApplyResult": "seed-apply.schema.json",
     "SeedGenerationResult": "seed-generate.schema.json",
+    "CTEDebugSession": "debug-cte.schema.json",
 }
 
 # Payloads a command assembles from several sources; validated by the CLI tests.
@@ -79,6 +81,8 @@ CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "migrate-diff.schema.json",
     "migrate-steps.schema.json",
     "migrate-fix.schema.json",
+    "migrate-fix-signatures.schema.json",
+    "migrate-generate.schema.json",
     "migrate-introspect.schema.json",
     "migrate-preflight-against.schema.json",
     "migrate-preflight.schema.json",
@@ -96,6 +100,7 @@ CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "migrate-validate-idempotent.schema.json",
     "migrate-validate-list-patterns.schema.json",
     "schema-dump-model.schema.json",
+    "seed-validate.schema.json",
     "test-db-drop.schema.json",
     "test-db-list.schema.json",
     "test-db-prune.schema.json",

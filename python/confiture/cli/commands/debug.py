@@ -110,7 +110,7 @@ def debug_cte(
         if step.success:
             console.print(
                 f"[green]✓[/green] [bold]{verbatim(step.cte_name)}[/bold]  "
-                f"{verbatim(step.row_count)} row(s)  {step.execution_time_ms:.1f}ms"
+                f"{verbatim(step.row_count)} row(s)  {verbatim(step.execution_time_ms)}ms"
             )
             if step.columns and step.rows:
                 tbl = Table(show_header=True, header_style="bold cyan")

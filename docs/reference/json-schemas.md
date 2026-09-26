@@ -3,12 +3,12 @@
 > **Frozen at 1.0.0.** The published schemas are a stability contract: fields are added, never renamed or removed. A change here is a breaking change: it needs a major version and a CHANGELOG entry.
 
 The commands whose `--format json` output ships a machine-validatable JSON
-Schema are `bootstrap`, `build` (and `build --list-files`), `diff`, `drift` (and
+Schema are `bootstrap`, `build` (and `build --list-files`), `debug cte`, `diff`, `drift` (and
 `drift --check-acls`), `install-helpers`, `introspect`, `lint` (and
 `lint --list-rules`), `lint-unified`, `schema dump-model`, `sync`,
 `validate-config`, `validate-profile`, `verify-checksums` and, in the migrate
 family, `up`, `down`, `down-to`, `apply-as`, `baseline`, `rebuild`, `reinit`,
-`status`, `current`, `diff`, `fix`, `introspect`, `preflight` (and `--against`),
+`status`, `current`, `diff`, `fix`, `fix-signatures`, `generate`, `introspect`, `preflight` (and `--against`),
 `steps`, `validate` (every mode) and `verify` — plus the shared error envelope.
 The other JSON payloads have no published schema yet;
 `tests/unit/json_schemas/test_every_json_command_has_a_schema.py` lists them, with
@@ -107,7 +107,7 @@ attribute names are scheduled to follow them at 1.0.0.
 | `confiture.models.results.SplitBuildResult` | `execution_time_ms` | `execution_time_ms` | library result of the split build |
 | `confiture.models.results.PreflightAgainstMigration` | `execution_time_ms` | `execution_time_ms` | library result of `run_against()`; the CLI prints it as text |
 | `confiture.models.lint.LintReport` | `execution_time_ms` | `execution_time_ms` | `lint --format json` ([`lint.schema.json`](json-schemas/lint.schema.json)) |
-| `confiture.models.debug_models.CTEStepResult` | `execution_time_ms` | `execution_time_ms` | `debug cte --format json` |
+| `confiture.models.debug_models.CTEStepResult` | `execution_time_ms` | `execution_time_ms` | `debug cte --format json` ([`debug-cte.schema.json`](json-schemas/debug-cte.schema.json)) — each `steps[]` item |
 | `confiture.core.drift.DriftReport` | `detection_time_ms` | `detection_time_ms` | `drift --format json` ([`drift.schema.json`](json-schemas/drift.schema.json)) |
 | `confiture.core.function_signature_drift.FunctionSignatureDriftReport` | `detection_time_ms` | `detection_time_ms` | `migrate validate --check-signatures --format json` |
 | `confiture.core.function_body_drift.FunctionBodyDriftReport` | `detection_time_ms` | `detection_time_ms` | `migrate validate --check-body` (`body_drift`) |
@@ -179,6 +179,14 @@ attribute names are scheduled to follow them at 1.0.0.
 ### `confiture migrate apply-as --format json`
 
 [migrate-apply-as.schema.json](./json-schemas/migrate-apply-as.schema.json) — `{success, version, name, applied_by}` for the one migration applied as `<role>` through `apply_as.<role>.url`. A missing URL, an unknown or already-applied version, or a failed migration emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
+
+### `confiture migrate generate --format json`
+
+[migrate-generate.schema.json](./json-schemas/migrate-generate.schema.json) — the migration written: `{status, version, name, filepath, verify_file, class_name, migrations_dir, next_available_version, snapshot, snapshot_mode, warnings}`, or under `--dry-run` `{status: "dry_run", version, name, filepath, class_name, template, warnings}`. With `--generator` the external generator writes the `.up.sql`, and the payload is `{status, version, name, filepath, generator, resolved_command}` (`status` `dry_run` when it only resolved the command). `--verbose` narrates the directory scan on stderr. An invalid name, an existing file without `--force`, a `--generator` without `--from`/`--to` or not in `migration.migration_generators` (`CONFIG_001`), or a generator that fails (`GEN_001`) emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
+
+### `confiture migrate fix-signatures --format json`
+
+[migrate-fix-signatures.schema.json](./json-schemas/migrate-fix-signatures.schema.json) — stale function overloads and their fix, `status` naming the shape: `clean` `{message, fixes_applied: 0}`; `unfixable` `{message, fixes_applied: 0, missing_source[]}` at exit 1, when drift remains and nothing has a source definition to fix it with; `dry_run` (`--mode plan`, the default) `{fixes_planned, missing_source[], sql, blocks[]}`; `applied`, or `partial` at exit 1 when the re-check still finds drift, `{fixes_applied, applied[], missing_source[], remaining_drift, remaining_stale[]}`. `--check-body` adds the `body_drift_*` keys to each. A schema auto-build that fails (the build's own code), an unreachable database, or a fix PostgreSQL refuses — the transaction rolled back, `SQL_001` — emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
 
 ### `confiture migrate validate --list-patterns --format json`
 
@@ -639,9 +647,15 @@ or a live database, keys sorted so the same model is the same bytes.
 
 [test-db-ram-setup.schema.json](./json-schemas/test-db-ram-setup.schema.json) — `{tablespace, location, owner, recreated, action_required, dropped_databases[]}` after (re)creating a tmpfs tablespace. When confiture cannot hand the location to the server's OS user, nothing is created: `action_required` is `true`, `action_command` names the privileged step, and the command exits 5.
 ### `confiture seed apply --format json`
-[seed-apply.schema.json](./json-schemas/seed-apply.schema.json) — `{total, succeeded, failed, failed_files[], success, seed_profile}`: the seed files selected, how many applied, the names of those that failed (only under `--continue-on-error`, which exits 0), and the `--profile` applied or `null`. A file that fails without `--continue-on-error` rolls the run back and emits the [error envelope](./json-schemas/error-envelope.schema.json) (`SEED_001`) instead.
+[seed-apply.schema.json](./json-schemas/seed-apply.schema.json) — `{total, succeeded, failed, failed_files[], success, seed_profile}`: the seed files selected, how many applied, the paths below the seeds directory of those that failed (only under `--continue-on-error`, which exits 0), and the `--profile` applied or `null`. A file that fails without `--continue-on-error` rolls the run back and emits the [error envelope](./json-schemas/error-envelope.schema.json) (`SEED_001`) instead.
 ### `confiture seed generate --format json`
 [seed-generate.schema.json](./json-schemas/seed-generate.schema.json) — `{table, output_path, row_count, column_count, success, error}`: the stub written, or, with `success: false` and exit 1, why none was (the table not found, the file already there without `--overwrite`).
+### `confiture seed validate --format json`
+[seed-validate.schema.json](./json-schemas/seed-validate.schema.json) — one of two shapes, exit 1 when there are violations. The default checks: `{violations[], violation_count, files_scanned, has_violations}`, each violation `{pattern, sql_snippet, line_number, file_path, suggestion, fix_available}`; with `--fix`, a `fixes[]` of `{file, fixes_applied, written}` says which files were rewritten (`written: false` under `--dry-run`), and stdout holds nothing but the report. The violations are found before `--fix` runs. With `--prep-seed`: `PrepSeedReport.to_dict()`, which adds `scanned_files[]`, `uuid_basis`, `rows_read{}` and `violations_by_severity{}`, each violation `{pattern, severity, message, file_path, line_number, impact, fix_available, suggestion}`. A seeds directory that does not exist emits the [error envelope](./json-schemas/error-envelope.schema.json) (`CONFIG_004`) instead.
+
+### `confiture debug cte --format json`
+
+[debug-cte.schema.json](./json-schemas/debug-cte.schema.json) — `CTEDebugSession.to_dict()`: `{total_ctes, all_succeeded, failed_at, steps[]}`, each step `{cte_name, row_count, columns[], rows[], execution_time_ms, error}` in whole milliseconds. A CTE that fails is the query's finding: exit 1, this shape, `failed_at` naming it. A missing `--sql`/`--file` or a connection failure emits the [error envelope](./json-schemas/error-envelope.schema.json). The `debug` group is experimental; its output may change in any release.
 
 ### The schema model (`confiture.platform`)
 

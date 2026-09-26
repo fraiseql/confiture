@@ -1,0 +1,28 @@
+{
+  "violations": [
+    {
+      "pattern": "MISSING_ON_CONFLICT",
+      "sql_snippet": "INSERT INTO t (id) VALUES (1);",
+      "line_number": 1,
+      "file_path": "db/seeds/bad/01_t.sql",
+      "suggestion": "Add ON CONFLICT clause to handle duplicate inserts",
+      "fix_available": true
+    }
+  ],
+  "violation_count": 1,
+  "files_scanned": 2,
+  "has_violations": true,
+  "fixes": [
+    {
+      "file": "db/seeds/bad/01_t.sql",
+      "fixes_applied": 1,
+      "written": true
+    }
+  ],
+  "ok": true,
+  "command": "seed validate",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

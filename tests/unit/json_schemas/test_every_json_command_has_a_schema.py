@@ -3,9 +3,8 @@
 A consumer that parses ``--format json`` builds on key names; without a published
 schema those names rest on a ``to_dict`` nobody promised to keep. So each command
 whose ``--format`` accepts ``json`` has a section in ``docs/reference/json-schemas.md``
-linking a schema file that exists — or it is an alias of one that does, or it is
-listed below with the reason it has none yet. That list only shrinks: an entry for a
-command that now has a schema, or no longer writes JSON, fails.
+linking a schema file that exists, or it is an alias of one that does. There is no
+list of exceptions: a new command that writes JSON publishes its shape with it.
 """
 
 from __future__ import annotations
@@ -25,24 +24,6 @@ SCHEMAS = REPO / "python" / "confiture" / "schemas"
 #: Commands that write another documented command's payload, by that command.
 ALIASES: dict[str, str] = {
     "migrate verify-checksums": "verify-checksums",
-}
-
-#: Commands that write JSON with no published schema yet, and why. Shrink-only.
-WITHOUT_SCHEMA: dict[str, str] = {
-    "debug cte": (
-        "steps[].execution_time_ms is a fractional float (0.78) where the timing "
-        "vocabulary promises integer milliseconds; the group is also declared experimental"
-    ),
-    "migrate fix-signatures": (
-        "--format json writes nothing to stdout when the schema auto-build fails "
-        "(exit 2), when no stale overload has a source definition (exit 1), or when "
-        "an apply is rolled back: the message goes to stderr as text"
-    ),
-    "migrate generate": (
-        "--verbose prints the directory scan to stdout ahead of the JSON, and "
-        "--generator ignores --format json: text on success, text on stderr on failure"
-    ),
-    "seed validate": "--fix prints a line per fixed file to stdout ahead of the JSON",
 }
 
 _HEADING = re.compile(r"^### `confiture ([a-z0-9 -]+?)(?: <[^>]+>)?(?: --[^`]*)?`", re.MULTILINE)
@@ -86,8 +67,8 @@ def documented() -> dict[str, list[str]]:
     return sections
 
 
-def test_every_json_command_is_documented_aliased_or_listed() -> None:
-    covered = set(documented()) | set(ALIASES) | set(WITHOUT_SCHEMA)
+def test_every_json_command_is_documented_or_aliased() -> None:
+    covered = set(documented()) | set(ALIASES)
 
     assert sorted(json_commands() - covered) == []
 
@@ -104,14 +85,3 @@ def test_every_documented_section_links_a_schema_that_exists() -> None:
 
 def test_an_alias_names_a_documented_command() -> None:
     assert {a: t for a, t in ALIASES.items() if t not in documented()} == {}
-
-
-def test_the_without_schema_list_only_shrinks() -> None:
-    """An entry for a command that now has a section, or writes no JSON, is stale."""
-    stale = {
-        command
-        for command in WITHOUT_SCHEMA
-        if command in documented() or command not in json_commands()
-    }
-
-    assert stale == set()
