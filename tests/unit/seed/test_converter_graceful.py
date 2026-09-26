@@ -162,3 +162,15 @@ class TestGracefulDegradation:
         result = converter.try_convert(sql, file_path="math.sql")
 
         assert result.success is False
+
+
+def test_all_or_nothing_refuses_a_file_with_one_statement_copy_cannot_express() -> None:
+    """``seed apply --copy-format`` then runs the file as written: COPY has no ON CONFLICT."""
+    sql = "INSERT INTO t (id) VALUES (1);\nINSERT INTO t (id) VALUES (2) ON CONFLICT DO NOTHING;\n"
+
+    whole = InsertToCopyConverter().try_convert(sql, all_or_nothing=True)
+    partial = InsertToCopyConverter().try_convert(sql)
+
+    assert (whole.success, whole.copy_format) == (False, None)
+    assert "ON CONFLICT" in (whole.reason or "")
+    assert partial.success is True

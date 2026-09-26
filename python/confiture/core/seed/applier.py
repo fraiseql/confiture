@@ -13,6 +13,7 @@ from pathlib import Path
 
 import psycopg
 from rich.console import Console
+from rich.markup import escape
 
 from confiture.config.environment import SeedProfile
 from confiture.core import path_globs
@@ -309,12 +310,28 @@ class SeedApplier:
         self.console.print(f"[cyan]→ {self.seed_name(seed_file)}[/cyan]", end=" ")
         sql_content = read_seed(seed_file)
         if self.copy_format and count_insert_rows(sql_content) >= self.copy_threshold:
-            sql_content = InsertToCopyConverter().convert(sql_content)
-            self.console.print("[dim](COPY)[/dim]", end=" ")
+            sql_content = self._as_copy(sql_content, seed_file)
         executor.execute_sql(sql_content, savepoint_name, source=seed_file)
         if transaction_mode == "transaction":
             self.connection.commit()
         self.console.print("[green]✓[/green]")
+
+    def _as_copy(self, sql_content: str, seed_file: Path) -> str:
+        """*sql_content* as COPY when every statement in it can be; otherwise as written.
+
+        A COPY cannot say ``ON CONFLICT``, ``RETURNING`` or ``now()``: converting
+        such a statement would change what the file does (a seed that re-applies
+        cleanly would fail on a duplicate key), so a file holding one runs as
+        written and the progress line says why.
+        """
+        conversion = InsertToCopyConverter().try_convert(
+            sql_content, file_path=str(seed_file), all_or_nothing=True
+        )
+        if conversion.success and conversion.copy_format is not None:
+            self.console.print("[dim](COPY)[/dim]", end=" ")
+            return conversion.copy_format
+        self.console.print(f"[dim](INSERT: {escape(conversion.reason or '')})[/dim]", end=" ")
+        return sql_content
 
     def _print_seed_summary(self, result: ApplyResult) -> None:
         self.console.print("\n" + "=" * 50)

@@ -141,6 +141,13 @@ When you use `--copy-format`, Confiture:
 3. **Converts to COPY format** with proper escaping
 4. **Applies via native protocol** for maximum speed
 
+A file is converted whole or not at all. One statement COPY cannot express —
+`ON CONFLICT`, `RETURNING`, a function call such as `now()`, a subquery — keeps
+the file as written, and its progress line on stderr says why:
+`→ 01_users.sql (INSERT: ON CONFLICT clause not compatible with COPY) ✓`.
+COPY has no conflict handling, so an `ON CONFLICT DO NOTHING` seed converted to
+COPY would fail with a duplicate key the second time it is applied.
+
 ### Escaping Rules
 
 COPY format uses tab-delimited values with special characters escaped:

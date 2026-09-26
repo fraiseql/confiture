@@ -56,6 +56,8 @@ class InsertToCopyConverter:
         self,
         insert_sql: str,
         file_path: str = "",
+        *,
+        all_or_nothing: bool = False,
     ) -> ConversionResult:
         """Attempt to convert INSERT statements to COPY format with graceful fallback.
 
@@ -68,6 +70,12 @@ class InsertToCopyConverter:
         Args:
             insert_sql: One or more SQL INSERT statements
             file_path: Optional path to the file being converted (for reporting)
+            all_or_nothing: Fail, with the statement's reason, as soon as one
+                statement cannot become COPY, instead of passing it through
+                after the COPY blocks. What runs a file in place of its text
+                asks for this: a passed-through statement runs after rows it
+                preceded, and a file that cannot be converted whole is run as
+                written.
 
         Returns:
             ConversionResult with success status, converted format (if successful),
@@ -112,6 +120,8 @@ class InsertToCopyConverter:
             stmt_sql = stmt.sql(dialect="postgres")
 
             can_convert, reason = self.validator.can_convert_to_copy(stmt_sql)
+            if not can_convert and all_or_nothing:
+                return ConversionResult(file_path=file_path, success=False, reason=reason)
             if not can_convert:
                 if first_failure_reason is None:
                     first_failure_reason = reason
@@ -124,6 +134,12 @@ class InsertToCopyConverter:
             rows = self.validator.extract_rows(stmt_sql)
 
             if table_name is None or rows is None:
+                if all_or_nothing:
+                    return ConversionResult(
+                        file_path=file_path,
+                        success=False,
+                        reason="Could not read the statement's table or rows",
+                    )
                 passthrough.append(stmt_sql)
                 continue
 

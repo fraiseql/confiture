@@ -176,6 +176,14 @@ run and the `--dry-run-execute` rehearsal both did it.
   path a `--profile` glob matches (for `build --sequential`, below the first
   seed directory) — and the per-file progress on stderr names files the same
   way. A file directly in the seeds directory reads as before.
+- **`seed apply --copy-format` no longer drops `ON CONFLICT`.** A file over
+  `--copy-threshold` was rewritten as COPY without checking what its statements
+  said: `INSERT … ON CONFLICT DO NOTHING` became a plain COPY, so re-applying the
+  seed failed on a duplicate key, and a file of two INSERT statements failed
+  outright (`Could not extract table name`). A file is now converted only when
+  every statement in it can become COPY; one holding `ON CONFLICT`, `RETURNING`,
+  a function call or a subquery runs as written, and its progress line says why
+  (`(INSERT: ON CONFLICT clause not compatible with COPY)`).
 - **A table `migrate diff` pairs as a rename is still compared.** The differ
   emitted `RENAME TABLE` and moved on, so the renamed table's new columns,
   indexes and constraints never reached the generated migration, and the migrated
