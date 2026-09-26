@@ -158,6 +158,13 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="naming_003",
+        family="naming",
+        title="No identifier holds a dot: confiture would read it as schema.name",
+        severity="error",
+        default_on=True,
+    ),
+    LintRule(
         code="pk_001",
         family="pk",
         title="Every table should declare a primary key",

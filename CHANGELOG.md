@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`naming_003`: no identifier holds a dot** (#476), at `error` and on by
+  default. PostgreSQL accepts `CREATE TABLE app."a.b"`, but confiture carries a
+  foreign key's target (among others) as one `schema.name` string, so a dot in a
+  name reads as the separator and the differ, drift and prep-seed misread what
+  refers to it. The rule reports every schema, relation, type, sequence, routine,
+  column and index whose name holds a dot — a schema once, where it is declared
+  or first used — spelled as SQL writes it (`app."a.b"`), with the name's dots
+  made underscores as the suggested fix. `naming_001` and `naming_002` no longer
+  also report such a name as a spelling. A tree that trips it can adopt it with
+  `--baseline`.
+
 ## [1.24.0] - 2026-09-26
 
 **Tenancy is declared once, and the schema is held to it.** A new project-level

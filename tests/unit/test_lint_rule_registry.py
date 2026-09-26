@@ -32,6 +32,7 @@ class TestRegistryContents:
             "UNPARSEABLE",
             "naming_001",
             "naming_002",
+            "naming_003",
             "pk_001",
             "doc_001",
             "doc_002",
@@ -78,6 +79,7 @@ class TestRegistryContents:
             "UNPARSEABLE",
             "naming_001",
             "naming_002",
+            "naming_003",
             "pk_001",
             "doc_001",
             "doc_002",
@@ -134,6 +136,7 @@ class TestSelection:
                 "UNPARSEABLE",
                 "naming_001",
                 "naming_002",
+                "naming_003",
                 "pk_001",
                 "doc_001",
                 "doc_002",
@@ -151,7 +154,9 @@ class TestSelection:
         )
 
     def test_a_family_selects_its_rules_and_nothing_else(self) -> None:
-        assert resolve_selection(["naming"], ()) == frozenset({"naming_001", "naming_002"})
+        assert resolve_selection(["naming"], ()) == frozenset(
+            {"naming_001", "naming_002", "naming_003"}
+        )
 
     def test_a_code_selects_exactly_that_rule(self) -> None:
         assert resolve_selection(["naming_001"], ()) == frozenset({"naming_001"})
@@ -162,6 +167,7 @@ class TestSelection:
             {
                 "naming_001",
                 "naming_002",
+                "naming_003",
                 "pk_001",
                 "doc_001",
                 "doc_002",
@@ -182,11 +188,13 @@ class TestSelection:
 
     def test_comma_separated_values_are_split(self) -> None:
         assert resolve_selection(["naming,pk"], ()) == frozenset(
-            {"naming_001", "naming_002", "pk_001"}
+            {"naming_001", "naming_002", "naming_003", "pk_001"}
         )
 
     def test_ignore_wins_over_select(self) -> None:
-        assert resolve_selection(["naming"], ["naming_001"]) == frozenset({"naming_002"})
+        assert resolve_selection(["naming"], ["naming_001"]) == frozenset(
+            {"naming_002", "naming_003"}
+        )
 
     def test_ignore_accepts_a_family(self) -> None:
         assert resolve_selection([DEFAULT_SELECTOR], ["naming"]) == frozenset(
@@ -212,7 +220,9 @@ class TestSelection:
         assert resolve_selection([DEFAULT_SELECTOR], [DEFAULT_SELECTOR]) == frozenset()
 
     def test_selection_is_case_insensitive(self) -> None:
-        assert resolve_selection(["NAMING"], ()) == frozenset({"naming_001", "naming_002"})
+        assert resolve_selection(["NAMING"], ()) == frozenset(
+            {"naming_001", "naming_002", "naming_003"}
+        )
 
 
 class TestUnknownSelectors:

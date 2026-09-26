@@ -65,14 +65,14 @@ def _gate(*args: str) -> dict:
 
 class TestTheNotice:
     def test_a_selection_with_no_error_rule_cannot_reach_error(self, project: Path) -> None:
-        result = _lint("--fail-on", "error", "--select", "doc,naming,pk")
+        result = _lint("--fail-on", "error", "--select", "doc,naming_001,naming_002,pk")
 
         assert result.exit_code == 0
         assert "no selected rule emits at 'error'" in result.output
         assert "this gate cannot fail" in result.output
 
     def test_json_says_the_same_thing(self, project: Path) -> None:
-        gate = _gate("--fail-on", "error", "--select", "doc,naming,pk")
+        gate = _gate("--fail-on", "error", "--select", "doc,naming_001,naming_002,pk")
 
         assert gate["threshold"] == "error"
         assert gate["reachable"] is False

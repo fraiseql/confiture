@@ -26,6 +26,7 @@ from confiture.core import builder as _core_builder
 from confiture.core import sql_lexer
 from confiture.core.builder import files_under
 from confiture.core.linting import seed_secrets
+from confiture.core.linting.dotted_names import dotted_names
 from confiture.core.linting.inventory import (
     Inventory,
     SchemaObject,
@@ -517,9 +518,14 @@ class SchemaLinter:
             self._schema_sql = ""
 
     def _check_naming_conventions(self, report: LintReport) -> None:
-        """Check naming conventions (snake_case for identifiers) on the inventory."""
+        """Check naming conventions on the inventory: snake_case, and no dotted name.
+
+        A name holding a dot is ``naming_003``'s, an error, and is not reported
+        again as a spelling (``naming_001`` / ``naming_002``).
+        """
+        self._check_dotted_names(report)
         for table in distinct(self._inventory.tables):
-            if not self._is_snake_case(table.name):
+            if "." not in table.name and not self._is_snake_case(table.name):
                 report.add_violation(
                     LintViolation(
                         rule_id="naming_001",
@@ -540,7 +546,7 @@ class SchemaLinter:
     def _check_column_names(self, table: SchemaObject, report: LintReport) -> None:
         """Check column naming conventions in a table."""
         for column in table.columns:
-            if not self._is_snake_case(column.name):
+            if "." not in column.name and not self._is_snake_case(column.name):
                 report.add_violation(
                     LintViolation(
                         rule_id="naming_002",
@@ -555,6 +561,26 @@ class SchemaLinter:
                         line_number=column.line,
                     )
                 )
+
+    def _check_dotted_names(self, report: LintReport) -> None:
+        """``naming_003``: a name holding a dot, which confiture reads as ``schema.name``."""
+        for found in dotted_names(self._inventory):
+            report.add_violation(
+                LintViolation(
+                    rule_id="naming_003",
+                    rule_name="Dotted Identifier",
+                    severity=RuleSeverity.ERROR,
+                    object_type=found.kind,
+                    object_name=found.spelled,
+                    message=(
+                        f"{found.spelled} holds a dot in its name: confiture reads a "
+                        "dotted name as schema.name, so what refers to it is misread"
+                    ),
+                    file_path=found.file,
+                    line_number=found.line,
+                    suggested_fix=f"rename it without the dot, e.g. {found.suggested}",
+                )
+            )
 
     def _check_primary_keys(self, report: LintReport) -> None:
         """Every table has a primary key — a partition inherits its parent's."""
