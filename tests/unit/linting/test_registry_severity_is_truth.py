@@ -151,6 +151,25 @@ FIXTURES: dict[str, Fixture] = {
         {"010.sql": "CREATE TABLE tb_order_line (id INT PRIMARY KEY);\n"},
         extra_files={"db/project.yaml": "tenancy: {}\n"},
     ),
+    "tenant_003": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_order (id INT PRIMARY KEY, tenant_id INT NOT NULL);\n"
+            "CREATE VIEW v_order AS SELECT o.id FROM tb_order o;\n"
+        },
+        extra_files={"db/project.yaml": "tenancy: {}\n"},
+    ),
+    "tenant_004": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_order (id INT PRIMARY KEY, tenant_id INT NOT NULL);\n"
+            "CREATE TABLE tb_order_line (id INT PRIMARY KEY, tenant_id INT NOT NULL,\n"
+            "  fk_order INT REFERENCES tb_order (id));\n"
+        },
+        extra_files={"db/project.yaml": "tenancy: {}\n"},
+    ),
+    "tenant_005": Fixture(
+        {"010.sql": "CREATE TABLE tb_user (id INT PRIMARY KEY, tenant_id INT NOT NULL);\n"},
+        extra_files={"db/project.yaml": "tenancy: {}\n"},
+    ),
     "replica_001": Fixture(
         {"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, c INT);\n"},
         escalated_env_extra="infrastructure:\n  replicas:\n    - read-1\n",

@@ -283,6 +283,31 @@ LINT_RULES: tuple[LintRule, ...] = (
         enabled_by="tenancy",
     ),
     LintRule(
+        code="tenant_003",
+        family="tenant",
+        title="A view reading tenant data publishes the discriminator as a plain column, "
+        "or is declared global",
+        severity="warning",
+        default_on=False,
+        enabled_by="tenancy",
+    ),
+    LintRule(
+        code="tenant_004",
+        family="tenant",
+        title="A foreign key between tenant tables carries the discriminator on both sides",
+        severity="warning",
+        default_on=False,
+        enabled_by="tenancy",
+    ),
+    LintRule(
+        code="tenant_005",
+        family="tenant",
+        title="A tenant table's primary key and unique keys lead with the discriminator",
+        severity="warning",
+        default_on=False,
+        enabled_by="tenancy",
+    ),
+    LintRule(
         code="replica_001",
         family="replica",
         title="Migrations stay forward-compatible with streaming replicas",

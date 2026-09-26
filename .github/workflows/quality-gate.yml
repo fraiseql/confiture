@@ -358,6 +358,10 @@ jobs:
           tests/unit/test_change_order.py \
           tests/unit/test_exclusion_constraints.py \
           tests/unit/test_one_identifier_quoter.py \
+          tests/unit/test_one_column_tracer.py \
+          tests/unit/linting/test_tenant_003_views.py \
+          tests/unit/linting/test_tenant_004_foreign_keys.py \
+          tests/unit/linting/test_tenant_005_unique_keys.py \
           tests/unit/test_schema_change.py \
           tests/unit/test_schema_change_is_exhaustive.py \
           tests/unit/test_schema_change_tiers.py \

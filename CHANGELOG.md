@@ -45,6 +45,44 @@ run and the `--dry-run-execute` rehearsal both did it.
   declaration that cannot hold. Selected without a `tenancy:` block, it reports
   itself skipped, with the reason. An environment file carrying `tenancy:` is
   refused and pointed at `db/project.yaml`.
+- **The `tenant` family reads one classification of the tables** (#426). Each
+  table's scope — tenant, global, the root, or undecided — is decided once per lint,
+  from its first definition when it is defined twice, and `tenant_002` through
+  `tenant_005` all read that answer. So does the root's tenant id: the column the
+  discriminator's foreign keys reference, which need not be the root's primary key
+  (a root may keep a surrogate `id bigint` beside a `UNIQUE` tenant id); while no
+  discriminator references the root, its single-column primary key; undecided, and
+  never guessed, when the discriminators reference different columns of it.
+- **`tenant_003`: a view that reads tenant data publishes the discriminator, or is
+  declared global** (#426). The output column named `tenancy.discriminator` is
+  traced through the view's parse tree — aliases, `JOIN … USING`/`NATURAL`,
+  subqueries, CTEs (recursive included), `*`, set operations branch by branch — to
+  the discriminator of a tenant relation it reads, or the root's tenant id (so
+  `o.id AS tenant_id` from the root, and the global `CROSS JOIN` root fan-out,
+  publish it). An expression, a cast, a `COALESCE` or an aggregate is not a plain
+  column. What a view reads includes the bodies of the routines it calls. What the
+  tracer cannot follow — a set-returning function in `FROM`, a relation the model
+  lacks, a called routine whose body could not be read — is a finding with its
+  reason, never a pass; a declaration without a reason, contradicted, or stale is a
+  finding too. Materialized views are views here.
+- **`tenant_004`: a foreign key cannot cross tenants** (#426). It reports a foreign
+  key between two tenant tables that does not carry the discriminator on both sides
+  at the same position (the hint writes `(tenant_id, fk_x) REFERENCES … (tenant_id,
+  id)` and the key the target then needs), a column other than the discriminator
+  referencing the root, and a global table referencing a tenant table. The
+  discriminator referencing the root's tenant id is the one clean reference to the
+  root; a tenant table may reference a global one, and an undecided table is not
+  judged.
+- **`tenant_005`: a tenant table's keys lead with the discriminator** (#426). It
+  reports a tenant table's primary key, `UNIQUE` or unique index (expression and
+  partial ones included) whose first key is not the discriminator; a
+  `CREATE UNIQUE INDEX` under `-- confiture:tenant-global <reason>` is exempt, and
+  the directive on one that already leads with the discriminator is stale.
+
+  `tenant_003`, `tenant_004` and `tenant_005` are on with a `tenancy:` block, like
+  `tenant_002`, and report themselves skipped, with the reason, without one;
+  `--ignore tenant_003,tenant_004,tenant_005` defers them on a schema that predates
+  them.
 - **Every command that writes JSON publishes its shape.** All 49 commands
   whose `--format` accepts `json` now have a schema in `python/confiture/schemas/`
   (was 20), each written against payloads the command printed in a real run and
