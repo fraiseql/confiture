@@ -374,12 +374,17 @@ is blanked, one it accepts is put back. A reference is never rewritten, because
 `app.tv_summary` reduced to `tv_summary` would be a name the rule declines to
 judge — the same silent miss, one step along.
 
-One shape is still refused, and it is **named** rather than passed off as clean
-(see `degraded`, below): an array whose element type the stub cannot resolve —
-`app.type_input[]`, and equally `public.type_input[]` and a bare `type_input[]`,
-since naming the array type means resolving the element, and telling
-`type_input[]` from `text[]` needs the catalogue that is not there. It is
-pglast 8's alone: pglast 6.16 and 7.18 read it.
+An array of a type the stub cannot resolve — `app.type_input[]`, and equally
+`public.type_input[]` and a bare `type_input[]` — is refused a second way: the
+stub resolves the element to `record` and the array to `_record`, which PL/pgSQL
+declines as a parameter, a return type or a variable. Since #453 the array
+suffix (`[]`, `[n]`, `ARRAY`, `ARRAY[n]`) is blanked the same way, and by the
+same rule: only when the compiler refuses the statement, and put back when it
+compiles without it, so `text[]` and a subscript `p[1]` in the body are left as
+written. A `VARIADIC` marker, which pglast 8's stub refuses whatever its type,
+is handled alike. All of this is pglast 8's alone: pglast 6.16 and 7.18 read
+these routines as written. A body refused for a reason no blank explains is
+**named** rather than passed off as clean (see `degraded`, below).
 
 #### A trigger function's body is read like any other
 

@@ -212,6 +212,22 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Fixed
 
+- **A routine that takes an array of a user-defined type is read on pglast 8**
+  (#453). libpg_query's catalogue stub resolves a type it does not know to
+  `record` and an array of one to `_record`, which PL/pgSQL refuses as a
+  parameter, a return type or a variable — so `p app.type_input[]`,
+  `p public.type_input[]` and a bare `p type_input[]` each left the body unread,
+  and `build_003` and `tenant_001` reported it as degraded rather than judging
+  it. `plpgsql_parse.parse_body` now blanks the array suffix (`[]`, `[n]`,
+  `ARRAY`, `ARRAY[n]`) as it already blanked a schema qualifier: with spaces,
+  only after the compiler refuses the statement, and each blank put back when
+  the routine compiles without it — so `text[]` and a body's `p[1]` are never
+  touched, and every fragment keeps its text and its line. A `VARIADIC`
+  parameter, which pglast 8's stub refuses whatever its type (`text[]`
+  included), is read the same way, and so is a qualifier or a type whose name
+  is a keyword the scanner does not report as an identifier (`catalog.`,
+  `app.type`), which was never offered for blanking. pglast 6 and 7 read all
+  of these already and compile them as written.
 - **`debug cte` times each step in whole milliseconds.** `steps[].execution_time_ms`
   was a float rounded to two places (`0.78`), where every other duration a
   payload carries is an integer; it is now truncated to an integer, as `build`

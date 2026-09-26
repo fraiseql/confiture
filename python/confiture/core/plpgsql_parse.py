@@ -1,4 +1,4 @@
-"""Compiling a PL/pgSQL body with a compiler that has no catalogue (issues #270, #272).
+"""Compiling a PL/pgSQL body with a compiler that has no catalogue (#270, #272, #453).
 
 ``pglast.parse_plpgsql`` is the only thing that reads a PL/pgSQL body, and it
 is the wrong shape twice: the compiler behind it refuses a routine it should
@@ -28,13 +28,25 @@ wants the tree's ``lineno``s and its ``PLpgSQL_expr`` query strings, and a datum
 compiler looks up, so the qualifier is **blanked with spaces** — every offset and
 every line number preserved to the character — and the routine compiles.
 
-Which qualifiers to blank is decided by the compiler, not by a model of
-PL/pgSQL's declaration grammar:
+The same stub resolves a type it does not know to ``record``, and an array of
+one to ``_record`` — which PL/pgSQL refuses as a parameter, a return type and a
+variable (#453). ``app.type_input[]``, ``public.type_input[]`` and a bare
+``type_input[]`` are all refused that way, and so is every ``VARIADIC``
+parameter, ``text[]`` included, because the stub cannot say that any type is an
+array. The array suffix (``[]``, ``[3]``, ``ARRAY``, ``ARRAY[3]``) and the
+``VARIADIC`` marker are in the way exactly as a qualifier is, and nothing
+downstream reads them either, so they are blanked the same way: the scalar left
+behind is one the stub accepts as ``record``.
+
+Which qualifiers, suffixes and markers to blank is decided by the compiler, not
+by a model of PL/pgSQL's declaration grammar:
 
 - a qualifier it **refuses** is a type, and blanking it costs nothing;
 - a qualifier it **accepts** is a reference, and blanking one would turn
   ``app.tv_summary`` into a bare name that ``build_003`` declines to judge —
-  the same silent miss, moved one step along.
+  the same silent miss, moved one step along. A suffix it accepts — ``text[]``,
+  a subscript ``p[1]`` in the body — is put back for the same reason: the
+  fragments a body holds reach the caller as their author wrote them.
 
 Only the compiler can tell those apart with certainty, so only the compiler is
 asked. A guess — the signature, plus every ``DECLARE … BEGIN`` region — narrows
@@ -45,7 +57,11 @@ where PL/pgSQL writes a type from becoming a silent miss.
 
 Finding the candidates is :mod:`confiture.core.sql_lexer`'s work and nobody
 else's. A qualified name inside a string literal or a comment must not be
-touched, and the scanner is what knows where those end.
+touched, and the scanner is what knows where those end. A candidate is only
+ever something whose blanking leaves the text SQL: ``x[1]`` blanked to ``x`` is
+still an expression, where the array *constructor* ``ARRAY[1]`` blanked to
+nothing is not — so the ``ARRAY`` keyword is a candidate only where it follows
+what can end a type name, which is the one place it is written as a suffix.
 
 The serialiser, second (#272).
 
@@ -101,13 +117,29 @@ from confiture.core import sql_lexer
 RESOLVABLE_SCHEMAS: frozenset[str] = frozenset({"pg_catalog", "public"})
 
 #: The scanner's names for the three tokens a schema qualifier is written with,
-#: and for the two that bound a PL/pgSQL declaration section.
+#: for the two that bound a PL/pgSQL declaration section, and for the ones an
+#: array suffix and a ``VARIADIC`` marker are written with.
 _IDENT = "IDENT"
 _DOT = "ASCII_46"
+_OPEN_BRACKET = "ASCII_91"
+_CLOSE_BRACKET = "ASCII_93"
+_OPEN_PAREN = "ASCII_40"
+_CLOSE_PAREN = "ASCII_41"
+_ICONST = "ICONST"
+_ARRAY = "ARRAY"
+_VARIADIC = "VARIADIC"
 _DECLARE = "DECLARE"
 _BEGIN = "BEGIN_P"
 _STRING = "SCONST"
 _AS = "AS"
+
+#: The keyword kind of a token that is no keyword: an identifier, punctuation,
+#: a constant.
+_NO_KEYWORD = "NO_KEYWORD"
+
+#: Keyword kinds that cannot end a type name: an identifier's, which is
+#: :data:`_IDENT` by name, and a reserved word's.
+_NOT_A_TYPE_NAME_KIND = frozenset({_NO_KEYWORD, "RESERVED_KEYWORD"})
 
 #: The three characters a mis-serialised datum ends with: an empty object and
 #: one closing brace too many. Only ever deleted at the position the JSON
@@ -127,9 +159,11 @@ class Compiled:
         tree: What ``pglast.parse_plpgsql`` returned.
         text: The statement as it was finally handed over — equal to the
             statement passed in whenever nothing had to be rewritten.
-        neutralised: The schema qualifiers blanked, in source order. Empty on
-            every routine the compiler accepts as written, which is what makes
-            "nothing was rewritten, so nothing was lost" checkable.
+        neutralised: The spans blanked, in source order: schema qualifiers
+            (``app.``), array suffixes (``[]``, ``[3]``, ``ARRAY``,
+            ``ARRAY[3]``) and ``VARIADIC`` markers. Empty on every routine the
+            compiler accepts as written, which is what makes "nothing was
+            rewritten, so nothing was lost" checkable.
         repaired: Stray closing braces deleted from ``libpg_query``'s
             serialisation before it would decode — one per implicit datum it
             mis-writes. Zero on every routine whose JSON is well formed, which
@@ -157,12 +191,13 @@ def parse_body(statement: str, *, body_at: int | None = None) -> Compiled:
             by a longer route.
 
     Returns:
-        The tree, the text it came from, the qualifiers blanked to get it, and
+        The tree, the text it came from, the spans blanked to get it, and
         the stray braces deleted from the serialisation to decode it.
 
     Raises:
         pglast.parser.ParseError: The body is unreadable for a reason blanking
-            a qualifier does not address. The **first** error is re-raised, not
+            a qualifier, an array suffix or a ``VARIADIC`` marker does not
+            address. The **first** error is re-raised, not
             the rewritten run's: it is the one that describes the real body.
         json.JSONDecodeError: The serialisation is malformed somewhere that is
             not the stray brace described above, so what it holds is unknown
@@ -175,7 +210,7 @@ def parse_body(statement: str, *, body_at: int | None = None) -> Compiled:
     else:
         return Compiled(tree, statement, (), repaired)
 
-    candidates = _qualifier_spans(statement, body_at)
+    candidates = _candidate_spans(statement, body_at)
     if not candidates:
         raise refused
 
@@ -280,29 +315,41 @@ def _blank(statement: str, spans: list[Span]) -> str:
     return "".join(text)
 
 
-def _qualifier_spans(statement: str, body_at: int | None) -> list[Span]:
-    """Every ``schema.`` prefix in the statement and in its body, in source order.
+def _candidate_spans(statement: str, body_at: int | None) -> list[Span]:
+    """Every blankable span in the statement and in its body, in source order.
 
-    A prefix is an identifier, a dot and an identifier, where the identifier is
-    not itself the tail of a longer chain — in ``app.tbl.col`` only ``app.`` is
-    removable, and removing it leaves ``tbl.col``, which still means what it
-    said. Qualifiers naming a schema the stub resolves are not candidates: they
-    are not in the way, and blanking one would be a rewrite with no purpose.
+    The body is one string constant to the statement's scanner, so it is
+    scanned again on its own: what is inside it is only visible from there.
     """
-    spans = _prefixes(statement)
+    spans = _candidates(statement)
     body = _body_span(statement, body_at)
     if body is not None:
         start, end = body
-        spans += [(s + start, e + start) for s, e in _prefixes(statement[start:end])]
+        spans += [(s + start, e + start) for s, e in _candidates(statement[start:end])]
     return sorted(spans)
 
 
-def _prefixes(text: str) -> list[Span]:
+def _candidates(text: str) -> list[Span]:
     tokens = sql_lexer.tokens(text)
+    return _prefixes(text, tokens) + _array_suffixes(tokens) + _variadics(tokens)
+
+
+def _prefixes(text: str, tokens: list[Any]) -> list[Span]:
+    """Every ``schema.`` prefix naming a schema the stub cannot resolve.
+
+    A prefix is a name, a dot and a name, where the first is not itself the
+    tail of a longer chain — in ``app.tbl.col`` only ``app.`` is removable, and
+    removing it leaves ``tbl.col``, which still means what it said. A name is
+    an identifier or a keyword the scanner reports as one: ``catalog`` scans as
+    ``CATALOG_P`` and ``type`` as ``TYPE_P``, and a schema or a type may be
+    called either. Qualifiers naming a schema the stub resolves are not
+    candidates: they are not in the way, and blanking one would be a rewrite
+    with no purpose.
+    """
     found: list[Span] = []
     for index in range(len(tokens) - 2):
         name, dot, tail = tokens[index : index + 3]
-        if name.name != _IDENT or dot.name != _DOT or tail.name != _IDENT:
+        if not (_is_name(name) and dot.name == _DOT and _is_name(tail)):
             continue
         if index and tokens[index - 1].name == _DOT:
             continue
@@ -310,6 +357,70 @@ def _prefixes(text: str) -> list[Span]:
             continue
         found.append((name.start, dot.end + 1))
     return found
+
+
+def _is_name(token: Any) -> bool:
+    """Whether *token* can be a name either side of a dot: an identifier or a keyword."""
+    return token.name == _IDENT or token.kind != _NO_KEYWORD
+
+
+def _array_suffixes(tokens: list[Any]) -> list[Span]:
+    """Every ``[]``/``[n]``, and every ``ARRAY``/``ARRAY[n]`` after a type name.
+
+    A bracket pair holding nothing or one integer is an array suffix or a
+    subscript, and blanking either leaves an expression; :func:`_minimised`
+    puts a subscript back. ``ARRAY`` is also the array *constructor*
+    (``ARRAY[1]``, ``ARRAY(SELECT …)``), which blanked leaves no expression at
+    all, so it is a candidate only after what can end a type name — an
+    identifier, a keyword that is not reserved, or a typmod's ``)`` — and
+    never before a ``(``. The brackets after it are part of its span, never a
+    candidate of their own.
+    """
+    found: list[Span] = []
+    for index, token in enumerate(tokens):
+        previous = tokens[index - 1] if index else None
+        if token.name == _ARRAY:
+            if _ends_a_type_name(previous) and not _is(tokens, index + 1, _OPEN_PAREN):
+                end = _brackets_end(tokens, index + 1)
+                found.append((token.start, (token.end if end is None else end) + 1))
+        elif token.name == _OPEN_BRACKET and not _is(tokens, index - 1, _ARRAY):
+            end = _brackets_end(tokens, index)
+            if end is not None:
+                found.append((token.start, end + 1))
+    return found
+
+
+def _brackets_end(tokens: list[Any], index: int) -> int | None:
+    """Where the ``[]`` or ``[n]`` opening at *index* ends, or ``None``."""
+    if not _is(tokens, index, _OPEN_BRACKET):
+        return None
+    if _is(tokens, index + 1, _CLOSE_BRACKET):
+        return tokens[index + 1].end
+    if _is(tokens, index + 1, _ICONST) and _is(tokens, index + 2, _CLOSE_BRACKET):
+        return tokens[index + 2].end
+    return None
+
+
+def _is(tokens: list[Any], index: int, name: str) -> bool:
+    return 0 <= index < len(tokens) and tokens[index].name == name
+
+
+def _ends_a_type_name(token: Any) -> bool:
+    if token is None:
+        return False
+    if token.name in {_IDENT, _CLOSE_PAREN}:
+        return True
+    return token.kind not in _NOT_A_TYPE_NAME_KIND
+
+
+def _variadics(tokens: list[Any]) -> list[Span]:
+    """Every ``VARIADIC`` marker: on a parameter, or on a call's last argument.
+
+    Blanking one leaves an ordinary parameter or argument. The stub cannot say
+    that any ``VARIADIC`` parameter's type is an array — ``text[]`` included —
+    so it refuses every one it is given.
+    """
+    return [(token.start, token.end + 1) for token in tokens if token.name == _VARIADIC]
 
 
 def _folded(text: str, token: Any) -> str:
