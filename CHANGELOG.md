@@ -51,6 +51,17 @@ run and the `--dry-run-execute` rehearsal both did it.
   text (an accented `COMMENT`, a translated label) made the file longer on disk
   than that, so the figure matched neither `wc -c` nor a CI step comparing
   bundles. It is now the written file's size in bytes.
+- **`migrate validate --check-live-drift --help` names what it reports** (#423).
+  It said constraints and column defaults were not compared; both have been
+  since 1.15.0/1.21.0. It now names every finding kind it can report
+  (`missing_constraint`, `extra_constraint`, `default_mismatch`, …) and keeps
+  the one true exclusion: sequences. A test holds it to `DriftType`.
+- **`lint --help` says which rules run by default** (#430). Its rule paragraphs
+  are generated from the registry `--list-rules` prints: `tree_001`,
+  `build_003` and `build_004` are on by default, and `build_004` and `tree_001`
+  fail a plain lint alongside `build_001`. The guides that called the `tree`
+  family opt-in now say `tree_001` is not, and the schema-linting guide links
+  the generated catalogue instead of keeping a copy.
 - **A rehearsal that halted no longer says "all SQL executed successfully".**
   Its warning is `dry_run_execute: changes rolled back`; the halt is in `errors`.
 - **A routine with ~30 parameters no longer crashes the schema read** (#433).

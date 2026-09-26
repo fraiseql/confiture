@@ -185,10 +185,13 @@ CheckLiveDriftOpt = Annotated[
     bool,
     typer.Option(
         "--check-live-drift",
-        help="Compare the live database schema against the DDL files: tables, "
-        "columns (existence, type, nullability, order), indexes, and the existence "
-        "of views, materialized views, triggers and routines. Constraints, "
-        "sequences and column defaults are NOT compared; grants and ownership are "
+        help="Compare the live database schema against the DDL files and report "
+        "each difference by kind: missing_table / extra_table, missing_column / "
+        "extra_column, type_mismatch, nullable_mismatch, default_mismatch, "
+        "column_order_mismatch, missing_index / extra_index, missing_constraint / "
+        "extra_constraint, missing_view / extra_view, missing_matview / "
+        "extra_matview, missing_trigger / extra_trigger, missing_routine / "
+        "extra_routine. Sequences are not compared; grants and ownership are "
         "separate checks (--check-acls, --check-ownership-coverage). "
         "Requires --config and a database connection.",
     ),

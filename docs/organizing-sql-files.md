@@ -45,8 +45,9 @@ with the lower `order`, and among equals under the one listed first.
 reports colliding prefixes, a prefix that does not extend its parent's, an
 unnumbered entry beside numbered siblings, and a status word in a name the
 build reads — see [the `tree` family](reference/lint-rules.md#the-tree-family-the-arrangement-that-decides-the-build-order).
-The family is opt-in and `--baseline` is the way to adopt it on a tree that has
-never been checked.
+`tree_001` (a shared prefix) is on by default, at `error`; the rest of the family
+is opt-in, and `--baseline` is the way to adopt it on a tree that has never been
+checked.
 
 ### How a file gets into the build
 
