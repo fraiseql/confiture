@@ -338,8 +338,7 @@ def test_a_fragment_that_cannot_be_read_is_reported_never_passed(
 def test_a_body_the_compiler_refuses_is_reported_never_passed(tmp_path: Path) -> None:
     found, report = _inserts(
         tmp_path,
-        _ORDER
-        + "CREATE FUNCTION app.fn_create_order() RETURNS void\n"
+        _ORDER + "CREATE FUNCTION app.fn_create_order() RETURNS void\n"
         "LANGUAGE plpgsql AS $$\n"
         "BEGIN INSERT INTO app.tb_order (id) VALUES (gen_random_uuid()); END IF; END; $$;\n",
     )
