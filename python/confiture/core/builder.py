@@ -679,7 +679,7 @@ class SchemaBuilder:
         Example:
             >>> builder = SchemaBuilder(env="local")
             >>> schema = builder.build(output_path=Path("schema.sql"))
-            >>> print(f"Generated {len(schema)} bytes")
+            >>> print(f"Generated {len(schema.encode('utf-8'))} bytes")
 
             >>> # Build schema without seeds
             >>> schema = builder.build(schema_only=True)

@@ -258,7 +258,7 @@ def build(
             seed_profile=seed_profile,
             sequential=sequential,
         )
-        schema, schema_file_count, duplicates, warnings = _run_build(
+        schema_file_count, duplicates, warnings = _run_build(
             builder,
             out,
             env=env,
@@ -314,7 +314,8 @@ def build(
         build_result = BuildResult(
             success=True,
             files_processed=schema_file_count,
-            schema_size_bytes=len(schema),
+            # The file it wrote, in bytes: `len(schema)` counts characters (#429).
+            schema_size_bytes=output.stat().st_size,
             output_path=str(output.absolute()),
             hash=schema_hash,
             execution_time_ms=0,
@@ -442,12 +443,12 @@ def _run_build(
     output: Path,
     apply_sequential: bool,
     duplicate_gate: Callable[[list[Path]], Any],
-) -> tuple[str, int, Any, list[BuildWarning]]:
-    """Concatenate the schema under a progress bar, after ``duplicate_gate`` saw the files.
+) -> tuple[int, Any, list[BuildWarning]]:
+    """Write the schema to ``output`` under a progress bar, after ``duplicate_gate`` saw the files.
 
     Returns:
-        ``(schema, schema_file_count, duplicates, warnings)``; the seed files
-        are left to the sequential applier when ``apply_sequential``.
+        ``(schema_file_count, duplicates, warnings)``; the seed files are left
+        to the sequential applier when ``apply_sequential``.
     """
     out.print(f"[cyan]🔨 Building schema for environment: {verbatim(env)}[/cyan]")
 
@@ -455,13 +456,13 @@ def _run_build(
         sql_files = builder.find_sql_files()
         duplicates, warnings = duplicate_gate(sql_files)
         if apply_sequential:
-            schema = builder.build(output_path=output, schema_only=True, progress=progress)
+            builder.build(output_path=output, schema_only=True, progress=progress)
             schema_file_count = len([f for f in sql_files if not builder.is_seed_file(f)])
         else:
-            schema = builder.build(output_path=output, progress=progress)
+            builder.build(output_path=output, progress=progress)
             schema_file_count = len(sql_files)
     out.print(f"[cyan]📄 Found {len(sql_files)} SQL files[/cyan]")
-    return schema, schema_file_count, duplicates, warnings
+    return schema_file_count, duplicates, warnings
 
 
 def _apply_build_overrides(

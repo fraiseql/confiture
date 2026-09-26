@@ -38,6 +38,11 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Fixed
 
+- **`build` reports the size of the file it wrote** (#429). It printed, and
+  put in `schema_size_bytes`, the schema's length in characters; any non-ASCII
+  text (an accented `COMMENT`, a translated label) made the file longer on disk
+  than that, so the figure matched neither `wc -c` nor a CI step comparing
+  bundles. It is now the written file's size in bytes.
 - **A rehearsal that halted no longer says "all SQL executed successfully".**
   Its warning is `dry_run_execute: changes rolled back`; the halt is in `errors`.
 - **A routine with ~30 parameters no longer crashes the schema read** (#433).
