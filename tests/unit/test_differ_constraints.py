@@ -14,7 +14,7 @@ produces the *same* model.
 from __future__ import annotations
 
 from confiture.core.differ import SchemaDiffer
-from confiture.core.schema_model import Table
+from confiture.core.schema_model import RelationName, Table
 
 PARENT = "CREATE TABLE b.parent (id INT PRIMARY KEY);\n"
 
@@ -34,7 +34,7 @@ class TestAColumnLevelConstraintIsATableConstraint:
         assert (table.qualified, fk.columns, fk.ref_table, fk.ref_columns) == (
             "a.child",
             ("pid",),
-            "b.parent",
+            RelationName("b", "parent"),
             ("id",),
         )
 
@@ -187,7 +187,7 @@ class TestAnAddedColumnBringsItsConstraints:
             "ALTER TABLE a.child ADD COLUMN pid INT REFERENCES b.parent(id);"
         )
         assert [(fk.columns, fk.ref_table) for fk in table.constraints_of("foreign_key")] == [
-            (("pid",), "b.parent")
+            (("pid",), RelationName("b", "parent"))
         ]
 
     def test_an_added_column_can_be_the_primary_key(self) -> None:

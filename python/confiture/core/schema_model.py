@@ -118,6 +118,37 @@ def qualified_name(schema: str | None, name: str) -> str:
 
 
 @dataclass(frozen=True)
+class RelationName:
+    """A relation one object names — a foreign key's target, an index's table, a parent.
+
+    Two parts, never one string (#478). PostgreSQL accepts a dot inside a quoted
+    name (``app."a.b"``), so ``schema.name`` text cannot be taken apart again: the
+    parser hands the two over separately, the catalog reads them separately, and
+    they stay that way. Both parts are as the parser holds them — an unquoted
+    part already folded, a quoted one kept — and ``schema`` is ``None`` when the
+    author wrote none; :attr:`identity` defaults it, which is how two references
+    are compared.
+    """
+
+    schema: str | None
+    name: str
+
+    @property
+    def identity(self) -> tuple[str, str]:
+        """``(schema, name)`` the relation is found under: a missing schema defaulted."""
+        return self.schema or DEFAULT_SCHEMA, self.name
+
+    @property
+    def qualified(self) -> str:
+        """``schema.name`` as written, for a message — never to be split again."""
+        return qualified_name(self.schema, self.name)
+
+    def ref(self, kind: str = "table") -> ObjectRef:
+        """The model's key of the relation, as :func:`ref_for` builds it."""
+        return ref_for(kind, self.schema, self.name)
+
+
+@dataclass(frozen=True)
 class Column:
     """A column, whole.
 
@@ -170,7 +201,7 @@ class Constraint:
     kind: ConstraintKind
     name: str = ""
     columns: tuple[str, ...] = ()
-    ref_table: str | None = None
+    ref_table: RelationName | None = None
     ref_columns: tuple[str, ...] = ()
     on_delete: str | None = None
     on_update: str | None = None
@@ -198,7 +229,7 @@ class Index:
     """
 
     name: str | None
-    table: str
+    table: RelationName
     columns: tuple[str, ...]
     unique: bool = False
     where: str | None = None
@@ -220,6 +251,11 @@ class Table:
     @property
     def qualified(self) -> str:
         return qualified_name(self.schema, self.name)
+
+    @property
+    def relation(self) -> RelationName:
+        """The table as another object names it: its schema and its name, apart."""
+        return RelationName(self.schema, self.name)
 
     def column(self, folded: str) -> Column | None:
         """The column the parser spells *folded*, or ``None``."""
@@ -499,11 +535,27 @@ def _column_from(data: dict[str, Any]) -> Column:
     return Column(**data)
 
 
+def _relation_from(data: dict[str, Any] | str | None) -> RelationName | None:
+    """A relation from its wire: ``{"schema", "name"}``.
+
+    A model written before the relation was two parts carried ``schema.name``
+    text; it reads as split on its last dot, which is what it meant when it was
+    written — a dot inside a name was already lost then.
+    """
+    if data is None:
+        return None
+    if isinstance(data, str):
+        schema, _, name = data.rpartition(".")
+        return RelationName(schema or None, name)
+    return RelationName(data["schema"], data["name"])
+
+
 def _constraint_from(data: dict[str, Any]) -> Constraint:
     """A constraint from its wire; one written before EXCLUDE was modelled reads without it."""
     return Constraint(
         **{
             **data,
+            "ref_table": _relation_from(data.get("ref_table")),
             "columns": tuple(data["columns"]),
             "ref_columns": tuple(data["ref_columns"]),
             "operators": tuple(data.get("operators", ())),
@@ -514,9 +566,13 @@ def _constraint_from(data: dict[str, Any]) -> Constraint:
 
 def _index_from(data: dict[str, Any]) -> Index:
     """An index from its wire; one written before ``key_options`` existed reads as none."""
+    table = _relation_from(data["table"])
+    if table is None:
+        raise ValueError(f"an index on no relation: {data!r}")
     return Index(
         **{
             **data,
+            "table": table,
             "columns": tuple(data["columns"]),
             "key_options": tuple(data.get("key_options", ())),
         }
@@ -643,12 +699,9 @@ _COLUMN_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 _DEFAULT_MAX = frozenset({2**15 - 1, 2**31 - 1, 2**63 - 1})
 
 
-def identity_of(qualified: str | None) -> str | None:
-    """``b.p`` → ``b.p``, ``p`` → ``public.p``: a reference as an identity."""
-    if not qualified:
-        return qualified
-    schema, _, name = qualified.rpartition(".")
-    return f"{(schema or DEFAULT_SCHEMA).lower()}.{name}"
+def _parity_relation(relation: RelationName) -> RelationName:
+    """*relation* by its identity: the catalog always names the schema a tree may omit."""
+    return RelationName(*relation.identity)
 
 
 def _generated_name(table: str, name: str) -> bool:
@@ -677,7 +730,7 @@ def _parity_constraint(table: str, constraint: Constraint) -> Constraint:
         constraint,
         name="" if _generated_name(table, constraint.name) else constraint.name,
         expression=None if constraint.expression is None else _EXPRESSION,
-        ref_table=identity_of(constraint.ref_table),
+        ref_table=None if constraint.ref_table is None else _parity_relation(constraint.ref_table),
     )
 
 
@@ -696,7 +749,7 @@ def _parity_table(table: Table) -> Table:
 def _parity_index(index: Index) -> Index:
     return replace(
         index,
-        table=identity_of(index.table) or index.table,
+        table=_parity_relation(index.table),
         columns=tuple(key if _COLUMN_KEY.fullmatch(key) else _EXPRESSION for key in index.columns),
         where=None if index.where is None else _EXPRESSION,
     )

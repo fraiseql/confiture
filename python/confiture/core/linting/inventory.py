@@ -37,11 +37,11 @@ from confiture.core.ddl_walk import (
     column_edit,
     object_edits,
     object_kinds,
-    qualified_relname,
     read_column_constraints,
     read_constraint,
     read_index,
     read_like,
+    relation_name,
     render_default,
     routine_body,
     routine_options,
@@ -58,6 +58,7 @@ from confiture.core.schema_model import (
     EnumType,
     Index,
     ObjectRef,
+    RelationName,
     Routine,
     RoutineKind,
     SchemaModel,
@@ -189,10 +190,10 @@ class SchemaObject:
     file: str | None = None
     replace: bool = False
     if_not_exists: bool = False
-    #: ``schema.parent`` of a ``PARTITION OF`` child, as pglast holds it.
-    parent: str | None = None
-    #: ``schema.parent`` of each table an ``INHERITS`` names, as pglast holds it.
-    inherits: tuple[str, ...] = ()
+    #: The parent of a ``PARTITION OF`` child, as pglast holds it.
+    parent: RelationName | None = None
+    #: Each table an ``INHERITS`` names, as pglast holds it.
+    inherits: tuple[RelationName, ...] = ()
     statement_line: int = 1
     #: What a routine or a view *is*, beyond its identity — a body, a language,
     #: a query. Its name, schema and signature are this object's own, which an
@@ -583,24 +584,20 @@ def _table_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     return table
 
 
-def _parent_name(stmt: Any) -> str | None:
-    """``schema.parent`` of a ``PARTITION OF`` child (folded, as pglast spells it)."""
+def _parent_name(stmt: Any) -> RelationName | None:
+    """The parent of a ``PARTITION OF`` child (folded, as pglast holds it)."""
     if stmt.partbound is None:
         return None
-    for rv in getattr(stmt, "inhRelations", None) or ():
-        name = getattr(rv, "relname", None)
-        if name:
-            schema = getattr(rv, "schemaname", None)
-            return f"{schema}.{name}" if schema else name
-    return None
+    names = (relation_name(rv) for rv in getattr(stmt, "inhRelations", None) or ())
+    return next((name for name in names if name is not None), None)
 
 
-def _inherited_names(stmt: Any) -> tuple[str, ...]:
-    """``schema.parent`` of each table an ``INHERITS`` names; ``()`` for a partition."""
+def _inherited_names(stmt: Any) -> tuple[RelationName, ...]:
+    """Each table an ``INHERITS`` names; ``()`` for a partition."""
     if stmt.partbound is not None:
         return ()
-    names = (qualified_relname(rv) for rv in getattr(stmt, "inhRelations", None) or ())
-    return tuple(name for name in names if name)
+    names = (relation_name(rv) for rv in getattr(stmt, "inhRelations", None) or ())
+    return tuple(name for name in names if name is not None)
 
 
 def _routine_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
@@ -832,10 +829,11 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
             apply(sql, table, edit)
 
 
-def _held_table(inventory: Inventory, held: str, before: int | None = None) -> SchemaObject | None:
-    """The table a ``schema.name`` pglast holds names; declared before *before*, when given."""
-    schema, _, name = held.rpartition(".")
-    found = inventory.find_all(("table",), schema or None, name)
+def _held_table(
+    inventory: Inventory, held: RelationName, before: int | None = None
+) -> SchemaObject | None:
+    """The table *held* names; declared before *before*, when given."""
+    found = inventory.find_all(("table",), held.schema, held.name)
     return next((t for t in found if before is None or t.offset < before), None)
 
 
@@ -938,7 +936,7 @@ def _apply_index(sql: str, raw: Any, inventory: Inventory) -> None:
     if not found:
         return
     target = found[0]
-    index = read_index(raw.stmt, table=target.qualified)
+    index = read_index(raw.stmt, table=RelationName(target.schema, target.name))
     target.indexes.append(index)
     target.index_lines[index] = _line_of(sql, _statement_offset(sql, raw))
 
@@ -1128,13 +1126,13 @@ def _model_ref(obj: SchemaObject) -> Any:
 
 
 def _model_table(obj: SchemaObject) -> Table:
-    qualified = f"{obj.folded_schema}.{obj.folded_name}" if obj.folded_schema else obj.folded_name
+    relation = RelationName(obj.folded_schema, obj.folded_name)
     return Table(
         name=obj.folded_name,
         schema=obj.folded_schema,
         columns=tuple(obj.columns),
         constraints=tuple(obj.constraints),
-        indexes=tuple(replace(ix, table=qualified) for ix in obj.indexes),
+        indexes=tuple(replace(ix, table=relation) for ix in obj.indexes),
     )
 
 
@@ -1173,12 +1171,12 @@ def _model_routine(obj: SchemaObject, routine: Routine) -> Routine:
 
 
 def _model_view(obj: SchemaObject, view: View) -> View:
-    qualified = f"{obj.folded_schema}.{obj.folded_name}" if obj.folded_schema else obj.folded_name
+    relation = RelationName(obj.folded_schema, obj.folded_name)
     return replace(
         view,
         name=obj.folded_name,
         schema=obj.folded_schema,
-        indexes=tuple(replace(ix, table=qualified) for ix in obj.indexes),
+        indexes=tuple(replace(ix, table=relation) for ix in obj.indexes),
     )
 
 

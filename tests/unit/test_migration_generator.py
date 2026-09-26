@@ -16,6 +16,7 @@ from confiture.core.schema_change import (
     TableAdded,
     TableDropped,
 )
+from confiture.core.schema_model import RelationName
 from tests.unit._schema_changes import replaced, spelled
 from tests.unit._schema_models import table
 
@@ -28,7 +29,9 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[ColumnAdded("users", spelled("email", "TEXT"))])
+        diff = SchemaDiff(
+            changes=[ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT"))]
+        )
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="add_users_table")
@@ -45,14 +48,18 @@ class TestMigrationGenerator:
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
         # First migration should have timestamp format
-        diff1 = SchemaDiff(changes=[ColumnAdded("users", spelled("email", "TEXT"))])
+        diff1 = SchemaDiff(
+            changes=[ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT"))]
+        )
         file1 = generator.generate(diff1, name="add_email")
         assert re.match(r"^\d{14}_", file1.name), (
             f"Filename {file1.name} should start with 14-digit timestamp"
         )
 
         # Second migration should also have timestamp format (may be same second or later)
-        diff2 = SchemaDiff(changes=[ColumnAdded("posts", spelled("title", "TEXT"))])
+        diff2 = SchemaDiff(
+            changes=[ColumnAdded(RelationName(None, "posts"), spelled("title", "TEXT"))]
+        )
         file2 = generator.generate(diff2, name="add_title")
         assert re.match(r"^\d{14}_", file2.name), (
             f"Filename {file2.name} should start with 14-digit timestamp"
@@ -109,7 +116,11 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[ColumnAdded("users", spelled("email", "TEXT", nullable=False))])
+        diff = SchemaDiff(
+            changes=[
+                ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT", nullable=False))
+            ]
+        )
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="add_user_email")
@@ -128,7 +139,9 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[ColumnDropped("users", spelled("old_field", "TEXT"))])
+        diff = SchemaDiff(
+            changes=[ColumnDropped(RelationName(None, "users"), spelled("old_field", "TEXT"))]
+        )
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="drop_old_field")
@@ -147,7 +160,9 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[ColumnRenamed("users", "full_name", "display_name")])
+        diff = SchemaDiff(
+            changes=[ColumnRenamed(RelationName(None, "users"), "full_name", "display_name")]
+        )
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="rename_user_full_name")
@@ -168,7 +183,9 @@ class TestMigrationGenerator:
 
         diff = SchemaDiff(
             changes=[
-                ColumnTypeChanged("users", spelled("age", "INTEGER"), spelled("age", "BIGINT"))
+                ColumnTypeChanged(
+                    RelationName(None, "users"), spelled("age", "INTEGER"), spelled("age", "BIGINT")
+                )
             ]
         )
 
@@ -189,7 +206,9 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[ColumnNullabilityChanged("users", "email", nullable=False)])
+        diff = SchemaDiff(
+            changes=[ColumnNullabilityChanged(RelationName(None, "users"), "email", nullable=False)]
+        )
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="make_email_not_null")
@@ -208,7 +227,11 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[ColumnDefaultChanged("settings", "enabled", "FALSE", "TRUE")])
+        diff = SchemaDiff(
+            changes=[
+                ColumnDefaultChanged(RelationName(None, "settings"), "enabled", "FALSE", "TRUE")
+            ]
+        )
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="change_default_enabled")
@@ -229,8 +252,8 @@ class TestMigrationGenerator:
 
         diff = SchemaDiff(
             changes=[
-                ColumnAdded("users", spelled("email", "TEXT")),
-                ColumnRenamed("users", "name", "username"),
+                ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT")),
+                ColumnRenamed(RelationName(None, "users"), "name", "username"),
             ]
         )
 
@@ -260,7 +283,7 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[ColumnRenamed("users", "name", "username")])
+        diff = SchemaDiff(changes=[ColumnRenamed(RelationName(None, "users"), "name", "username")])
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="test_migration")
@@ -298,7 +321,9 @@ class TestMigrationGenerator:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
 
-        diff = SchemaDiff(changes=[ColumnAdded("users", spelled("email", "TEXT"))])
+        diff = SchemaDiff(
+            changes=[ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT"))]
+        )
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
         migration_file = generator.generate(diff, name="add_users_table")
@@ -315,8 +340,8 @@ class TestGenerateSql:
     def test_writes_an_up_and_a_down_file(self, tmp_path):
         diff = SchemaDiff(
             changes=[
-                ColumnAdded("users", spelled("bio", "TEXT")),
-                ColumnAdded("users", spelled("age", "INTEGER")),
+                ColumnAdded(RelationName(None, "users"), spelled("bio", "TEXT")),
+                ColumnAdded(RelationName(None, "users"), spelled("age", "INTEGER")),
             ]
         )
         up = MigrationGenerator(migrations_dir=tmp_path).generate_sql(

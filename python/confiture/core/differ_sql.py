@@ -27,6 +27,7 @@ from confiture.core.ddl_clauses import (
     column_type,
     index_element,
     named,
+    relation,
 )
 from confiture.core.ddl_clauses import constraint_body as _clause
 from confiture.core.ddl_objects import OBJECT_KEYWORD, DDLObject, drop_statement, output_columns
@@ -65,7 +66,15 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.core.schema_model import Column, Constraint, EnumType, Index, Sequence, Table
+from confiture.core.schema_model import (
+    Column,
+    Constraint,
+    EnumType,
+    Index,
+    RelationName,
+    Sequence,
+    Table,
+)
 from confiture.core.type_lattice import has_assignment_cast
 
 #: The kinds compared by definition that a migration is derived for, created and
@@ -212,9 +221,7 @@ def _create_table(table: Table) -> str:
     )
     joined = ",\n    ".join(elements)
     body = f"(\n    {joined}\n)" if elements else "()"
-    return (
-        f"{warnings}CREATE TABLE IF NOT EXISTS {table.qualified} {body};\n{_table_indexes(table)}"
-    )
+    return f"{warnings}CREATE TABLE IF NOT EXISTS {relation(table.relation)} {body};\n{_table_indexes(table)}"
 
 
 def _table_up(change: TableChange) -> str | None:
@@ -222,10 +229,10 @@ def _table_up(change: TableChange) -> str | None:
         case TableAdded(table):
             return _create_table(table)
         case TableDropped(table):
-            return f"DROP TABLE {table.qualified};\n"
+            return f"DROP TABLE {relation(table.relation)};\n"
         case TableRenamed(old, new):
             # `ALTER TABLE a.t RENAME TO a.t2` is a syntax error: the target is a bare name.
-            return f"ALTER TABLE {old.qualified} RENAME TO {new.name};\n"
+            return f"ALTER TABLE {relation(old.relation)} RENAME TO {new.name};\n"
         case _:
             assert_never(change)
 
@@ -233,26 +240,26 @@ def _table_up(change: TableChange) -> str | None:
 def _table_down(change: TableChange) -> str | None:
     match change:
         case TableAdded(table):
-            return f"DROP TABLE {table.qualified};\n"
+            return f"DROP TABLE {relation(table.relation)};\n"
         case TableDropped(table):
             return _create_table(table) if table.columns else None
         case TableRenamed(old, new):
-            return f"ALTER TABLE {new.qualified} RENAME TO {old.name};\n"
+            return f"ALTER TABLE {relation(new.relation)} RENAME TO {old.name};\n"
         case _:
             assert_never(change)
 
 
-def _nullability(table: str, column: str, *, nullable: bool) -> str:
+def _nullability(table: RelationName, column: str, *, nullable: bool) -> str:
     verb = "DROP" if nullable else "SET"
-    return f"ALTER TABLE {table} ALTER COLUMN {column} {verb} NOT NULL;\n"
+    return f"ALTER TABLE {relation(table)} ALTER COLUMN {column} {verb} NOT NULL;\n"
 
 
-def _default(table: str, column: str, default: str | None) -> str:
+def _default(table: RelationName, column: str, default: str | None) -> str:
     clause = f"SET DEFAULT {default}" if default else "DROP DEFAULT"
-    return f"ALTER TABLE {table} ALTER COLUMN {column} {clause};\n"
+    return f"ALTER TABLE {relation(table)} ALTER COLUMN {column} {clause};\n"
 
 
-def _retype(table: str, old: Column, new: Column) -> str:
+def _retype(table: RelationName, old: Column, new: Column) -> str:
     """``ALTER COLUMN … TYPE``, with ``USING`` where PostgreSQL has no assignment cast.
 
     Where it has one — within a family, or to a string type — the statement needs
@@ -262,7 +269,7 @@ def _retype(table: str, old: Column, new: Column) -> str:
     review line says the cast can fail on data.
     """
     before, after = column_type(old), column_type(new)
-    statement = f"ALTER TABLE {table} ALTER COLUMN {old.folded} TYPE {after}"
+    statement = f"ALTER TABLE {relation(table)} ALTER COLUMN {old.folded} TYPE {after}"
     if has_assignment_cast(before, after):
         return f"{statement};\n"
     return (
@@ -275,11 +282,13 @@ def _retype(table: str, old: Column, new: Column) -> str:
 def _column_up(change: ColumnChange) -> str:
     match change:
         case ColumnAdded(table, column):
-            return f"ALTER TABLE {table} ADD COLUMN {column.folded} {column_body(column)};\n"
+            return (
+                f"ALTER TABLE {relation(table)} ADD COLUMN {column.folded} {column_body(column)};\n"
+            )
         case ColumnDropped(table, column):
-            return f"ALTER TABLE {table} DROP COLUMN {column.folded};\n"
+            return f"ALTER TABLE {relation(table)} DROP COLUMN {column.folded};\n"
         case ColumnRenamed(table, old, new):
-            return f"ALTER TABLE {table} RENAME COLUMN {old} TO {new};\n"
+            return f"ALTER TABLE {relation(table)} RENAME COLUMN {old} TO {new};\n"
         case ColumnTypeChanged(table, old, new):
             return _retype(table, old, new)
         case ColumnNullabilityChanged(table, column, nullable):
@@ -294,11 +303,13 @@ def _column_down(change: ColumnChange) -> str:
     """The reverse of each column change; a dropped column comes back, its rows do not."""
     match change:
         case ColumnAdded(table, column):
-            return f"ALTER TABLE {table} DROP COLUMN {column.folded};\n"
+            return f"ALTER TABLE {relation(table)} DROP COLUMN {column.folded};\n"
         case ColumnDropped(table, column):
-            return f"ALTER TABLE {table} ADD COLUMN {column.folded} {column_body(column)};\n"
+            return (
+                f"ALTER TABLE {relation(table)} ADD COLUMN {column.folded} {column_body(column)};\n"
+            )
         case ColumnRenamed(table, old, new):
-            return f"ALTER TABLE {table} RENAME COLUMN {new} TO {old};\n"
+            return f"ALTER TABLE {relation(table)} RENAME COLUMN {new} TO {old};\n"
         case ColumnTypeChanged(table, old, new):
             return _retype(table, new, old)
         case ColumnNullabilityChanged(table, column, nullable):
@@ -330,7 +341,7 @@ def _create_index(change: IndexAdded | IndexDropped) -> str:
     """``CONCURRENTLY``: the table exists and is in use while the index builds."""
     if not change.index.name:
         return _unnamed(change, "index")
-    return _index_statement(change.index, change.table, concurrently=True)
+    return _index_statement(change.index, relation(change.table), concurrently=True)
 
 
 def _table_indexes(table: Table) -> str:
@@ -345,7 +356,7 @@ def _table_indexes(table: Table) -> str:
         if index.backs_constraint:
             continue
         if index.name:
-            written.append(_index_statement(index, table.qualified, concurrently=False))
+            written.append(_index_statement(index, relation(table.relation), concurrently=False))
         else:
             written.append(
                 f"-- WARNING: Cannot generate the index on {table.qualified}"
@@ -375,13 +386,13 @@ def _add_foreign_key(change: ForeignKeyAdded | ForeignKeyDropped) -> str:
     clause = named(name, body)
     if not name:
         return (
-            f"ALTER TABLE {change.table} ADD {clause};"
+            f"ALTER TABLE {relation(change.table)} ADD {clause};"
             " -- review: unnamed in the schema, so it cannot be added NOT VALID and"
             " validated separately; this scans the table under a lock\n"
         )
     return (
-        f"ALTER TABLE {change.table} ADD {clause} NOT VALID;\n"
-        f"ALTER TABLE {change.table} VALIDATE CONSTRAINT {name};\n"
+        f"ALTER TABLE {relation(change.table)} ADD {clause} NOT VALID;\n"
+        f"ALTER TABLE {relation(change.table)} VALIDATE CONSTRAINT {name};\n"
     )
 
 
@@ -397,7 +408,7 @@ def _add_constraint(
     body = _clause(change.constraint)
     if body is None:
         return _incomplete(change, missing)
-    return f"ALTER TABLE {change.table} ADD {named(change.constraint.name, body)};\n"
+    return f"ALTER TABLE {relation(change.table)} ADD {named(change.constraint.name, body)};\n"
 
 
 def _drop_constraint(
@@ -412,7 +423,7 @@ def _drop_constraint(
 ) -> str:
     if not change.constraint.name:
         return _unnamed(change, "constraint")
-    return f"ALTER TABLE {change.table} DROP CONSTRAINT IF EXISTS {change.constraint.name};\n"
+    return f"ALTER TABLE {relation(change.table)} DROP CONSTRAINT IF EXISTS {change.constraint.name};\n"
 
 
 def _table_object_up(change: TableObjectChange) -> str:

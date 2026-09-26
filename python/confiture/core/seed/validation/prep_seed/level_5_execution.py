@@ -212,8 +212,11 @@ class Level5ExecutionValidator:
         ``search_path`` would not find it, so an unqualified one is named
         unqualified on this same connection — and reaches the same table.
         """
-        schema, _, name = (constraint.ref_table or "").rpartition(".")
-        return (sql.Identifier(schema, name) if schema else sql.Identifier(name)), name
+        target = constraint.ref_table
+        if target is None:
+            return sql.Identifier(""), ""
+        parts = (target.schema, target.name) if target.schema else (target.name,)
+        return sql.Identifier(*parts), target.name
 
     def _count(self, connection: Any, table: FinalName, predicate: sql.Composable) -> int:
         """How many rows of *table* satisfy *predicate*."""

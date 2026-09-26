@@ -23,7 +23,7 @@ from confiture.core.schema_change import (
     IndexDropped,
     UniqueConstraintAdded,
 )
-from confiture.core.schema_model import Constraint, ConstraintKind
+from confiture.core.schema_model import Constraint, ConstraintKind, RelationName
 from tests.unit._schema_models import index
 
 
@@ -94,7 +94,7 @@ class TestAFabricatedNameIsNotAName:
     def test_an_index_change_with_no_name_warns_rather_than_inventing_one(
         self, method: str
     ) -> None:
-        change = IndexAdded("tenant.t", index(None, "tenant.t", "x"))
+        change = IndexAdded(RelationName("tenant", "t"), index(None, "tenant.t", "x"))
         sql = getattr(DifferSQLGenerator(), method)(change)
         assert sql.startswith("-- WARNING:")
         assert "idx_" not in sql
@@ -127,6 +127,8 @@ class TestNoConstraintNameIsInventedEither:
         added: type[ForeignKeyAdded | CheckConstraintAdded | UniqueConstraintAdded],
         kind: ConstraintKind,
     ) -> None:
-        sql = DifferSQLGenerator().generate_up(added("tenant.t", Constraint(kind=kind)))
+        sql = DifferSQLGenerator().generate_up(
+            added(RelationName("tenant", "t"), Constraint(kind=kind))
+        )
         assert sql.startswith("-- WARNING:")
         assert "tenant.t" in sql

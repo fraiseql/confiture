@@ -216,8 +216,8 @@ class Level3ResolutionValidator:
     def _parent(prep: Table, column: str) -> str:
         """The table *column* points at: its foreign key's, or ``tb_<entity>`` by convention."""
         for constraint in prep.constraints_of("foreign_key"):
-            if constraint.columns == (column,) and constraint.ref_table:
-                return constraint.ref_table.rsplit(".", 1)[-1]
+            if constraint.columns == (column,) and constraint.ref_table is not None:
+                return constraint.ref_table.name
         return "tb_" + column.removeprefix(_FK_PREFIX).removesuffix(_FK_SUFFIX)
 
     @staticmethod

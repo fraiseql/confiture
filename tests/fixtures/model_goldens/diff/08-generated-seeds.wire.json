@@ -80,7 +80,10 @@
               "columns": [
                 "fk_vendor"
               ],
-              "ref_table": "catalog.tb_vendor",
+              "ref_table": {
+                "schema": "catalog",
+                "name": "tb_vendor"
+              },
               "ref_columns": [
                 "pk_vendor"
               ],
@@ -207,7 +210,10 @@
               "columns": [
                 "fk_vendor_id"
               ],
-              "ref_table": "prep_seed.tb_vendor",
+              "ref_table": {
+                "schema": "prep_seed",
+                "name": "tb_vendor"
+              },
               "ref_columns": [
                 "id"
               ],

@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from confiture.core.linting.inventory import build_model
-from confiture.core.schema_model import EnumType, Index, Sequence, ref_for
+from confiture.core.schema_model import EnumType, Index, RelationName, Sequence, ref_for
 
 DDL = """\
 CREATE TABLE a.t (n INT, m TEXT);
@@ -32,11 +32,15 @@ def _model():
 def test_every_index_reaches_its_table() -> None:
     table = _model().tables[ref_for("table", "a", "t")]
     assert table.indexes == (
-        Index(name="ix_n", table="a.t", columns=("n",), method="btree"),
-        Index(name="ux_m", table="a.t", columns=("m",), unique=True, method="btree"),
-        Index(name="hx_n", table="a.t", columns=("n",), method="hash"),
-        Index(name="px_n", table="a.t", columns=("n",), where="n > 0", method="btree"),
-        Index(name="ex_m", table="a.t", columns=("lower(m)",), method="btree"),
+        Index(name="ix_n", table=RelationName("a", "t"), columns=("n",), method="btree"),
+        Index(
+            name="ux_m", table=RelationName("a", "t"), columns=("m",), unique=True, method="btree"
+        ),
+        Index(name="hx_n", table=RelationName("a", "t"), columns=("n",), method="hash"),
+        Index(
+            name="px_n", table=RelationName("a", "t"), columns=("n",), where="n > 0", method="btree"
+        ),
+        Index(name="ex_m", table=RelationName("a", "t"), columns=("lower(m)",), method="btree"),
     )
 
 

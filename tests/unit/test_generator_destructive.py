@@ -28,6 +28,7 @@ from confiture.core.schema_change import (
     TableDropped,
     column_definition,
 )
+from confiture.core.schema_model import RelationName
 from confiture.exceptions import DifferError, ValidationError
 from tests.unit._schema_changes import spelled
 from tests.unit._schema_models import table
@@ -49,7 +50,9 @@ def _tiers(text: str) -> dict[int, str | None]:
 
 
 def test_a_dropped_column_is_real_ddl_at_tier_irreversible(tmp_path: Path) -> None:
-    up, _ = _generate(tmp_path, ColumnDropped("tb_user", spelled("display_name", "TEXT")))
+    up, _ = _generate(
+        tmp_path, ColumnDropped(RelationName(None, "tb_user"), spelled("display_name", "TEXT"))
+    )
     assert "ALTER TABLE tb_user DROP COLUMN display_name;" in up
     # Data is lost with the column: the change set tiers the drop irreversible, not merely destructive.
     assert list(_tiers(up).values()) == ["irreversible"]
@@ -59,9 +62,11 @@ def test_a_dropped_column_is_real_ddl_at_tier_irreversible(tmp_path: Path) -> No
     "change",
     [
         TableDropped(table("tb_old")),
-        ColumnDropped("tb_user", spelled("display_name", "TEXT")),
-        ColumnTypeChanged("tb_user", spelled("score", "BIGINT"), spelled("score", "INTEGER")),
-        ColumnAdded("tb_user", spelled("bio", "TEXT")),
+        ColumnDropped(RelationName(None, "tb_user"), spelled("display_name", "TEXT")),
+        ColumnTypeChanged(
+            RelationName(None, "tb_user"), spelled("score", "BIGINT"), spelled("score", "INTEGER")
+        ),
+        ColumnAdded(RelationName(None, "tb_user"), spelled("bio", "TEXT")),
     ],
     ids=lambda c: c.to_wire().type,
 )
@@ -84,8 +89,8 @@ def test_every_statement_carries_the_tier_the_change_set_gives_it(
 class TestTheGate:
     """``destructive`` policy at generation: gated marks the file, allow leaves it, forbid refuses."""
 
-    DROP = ColumnDropped("tb_user", spelled("display_name", "TEXT"))
-    ADD = ColumnAdded("tb_user", spelled("bio", "TEXT"))
+    DROP = ColumnDropped(RelationName(None, "tb_user"), spelled("display_name", "TEXT"))
+    ADD = ColumnAdded(RelationName(None, "tb_user"), spelled("bio", "TEXT"))
 
     def _gate(self, text: str) -> list[int | None]:
         return [d.statement_line for d in sql_lexer.directives(text) if d.name == "destructive"]

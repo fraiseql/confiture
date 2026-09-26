@@ -52,6 +52,26 @@
     }
   },
   "$defs": {
+    "RelationName": {
+      "type": "object",
+      "description": "A relation one object names — a foreign key's target, an index's table — as its two parts, never one dotted string: a quoted name may hold a dot (`app.\"a.b\"`). `schema` is null where the schema file wrote none.",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "name"
+      ],
+      "properties": {
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
     "Column": {
       "type": "object",
       "description": "A column, whole. `type_key` is the identity (typmod kept), `raw_sql_type` the spelling generated DDL writes, `type_text` the author's.",
@@ -171,9 +191,13 @@
           }
         },
         "ref_table": {
-          "type": [
-            "string",
-            "null"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/RelationName"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "ref_columns": {
@@ -255,7 +279,7 @@
           ]
         },
         "table": {
-          "type": "string"
+          "$ref": "#/$defs/RelationName"
         },
         "columns": {
           "type": "array",

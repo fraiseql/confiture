@@ -274,7 +274,7 @@ def _table_schema(table: Table, indexes: Iterable[Index]) -> TableSchema:
             ForeignKeyInfo(
                 constraint_name=fk.name,
                 column_name=column,
-                referenced_table=(fk.ref_table or "").rpartition(".")[2],
+                referenced_table=fk.ref_table.name if fk.ref_table is not None else "",
                 referenced_column=referenced,
             )
             for fk in table.constraints_of("foreign_key")

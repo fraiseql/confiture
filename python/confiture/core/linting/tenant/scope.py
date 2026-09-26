@@ -42,7 +42,7 @@ from confiture.core.schema_identity import (
 if TYPE_CHECKING:
     from confiture.config.project import TenancyConfig
     from confiture.core.linting.inventory import SchemaColumn, SchemaObject
-    from confiture.core.schema_model import Constraint
+    from confiture.core.schema_model import Constraint, RelationName
 
 #: The directive that declares one relation global.
 GLOBAL_DIRECTIVE = "tenant-global"
@@ -121,23 +121,15 @@ class TenantScopes:
             parent = self.partitions[key].parent
             if parent is None:
                 return None
-            found = next(
-                (k for k in _held_identities(parent) if k in self.tables or k in self.partitions),
-                None,
-            )
-            if found is None:
-                return None
-            key = found
+            key = parent.identity
         entry = self.tables.get(key)
         if entry is None or partition is None:
             return entry
         return replace(entry, through=partition)
 
-    def of(self, held: str | None) -> TableScope | None:
-        """The scope of the table a foreign key names, as the parser holds it."""
-        if held is None:
-            return None
-        return next((e for k in _held_identities(held) if (e := self.get(k)) is not None), None)
+    def of(self, held: RelationName | None) -> TableScope | None:
+        """The scope of the table a foreign key names."""
+        return self.get(held.identity) if held is not None else None
 
     @property
     def root(self) -> TableScope | None:
@@ -179,20 +171,6 @@ def written_identity(qualified: str) -> tuple[str, str]:
         identifier_identity(schema[-1]) if schema else DEFAULT_SCHEMA,
         identifier_identity(name),
     )
-
-
-def _held_identities(held: str) -> Iterator[tuple[str, str]]:
-    """Each ``(schema, name)`` a ``schema.name`` the parser holds can be: already folded.
-
-    The model holds a referenced table as one dotted string, so the dot inside
-    ``app."a.b"`` reads as the one between schema and name (#469). Every split is
-    a candidate — the last dot first, then the bare name in the default schema —
-    and the tables the tree declares decide which one it names.
-    """
-    dots = [i for i, char in enumerate(held) if char == "."]
-    for i in reversed(dots):
-        yield (held[:i], held[i + 1 :])
-    yield (DEFAULT_SCHEMA, held)
 
 
 def spelled(obj: SchemaObject) -> str:
@@ -277,7 +255,7 @@ def _root_references(
             constraint.kind == "foreign_key"
             and constraint.columns == (column,)
             and constraint.ref_table is not None
-            and root in _held_identities(constraint.ref_table)
+            and constraint.ref_table.identity == root
         ):
             yield constraint
 

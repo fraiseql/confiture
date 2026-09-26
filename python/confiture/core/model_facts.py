@@ -18,8 +18,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from confiture.core import sql_lexer
 from confiture.core.ddl_walk import expression_columns
-from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity
 from confiture.core.schema_model import (
     SERIAL_TYPES,
     Column,
@@ -27,9 +28,9 @@ from confiture.core.schema_model import (
     ColumnReference,
     Constraint,
     ObjectRef,
+    RelationName,
     SchemaModel,
     Table,
-    ref_for,
 )
 from confiture.exceptions import SchemaError
 from confiture.models.introspection import TableHints
@@ -49,9 +50,18 @@ class NotInModelError(SchemaError, KeyError):
         return self.message
 
 
-def resolve(refs: Iterable[ObjectRef], written: str) -> ObjectRef | None:
-    """The reference among *refs* a name *written* as ``schema.name`` or ``name`` means."""
-    schema, _, name = written.rpartition(".")
+def resolve(refs: Iterable[ObjectRef], written: RelationName | str | None) -> ObjectRef | None:
+    """The reference among *refs* a name means: one the model holds, or one a caller typed.
+
+    A :class:`RelationName` is taken as its two parts. Text is read as SQL reads a
+    name (``sql_lexer.name_parts``), so ``"my.s".t`` is table ``t`` in schema
+    ``my.s`` and an unquoted part is folded; text that is not one name means
+    nothing (#478).
+    """
+    relation = written if isinstance(written, RelationName) else _read_name(written)
+    if relation is None:
+        return None
+    schema, name = relation.schema, relation.name
     candidates = [ref for ref in refs if ref.name == name]
     if schema:
         return next((ref for ref in candidates if ref.schema == schema.lower()), None)
@@ -59,6 +69,19 @@ def resolve(refs: Iterable[ObjectRef], written: str) -> ObjectRef | None:
     if default is not None or len(candidates) != 1:
         return default
     return candidates[0]
+
+
+#: A relation's name is its own, and a schema at most.
+_QUALIFIED = 2
+
+
+def _read_name(written: str | None) -> RelationName | None:
+    """``schema.name`` or ``name`` as a caller typed it, read by the scanner; else ``None``."""
+    parts = sql_lexer.name_parts(written) if written else None
+    if parts is None or len(parts) > _QUALIFIED:
+        return None
+    *schema, name = (identifier_identity(part) for part in parts)
+    return RelationName(schema[0] if schema else None, name)
 
 
 def table_ref(model: SchemaModel, table: ObjectRef | str) -> ObjectRef:
@@ -73,7 +96,7 @@ def table_ref(model: SchemaModel, table: ObjectRef | str) -> ObjectRef:
             f"no table {table!r} in the model",
             resolution_hint=(
                 "Name a table the model holds: schema.name, or a bare name the default "
-                "schema holds or exactly one schema does."
+                'schema holds or exactly one schema does; quote a part as SQL does ("My Table")'
             ),
         )
     return found
@@ -136,9 +159,9 @@ def _foreign_key(model: SchemaModel, table: Table, column: str) -> ColumnReferen
     for fk in table.constraints_of("foreign_key"):
         if column not in fk.columns:
             continue
-        written = fk.ref_table or ""
-        schema, _, name = written.rpartition(".")
-        target = resolve(model.tables, written) or ref_for("table", schema or None, name)
+        if fk.ref_table is None:
+            continue
+        target = resolve(model.tables, fk.ref_table) or fk.ref_table.ref()
         at = fk.columns.index(column)
         return ColumnReference(table=target, column=_referenced_column(model, target, fk, at))
     return None

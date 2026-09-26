@@ -12,7 +12,7 @@ import pglast
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.schema_change import ExclusionConstraintAdded, ExclusionConstraintDropped
-from confiture.core.schema_model import Constraint
+from confiture.core.schema_model import Constraint, RelationName
 
 EXCL = (
     "CREATE TABLE tenant.tb_booking (\n"
@@ -74,15 +74,17 @@ class TestAddingOneIsAChange:
 
     def test_the_create_table_spelling(self) -> None:
         (change,) = self._changes(WITHOUT, EXCL)
-        assert change == ExclusionConstraintAdded("tenant.tb_booking", NO_OVERLAP)
+        assert change == ExclusionConstraintAdded(RelationName("tenant", "tb_booking"), NO_OVERLAP)
 
     def test_the_alter_table_spelling(self) -> None:
         (change,) = self._changes(WITHOUT, BY_ALTER)
-        assert change == ExclusionConstraintAdded("tenant.tb_booking", NO_OVERLAP)
+        assert change == ExclusionConstraintAdded(RelationName("tenant", "tb_booking"), NO_OVERLAP)
 
     def test_dropping_one(self) -> None:
         (change,) = self._changes(EXCL, WITHOUT)
-        assert change == ExclusionConstraintDropped("tenant.tb_booking", NO_OVERLAP)
+        assert change == ExclusionConstraintDropped(
+            RelationName("tenant", "tb_booking"), NO_OVERLAP
+        )
 
     def test_two_unnamed_ones_are_two(self) -> None:
         new = (

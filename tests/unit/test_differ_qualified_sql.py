@@ -25,6 +25,7 @@ from confiture.core.schema_change import (
     SchemaChange,
     TableRenamed,
 )
+from confiture.core.schema_model import RelationName
 
 _Change = TypeVar("_Change")
 
@@ -43,7 +44,7 @@ class TestAChangeCarriesTheSpellingTheAuthorWrote:
             _changes("CREATE TABLE tenant.t (id INT);", "CREATE TABLE tenant.t (id INT, x TEXT);"),
             ColumnAdded,
         )
-        assert change.table == "tenant.t"
+        assert change.table == RelationName("tenant", "t")
 
     def test_add_index_names_the_qualified_table(self) -> None:
         change = _by_type(
@@ -53,7 +54,7 @@ class TestAChangeCarriesTheSpellingTheAuthorWrote:
             ),
             IndexAdded,
         )
-        assert change.table == "tenant.t"
+        assert change.table == RelationName("tenant", "t")
 
     def test_add_foreign_key_names_both_qualified_tables(self) -> None:
         old = "CREATE TABLE b.parent (id INT PRIMARY KEY);\nCREATE TABLE a.child (pid INT);"
@@ -63,8 +64,8 @@ class TestAChangeCarriesTheSpellingTheAuthorWrote:
             " REFERENCES b.parent(id));"
         )
         change = _by_type(_changes(old, new), ForeignKeyAdded)
-        assert change.table == "a.child"
-        assert change.constraint.ref_table == "b.parent"
+        assert change.table == RelationName("a", "child")
+        assert change.constraint.ref_table == RelationName("b", "parent")
 
     def test_an_unqualified_tree_is_unchanged(self) -> None:
         old = "CREATE TABLE tb_post (id INT);"
@@ -80,7 +81,7 @@ class TestTheConstraintModelsKeepTheSchema:
         parsed = SchemaDiffer().parse_schema(
             "CREATE TABLE tenant.t (id INT);\nCREATE INDEX ix ON tenant.t (id);"
         )
-        assert parsed.tables[0].indexes[0].table == "tenant.t"
+        assert parsed.tables[0].indexes[0].table == RelationName("tenant", "t")
 
     def test_a_foreign_key_carries_the_referenced_schema(self) -> None:
         parsed = SchemaDiffer().parse_schema(
@@ -90,7 +91,7 @@ class TestTheConstraintModelsKeepTheSchema:
         )
         child = parsed.tables[1]
         fk = child.constraints_of("foreign_key")[0]
-        assert (child.qualified, fk.ref_table) == ("a.child", "b.parent")
+        assert (child.qualified, fk.ref_table) == ("a.child", RelationName("b", "parent"))
 
     def test_an_alter_table_foreign_key_carries_the_referenced_schema(self) -> None:
         parsed = SchemaDiffer().parse_schema(
@@ -100,7 +101,7 @@ class TestTheConstraintModelsKeepTheSchema:
         )
         child = parsed.tables[1]
         fk = child.constraints_of("foreign_key")[0]
-        assert (child.qualified, fk.ref_table) == ("a.child", "b.parent")
+        assert (child.qualified, fk.ref_table) == ("a.child", RelationName("b", "parent"))
 
     def test_check_and_unique_constraints_carry_the_qualified_table(self) -> None:
         parsed = SchemaDiffer().parse_schema(
@@ -117,7 +118,7 @@ class TestTheConstraintModelsKeepTheSchema:
         )
         assert parsed.tables[0].qualified == "t"
         assert parsed.tables[0].constraints_of("unique")
-        assert parsed.tables[0].indexes[0].table == "t"
+        assert parsed.tables[0].indexes[0].table == RelationName(None, "t")
 
 
 class TestBothGeneratorsEmitWhatParses:

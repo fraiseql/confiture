@@ -197,7 +197,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_confiture_pk_confiture",
-          "table": "tb_confiture",
+          "table": {
+            "name": "tb_confiture",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -209,7 +212,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_confiture_slug",
-          "table": "tb_confiture",
+          "table": {
+            "name": "tb_confiture",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -221,7 +227,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_confiture_version",
-          "table": "tb_confiture",
+          "table": {
+            "name": "tb_confiture",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -235,7 +244,10 @@
           ],
           "method": "btree",
           "name": "idx_tb_confiture_applied_at",
-          "table": "tb_confiture",
+          "table": {
+            "name": "tb_confiture",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }

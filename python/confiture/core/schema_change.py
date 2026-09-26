@@ -35,6 +35,7 @@ from confiture.core.schema_model import (
     EnumType,
     Index,
     ObjectRef,
+    RelationName,
     Sequence,
     Table,
     ref_for,
@@ -117,7 +118,11 @@ def _foreign_key_detail(fk: Constraint) -> dict[str, Any]:
         "kind": "FOREIGN KEY",
         "name": fk.name,
         "columns": list(fk.columns),
-        "ref_table": fk.ref_table or "",
+        "ref_table": (
+            None
+            if fk.ref_table is None
+            else {"schema": fk.ref_table.schema, "name": fk.ref_table.name}
+        ),
         "ref_columns": list(fk.ref_columns),
         "on_delete": fk.on_delete,
         "on_update": fk.on_update,
@@ -205,7 +210,7 @@ class _Change(ABC):
 
 
 def _written_ref(kind: str, written: str) -> ObjectRef:
-    """The reference of an object a change spells ``schema.name`` or ``name``."""
+    """The reference of a type a change spells ``schema.name`` or ``name``."""
     schema, _, name = written.rpartition(".")
     return ref_for(kind, schema or None, name)
 
@@ -226,19 +231,19 @@ class _OfTable(_Change):
 class _OnTable(_Change):
     """A change to what a table holds: a column, an index or a constraint.
 
-    ``table`` is the table's spelling; :attr:`ref` is the key the model holds the
+    ``table`` is the table, schema and name apart; :attr:`ref` is the key the model holds the
     table under, since a column, an index and a constraint are keyed by nothing
     of their own.
     """
 
     __slots__ = ()
 
-    table: str
+    table: RelationName
 
     @property
     def ref(self) -> ObjectRef:
         """The key of the table the change is on."""
-        return _written_ref("table", self.table)
+        return self.table.ref()
 
 
 class _OfEnum(_Change):
@@ -333,12 +338,12 @@ class ColumnAdded(_OnTable):
     WIRE: ClassVar[str] = "ADD_COLUMN"
     TEMPLATE: ClassVar[str] = "ADD COLUMN {table}.{column}"
 
-    table: str
+    table: RelationName
     column: Column
 
     def _wire_fields(self) -> dict[str, Any]:
         return {
-            "table": self.table,
+            "table": self.table.qualified,
             "column": self.column.folded,
             "new_value": column_definition(self.column),
         }
@@ -351,12 +356,12 @@ class ColumnDropped(_OnTable):
     WIRE: ClassVar[str] = "DROP_COLUMN"
     TEMPLATE: ClassVar[str] = "DROP COLUMN {table}.{column}"
 
-    table: str
+    table: RelationName
     column: Column
 
     def _wire_fields(self) -> dict[str, Any]:
         return {
-            "table": self.table,
+            "table": self.table.qualified,
             "column": self.column.folded,
             "old_value": column_definition(self.column),
         }
@@ -369,12 +374,12 @@ class ColumnRenamed(_OnTable):
     WIRE: ClassVar[str] = "RENAME_COLUMN"
     TEMPLATE: ClassVar[str] = "RENAME COLUMN {table}.{old} TO {new}"
 
-    table: str
+    table: RelationName
     old: str
     new: str
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "old_value": self.old, "new_value": self.new}
+        return {"table": self.table.qualified, "old_value": self.old, "new_value": self.new}
 
 
 @dataclass(frozen=True)
@@ -384,13 +389,13 @@ class ColumnTypeChanged(_OnTable):
     WIRE: ClassVar[str] = "CHANGE_COLUMN_TYPE"
     TEMPLATE: ClassVar[str] = "CHANGE COLUMN TYPE {table}.{column} FROM {old} TO {new}"
 
-    table: str
+    table: RelationName
     old: Column
     new: Column
 
     def _wire_fields(self) -> dict[str, Any]:
         return {
-            "table": self.table,
+            "table": self.table.qualified,
             "column": self.old.folded,
             "old_value": column_type(self.old),
             "new_value": column_type(self.new),
@@ -404,13 +409,13 @@ class ColumnNullabilityChanged(_OnTable):
     WIRE: ClassVar[str] = "CHANGE_COLUMN_NULLABLE"
     TEMPLATE: ClassVar[str] = "CHANGE COLUMN NULLABLE {table}.{column} FROM {old} TO {new}"
 
-    table: str
+    table: RelationName
     column: str
     nullable: bool
 
     def _wire_fields(self) -> dict[str, Any]:
         return {
-            "table": self.table,
+            "table": self.table.qualified,
             "column": self.column,
             "old_value": _nullable(not self.nullable),
             "new_value": _nullable(self.nullable),
@@ -424,14 +429,14 @@ class ColumnDefaultChanged(_OnTable):
     WIRE: ClassVar[str] = "CHANGE_COLUMN_DEFAULT"
     TEMPLATE: ClassVar[str] = "CHANGE COLUMN DEFAULT {table}.{column}"
 
-    table: str
+    table: RelationName
     column: str
     old: str | None
     new: str | None
 
     def _wire_fields(self) -> dict[str, Any]:
         return {
-            "table": self.table,
+            "table": self.table.qualified,
             "column": self.column,
             "old_value": self.old or None,
             "new_value": self.new or None,
@@ -449,11 +454,11 @@ class IndexAdded(_OnTable):
     WIRE: ClassVar[str] = "ADD_INDEX"
     TEMPLATE: ClassVar[str] = "ADD INDEX {name} ON {table}"
 
-    table: str
+    table: RelationName
     index: Index
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _index_detail(self.index)}
+        return {"table": self.table.qualified, "details": _index_detail(self.index)}
 
 
 @dataclass(frozen=True)
@@ -463,11 +468,11 @@ class IndexDropped(_OnTable):
     WIRE: ClassVar[str] = "DROP_INDEX"
     TEMPLATE: ClassVar[str] = "DROP INDEX {name}"
 
-    table: str
+    table: RelationName
     index: Index
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _index_detail(self.index)}
+        return {"table": self.table.qualified, "details": _index_detail(self.index)}
 
 
 def _fk_wire(fk: Constraint) -> dict[str, Any]:
@@ -481,11 +486,11 @@ class ForeignKeyAdded(_OnTable):
     WIRE: ClassVar[str] = "ADD_FOREIGN_KEY"
     TEMPLATE: ClassVar[str] = "ADD FOREIGN KEY {name} ON {table}"
 
-    table: str
+    table: RelationName
     constraint: Constraint
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _fk_wire(self.constraint)}
+        return {"table": self.table.qualified, "details": _fk_wire(self.constraint)}
 
 
 @dataclass(frozen=True)
@@ -495,11 +500,11 @@ class ForeignKeyDropped(_OnTable):
     WIRE: ClassVar[str] = "DROP_FOREIGN_KEY"
     TEMPLATE: ClassVar[str] = "DROP FOREIGN KEY {name}"
 
-    table: str
+    table: RelationName
     constraint: Constraint
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _fk_wire(self.constraint)}
+        return {"table": self.table.qualified, "details": _fk_wire(self.constraint)}
 
 
 def _check_wire(cc: Constraint) -> dict[str, Any]:
@@ -513,11 +518,11 @@ class CheckConstraintAdded(_OnTable):
     WIRE: ClassVar[str] = "ADD_CHECK_CONSTRAINT"
     TEMPLATE: ClassVar[str] = "ADD CHECK CONSTRAINT {name} ON {table}"
 
-    table: str
+    table: RelationName
     constraint: Constraint
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _check_wire(self.constraint)}
+        return {"table": self.table.qualified, "details": _check_wire(self.constraint)}
 
 
 @dataclass(frozen=True)
@@ -527,11 +532,11 @@ class CheckConstraintDropped(_OnTable):
     WIRE: ClassVar[str] = "DROP_CHECK_CONSTRAINT"
     TEMPLATE: ClassVar[str] = "DROP CHECK CONSTRAINT {name}"
 
-    table: str
+    table: RelationName
     constraint: Constraint
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _check_wire(self.constraint)}
+        return {"table": self.table.qualified, "details": _check_wire(self.constraint)}
 
 
 def _unique_wire(uc: Constraint) -> dict[str, Any]:
@@ -545,11 +550,11 @@ class UniqueConstraintAdded(_OnTable):
     WIRE: ClassVar[str] = "ADD_UNIQUE_CONSTRAINT"
     TEMPLATE: ClassVar[str] = "ADD UNIQUE CONSTRAINT {name} ON {table}"
 
-    table: str
+    table: RelationName
     constraint: Constraint
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _unique_wire(self.constraint)}
+        return {"table": self.table.qualified, "details": _unique_wire(self.constraint)}
 
 
 @dataclass(frozen=True)
@@ -559,11 +564,11 @@ class UniqueConstraintDropped(_OnTable):
     WIRE: ClassVar[str] = "DROP_UNIQUE_CONSTRAINT"
     TEMPLATE: ClassVar[str] = "DROP UNIQUE CONSTRAINT {name}"
 
-    table: str
+    table: RelationName
     constraint: Constraint
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _unique_wire(self.constraint)}
+        return {"table": self.table.qualified, "details": _unique_wire(self.constraint)}
 
 
 def _exclusion_wire(ec: Constraint) -> dict[str, Any]:
@@ -586,11 +591,11 @@ class ExclusionConstraintAdded(_OnTable):
     WIRE: ClassVar[str] = "ADD_EXCLUSION_CONSTRAINT"
     TEMPLATE: ClassVar[str] = "ADD EXCLUSION CONSTRAINT {name} ON {table}"
 
-    table: str
+    table: RelationName
     constraint: Constraint
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _exclusion_wire(self.constraint)}
+        return {"table": self.table.qualified, "details": _exclusion_wire(self.constraint)}
 
 
 @dataclass(frozen=True)
@@ -600,11 +605,11 @@ class ExclusionConstraintDropped(_OnTable):
     WIRE: ClassVar[str] = "DROP_EXCLUSION_CONSTRAINT"
     TEMPLATE: ClassVar[str] = "DROP EXCLUSION CONSTRAINT {name}"
 
-    table: str
+    table: RelationName
     constraint: Constraint
 
     def _wire_fields(self) -> dict[str, Any]:
-        return {"table": self.table, "details": _exclusion_wire(self.constraint)}
+        return {"table": self.table.qualified, "details": _exclusion_wire(self.constraint)}
 
 
 @dataclass(frozen=True)

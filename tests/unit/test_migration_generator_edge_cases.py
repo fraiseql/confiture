@@ -11,6 +11,7 @@ from confiture.core.schema_change import (
     SchemaDiff,
     TableDropped,
 )
+from confiture.core.schema_model import RelationName
 from tests.unit._schema_changes import spelled
 from tests.unit._schema_models import table
 
@@ -25,7 +26,9 @@ class TestMigrationGeneratorEdgeCases:
 
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
-        diff = SchemaDiff(changes=[ColumnAdded("users", spelled("email", "TEXT"))])
+        diff = SchemaDiff(
+            changes=[ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT"))]
+        )
 
         migration_file = generator.generate(diff=diff, name="add_email")
 
@@ -55,25 +58,27 @@ class TestMigrationGeneratorEdgeCases:
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
         # Test ADD_COLUMN
-        change = ColumnAdded("users", spelled("email", "TEXT"))
+        change = ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT"))
         sql = generator._change_to_up_sql(change)
         assert "ALTER TABLE users" in sql
         assert "ADD COLUMN email" in sql
 
         # Test DROP_COLUMN
-        change = ColumnDropped("users", spelled("old_field", "TEXT"))
+        change = ColumnDropped(RelationName(None, "users"), spelled("old_field", "TEXT"))
         sql = generator._change_to_up_sql(change)
         assert "ALTER TABLE users" in sql
         assert "DROP COLUMN old_field" in sql
 
         # Test RENAME_COLUMN
-        change = ColumnRenamed("users", "full_name", "display_name")
+        change = ColumnRenamed(RelationName(None, "users"), "full_name", "display_name")
         sql = generator._change_to_up_sql(change)
         assert "ALTER TABLE users" in sql
         assert "RENAME COLUMN full_name TO display_name" in sql
 
         # Test CHANGE_COLUMN_TYPE
-        change = ColumnTypeChanged("users", spelled("age", "INTEGER"), spelled("age", "BIGINT"))
+        change = ColumnTypeChanged(
+            RelationName(None, "users"), spelled("age", "INTEGER"), spelled("age", "BIGINT")
+        )
         sql = generator._change_to_up_sql(change)
         assert "ALTER TABLE users" in sql
         assert "ALTER COLUMN age TYPE BIGINT" in sql
@@ -91,17 +96,19 @@ class TestMigrationGeneratorEdgeCases:
         generator = MigrationGenerator(migrations_dir=migrations_dir)
 
         # Test ADD_COLUMN (reverse is DROP)
-        change = ColumnAdded("users", spelled("email", "TEXT"))
+        change = ColumnAdded(RelationName(None, "users"), spelled("email", "TEXT"))
         sql = generator._change_to_down_sql(change)
         assert "DROP COLUMN email" in sql
 
         # Test DROP_COLUMN (reverse is ADD, from the definition the change carries)
-        change = ColumnDropped("users", spelled("old_field", "TEXT", nullable=False))
+        change = ColumnDropped(
+            RelationName(None, "users"), spelled("old_field", "TEXT", nullable=False)
+        )
         sql = generator._change_to_down_sql(change)
         assert sql == "ALTER TABLE users ADD COLUMN old_field TEXT NOT NULL;"
 
         # Test RENAME_COLUMN (reverse names)
-        change = ColumnRenamed("users", "full_name", "display_name")
+        change = ColumnRenamed(RelationName(None, "users"), "full_name", "display_name")
         sql = generator._change_to_down_sql(change)
         assert "RENAME COLUMN display_name TO full_name" in sql
 
@@ -120,8 +127,8 @@ class TestMigrationGeneratorEdgeCases:
         # Complex diff with multiple changes (ADD_TABLE is not auto-generatable)
         diff = SchemaDiff(
             changes=[
-                ColumnAdded("posts", spelled("title", "TEXT")),
-                ColumnRenamed("users", "name", "full_name"),
+                ColumnAdded(RelationName(None, "posts"), spelled("title", "TEXT")),
+                ColumnRenamed(RelationName(None, "users"), "name", "full_name"),
                 TableDropped(table("old_logs", spelled("id", "INTEGER", nullable=False))),
             ]
         )

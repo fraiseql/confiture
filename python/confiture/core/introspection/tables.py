@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from confiture.core import live_catalog
-from confiture.core.schema_model import identity_of
+from confiture.core.schema_model import ref_for
 from confiture.models.introspection import (
     FKReference,
     IntrospectedColumn,
@@ -102,10 +102,10 @@ def _resolve_inbound_fks(read: list[Table], tables: list[IntrospectedTable]) -> 
         read: The model's tables, each beside its wire shape in *tables*.
         tables: The same tables in the wire shape (mutated in-place).
     """
-    index = {identity_of(t.qualified): wire for t, wire in zip(read, tables, strict=True)}
+    index = {ref_for("table", t.schema, t.name): wire for t, wire in zip(read, tables, strict=True)}
     for table in read:
         for fk in table.constraints_of("foreign_key"):
-            target = index.get(identity_of(fk.ref_table))
+            target = index.get(fk.ref_table.ref()) if fk.ref_table is not None else None
             if target is None:
                 continue
             target.inbound_fks.extend(
@@ -146,7 +146,7 @@ def _outbound_fks(table: Table) -> list[FKReference]:
     return [
         FKReference(
             from_table=None,
-            to_table=(fk.ref_table or "").rpartition(".")[2],
+            to_table=fk.ref_table.name if fk.ref_table is not None else "",
             via_column=via,
             on_column=on,
         )

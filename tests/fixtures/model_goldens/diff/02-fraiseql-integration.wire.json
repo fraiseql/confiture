@@ -104,7 +104,10 @@
               "columns": [
                 "fk_post"
               ],
-              "ref_table": "tb_post",
+              "ref_table": {
+                "schema": null,
+                "name": "tb_post"
+              },
               "ref_columns": [
                 "pk_post"
               ],
@@ -117,7 +120,10 @@
               "columns": [
                 "fk_user"
               ],
-              "ref_table": "tb_user",
+              "ref_table": {
+                "schema": null,
+                "name": "tb_user"
+              },
               "ref_columns": [
                 "pk_user"
               ],
@@ -130,7 +136,10 @@
               "columns": [
                 "fk_parent_comment"
               ],
-              "ref_table": "tb_comment",
+              "ref_table": {
+                "schema": null,
+                "name": "tb_comment"
+              },
               "ref_columns": [
                 "pk_comment"
               ],
@@ -265,7 +274,10 @@
               "columns": [
                 "fk_user"
               ],
-              "ref_table": "tb_user",
+              "ref_table": {
+                "schema": null,
+                "name": "tb_user"
+              },
               "ref_columns": [
                 "pk_user"
               ],

@@ -13,7 +13,14 @@ from confiture.core.introspection.tables import (
     _detect_hints,
     _resolve_inbound_fks,
 )
-from confiture.core.schema_model import Column, Constraint, SchemaModel, Table, ref_for
+from confiture.core.schema_model import (
+    Column,
+    Constraint,
+    RelationName,
+    SchemaModel,
+    Table,
+    ref_for,
+)
 from confiture.models.introspection import (
     FKReference,
     IntrospectedColumn,
@@ -57,11 +64,12 @@ def table(name: str, *columns: Column, constraints: tuple[Constraint, ...] = ())
 
 
 def fk(name: str, columns: tuple[str, ...], ref_table: str, ref_columns: tuple[str, ...]):
+    schema, _, table = ref_table.rpartition(".")
     return Constraint(
         kind="foreign_key",
         name=name,
         columns=columns,
-        ref_table=ref_table,
+        ref_table=RelationName(schema or None, table),
         ref_columns=ref_columns,
     )
 
@@ -248,8 +256,12 @@ class TestResolveInboundFks:
 
     @staticmethod
     def _fk(ref_table: str) -> Constraint:
+        schema, _, table = ref_table.rpartition(".")
         return Constraint(
-            kind="foreign_key", columns=("fk_user",), ref_table=ref_table, ref_columns=("pk_user",)
+            kind="foreign_key",
+            columns=("fk_user",),
+            ref_table=RelationName(schema or None, table),
+            ref_columns=("pk_user",),
         )
 
     def test_outbound_fk_creates_inbound_on_target(self):

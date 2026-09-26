@@ -25,7 +25,7 @@ from confiture.core.schema_change import (
     TableAdded,
     UniqueConstraintAdded,
 )
-from confiture.core.schema_model import Constraint
+from confiture.core.schema_model import Constraint, RelationName
 
 PARENT = "CREATE TABLE b.parent (id INT PRIMARY KEY);\n"
 
@@ -72,7 +72,9 @@ class TestACheckConstraintIsGeneratedAsItsExpression:
     def test_a_check_with_no_expression_is_a_warning_not_empty_parentheses(self) -> None:
         generator = DifferSQLGenerator()
         sql = generator.generate_up(
-            CheckConstraintAdded("tenant.t", Constraint(kind="check", name="ck", expression=""))
+            CheckConstraintAdded(
+                RelationName("tenant", "t"), Constraint(kind="check", name="ck", expression="")
+            )
         )
         assert sql.startswith("-- WARNING:")
         assert _without_comments(sql).strip() == ""

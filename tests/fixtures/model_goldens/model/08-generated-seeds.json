@@ -178,7 +178,10 @@
           "ref_columns": [
             "pk_vendor"
           ],
-          "ref_table": "catalog.tb_vendor",
+          "ref_table": {
+            "name": "tb_vendor",
+            "schema": "catalog"
+          },
           "where": null
         },
         {
@@ -407,7 +410,10 @@
           "ref_columns": [
             "id"
           ],
-          "ref_table": "prep_seed.tb_vendor",
+          "ref_table": {
+            "name": "tb_vendor",
+            "schema": "prep_seed"
+          },
           "where": null
         },
         {

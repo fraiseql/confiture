@@ -256,6 +256,16 @@ matched within one schema (moving a table between schemas is `SET SCHEMA`). Two
 definitions of one `(schema, name)` are resolved by `duplicates.wins` — `build_001`'s
 rule, so the diff reads the tree the build produces — and reported as `DIFFER_402`.
 
+**One relation reference** — a relation one object names (a foreign key's target, an
+index's table, a partition's parent, the table a change is on) is
+`schema_model.RelationName`: schema and name, filled apart from the parser's
+`RangeVar` and the catalog's two names, never joined and split again, because a quoted
+name may hold a dot (`app."a.b"`). Compare `.identity`; write it with
+`ddl_clauses.relation`. A name a caller types is read by `sql_lexer.name_parts`.
+`tests/unit/test_one_relation_reference.py` fails on a module that splits text on a
+dot; its allow-list names what each remaining split reads instead (a module path, a
+file name, a configured label) or the issue that tracks it.
+
 **One identifier quoter** — `core/schema_identity.quote_identifier` writes an identifier
 into generated text, quoting it when PostgreSQL's own keyword lists (pglast's
 `RESERVED` and `TYPE_FUNC_NAME`) or its characters need it; `identifier_identity` reads

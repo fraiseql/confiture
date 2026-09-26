@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from confiture.core.drift import DriftType, SchemaDriftDetector, parse_expected_schema
-from confiture.core.schema_model import Constraint, SchemaModel, Table
+from confiture.core.schema_model import Constraint, RelationName, SchemaModel, Table
 from confiture.exceptions import SchemaError
 from tests.unit._schema_models import model_of
 
@@ -102,7 +102,9 @@ def test_indexes_are_keyed_by_the_qualified_table() -> None:
     assert {name: [ix.name for ix in t.indexes] for name, t in tables.items()} == {
         "tenant.tb_user": ["idx_user_name"]
     }
-    assert [ix.table for ix in tables["tenant.tb_user"].indexes] == ["tenant.tb_user"]
+    assert [ix.table for ix in tables["tenant.tb_user"].indexes] == [
+        RelationName("tenant", "tb_user")
+    ]
 
 
 def test_a_partition_child_inherits_its_parents_columns() -> None:

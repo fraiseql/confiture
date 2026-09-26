@@ -73,7 +73,10 @@
               "columns": [
                 "user_id"
               ],
-              "ref_table": "users",
+              "ref_table": {
+                "schema": null,
+                "name": "users"
+              },
               "ref_columns": [
                 "id"
               ],

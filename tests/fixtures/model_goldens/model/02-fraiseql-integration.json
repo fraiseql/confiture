@@ -211,7 +211,10 @@
           "ref_columns": [
             "pk_post"
           ],
-          "ref_table": "tb_post",
+          "ref_table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -230,7 +233,10 @@
           "ref_columns": [
             "pk_user"
           ],
-          "ref_table": "tb_user",
+          "ref_table": {
+            "name": "tb_user",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -249,7 +255,10 @@
           "ref_columns": [
             "pk_comment"
           ],
-          "ref_table": "tb_comment",
+          "ref_table": {
+            "name": "tb_comment",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -292,7 +301,10 @@
           "key_options": [],
           "method": "btree",
           "name": "uq_tb_comment_identifier",
-          "table": "tb_comment",
+          "table": {
+            "name": "tb_comment",
+            "schema": null
+          },
           "unique": true,
           "where": "identifier IS NOT NULL"
         },
@@ -304,7 +316,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_comment_post",
-          "table": "tb_comment",
+          "table": {
+            "name": "tb_comment",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -316,7 +331,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_comment_user",
-          "table": "tb_comment",
+          "table": {
+            "name": "tb_comment",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -328,7 +346,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_comment_parent",
-          "table": "tb_comment",
+          "table": {
+            "name": "tb_comment",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -342,7 +363,10 @@
           ],
           "method": "btree",
           "name": "idx_tb_comment_created",
-          "table": "tb_comment",
+          "table": {
+            "name": "tb_comment",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -358,7 +382,10 @@
           ],
           "method": "btree",
           "name": "idx_tb_comment_post_created",
-          "table": "tb_comment",
+          "table": {
+            "name": "tb_comment",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -374,7 +401,10 @@
           ],
           "method": "btree",
           "name": "idx_tb_comment_user_created",
-          "table": "tb_comment",
+          "table": {
+            "name": "tb_comment",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -390,7 +420,10 @@
           ],
           "method": "btree",
           "name": "idx_tb_comment_top_level",
-          "table": "tb_comment",
+          "table": {
+            "name": "tb_comment",
+            "schema": null
+          },
           "unique": false,
           "where": "fk_parent_comment IS NULL"
         }
@@ -665,7 +698,10 @@
           "ref_columns": [
             "pk_user"
           ],
-          "ref_table": "tb_user",
+          "ref_table": {
+            "name": "tb_user",
+            "schema": null
+          },
           "where": null
         },
         {
@@ -738,7 +774,10 @@
           "key_options": [],
           "method": "btree",
           "name": "uq_tb_post_identifier",
-          "table": "tb_post",
+          "table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "unique": true,
           "where": "identifier IS NOT NULL"
         },
@@ -750,7 +789,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_user",
-          "table": "tb_post",
+          "table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -762,7 +804,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_slug",
-          "table": "tb_post",
+          "table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -774,7 +819,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_published",
-          "table": "tb_post",
+          "table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "unique": false,
           "where": "is_published = TRUE"
         },
@@ -788,7 +836,10 @@
           ],
           "method": "btree",
           "name": "idx_tb_post_created",
-          "table": "tb_post",
+          "table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -800,7 +851,10 @@
           "key_options": [],
           "method": "gin",
           "name": "idx_tb_post_tags",
-          "table": "tb_post",
+          "table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -813,7 +867,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_user_published",
-          "table": "tb_post",
+          "table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "unique": false,
           "where": "is_published = TRUE"
         },
@@ -829,7 +886,10 @@
           ],
           "method": "btree",
           "name": "idx_tb_post_published_created",
-          "table": "tb_post",
+          "table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "unique": false,
           "where": "is_published = TRUE"
         },
@@ -845,7 +905,10 @@
           ],
           "method": "btree",
           "name": "idx_tb_post_unpublished",
-          "table": "tb_post",
+          "table": {
+            "name": "tb_post",
+            "schema": null
+          },
           "unique": false,
           "where": "is_published = FALSE"
         }
@@ -1119,7 +1182,10 @@
           "key_options": [],
           "method": "btree",
           "name": "uq_tb_user_identifier",
-          "table": "tb_user",
+          "table": {
+            "name": "tb_user",
+            "schema": null
+          },
           "unique": true,
           "where": "identifier IS NOT NULL"
         },
@@ -1131,7 +1197,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_email",
-          "table": "tb_user",
+          "table": {
+            "name": "tb_user",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1143,7 +1212,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_username",
-          "table": "tb_user",
+          "table": {
+            "name": "tb_user",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1155,7 +1227,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_active",
-          "table": "tb_user",
+          "table": {
+            "name": "tb_user",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1169,7 +1244,10 @@
           ],
           "method": "btree",
           "name": "idx_tb_user_created",
-          "table": "tb_user",
+          "table": {
+            "name": "tb_user",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1181,7 +1259,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_active_username",
-          "table": "tb_user",
+          "table": {
+            "name": "tb_user",
+            "schema": null
+          },
           "unique": false,
           "where": "is_active = TRUE"
         }
@@ -1290,7 +1371,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_comment_post",
-          "table": "tv_comment",
+          "table": {
+            "name": "tv_comment",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1302,7 +1386,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_comment_author",
-          "table": "tv_comment",
+          "table": {
+            "name": "tv_comment",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }
@@ -1425,7 +1512,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_post_slug",
-          "table": "tv_post",
+          "table": {
+            "name": "tv_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1437,7 +1527,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_post_published",
-          "table": "tv_post",
+          "table": {
+            "name": "tv_post",
+            "schema": null
+          },
           "unique": false,
           "where": "is_published = TRUE"
         },
@@ -1451,7 +1544,10 @@
           ],
           "method": "btree",
           "name": "idx_tv_post_created",
-          "table": "tv_post",
+          "table": {
+            "name": "tv_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1463,7 +1559,10 @@
           "key_options": [],
           "method": "gin",
           "name": "idx_tv_post_content_search",
-          "table": "tv_post",
+          "table": {
+            "name": "tv_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1475,7 +1574,10 @@
           "key_options": [],
           "method": "gin",
           "name": "idx_tv_post_title_search",
-          "table": "tv_post",
+          "table": {
+            "name": "tv_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1489,7 +1591,10 @@
           ],
           "method": "gin",
           "name": "idx_tv_post_title_trgm",
-          "table": "tv_post",
+          "table": {
+            "name": "tv_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1503,7 +1608,10 @@
           ],
           "method": "btree",
           "name": "idx_tv_post_list",
-          "table": "tv_post",
+          "table": {
+            "name": "tv_post",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }
@@ -1626,7 +1734,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_user_email",
-          "table": "tv_user",
+          "table": {
+            "name": "tv_user",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1638,7 +1749,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_user_username",
-          "table": "tv_user",
+          "table": {
+            "name": "tv_user",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1650,7 +1764,10 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_user_active",
-          "table": "tv_user",
+          "table": {
+            "name": "tv_user",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1664,7 +1781,10 @@
           ],
           "method": "gin",
           "name": "idx_tv_user_username_trgm",
-          "table": "tv_user",
+          "table": {
+            "name": "tv_user",
+            "schema": null
+          },
           "unique": false,
           "where": null
         },
@@ -1678,7 +1798,10 @@
           ],
           "method": "btree",
           "name": "idx_tv_user_list",
-          "table": "tv_user",
+          "table": {
+            "name": "tv_user",
+            "schema": null
+          },
           "unique": false,
           "where": null
         }

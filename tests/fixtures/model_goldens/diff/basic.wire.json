@@ -86,7 +86,10 @@
               "columns": [
                 "post_id"
               ],
-              "ref_table": "posts",
+              "ref_table": {
+                "schema": null,
+                "name": "posts"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -99,7 +102,10 @@
               "columns": [
                 "user_id"
               ],
-              "ref_table": "users",
+              "ref_table": {
+                "schema": null,
+                "name": "users"
+              },
               "ref_columns": [
                 "id"
               ],
@@ -194,7 +200,10 @@
               "columns": [
                 "user_id"
               ],
-              "ref_table": "users",
+              "ref_table": {
+                "schema": null,
+                "name": "users"
+              },
               "ref_columns": [
                 "id"
               ],

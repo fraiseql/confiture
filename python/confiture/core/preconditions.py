@@ -29,11 +29,14 @@ from typing import TYPE_CHECKING
 from psycopg import sql as pgsql
 
 from confiture.core import live_catalog
+from confiture.core.schema_model import RelationName
 from confiture.core.type_lattice import canonical_type, parse_type
 from confiture.exceptions import PreconditionError, PreconditionValidationError
 
 if TYPE_CHECKING:
     import psycopg
+
+    from confiture.core.schema_model import RelationName
 
 
 # PreconditionError and PreconditionValidationError live in confiture.exceptions
@@ -47,14 +50,15 @@ def _base_type(canonical: str | None) -> str | None:
     return parsed.name + "[]" * parsed.dimensions if parsed is not None else canonical
 
 
-def _names(reference: str | None, schema: str, table: str) -> bool:
+def _names(reference: RelationName | None, schema: str, table: str) -> bool:
     """Whether ``pg_get_constraintdef``'s ``REFERENCES`` target is *schema.table*.
 
     PostgreSQL leaves a referenced table unqualified when ``search_path`` finds
     it, so an unqualified reference matches on its name alone.
     """
-    ref_schema, _, ref_table = (reference or "").rpartition(".")
-    return ref_table == table and (not ref_schema or ref_schema == schema)
+    if reference is None:
+        return False
+    return reference.name == table and reference.schema in (None, schema)
 
 
 @dataclass

@@ -18,6 +18,7 @@ import pytest
 from confiture.core import sql_lexer
 from confiture.core.differ import SchemaDiffer
 from confiture.core.idempotency.patterns import detect_non_idempotent_patterns
+from confiture.core.schema_model import RelationName
 
 SPLIT_CASES = {
     "quoted_identifier_with_semicolon": (
@@ -123,7 +124,7 @@ ALTER TABLE s.t ADD CONSTRAINT uq_t UNIQUE (a, b);
     assert (fk.name, fk.columns, fk.ref_table, fk.ref_columns, fk.on_delete) == (
         "fk_t",
         ("a",),
-        "s.t",
+        RelationName("s", "t"),
         ("id",),
         "CASCADE",
     )

@@ -16,7 +16,15 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from confiture.core.schema_model import Column, Constraint, Index, SchemaModel, Table, ref_for
+from confiture.core.schema_model import (
+    Column,
+    Constraint,
+    Index,
+    RelationName,
+    SchemaModel,
+    Table,
+    ref_for,
+)
 from confiture.core.type_lattice import canonical_type
 
 
@@ -42,8 +50,9 @@ def column(
 
 
 def index(name: str | None, table: str, *columns: str, **facts: Any) -> Index:
-    """One index on *table*; *facts* are ``unique``, ``method``, ``backs_constraint``…."""
-    return Index(name=name, table=table, columns=columns, **facts)
+    """One index on *table*, written ``schema.name`` or ``name``; *facts* are ``unique``, ``method``…."""
+    schema, _, relation = table.rpartition(".")
+    return Index(name=name, table=RelationName(schema or None, relation), columns=columns, **facts)
 
 
 def table(
