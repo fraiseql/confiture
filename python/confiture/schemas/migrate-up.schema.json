@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://confiture.fraiseql.dev/schemas/migrate-up.schema.json",
   "title": "confiture migrate up --format json",
-  "description": "Result of applying pending migrations (MigrateUpResult.to_dict). The fraisier migration adapter reads applied[].version to report the new head. A failure that aborts before/within execution emits the error envelope (error-envelope.schema.json) instead of this shape; a partial failure sets success=false and lists human-readable strings in errors.",
+  "description": "Result of applying pending migrations (MigrateUpResult.to_dict). The fraisier migration adapter reads applied[].version to report the new head. A failure that aborts before/within execution emits the error envelope (error-envelope.schema.json) instead of this shape; a partial failure or a requires_superuser halt sets success=false and lists at least one human-readable string in errors.",
   "type": "object",
   "required": [
     "success",
@@ -18,6 +18,20 @@
     "warnings"
   ],
   "additionalProperties": false,
+  "if": {
+    "properties": {
+      "success": {
+        "const": false
+      }
+    }
+  },
+  "then": {
+    "properties": {
+      "errors": {
+        "minItems": 1
+      }
+    }
+  },
   "properties": {
     "success": {
       "type": "boolean",
@@ -98,7 +112,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Human-readable failure messages when success=false; empty in the happy path."
+      "description": "Why the run stopped short: never empty when success=false (a failed migration, or the requires_superuser migration a run halted at, with its apply-as remedy and the count left in pending); empty in the happy path."
     },
     "total_duration_ms": {
       "type": "integer",

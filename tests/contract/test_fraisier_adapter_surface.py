@@ -440,3 +440,46 @@ def test_adapter_dsn_handoff_is_env_only_under_no_config(
     payload = _read_report(result, report)
     assert payload["success"] is True
     assert [m["version"] for m in payload["applied"]] == [v for v, _ in _VERSIONS]
+
+
+def test_adapter_up_that_halts_is_a_failure_that_says_why(adapter_db, tmp_path) -> None:
+    """A ``requires_superuser`` halt exits 1 with ``success: false`` and a non-empty
+    ``errors[]`` naming the migration, its ``apply-as`` remedy and what is left.
+
+    Through 1.23.1 the halt carried ``errors: []``; a caller asking "are there
+    errors?" read it as a success (fraiseql/fraisier#417).
+    """
+    (first, a), (_, b) = _VERSIONS
+    halted, last = "20260101000002", "20260101000003"
+    md = tmp_path / "migrations"
+    md.mkdir()
+    (md / f"{first}_{a}.up.sql").write_text(f"CREATE TABLE eco_contract_{a} (id int);")
+    (md / f"{first}_{a}.down.sql").write_text(f"DROP TABLE eco_contract_{a};")
+    (md / f"{halted}_needs_superuser.py").write_text(
+        "from confiture.models.migration import Migration\n\n\n"
+        "class NeedsSuperuser(Migration):\n"
+        f'    version = "{halted}"\n'
+        '    name = "needs_superuser"\n'
+        "    requires_superuser = True\n\n"
+        "    def up(self) -> None:\n"
+        '        self.execute("SELECT 1")\n\n'
+        "    def down(self) -> None:\n"
+        '        self.execute("SELECT 1")\n'
+    )
+    (md / f"{last}_{b}.up.sql").write_text(f"CREATE TABLE eco_contract_{b} (id int);")
+    (md / f"{last}_{b}.down.sql").write_text(f"DROP TABLE eco_contract_{b};")
+    report = tmp_path / "r.json"
+
+    result = _adapter_invoke("up", dsn=adapter_db, report=report, migrations_dir=md)
+
+    assert result.exit_code == 1, result.output
+    payload = _read_report(result, report)
+    _schema("migrate-up.schema.json").validate(payload)
+    assert payload["success"] is False
+    assert [m["version"] for m in payload["applied"]] == [first]
+    assert [s["version"] for s in payload["skipped_superuser"]] == [halted]
+    assert payload["pending"] == [last]
+    (message,) = payload["errors"]
+    assert f"{halted}_needs_superuser" in message
+    assert f"confiture migrate apply-as <role> {halted}" in message
+    assert "1 migration left pending" in message

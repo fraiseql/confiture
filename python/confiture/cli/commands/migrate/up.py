@@ -231,7 +231,8 @@ def migrate_up(
 
     EXIT CODES:
       0  All migrations applied successfully.
-      1  Generic/unknown error.
+      1  Halted at a requires_superuser migration (apply it with apply-as,
+         then re-run), or a generic/unknown error.
       2  Validation or configuration error (bad flags, missing config).
       3  Migration execution error (SQL failure, duplicate versions).
       6  Lock/pool error (retriable — another process holds the lock).

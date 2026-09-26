@@ -91,7 +91,12 @@ confiture migrate <subcommand> [<args>] --no-config --format json --output <file
 The adapter-consumed fields per command:
 
 - **current** — `revision` (the head, `null` when none applied).
-- **up** — `applied[].version` (the new head).
+- **up** — `applied[].version` (the new head), and `success`: a run that
+  halted at a `requires_superuser` migration exits `1` with `success: false`,
+  the halted migration in `skipped_superuser[]` and the rest in `pending[]`.
+  From 1.24.0 `errors[]` is never empty when `success` is false; through 1.23.1
+  a halt carried `errors: []`, so a caller that asked "are there errors?" read
+  the halt as a success. Read `success`.
 - **down-to** — `from`, `to`, `rolled_back[]`.
 - **verify** — `ok` and each `results[].{version, name, status, error}`.
 
