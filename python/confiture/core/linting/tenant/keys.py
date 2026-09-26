@@ -84,7 +84,10 @@ def _crossing(
     source_key, target_key = source.key or "", target.key or ""
     held = (source_key, *(c for c in fk.columns if c != source_key))
     referenced = (target_key, *(r for r in refs if r != target_key))
-    fix = f"FOREIGN KEY ({_columns(held)}) REFERENCES {spelled(target.table)} ({_columns(referenced)})"
+    fix = (
+        f"FOREIGN KEY ({_columns(held)}) REFERENCES {spelled(target.relation)} "
+        f"({_columns(referenced)})"
+    )
     if not _unique_on(target, referenced):
         fix += (
             f"; {spelled(target.table)} needs PRIMARY KEY ({_columns(referenced)}) "
@@ -92,7 +95,7 @@ def _crossing(
         )
     message = (
         f"{source.table.qualified}'s foreign key ({_columns(fk.columns)}) → "
-        f"{target.table.qualified} ({_columns(refs)}) can point at another tenant's row: "
+        f"{target.named} ({_columns(refs)}) can point at another tenant's row: "
         f"it does not carry {source_key} on both sides"
     )
     return finding(source.table, message, fix, _line(source, fk))
@@ -120,7 +123,7 @@ def _root_crossing(
     return finding(
         source.table,
         f"{source.table.qualified}'s foreign key ({columns}) → "
-        f"{target.table.qualified} ({_columns(refs)}): only {tenancy_column} references "
+        f"{target.named} ({_columns(refs)}): only {tenancy_column} references "
         f"the table of tenants. If {columns} is the row's own tenant, it duplicates "
         f"{tenancy_column} and can disagree with it; if it is another organisation, "
         "it is a counterparty pointing into another tenant's space",
@@ -137,7 +140,7 @@ def _global_to_tenant(source: TableScope, target: TableScope, fk: Constraint) ->
     return finding(
         source.table,
         f"{source.table.qualified} is global, yet its foreign key ({_columns(fk.columns)}) "
-        f"→ {target.table.qualified} points at one tenant's row",
+        f"→ {target.named} points at one tenant's row",
         f"move the reference to a tenant table, or make {spelled(source.table)} tenant-scoped",
         _line(source, fk),
     )
