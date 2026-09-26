@@ -418,9 +418,11 @@ plus a structured `error` object:
 The process exit code is derived from `error.code` (see the
 [CLI reference](../reference/cli.md)).
 
-Distinguish this from a command that *runs* but reports per-item failures in its
-result body — e.g. `migrate up` returns `"success": false` with a populated
-`errors` array (exit code 0 for the run, non-zero only on a hard failure).
+Distinguish this from a command that *runs* but reports its outcome in its
+result body — e.g. `migrate up` returns `"success": false` when a migration
+failed (exit `3`) or when the run halted at a `requires_superuser` migration
+(exit `1`). `errors` is never empty when `success` is false: a halt names the
+migration, its `apply-as` remedy and how many migrations are left in `pending`.
 Detect failures by checking `ok` (envelope) or `success` (result body).
 
 ## Best Practices

@@ -301,8 +301,10 @@ class MigrateUpResult:
         skipped: List of migration versions that were already applied.
                 Empty if no previously-applied migrations were encountered.
 
-        errors: List of error messages if success=False. Each string is a human-readable
-               error description. Empty list if success=True.
+        errors: Why the run stopped short. Never empty when success=False — a
+               migration that failed, or the ``requires_superuser`` migration a
+               run halted at (named with its ``apply-as`` remedy and the count
+               left in ``pending``). Empty list if success=True.
     """
 
     success: bool
@@ -325,8 +327,8 @@ class MigrateUpResult:
 
     @property
     def has_errors(self) -> bool:
-        """True if operation had errors (success=False and errors non-empty)."""
-        return not self.success and len(self.errors) > 0
+        """True if the run did not succeed; ``errors`` says why."""
+        return not self.success
 
     @property
     def error_summary(self) -> str | None:

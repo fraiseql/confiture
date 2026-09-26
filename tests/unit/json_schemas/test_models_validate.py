@@ -214,3 +214,17 @@ def test_every_public_schema_is_mapped_to_a_model_or_listed_as_cli_built() -> No
         | set(schema_exporter.LIBRARY_SCHEMAS)
     )
     assert public == covered, {"unmapped": public - covered, "unknown": covered - public}
+
+
+def test_migrate_up_schema_refuses_a_failure_that_says_nothing() -> None:
+    """``success=false`` with an empty ``errors`` is what a caller read as a success."""
+    from confiture.models.results import MigrateUpResult
+
+    validator = _validator("migrate-up.schema.json")
+    silent = MigrateUpResult(success=False, migrations_applied=[], total_duration_ms=0)
+    said = MigrateUpResult(
+        success=False, migrations_applied=[], total_duration_ms=0, errors=["Halted at 002_b"]
+    )
+
+    assert not validator.is_valid(json.loads(json.dumps(silent.to_dict())))
+    assert validator.is_valid(json.loads(json.dumps(said.to_dict())))

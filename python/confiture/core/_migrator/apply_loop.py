@@ -360,6 +360,21 @@ def _apply_one(
     )
 
 
+def _errors(applied: _Applied) -> list[str]:
+    """Why the loop stopped short — never empty when it did, so ``success=False`` says why."""
+    if applied.failure is not None:
+        return [str(applied.failure) or type(applied.failure).__name__]
+    if not applied.halted:
+        return []
+    stopped = applied.skipped_superuser[0]
+    left = len(applied.pending_after_halt)
+    return [
+        f"Halted at {stopped.version}_{stopped.name}: it declares requires_superuser=True. "
+        f"Apply it with `confiture migrate apply-as <role> {stopped.version}`, then re-run "
+        f"`confiture migrate up`; {left} migration{'' if left == 1 else 's'} left pending."
+    ]
+
+
 def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResult:
     """The :class:`MigrateUpResult` for what the loop did."""
     if applied.failure is not None:
@@ -369,7 +384,7 @@ def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResul
             total_duration_ms=applied.total_duration_ms,
             checksums_verified=plan.checksums_verified,
             dry_run=False,
-            errors=[str(applied.failure)],
+            errors=_errors(applied),
             failure=applied.failure,
             skipped=plan.skipped_versions,
             skipped_superuser=applied.skipped_superuser,
@@ -382,6 +397,7 @@ def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResul
         checksums_verified=plan.checksums_verified,
         dry_run=False,
         warnings=(["Force mode enabled"] if force else []) + plan.checksum_warnings,
+        errors=_errors(applied),
         skipped=plan.skipped_versions,
         skipped_superuser=applied.skipped_superuser,
         pending=applied.pending_after_halt,
@@ -420,7 +436,7 @@ def _rehearsal_result(plan: _Plan, applied: _Applied) -> MigrateUpResult:
             checksums_verified=plan.checksums_verified,
             dry_run=True,
             dry_run_execute=True,
-            errors=[str(applied.failure)],
+            errors=_errors(applied),
             failure=applied.failure,
             skipped=plan.skipped_versions,
             skipped_superuser=applied.skipped_superuser,
@@ -433,11 +449,14 @@ def _rehearsal_result(plan: _Plan, applied: _Applied) -> MigrateUpResult:
         checksums_verified=plan.checksums_verified,
         dry_run=True,
         dry_run_execute=True,
+        errors=_errors(applied),
         skipped=plan.skipped_versions,
         skipped_superuser=applied.skipped_superuser,
         pending=applied.pending_after_halt,
         warnings=[
-            "dry_run_execute: all SQL executed successfully, changes rolled back",
+            "dry_run_execute: changes rolled back"
+            if applied.halted
+            else "dry_run_execute: all SQL executed successfully, changes rolled back",
             *plan.checksum_warnings,
         ],
     )

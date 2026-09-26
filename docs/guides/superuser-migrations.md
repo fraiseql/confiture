@@ -55,6 +55,23 @@ When `migrate up` encounters a migration with `requires_superuser=True`, it:
 2. **Halts the chain** at that migration.
 3. Exits with code `1`.
 
+The run did not finish, so it is not a success: `MigrateUpResult.success` is
+`False`, `has_errors` is `True`, and `errors` names the migration that stopped
+the chain, the `apply-as` command and how many migrations are left in `pending`
+(the versions themselves are in `pending`, the halted one in
+`skipped_superuser`). `--dry-run-execute` halts where `up` would, and reports it
+the same way.
+
+```json
+{
+  "success": false,
+  "applied": [{"version": "20260528160001", "name": "first", "execution_time_ms": 4, "rows_affected": 0}],
+  "skipped_superuser": [{"version": "20260528160002", "name": "second", "reason": "requires_superuser=True; resolve with `confiture migrate apply-as <role> 20260528160002`"}],
+  "pending": ["20260528160003"],
+  "errors": ["Halted at 20260528160002_second: it declares requires_superuser=True. Apply it with `confiture migrate apply-as <role> 20260528160002`, then re-run `confiture migrate up`; 1 migration left pending."]
+}
+```
+
 ```
 ⚡ Applying 20260528160001_first... ✅
 

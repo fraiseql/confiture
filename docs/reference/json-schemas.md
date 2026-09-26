@@ -126,7 +126,7 @@ attribute names are scheduled to follow them at 1.0.0.
 
 ### `confiture migrate up --format json`
 
-[migrate-up.schema.json](./json-schemas/migrate-up.schema.json) — `{success, applied[], skipped, skipped_superuser[], pending, errors, total_duration_ms, checksums_verified, dry_run, dry_run_execute, warnings}` after applying pending migrations. The fraisier migration adapter reads `applied[].version` as the new head. A failure that aborts execution emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
+[migrate-up.schema.json](./json-schemas/migrate-up.schema.json) — `{success, applied[], skipped, skipped_superuser[], pending, errors, total_duration_ms, checksums_verified, dry_run, dry_run_execute, warnings}` after applying pending migrations. The fraisier migration adapter reads `applied[].version` as the new head. A failure that aborts execution emits the [error envelope](./json-schemas/error-envelope.schema.json) instead; a failed migration or a `requires_superuser` halt keeps this shape with `success: false`, and `errors` is then never empty.
 
 ### `confiture migrate verify --format json`
 

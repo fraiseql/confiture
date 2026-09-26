@@ -14,6 +14,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**A halt is a failure that says why.** A `migrate up` that stopped at a
+`requires_superuser` migration returned `success=False` with `errors=[]`, so
+`has_errors` was `False` and a caller that branched on it — fraisier's deploy
+(fraiseql/fraisier#417) — started the app on a half-migrated schema. The real
+run and the `--dry-run-execute` rehearsal both did it.
+
+### Changed
+
+- **`errors` is never empty when `success` is false** (`MigrateUpResult`, and
+  `errors[]` in `migrate up --format json`). A halt now reads `Halted at
+  <version>_<name>: it declares requires_superuser=True. Apply it with
+  `confiture migrate apply-as <role> <version>`, then re-run `confiture migrate
+  up`; N migrations left pending.` A migration that raised an exception with an
+  empty message reports the exception's type instead of `""`.
+  `migrate-up.schema.json` states it: `success: false` requires `errors` with at
+  least one item. The exit codes are unchanged (a halt exits `1`, a failed
+  migration `3`).
+- **`MigrateUpResult.has_errors` is `not success`.** It was `not success and
+  errors`, which a hand-built `MigrateUpResult(success=False)` still answered
+  `False`.
+
+### Fixed
+
+- **A rehearsal that halted no longer says "all SQL executed successfully".**
+  Its warning is `dry_run_execute: changes rolled back`; the halt is in `errors`.
+
 ## [1.23.1] - 2026-09-25
 
 **A webhook URL opens nothing but a webhook.** The notification transport opened

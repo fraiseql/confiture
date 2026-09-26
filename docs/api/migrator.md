@@ -335,9 +335,9 @@ from confiture.models.results import MigrateUpResult
 #   dry_run_execute: bool
 #   warnings: list[str]
 #   skipped: list[str]
-#   errors: list[str]
+#   errors: list[str]         # never empty when success is False, a halt included
 # Properties
-#   has_errors: bool
+#   has_errors: bool          # not success
 #   error_summary: str | None
 # to_dict() serialises migrations_applied as "applied" and
 # total_duration_ms (the attribute and the JSON key share the name since 1.0.0).
