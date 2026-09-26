@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
 from confiture.config.environment import Environment
+from confiture.config.project import ProjectConfig
 
 DOC = Path(__file__).resolve().parents[1] / "docs" / "reference" / "configuration.md"
 BEGIN = "<!-- BEGIN GENERATED: config-fields -->"
@@ -202,10 +203,11 @@ def render() -> str:
         "",
         "### Every field, from the models",
         "",
-        "Generated from `confiture.config.environment`; the description is the model's own.",
+        "Generated from `confiture.config.environment` and `confiture.config.project`; "
+        "the description is the model's own.",
         "",
     ]
-    for model in _models(Environment):
+    for model in [*_models(Environment), *_models(ProjectConfig)]:
         descriptions = _descriptions(model)
         lines += [
             f"#### `{model.__name__}`",
@@ -223,8 +225,16 @@ def render() -> str:
     lines += [
         "### Complete skeleton (every field at its default)",
         "",
+        "`db/environments/<env>.yaml`:",
+        "",
         "```yaml",
         *_yaml_model(Environment, 0),
+        "```",
+        "",
+        "`db/project.yaml` — the facts true in every environment (optional):",
+        "",
+        "```yaml",
+        *_yaml_model(ProjectConfig, 0),
         "```",
         "",
         END,
@@ -234,7 +244,7 @@ def render() -> str:
 
 def undocumented() -> list[str]:
     missing: list[str] = []
-    for model in _models(Environment):
+    for model in [*_models(Environment), *_models(ProjectConfig)]:
         descriptions = _descriptions(model)
         missing.extend(
             f"{model.__name__}.{name}" for name in model.model_fields if not descriptions.get(name)

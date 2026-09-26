@@ -92,6 +92,10 @@ class LintRule:
             *this* project rather than in general.
         escalated_by: The configuration that raises the severity, named the way
             an operator would set it.
+        enabled_by: A ``db/project.yaml`` block that turns the rule on by default
+            when the project declares it (``tenancy``): the rule describes the
+            project, so declaring the project once is the switch, and ``--ignore``
+            still narrows it.
     """
 
     code: str
@@ -104,6 +108,7 @@ class LintRule:
     escalates_to: str | None = None
     escalated_by: str | None = None
     requires_db: bool = False
+    enabled_by: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """JSON shape for ``lint --list-rules --format json``."""
@@ -118,6 +123,7 @@ class LintRule:
             "escalates_to": self.escalates_to,
             "escalated_by": self.escalated_by,
             "requires_db": self.requires_db,
+            "enabled_by": self.enabled_by,
         }
 
 
@@ -267,6 +273,14 @@ LINT_RULES: tuple[LintRule, ...] = (
         severity="warning",
         default_on=False,
         legacy_flag="--check-tenant-isolation",
+    ),
+    LintRule(
+        code="tenant_002",
+        family="tenant",
+        title="A table carries the tenant discriminator NOT NULL, or is declared global",
+        severity="warning",
+        default_on=False,
+        enabled_by="tenancy",
     ),
     LintRule(
         code="replica_001",
@@ -436,12 +450,19 @@ def families() -> tuple[str, ...]:
     return tuple(seen)
 
 
-def default_codes() -> frozenset[str]:
-    """The rule codes a plain ``confiture lint`` applies."""
-    return frozenset(rule.code for rule in LINT_RULES if rule.default_on)
+def default_codes(declared: frozenset[str] = frozenset()) -> frozenset[str]:
+    """The rule codes a plain ``confiture lint`` applies.
+
+    Args:
+        declared: The ``db/project.yaml`` blocks the project declares; a rule
+            :attr:`~LintRule.enabled_by` one of them is on by default.
+    """
+    return frozenset(
+        rule.code for rule in LINT_RULES if rule.default_on or rule.enabled_by in declared
+    )
 
 
-def _expand(token: str, *, option: str) -> frozenset[str]:
+def _expand(token: str, *, option: str, declared: frozenset[str] = frozenset()) -> frozenset[str]:
     """Resolve one selector token to rule codes.
 
     Args:
@@ -461,7 +482,7 @@ def _expand(token: str, *, option: str) -> frozenset[str]:
         return frozenset()
     key = LEGACY_CODE_ALIASES.get(key, key)
     if key == DEFAULT_SELECTOR:
-        return default_codes()
+        return default_codes(declared)
     # Keyed on the folded code and answering with the registry's own spelling:
     # selection is case-insensitive, and `UNPARSEABLE` is the one upper-case
     # code — which would otherwise resolve to a set holding `unparseable`,
@@ -484,17 +505,21 @@ def _expand(token: str, *, option: str) -> frozenset[str]:
     )
 
 
-def _expand_all(tokens: Iterable[str], *, option: str) -> frozenset[str]:
+def _expand_all(
+    tokens: Iterable[str], *, option: str, declared: frozenset[str] = frozenset()
+) -> frozenset[str]:
     codes: set[str] = set()
     for token in tokens:
         for part in str(token).split(","):
-            codes |= _expand(part, option=option)
+            codes |= _expand(part, option=option, declared=declared)
     return frozenset(codes)
 
 
 def resolve_selection(
     select: Sequence[str] | None,
     ignore: Sequence[str],
+    *,
+    declared: frozenset[str] = frozenset(),
 ) -> frozenset[str]:
     """The exact rule codes one ``confiture lint`` invocation applies.
 
@@ -502,6 +527,8 @@ def resolve_selection(
         select: ``--select`` values (each may be comma-separated). ``None`` or
             empty means the default set, what a plain ``confiture lint`` applies.
         ignore: ``--ignore`` values, removed after selection.
+        declared: The ``db/project.yaml`` blocks the project declares, which
+            turn their rules on by default.
 
     Returns:
         The selected rule codes. Selecting a rule is necessary but not always
@@ -510,7 +537,11 @@ def resolve_selection(
     Raises:
         ConfigurationError: An unknown code or family appeared in either option.
     """
-    selected = _expand_all(select, option="--select") if select else default_codes()
+    selected = (
+        _expand_all(select, option="--select", declared=declared)
+        if select
+        else default_codes(declared)
+    )
     excluded = _expand_all(ignore, option="--ignore") if ignore else frozenset()
     return frozenset(selected - excluded)
 
@@ -526,7 +557,9 @@ def render_rule_table() -> str:
         "|------|--------|----------|:-------:|------|",
     ]
     for rule in LINT_RULES:
-        default = "on" if rule.default_on else "off"
+        default = (
+            "on" if rule.default_on else f"with `{rule.enabled_by}:`" if rule.enabled_by else "off"
+        )
         title = rule.title.replace("|", "\\|")
         lines.append(f"| `{rule.code}` | {rule.family} | {rule.severity} | {default} | {title} |")
     return "\n".join(lines)
@@ -556,9 +589,14 @@ def _grouped(rules: Iterable[LintRule]) -> list[str]:
             rule is None
             or rule.family != run[-1].family
             or rule.requires_config != run[-1].requires_config
+            or rule.enabled_by != run[-1].enabled_by
         ):
             spanned = ", ".join(_span([r.code for r in run]))
-            needs = run[-1].requires_config
+            needs = run[-1].requires_config or (
+                f"on when db/project.yaml declares {run[-1].enabled_by}:"
+                if run[-1].enabled_by
+                else None
+            )
             parts.append(f"{spanned} ({needs})" if needs else spanned)
             run = []
         if rule is not None:

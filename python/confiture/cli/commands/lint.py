@@ -25,6 +25,7 @@ from confiture.cli.options import (
     migrations_dir_option,
     output_option,
 )
+from confiture.config.project import load_project_config
 from confiture.core.linting import SchemaLinter
 from confiture.core.linting.gate import (
     Gate,
@@ -279,6 +280,7 @@ def lint(
             replica_safe=replica_safe,
             check_tenant_isolation=check_tenant_isolation,
             check_security_definer=check_security_definer,
+            declared=load_project_config(project_dir).declared_blocks(),
         )
         config = linter_config(selected, threshold, server_url)
         if format_type == "table":
@@ -484,7 +486,11 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
             rule.code,
             rule.family,
             rule.severity,
-            "on" if rule.default_on else "opt-in",
+            "on"
+            if rule.default_on
+            else f"with {rule.enabled_by}:"
+            if rule.enabled_by
+            else "opt-in",
             rule.title + (f" (needs {rule.requires_config})" if rule.requires_config else ""),
         )
     console.print(table)

@@ -20,6 +20,7 @@ import pglast.parser
 import psycopg
 
 from confiture.config.environment import Environment
+from confiture.config.project import load_project_config
 from confiture.core import builder as _core_builder
 from confiture.core import sql_lexer
 from confiture.core.builder import files_under
@@ -176,6 +177,7 @@ class LintConfig:
         check_security: bool = True,
         check_seed_secrets: bool = True,
         check_tenant_isolation: bool = False,
+        check_tenant_tables: bool = False,
         check_acl_coverage: bool = True,
         check_duplicates: bool = True,
         check_qualification: bool = True,
@@ -205,6 +207,9 @@ class LintConfig:
                 the tree — a seed row's value or a role's password (``sec_003``)
             check_tenant_isolation: Detect INSERTs missing tenant FK columns
                 (multi-tenant rule, ``tenant_001``). Opt-in (default off).
+            check_tenant_tables: Every table carries the tenant discriminator
+                NOT NULL, or is declared global (``tenant_002``); needs a
+                ``tenancy:`` block in ``db/project.yaml``
             check_acl_coverage: Allow the ACL coverage rule (``acl_001``) to run.
             check_duplicates: Report objects defined more than once in one build
                 (``build_001`` / ``build_002``).
@@ -247,6 +252,7 @@ class LintConfig:
         self.check_security = check_security
         self.check_seed_secrets = check_seed_secrets
         self.check_tenant_isolation = check_tenant_isolation
+        self.check_tenant_tables = check_tenant_tables
         self.check_acl_coverage = check_acl_coverage
         self.check_duplicates = check_duplicates
         self.check_qualification = check_qualification
@@ -420,6 +426,7 @@ class SchemaLinter:
                 None,
             ),
             (self.config.check_tenant_isolation, self._check_tenant_isolation, None),
+            (self.config.check_tenant_tables, self._check_tenant_tables, "tenant"),
         ):
             if enabled:
                 check(report)
@@ -997,6 +1004,47 @@ class SchemaLinter:
                 ]
             )
         return self._written_cache
+
+    def _check_tenant_tables(self, report: LintReport) -> None:
+        """``tenant_002``: a table carries the discriminator, or is declared global.
+
+        Without a ``tenancy:`` block the rule has nothing to judge against, and
+        says so rather than passing.
+        """
+        # Reason: import cycle (the tenant package's __init__ imports tenant_isolation_rule, which imports this module)
+        from confiture.core.linting.tenant import scope as tenant_scope
+
+        tenancy = load_project_config(self.project_dir).tenancy
+        if tenancy is None:
+            report.skipped.append(
+                RuleStatus(
+                    code="tenant_002",
+                    state="skipped",
+                    reason="no tenancy: block in db/project.yaml, so no table can be judged",
+                )
+            )
+            return
+        declarations = {
+            (label, directive.statement_line): directive.argument
+            for label, text in self._sources()
+            for directive in sql_lexer.directives(text)
+            if directive.name == tenant_scope.GLOBAL_DIRECTIVE
+            and directive.statement_line is not None
+        }
+        for finding in tenant_scope.table_findings(self._inventory.tables, tenancy, declarations):
+            report.add_violation(
+                LintViolation(
+                    rule_id="tenant_002",
+                    rule_name="Tenant Discriminator",
+                    severity=RuleSeverity.WARNING,
+                    object_type="table",
+                    object_name=finding.table,
+                    message=finding.message,
+                    suggested_fix=finding.fix,
+                    file_path=finding.file,
+                    line_number=finding.line,
+                )
+            )
 
     @staticmethod
     def _is_snake_case(identifier: str) -> bool:

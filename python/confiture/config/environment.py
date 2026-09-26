@@ -984,6 +984,23 @@ class Environment(BaseModel):
             )
         return data
 
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_project_facts(cls, data: Any) -> Any:
+        """Refuse ``tenancy:`` here: it describes the schema, not one environment.
+
+        Pydantic would ignore it as an unknown key, and an environment that
+        carried it would look tenant-scoped while no tenant rule ran. It lives
+        once, in ``db/project.yaml``.
+        """
+        if isinstance(data, dict) and "tenancy" in data:
+            raise ConfigurationError(
+                "'tenancy' is a fact about the schema, not about one environment: "
+                "move it to db/project.yaml, where every environment reads it.",
+                error_code="CONFIG_010",
+            )
+        return data
+
     @field_validator("database_url")
     @classmethod
     def validate_database_url(cls, v: str) -> str:

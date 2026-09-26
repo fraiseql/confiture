@@ -540,13 +540,36 @@ CREATE TABLE catalog.tb_audit_ledger ( ... );
 ---
 
 
+## `db/project.yaml`
+
+An environment file says how to reach one database. `db/project.yaml` holds what is
+true in **every** environment — facts about the schema itself — so it is written
+once, and an environment that forgot a copy cannot quietly disagree. It is optional:
+without it confiture assumes nothing it describes.
+
+```yaml
+# db/project.yaml
+tenancy:
+  discriminator: tenant_id              # the column every tenant-scoped relation carries
+  root: management.tb_organization      # the table of tenants
+  global_schemas: [catalog]             # shared reference data
+```
+
+- **`tenancy`** declares the project tenant-scoped, which turns the `tenant` lint
+  family on for every `confiture lint` (see
+  [`tenant_002`](lint-rules.md#tenant_002-every-table-carries-the-tenant-discriminator-or-is-declared-global)).
+  An environment file that carries a `tenancy:` block is refused, pointing here.
+
+Unknown keys are refused, like everywhere else in confiture's configuration: a typo
+is never an empty success.
+
 ## Field reference
 
 <!-- BEGIN GENERATED: config-fields -->
 
 ### Every field, from the models
 
-Generated from `confiture.config.environment`; the description is the model's own.
+Generated from `confiture.config.environment` and `confiture.config.project`; the description is the model's own.
 
 #### `Environment`
 
@@ -757,7 +780,23 @@ Generated from `confiture.config.environment`; the description is the model's ow
 | `search_path` | list[str] | `[]` | The schemas an unqualified *relation* in a body is looked for in, in order. Empty (the default) means an unqualified name is not judged at all: without knowing what resolves it, every ``now()`` becomes a finding. Unqualified *routine* calls are never judged even with this set — ``pg_catalog`` is on every search path and confiture cannot enumerate it. |
 | `status_words` | list[str] | `['TODO', 'FIXME', 'WIP', 'DRAFT']` | The words in a file or directory name that say the work is unfinished, matched case-insensitively against the underscore-separated parts of the name. The default is :data:`DEFAULT_STATUS_WORDS`; a project that writes ``_SPIKE`` says so here. |
 
+#### `ProjectConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `tenancy` | [TenancyConfig](#tenancyconfig) \| NoneType | - | Declares the project tenant-scoped; absent, no tenant rule runs. |
+
+#### `TenancyConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `discriminator` | str | `tenant_id` | The column every tenant-scoped relation carries, ``NOT NULL``. |
+| `root` | str \| NoneType | - | The table of tenants, schema-qualified (``management.tb_organization``): its key is the tenant id, so it carries no discriminator of its own. |
+| `global_schemas` | list[str] | `[]` | Schemas holding shared reference data — every relation in them is global, never tenant-scoped. |
+
 ### Complete skeleton (every field at its default)
+
+`db/environments/<env>.yaml`:
 
 ```yaml
 name: ''
@@ -891,6 +930,15 @@ lint:
     - FIXME
     - WIP
     - DRAFT
+```
+
+`db/project.yaml` — the facts true in every environment (optional):
+
+```yaml
+tenancy:
+  discriminator: tenant_id
+  root: null
+  global_schemas: []
 ```
 
 <!-- END GENERATED: config-fields -->

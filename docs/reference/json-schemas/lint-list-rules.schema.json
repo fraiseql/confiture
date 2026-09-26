@@ -99,6 +99,13 @@
           "requires_db": {
             "type": "boolean",
             "description": "Whether the rule answers from a database rather than from the files. Such a rule can be selected and still not run; it then reports a `skipped` entry rather than an empty finding list."
+          },
+          "enabled_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A db/project.yaml block that turns the rule on by default when the project declares it (`tenancy`), or null. Since 1.24.0; absent from earlier payloads."
           }
         }
       }
