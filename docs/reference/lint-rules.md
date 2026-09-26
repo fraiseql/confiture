@@ -670,11 +670,13 @@ column tracer `tenant_003` uses. `DEFAULT VALUES` writes none. A data-modifying
 CTE's `INSERT` is judged like any other; an `INSERT` into a global, root or undecided
 table is not judged, and neither is one outside a routine (a seed row).
 
-What the fragment reader cannot read is a finding saying the `INSERT` in it is not
-judged, never a pass: a body the PL/pgSQL compiler refuses, a statement pglast
-rejects, a string `EXECUTE` builds at run time (as `build_003` declares it), and an
+What the fragment reader cannot read is never a pass: a body the PL/pgSQL compiler
+refuses, a statement pglast rejects, a string `EXECUTE` builds at run time, and an
 `INSERT` without a column list whose query's outputs cannot be counted (a
-set-returning function in `FROM`). A finding names the routine and the table
+set-returning function in `FROM`). Each is named, with its routine and line, in the
+rule's `degraded` status — the channel `build_003` reports its unread bodies on — so
+`--require-complete` fails on it and no `--baseline` silences it: it is a limit of the
+run, not a finding about the schema. A finding names the routine and the table
 (`app.fn_create_order -> app.tb_order`), which is what a `--baseline` records.
 
 This code once meant something else — an `INSERT` missing the foreign key a

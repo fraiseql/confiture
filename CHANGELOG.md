@@ -191,8 +191,9 @@ run and the `--dry-run-execute` rehearsal both did it.
   query supplies (a `SELECT *` over a table the model holds is counted). Bodies are
   read by the one PL/pgSQL fragment reader, and what it cannot read — a body the
   compiler refuses, a statement pglast rejects, a string `EXECUTE` builds at run
-  time, a query whose outputs cannot be counted — is a finding saying the `INSERT`
-  in it is not judged, never a pass. Like the rest of the family it is on with a
+  time, a query whose outputs cannot be counted — is never a pass: each is named in
+  the rule's `degraded` status, as `build_003` names the bodies it could not read,
+  so `--require-complete` fails on it and no `--baseline` silences it. Like the rest of the family it is on with a
   `tenancy:` block and reports itself skipped without one; `--check-tenant-isolation`
   and `LintConfig(check_tenant_isolation=True)` still select it. A finding names
   the routine and the table (`app.fn_create_order -> app.tb_order`), so a baseline

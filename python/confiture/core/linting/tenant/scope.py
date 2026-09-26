@@ -107,6 +107,10 @@ class TenancyFinding:
     line: int
     message: str
     fix: str
+    #: ``False`` for what the rule could not read, so did not judge: not a
+    #: finding about the schema but a limit of this run, reported as the rule's
+    #: ``degraded`` status, which a ``--baseline`` cannot silence.
+    judged: bool = True
 
 
 def primary_key(table: SchemaObject) -> tuple[str, ...]:

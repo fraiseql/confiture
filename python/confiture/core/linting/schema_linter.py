@@ -1056,7 +1056,11 @@ class SchemaLinter:
             return
         rule = tenant_rules.RULES[code]
         tree = tenant_rules.tree(self._inventory, tenancy, self._sources())
+        unjudged: list[str] = []
         for finding in rule.findings(tree):
+            if not finding.judged:
+                unjudged.append(f"{finding.message} ({finding.file or 'line'}:{finding.line})")
+                continue
             report.add_violation(
                 LintViolation(
                     rule_id=code,
@@ -1068,6 +1072,14 @@ class SchemaLinter:
                     suggested_fix=finding.fix,
                     file_path=finding.file,
                     line_number=finding.line,
+                )
+            )
+        if unjudged:
+            report.degraded.append(
+                RuleStatus(
+                    code=code,
+                    state="degraded",
+                    reason=f"{len(unjudged)} not judged: {'; '.join(unjudged)}",
                 )
             )
 

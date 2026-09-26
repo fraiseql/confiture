@@ -25,6 +25,13 @@ def _inserts(tmp_path: Path, sql: str, project_yaml: str | None = TENANCY):
     return findings(tmp_path, sql, "tenant_001", "check_tenant_isolation", project_yaml)
 
 
+def _not_judged(report) -> str:
+    """The one ``degraded`` status that names every statement not judged."""
+    (status,) = [s for s in report.degraded if s.code == "tenant_001"]
+    assert status.state == "degraded"
+    return status.reason
+
+
 def _function(body: str, name: str = "app.fn_create_order") -> str:
     return (
         f"CREATE FUNCTION {name}(p_tenant uuid) RETURNS void LANGUAGE plpgsql AS $$\n"
@@ -210,14 +217,15 @@ def test_a_select_with_no_column_list_counts_its_outputs_from_the_model(tmp_path
 
 
 def test_a_select_whose_outputs_cannot_be_counted_is_reported_unread(tmp_path: Path) -> None:
-    found, _ = _inserts(
+    found, report = _inserts(
         tmp_path,
         _ORDER + _function("  INSERT INTO app.tb_order SELECT * FROM app.fn_rows(p_tenant);"),
     )
 
-    (finding,) = found
-    assert "not judged" in finding.message
-    assert "set-returning function" in finding.message
+    assert found == []
+    reason = _not_judged(report)
+    assert "not judged" in reason
+    assert "set-returning function" in reason
 
 
 def test_default_values_supplies_no_column(tmp_path: Path) -> None:
@@ -291,7 +299,7 @@ def test_an_unqualified_target_is_the_table_the_model_holds(tmp_path: Path) -> N
 
 
 def test_dynamic_execute_is_declared_unread(tmp_path: Path) -> None:
-    found, _ = _inserts(
+    found, report = _inserts(
         tmp_path,
         _ORDER
         + _function(
@@ -300,10 +308,11 @@ def test_dynamic_execute_is_declared_unread(tmp_path: Path) -> None:
         ),
     )
 
-    (finding,) = found
-    assert finding.line_number == 9
-    assert "run time" in finding.message
-    assert "not judged" in finding.message
+    assert found == []
+    reason = _not_judged(report)
+    assert ":9" in reason
+    assert "run time" in reason
+    assert "not judged" in reason
 
 
 def test_a_fragment_that_cannot_be_read_is_reported_never_passed(
@@ -315,18 +324,19 @@ def test_a_fragment_that_cannot_be_read_is_reported_never_passed(
     del slots[("PLpgSQL_stmt_execsql", "sqlstmt")]
     monkeypatch.setattr(plpgsql_fragments, "SLOTS", slots)
 
-    found, _ = _inserts(
+    found, report = _inserts(
         tmp_path,
         _ORDER + _function("  INSERT INTO app.tb_order (id) VALUES (gen_random_uuid());"),
     )
 
-    (finding,) = found
-    assert "no reading for PLpgSQL_stmt_execsql.sqlstmt" in finding.message
-    assert "not judged" in finding.message
+    assert found == []
+    reason = _not_judged(report)
+    assert "no reading for PLpgSQL_stmt_execsql.sqlstmt" in reason
+    assert "not judged" in reason
 
 
 def test_a_body_the_compiler_refuses_is_reported_never_passed(tmp_path: Path) -> None:
-    found, _ = _inserts(
+    found, report = _inserts(
         tmp_path,
         _ORDER
         + "CREATE TYPE app.type_input AS (nom text);\n"
@@ -336,9 +346,10 @@ def test_a_body_the_compiler_refuses_is_reported_never_passed(tmp_path: Path) ->
         "BEGIN INSERT INTO app.tb_order (id) VALUES (gen_random_uuid()); END; $$;\n",
     )
 
-    (finding,) = found
-    assert "could not be read" in finding.message
-    assert finding.line_number == 8
+    assert found == []
+    reason = _not_judged(report)
+    assert "could not be read" in reason
+    assert ":8" in reason
 
 
 # -- Reading ------------------------------------------------------------------

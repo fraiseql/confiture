@@ -18,10 +18,11 @@ Which table is a tenant table is what
 :func:`~confiture.core.linting.tenant.scope.classify` decided for every rule of the
 family — never inferred here. Each routine body is read by
 :func:`~confiture.core.linting.references.routine_bodies`, which reads PL/pgSQL
-through the one fragment reader. What it cannot read is a finding, never a pass: a
-body the compiler refuses, a statement pglast rejects, a string ``EXECUTE`` builds
-at run time, a query whose outputs cannot be counted. Each says the ``INSERT`` in it
-is not judged.
+through the one fragment reader. What it cannot read is never a pass: a body the
+compiler refuses, a statement pglast rejects, a string ``EXECUTE`` builds at run
+time, a query whose outputs cannot be counted. Each is named in the rule's
+``degraded`` status, as ``build_003`` names the bodies it could not read: a limit of
+the run, not a finding about the schema, so no ``--baseline`` silences it.
 """
 
 from __future__ import annotations
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
     from confiture.core.linting.inventory import Inventory, SchemaObject
     from confiture.core.linting.references import BodyStatement, RoutineBody
 
-#: Said of every statement that was not read: what the finding means.
+#: Said of every statement that was not read: what its mention in the status means.
 _NOT_JUDGED = "so an INSERT in it is not judged"
 
 #: How a finding names the routine and the table it writes, as ``build_003`` names
@@ -112,8 +113,9 @@ def _supplied(insert: Any, tree: _Tree) -> int | Unread:
     return len(found)
 
 
-def _missing(insert: Any, entry: TableScope, tree: _Tree) -> str | None:
-    """How the ``INSERT`` leaves the discriminator out, or ``None`` when it supplies it."""
+def _missing(insert: Any, entry: TableScope, tree: _Tree) -> str | Unread | None:
+    """How the ``INSERT`` leaves the discriminator out, ``None`` when it supplies it,
+    or why that cannot be known."""
     column = tree.scopes.tenancy.discriminator
     if insert.cols:
         names = [target.name for target in insert.cols]
@@ -124,10 +126,7 @@ def _missing(insert: Any, entry: TableScope, tree: _Tree) -> str | None:
         )
     supplied = _supplied(insert, tree)
     if isinstance(supplied, Unread):
-        return (
-            "without a column list, and the columns its query supplies cannot be "
-            f"counted ({supplied.reason}), {_NOT_JUDGED}"
-        )
+        return supplied
     at = _position(entry)
     if supplied > at:
         return None
@@ -138,10 +137,16 @@ def _missing(insert: Any, entry: TableScope, tree: _Tree) -> str | None:
 
 
 def _finding(
-    routine: SchemaObject, line: int, message: str, fix: str, table: str | None = None
+    routine: SchemaObject,
+    line: int,
+    message: str,
+    fix: str,
+    table: str | None = None,
+    *,
+    judged: bool = True,
 ) -> TenancyFinding:
     name = routine.qualified if table is None else f"{routine.qualified}{_PAIR}{table}"
-    return TenancyFinding(name, routine.file, line, message, fix)
+    return TenancyFinding(name, routine.file, line, message, fix, judged)
 
 
 def _judge(
@@ -155,20 +160,33 @@ def _judge(
         return None
     table, column = entry.table.qualified, tree.scopes.tenancy.discriminator
     line = statement.line_at(insert.relation.location) if statement.exact else None
+    fix = (
+        f"name {column} in the INSERT's column list, or give {table}.{column} a default "
+        f"(DEFAULT current_setting('app.{column}'))"
+    )
+    if isinstance(why, Unread):
+        return _finding(
+            routine,
+            line or routine.statement_line,
+            f"{routine.qualified} inserts into {table} without a column list, and the "
+            f"columns its query supplies cannot be counted ({why.reason}), {_NOT_JUDGED}",
+            fix,
+            table,
+            judged=False,
+        )
     return _finding(
         routine,
         line or routine.statement_line,
         f"{routine.qualified} inserts into {table} {why}",
-        f"name {column} in the INSERT's column list, or give {table}.{column} a default "
-        f"(DEFAULT current_setting('app.{column}'))",
+        fix,
         table,
     )
 
 
 def _unread(body: RoutineBody) -> Iterator[TenancyFinding]:
-    """What of *body* was not read: each is a finding, never a pass."""
+    """What of *body* was not read: each is named, never passed."""
     routine = body.obj
-    fix = "make the statement one pglast reads, or record the finding in a --baseline"
+    fix = "make the statement one pglast reads"
     if body.refused is not None:
         yield _finding(
             routine,
@@ -176,14 +194,15 @@ def _unread(body: RoutineBody) -> Iterator[TenancyFinding]:
             f"{routine.qualified}: its body could not be read ({body.refused}), so its "
             "INSERTs are not judged",
             fix,
+            judged=False,
         )
     for line, _text in body.dynamic:
         yield _finding(
             routine,
             line if body.exact else routine.statement_line,
             f"{routine.qualified}: EXECUTE builds a statement at run time, {_NOT_JUDGED}",
-            "write the INSERT as a static statement, or record the finding in a --baseline "
-            "once it is reviewed",
+            "write the INSERT as a static statement",
+            judged=False,
         )
     for line, reason in body.unread:
         yield _finding(
@@ -191,6 +210,7 @@ def _unread(body: RoutineBody) -> Iterator[TenancyFinding]:
             line if body.exact else routine.statement_line,
             f"{routine.qualified}: a statement could not be read ({reason}), {_NOT_JUDGED}",
             fix,
+            judged=False,
         )
 
 
