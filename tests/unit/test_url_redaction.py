@@ -7,7 +7,16 @@ moving it into the `PGPASSWORD` environment variable.
 
 from __future__ import annotations
 
-from confiture.url_redaction import libpq_env, redact_url, split_password
+import time
+
+import pytest
+
+from confiture.url_redaction import (
+    libpq_env,
+    redact_credentials_in,
+    redact_url,
+    split_password,
+)
 
 
 class TestRedactUrl:
@@ -83,3 +92,50 @@ class TestRedactBearerUrl:
 
     def test_a_dsn_keeps_its_database_without_bearer(self) -> None:
         assert redact_url("postgresql://u:pw@host/db") == "postgresql://u:***@host/db"
+
+
+#: Passwords libpq reads whole from a URI's userinfo — it ends the userinfo at
+#: the first ``@`` or ``/`` — that ``urlparse`` splits at ``#`` or ``?``, or
+#: that a quote would end a URL found in text (#464).
+LIBPQ_PASSWORDS = ["Pa#ss", "p?w", "pa'ss", 'pa"ss', "p`w", "p<w>", "p&w=1", "p:w"]
+
+
+class TestEveryPasswordLibpqReads:
+    """Masked however it is spelled, since libpq connects with it (#464)."""
+
+    @pytest.mark.parametrize("password", LIBPQ_PASSWORDS)
+    def test_redact_url_masks_it_whole(self, password: str) -> None:
+        masked = redact_url(f"postgresql://app:{password}@db.example:5432/prod?sslmode=require")
+
+        assert masked == "postgresql://app:***@db.example:5432/prod?sslmode=require"
+
+    @pytest.mark.parametrize("password", LIBPQ_PASSWORDS)
+    def test_redact_credentials_in_masks_it_in_a_message(self, password: str) -> None:
+        text = f"could not connect to postgresql://app:{password}@db.example/prod: refused"
+
+        assert redact_credentials_in(text) == (
+            "could not connect to postgresql://app:***@db.example/prod: refused"
+        )
+
+    @pytest.mark.parametrize("password", LIBPQ_PASSWORDS)
+    def test_split_password_returns_it_whole(self, password: str) -> None:
+        url, found = split_password(f"postgresql://app:{password}@db.example/prod")
+
+        assert (url, found) == ("postgresql://app@db.example/prod", password)
+
+    def test_a_port_is_not_a_password(self) -> None:
+        for url in ("postgresql://db:5432/prod", "postgresql://h1:5432,h2:5433/prod?user=a@b"):
+            assert redact_url(url) == url
+            assert split_password(url) == (url, None)
+
+
+def test_a_long_run_of_scheme_characters_is_scanned_in_linear_time() -> None:
+    """No left boundary made every offset a new start: quadratic (#464)."""
+    small, large = "a" * 20_000, "a" * 80_000
+
+    def cost(text: str) -> float:
+        start = time.perf_counter()
+        redact_credentials_in(text)
+        return time.perf_counter() - start
+
+    assert cost(large) < max(cost(small) * 8, 0.05)
