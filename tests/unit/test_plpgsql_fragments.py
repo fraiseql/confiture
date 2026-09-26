@@ -187,3 +187,84 @@ class TestAFragmentThatDoesNotParse:
 
 def test_every_slot_names_a_mode() -> None:
     assert all(isinstance(mode, Mode) for mode in SLOTS.values())
+
+
+class TestARecordVariablesInitialiser:
+    """A ``record`` variable's initialiser is read from the text it is written in (#455).
+
+    libpg_query never serialises a ``PLpgSQL_rec``'s ``default_val``: on every
+    pglast ``r record := f()`` comes back as a name and a line, and on pglast 8
+    so does every variable of a type the compiler stub cannot resolve
+    (``v app.t := f()``). The declaration is on the line the compiler names, so
+    the initialiser is read from there; where it cannot be found, the fragment
+    is a finding, never a silence.
+    """
+
+    def _initialisers(self, body: str) -> list[Fragment]:
+        return [f for f in _read(body) if f.slot == "default_val"]
+
+    @pytest.mark.parametrize(
+        "declaration",
+        [
+            "r record := app.fn_x();",
+            "r record = app.fn_x();",
+            "r record DEFAULT app.fn_x();",
+            "r CONSTANT record NOT NULL := app.fn_x();",
+            "v t := app.fn_x();",
+            "v app.t := app.fn_x();",
+            '"R" record := app.fn_x();',
+        ],
+    )
+    def test_the_call_is_read(self, declaration: str) -> None:
+        (found,) = self._initialisers(f"DECLARE\n  {declaration}\nBEGIN RETURN 1; END")
+
+        assert (found.text, _names(found), found.line) == ("app.fn_x()", ["app.fn_x"], 3)
+
+    def test_two_on_one_line_are_both_read(self) -> None:
+        found = self._initialisers(
+            "DECLARE a record := app.f1(); b record := app.f2();\nBEGIN RETURN 1; END"
+        )
+
+        assert [(_names(f), f.line) for f in found] == [(["app.f1"], 2), (["app.f2"], 2)]
+
+    def test_a_multi_line_initialiser_keeps_its_lines(self) -> None:
+        (found,) = self._initialisers(
+            "DECLARE\n  r record :=\n    (SELECT 1\n     FROM app.tb_x);\nBEGIN RETURN 1; END"
+        )
+
+        assert found.text == "(SELECT 1\n     FROM app.tb_x)"
+        assert found.line == 4
+        (raw,) = found.tree or ()
+        relation = next(n for n in _walk(raw) if type(n).__name__ == "RangeVar")
+        assert found.line_of(relation.location) == 5
+
+    @pytest.mark.parametrize(
+        "declaration",
+        ["r record;", "r record; -- := app.fn_x()", "r record; s text := ';';"],
+    )
+    def test_a_record_with_none_contributes_none(self, declaration: str) -> None:
+        found = self._initialisers(f"DECLARE\n  {declaration}\nBEGIN RETURN 1; END")
+
+        assert [f.text for f in found if f.kind == "PLpgSQL_rec"] == []
+
+    def test_a_cursor_loops_own_variable_has_none(self) -> None:
+        """``FOR r IN c`` declares ``r`` itself: a record on its line, never a finding."""
+        found = self._initialisers(
+            "DECLARE c CURSOR FOR SELECT 1;\nBEGIN\n  FOR r IN c LOOP NULL; END LOOP;\n"
+            "  RETURN 1;\nEND"
+        )
+
+        assert [f for f in found if f.kind == "PLpgSQL_rec"] == []
+
+    def test_a_declaration_not_where_the_compiler_says_is_a_finding(self) -> None:
+        statement = _body("DECLARE\n  r record := app.fn_x();\nBEGIN RETURN 1; END")
+        compiled = parse_body(statement)
+        (datums,) = [n.fields for n in nodes(compiled.tree) if n.kind == "PLpgSQL_function"]
+        for datum in datums["datums"]:
+            if "PLpgSQL_rec" in datum:
+                datum["PLpgSQL_rec"]["lineno"] = 4
+
+        (found,) = [f for f in fragments(compiled) if f.kind == "PLpgSQL_rec"]
+
+        assert found.tree is None
+        assert found.finding == "record variable r: no declaration on body line 4"

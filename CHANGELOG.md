@@ -252,6 +252,18 @@ run and the `--dry-run-execute` rehearsal both did it.
   every candidate, never a guess. Resolvers run parents first by the foreign
   keys between their final tables in every schema, not only in
   `catalog_schema`. Level 5's other findings name their table schema-qualified.
+- **A record variable's initialiser is read** (#455). libpg_query never
+  serialises a `PLpgSQL_rec`'s default: `r record := app.fn_x()` came back as a
+  name and a line on every pglast, and on pglast 8 so did every variable of a
+  type the compiler stub cannot resolve (`v app.t := app.fn_x()`). The call was
+  in no fragment, so `build_003`, `tenant_001` and prep-seed level 3 never saw
+  it, and nothing said so. The fragment reader now reads the initialiser from
+  the declaration on the line the compiler gives it — through the one lexer,
+  up to the first top-level `:=`, `=` or `DEFAULT` and then to its `;` — as a
+  `PLpgSQL_rec.default_val` fragment with its own line. A declaration not found
+  on that line is an unread fragment, never a silence; the variable a
+  `FOR … IN <cursor>` loop declares for itself holds no initialiser and is
+  neither.
 - **A routine that takes an array of a user-defined type is read on pglast 8**
   (#453). libpg_query's catalogue stub resolves a type it does not know to
   `record` and an array of one to `_record`, which PL/pgSQL refuses as a

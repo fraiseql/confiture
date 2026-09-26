@@ -171,12 +171,15 @@ class Compiled:
             checkable. Each repaired datum decodes to ``{}``, so the array
             keeps its length and its positions but those entries carry
             nothing: **a datum index is not a fact this tree holds.**
+        body: ``[start, end)`` of the body's own text in :attr:`text`, where the
+            tree's ``lineno`` 1 begins; ``None`` when no body was found.
     """
 
     tree: Any
     text: str
     neutralised: tuple[Span, ...]
     repaired: int = 0
+    body: Span | None = None
 
 
 def parse_body(statement: str, *, body_at: int | None = None) -> Compiled:
@@ -208,7 +211,7 @@ def parse_body(statement: str, *, body_at: int | None = None) -> Compiled:
     except pglast.parser.ParseError as first:
         refused = first
     else:
-        return Compiled(tree, statement, (), repaired)
+        return Compiled(tree, statement, (), repaired, _body_span(statement, body_at))
 
     candidates = _candidate_spans(statement, body_at)
     if not candidates:
@@ -221,7 +224,7 @@ def parse_body(statement: str, *, body_at: int | None = None) -> Compiled:
     kept = _minimised(statement, blanked)
     text = _blank(statement, kept)
     tree, repaired = _compile(text)
-    return Compiled(tree, text, tuple(kept), repaired)
+    return Compiled(tree, text, tuple(kept), repaired, _body_span(text, body_at))
 
 
 def _compile(text: str) -> tuple[Any, int]:

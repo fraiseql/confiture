@@ -259,3 +259,26 @@ def test_a_fragment_that_cannot_be_read_is_named_with_its_line(monkeypatch) -> N
     ]
     assert scan.unread_fragments[0].name == "no reading for PLpgSQL_stmt_assign.expr"
     assert scan.references == []
+
+
+#: #455: two initialisers libpg_query does not serialise — a ``record``
+#: variable's on every pglast, and an unresolved type's on pglast 8.
+ISSUE_455 = """CREATE FUNCTION app.fn_rec() RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+    r record := app.fn_first();
+    v app.t_row := (SELECT app.fn_second() FROM app.tb_source);
+BEGIN
+    NULL;
+END;
+$$;
+"""
+
+
+def test_a_record_initialiser_is_read_with_its_file_line() -> None:
+    refs = referenced_objects(ISSUE_455)
+
+    assert [(r.schema, r.name, r.line) for r in refs] == [
+        ("app", "fn_first", 3),
+        ("app", "fn_second", 4),
+        ("app", "tb_source", 4),
+    ]
