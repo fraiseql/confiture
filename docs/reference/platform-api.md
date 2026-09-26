@@ -812,7 +812,9 @@ def validate_seeds(
 Validate seeds written for the prep-seed pattern, levels 1 through *max_level*.
 
 The prep-seed pattern loads UUID-keyed rows into *prep_seed_schema* and
-resolves them into BIGINT-keyed rows in *catalog_schema*. Levels 1-3 read
+resolves them into BIGINT-keyed final tables. Each staging table's final
+table is the table its resolver's `INSERT` writes; failing that, the one
+schema declaring its name; failing that, *catalog_schema*. Levels 1-3 read
 files and need no database; 4 and 5 load the seeds and run the resolvers
 against *database*, in a transaction nothing outlives: a URL's connection is
 opened, rolled back and closed here, and a caller's connection runs inside a
@@ -928,7 +930,7 @@ These patterns represent issues specific to the prep_seed transformation
 pattern where UUID FKs in prep_seed schema transform to BIGINT FKs in
 final tables via resolution functions.
 
-Members: `SCHEMA_DRIFT_IN_RESOLVER`, `MISSING_FK_TRANSFORMATION`, `MISSING_RESOLVER_FUNCTION`, `MISSING_FK_MAPPING`, `PREP_SEED_TARGET_MISMATCH`, `INVALID_FK_NAMING`, `INVALID_UUID_FORMAT`, `UNION_TYPE_MISMATCH`, `NULL_FK_AFTER_RESOLUTION`, `UNIQUE_CONSTRAINT_VIOLATION`, `MISSING_SELF_REFERENCE_HANDLING`, `UNION_INLINE_COMMENT`, `UNION_UNCAST_NULL`, `RESOLVER_NOT_READ`, `SEED_UNPARSEABLE`, `SEED_NOT_CHECKED`, `SEED_ROW_WIDTH`.
+Members: `SCHEMA_DRIFT_IN_RESOLVER`, `MISSING_FK_TRANSFORMATION`, `MISSING_RESOLVER_FUNCTION`, `MISSING_FK_MAPPING`, `PREP_SEED_TARGET_MISMATCH`, `INVALID_FK_NAMING`, `INVALID_UUID_FORMAT`, `UNION_TYPE_MISMATCH`, `NULL_FK_AFTER_RESOLUTION`, `UNIQUE_CONSTRAINT_VIOLATION`, `MISSING_SELF_REFERENCE_HANDLING`, `UNION_INLINE_COMMENT`, `UNION_UNCAST_NULL`, `RESOLVER_NOT_READ`, `SEED_UNPARSEABLE`, `SEED_NOT_CHECKED`, `SEED_ROW_WIDTH`, `AMBIGUOUS_FINAL_TABLE`.
 
 ### `ViolationSeverity`
 

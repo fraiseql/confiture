@@ -9,7 +9,7 @@ Catches runtime issues that static analysis can't detect.
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -28,6 +28,9 @@ from confiture.core.seed.validation.prep_seed.models import (
 if TYPE_CHECKING:
     from confiture.core.schema_model import Column, Constraint, ConstraintKind
     from confiture.core.seed.validation.prep_seed.resolvers import Resolver
+
+#: A final table: ``(schema, name)``, or a bare name in the validator's ``catalog_schema``.
+FinalName = str | tuple[str, str]
 
 
 @contextmanager
@@ -161,34 +164,44 @@ class Level5ExecutionValidator:
     def __init__(
         self,
         catalog_schema: str = "catalog",
-        locate: Callable[[str], tuple[str, int]] | None = None,
+        locate: Callable[[str, str], tuple[str, int]] | None = None,
     ) -> None:
         """Args:
-        catalog_schema: schema holding the resolved (BIGINT-keyed) tables.
-        locate: ``(file, line)`` a catalog table is created on, for a finding
-            about it; without one a finding names the table itself.
+        catalog_schema: the schema of a table named without one.
+        locate: ``(file, line)`` a ``(schema, table)`` is created on, for a
+            finding about it; without one a finding names the table itself.
         """
         self.catalog_schema = catalog_schema
         self._locate = locate
 
-    def _at(self, table: str) -> tuple[str, int]:
-        """Where a finding about ``<catalog>.<table>`` points."""
+    def _qualified(self, table: FinalName) -> tuple[str, str]:
+        """``(schema, name)`` of *table*: a bare name is in :attr:`catalog_schema`."""
+        return (self.catalog_schema, table) if isinstance(table, str) else table
+
+    def _name(self, table: FinalName) -> str:
+        """``schema.name`` of *table*, for a finding."""
+        return ".".join(self._qualified(table))
+
+    def _at(self, table: FinalName) -> tuple[str, int]:
+        """Where a finding about *table* points."""
         if self._locate is not None:
-            return self._locate(table)
-        return f"{self.catalog_schema}.{table}", 1
+            return self._locate(*self._qualified(table))
+        return self._name(table), 1
 
-    def _relation(self, table: str) -> sql.Identifier:
-        return sql.Identifier(self.catalog_schema, table)
+    def _relation(self, table: FinalName) -> sql.Identifier:
+        return sql.Identifier(*self._qualified(table))
 
-    def _columns(self, connection: Any, table: str) -> tuple[Column, ...]:
-        """The columns of ``catalog.<table>``, in order; none for a table that is not there."""
+    def _columns(self, connection: Any, table: FinalName) -> tuple[Column, ...]:
+        """The columns of *table*, in order; none for a table that is not there."""
         with _probe(connection):
-            return live_catalog.columns(connection, self.catalog_schema, table)
+            return live_catalog.columns(connection, *self._qualified(table))
 
-    def _constraints(self, connection: Any, table: str, kind: ConstraintKind) -> list[Constraint]:
-        """The constraints of one kind on ``catalog.<table>``, by name."""
+    def _constraints(
+        self, connection: Any, table: FinalName, kind: ConstraintKind
+    ) -> list[Constraint]:
+        """The constraints of one kind on *table*, by name."""
         with _probe(connection):
-            found = live_catalog.constraints(connection, self.catalog_schema, table)
+            found = live_catalog.constraints(connection, *self._qualified(table))
         return [constraint for constraint in found if constraint.kind == kind]
 
     @staticmethod
@@ -202,8 +215,8 @@ class Level5ExecutionValidator:
         schema, _, name = (constraint.ref_table or "").rpartition(".")
         return (sql.Identifier(schema, name) if schema else sql.Identifier(name)), name
 
-    def _count(self, connection: Any, table: str, predicate: sql.Composable) -> int:
-        """How many rows of ``catalog.<table>`` satisfy *predicate*."""
+    def _count(self, connection: Any, table: FinalName, predicate: sql.Composable) -> int:
+        """How many rows of *table* satisfy *predicate*."""
         query = sql.SQL("SELECT COUNT(*) FROM {} WHERE {}").format(self._relation(table), predicate)
         with _probe(connection):
             row = connection.execute(query).fetchone()
@@ -212,7 +225,7 @@ class Level5ExecutionValidator:
     def detect_null_fks(
         self,
         connection: Any,
-        tables: list[str],
+        tables: Sequence[FinalName],
     ) -> list[PrepSeedViolation]:
         """Detect NULL foreign keys after resolution.
 
@@ -222,7 +235,8 @@ class Level5ExecutionValidator:
 
         Args:
             connection: Database connection
-            tables: List of final table names
+            tables: The final tables: ``(schema, name)``, or a name in
+                :attr:`catalog_schema`
 
         Returns:
             List of violations found
@@ -245,7 +259,7 @@ class Level5ExecutionValidator:
                                 severity=ViolationSeverity.CRITICAL,
                                 message=(
                                     f"Found {null_count} NULL values in "
-                                    f"{self.catalog_schema}.{table}.{column} "
+                                    f"{self._name(table)}.{column} "
                                     f"after resolution"
                                 ),
                                 file_path=self._at(table)[0],
@@ -264,13 +278,14 @@ class Level5ExecutionValidator:
     def detect_duplicate_identifiers(
         self,
         connection: Any,
-        tables: list[str],
+        tables: Sequence[FinalName],
     ) -> list[PrepSeedViolation]:
         """Detect duplicate identifiers after resolution.
 
         Args:
             connection: Database connection
-            tables: List of final table names
+            tables: The final tables: ``(schema, name)``, or a name in
+                :attr:`catalog_schema`
 
         Returns:
             List of violations found
@@ -295,7 +310,7 @@ class Level5ExecutionValidator:
                                 severity=ViolationSeverity.ERROR,
                                 message=(
                                     f"Duplicate identifier {identifier} "
-                                    f"found {count} times in {table}"
+                                    f"found {count} times in {self._name(table)}"
                                 ),
                                 file_path=self._at(table)[0],
                                 line_number=self._at(table)[1],
@@ -312,7 +327,7 @@ class Level5ExecutionValidator:
     def detect_not_null_violations(
         self,
         connection: Any,
-        tables: list[str],
+        tables: Sequence[FinalName],
     ) -> list[PrepSeedViolation]:
         """Detect NOT NULL constraint violations.
 
@@ -322,7 +337,8 @@ class Level5ExecutionValidator:
 
         Args:
             connection: Database connection
-            tables: List of final table names
+            tables: The final tables: ``(schema, name)``, or a name in
+                :attr:`catalog_schema`
 
         Returns:
             List of violations found
@@ -344,7 +360,7 @@ class Level5ExecutionValidator:
                                 pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                                 severity=ViolationSeverity.CRITICAL,
                                 message=(
-                                    f"NOT NULL constraint violation in {table}.{column}: "
+                                    f"NOT NULL constraint violation in {self._name(table)}.{column}: "
                                     f"found {null_count} NULL values"
                                 ),
                                 file_path=self._at(table)[0],
@@ -360,7 +376,7 @@ class Level5ExecutionValidator:
     def detect_check_constraint_violations(
         self,
         connection: Any,
-        tables: list[str],
+        tables: Sequence[FinalName],
     ) -> list[PrepSeedViolation]:
         """Detect CHECK constraint violations.
 
@@ -371,7 +387,8 @@ class Level5ExecutionValidator:
 
         Args:
             connection: Database connection
-            tables: List of final table names
+            tables: The final tables: ``(schema, name)``, or a name in
+                :attr:`catalog_schema`
 
         Returns:
             List of violations found
@@ -393,7 +410,7 @@ class Level5ExecutionValidator:
                                 pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                                 severity=ViolationSeverity.ERROR,
                                 message=(
-                                    f"CHECK constraint violation in {table}.{name}: "
+                                    f"CHECK constraint violation in {self._name(table)}.{name}: "
                                     f"found {violation_count} violations"
                                 ),
                                 file_path=self._at(table)[0],
@@ -409,7 +426,7 @@ class Level5ExecutionValidator:
     def detect_fk_constraint_violations(
         self,
         connection: Any,
-        tables: list[str],
+        tables: Sequence[FinalName],
     ) -> list[PrepSeedViolation]:
         """Detect foreign keys pointing at rows that do not exist.
 
@@ -422,7 +439,8 @@ class Level5ExecutionValidator:
 
         Args:
             connection: Database connection
-            tables: List of final table names
+            tables: The final tables: ``(schema, name)``, or a name in
+                :attr:`catalog_schema`
 
         Returns:
             List of violations found
@@ -466,7 +484,7 @@ class Level5ExecutionValidator:
                                 severity=ViolationSeverity.ERROR,
                                 message=(
                                     f"Foreign key constraint violation in "
-                                    f"{table}.{', '.join(child_cols)} "
+                                    f"{self._name(table)}.{', '.join(child_cols)} "
                                     f"referencing {parent_table}: "
                                     f"found {orphans} orphaned references"
                                 ),
@@ -487,7 +505,7 @@ class Level5ExecutionValidator:
         connection: Any,
         seed_files: list[str],
         resolution_functions: list[Resolver],
-        tables: list[str],
+        tables: Sequence[FinalName],
     ) -> list[PrepSeedViolation]:
         """Execute full seed loading and validation cycle.
 
@@ -495,7 +513,8 @@ class Level5ExecutionValidator:
             connection: Database connection
             seed_files: List of seed file paths
             resolution_functions: The resolvers, in the order they run
-            tables: List of final table names
+            tables: The final tables: ``(schema, name)``, or a name in
+                :attr:`catalog_schema`
 
         Returns:
             List of violations found
@@ -523,7 +542,7 @@ class Level5ExecutionValidator:
         connection: Any,
         seed_files: list[str],
         resolution_functions: list[Resolver],
-        tables: list[str],
+        tables: Sequence[FinalName],
     ) -> list[PrepSeedViolation]:
         """Execute full seed loading and comprehensive validation cycle.
 
@@ -533,7 +552,8 @@ class Level5ExecutionValidator:
             connection: Database connection
             seed_files: List of seed file paths
             resolution_functions: The resolvers, in the order they run
-            tables: List of final table names
+            tables: The final tables: ``(schema, name)``, or a name in
+                :attr:`catalog_schema`
 
         Returns:
             List of violations found

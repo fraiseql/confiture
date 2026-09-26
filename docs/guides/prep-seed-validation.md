@@ -162,11 +162,38 @@ rejects is a CRITICAL finding naming its file and line; a file that is not UTF-8
 text is an error naming it. Neither is skipped. Every finding names the file and
 line the table it is about is created on.
 
+#### Where a prep-seed table's rows land
+
+A prep-seed table's final table need not be in one schema: a tree that keeps
+shared reference data in `catalog` and per-tenant tables in `tenant` resolves
+into both. Each final table is decided once, and levels 2, 3, 4 and 5 all check
+that table:
+
+1. **What the resolver writes.** In the body of `fn_resolve_<table>`, the
+   target of the `INSERT` that reads `prep_seed.<table>` — `INSERT INTO
+   tenant.tb_widget … FROM prep_seed.tb_widget` makes `tenant.tb_widget` the
+   final table. An unqualified target (`INSERT INTO tb_widget`) is in `public`,
+   the schema an unqualified name lands in. A target the schema tree does not
+   declare is level 3's schema-drift finding, and the next rule decides.
+2. **The one schema that declares `<table>`**, outside the prep-seed schema.
+   A name declared in two schemas, with no resolver to say which, is an
+   `AMBIGUOUS_FINAL_TABLE` error naming both — never a guess — and levels 2, 4
+   and 5 do not check that table until it is resolved.
+3. **`catalog_schema`** (default `catalog`), when neither says. A tree that
+   resolves into one schema behaves as it always has.
+
+So `validate_seeds(…, max_level=5)` on a tree whose `fn_resolve_tb_widget`
+fills `tenant.tb_widget` compares `prep_seed.tb_widget` with
+`tenant.tb_widget`, checks that the table exists at level 4, and counts its
+NULL foreign keys at level 5 — whatever `catalog_schema` is. Resolvers run
+parents first by the foreign keys between their final tables, in every schema.
+
 **When to use:** Pre-commit hook
 
 **Example violations:**
 ```
 ❌ prep_seed.tb_x has no corresponding final table catalog.tb_x
+❌ prep_seed.tb_x could resolve into any of archive.tb_x, tenant.tb_x, and nothing says which
 ❌ FK type mismatch: prep_seed.tb_x.fk_org_id (UUID) but final table expects BIGINT
 ✅ FIXABLE with --fix
 ```
@@ -362,7 +389,7 @@ OrchestrationConfig(
 
     # Schema configuration
     prep_seed_schema: str = "prep_seed",      # Schema for prep-seed tables
-    catalog_schema: str = "catalog",          # Schema for final tables
+    catalog_schema: str = "catalog",          # Final tables no resolver or declaration places
     tables_to_validate: list[str] | None = None,  # Specific tables (optional)
     level_5_mode: str = "standard",      # "standard" or "comprehensive"
 )

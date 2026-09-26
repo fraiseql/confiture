@@ -27,6 +27,7 @@ from confiture.core.ddl_walk import relation_parts, walk_nodes
 from confiture.core.linting.references import BodyStatement
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import SchemaModel, Table
+from confiture.core.seed.validation.prep_seed.final_tables import FinalTable, FinalTables
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
@@ -108,16 +109,20 @@ class Level3ResolutionValidator:
         *,
         prep_seed_schema: str = "prep_seed",
         catalog_schema: str = "catalog",
+        finals: FinalTables | None = None,
     ) -> None:
         """Initialize the validator.
 
         Args:
             model: The schema the resolvers are compared with.
             prep_seed_schema: The schema the UUID-keyed rows are loaded into.
-            catalog_schema: The schema the resolvers fill.
+            catalog_schema: The schema the resolvers fill when nothing says otherwise.
+            finals: Each staging table's final table; without it every one is
+                in *catalog_schema*.
         """
         self.prep_seed_schema = prep_seed_schema.lower()
         self.catalog_schema = catalog_schema.lower()
+        self._finals = finals or FinalTables(self.catalog_schema)
         self._tables: dict[tuple[str, str], Table] = {
             ((table.schema or DEFAULT_SCHEMA).lower(), table.name): table
             for table in model.tables.values()
@@ -146,7 +151,8 @@ class Level3ResolutionValidator:
             homes = sorted(home for home, name in self._tables if name == table)
             if not homes:
                 return []
-            schema = self.catalog_schema if self.catalog_schema in homes else homes[0]
+            final = self._finals.of(table)
+            schema = final.schema if final is not None and final.schema in homes else homes[0]
             violations.append(
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.SCHEMA_DRIFT_IN_RESOLVER,
@@ -162,15 +168,21 @@ class Level3ResolutionValidator:
                     suggestion=f"Change INSERT target to {schema}.{table}",
                 )
             )
-        if schema == self.catalog_schema:
-            violations.extend(self._fk_transformations(resolver, insert, table, (file, line)))
+        final = self._finals.of(table)
+        if final is not None and (final.schema, final.name) == (schema, table):
+            violations.extend(self._fk_transformations(resolver, insert, final, (file, line)))
         return violations
 
+    def _home(self, table: str) -> str:
+        """``schema.name`` of *table*'s final table, for a suggestion."""
+        final = self._finals.of(table)
+        return final.qualified if final is not None else table
+
     def _fk_transformations(
-        self, resolver: Resolver, insert: Any, table: str, at: tuple[str, int]
+        self, resolver: Resolver, insert: Any, target: FinalTable, at: tuple[str, int]
     ) -> list[PrepSeedViolation]:
         """Each ``fk_<entity>_id`` of the prep-seed table that the ``INSERT`` never joins."""
-        prep = self._tables.get((self.prep_seed_schema, table))
+        prep = self._tables.get((self.prep_seed_schema, target.name))
         if prep is None:
             return []
         sources = _sources(insert)
@@ -188,16 +200,14 @@ class Level3ResolutionValidator:
                     pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,
                     severity=ViolationSeverity.ERROR,
                     message=(
-                        f"{resolver.name} fills {self.catalog_schema}.{table} but never joins "
+                        f"{resolver.name} fills {target.qualified} but never joins "
                         f"{parent} on {name}: {name.removesuffix(_FK_SUFFIX)} is not resolved"
                     ),
                     file_path=at[0],
                     line_number=at[1],
                     impact="This FK will have NULL values after resolution",
                     fix_available=True,
-                    suggestion=(
-                        f"Add: LEFT JOIN {self.catalog_schema}.{parent} ON {parent}.id = {name}"
-                    ),
+                    suggestion=(f"Add: LEFT JOIN {self._home(parent)} ON {parent}.id = {name}"),
                 )
             )
         return violations

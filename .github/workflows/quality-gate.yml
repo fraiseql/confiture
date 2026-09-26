@@ -386,6 +386,7 @@ jobs:
           tests/unit/seed_validation/prep_seed/test_level_2_reads_one_model.py \
           tests/unit/seed_validation/prep_seed/test_level_3_resolvers.py \
           tests/unit/seed_validation/prep_seed/test_resolvers_by_definition.py \
+          tests/unit/seed_validation/prep_seed/test_final_table_per_resolver.py \
           tests/contract/test_platform_surface.py \
           tests/unit/test_port_parity_corpus.py \
           -q

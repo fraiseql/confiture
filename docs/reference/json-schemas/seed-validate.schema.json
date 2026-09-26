@@ -251,7 +251,8 @@
             "RESOLVER_NOT_READ",
             "SEED_UNPARSEABLE",
             "SEED_NOT_CHECKED",
-            "SEED_ROW_WIDTH"
+            "SEED_ROW_WIDTH",
+            "AMBIGUOUS_FINAL_TABLE"
           ]
         },
         "severity": {
