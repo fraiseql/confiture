@@ -28,7 +28,7 @@ Adopt a rule on a schema that already trips it with a
 | `qual_001` | qual | warning | on | Routines are created schema-qualified |
 | `qual_002` | qual | warning | off | Relations and types are created schema-qualified |
 | `acl_001` | acl | error | off | Every CREATE TABLE has a matching GRANT |
-| `tenant_001` | tenant | warning | off | Function INSERTs carry the FK a tenant-scoped view requires |
+| `tenant_001` | tenant | warning | with `tenancy:` | An INSERT into a tenant table supplies the discriminator |
 | `tenant_002` | tenant | warning | with `tenancy:` | A table carries the tenant discriminator NOT NULL, or is declared global |
 | `tenant_003` | tenant | warning | with `tenancy:` | A view reading tenant data publishes the discriminator as a plain column, or is declared global |
 | `tenant_004` | tenant | warning | with `tenancy:` | A foreign key between tenant tables carries the discriminator on both sides |

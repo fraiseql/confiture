@@ -66,17 +66,11 @@ _OWNERSHIP = (
     "      relkinds: [r]\n"
 )
 
-_TENANT_SCHEMA = """CREATE TABLE tb_item (id INT PRIMARY KEY, name TEXT, fk_org INT);
-CREATE TABLE tv_organization (pk_organization INT PRIMARY KEY);
+_TENANT_SCHEMA = """CREATE TABLE tb_order (id INT PRIMARY KEY, tenant_id INT NOT NULL);
 
-CREATE VIEW v_item AS
-SELECT i.id, i.name, o.pk_organization AS tenant_id
-FROM tb_item i
-JOIN tv_organization o ON i.fk_org = o.pk_organization;
-
-CREATE FUNCTION fn_create_item() RETURNS VOID AS $$
+CREATE FUNCTION fn_create_order() RETURNS VOID AS $$
 BEGIN
-    INSERT INTO tb_item (id, name) VALUES (1, 'test');
+    INSERT INTO tb_order (id) VALUES (1);
 END;
 $$ LANGUAGE plpgsql;
 """
@@ -146,7 +140,9 @@ FIXTURES: dict[str, Fixture] = {
         env_extra=_ACLS,
         migrations={"20260908120000.up.sql": "CREATE TABLE uncovered (id int);"},
     ),
-    "tenant_001": Fixture({"010.sql": _TENANT_SCHEMA}),
+    "tenant_001": Fixture(
+        {"010.sql": _TENANT_SCHEMA}, extra_files={"db/project.yaml": "tenancy: {}\n"}
+    ),
     "tenant_002": Fixture(
         {"010.sql": "CREATE TABLE tb_order_line (id INT PRIMARY KEY);\n"},
         extra_files={"db/project.yaml": "tenancy: {}\n"},

@@ -209,12 +209,13 @@ class LintConfig:
             check_security: Check for security issues (passwords, tokens)
             check_seed_secrets: Report a credential written as a literal in
                 the tree — a seed row's value or a role's password (``sec_003``)
-            check_tenant_isolation: Detect INSERTs missing tenant FK columns
-                (multi-tenant rule, ``tenant_001``). Opt-in (default off).
+            check_tenant_isolation: An ``INSERT`` into a tenant table, in a
+                routine body, supplies the discriminator or relies on its
+                default (``tenant_001``).
             check_tenant_tables: Every table carries the tenant discriminator
-                NOT NULL, or is declared global (``tenant_002``); needs a
-                ``tenancy:`` block in ``db/project.yaml``, as every switch of
-                the family below does.
+                NOT NULL, or is declared global (``tenant_002``). Every switch
+                of the ``tenant`` family needs a ``tenancy:`` block in
+                ``db/project.yaml``.
             check_tenant_views: Every view that reads a tenant relation publishes
                 the discriminator, traced as a plain column, or is declared global
                 (``tenant_003``).
@@ -330,7 +331,7 @@ class SchemaLinter:
         # interchangeable (#274):
         #   `_schema_sql` is the build as `SchemaBuilder` produced it, COPY
         #     rows and all. It is what gets materialised into a database
-        #     (`bodies.diagnose`) or scanned as text (`tenant_001`).
+        #     (`bodies.diagnose`).
         #   `_parse_sql` is what pglast is asked to read: the same files with
         #     their COPY blocks blanked, assembled by `_assemble_parse_text`.
         # Handing the first to pglast reads nothing; handing the second to a
@@ -412,8 +413,7 @@ class SchemaLinter:
         # row rather than in a table of its own so a new rule cannot be added
         # without answering "what does this lose when a file will not parse".
         # `None` means the answer is "nothing an unread file explains": the
-        # `body` family degrades on its live tier, and `tenant_001` parses the
-        # build itself and reports its own notice when that fails.
+        # `body` family degrades on its live tier.
         ran: set[str] = set()
         for enabled, check, family in (
             (self.config.check_naming, self._check_naming_conventions, "naming"),
@@ -440,7 +440,11 @@ class SchemaLinter:
                 self._check_bodies,
                 None,
             ),
-            (self.config.check_tenant_isolation, self._check_tenant_isolation, None),
+            (
+                self.config.check_tenant_isolation,
+                partial(self._check_tenancy, "tenant_001"),
+                "tenant",
+            ),
             (self.config.check_tenant_tables, partial(self._check_tenancy, "tenant_002"), "tenant"),
             (self.config.check_tenant_views, partial(self._check_tenancy, "tenant_003"), "tenant"),
             (
@@ -926,9 +930,9 @@ class SchemaLinter:
           and stops at the first disagreement;
         * every file's span in this text is known, because this laid it out.
 
-        ``_schema_sql`` keeps the real build, COPY rows and all, for the two
-        consumers that want it: ``bodies.diagnose()`` materialises it into a
-        throwaway database, and ``tenant_001`` scans it as text.
+        ``_schema_sql`` keeps the real build, COPY rows and all, for the one
+        consumer that wants it: ``bodies.diagnose()`` materialises it into a
+        throwaway database.
         """
         parts: list[str] = []
         for label, text in self._sources():
@@ -1119,29 +1123,6 @@ class SchemaLinter:
         ):
             report.add_violation(violation)
         return report
-
-    def _check_tenant_isolation(self, report: LintReport) -> None:
-        """Detect function INSERTs missing tenant FK columns (``tenant_001``).
-
-        Delegates to :class:`TenantIsolationRule`, which parses the built
-        schema for tenant-scoped views and the function INSERTs that should
-        carry their FK columns. The schema blob holds both, so it is passed
-        as both the view and function source.
-
-        Args:
-            report: Report to add violations to
-        """
-        if not self._schema_sql:
-            return
-
-        # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core.linting.tenant.tenant_isolation_rule import TenantIsolationRule
-
-        TenantIsolationRule().run(
-            view_sqls=[self._schema_sql],
-            function_sqls=[self._schema_sql],
-            report=report,
-        )
 
     def lint_migrations(
         self,

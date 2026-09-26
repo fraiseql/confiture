@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from confiture.core import sql_lexer
-from confiture.core.linting.tenant import keys, scope, views
+from confiture.core.linting.tenant import inserts, keys, scope, views
 
 if TYPE_CHECKING:
     from confiture.config.project import TenancyConfig
@@ -46,6 +46,11 @@ class TenantRule:
 
 #: The rules of the family, by code.
 RULES: dict[str, TenantRule] = {
+    "tenant_001": TenantRule(
+        "Tenant Insert",
+        "function",
+        lambda tree: inserts.insert_findings(tree.scopes, tree.sources),
+    ),
     "tenant_002": TenantRule(
         "Tenant Discriminator", "table", lambda tree: scope.table_findings(tree.scopes)
     ),

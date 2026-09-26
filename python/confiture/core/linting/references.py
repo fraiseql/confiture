@@ -52,7 +52,7 @@ with its line rather than letting the rest of the body pass for the whole.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -243,6 +243,24 @@ def read_references(sql: str) -> ReferenceScan:
             kept = scan.unread_fragments if reference.kind == UNREAD else scan.references
             kept.append(reference)
     return scan
+
+
+def routine_bodies(sql: str) -> Iterator[RoutineBody]:
+    """Every function and procedure body in ``sql``, each read by :func:`read_body`.
+
+    For a rule that asks its own question of the statements a body holds rather
+    than of the objects they name. A text pglast rejects yields none, as in
+    :func:`read_references`: the linter reports it once, as ``UNPARSEABLE``.
+    """
+    try:
+        raws = list(pglast.parse_sql(sql) or [])
+    except pglast.parser.ParseError:
+        return
+    constants = _string_constants(sql)
+    for raw in raws:
+        obj = object_from_statement(sql, raw)
+        if obj is not None and obj.kind in _ROUTINE_KINDS:
+            yield read_body(sql, raw, obj, constants)
 
 
 def temp_relations(sql: str) -> frozenset[str]:
