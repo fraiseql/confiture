@@ -650,6 +650,9 @@ findings, and only a new one fails.
 
 ## `tenant_001` — an INSERT into a tenant table supplies the discriminator
 
+The [multi-tenant schemas guide](../guides/multi-tenant-schemas.md) describes the
+design the five `tenant` rules check, and how to move an existing schema to it.
+
 On when `db/project.yaml` declares `tenancy:`, like the rest of the family. Every
 `INSERT` in a function or procedure body — PL/pgSQL, `LANGUAGE sql`, `BEGIN ATOMIC`
 — into a **tenant table** (the scope `tenant_002` decides: it carries the
@@ -833,9 +836,11 @@ both, since the schema cannot say which:
   ```
 
   Each tenant keeps its own terms with a provider, and a company's identity is
-  still stored once. A contract two tenants must both *see* is shared data, which a
-  single-valued discriminator cannot express: give each tenant its own row (a
-  `tb_contract_share (tenant_id, fk_contract)`), never a second pointer to the root.
+  still stored once. A contract two tenants must both *see* is two rows, one per
+  tenant, tied by a correlation key that is not a foreign key and written together
+  by one routine — never a second pointer to the root, and never a global table,
+  which no tenant filter could scope. The [guide](../guides/multi-tenant-schemas.md#tenant_004-a-foreign-key-cannot-cross-tenants)
+  writes the table and the routine.
 
 Neither is an exception to declare, so there is no directive for it; a schema
 moving to this design records today's findings in a `--baseline`, and only a new
@@ -867,8 +872,10 @@ INDEX`, in whichever file it is written.
 
 Every rule of the family reports itself *skipped*, with the reason, when selected
 in a project with no `tenancy:` block. A schema that predates
-them can adopt the family with `--ignore tenant_003,tenant_004,tenant_005` until its
-views and keys are rebuilt.
+them can adopt the family with a `--baseline`, or with
+`--ignore tenant_003,tenant_004,tenant_005` until its views and keys are rebuilt;
+the [guide](../guides/multi-tenant-schemas.md#moving-an-existing-schema) walks the
+migration step by step.
 
 ## The `body` family — a routine's body resolves, checked by PostgreSQL
 

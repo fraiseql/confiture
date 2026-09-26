@@ -1,0 +1,5 @@
+# Facts about the schema, the same in every environment.
+tenancy:
+  discriminator: tenant_id           # the column every tenant row carries, NOT NULL
+  root: management.tb_organization   # the table of tenants: its key is the tenant id
+  global_schemas: [catalog]          # shared reference data, read by every tenant

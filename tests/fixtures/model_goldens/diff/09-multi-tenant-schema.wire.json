@@ -1,0 +1,611 @@
+{
+  "exit_code": 1,
+  "stdout": {
+    "has_changes": true,
+    "summary": {
+      "tables_added": 8,
+      "tables_dropped": 0,
+      "tables_renamed": 0,
+      "columns_added": 0,
+      "columns_dropped": 0,
+      "indexes_added": 0,
+      "indexes_dropped": 0,
+      "foreign_keys_added": 0,
+      "foreign_keys_dropped": 0,
+      "constraints_added": 0,
+      "constraints_dropped": 0,
+      "enum_types_added": 0,
+      "enum_types_dropped": 0,
+      "sequences_added": 0,
+      "sequences_dropped": 0
+    },
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "table": "app.tb_custom_unit",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "tenant_id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "code",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "label",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "tenant_id",
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "tenant_id"
+              ],
+              "ref_table": "management.tb_organization",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "tenant_id",
+                "code"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "app.tb_order",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "tenant_id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "fk_provider",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "reference",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "created_at",
+              "type": "TIMESTAMPTZ",
+              "nullable": false,
+              "default": "now()"
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "tenant_id",
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "tenant_id"
+              ],
+              "ref_table": "management.tb_organization",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "tenant_id",
+                "fk_provider"
+              ],
+              "ref_table": "app.tb_provider",
+              "ref_columns": [
+                "tenant_id",
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "tenant_id",
+                "reference"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "app.tb_order_line",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "tenant_id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "fk_order",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "fk_product",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "quantity",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "tenant_id",
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "tenant_id"
+              ],
+              "ref_table": "management.tb_organization",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "fk_product"
+              ],
+              "ref_table": "catalog.tb_product",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "tenant_id",
+                "fk_order"
+              ],
+              "ref_table": "app.tb_order",
+              "ref_columns": [
+                "tenant_id",
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "CHECK",
+              "name": "",
+              "expression": "quantity > 0"
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "app.tb_provider",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "tenant_id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "fk_company",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "terms",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "tenant_id",
+                "id"
+              ]
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "tenant_id"
+              ],
+              "ref_table": "management.tb_organization",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "FOREIGN KEY",
+              "name": "",
+              "columns": [
+                "fk_company"
+              ],
+              "ref_table": "catalog.tb_company",
+              "ref_columns": [
+                "id"
+              ],
+              "on_delete": null,
+              "on_update": null
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "tenant_id",
+                "fk_company"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "catalog.tb_company",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "legal_name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "vat_id",
+              "type": "TEXT",
+              "nullable": true,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "vat_id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "catalog.tb_product",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "sku",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "sku"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "catalog.tb_unit",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "code",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "label",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            },
+            {
+              "kind": "UNIQUE",
+              "name": "",
+              "columns": [
+                "code"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "management.tb_organization",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "id",
+              "type": "UUID",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "name",
+              "type": "TEXT",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "",
+              "columns": [
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "table": "app.fn_create_order(uuid, uuid, text)",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE FUNCTION app.fn_create_order(p_tenant_id uuid, p_provider uuid, p_reference text) RETURNS uuid LANGUAGE plpgsql AS $$\nDECLARE\n    v_id uuid := gen_random_uuid();\nBEGIN\n    INSERT INTO app.tb_order (tenant_id, id, fk_provider, reference)\n    VALUES (p_tenant_id, v_id, p_provider, p_reference);\n    RETURN v_id;\nEND;\n$$",
+        "details": {
+          "kind": "function",
+          "name": "app.fn_create_order(uuid, uuid, text)",
+          "keyword": "FUNCTION"
+        }
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "table": "app",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE SCHEMA IF NOT EXISTS app",
+        "details": {
+          "kind": "schema",
+          "name": "app",
+          "keyword": "SCHEMA"
+        }
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "table": "catalog",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE SCHEMA IF NOT EXISTS catalog",
+        "details": {
+          "kind": "schema",
+          "name": "catalog",
+          "keyword": "SCHEMA"
+        }
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "table": "management",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE SCHEMA IF NOT EXISTS management",
+        "details": {
+          "kind": "schema",
+          "name": "management",
+          "keyword": "SCHEMA"
+        }
+      },
+      {
+        "type": "ADD_STATISTICS",
+        "table": "app.st_order_line_tenant_order",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE STATISTICS app.st_order_line_tenant_order(dependencies) ON tenant_id, fk_order FROM app.tb_order_line",
+        "details": {
+          "kind": "statistics",
+          "name": "app.st_order_line_tenant_order",
+          "keyword": "STATISTICS"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "app.v_order",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW app.v_order AS SELECT o.tenant_id, o.id, o.reference, o.created_at, p.id AS provider_id, c.legal_name AS provider_name FROM app.tb_order AS o INNER JOIN app.tb_provider AS p ON p.tenant_id = o.tenant_id AND p.id = o.fk_provider INNER JOIN catalog.tb_company AS c ON c.id = p.fk_company",
+        "details": {
+          "kind": "view",
+          "name": "app.v_order",
+          "keyword": "VIEW"
+        }
+      },
+      {
+        "type": "ADD_VIEW",
+        "table": "app.v_unit",
+        "column": null,
+        "old_value": null,
+        "new_value": "CREATE OR REPLACE VIEW app.v_unit AS SELECT o.id AS tenant_id, u.id, u.code, u.label, FALSE AS is_custom FROM catalog.tb_unit AS u CROSS JOIN management.tb_organization AS o UNION ALL SELECT c.tenant_id, c.id, c.code, c.label, TRUE FROM app.tb_custom_unit AS c",
+        "details": {
+          "kind": "view",
+          "name": "app.v_unit",
+          "keyword": "VIEW"
+        }
+      }
+    ],
+    "ok": true,
+    "command": "diff",
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

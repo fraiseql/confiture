@@ -83,6 +83,21 @@ run and the `--dry-run-execute` rehearsal both did it.
   `tenant_002`, and report themselves skipped, with the reason, without one;
   `--ignore tenant_003,tenant_004,tenant_005` defers them on a schema that predates
   them.
+- **A guide to multi-tenant schemas** (`docs/guides/multi-tenant-schemas.md`,
+  #426): why tenancy is a column and not an inference, the `tenancy:` block, the
+  tenant, global and root scopes and how to declare global, what each of the five
+  rules asks and why — the counterparty modelled over a global directory of
+  companies, a record two tenants both see as one row per tenant, and `UNIQUE (email)`
+  as an existence oracle across tenants — the hybrid "standard rows plus a tenant's
+  own" read view, a step-by-step migration of an existing schema ending in a
+  `--baseline`, what `CREATE STATISTICS … (dependencies)` does and does not do for
+  `(tenant_id, …)` pairs, and where the schema's shape ends and an application's
+  request scoping begins. Every SQL block in it is parsed by pglast in the unit
+  suite.
+- **`examples/09-multi-tenant-schema`**: a project in that shape that passes all
+  five `tenant` rules with nothing skipped or degraded. Its `run.sh` builds it and
+  shows PostgreSQL refusing an order line that names another tenant's order; the
+  unit suite lints it and trips each rule with a one-line edit of a copy.
 - **Every command that writes JSON publishes its shape.** All 49 commands
   whose `--format` accepts `json` now have a schema in `python/confiture/schemas/`
   (was 20), each written against payloads the command printed in a real run and

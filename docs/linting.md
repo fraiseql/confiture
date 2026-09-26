@@ -326,6 +326,13 @@ design: the rule does not ask for the column then.
 **Why This Matters**: A row with no tenant is refused by `NOT NULL`, or — without
 it — visible to no tenant and invisible to every tenant-filtered read.
 
+`tenant_001` is one of five rules in the `tenant` family, which checks that every
+table carries the discriminator or is declared global (`tenant_002`), every view
+publishes it (`tenant_003`), no foreign key crosses tenants (`tenant_004`) and every
+unique key leads with it (`tenant_005`). The
+[multi-tenant schemas guide](guides/multi-tenant-schemas.md) describes the design,
+and [lint-rules.md](reference/lint-rules.md) each rule's findings.
+
 ### 5. MissingIndexRule
 
 **Purpose**: Detect unindexed foreign keys
@@ -476,11 +483,6 @@ linting:
     documentation:
       enabled: true               # Require COMMENT on tables
       # Can be disabled in development environments
-
-    # Rule 4: Multi-tenant structure
-    multi_tenant:
-      enabled: true
-      identifier: tenant_id       # Column name to check (customizable)
 
     # Rule 5: Missing indexes
     missing_index:
@@ -874,8 +876,6 @@ confiture lint --format json | jq '.violations.items[] | select(.severity == "er
 ```yaml
 # Disable irrelevant rules for your schema
 rules:
-  multi_tenant:
-    enabled: false  # If not using multi-tenancy
   documentation:
     enabled: false  # If not required in development
 ```
@@ -989,9 +989,10 @@ Create a `.confiture-standards.md` document for your team:
 
 ## Exceptions
 
-Multi-tenant detection is automatic. If you have edge cases:
-- File a GitHub issue with example schema
-- Document exception in table comment
+Tenancy is declared, never detected: the `tenant` rules run only when
+`db/project.yaml` has a `tenancy:` block, and a table outside the global schemas
+is declared global with `-- confiture:tenant-global <reason>` above its
+`CREATE TABLE`.
 
 ## Gradual Adoption
 
