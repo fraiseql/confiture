@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/debug-cte.schema.json",
+  "title": "confiture debug cte --format json",
+  "description": "A CTE step-through session (CTEDebugSession.to_dict): each CTE of the query run in isolation, in order, stopping at the first that fails. A failing CTE is the query's finding, not confiture's error: the command exits 1 with this shape, `all_succeeded` false and `failed_at` naming the CTE. A missing --sql/--file or an unreachable database writes the error envelope (error-envelope.schema.json) instead. The `debug` group is experimental: its options and output may change in any release.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "total_ctes",
+    "all_succeeded",
+    "failed_at",
+    "steps"
+  ],
+  "properties": {
+    "total_ctes": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "CTEs the query declares; `steps` may hold fewer when one failed."
+    },
+    "all_succeeded": {
+      "type": "boolean",
+      "description": "True when every step ran without error."
+    },
+    "failed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The first CTE that failed, or null."
+    },
+    "steps": {
+      "type": "array",
+      "description": "One per CTE run, in the query's order.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "cte_name",
+          "row_count",
+          "columns",
+          "rows",
+          "execution_time_ms",
+          "error"
+        ],
+        "properties": {
+          "cte_name": {
+            "type": "string"
+          },
+          "row_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Rows fetched, at most --max-rows."
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Column names, in order."
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array"
+            },
+            "description": "The rows fetched, each a list of values in column order."
+          },
+          "execution_time_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Wall-clock time of the step, in whole milliseconds (truncated)."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "PostgreSQL's message when the step failed, else null."
+          }
+        }
+      }
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "debug cte",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

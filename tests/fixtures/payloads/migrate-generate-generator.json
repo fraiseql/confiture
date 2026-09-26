@@ -1,0 +1,14 @@
+{
+  "status": "success",
+  "version": "20260926150127",
+  "name": "add_note",
+  "filepath": "/tmp/project/db/migrations/20260926150127_add_note.up.sql",
+  "generator": "copier",
+  "resolved_command": "test -f /tmp/project/old.sql && cp /tmp/project/new.sql /tmp/project/db/migrations/20260926150127_add_note.up.sql",
+  "ok": true,
+  "command": "migrate generate",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

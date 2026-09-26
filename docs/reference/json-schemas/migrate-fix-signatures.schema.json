@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-fix-signatures.schema.json",
+  "title": "confiture migrate fix-signatures --format json",
+  "description": "Stale function overloads (and, with --check-body, drifted bodies) and their fix; `status` names the shape. `clean`: nothing to fix. `unfixable`: drift remains but no stale overload or drifted body has a source definition (exit 1). `dry_run` (--mode plan, the default): the SQL a fix would run. `applied` / `partial` (--mode apply): the fixes committed in one transaction and what a re-check still finds (`partial`, exit 1). The --check-body keys appear only with --check-body. A missing config, a schema auto-build that fails, an unreachable database, or a fix PostgreSQL refuses (the transaction rolled back, SQL_001) writes the error envelope (error-envelope.schema.json) instead.",
+  "oneOf": [
+    {
+      "type": "object",
+      "description": "No stale overload, and with --check-body no drifted body.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "message",
+        "fixes_applied"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "clean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "fixes_applied": {
+          "type": "integer",
+          "const": 0
+        },
+        "body_drift_fixes_planned": {
+          "type": "integer",
+          "const": 0,
+          "description": "--check-body only."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate fix-signatures",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "Drift remains and nothing has a source definition to fix it with; exit 1.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "message",
+        "fixes_applied",
+        "missing_source"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "unfixable"
+        },
+        "message": {
+          "type": "string"
+        },
+        "fixes_applied": {
+          "type": "integer",
+          "const": 0
+        },
+        "missing_source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Stale overloads skipped because the source cannot create what dropping them would leave missing."
+        },
+        "body_drift_missing_source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "--check-body: drifted bodies with no source definition."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate fix-signatures",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "--mode plan: the fix, not run.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "fixes_planned",
+        "missing_source",
+        "sql",
+        "blocks"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "dry_run"
+        },
+        "fixes_planned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "missing_source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Stale overloads skipped because the source cannot create what dropping them would leave missing."
+        },
+        "sql": {
+          "type": "string",
+          "description": "Every signature fix's statements, in order."
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "stale_signature",
+              "drop_sql",
+              "create_sql"
+            ],
+            "properties": {
+              "stale_signature": {
+                "type": "string",
+                "description": "The overload dropped, as the catalog prints it."
+              },
+              "drop_sql": {
+                "type": "string"
+              },
+              "create_sql": {
+                "type": "string",
+                "description": "The overloads of the function the database lacks, created from source; empty when the drop is the whole fix."
+              }
+            }
+          }
+        },
+        "body_drift_fixes_planned": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "--check-body only."
+        },
+        "body_drift_blocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "signature_key",
+              "create_sql"
+            ],
+            "properties": {
+              "signature_key": {
+                "type": "string"
+              },
+              "create_sql": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "--check-body only."
+        },
+        "body_drift_missing_source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "--check-body: drifted bodies with no source definition."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate fix-signatures",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      },
+      "dependentRequired": {
+        "body_drift_fixes_planned": [
+          "body_drift_blocks",
+          "body_drift_missing_source"
+        ]
+      }
+    },
+    {
+      "type": "object",
+      "description": "--mode apply: every fix committed, and the re-check finds no drift.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "fixes_applied",
+        "applied",
+        "missing_source",
+        "remaining_drift",
+        "remaining_stale"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "applied"
+        },
+        "fixes_applied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applied": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The stale overloads dropped."
+        },
+        "missing_source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Stale overloads skipped because the source cannot create what dropping them would leave missing."
+        },
+        "remaining_drift": {
+          "type": "boolean",
+          "description": "Signature drift found by the re-check after the commit."
+        },
+        "remaining_stale": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Stale overloads the re-check still finds."
+        },
+        "body_drift_fixes_applied": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "--check-body only."
+        },
+        "body_drift_applied": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "--check-body only: the bodies replaced."
+        },
+        "body_drift_missing_source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "--check-body: drifted bodies with no source definition."
+        },
+        "remaining_body_drift": {
+          "type": "boolean",
+          "description": "--check-body only: body drift the re-check still finds."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate fix-signatures",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      },
+      "dependentRequired": {
+        "body_drift_fixes_applied": [
+          "body_drift_applied",
+          "body_drift_missing_source",
+          "remaining_body_drift"
+        ]
+      }
+    },
+    {
+      "type": "object",
+      "description": "--mode apply: every fix committed, and the re-check still finds drift; exit 1.",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "fixes_applied",
+        "applied",
+        "missing_source",
+        "remaining_drift",
+        "remaining_stale"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "partial"
+        },
+        "fixes_applied": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "applied": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The stale overloads dropped."
+        },
+        "missing_source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Stale overloads skipped because the source cannot create what dropping them would leave missing."
+        },
+        "remaining_drift": {
+          "type": "boolean",
+          "description": "Signature drift found by the re-check after the commit."
+        },
+        "remaining_stale": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Stale overloads the re-check still finds."
+        },
+        "body_drift_fixes_applied": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "--check-body only."
+        },
+        "body_drift_applied": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "--check-body only: the bodies replaced."
+        },
+        "body_drift_missing_source": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "--check-body: drifted bodies with no source definition."
+        },
+        "remaining_body_drift": {
+          "type": "boolean",
+          "description": "--check-body only: body drift the re-check still finds."
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "migrate fix-signatures",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      },
+      "dependentRequired": {
+        "body_drift_fixes_applied": [
+          "body_drift_applied",
+          "body_drift_missing_source",
+          "remaining_body_drift"
+        ]
+      }
+    }
+  ]
+}

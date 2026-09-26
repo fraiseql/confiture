@@ -29,19 +29,6 @@ ALIASES: dict[str, str] = {
 
 #: Commands that write JSON with no published schema yet, and why. Shrink-only.
 WITHOUT_SCHEMA: dict[str, str] = {
-    "debug cte": (
-        "steps[].execution_time_ms is a fractional float (0.78) where the timing "
-        "vocabulary promises integer milliseconds; the group is also declared experimental"
-    ),
-    "migrate fix-signatures": (
-        "--format json writes nothing to stdout when the schema auto-build fails "
-        "(exit 2), when no stale overload has a source definition (exit 1), or when "
-        "an apply is rolled back: the message goes to stderr as text"
-    ),
-    "migrate generate": (
-        "--verbose prints the directory scan to stdout ahead of the JSON, and "
-        "--generator ignores --format json: text on success, text on stderr on failure"
-    ),
     "seed validate": "--fix prints a line per fixed file to stdout ahead of the JSON",
 }
 

@@ -33,7 +33,7 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Added
 
-- **Every command that writes JSON publishes its shape.** 45 of the 49 commands
+- **Every command that writes JSON publishes its shape.** 48 of the 49 commands
   whose `--format` accepts `json` now have a schema in `python/confiture/schemas/`
   (was 20), each written against payloads the command printed in a real run and
   kept validating by `tests/unit/json_schemas/test_captured_payloads.py`:
@@ -44,8 +44,12 @@ run and the `--dry-run-execute` rehearsal both did it.
   exactly when `action_required` is); all six `migrate schema-to-schema`
   subcommands; `seed apply` and `seed generate`; `bootstrap` and
   `migrate baseline` (one shape per mode), `diff`, `install-helpers`,
-  `validate-profile` and `migrate apply-as`. The envelope keys `ok`, `command` and
-  `parser` are declared by every schema and required by none.
+  `validate-profile` and `migrate apply-as`; `debug cte`; `migrate fix-signatures`
+  (one shape per `status`: `clean`, `unfixable`, `dry_run`, `applied`, `partial`,
+  each with the `body_drift_*` keys under `--check-body`); and `migrate generate`
+  (the template, its `--dry-run`, and the `--generator` payloads). The envelope
+  keys `ok`, `command` and `parser` are declared by every schema and required by
+  none.
 - **`sec_003`: no credential is written as a literal in the tree** (#427), at
   `warning` and on by default beside `sec_001`. `sec_001` reads column names;
   `sec_003` reads the values a seed writes — `INSERT … VALUES` and `COPY` rows,
@@ -64,10 +68,8 @@ run and the `--dry-run-execute` rehearsal both did it.
 - **A guard that every command writing JSON publishes it.** Each command whose
   `--format` accepts `json` has a section in the JSON-schema reference linking a
   schema that exists, is an alias of one, or is on a shrink-only list that names
-  the defect keeping it off. Four remain: `debug cte` (a fractional
-  `execution_time_ms`), `migrate fix-signatures` (three failure paths write nothing
-  to stdout), `migrate generate` (`--verbose` prints ahead of the JSON) and
-  `seed validate` (`--fix` prints ahead of the JSON).
+  the defect keeping it off. One remains: `seed validate` (`--fix` prints ahead
+  of the JSON).
 - **The JSON keys consumers read are pinned** (`tests/contract/test_consumer_payload_keys.py`):
   each key a consumer reads off a payload must stay `required` in its schema —
   fraisier's `applied`, `rolled_back`, `marked`, and the error envelope's
@@ -128,6 +130,36 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Fixed
 
+- **`debug cte` times each step in whole milliseconds.** `steps[].execution_time_ms`
+  was a float rounded to two places (`0.78`), where every other duration a
+  payload carries is an integer; it is now truncated to an integer, as `build`
+  and the migrate family truncate theirs, and the table output prints it as such.
+- **`migrate fix-signatures --format json` writes JSON whatever happens.** Three
+  paths wrote nothing to stdout and a text line to stderr. A schema auto-build
+  that fails now writes the error envelope with the build's own code (a missing
+  `name` in the config is `CONFIG_001`, exit 5; a missing schema directory
+  `SCHEMA_201`, exit 4) where it exited 2; a fix PostgreSQL refuses writes the
+  `SQL_001` envelope (exit 1, as before) — both errors, so both the envelope. A
+  run that finds drift and no source definition to fix any of it is a finding,
+  not an error: it writes the report, `status: "unfixable"` with
+  `missing_source[]`, at exit 1 as before. With `--check-body` that run reported
+  `status: "clean"` at exit 0 while the stale overloads stayed; it is
+  `unfixable` too.
+- **`migrate generate --format json` writes JSON and nothing else.** `--verbose`
+  printed the directory scan on stdout ahead of the payload; in JSON mode it goes
+  to stderr. `--generator` ignored `--format json`: it now writes
+  `{status, version, name, filepath, generator, resolved_command}`, and its
+  refusals write the error envelope — a missing `--from`/`--to`, a generator not
+  in `migration.migration_generators` or a missing schema file is `CONFIG_001`
+  (exit 5, was 2, as an invalid migration name already was `VALID_001`, exit 5),
+  a generator that fails `GEN_001` (exit 3, as before). `--verbose`'s
+  "Highest version" printed the next version with its last digit cut off
+  (`2026092614580`); it is the highest version in the directory, or `none`, and
+  the scan lists `.up.sql` migrations and no longer `__init__.py`.
+- **`migrate baseline --from-db --format json` writes `applied_at` in ISO 8601.**
+  Each `copied[]` row's timestamp was Python's `str()` of it,
+  `2026-09-26 13:56:41.386666+02:00`; it is now `2026-09-26T13:56:41.386666+02:00`,
+  like every other timestamp a payload carries.
 - **A table `migrate diff` pairs as a rename is still compared.** The differ
   emitted `RENAME TABLE` and moved on, so the renamed table's new columns,
   indexes and constraints never reached the generated migration, and the migrated

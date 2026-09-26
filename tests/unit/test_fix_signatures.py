@@ -459,3 +459,21 @@ class TestFixSignaturesJsonOnEveryPath:
         assert "rolled back" in payload["error"]["message"]
         failing_conn.commit.assert_not_called()
 
+    def test_the_unfixable_report_is_the_published_shape(self, tmp_path):
+        """No real capture reaches it (declared and defined come from one source): validate here."""
+        from jsonschema import Draft202012Validator
+        from referencing import Registry, Resource
+        from referencing.jsonschema import DRAFT202012
+
+        from confiture.core.schema_exporter import load_schema
+
+        registry = Registry().with_resource(
+            "_common.schema.json",
+            Resource.from_contents(load_schema("_common.schema.json"), DRAFT202012),
+        )
+        validator = Draft202012Validator(
+            load_schema("migrate-fix-signatures.schema.json"), registry=registry
+        )
+        for extra in ((), ("--check-body",)):
+            payload = json.loads(self._invoke(tmp_path, self._NO_SOURCE_SQL, *extra).stdout)
+            assert [e.message for e in validator.iter_errors(payload)] == []

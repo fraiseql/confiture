@@ -1,0 +1,27 @@
+{
+  "status": "dry_run",
+  "fixes_planned": 1,
+  "missing_source": [],
+  "sql": "DROP FUNCTION app.total(integer);",
+  "blocks": [
+    {
+      "stale_signature": "app.total(integer)",
+      "drop_sql": "DROP FUNCTION app.total(integer);",
+      "create_sql": ""
+    }
+  ],
+  "body_drift_fixes_planned": 1,
+  "body_drift_blocks": [
+    {
+      "signature_key": "app.total(bigint)",
+      "create_sql": "CREATE OR REPLACE FUNCTION app.total(p_a bigint) RETURNS bigint LANGUAGE sql AS $$ SELECT p_a * 2 $$"
+    }
+  ],
+  "body_drift_missing_source": [],
+  "ok": true,
+  "command": "migrate fix-signatures",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

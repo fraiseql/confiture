@@ -1,0 +1,57 @@
+{
+  "total_ctes": 2,
+  "all_succeeded": true,
+  "failed_at": null,
+  "steps": [
+    {
+      "cte_name": "base",
+      "row_count": 3,
+      "columns": [
+        "id"
+      ],
+      "rows": [
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ],
+      "execution_time_ms": 0,
+      "error": null
+    },
+    {
+      "cte_name": "doubled",
+      "row_count": 3,
+      "columns": [
+        "id",
+        "twice"
+      ],
+      "rows": [
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          3,
+          6
+        ]
+      ],
+      "execution_time_ms": 0,
+      "error": null
+    }
+  ],
+  "ok": true,
+  "command": "debug cte",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

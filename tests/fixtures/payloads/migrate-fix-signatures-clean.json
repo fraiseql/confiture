@@ -1,0 +1,11 @@
+{
+  "status": "clean",
+  "message": "No stale function overloads detected (1 functions checked)",
+  "fixes_applied": 0,
+  "ok": true,
+  "command": "migrate fix-signatures",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

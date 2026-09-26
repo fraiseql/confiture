@@ -1,0 +1,21 @@
+{
+  "status": "success",
+  "version": "20260926150126",
+  "name": "add_t",
+  "filepath": "/tmp/project/db/migrations/20260926150126_add_t.py",
+  "verify_file": "/tmp/project/db/migrations/20260926150126_add_t.verify.sql",
+  "class_name": "AddT",
+  "migrations_dir": "/tmp/project/db/migrations",
+  "next_available_version": "20260926150126",
+  "snapshot": "/tmp/project/db/schema_history/20260926150126_add_t.sql",
+  "snapshot_mode": "static",
+  "warnings": [
+    "Migration name 'add_t' already exists in other versions"
+  ],
+  "ok": true,
+  "command": "migrate generate",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}
