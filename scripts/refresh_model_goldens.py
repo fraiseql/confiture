@@ -115,6 +115,7 @@ TREES: tuple[Tree, ...] = (
             for path in sorted((REPO_ROOT / "examples/08-generated-seeds/db/schema").rglob("*.sql"))
         ),
     ),
+    Tree("09-multi-tenant-schema", "examples/09-multi-tenant-schema", "local"),
     Tree("basic", "examples/basic", "local"),
     # A pair whose diff is every kind of schema change, once each: what the
     # other trees, almost all additions, cannot show of the wire.

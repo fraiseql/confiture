@@ -1,0 +1,958 @@
+{
+  "enum_types": [],
+  "routines": [
+    {
+      "body": "\nDECLARE\n    v_id uuid := gen_random_uuid();\nBEGIN\n    INSERT INTO app.tb_order (tenant_id, id, fk_provider, reference)\n    VALUES (p_tenant_id, v_id, p_provider, p_reference);\n    RETURN v_id;\nEND;\n",
+      "kind": "function",
+      "language": "plpgsql",
+      "name": "fn_create_order",
+      "returns": "uuid",
+      "schema": "app",
+      "search_path_pinned": false,
+      "security_definer": false,
+      "signature": "uuid, uuid, text",
+      "signature_key": [
+        [
+          null,
+          "uuid"
+        ],
+        [
+          null,
+          "uuid"
+        ],
+        [
+          null,
+          "text"
+        ]
+      ],
+      "volatility": "volatile"
+    }
+  ],
+  "sequences": [],
+  "tables": [
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "tenant_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 84,
+          "name": "tenant_id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 85,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "code",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 86,
+          "name": "code",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "folded": "label",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 87,
+          "name": "label",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "foreign_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [
+            "id"
+          ],
+          "ref_table": "management.tb_organization",
+          "where": null
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "code"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "unique",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_custom_unit",
+      "schema": "app"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "tenant_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 115,
+          "name": "tenant_id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 116,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "fk_provider",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 117,
+          "name": "fk_provider",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "reference",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 118,
+          "name": "reference",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": "now()",
+          "folded": "created_at",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 119,
+          "name": "created_at",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TIMESTAMPTZ",
+          "type_key": "timestamptz",
+          "type_text": "timestamptz"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "foreign_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [
+            "id"
+          ],
+          "ref_table": "management.tb_organization",
+          "where": null
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "reference"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "unique",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "fk_provider"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "foreign_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [
+            "tenant_id",
+            "id"
+          ],
+          "ref_table": "app.tb_provider",
+          "where": null
+        }
+      ],
+      "indexes": [
+        {
+          "backs_constraint": false,
+          "columns": [
+            "created_at"
+          ],
+          "key_options": [],
+          "method": "btree",
+          "name": "ix_order_created_at",
+          "table": "app.tb_order",
+          "unique": false,
+          "where": null
+        }
+      ],
+      "name": "tb_order",
+      "schema": "app"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "tenant_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 132,
+          "name": "tenant_id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 133,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "fk_order",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 134,
+          "name": "fk_order",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "fk_product",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 135,
+          "name": "fk_product",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "quantity",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 136,
+          "name": "quantity",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "INTEGER",
+          "type_key": "integer",
+          "type_text": "integer"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "foreign_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [
+            "id"
+          ],
+          "ref_table": "management.tb_organization",
+          "where": null
+        },
+        {
+          "columns": [
+            "fk_product"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "foreign_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [
+            "id"
+          ],
+          "ref_table": "catalog.tb_product",
+          "where": null
+        },
+        {
+          "columns": [],
+          "deferrable": null,
+          "expression": "quantity > 0",
+          "key_options": [],
+          "kind": "check",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "fk_order"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "foreign_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [
+            "tenant_id",
+            "id"
+          ],
+          "ref_table": "app.tb_order",
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_order_line",
+      "schema": "app"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "tenant_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 101,
+          "name": "tenant_id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 102,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "fk_company",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 103,
+          "name": "fk_company",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "terms",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 104,
+          "name": "terms",
+          "not_null": false,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "tenant_id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "foreign_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [
+            "id"
+          ],
+          "ref_table": "management.tb_organization",
+          "where": null
+        },
+        {
+          "columns": [
+            "fk_company"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "foreign_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [
+            "id"
+          ],
+          "ref_table": "catalog.tb_company",
+          "where": null
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        },
+        {
+          "columns": [
+            "tenant_id",
+            "fk_company"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "unique",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_provider",
+      "schema": "app"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 48,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "legal_name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 49,
+          "name": "legal_name",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "folded": "vat_id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 50,
+          "name": "vat_id",
+          "not_null": false,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        },
+        {
+          "columns": [
+            "vat_id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "unique",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_company",
+      "schema": "catalog"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 59,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "sku",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 60,
+          "name": "sku",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "folded": "name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 61,
+          "name": "name",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        },
+        {
+          "columns": [
+            "sku"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "unique",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_product",
+      "schema": "catalog"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 72,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "code",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 73,
+          "name": "code",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        },
+        {
+          "default": null,
+          "folded": "label",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 74,
+          "name": "label",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        },
+        {
+          "columns": [
+            "code"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "unique",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_unit",
+      "schema": "catalog"
+    },
+    {
+      "columns": [
+        {
+          "default": null,
+          "folded": "id",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 36,
+          "name": "id",
+          "not_null": true,
+          "primary_key": true,
+          "raw_sql_type": "UUID",
+          "type_key": "uuid",
+          "type_text": "uuid"
+        },
+        {
+          "default": null,
+          "folded": "name",
+          "generated": null,
+          "generated_kind": null,
+          "identity": null,
+          "line": 37,
+          "name": "name",
+          "not_null": true,
+          "primary_key": false,
+          "raw_sql_type": "TEXT",
+          "type_key": "text",
+          "type_text": "text"
+        }
+      ],
+      "constraints": [
+        {
+          "columns": [
+            "id"
+          ],
+          "deferrable": null,
+          "expression": null,
+          "key_options": [],
+          "kind": "primary_key",
+          "method": null,
+          "name": "",
+          "on_delete": null,
+          "on_update": null,
+          "operators": [],
+          "ref_columns": [],
+          "ref_table": null,
+          "where": null
+        }
+      ],
+      "indexes": [],
+      "name": "tb_organization",
+      "schema": "management"
+    }
+  ],
+  "triggers": [],
+  "views": [
+    {
+      "definition": "SELECT o.tenant_id, o.id, o.reference, o.created_at, p.id AS provider_id, c.legal_name AS provider_name FROM app.tb_order AS o INNER JOIN app.tb_provider AS p ON p.tenant_id = o.tenant_id AND p.id = o.fk_provider INNER JOIN catalog.tb_company AS c ON c.id = p.fk_company",
+      "indexes": [],
+      "materialized": false,
+      "name": "v_order",
+      "schema": "app"
+    },
+    {
+      "definition": "SELECT o.id AS tenant_id, u.id, u.code, u.label, FALSE AS is_custom FROM catalog.tb_unit AS u CROSS JOIN management.tb_organization AS o UNION ALL SELECT c.tenant_id, c.id, c.code, c.label, TRUE FROM app.tb_custom_unit AS c",
+      "indexes": [],
+      "materialized": false,
+      "name": "v_unit",
+      "schema": "app"
+    }
+  ]
+}

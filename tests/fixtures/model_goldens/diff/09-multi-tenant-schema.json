@@ -1,0 +1,100 @@
+{
+  "exit_code": 0,
+  "stdout": {
+    "success": true,
+    "has_changes": true,
+    "changes": [
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE app.tb_custom_unit",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE app.tb_order",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE app.tb_order_line",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE app.tb_provider",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE catalog.tb_company",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE catalog.tb_product",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE catalog.tb_unit",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_TABLE",
+        "details": "ADD TABLE management.tb_organization",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_FUNCTION",
+        "details": "ADD FUNCTION app.fn_create_order(uuid, uuid, text)",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "details": "ADD SCHEMA app",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "details": "ADD SCHEMA catalog",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_SCHEMA",
+        "details": "ADD SCHEMA management",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_STATISTICS",
+        "details": "ADD STATISTICS app.st_order_line_tenant_order",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW app.v_order",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_VIEW",
+        "details": "ADD VIEW app.v_unit",
+        "irreversible_reason": null
+      }
+    ],
+    "change_count": 15,
+    "migration_generated": true,
+    "migration_file": "<version>_golden.up.sql",
+    "error": null,
+    "source": {
+      "kind": "sql",
+      "path": "<to>"
+    },
+    "destructive_gate": "gated",
+    "warnings": [],
+    "ok": true,
+    "command": "migrate diff",
+    "parser": {
+      "pglast": "8.4",
+      "pg_major": 18
+    }
+  }
+}

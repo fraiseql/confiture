@@ -16,6 +16,16 @@ Follow these examples in order to master Confiture's migration workflows:
 | 4 | [Production Sync](#4-production-sync--anonymization) | Production Data Sync | Advanced | 25 min |
 | 5 | [Multi-Environment Workflow](#5-multi-environment-workflow) | Complete CI/CD | Advanced | 30 min |
 
+The examples after these each show one feature, and each has its own README:
+
+| Example | What it shows |
+|---------|---------------|
+| [06-prep-seed-validation](06-prep-seed-validation/) | The five-level prep-seed validation |
+| [07-comment-validation](07-comment-validation/) | Comment validation and file separators |
+| [07-external-emitter](07-external-emitter/) | A `ConfitureEmitter` plugged into `confiture generate scaffold` |
+| [08-generated-seeds](08-generated-seeds/) | A seed generator written against `confiture.platform` |
+| [09-multi-tenant-schema](09-multi-tenant-schema/) | A schema that passes the `tenant` lint family |
+
 The multi-agent coordination example moved with pgGit support into a plugin in 1.16:
 [`plugins/fraiseql-confiture-pggit/examples/multi-agent-workflow/`](../plugins/fraiseql-confiture-pggit/examples/multi-agent-workflow/).
 

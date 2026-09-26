@@ -113,6 +113,7 @@ nav:
       - 'Migration Naming Best Practices': guides/migration-naming-best-practices.md
       - 'Verifying migrations: what runs where, and where assertions belong': guides/migration-verification.md
       - 'Migration Versioning Strategies: Confiture vs Industry Standards': guides/migration-versioning-strategies.md
+      - 'Multi-tenant schemas': guides/multi-tenant-schemas.md
       - 'Named Schemas': guides/named-schemas.md
       - 'Notification Hooks': guides/notifications.md
       - 'Ownership Coverage': guides/ownership-coverage.md

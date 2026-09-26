@@ -1,0 +1,4 @@
+name: local
+database_url: postgresql://localhost/confiture_ex09_multi_tenant
+include_dirs:
+  - db/schema
