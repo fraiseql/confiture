@@ -772,6 +772,8 @@ class ApplyResult
 Result of seed application.
 
 Tracks successful and failed files during sequential execution.
+`failed_files` names each failed file by its path below the seeds
+directory (`seed_name`), in apply order.
 
 | Field | Type | Default |
 |---|---|---|

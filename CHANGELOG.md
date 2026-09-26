@@ -170,6 +170,12 @@ run and the `--dry-run-execute` rehearsal both did it.
   read (absent, no columns, no connection), `output_path` was
   `<output-dir>/<table>.sql`, without the `<seed-env>/` directory every stub is
   written under; it is now `<output-dir>/<seed-env>/<table>.sql` in every case.
+- **`seed apply` names a failed file by its path.** `failed_files` held bare
+  file names, so `common/02_data.sql` and `dev/02_data.sql` failing read as the
+  same name twice. Each entry is now the path below the seeds directory — the
+  path a `--profile` glob matches (for `build --sequential`, below the first
+  seed directory) — and the per-file progress on stderr names files the same
+  way. A file directly in the seeds directory reads as before.
 - **A table `migrate diff` pairs as a rename is still compared.** The differ
   emitted `RENAME TABLE` and moved on, so the renamed table's new columns,
   indexes and constraints never reached the generated migration, and the migrated

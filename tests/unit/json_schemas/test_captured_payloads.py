@@ -61,6 +61,7 @@ CAPTURED = {
     "seed-apply.json": "seed-apply.schema.json",
     "seed-apply-profile.json": "seed-apply.schema.json",
     "seed-apply-continue-on-error.json": "seed-apply.schema.json",
+    "seed-apply-continue-on-error-nested.json": "seed-apply.schema.json",
     "seed-generate.json": "seed-generate.schema.json",
     "seed-generate-refused.json": "seed-generate.schema.json",
     "seed-validate.json": "seed-validate.schema.json",

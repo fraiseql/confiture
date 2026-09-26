@@ -34,7 +34,7 @@
       "items": {
         "type": "string"
       },
-      "description": "The failed files' names, in apply order, without their directory; empty if none failed."
+      "description": "The failed files, in apply order, each by its path below the seeds directory (common/01_users.sql), the path a --profile glob matches; empty if none failed."
     },
     "success": {
       "type": "boolean",
