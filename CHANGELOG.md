@@ -86,6 +86,17 @@ run and the `--dry-run-execute` rehearsal both did it.
   the same command `migrate schema-to-schema setup`. They now carry the full path,
   like every other command, and a guard fails on a command that spells an
   envelope key `emit` owns.
+- **A built bundle's header says what it can prove, and builds can be
+  byte-identical** (#428). The header carried the *source* fingerprint, which
+  moved between confiture versions while the body did not, so every consumer
+  dropped two header lines by position. It now carries `Body SHA-256:` — the
+  SHA-256 of everything after the header (`tail -n +15 | sha256sum`), the same
+  for the same body whatever version wrote it — and `Generated:` honours
+  `SOURCE_DATE_EPOCH`, so two builds of one tree are byte-identical and a CI
+  check is a plain `diff`. The source fingerprint still keys template and
+  artifact caches and is what `--show-hash` prints. The header keeps its line
+  count. The CLI reference's build header example, which showed lines confiture
+  never wrote, is replaced by the real one.
 - **`errors` is never empty when `success` is false** (`MigrateUpResult`, and
   `errors[]` in `migrate up --format json`). A halt now reads `Halted at
   <version>_<name>: it declares requires_superuser=True. Apply it with
