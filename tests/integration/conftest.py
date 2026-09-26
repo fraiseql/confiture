@@ -32,7 +32,7 @@ import psycopg
 import psycopg.errors
 import psycopg.sql
 import pytest
-from tests.conftest import DEFAULT_TEST_DB_URL, resolve_db_url
+from tests.conftest import DEFAULT_TEST_DB_URL, fail_if_ledger_left, resolve_db_url
 
 from confiture.core.temp_database import _maintenance_url
 from confiture.core.test_db import TestDbProvisioner
@@ -238,3 +238,7 @@ def restore_connection_kwargs(test_db_url: str) -> dict[str, object]:
         "username": parsed.username,
         "password": unquote(parsed.password) if parsed.password else None,
     }
+
+
+# Each module leaves the default ledger empty: see `ledger_rows_left`.
+_ledger_left_empty = pytest.fixture(autouse=True, scope="module")(fail_if_ledger_left)
