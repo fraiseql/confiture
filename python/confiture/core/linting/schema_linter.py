@@ -1004,6 +1004,7 @@ class SchemaLinter:
                 ]
             )
         return self._written_cache
+
     def _check_tenant_tables(self, report: LintReport) -> None:
         """``tenant_002``: a table carries the discriminator, or is declared global.
 
