@@ -67,6 +67,9 @@ class PrepSeedPattern(Enum):
     SEED_ROW_WIDTH = "SEED_ROW_WIDTH"
     """A seed row holds more or fewer values than the statement has columns."""
 
+    AMBIGUOUS_FINAL_TABLE = "AMBIGUOUS_FINAL_TABLE"
+    """A staging table's name is declared in several schemas and no resolver says which."""
+
     @property
     def description(self) -> str:
         """Get human-readable description of this pattern."""
@@ -117,6 +120,10 @@ class PrepSeedPattern(Enum):
             ),
             PrepSeedPattern.SEED_ROW_WIDTH: (
                 "A seed row holds more or fewer values than the statement has columns"
+            ),
+            PrepSeedPattern.AMBIGUOUS_FINAL_TABLE: (
+                "A prep_seed table's final table could be any of several: its name is "
+                "declared in more than one schema and no resolver's INSERT names one"
             ),
         }
         return descriptions.get(self, "Prep-seed pattern violation")

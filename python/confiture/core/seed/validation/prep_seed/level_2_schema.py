@@ -21,6 +21,11 @@ def _column_names(table: Table) -> list[str]:
     return [column.folded for column in table.columns]
 
 
+def _spelled(table: Table) -> str:
+    """``schema.name`` of *table*, or its name when its ``CREATE`` names no schema."""
+    return f"{table.schema}.{table.name}" if table.schema else table.name
+
+
 class Level2SchemaValidator:
     """Validates schema consistency between prep_seed and final tables.
 
@@ -39,6 +44,7 @@ class Level2SchemaValidator:
         self,
         get_final_table: Callable[[str], Table | None] | None = None,
         *,
+        final_name: Callable[[str], str | None] | None = None,
         locate: Callable[[Table], tuple[str, int]] | None = None,
         locate_resolver: Callable[[Table], tuple[str, int] | None] | None = None,
         prep_seed_schema: str = "prep_seed",
@@ -48,14 +54,19 @@ class Level2SchemaValidator:
 
         Args:
             get_final_table: Optional function to look up final table by name.
+            final_name: ``schema.name`` of the final table a prep table's rows
+                land in, for a finding that it is missing; ``None`` for one no
+                rule could decide, which is reported elsewhere. Without one it
+                is ``<catalog_schema>.<name>``.
             locate: ``(file, line)`` a table is created on, for a finding about
                 it; without one a finding names the table itself.
             locate_resolver: ``(file, line)`` of the resolver that fills a prep
                 table, when the schema defines one.
             prep_seed_schema: The schema seeds are loaded into.
-            catalog_schema: The schema the resolvers fill.
+            catalog_schema: The schema the resolvers fill when nothing says otherwise.
         """
         self.get_final_table = get_final_table
+        self._final_name = final_name or (lambda name: f"{catalog_schema}.{name}")
         self._locate = locate
         self._locate_resolver = locate_resolver
         self.prep_seed_schema = prep_seed_schema
@@ -92,13 +103,16 @@ class Level2SchemaValidator:
 
         final_table = self.get_final_table(prep_table.name)
         if not final_table:
+            expected = self._final_name(prep_table.name)
+            if expected is None:
+                return violations
             violations.append(
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_MAPPING,
                     severity=ViolationSeverity.ERROR,
                     message=(
                         f"{self.prep_seed_schema}.{prep_table.name} has no corresponding "
-                        f"final table {self.catalog_schema}.{prep_table.name}"
+                        f"final table {expected}"
                     ),
                     file_path=self._at(prep_table)[0],
                     line_number=self._at(prep_table)[1],
@@ -187,7 +201,7 @@ class Level2SchemaValidator:
                             message=(
                                 f"{self.prep_seed_schema}.{prep_table.name}.{col_name} has no "
                                 f"corresponding column "
-                                f"{self.catalog_schema}.{final_table.name}.{final_col}"
+                                f"{_spelled(final_table)}.{final_col}"
                             ),
                             file_path=self._at(prep_table)[0],
                             line_number=self._at(prep_table)[1],

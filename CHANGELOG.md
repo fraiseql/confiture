@@ -220,6 +220,23 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Fixed
 
+- **Prep-seed validation checks the table each resolver fills, in whatever
+  schema** (#458). Levels 2-5 took every `prep_seed.<table>` to resolve into
+  `<catalog_schema>.<table>`, so a tree whose resolvers fill tables in several
+  schemas — shared reference data in `catalog`, per-tenant tables in `tenant` —
+  got a false `MISSING_FK_MAPPING` at level 2 and another at level 4 for every
+  table outside `catalog_schema`; level 3 checked the joins of no resolver
+  filling another schema; and level 5 never counted those tables' NULL foreign
+  keys, so a real `NULL_FK_AFTER_RESOLUTION` CRITICAL was missed. Each staging
+  table's final table is now decided once (`prep_seed/final_tables.py`) and
+  every level reads it: the target of the `INSERT` in `fn_resolve_<table>` that
+  reads `prep_seed.<table>` (an unqualified target is in `public`); otherwise
+  the one schema declaring `<table>`; otherwise `catalog_schema`, so a
+  single-schema tree behaves as before. A name declared in more than one schema
+  with no resolver to decide is the new `AMBIGUOUS_FINAL_TABLE` error naming
+  every candidate, never a guess. Resolvers run parents first by the foreign
+  keys between their final tables in every schema, not only in
+  `catalog_schema`. Level 5's other findings name their table schema-qualified.
 - **A routine that takes an array of a user-defined type is read on pglast 8**
   (#453). libpg_query's catalogue stub resolves a type it does not know to
   `record` and an array of one to `_record`, which PL/pgSQL refuses as a

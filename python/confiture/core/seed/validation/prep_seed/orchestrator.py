@@ -20,6 +20,7 @@ from confiture.core.connection import Connection, create_connection, require_mod
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import SchemaModel, Table
 from confiture.core.schema_sources import SchemaRead, read_schema
+from confiture.core.seed.validation.prep_seed.final_tables import FinalTables
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )
@@ -41,7 +42,11 @@ from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedViolation,
     ViolationSeverity,
 )
-from confiture.core.seed.validation.prep_seed.resolvers import Resolver, find_resolvers
+from confiture.core.seed.validation.prep_seed.resolvers import (
+    Resolution,
+    Resolver,
+    read_resolution,
+)
 from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError, SeedError
 from confiture.models.warnings import BuildWarning
 
@@ -100,7 +105,8 @@ class OrchestrationConfig:
         stop_on_critical: Stop early if CRITICAL violation found (default: True)
         show_progress: Show progress indicators during validation (default: True)
         prep_seed_schema: Schema name for prep-seed tables (default: "prep_seed")
-        catalog_schema: Schema name for final tables (default: "catalog")
+        catalog_schema: Schema of a final table neither a resolver's ``INSERT``
+            nor a single declaration places (default: "catalog")
         tables_to_validate: Optional list of specific tables to validate
         level_5_mode: Validation mode for Level 5 ("standard" or "comprehensive")
     """
@@ -144,7 +150,7 @@ class PrepSeedOrchestrator:
         """
         self.config = config
         self._schema: SchemaRead | None = None
-        self._found: list[Resolver] | None = None
+        self._found: Resolution | None = None
 
     def run(self) -> PrepSeedReport:
         """Run validation levels 1 through max_level.
@@ -296,16 +302,26 @@ class PrepSeedOrchestrator:
             violations.extend(self._nothing_to_compare(tables))
             return violations
 
-        # The catalog counterpart of a prep-seed table is the same name in the
-        # configured catalog schema — the pairing is across schemas, by name,
-        # which is why the *side* a table is on is read from its qualifier.
-        catalog_schema = self.config.catalog_schema.lower()
+        # A prep-seed table's final table is decided once, for every level:
+        # what its resolver writes, else the one schema declaring its name,
+        # else `catalog_schema` (`final_tables`).
+        finals = self._finals()
+        declared = {
+            (ref.schema.lower(), ref.name): table for ref, table in read.model.tables.items()
+        }
 
         def get_final_table(table_name: str) -> Table | None:
-            return tables.catalog.get((catalog_schema, table_name))
+            final = finals.of(table_name)
+            return declared.get((final.schema, final.name)) if final is not None else None
 
+        def final_name(table_name: str) -> str | None:
+            final = finals.of(table_name)
+            return final.qualified if final is not None else None
+
+        violations.extend(self._ambiguous(finals))
         validator = Level2SchemaValidator(
             get_final_table=get_final_table,
+            final_name=final_name,
             locate=lambda table: self._where(table.schema or DEFAULT_SCHEMA, table.name),
             locate_resolver=self._resolver_of,
             prep_seed_schema=self.config.prep_seed_schema,
@@ -325,6 +341,7 @@ class PrepSeedOrchestrator:
             self._read_schema().model,
             prep_seed_schema=self.config.prep_seed_schema,
             catalog_schema=self.config.catalog_schema,
+            finals=self._finals(),
         )
         return [violation for resolver in resolvers for violation in validator.validate(resolver)]
 
@@ -428,11 +445,16 @@ class PrepSeedOrchestrator:
         # Create validator with callbacks
         validator = Level4RuntimeValidator(table_exists=table_exists)
 
+        finals = self._finals()
         for resolver in resolvers:
-            runtime_violations = validator.validate_runtime(
-                resolver,
-                target_schema=self.config.catalog_schema,
-                target_table=resolver.table,
+            # An ambiguous final table is level 2's finding; the dry run still runs.
+            final = finals.of(resolver.table)
+            runtime_violations = (
+                validator.validate_runtime(
+                    resolver, target_schema=final.schema, target_table=final.name
+                )
+                if final is not None
+                else []
             )
             violations.extend(runtime_violations)
 
@@ -477,14 +499,24 @@ class PrepSeedOrchestrator:
             return violations
 
         resolvers = self._discovered()
-        target_tables = self.config.tables_to_validate or [r.table for r in resolvers]
+        finals = self._finals()
+        # Each staging table's final table, wherever it is: a table outside
+        # `catalog_schema` is checked like any other (#458).
+        target_tables = [
+            (final.schema, final.name)
+            for final in (
+                finals.of(name)
+                for name in dict.fromkeys(
+                    self.config.tables_to_validate or [r.table for r in resolvers]
+                )
+            )
+            if final is not None
+        ]
 
         try:
             with self._database() as connection:
-                # Every level-5 query is qualified with the configured
-                # `catalog_schema`, never a hardwired `catalog.`.
                 validator = Level5ExecutionValidator(
-                    catalog_schema=self.config.catalog_schema, locate=self._locate
+                    catalog_schema=self.config.catalog_schema, locate=self._where
                 )
                 run = (
                     validator.execute_full_cycle_comprehensive
@@ -640,11 +672,54 @@ class PrepSeedOrchestrator:
         Raises:
             SchemaError: as :meth:`_read_schema`.
         """
+        return self._resolution().resolvers
+
+    def _resolution(self) -> Resolution:
+        """The resolvers and every staging table's final table, read once.
+
+        Raises:
+            SchemaError: as :meth:`_read_schema`.
+        """
         if self._found is None:
-            self._found = find_resolvers(
-                self._read_schema(), catalog_schema=self.config.catalog_schema
+            self._found = read_resolution(
+                self._read_schema(),
+                catalog_schema=self.config.catalog_schema,
+                prep_seed_schema=self.config.prep_seed_schema,
             )
         return self._found
+
+    def _finals(self) -> FinalTables:
+        """Each staging table's final table; ``catalog_schema`` for all when the schema does not parse."""
+        try:
+            return self._resolution().finals
+        except SchemaError as exc:
+            if exc.error_code != "DIFFER_400":
+                raise
+            return FinalTables(self.config.catalog_schema.lower())
+
+    def _ambiguous(self, finals: FinalTables) -> list[PrepSeedViolation]:
+        """A staging table whose final table could be any of several: named, never guessed."""
+        violations: list[PrepSeedViolation] = []
+        for staging, candidates in sorted(finals.ambiguous.items()):
+            file, line = self._where(self.config.prep_seed_schema, staging)
+            violations.append(
+                PrepSeedViolation(
+                    pattern=PrepSeedPattern.AMBIGUOUS_FINAL_TABLE,
+                    severity=ViolationSeverity.ERROR,
+                    message=(
+                        f"{self.config.prep_seed_schema}.{staging} could resolve into any of "
+                        f"{', '.join(candidates)}: no resolver's INSERT reading it names one"
+                    ),
+                    file_path=file,
+                    line_number=line,
+                    impact="Levels 2, 4 and 5 do not check this table's final table",
+                    suggestion=(
+                        f"Write fn_resolve_{staging} so its INSERT reads "
+                        f"{self.config.prep_seed_schema}.{staging} and names its target's schema"
+                    ),
+                )
+            )
+        return violations
 
     def _discovered(self) -> list[Resolver]:
         """:meth:`_resolvers` for levels 4-5: a schema that does not parse holds none.
@@ -657,10 +732,6 @@ class PrepSeedOrchestrator:
             if exc.error_code != "DIFFER_400":
                 raise
             return []
-
-    def _locate(self, table: str) -> tuple[str, int]:
-        """The file and line ``<catalog>.<table>`` is created on, for a level-5 finding."""
-        return self._where(self.config.catalog_schema, table)
 
     def _where(self, schema: str, table: str) -> tuple[str, int]:
         """The file and line ``<schema>.<table>`` is created on, as the schema read found it.
@@ -704,7 +775,9 @@ def validate_seeds(
     """Validate seeds written for the prep-seed pattern, levels 1 through *max_level*.
 
     The prep-seed pattern loads UUID-keyed rows into *prep_seed_schema* and
-    resolves them into BIGINT-keyed rows in *catalog_schema*. Levels 1-3 read
+    resolves them into BIGINT-keyed final tables. Each staging table's final
+    table is the table its resolver's ``INSERT`` writes; failing that, the one
+    schema declaring its name; failing that, *catalog_schema*. Levels 1-3 read
     files and need no database; 4 and 5 load the seeds and run the resolvers
     against *database*, in a transaction nothing outlives: a URL's connection is
     opened, rolled back and closed here, and a caller's connection runs inside a

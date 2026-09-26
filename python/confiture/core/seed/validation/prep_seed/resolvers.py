@@ -21,6 +21,8 @@ from psycopg import sql
 from confiture.core.introspection.dependency_graph import dependency_order
 from confiture.core.linting import references
 from confiture.core.schema_sources import SchemaRead
+from confiture.core.seed.validation.prep_seed import final_tables
+from confiture.core.seed.validation.prep_seed.final_tables import FinalTables
 from confiture.exceptions import SchemaError
 
 #: What a resolver's name starts with.
@@ -78,13 +80,39 @@ class Resolver:
         return self.file, line - self._shift
 
 
-def find_resolvers(read: SchemaRead, *, catalog_schema: str) -> list[Resolver]:
-    """Every resolver *read*'s schema defines, parents first.
+@dataclass(frozen=True)
+class Resolution:
+    """The resolvers a schema defines, parents first, and where each staging table lands.
 
-    ``fn_resolve_<table>`` fills ``<catalog>.<table>`` and joins the tables that
-    table references, so it runs after their resolvers: the catalog tables'
-    foreign-key order decides, and a resolver of no catalog table follows in name
-    order. Keys that form a cycle leave the name order.
+    Attributes:
+        resolvers: Every resolver, each after the resolvers of the tables its
+            final table references.
+        finals: Each staging table's final table (:mod:`.final_tables`).
+    """
+
+    resolvers: list[Resolver]
+    finals: FinalTables
+
+
+def find_resolvers(
+    read: SchemaRead, *, catalog_schema: str, prep_seed_schema: str = "prep_seed"
+) -> list[Resolver]:
+    """Every resolver *read*'s schema defines, parents first (:func:`read_resolution`)."""
+    return read_resolution(
+        read, catalog_schema=catalog_schema, prep_seed_schema=prep_seed_schema
+    ).resolvers
+
+
+def read_resolution(
+    read: SchemaRead, *, catalog_schema: str, prep_seed_schema: str = "prep_seed"
+) -> Resolution:
+    """Every resolver *read*'s schema defines, parents first, and each final table.
+
+    ``fn_resolve_<table>`` fills ``<table>``'s final table and joins the tables
+    that table references, so it runs after their resolvers: the final tables'
+    foreign-key order decides, whatever schema each is in, and a resolver whose
+    final table the order does not hold follows in name order. Keys that form a
+    cycle leave the name order.
     """
     found: list[Resolver] = []
     for definition in read.definitions:
@@ -101,14 +129,24 @@ def find_resolvers(read: SchemaRead, *, catalog_schema: str) -> list[Resolver]:
                 _shift=obj.statement_line - definition.line,
             )
         )
-    return _parents_first(found, read, catalog_schema)
+    finals = final_tables.decide(
+        read.model, found, prep_seed_schema=prep_seed_schema, catalog_schema=catalog_schema
+    )
+    return Resolution(_parents_first(found, read, finals), finals)
 
 
-def _parents_first(resolvers: list[Resolver], read: SchemaRead, catalog: str) -> list[Resolver]:
+def _parents_first(
+    resolvers: list[Resolver], read: SchemaRead, finals: FinalTables
+) -> list[Resolver]:
     by_name = sorted(resolvers, key=lambda resolver: resolver.name)
     try:
         order = dependency_order(read.model)
     except SchemaError:
         return by_name
-    rank = {ref.name: position for position, ref in enumerate(order) if ref.schema == catalog}
-    return sorted(by_name, key=lambda resolver: rank.get(resolver.table, len(rank)))
+    rank = {(ref.schema.lower(), ref.name): position for position, ref in enumerate(order)}
+
+    def position(resolver: Resolver) -> int:
+        final = finals.of(resolver.table)
+        return rank.get((final.schema, final.name), len(rank)) if final else len(rank)
+
+    return sorted(by_name, key=position)
