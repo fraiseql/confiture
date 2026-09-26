@@ -460,6 +460,19 @@ def _append_column(sql: str, table: SchemaObject, node: Any) -> None:
 # the prose is exactly what cannot be compared (#275).
 
 
+def _without_typmods(type_name: Any) -> Any:
+    """A copy of ``type_name`` with its typmods blanked; the parsed tree is left as it was.
+
+    Shallow on purpose (#433): ``RawStream`` attaches an ``ancestors`` chain to every
+    node it renders, so a deep copy of a rendered argument's type follows it through
+    the whole statement — every parameter, once per argument — and a routine with
+    ~30 parameters exceeds the recursion limit.
+    """
+    bare = copy.copy(type_name)
+    bare.typmods = None
+    return bare
+
+
 def type_text(type_name: Any) -> str:
     """``integer[]`` for a ``TypeName``, typmods dropped — an argument, as written.
 
@@ -471,9 +484,7 @@ def type_text(type_name: Any) -> str:
     user schema can be called ``pg_catalog`` — the ``pg_`` prefix is reserved —
     so the qualifier is always the parser's.
     """
-    bare = copy.deepcopy(type_name)
-    bare.typmods = None
-    rendered = RawStream()(bare)
+    rendered = RawStream()(_without_typmods(type_name))
     return rendered.removeprefix(f"{_CATALOG_SCHEMA}.")
 
 
@@ -489,9 +500,7 @@ def type_key(type_name: Any) -> tuple[str | None, str]:
     missing schema matches any schema" — the rule ``find_all`` already applies
     to an object's own schema — can be expressed one level down.
     """
-    bare = copy.deepcopy(type_name)
-    bare.typmods = None
-    rendered = ddl_type_name(bare) or ""
+    rendered = ddl_type_name(_without_typmods(type_name)) or ""
     schema, _, name = rendered.rpartition(".")
     return (schema or None), signature_type(name)
 
