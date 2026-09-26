@@ -36,3 +36,25 @@ def test_reading_a_type_leaves_the_parsed_tree_as_it_was() -> None:
     assert type_text(type_name) == "varchar"
     assert type_key(type_name) == (None, "varchar")
     assert type_name.typmods is not None
+
+
+def test_a_routine_returning_a_wide_table_reads() -> None:
+    """An input parameter and 200 output columns (#457): ``RETURNS TABLE`` renders
+    every output column as a parameter, so the width is the same trap."""
+    columns = ", ".join(f"c{i} text" for i in range(200))
+    model = parse_schema(
+        f"CREATE FUNCTION app.f(p uuid) RETURNS TABLE ({columns}) LANGUAGE sql AS 'select null';"
+    )
+
+    ((routine,),) = model.routines.values()
+    assert len(routine.signature_key) == 1
+
+
+def test_a_routine_with_thirty_out_parameters_reads() -> None:
+    outs = ", ".join(f"OUT c{i} text" for i in range(30))
+    model = parse_schema(
+        f"CREATE FUNCTION app.f(p uuid, {outs}) RETURNS SETOF record LANGUAGE sql AS 'select null';"
+    )
+
+    ((routine,),) = model.routines.values()
+    assert len(routine.signature_key) == 1
