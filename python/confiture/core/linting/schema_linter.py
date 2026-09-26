@@ -36,6 +36,7 @@ from confiture.core.linting.inventory import (
 )
 from confiture.core.linting.rule_registry import LINT_RULES, UNPARSEABLE_RULE_ID
 from confiture.core.linting.seed_secrets import SECRET_COLUMN_PATTERNS
+from confiture.core.linting.tenant import rules as tenant_rules
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import blank_copy_blocks, blank_preserving_lines
 from confiture.exceptions import ConfiturError
@@ -1043,9 +1044,6 @@ class SchemaLinter:
         ``tenancy:`` block a rule has nothing to judge against, and says so
         rather than passing.
         """
-        # Reason: import cycle (the tenant package's __init__ imports tenant_isolation_rule, which imports this module)
-        from confiture.core.linting.tenant import rules as tenant_rules
-
         tenancy = load_project_config(self.project_dir).tenancy
         if tenancy is None:
             report.skipped.append(

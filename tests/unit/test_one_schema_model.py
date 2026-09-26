@@ -89,9 +89,6 @@ ALLOWED: dict[str, str] = {
         "line, offset and existence clauses a finding needs; `schema_model()` turns "
         "the inventory into the model"
     ),
-    "core/linting/tenant/function_parser.py:InsertStatement": (
-        "a parsed INSERT inside a function body: the columns it writes, not a table"
-    ),
     "models/introspection.py:IntrospectedColumn": (
         "the `introspect` wire shape, pinned by introspect.schema.json"
     ),

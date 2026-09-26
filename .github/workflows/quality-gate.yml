@@ -362,6 +362,7 @@ jobs:
           tests/unit/linting/test_tenant_003_views.py \
           tests/unit/linting/test_tenant_004_foreign_keys.py \
           tests/unit/linting/test_tenant_005_unique_keys.py \
+          tests/unit/linting/test_tenant_001_inserts.py \
           tests/unit/test_schema_change.py \
           tests/unit/test_schema_change_is_exhaustive.py \
           tests/unit/test_schema_change_tiers.py \

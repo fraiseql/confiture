@@ -15,9 +15,8 @@ This document provides a step-by-step guide to migrate confiture's INSERT parsin
    - ~150 lines of regex-based validation (`_can_convert_to_copy()`)
    - ~100 lines of manual string parsing (`_parse_rows()`, `_parse_values()`)
 
-2. **`python/confiture/core/linting/tenant/function_parser.py`** (SECONDARY)
-   - 200 lines using regex for INSERT extraction
-   - Could benefit from sqlglot but less critical
+2. **The tenant rule's function-body INSERT scanner** (SECONDARY) — since deleted:
+   `tenant_001` reads routine bodies through PostgreSQL's own PL/pgSQL compiler
 
 3. **`tests/unit/seed/test_insert_to_copy_converter.py`** (TEST)
    - 319 tests (all passing)
@@ -714,9 +713,10 @@ class TestValidatorAndConverterIntegration:
 
 ---
 
-### Phase 5: Refactor function_parser.py (Optional, Lower Priority)
+### Phase 5: Refactor the function-body INSERT scanner (retired)
 
-**File**: `python/confiture/core/linting/tenant/function_parser.py`
+The scanner this phase proposed rewriting was deleted: `tenant_001` reads routine
+bodies through pglast. The sketch below is kept as research.
 
 The current regex-based approach for extracting INSERTs from function bodies works reasonably well. However, it could be improved with sqlglot:
 

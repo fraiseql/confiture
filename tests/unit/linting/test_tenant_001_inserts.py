@@ -339,3 +339,42 @@ def test_a_body_the_compiler_refuses_is_reported_never_passed(tmp_path: Path) ->
     (finding,) = found
     assert "could not be read" in finding.message
     assert finding.line_number == 8
+
+
+# -- Reading ------------------------------------------------------------------
+
+
+def test_an_insert_in_a_comment_or_a_literal_is_not_an_insert(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER
+        + _function(
+            "  -- INSERT INTO app.tb_order (id) VALUES (gen_random_uuid());\n"
+            "  RAISE NOTICE 'INSERT INTO app.tb_order (id) VALUES (1)';"
+        ),
+    )
+
+    assert found == []
+
+
+def test_a_begin_atomic_body_is_judged(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER + "CREATE FUNCTION app.fn_create_order() RETURNS void LANGUAGE sql BEGIN ATOMIC\n"
+        "  INSERT INTO app.tb_order (id) VALUES (gen_random_uuid());\nEND;\n",
+    )
+
+    (finding,) = found
+    assert finding.line_number == 8
+
+
+def test_a_quoted_discriminator_is_the_column_it_names(tmp_path: Path) -> None:
+    found, _ = _inserts(
+        tmp_path,
+        _ORDER
+        + _function(
+            '  INSERT INTO "app"."tb_order" ("id", "tenant_id") VALUES (gen_random_uuid(), p_tenant);'
+        ),
+    )
+
+    assert found == []

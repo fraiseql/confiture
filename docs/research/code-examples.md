@@ -668,29 +668,6 @@ else:
     print(f"✗ Conversion failed: {result.reason}")
 ```
 
-### Usage in function parsing
-
-```python
-from confiture.core.linting.tenant.function_parser import FunctionParser
-
-parser = FunctionParser()
-
-plpgsql_function = """
-CREATE FUNCTION create_item(p_name TEXT) RETURNS BIGINT AS $$
-BEGIN
-    INSERT INTO tb_item (id, name) VALUES (1, p_name);
-    RETURN 1;
-END;
-$$ LANGUAGE plpgsql;
-"""
-
-functions = parser.extract_functions(plpgsql_function)
-for func in functions:
-    print(f"Function: {func.name}")
-    for insert in func.inserts:
-        print(f"  INSERT INTO {insert.table_name} ({', '.join(insert.columns or [])})")
-```
-
 ---
 
 ## Summary Table

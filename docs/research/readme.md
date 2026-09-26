@@ -264,9 +264,8 @@ These files would benefit from the sqlglot migration:
   - Current: 690 lines, 150+ regex
   - After: 200 lines, 0 regex
 
-- `python/confiture/core/linting/tenant/function_parser.py` (SECONDARY)
-  - Current: 200 lines regex
-  - Could be improved (lower priority)
+- The tenant rule's function-body INSERT scanner, since deleted: `tenant_001` now
+  reads routine bodies through PostgreSQL's own PL/pgSQL compiler (pglast)
 
 - Tests affected: All in `tests/unit/seed/test_insert_to_copy_converter.py` (62 tests)
   - Expected: All still pass (no behavior change)
