@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-09-26
+
+**Tenancy is declared once, and the schema is held to it.** A new project-level
+file, `db/project.yaml`, declares what is true in every environment. Its
+`tenancy:` block turns on five `tenant` lint rules: every table carries the
+discriminator or is declared global, every view publishes it, no foreign key
+crosses tenants, keys lead with it, and every `INSERT` supplies it. The rules
+come with a guide and an example project that passes all five. Every command
+that writes JSON now publishes its shape, `sec_003` finds credentials written
+into seeds, and an error never prints a password.
+
 **A halt is a failure that says why.** A `migrate up` that stopped at a
 `requires_superuser` migration returned `success=False` with `errors=[]`, so
 `has_errors` was `False` and a caller that branched on it — fraisier's deploy
