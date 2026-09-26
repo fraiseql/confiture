@@ -3042,6 +3042,7 @@ confiture lint [OPTIONS]
 | `--ignore` | - | str | - | Rules or families to skip, comma-separated. Applied after --select, so --ignore always wins. |
 | `--baseline` | - | path | - | Baseline file (#219): fail only on findings it does not know, print only those, rewrite it when findings disappear |
 | `--write-baseline` | - | Flag | off | Create or reset the --baseline file from the current findings |
+| `--require-complete` | - | Flag | off | Exit 2 (not run) when a selected rule was skipped or ran on less than the whole schema — the rules in skipped[] and degraded[] — so a gate cannot pass on reduced coverage |
 | `--list-rules` | - | Flag | off | Print the rule catalogue (code, family, severity, default/opt-in) and exit 0. Honours --format json. |
 | `--replica-safe` | - | Flag | off | Deprecated alias for `--select default,replica` (#139). Still supported; new rules register instead of adding a flag. |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory the migration-tree rules read — replica_001, own_001, own_002 (default: db/migrations) |

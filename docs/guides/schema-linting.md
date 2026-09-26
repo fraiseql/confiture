@@ -166,6 +166,11 @@ a project with neither. A run where no database answered prints
 `build_003 ran without the live tier: …` and carries the same sentence in the
 JSON `degraded` array — read its count as an upper bound.
 
+A CI gate that only counts findings passes such a run, with fewer findings than
+a complete one. `--require-complete` makes coverage part of the gate: a run in
+which any selected rule is in `skipped[]` or `degraded[]` exits **2** (not run),
+naming each rule and why on stderr, while the JSON payload is written as usual.
+
 An unqualified name is not judged unless `lint.search_path` names the schemas
 to look in, and an unqualified routine call is not judged even then: `now()` is
 `pg_catalog`'s and no configuration makes that enumerable.
