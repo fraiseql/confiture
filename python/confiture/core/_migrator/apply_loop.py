@@ -361,18 +361,23 @@ def _apply_one(
 
 
 def _errors(applied: _Applied) -> list[str]:
-    """Why the loop stopped short — never empty when it did, so ``success=False`` says why."""
+    """Why the loop stopped short — never empty when it did, so ``success=False`` says why.
+
+    A halt and a failure can both happen — a rehearsal halts, then its savepoint
+    cannot be released — and then both are reported, the halt first.
+    """
+    errors: list[str] = []
+    if applied.halted:
+        stopped = applied.skipped_superuser[0]
+        left = len(applied.pending_after_halt)
+        errors.append(
+            f"Halted at {stopped.version}_{stopped.name}: it declares requires_superuser=True. "
+            f"Apply it with `confiture migrate apply-as <role> {stopped.version}`, then re-run "
+            f"`confiture migrate up`; {left} migration{'' if left == 1 else 's'} left pending."
+        )
     if applied.failure is not None:
-        return [str(applied.failure) or type(applied.failure).__name__]
-    if not applied.halted:
-        return []
-    stopped = applied.skipped_superuser[0]
-    left = len(applied.pending_after_halt)
-    return [
-        f"Halted at {stopped.version}_{stopped.name}: it declares requires_superuser=True. "
-        f"Apply it with `confiture migrate apply-as <role> {stopped.version}`, then re-run "
-        f"`confiture migrate up`; {left} migration{'' if left == 1 else 's'} left pending."
-    ]
+        errors.append(str(applied.failure) or type(applied.failure).__name__)
+    return errors
 
 
 def _up_result(plan: _Plan, applied: _Applied, *, force: bool) -> MigrateUpResult:

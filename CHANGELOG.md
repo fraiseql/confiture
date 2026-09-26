@@ -27,7 +27,8 @@ run and the `--dry-run-execute` rehearsal both did it.
   <version>_<name>: it declares requires_superuser=True. Apply it with
   `confiture migrate apply-as <role> <version>`, then re-run `confiture migrate
   up`; N migrations left pending.` A migration that raised an exception with an
-  empty message reports the exception's type instead of `""`.
+  empty message reports the exception's type instead of `""`. A rehearsal that
+  halts and then cannot release its savepoint reports both, the halt first.
   `migrate-up.schema.json` states it: `success: false` requires `errors` with at
   least one item. The exit codes are unchanged (a halt exits `1`, a failed
   migration `3`).

@@ -140,3 +140,27 @@ def test_has_errors_is_the_failure_outcome_not_the_failure_channel() -> None:
     result = MigrateUpResult(success=False, migrations_applied=[], total_duration_ms=1)
 
     assert result.has_errors is True
+
+
+def test_a_rehearsal_that_halts_and_then_fails_to_release_reports_both(tmp_path):
+    """The savepoint failure is added to the halt, not put in its place."""
+    session, files = _session(tmp_path, count=2)
+    classes = {
+        files[0]: _migration("001", "m1", requires_superuser=True),
+        files[1]: _migration("002", "m2"),
+    }
+    execute = session._conn.execute
+
+    def release_fails(sql, *args, **kwargs):
+        if str(sql).startswith("RELEASE"):
+            raise RuntimeError("connection lost")
+        return execute(sql, *args, **kwargs)
+
+    session._conn.execute = MagicMock(side_effect=release_fails)
+
+    result = _up(session, classes, dry_run_execute=True)
+
+    _assert_failed_with_errors(result)
+    assert len(result.errors) == 2
+    assert "Halted at 001_m1" in result.errors[0]
+    assert result.errors[1] == "connection lost"

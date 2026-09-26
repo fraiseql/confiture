@@ -60,7 +60,9 @@ The run did not finish, so it is not a success: `MigrateUpResult.success` is
 the chain, the `apply-as` command and how many migrations are left in `pending`
 (the versions themselves are in `pending`, the halted one in
 `skipped_superuser`). `--dry-run-execute` halts where `up` would, and reports it
-the same way.
+the same way. The `migrate up --format json` payload, abridged to the fields a halt
+fills (the full shape is
+[migrate-up.schema.json](../reference/json-schemas/migrate-up.schema.json)):
 
 ```json
 {
