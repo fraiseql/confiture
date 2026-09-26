@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tests.unit.linting.tenant_projects import TENANCY, findings
+from tests.unit.linting.tenant_projects import SCOPED, TENANCY, findings
 
 from confiture.core.linting.rule_registry import LINT_RULES, resolve_selection
 
@@ -188,3 +188,49 @@ def test_discriminators_that_reference_different_root_columns_are_reported(
     assert finding.object_name == "management.tb_organization"
     assert "code" in finding.message
     assert "id" in finding.message
+
+
+def test_a_root_the_tree_does_not_declare_is_one_finding_naming_it(tmp_path: Path) -> None:
+    """A typo in ``tenancy.root`` (#468) is one finding that names the table it
+    names, not a cascade: the real table of tenants is not "missing tenant_id",
+    and no discriminator is told to reference a table that does not exist."""
+    findings, _ = _findings(
+        tmp_path,
+        f"CREATE TABLE app.tb_order (id uuid PRIMARY KEY, {SCOPED});\n"
+        "CREATE TABLE app.tb_order_line (id uuid PRIMARY KEY);\n",
+        project_yaml="tenancy:\n  root: management.nope\n  global_schemas: [catalog]\n",
+    )
+
+    root, unscoped = findings
+    assert root.object_name == "management.nope"
+    assert "management.nope" in root.message
+    assert root.file_path == "db/project.yaml"
+    assert "management.tb_organization" in (root.suggested_fix or "")
+    assert unscoped.object_name == "app.tb_order_line"
+    assert "nope" not in (unscoped.suggested_fix or "")
+
+
+def test_a_quoted_root_whose_schema_holds_a_dot_is_the_root(tmp_path: Path) -> None:
+    findings, _ = _findings(
+        tmp_path,
+        'CREATE SCHEMA "my.schema";\n'
+        'CREATE TABLE "my.schema".tb_org (id uuid PRIMARY KEY);\n'
+        "CREATE TABLE app.tb_order (id uuid PRIMARY KEY, "
+        'tenant_id uuid NOT NULL REFERENCES "my.schema".tb_org (id));\n',
+        project_yaml="tenancy:\n  root: '\"my.schema\".tb_org'\n  global_schemas: [management]\n",
+    )
+
+    assert findings == []
+
+
+def test_a_tenancy_block_with_no_body_runs_with_the_defaults(tmp_path: Path) -> None:
+    """``tenancy:`` alone is the block, declared (#468): the rules run with every
+    default, and none is skipped for a block that is there."""
+    findings, report = _findings(
+        tmp_path,
+        "CREATE TABLE app.tb_order_line (id uuid PRIMARY KEY);\n",
+        project_yaml="tenancy:\n",
+    )
+
+    assert "app.tb_order_line" in [f.object_name for f in findings]
+    assert report.skipped == []

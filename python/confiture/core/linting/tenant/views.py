@@ -160,7 +160,7 @@ class ViewScopes:
         """Every view whose tenancy is undecided, or declared in a way that cannot hold."""
         for key in self.views:
             self.verdict(key)
-        return sorted(self._findings, key=lambda f: (f.file or "", f.line))
+        return sorted(self._findings, key=lambda f: (f.file or "", f.line or 0))
 
     def verdict(self, key: Key) -> Verdict:
         """The scope of view *key*, computed once; a finding is recorded on the way."""

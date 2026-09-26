@@ -3,7 +3,9 @@
 An environment file says how to reach one database. What the schema *is* — which
 column scopes a row to a tenant, which table holds the tenants, which schemas are
 shared reference data — is the same in every environment, so it is written once
-here. The file is optional: without it confiture assumes nothing about tenants.
+here. The file is optional: without it, or with nothing in it, confiture assumes
+nothing about tenants. A malformed file is refused as a malformed environment file
+is, ``CONFIG_001`` (#468).
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from confiture.config.environment import _read_config_yaml
+from confiture.core import sql_lexer
 from confiture.exceptions import ConfigurationError
 
 #: Where the project file lives, relative to the project directory.
@@ -26,8 +29,9 @@ class TenancyConfig(BaseModel):
 
     Attributes:
         discriminator: The column every tenant-scoped relation carries, ``NOT NULL``.
-        root: The table of tenants, schema-qualified (``management.tb_organization``):
-            its key is the tenant id, so it carries no discriminator of its own.
+        root: The table of tenants, schema-qualified (``management.tb_organization``,
+            or ``"my.schema".tb_org`` quoted as SQL quotes it): its key is the
+            tenant id, so it carries no discriminator of its own.
         global_schemas: Schemas holding shared reference data — every relation in
             them is global, never tenant-scoped.
     """
@@ -38,12 +42,26 @@ class TenancyConfig(BaseModel):
     root: str | None = None
     global_schemas: list[str] = []
 
+    @field_validator("discriminator")
+    @classmethod
+    def _discriminator_is_a_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("tenancy.discriminator must name a column, got an empty name")
+        return value
+
     @field_validator("root")
     @classmethod
     def _root_is_qualified(cls, value: str | None) -> str | None:
-        if value is not None and value.count(".") != 1:
-            raise ValueError(f"tenancy.root must be schema-qualified (schema.table), got {value!r}")
-        return value
+        """Read as SQL reads a name, so a dot inside a quoted part is not counted (#468)."""
+        if value is None:
+            return value
+        match sql_lexer.name_parts(value):
+            case [_schema, _table]:
+                return value
+            case _:
+                raise ValueError(
+                    f"tenancy.root must be schema-qualified (schema.table), got {value!r}"
+                )
 
 
 class ProjectConfig(BaseModel):
@@ -67,14 +85,20 @@ class ProjectConfig(BaseModel):
 def load_project_config(project_dir: Path = Path()) -> ProjectConfig:
     """The project's ``db/project.yaml``, or an empty :class:`ProjectConfig` when absent.
 
+    An empty (or comment-only) file declares no block. A block written with no
+    body (``tenancy:`` alone) is declared, with its defaults: the key is there,
+    and YAML reading it as ``null`` does not make it absent.
+
     Raises:
-        ConfigurationError: The file is not a mapping, names a key confiture does
-            not know, or a value is malformed — a typo is never an empty success.
+        ConfigurationError: ``CONFIG_001``, as for an environment file — the file
+            is not a mapping, names a key confiture does not know, or a value is
+            malformed. A typo is never an empty success.
     """
     path = Path(project_dir) / PROJECT_FILE
     if not path.is_file():
         return ProjectConfig()
-    data = _read_config_yaml(path)
+    data = _read_config_yaml(path, allow_empty=True)
+    data |= {block: {} for block in ProjectConfig.model_fields if data.get(block, ()) is None}
     try:
         return ProjectConfig.model_validate(data)
     except ValidationError as exc:
@@ -83,6 +107,5 @@ def load_project_config(project_dir: Path = Path()) -> ProjectConfig:
         )
         raise ConfigurationError(
             f"Invalid {PROJECT_FILE.as_posix()}: {problems}",
-            error_code="CONFIG_010",
             resolution_hint="See docs/reference/configuration.md#dbprojectyaml",
         ) from exc

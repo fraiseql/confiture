@@ -61,14 +61,59 @@ def test_the_discriminator_defaults_to_tenant_id(tmp_path: Path) -> None:
         "tenancy:\n  discriminatr: org_id\n",  # a typo is never an empty success
         "tenants: {}\n",
         "tenancy:\n  root: tb_organization\n",  # root is schema-qualified
+        "tenancy:\n  root: a.b.c\n",
+        "tenancy:\n  root: 'a.b; DROP TABLE x'\n",
+        "tenancy:\n  discriminator: ''\n",
+        "tenancy:\n  discriminator: '  '\n",
+        "- tenancy\n",
+        "tenancy: [\n",
     ],
-    ids=["unknown-tenancy-key", "unknown-top-level-key", "unqualified-root"],
+    ids=[
+        "unknown-tenancy-key",
+        "unknown-top-level-key",
+        "unqualified-root",
+        "three-part-root",
+        "root-not-a-name",
+        "empty-discriminator",
+        "blank-discriminator",
+        "not-a-mapping",
+        "not-yaml",
+    ],
 )
 def test_a_malformed_project_file_is_refused(tmp_path: Path, text: str) -> None:
+    """Refused as an environment file is, ``CONFIG_001`` — never ``CONFIG_010``,
+    which is the unset database URL a script branching on the code would read (#468)."""
     _write(tmp_path, text)
 
-    with pytest.raises(ConfigurationError, match=r"db/project\.yaml"):
+    with pytest.raises(ConfigurationError, match=r"db/project\.yaml") as refused:
         load_project_config(tmp_path)
+
+    assert refused.value.error_code == "CONFIG_001"
+
+
+@pytest.mark.parametrize("text", ["", "\n", "# nothing declared yet\n"])
+def test_an_empty_project_file_declares_no_block(tmp_path: Path, text: str) -> None:
+    _write(tmp_path, text)
+
+    assert load_project_config(tmp_path) == ProjectConfig()
+
+
+def test_a_tenancy_block_with_no_body_is_declared_with_the_defaults(tmp_path: Path) -> None:
+    _write(tmp_path, "tenancy:\n")
+
+    config = load_project_config(tmp_path)
+
+    assert config.tenancy == TenancyConfig()
+    assert config.declared_blocks() == frozenset({"tenancy"})
+
+
+def test_a_quoted_root_may_hold_a_dot(tmp_path: Path) -> None:
+    _write(tmp_path, "tenancy:\n  root: '\"my.schema\".tb_org'\n")
+
+    tenancy = load_project_config(tmp_path).tenancy
+
+    assert tenancy is not None
+    assert tenancy.root == '"my.schema".tb_org'
 
 
 def test_an_environment_file_carrying_tenancy_is_refused_and_pointed_at_the_project_file(
