@@ -23,6 +23,7 @@ from confiture.config.environment import Environment
 from confiture.core import builder as _core_builder
 from confiture.core import sql_lexer
 from confiture.core.builder import files_under
+from confiture.core.linting import seed_secrets
 from confiture.core.linting.inventory import (
     Inventory,
     SchemaObject,
@@ -32,6 +33,8 @@ from confiture.core.linting.inventory import (
     label_for,
 )
 from confiture.core.linting.rule_registry import LINT_RULES, UNPARSEABLE_RULE_ID
+from confiture.core.linting.seed_secrets import SECRET_COLUMN_PATTERNS
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import blank_copy_blocks, blank_preserving_lines
 from confiture.exceptions import ConfiturError
 
@@ -171,6 +174,7 @@ class LintConfig:
         check_documentation: bool = True,
         check_restatements: bool = False,
         check_security: bool = True,
+        check_seed_secrets: bool = True,
         check_tenant_isolation: bool = False,
         check_acl_coverage: bool = True,
         check_duplicates: bool = True,
@@ -197,6 +201,8 @@ class LintConfig:
                 it is a heuristic and a correct comment that happens to restate
                 the name is a false positive.
             check_security: Check for security issues (passwords, tokens)
+            check_seed_secrets: Report a credential written as a literal in
+                the tree — a seed row's value or a role's password (``sec_003``)
             check_tenant_isolation: Detect INSERTs missing tenant FK columns
                 (multi-tenant rule, ``tenant_001``). Opt-in (default off).
             check_acl_coverage: Allow the ACL coverage rule (``acl_001``) to run.
@@ -239,6 +245,7 @@ class LintConfig:
         self.check_documentation = check_documentation
         self.check_restatements = check_restatements
         self.check_security = check_security
+        self.check_seed_secrets = check_seed_secrets
         self.check_tenant_isolation = check_tenant_isolation
         self.check_acl_coverage = check_acl_coverage
         self.check_duplicates = check_duplicates
@@ -315,6 +322,7 @@ class SchemaLinter:
         self._file_objects: list[SchemaObject] = []
         self._file_schemas: list[SchemaObject] = []
         self._source_cache: list[tuple[str | None, str]] | None = None
+        self._written_cache: list[tuple[str | None, str]] | None = None
 
     def lint(self, schema: str | None = None) -> LintReport:
         """Run linting and return report.
@@ -331,6 +339,7 @@ class SchemaLinter:
             return report
 
         self._source_cache = None
+        self._written_cache = None
         # Use provided schema or load from files
         if schema is not None:
             self._schema_sql = schema
@@ -391,6 +400,7 @@ class SchemaLinter:
             (self.config.check_documentation, self._check_documentation, "doc"),
             (self.config.check_restatements, self._check_restatements, "doc"),
             (self.config.check_security, self._check_security, "security"),
+            (self.config.check_seed_secrets, self._check_seed_secrets, "security"),
             (self.config.check_duplicates, self._check_duplicates, "build"),
             (
                 self.config.check_qualification or self.config.check_qualification_relations,
@@ -799,17 +809,9 @@ class SchemaLinter:
         what is on disk now.
         """
         if self._source_cache is None:
-            self._source_cache = (
-                [(None, blank_copy_blocks(self._schema_sql or ""))]
-                if not self._schema_files
-                else [
-                    (
-                        label_for(path, self.project_dir),
-                        blank_copy_blocks(path.read_text(encoding="utf-8")),
-                    )
-                    for path in self._schema_files
-                ]
-            )
+            self._source_cache = [
+                (label, blank_copy_blocks(text)) for label, text in self._written_sources()
+            ]
         return self._source_cache
 
     @staticmethod
@@ -920,17 +922,9 @@ class SchemaLinter:
 
     def _check_security(self, report: LintReport) -> None:
         """Columns whose names suggest sensitive data, read from the inventory."""
-        security_patterns = [
-            (r"password", "password"),
-            (r"token", "token"),
-            (r"secret", "secret"),
-            (r"api_key", "API key"),
-            (r"credit_card", "credit card"),
-            (r"ssn", "social security number"),
-        ]
         for table in self._inventory.tables:
             for column in table.columns:
-                for pattern, description in security_patterns:
+                for pattern, description in SECRET_COLUMN_PATTERNS:
                     if not re.search(pattern, column.name, re.IGNORECASE):
                         continue
                     report.add_violation(
@@ -948,6 +942,61 @@ class SchemaLinter:
                             line_number=column.line,
                         )
                     )
+
+    def _check_seed_secrets(self, report: LintReport) -> None:
+        """``sec_003``: a credential written as a literal — a seed row, a role password.
+
+        Reads each file *as written*: a ``COPY`` block's rows are data this rule
+        exists to read, so the blanked text every other rule reads would hide
+        them. The finding names the row, never the value.
+        """
+        columns = {
+            (table.schema or DEFAULT_SCHEMA, table.name): tuple(c.name for c in table.columns)
+            for table in self._inventory.tables
+        }
+
+        def table_columns(schema: str | None, table: str) -> tuple[str, ...] | None:
+            return columns.get((schema or DEFAULT_SCHEMA, table))
+
+        for label, text in self._written_sources():
+            for finding in seed_secrets.findings_in(text, table_columns):
+                report.add_violation(
+                    LintViolation(
+                        rule_id="sec_003",
+                        rule_name="Credential In Seed",
+                        severity=RuleSeverity.WARNING,
+                        object_type="value",
+                        object_name=finding.subject,
+                        message=(
+                            f"{finding.subject}: a {finding.kind} written as a literal "
+                            f"({finding.length} characters) — the file is committed, so "
+                            "the value is in git history and in every database it seeds"
+                        ),
+                        suggested_fix=(
+                            "Store a hash, or load the value from the environment when "
+                            "the seed is applied"
+                        ),
+                        file_path=label,
+                        line_number=finding.line,
+                    )
+                )
+
+    def _written_sources(self) -> list[tuple[str | None, str]]:
+        """``(label, text)`` per file as written — ``COPY`` rows kept — read once per lint.
+
+        :meth:`_sources` is these, blanked; a rule that reads the data itself
+        (``sec_003``) takes them as they are. One trip to disk serves both.
+        """
+        if self._written_cache is None:
+            self._written_cache = (
+                [(None, self._schema_sql or "")]
+                if not self._schema_files
+                else [
+                    (label_for(path, self.project_dir), path.read_text(encoding="utf-8"))
+                    for path in self._schema_files
+                ]
+            )
+        return self._written_cache
 
     @staticmethod
     def _is_snake_case(identifier: str) -> bool:

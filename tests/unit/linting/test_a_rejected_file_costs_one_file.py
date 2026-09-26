@@ -190,6 +190,7 @@ class TestTheBlindedRulesSaySo:
             "doc_003",
             "doc_004",
             "sec_001",
+            "sec_003",
             "build_001",
             "build_002",
             "build_003",
