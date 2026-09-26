@@ -18,8 +18,6 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
-import pglast
-import pglast.parser
 import pytest
 from typer.testing import CliRunner
 
@@ -379,23 +377,6 @@ class TestTheHonestFallback:
         assert "the line given is the routine's" not in finding.message
 
 
-def _body_is_unreadable(statement: str) -> bool:
-    """Whether *this* libpg_query refuses the body — probed, not looked up.
-
-    The shapes this file pins are **pglast 8's alone**: 6.16 and 7.18 resolve a
-    schema-qualified type and serialise a trigger function's datums as valid
-    JSON, and the ``[ast]`` extra accepts all three majors. What `build_003`
-    promises on every one of them — that a body it did not read is named — is
-    asserted unconditionally; what it degrades *on* differs, and asking is the
-    only honest way to know which.
-    """
-    try:
-        pglast.parse_plpgsql(statement)
-    except (pglast.parser.ParseError, json.JSONDecodeError):
-        return True
-    return False
-
-
 ISSUE_270_TYPES = """CREATE SCHEMA IF NOT EXISTS app;
 
 CREATE TYPE app.type_input AS (nom TEXT);
@@ -424,10 +405,25 @@ BEGIN FOR r IN SELECT id FROM public.tv_d LOOP NULL; END LOOP; RETURN NULL; END;
 """
 
 
+#: Refused by every libpg_query for a reason no rewrite explains: the loop
+#: variable is never declared. The array of a user-defined type in its
+#: signature is read on every major (#453), so it is not why.
 REFUSED_ROUTINE_ALONE = """CREATE OR REPLACE FUNCTION app.m_z(input_data app.type_input[])
 RETURNS VOID LANGUAGE plpgsql AS $$
-DECLARE r RECORD;
 BEGIN FOR r IN SELECT id FROM public.tv_z LOOP NULL; END LOOP; END; $$;
+"""
+
+#: #453's reproduction: an array of a user-defined type, qualified, bare and
+#: ``public.``, as a parameter, a variable and a return type.
+ISSUE_453_ROUTINES = """CREATE OR REPLACE FUNCTION app.m_y(input_data app.type_input[])
+RETURNS app.mutation_response[] LANGUAGE plpgsql AS $$
+DECLARE r RECORD; v_items app.type_input[];
+BEGIN FOR r IN SELECT id FROM public.tv_y LOOP NULL; END LOOP; RETURN NULL; END; $$;
+
+CREATE OR REPLACE FUNCTION app.m_x(input_data type_input[], extra public.type_input[])
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE r RECORD;
+BEGIN FOR r IN SELECT id FROM public.tv_x LOOP NULL; END LOOP; END; $$;
 """
 
 REFUSED_ROUTINES = (
@@ -441,10 +437,6 @@ BEGIN FOR r IN SELECT id FROM public.tv_d LOOP NULL; END LOOP; RETURN NULL; END;
 )
 
 
-@pytest.mark.skipif(
-    not _body_is_unreadable(REFUSED_ROUTINE_ALONE),
-    reason="this libpg_query resolves an array of a type it does not know",
-)
 class TestARoutineTheCompilerRefuses:
     """A body libpg_query will not return is named, whatever stopped it (#270).
 
@@ -454,14 +446,11 @@ class TestARoutineTheCompilerRefuses:
     `ParseError` arm did the third of those: the routine contributed no names,
     produced no finding, and reached no degradation either.
 
-    Almost nothing raises here any more. A schema-qualified type is blanked
-    before the compiler sees it (#270), and a trigger function's mis-serialised
-    datums are repaired before the tree is decoded (#272). What is left is
-    refused for a reason no rewrite explains: naming an array type means
-    resolving its element type, and an element the stub cannot resolve comes
-    back as `record`, which PL/pgSQL declines as `_record`. That happens to
-    `public.type_input[]` and to a bare `type_input[]` exactly as it happens
-    here, so it is a hole with no catalogue-free bottom — and an audible one.
+    Almost nothing raises here any more. A schema-qualified type and an array
+    suffix are blanked before the compiler sees them (#270, #453), and a
+    trigger function's mis-serialised datums are repaired before the tree is
+    decoded (#272). What is left is a body wrong in itself — here, a loop
+    variable never declared — which every libpg_query refuses.
     """
 
     def _payload(self, *args: str) -> dict:
@@ -603,6 +592,38 @@ $$;
         (finding,) = self._payload()["violations"]["items"]
 
         assert finding["line"] == 6
+
+
+class TestAnArrayOfAUserDefinedType:
+    """#453: a routine taking an array of a user-defined type is read on pglast 8.
+
+    The stub resolved the element to `record` and the array to `_record`, which
+    PL/pgSQL refuses, so the body went unread and was reported as degraded.
+    """
+
+    def _payload(self) -> dict:
+        result = runner.invoke(
+            app, ["lint", "--select", "build_003", "--format", "json", "--fail-on", "never"]
+        )
+        assert result.exit_code == 0, result.output
+        return json.loads(result.stdout)
+
+    def test_both_report(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": ISSUE_453_ROUTINES})
+
+        assert sorted(i["location"] for i in self._payload()["violations"]["items"]) == [
+            "app.m_x(type_input[], public.type_input[]) -> public.tv_x",
+            "app.m_y(app.type_input[]) -> public.tv_y",
+        ]
+
+    def test_nothing_is_reported_as_unread(self, in_tmp: Path) -> None:
+        _project(in_tmp, {"001_types.sql": ISSUE_270_TYPES, "010_fn.sql": ISSUE_453_ROUTINES})
+
+        unread = [
+            d for d in self._payload()["degraded"] if d["reason"].startswith("could not read")
+        ]
+
+        assert unread == []
 
 
 ISSUE_272_ROUTINES = """CREATE OR REPLACE FUNCTION app.trg_audit()

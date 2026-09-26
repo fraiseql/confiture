@@ -153,8 +153,9 @@ parse cost that file rather than the build.
 **One PL/pgSQL compiler call** — `core/plpgsql_parse.parse_body()` returns
 `Compiled(tree, text, neutralised, repaired)`; `tests/unit/test_plpgsql_parse.py` pins
 the two shapes pglast 8 gets wrong. Its catalogue stub refuses any schema-qualified type
-outside `pg_catalog`/`public`, so the qualifier is blanked with spaces (offsets kept),
-and which one to blank is the compiler's answer — each blank is tested by putting it
+outside `pg_catalog`/`public` and resolves an array of an unknown type to `_record`,
+so the qualifier and the array suffix are blanked with spaces (offsets kept),
+and which ones to blank is the compiler's answer — each blank is tested by putting it
 back — never a model of PL/pgSQL's grammar. Its serialiser writes a trigger's implicit
 `TG_*` datums as `{}}`, so the stray brace is deleted at the position
 `json.JSONDecodeError.pos` names, only when the characters there are that defect; a
@@ -502,7 +503,7 @@ confiture/
 │   │   ├── path_globs.py         # The one path matcher: does this path, relative to its include directory…
 │   │   ├── pgtap_generator.py    # Generate pgTAP test scaffolds from PostgreSQL functions
 │   │   ├── plpgsql_fragments.py  # Every SQL fragment in a compiled PL/pgSQL body, read by the statement i…
-│   │   ├── plpgsql_parse.py      # Compiling a PL/pgSQL body with a compiler that has no catalogue (issues…
+│   │   ├── plpgsql_parse.py      # Compiling a PL/pgSQL body with a compiler that has no catalogue (#270,…
 │   │   ├── preconditions.py      # Migration preconditions for fail-fast validation
 │   │   ├── preflight.py          # Pre-flight migration checks
 │   │   ├── progress.py           # Progress tracking for long-running operations

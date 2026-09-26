@@ -7,7 +7,9 @@ The **compiler** stubs out PostgreSQL's catalogue. Its `LookupExplicitNamespace`
 resolves `pg_catalog` and `public`; every other schema is `Not implemented`, so
 a type name carrying one of those qualifiers takes the whole routine down before
 a line of its body is read — which is how `build_003` came to skip 78.5 % of the
-routines on the schema #270 was filed from, silently.
+routines on the schema #270 was filed from, silently. The same stub resolves a
+type it does not know to `record` and an array of one to `_record`, which
+PL/pgSQL refuses as a parameter, a return type or a variable (#453).
 
 The **serialiser** writes a trigger function's implicit `TG_*` datums as `{}}`,
 one closing brace too many each, so `json.loads` never reaches the tree and
@@ -21,13 +23,14 @@ asks rather than models:
 
 - **a qualifier libpg_query accepts is never blanked** — `app.tv_summary`
   reduced to `tv_summary` is a name `build_003` declines to judge, which is
-  #270's silent miss moved one step along;
+  #270's silent miss moved one step along — and neither is an array suffix it
+  accepts, nor a subscript in the body;
 - **a serialisation that decodes is never edited** — the same three characters
   spell a legitimate implicit `RETURN` in very nearly every body, so a global
   replace breaks the routines that were never broken.
 
 Both defects are **pglast 8's alone**, measured: pglast 6.16 and 7.18 compile
-every shape in `REFUSED` and in `STILL_REFUSED` and return a trigger body as
+every shape in `REFUSED` and return a trigger body as
 valid JSON, and the `[ast]` extra accepts all three majors. So which facts hold
 is discovered by probing this interpreter's libpg_query, never from a version
 number — the same "ask the parser" rule the module itself follows, and the one
@@ -45,7 +48,8 @@ import pglast
 import pglast.parser
 import pytest
 
-from confiture.core.plpgsql_parse import _STRAY, parse_body
+from confiture.core.plpgsql_fragments import fragments
+from confiture.core.plpgsql_parse import _STRAY, Compiled, parse_body
 
 #: The serialiser's name for a fragment of SQL, which is what a body is read for.
 _EXPR = "PLpgSQL_expr"
@@ -71,20 +75,43 @@ REFUSED: dict[str, str] = {
         "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
         "BEGIN\n  DECLARE v app.resp; BEGIN NULL; END;\nEND; $$"
     ),
-}
-
-#: One row per shape libpg_query refuses for a reason that is **not** a schema
-#: qualifier, so neutralising one cannot help. An array's element type has to be
-#: resolved to name the array type, and an element the stub cannot resolve comes
-#: back as `record`; `_record` is a type PL/pgSQL declines. That happens to
-#: `public.foo[]` and to a bare `foo[]` exactly as it happens to `app.foo[]`, and
-#: telling `foo[]` from `text[]` needs the catalogue nobody here has. It is a
-#: real hole in `build_003`'s coverage and, since #270's first half, an audible
-#: one: the routine is named in the report's `degraded` entry.
-STILL_REFUSED: dict[str, str] = {
-    "array of an unresolvable type": f"CREATE FUNCTION app.f(p app.type_input[]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
-    "array of an unresolvable public type": f"CREATE FUNCTION app.f(p public.type_input[]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
-    "array of an unresolvable unqualified type": f"CREATE FUNCTION app.f(p type_input[]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    # A schema or a type whose name is a keyword the grammar still accepts as
+    # a name: `catalog` scans as `CATALOG_P`, `type` as `TYPE_P`, not as `IDENT`.
+    "schema named by a keyword": f"CREATE FUNCTION app.f(p catalog.type_input) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "type named by a keyword": f"CREATE FUNCTION app.f(p app.type) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    # An array of a type the stub cannot resolve (#453). Naming the array type
+    # means resolving its element, the stub resolves an unknown element to
+    # `record`, and `_record` is a type PL/pgSQL declines — so the array
+    # suffix is in the way whether or not a qualifier is.
+    "array parameter": f"CREATE FUNCTION app.f(p app.type_input[]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "array parameter, public": f"CREATE FUNCTION app.f(p public.type_input[]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "array parameter, unqualified": f"CREATE FUNCTION app.f(p type_input[]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "array parameter, bounded": f"CREATE FUNCTION app.f(p type_input[3]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "array parameter, two dimensions": f"CREATE FUNCTION app.f(p app.type_input[][]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "array parameter, ARRAY": f"CREATE FUNCTION app.f(p app.type_input ARRAY) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "array parameter, ARRAY[n]": f"CREATE FUNCTION app.f(p app.type_input ARRAY[3]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "array parameter with a default": f"CREATE FUNCTION app.f(p type_input[] DEFAULT '{{}}') RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "array out parameter": f"CREATE FUNCTION app.f(OUT p app.type_input[]) LANGUAGE plpgsql AS {_BODY}",
+    "array procedure parameter": f"CREATE PROCEDURE app.p(INOUT p app.type_input[]) LANGUAGE plpgsql AS {_BODY}",
+    "array return": f"CREATE FUNCTION app.f() RETURNS app.resp[] LANGUAGE plpgsql AS {_BODY}",
+    "array setof return": f"CREATE FUNCTION app.f() RETURNS SETOF app.resp[] LANGUAGE plpgsql AS {_BODY}",
+    "array returns table": f"CREATE FUNCTION app.f() RETURNS TABLE(x resp[]) LANGUAGE plpgsql AS {_BODY}",
+    "array declared variable": (
+        "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
+        "DECLARE v app.resp[];\nBEGIN NULL; END; $$"
+    ),
+    "array declared variable, unqualified": (
+        "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
+        "DECLARE v resp[] := '{}';\nBEGIN NULL; END; $$"
+    ),
+    "array declared variable in a sub-block": (
+        "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
+        "BEGIN\n  DECLARE v app.resp[]; BEGIN NULL; END;\nEND; $$"
+    ),
+    # pglast 8's stub cannot tell that *any* type is an array when asked of a
+    # VARIADIC parameter — `text[]` included — so it refuses every one.
+    "variadic parameter": f"CREATE FUNCTION app.f(VARIADIC p text[]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "variadic array parameter": f"CREATE FUNCTION app.f(VARIADIC p app.type_input[]) RETURNS void LANGUAGE plpgsql AS {_BODY}",
 }
 
 #: One row per shape libpg_query already accepts. Nothing here should change,
@@ -93,6 +120,11 @@ ACCEPTED: dict[str, str] = {
     "public-qualified type": f"CREATE FUNCTION app.f(p public.type_input) RETURNS void LANGUAGE plpgsql AS {_BODY}",
     "pg_catalog-qualified type": f"CREATE FUNCTION app.f(p pg_catalog.text) RETURNS void LANGUAGE plpgsql AS {_BODY}",
     "unqualified type": f"CREATE FUNCTION app.f(p type_input) RETURNS void LANGUAGE plpgsql AS {_BODY}",
+    "array of a built-in type": f"CREATE FUNCTION app.f(p text[], q int ARRAY) RETURNS uuid[] LANGUAGE plpgsql AS {_BODY}",
+    "declared array of a built-in type": (
+        "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
+        "DECLARE v text[] := ARRAY['a'];\nBEGIN v[1] := 'b'; END; $$"
+    ),
     "qualified rowtype": (
         "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
         "DECLARE v app.tbl%ROWTYPE;\nBEGIN NULL; END; $$"
@@ -147,21 +179,6 @@ def test_an_accepted_shape_is_left_alone(shape: str) -> None:
 
     assert compiled.neutralised == ()
     assert compiled.text == statement
-
-
-@needs_the_stub
-@pytest.mark.parametrize("shape", sorted(STILL_REFUSED))
-def test_a_shape_no_qualifier_explains_still_raises(shape: str) -> None:
-    """Refused for a reason blanking cannot address, and said so rather than shrugged.
-
-    The message is `libpg_query`'s and its wording differs across the majors the
-    ``[ast]`` extra accepts, so nothing here reads it — only that the caller
-    gets the exception it needs to name the routine as unread.
-    """
-    statement = STILL_REFUSED[shape]
-
-    with pytest.raises(pglast.parser.ParseError):
-        parse_body(statement, body_at=_as_at(statement))
 
 
 #: The shape #270 is filed about, with a reference in every place the guess
@@ -318,6 +335,122 @@ class TestTheLexerDecidesWhatIsAName:
         )
 
         assert "app.commented" in parse_body(statement, body_at=_as_at(statement)).text
+
+
+class TestAnArrayOfAnUnknownType:
+    """An array suffix is blanked only where the compiler needs it gone (#453).
+
+    `app.type_input[]` has two things in the stub's way: the qualifier, which it
+    cannot resolve, and the suffix, which asks it for the array of a type it
+    resolved to `record`. Blanking both leaves a scalar the stub accepts as
+    `record`, which nothing downstream reads. Blanking an array of a type the
+    stub *does* know, or a subscript in the body, would be a rewrite with no
+    purpose — so it is put back, the compiler being the one asked.
+    """
+
+    STATEMENT = """CREATE FUNCTION app.fn_bulk(p app.type_input[], tags text[], n int)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+    v_items app.type_input[];
+    v_first app.type_input;
+    v_tags text[] := tags;
+BEGIN
+    v_items := p;
+    v_first := p[1];
+    INSERT INTO app.tb_item (nom) VALUES ((p[1]).nom);
+    INSERT INTO app.tb_item (nom) SELECT i.nom FROM unnest(v_items) AS i;
+    PERFORM app.fn_log(p[n], v_tags[2]);
+END;
+$$"""
+
+    #: `(text, body line)` of every fragment, as pglast 6.16 and 7.18 read the
+    #: statement unrewritten. The datum a default hangs on differs across the
+    #: majors — an unresolved type is a `PLpgSQL_rec` on 8 — so the kind is not
+    #: pinned; what a consumer reads, the SQL and where it is, is.
+    #:
+    #: The composite variables carry no initialiser on purpose. libpg_query
+    #: never serialises a ``PLpgSQL_rec``'s ``default_val``, and on pglast 8 a
+    #: variable of any type the stub cannot resolve is a ``PLpgSQL_rec`` —
+    #: rewritten or not; see :meth:`test_a_composite_initialiser_is_lost_unrewritten_too`.
+    FRAGMENTS: ClassVar[list[tuple[str, int]]] = [
+        ("tags", 5),
+        ("v_items := p", 7),
+        ("v_first := p[1]", 8),
+        ("INSERT INTO app.tb_item (nom) VALUES ((p[1]).nom)", 9),
+        ("INSERT INTO app.tb_item (nom) SELECT i.nom FROM unnest(v_items) AS i", 10),
+        ("SELECT app.fn_log(p[n], v_tags[2])", 11),
+    ]
+
+    def _compiled(self) -> Compiled:
+        return parse_body(self.STATEMENT, body_at=_as_at(self.STATEMENT))
+
+    @needs_the_stub
+    def test_the_compiler_refuses_it_outright(self) -> None:
+        with pytest.raises(pglast.parser.ParseError):
+            pglast.parse_plpgsql(self.STATEMENT)
+
+    @needs_the_stub
+    def test_only_the_unknown_types_qualifiers_and_suffixes_are_blanked(self) -> None:
+        compiled = self._compiled()
+
+        assert [
+            (self.STATEMENT[start:end], self.STATEMENT[end : end + 12].split()[0])
+            for start, end in compiled.neutralised
+        ] == [
+            ("app.", "type_input[]"),
+            ("[]", ","),
+            ("app.", "type_input[]"),
+            ("[]", ";"),
+            ("app.", "type_input;"),
+        ]
+
+    def test_the_fragments_are_read_as_written(self) -> None:
+        """Text and line, exactly what pglast 6 reads from the statement as written."""
+        assert [(f.text, f.line) for f in fragments(self._compiled())] == self.FRAGMENTS
+
+    def test_an_array_constructor_is_never_a_candidate(self) -> None:
+        """``ARRAY[1]`` blanked would leave no expression, so it is not offered.
+
+        Were it offered, the declaration section it sits in would stop
+        compiling whatever else was blanked, and the routine would go unread.
+        """
+        statement = (
+            "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
+            "DECLARE v app.resp[] := ARRAY[]::app.resp[]; w int[] := ARRAY[1];\n"
+            "BEGIN PERFORM app.fn_log(ARRAY(SELECT 1)); END; $$"
+        )
+        compiled = parse_body(statement, body_at=_as_at(statement))
+
+        assert compiled.tree
+        for constructor in ("ARRAY[]", "ARRAY[1]", "ARRAY(SELECT 1)"):
+            assert constructor in compiled.text
+
+    @needs_the_stub
+    def test_a_composite_initialiser_is_lost_unrewritten_too(self) -> None:
+        """A limit of the serialiser, not of the blanking — pinned so it is known.
+
+        ``v t := app.fn_x()`` needs no rewrite at all, and its initialiser is
+        still not in the tree: an unresolved type is a ``PLpgSQL_rec`` on
+        pglast 8, and a record's ``default_val`` is not serialised. A row that
+        starts failing is libpg_query writing it at last.
+        """
+        statement = (
+            "CREATE FUNCTION app.f() RETURNS void LANGUAGE plpgsql AS $$\n"
+            "DECLARE v t := app.fn_x();\nBEGIN NULL; END; $$"
+        )
+        compiled = parse_body(statement, body_at=_as_at(statement))
+
+        assert compiled.neutralised == ()
+        assert [f.text for f in fragments(compiled)] == []
+
+    def test_no_fragment_is_unread(self) -> None:
+        assert [f.finding for f in fragments(self._compiled()) if f.finding] == []
+
+    def test_the_text_handed_over_is_the_same_length(self) -> None:
+        compiled = self._compiled()
+
+        assert len(compiled.text) == len(self.STATEMENT)
+        assert compiled.text.count("\n") == self.STATEMENT.count("\n")
 
 
 #: One row per body whose implicit datums `libpg_query` mis-serialises, with the
@@ -697,9 +830,8 @@ def test_every_plpgsql_routine_in_the_repository_is_read(identity: str) -> None:
     """One row per routine confiture ships, so the one that regressed is named.
 
     5 of these 8 were unread on 1.7.0, all of them triggers. A row that starts
-    failing is a routine `build_003` has stopped checking — either a shape
-    worth repairing here, or one worth adding to `STILL_REFUSED` with the
-    reason it cannot be.
+    failing is a routine `build_003` has stopped checking — a shape worth
+    repairing here, or one to pin with the reason it cannot be.
     """
     statement = dict(ROUTINES)[identity]
 

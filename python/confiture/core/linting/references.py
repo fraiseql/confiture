@@ -504,7 +504,8 @@ def read_body(
         )
     except (pglast.parser.ParseError, json.JSONDecodeError) as exc:
         # A refusal by the PL/pgSQL compiler about this one body, which blanking
-        # a qualifier does not address (#270), or a serialisation that does not
+        # a qualifier or an array suffix does not address (#270, #453), or a
+        # serialisation that does not
         # decode for a reason other than the stray brace repaired for #272:
         # either way what the tree holds is unknown, and an unknown tree is an
         # unread body — named, never half-read and never passed off as clean.
