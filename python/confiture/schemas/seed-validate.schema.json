@@ -1,0 +1,295 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/seed-validate.schema.json",
+  "title": "confiture seed validate --format json",
+  "description": "What `seed validate` found in the seed files. Two shapes: the default checks (INSERT-only files, ON CONFLICT, double semicolons), which the command assembles, and --prep-seed's levels (PrepSeedReport.to_dict), which add scanned_files, uuid_basis, rows_read and violations_by_severity. Exit 1 when violations were found, 0 when none. A seeds directory that does not exist, or --prep-seed levels 4-5 without a database URL, writes the error envelope (error-envelope.schema.json) instead.",
+  "oneOf": [
+    {
+      "type": "object",
+      "description": "The default checks, over --seeds-dir, --env's db/seeds/<env>, or every environment's with --all.",
+      "additionalProperties": false,
+      "required": [
+        "violations",
+        "violation_count",
+        "files_scanned",
+        "has_violations"
+      ],
+      "properties": {
+        "violations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SeedViolation"
+          },
+          "description": "Every finding, file by file; empty when none. Found before --fix ran: a file --fix rewrote is still reported here."
+        },
+        "violation_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_scanned": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The .sql files read."
+        },
+        "has_violations": {
+          "type": "boolean",
+          "description": "True when violation_count > 0 (exit 1)."
+        },
+        "fixes": {
+          "type": "array",
+          "description": "Present only with --fix: each file --fix rewrote, or with --dry-run would rewrite; empty when none needed it.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "file",
+              "fixes_applied",
+              "written"
+            ],
+            "properties": {
+              "file": {
+                "type": "string",
+                "description": "The file, as the violations' file_path names it."
+              },
+              "fixes_applied": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The kinds of fix applied to the file (today one: ON CONFLICT DO NOTHING added to the INSERTs that lacked it)."
+              },
+              "written": {
+                "type": "boolean",
+                "description": "False under --dry-run: the file was left as it was."
+              }
+            }
+          }
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "seed validate",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    },
+    {
+      "type": "object",
+      "description": "--prep-seed: the levels run (--level, --static-only for 1-3, --full-execution for 1-5).",
+      "additionalProperties": false,
+      "required": [
+        "violations",
+        "violation_count",
+        "files_scanned",
+        "scanned_files",
+        "uuid_basis",
+        "rows_read",
+        "has_violations",
+        "violations_by_severity"
+      ],
+      "properties": {
+        "violations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PrepSeedViolation"
+          },
+          "description": "Every finding, in the order the levels found them; empty when none."
+        },
+        "violation_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "files_scanned": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The length of scanned_files."
+        },
+        "scanned_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The files the levels read."
+        },
+        "uuid_basis": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "schema",
+            "convention",
+            null
+          ],
+          "description": "What decided which columns level 1 checked as UUIDs: `schema` (the columns the schema types uuid) or `convention` (id and fk_*_id); null when level 1 did not run."
+        },
+        "rows_read": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "The rows level 1 read, per table as the seed statements name it."
+        },
+        "has_violations": {
+          "type": "boolean",
+          "description": "True when violation_count > 0 (exit 1)."
+        },
+        "violations_by_severity": {
+          "type": "object",
+          "description": "The violations again, grouped by severity; a severity with none is absent.",
+          "propertyNames": {
+            "enum": [
+              "INFO",
+              "WARNING",
+              "ERROR",
+              "CRITICAL"
+            ]
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/PrepSeedViolation"
+            }
+          }
+        },
+        "parser": {
+          "$ref": "_common.schema.json#/$defs/Parser"
+        },
+        "ok": {
+          "type": "boolean",
+          "const": true,
+          "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+        },
+        "command": {
+          "type": "string",
+          "const": "seed validate",
+          "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "SeedViolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pattern",
+        "sql_snippet",
+        "line_number",
+        "file_path",
+        "suggestion",
+        "fix_available"
+      ],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "enum": [
+            "DOUBLE_SEMICOLON",
+            "NON_INSERT_STATEMENT",
+            "MISSING_ON_CONFLICT",
+            "INVALID_UUID_FORMAT",
+            "COLUMN_VALUE_MISMATCH"
+          ]
+        },
+        "sql_snippet": {
+          "type": "string",
+          "description": "The statement that triggered the finding."
+        },
+        "line_number": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "file_path": {
+          "type": "string",
+          "description": "The file, below the directory scanned as its path was given."
+        },
+        "suggestion": {
+          "type": "string"
+        },
+        "fix_available": {
+          "type": "boolean",
+          "description": "True when --fix can rewrite it."
+        }
+      }
+    },
+    "PrepSeedViolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pattern",
+        "severity",
+        "message",
+        "file_path",
+        "line_number",
+        "impact",
+        "fix_available",
+        "suggestion"
+      ],
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "enum": [
+            "SCHEMA_DRIFT_IN_RESOLVER",
+            "MISSING_FK_TRANSFORMATION",
+            "MISSING_RESOLVER_FUNCTION",
+            "MISSING_FK_MAPPING",
+            "PREP_SEED_TARGET_MISMATCH",
+            "INVALID_FK_NAMING",
+            "INVALID_UUID_FORMAT",
+            "UNION_TYPE_MISMATCH",
+            "NULL_FK_AFTER_RESOLUTION",
+            "UNIQUE_CONSTRAINT_VIOLATION",
+            "MISSING_SELF_REFERENCE_HANDLING",
+            "UNION_INLINE_COMMENT",
+            "UNION_UNCAST_NULL",
+            "RESOLVER_NOT_READ",
+            "SEED_UNPARSEABLE",
+            "SEED_NOT_CHECKED",
+            "SEED_ROW_WIDTH"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "INFO",
+            "WARNING",
+            "ERROR",
+            "CRITICAL"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "file_path": {
+          "type": "string"
+        },
+        "line_number": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "impact": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "What happens if it is not fixed; null when unstated."
+        },
+        "fix_available": {
+          "type": "boolean"
+        },
+        "suggestion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

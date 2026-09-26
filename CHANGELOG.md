@@ -33,7 +33,7 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Added
 
-- **Every command that writes JSON publishes its shape.** 48 of the 49 commands
+- **Every command that writes JSON publishes its shape.** All 49 commands
   whose `--format` accepts `json` now have a schema in `python/confiture/schemas/`
   (was 20), each written against payloads the command printed in a real run and
   kept validating by `tests/unit/json_schemas/test_captured_payloads.py`:
@@ -42,7 +42,8 @@ run and the `--dry-run-execute` rehearsal both did it.
   either command); the `test-db` family (`status` writes one shape whether the
   template is current, stale or absent; `ram-setup`'s `action_command` is present
   exactly when `action_required` is); all six `migrate schema-to-schema`
-  subcommands; `seed apply` and `seed generate`; `bootstrap` and
+  subcommands; `seed apply`, `seed generate` and `seed validate` (one shape
+  for the default checks, one for `--prep-seed`); `bootstrap` and
   `migrate baseline` (one shape per mode), `diff`, `install-helpers`,
   `validate-profile` and `migrate apply-as`; `debug cte`; `migrate fix-signatures`
   (one shape per `status`: `clean`, `unfixable`, `dry_run`, `applied`, `partial`,
@@ -67,9 +68,8 @@ run and the `--dry-run-execute` rehearsal both did it.
   so a consumer counting it reads either command.
 - **A guard that every command writing JSON publishes it.** Each command whose
   `--format` accepts `json` has a section in the JSON-schema reference linking a
-  schema that exists, is an alias of one, or is on a shrink-only list that names
-  the defect keeping it off. One remains: `seed validate` (`--fix` prints ahead
-  of the JSON).
+  schema that exists, or is an alias of one. There is no list of exceptions: a
+  command that starts writing JSON publishes its shape in the same change.
 - **The JSON keys consumers read are pinned** (`tests/contract/test_consumer_payload_keys.py`):
   each key a consumer reads off a payload must stay `required` in its schema —
   fraisier's `applied`, `rolled_back`, `marked`, and the error envelope's
@@ -160,6 +160,12 @@ run and the `--dry-run-execute` rehearsal both did it.
   Each `copied[]` row's timestamp was Python's `str()` of it,
   `2026-09-26 13:56:41.386666+02:00`; it is now `2026-09-26T13:56:41.386666+02:00`,
   like every other timestamp a payload carries.
+- **`seed validate --fix --format json` prints only JSON.** It printed a line
+  per fixed file (`~ Would fix 1 issues in …`) to stdout ahead of the report, so
+  the output did not parse. In JSON mode the lines are now the report's
+  `fixes[]` — `{file, fixes_applied, written}` per file, `written: false` under
+  `--dry-run` — since the `violations` are found before the fix runs and were
+  otherwise the only word a consumer got. Text output is unchanged.
 - **A table `migrate diff` pairs as a rename is still compared.** The differ
   emitted `RENAME TABLE` and moved on, so the renamed table's new columns,
   indexes and constraints never reached the generated migration, and the migrated
