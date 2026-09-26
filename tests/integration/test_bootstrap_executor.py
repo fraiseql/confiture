@@ -1,6 +1,6 @@
 """Integration tests for ``BootstrapExecutor`` (issue #137 part 1).
 
-Requires a local PostgreSQL superuser ``postgres``.  Each test
+Requires a superuser connection.  Each test
 provisions a throwaway database, runs the planner + executor, and
 verifies the post-state in pg_catalog.
 """
@@ -11,6 +11,7 @@ from collections.abc import Generator
 
 import psycopg
 import pytest
+from psycopg import sql
 from tests.conftest import drop_roles
 
 from confiture.config.environment import OwnershipApplyTo, OwnershipExpectation
@@ -126,8 +127,12 @@ def test_apply_hands_over_postgres_owned_objects_on_a_standard_cluster(bootstrap
     its own; nothing outside the scope is touched.
     """
     with psycopg.connect(bootstrap_db, autocommit=True) as admin:
-        # Created as `postgres`, the way a migration applied as the superuser leaves them.
-        admin.execute("SET ROLE postgres")
+        # Created as the bootstrap superuser — the role that owns the system catalogs,
+        # whatever its name — the way a migration applied as the superuser leaves them.
+        bootstrap_superuser = admin.execute(
+            "SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = 'pg_class'::regclass"
+        ).fetchone()[0]
+        admin.execute(sql.SQL("SET ROLE {}").format(sql.Identifier(bootstrap_superuser)))
         admin.execute("CREATE TABLE public.tb_widget (id serial PRIMARY KEY, name text)")
         admin.execute("CREATE VIEW public.v_widget AS SELECT id, name FROM public.tb_widget")
         admin.execute(
