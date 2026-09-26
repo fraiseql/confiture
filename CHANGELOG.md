@@ -102,6 +102,13 @@ run and the `--dry-run-execute` rehearsal both did it.
 
 ### Fixed
 
+- **A table `migrate diff` pairs as a rename is still compared.** The differ
+  emitted `RENAME TABLE` and moved on, so the renamed table's new columns,
+  indexes and constraints never reached the generated migration, and the migrated
+  database lacked them. The renamed table is now compared under its new name —
+  every change after the rename runs against it — and added columns are emitted in
+  the order the tree declares them, so a table whose new columns come last ends up
+  exactly as declared (a migrated database read back shows no drift).
 - **The documented JSON matches what the commands write.** The `migrate up`
   example in the structured-output guide showed `execution_time_ms` in each
   `applied[]` entry; the key is `duration_ms`, and the example is now validated

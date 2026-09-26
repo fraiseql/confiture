@@ -8,7 +8,7 @@ This module provides functionality to:
 
 import logging
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import pglast
@@ -351,9 +351,15 @@ class SchemaDiffer:
         old_only = set(old_map) - set(new_map)
         new_only = set(new_map) - set(old_map)
 
+        # A renamed table is still compared: the rename is one change, and what
+        # else the new table declares — columns, indexes, constraints — is more.
         for old_key, new_key in self._renamed_tables(old_only, new_only).items():
             old_table, new_table = old_map[old_key], new_map[new_key]
             changes.append(TableRenamed(old_table, new_table))
+            # Compared under its new name: every change after the rename runs
+            # against a table that no longer answers to the old one.
+            renamed = replace(old_table, name=new_table.name, schema=new_table.schema)
+            changes.extend(self._compare_table(renamed, new_table))
             old_only.discard(old_key)
             new_only.discard(new_key)
 
@@ -361,16 +367,20 @@ class SchemaDiffer:
         changes.extend(TableAdded(new_map[key]) for key in sorted(new_only))
 
         for key in sorted(set(old_map) & set(new_map)):
-            old_table = old_map[key]
-            new_table = new_map[key]
-            changes.extend(self._compare_table_columns(old_table, new_table))
-            changes.extend(self._compare_indexes(old_table, new_table))
-            changes.extend(self._compare_foreign_keys(old_table, new_table))
-            changes.extend(self._compare_check_constraints(old_table, new_table))
-            changes.extend(self._compare_unique_constraints(old_table, new_table))
-            changes.extend(self._compare_exclusion_constraints(old_table, new_table))
+            changes.extend(self._compare_table(old_map[key], new_map[key]))
 
         return changes
+
+    def _compare_table(self, old_table: Table, new_table: Table) -> list[SchemaChange]:
+        """What changed inside one table: columns, indexes and every constraint kind."""
+        return [
+            *self._compare_table_columns(old_table, new_table),
+            *self._compare_indexes(old_table, new_table),
+            *self._compare_foreign_keys(old_table, new_table),
+            *self._compare_check_constraints(old_table, new_table),
+            *self._compare_unique_constraints(old_table, new_table),
+            *self._compare_exclusion_constraints(old_table, new_table),
+        ]
 
     def _renamed_tables(
         self, old_keys: set[tuple[str, str]], new_keys: set[tuple[str, str]]
@@ -476,8 +486,11 @@ class SchemaDiffer:
             for col_name in sorted(old_col_names - new_col_names)
         )
         changes.extend(
-            ColumnAdded(table, new_col_map[col_name])
-            for col_name in sorted(new_col_names - old_col_names)
+            # In declaration order: ADD COLUMN appends, so a table whose new columns
+            # come last ends up in the order the tree declares.
+            ColumnAdded(table, column)
+            for column in new_table.columns
+            if column.folded in new_col_names - old_col_names
         )
 
         for col_name in sorted(old_col_names & new_col_names):
