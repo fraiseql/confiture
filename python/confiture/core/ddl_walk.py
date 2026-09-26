@@ -31,6 +31,7 @@ from pglast.visitors import Visitor
 
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.schema_model import (
+    Column,
     Constraint,
     Deferral,
     GeneratedKind,
@@ -46,6 +47,10 @@ _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
 
 _AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
 _CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
+
+_LIKE_DEFAULTS = _pg_member("TableLikeOption", "CREATE_TABLE_LIKE_DEFAULTS")
+_LIKE_IDENTITY = _pg_member("TableLikeOption", "CREATE_TABLE_LIKE_IDENTITY")
+_LIKE_GENERATED = _pg_member("TableLikeOption", "CREATE_TABLE_LIKE_GENERATED")
 
 #: The two ``SET search_path`` forms that pin it: ``= value`` and ``FROM CURRENT``.
 #: ``TO DEFAULT`` and ``RESET`` leave the caller's path in force.
@@ -682,6 +687,52 @@ def adds_primary_key(cmd: Any) -> bool:
         return False
     definition = getattr(cmd, "def_", None)
     return enum_int(getattr(definition, "contype", None)) == _CONSTR_PRIMARY
+
+
+@dataclass(frozen=True)
+class LikeClause:
+    """``LIKE source [INCLUDING … | EXCLUDING …]`` in a ``CREATE TABLE`` (#467).
+
+    PostgreSQL copies every column of the source into the new table, with its type
+    and its ``NOT NULL``, whatever the options say; a default, an identity and a
+    generation expression only when the clause includes them. The copies are the
+    new table's own columns from then on. A foreign key is never copied, and no
+    constraint or index is read here: ``INCLUDING CONSTRAINTS`` and ``INDEXES``
+    add table facts, not column ones.
+    """
+
+    #: ``schema.name`` of the source, as pglast holds it.
+    source: str
+    defaults: bool
+    identity: bool
+    generated: bool
+
+    def copy(self, column: Column) -> Column:
+        """*column* as the new table holds it: no key of its own, options applied."""
+        return replace(
+            column,
+            primary_key=False,
+            default=column.default if self.defaults else None,
+            identity=column.identity if self.identity else None,
+            generated=column.generated if self.generated else None,
+            generated_kind=column.generated_kind if self.generated else None,
+        )
+
+
+def read_like(node: Any) -> LikeClause | None:
+    """The ``LIKE`` clause *node* is, or ``None`` for any other table element."""
+    if type(node).__name__ != "TableLikeClause":
+        return None
+    source = qualified_relname(getattr(node, "relation", None))
+    if source is None:
+        return None
+    options = enum_int(getattr(node, "options", None)) or 0
+    return LikeClause(
+        source,
+        defaults=bool(options & _LIKE_DEFAULTS),
+        identity=bool(options & _LIKE_IDENTITY),
+        generated=bool(options & _LIKE_GENERATED),
+    )
 
 
 def routine_body(stmt: Any) -> tuple[str | None, str | None]:

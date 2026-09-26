@@ -81,18 +81,18 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-25,516 lines, 34% of `core/`.
+25,712 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
-| `_pglast_enums.py` | 143 | DDL transform |
+| `_pglast_enums.py` | 148 | DDL transform |
 | `change_order.py` | 184 | DDL transform |
 | `change_set/` | 1,267 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 546 | DDL transform |
 | `ddl_clauses.py` | 137 | DDL transform |
 | `ddl_objects.py` | 662 | DDL transform |
-| `ddl_walk.py` | 1,417 | DDL transform |
+| `ddl_walk.py` | 1,468 | DDL transform |
 | `destructive.py` | 180 | DDL transform |
 | `differ.py` | 767 | DDL transform |
 | `differ_sql.py` | 674 | DDL transform |
@@ -103,7 +103,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_signature_checker.py` | 187 | DDL transform |
 | `idempotency/` | 2,712 | DDL transform |
 | `introspection/dependency_graph.py` | 203 | DDL transform |
-| `linting/` | 8,842 | DDL transform |
+| `linting/` | 8,982 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
 | `migration_grant_extractor.py` | 525 | DDL transform |
@@ -124,7 +124,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-41,994 lines, 56% of `core/`.
+41,984 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -140,7 +140,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `cte_debugger.py` | 198 | database orchestration |
 | `dependent_objects.py` | 162 | database orchestration |
 | `desired_state.py` | 73 | database orchestration |
-| `drift.py` | 1,331 | database orchestration |
+| `drift.py` | 1,321 | database orchestration |
 | `dry_run.py` | 239 | database orchestration |
 | `dry_run_summary.py` | 156 | neutral |
 | `error_context.py` | 286 | neutral |

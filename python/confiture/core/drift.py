@@ -20,7 +20,7 @@ from confiture.core import live_catalog
 from confiture.core.ddl_objects import declared_triggers, objects_in
 from confiture.core.ddl_walk import canonical_default
 from confiture.core.desired_state import load_desired_state
-from confiture.core.linting.inventory import Inventory, schema_model
+from confiture.core.linting.inventory import inherit_columns, schema_model
 from confiture.core.locking import LOCK_HOLDER_TABLE
 from confiture.core.schema_analyzer import SchemaAnalyzer
 from confiture.core.schema_model import (
@@ -311,16 +311,6 @@ class ExpectedSchema:
     schemas: frozenset[str]
 
 
-def _inherit_partition_columns(inventory: Inventory) -> None:
-    """A ``PARTITION OF`` child declares no columns: it has its parent's."""
-    for table in inventory.tables:
-        if table.parent and not table.columns:
-            parent_schema, _, parent_name = table.parent.rpartition(".")
-            parent = inventory.find(parent_schema or None, parent_name)
-            if parent is not None:
-                table.columns = list(parent.columns)
-
-
 def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
     """*model* with every unqualified object placed in *default_schema* (#227).
 
@@ -359,8 +349,8 @@ def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> Exp
 
     The lint inventory reads the tree — every column, constraint and index, wherever
     it was written — and an unqualified object belongs to ``default_schema``. A
-    ``PARTITION OF`` child inherits its parent's columns when the parent is in the
-    same DDL. ``CREATE SCHEMA`` declares a schema and no table.
+    ``PARTITION OF`` or ``INHERITS`` child holds its parents' columns when they are
+    in the same DDL, as the live catalog lists them (:func:`inherit_columns`). ``CREATE SCHEMA`` declares a schema and no table.
 
     Raises:
         SchemaError: ``SCHEMA_202`` when pglast rejects the DDL — a parser
@@ -379,7 +369,7 @@ def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> Exp
             resolution_hint="Fix the SQL syntax in the schema file, or regenerate it with `confiture build`.",
         ) from exc
 
-    _inherit_partition_columns(inventory)
+    inventory = inherit_columns(inventory)
     triggers = {trigger_ref(t): t for t in declared_triggers(objects)}
     model = _in_schema(replace(schema_model(inventory), triggers=triggers), default_schema)
     schemas = {default_schema} | {t.schema for t in model.tables.values() if t.schema}

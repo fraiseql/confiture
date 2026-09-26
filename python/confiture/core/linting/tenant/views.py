@@ -145,10 +145,7 @@ class ViewScopes:
         key = object_identity(found[0])
         if key in self.views:
             return self._view_outputs(key)
-        # A partition has its parent's columns, whatever its own CREATE spells.
-        entry = self.scopes.get(key) if found[0].is_partition else None
-        table = entry.table if entry is not None else found[0]
-        return [Output(c.folded, Origin(frozenset({(*key, c.folded)}))) for c in table.columns]
+        return [Output(c.folded, Origin(frozenset({(*key, c.folded)}))) for c in found[0].columns]
 
     def _view_outputs(self, key: Key) -> list[Output] | Unread:
         if key not in self._outputs:
