@@ -149,10 +149,17 @@ def _plaintext(value: object) -> str | None:
 
 
 def _row_label(columns: tuple[str, ...], values: tuple[Any, ...], secret: int, number: int) -> str:
-    """The row, named by its first other literal column — a key, typically."""
+    """The row, named by its first other literal column — a key, typically.
+
+    Never by a column this rule reads for secrets, nor by a value shaped like a
+    key: a label that could be another secret would repeat it (#463).
+    """
     for index, (column, value) in enumerate(zip(columns, values, strict=False)):
-        if index != secret and isinstance(value, str) and value:
-            return f"{column}={value}"
+        if index == secret or not isinstance(value, str) or not value:
+            continue
+        if secret_kind(column) or _KEY_COLUMN.search(column) or looks_like_a_key(value):
+            continue
+        return f"{column}={value}"
     return f"row {number}"
 
 

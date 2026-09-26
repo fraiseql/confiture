@@ -122,8 +122,10 @@ run and the `--dry-run-execute` rehearsal both did it.
   through the one seed reader — into a column named for a secret, a high-entropy
   value in a column named for a key, and `CREATE`/`ALTER ROLE … PASSWORD`. A hash
   or an obvious placeholder is not reported, nor a comment. A finding never repeats
-  the secret: it names the kind, the length and the row by another column, so a
-  `--baseline` can hold it without the value reaching a CI log. It reads the source
+  the secret: it names the kind, the length and the row by another column — never
+  one named for a secret or a key, nor a value shaped like one, so a second secret
+  in the row is not printed either (#463) — so a `--baseline` can hold it without
+  the value reaching a CI log. It reads the source
   tree, not a bundle, and the file text the linter already read — no extra trip to
   disk.
 - **`migrate down`, `migrate reinit` and `migrate rebuild` publish their JSON**:

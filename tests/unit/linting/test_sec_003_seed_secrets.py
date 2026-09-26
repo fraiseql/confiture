@@ -21,6 +21,8 @@ CREATE TABLE app.tb_user (id int PRIMARY KEY, email text, password text);
 CREATE TABLE app.tb_api (id int PRIMARY KEY, name text, signing_key text, sort_key text);
 """
 
+_LOGIN = "CREATE TABLE app.tb_login (password text, api_token text, note text);\n"
+
 
 def _findings(sql: str):
     report = SchemaLinter(env="local").lint(_TABLES + sql)
@@ -44,6 +46,29 @@ def test_the_finding_never_repeats_the_secret() -> None:
     )
 
     assert "hunter22" not in f"{finding.message} {finding.object_name} {finding.suggested_fix}"
+
+
+def test_a_row_is_never_named_by_another_secret() -> None:
+    """Two secrets in one row: neither finding carries the other's value (#463)."""
+    found = _findings(
+        _LOGIN + "INSERT INTO app.tb_login (password, api_token) "
+        "VALUES ('hunter2secret', 'tok_live_9f8a7s6d5f4g3h2j');\n"
+    )
+
+    assert sorted(f.object_name for f in found) == [
+        "app.tb_login.api_token[row 1]",
+        "app.tb_login.password[row 1]",
+    ]
+
+
+def test_a_row_is_never_named_by_a_key_shaped_value() -> None:
+    """A column no rule flags can still hold a key; it does not name the row (#463)."""
+    (finding,) = _findings(
+        _LOGIN + "INSERT INTO app.tb_login (note, password) "
+        "VALUES ('Zk8qP2vN7xR4tW9mB3cJ6hL1', 'hunter2secret');\n"
+    )
+
+    assert finding.object_name == "app.tb_login.password[row 1]"
 
 
 @pytest.mark.parametrize(
