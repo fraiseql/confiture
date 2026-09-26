@@ -145,7 +145,10 @@ class ViewScopes:
         key = object_identity(found[0])
         if key in self.views:
             return self._view_outputs(key)
-        return [Output(c.folded, Origin(frozenset({(*key, c.folded)}))) for c in found[0].columns]
+        # A partition has its parent's columns, whatever its own CREATE spells.
+        entry = self.scopes.get(key) if found[0].is_partition else None
+        table = entry.table if entry is not None else found[0]
+        return [Output(c.folded, Origin(frozenset({(*key, c.folded)}))) for c in table.columns]
 
     def _view_outputs(self, key: Key) -> list[Output] | Unread:
         if key not in self._outputs:
@@ -199,13 +202,13 @@ class ViewScopes:
 
     def _is_discriminator(self, column: tuple[str, str, str]) -> bool:
         """Whether *column* is the tenant id of the tenant table (or root) it belongs to."""
-        entry = self.scopes.tables.get(column[:2])
+        entry = self.scopes.get(column[:2])
         return entry is not None and entry.scope in _TENANT_DATA and column[2] == entry.key
 
     def _is_tenant(self, key: Key) -> bool:
         if key in self.views:
             return self.verdict(key) is not Verdict.GLOBAL
-        entry = self.scopes.tables.get(key)
+        entry = self.scopes.get(key)
         return entry is not None and entry.scope in _TENANT_DATA
 
     def _tenant_reads(self, obj: SchemaObject, read: set[Key]) -> list[str]:

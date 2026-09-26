@@ -15,8 +15,10 @@ the discriminator).
 and every rule of the family reads that answer: ``tenant_002`` here, ``tenant_003``
 in ``views.py``, ``tenant_004`` and ``tenant_005`` in ``keys.py``.
 
-A partition follows its parent: it is judged with the table it belongs to, never
-on its own. A table defined twice is judged once, by its first definition
+A partition follows its parent: it holds the parent's rows, so a view, an
+``INSERT`` or a foreign key that names it is judged as one naming the parent
+(:meth:`TenantScopes.get`), and it is never judged on its own for what the parent
+declares (#466). A table defined twice is judged once, by its first definition
 (:func:`~confiture.core.linting.inventory.distinct`); ``build_001`` reports the
 duplicate.
 """
@@ -24,7 +26,7 @@ duplicate.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -77,6 +79,18 @@ class TableScope:
     #: root's :func:`tenant_id_column`; ``None`` for every other table, and for a
     #: root whose tenant id is undecided.
     key: str | None = None
+    #: The partition a lookup named, when it resolved through one to this table.
+    through: SchemaObject | None = None
+
+    @property
+    def relation(self) -> SchemaObject:
+        """The relation the lookup named: the partition, else the table."""
+        return self.through or self.table
+
+    @property
+    def named(self) -> str:
+        """:attr:`relation`'s name as written, for a finding's message."""
+        return self.relation.qualified
 
 
 @dataclass(frozen=True)
@@ -88,12 +102,40 @@ class TenantScopes:
     declarations: Declarations
     #: ``(file, line)`` of a line of the text the inventory read.
     locate: Callable[[int], tuple[str | None, int]] = lambda line: (None, line)
+    #: Each partition, keyed like :attr:`tables`: judged through its parent.
+    partitions: Mapping[tuple[str, str], SchemaObject] = field(default_factory=dict)
+
+    def get(self, key: tuple[str, str]) -> TableScope | None:
+        """The scope of the relation *key* names — a partition's is its parent's.
+
+        A partition of a partition climbs to the table at the top of its tree; the
+        entry keeps the partition it was named by in ``through``, for a finding
+        to print what the author wrote.
+        """
+        partition = self.partitions.get(key)
+        seen: set[tuple[str, str]] = set()
+        while key in self.partitions and key not in seen:
+            seen.add(key)
+            parent = self.partitions[key].parent
+            if parent is None:
+                return None
+            found = next(
+                (k for k in _held_identities(parent) if k in self.tables or k in self.partitions),
+                None,
+            )
+            if found is None:
+                return None
+            key = found
+        entry = self.tables.get(key)
+        if entry is None or partition is None:
+            return entry
+        return replace(entry, through=partition)
 
     def of(self, held: str | None) -> TableScope | None:
         """The scope of the table a foreign key names, as the parser holds it."""
         if held is None:
             return None
-        return next((self.tables[k] for k in _held_identities(held) if k in self.tables), None)
+        return next((e for k in _held_identities(held) if (e := self.get(k)) is not None), None)
 
     @property
     def root(self) -> TableScope | None:
@@ -187,7 +229,7 @@ def classify(
     declarations: Declarations,
     locate: Callable[[int], tuple[str | None, int]] = lambda line: (None, line),
 ) -> TenantScopes:
-    """Every table's scope — partitions and temporary tables left out.
+    """Every table's scope — temporary tables left out, partitions kept aside.
 
     Args:
         tables: The tables the tree declares, ``ALTER``s folded in.
@@ -197,8 +239,12 @@ def classify(
     """
     discriminator = identifier_identity(tenancy.discriminator)
     scopes: dict[tuple[str, str], TableScope] = {}
+    partitions: dict[tuple[str, str], SchemaObject] = {}
     for table in distinct(tables):
-        if table.is_partition or table.is_temporary:
+        if table.is_temporary:
+            continue
+        if table.is_partition:
+            partitions[object_identity(table)] = table
             continue
         column = next((c for c in table.columns if c.folded == discriminator), None)
         scope = _scope(table, column, tenancy, declarations)
@@ -210,7 +256,7 @@ def classify(
     root = root_identity(tenancy)
     if root is not None and root in scopes:
         scopes[root] = replace(scopes[root], key=tenant_id_column(scopes[root].table, scopes))
-    return TenantScopes(tenancy, scopes, declarations, locate)
+    return TenantScopes(tenancy, scopes, declarations, locate, partitions)
 
 
 def _root_references(

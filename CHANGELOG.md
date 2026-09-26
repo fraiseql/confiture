@@ -63,7 +63,11 @@ run and the `--dry-run-execute` rehearsal both did it.
   discriminator's foreign keys reference, which need not be the root's primary key
   (a root may keep a surrogate `id bigint` beside a `UNIQUE` tenant id); while no
   discriminator references the root, its single-column primary key; undecided, and
-  never guessed, when the discriminators reference different columns of it.
+  never guessed, when the discriminators reference different columns of it. A
+  partition takes its parent's scope and key (#466): a view reading it, an `INSERT`
+  into it and a foreign key referencing it are judged as they would be against the
+  parent, and each finding names the partition as written; a partition is still
+  never reported on its own for what its parent declares.
 - **`tenant_003`: a view that reads tenant data publishes the discriminator, or is
   declared global** (#426). The output column named `tenancy.discriminator` is
   traced through the view's parse tree — aliases, `JOIN … USING`/`NATURAL`,

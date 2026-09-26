@@ -84,7 +84,7 @@ class _Tree:
         every one of them is a tenant table with the same discriminator position.
         """
         found = self.inventory.find_all(("table",), relation.schemaname, relation.relname)
-        entries = [self.scopes.tables.get(object_identity(obj)) for obj in found]
+        entries = [self.scopes.get(object_identity(obj)) for obj in found]
         tenant = [e for e in entries if e is not None and e.scope is Scope.TENANT]
         if not tenant or len(tenant) != len(entries):
             return None
@@ -176,7 +176,7 @@ def _judge(
     why = _missing(insert, entry, tree)
     if why is None:
         return None
-    table, column = entry.table.qualified, tree.scopes.tenancy.discriminator
+    table, column = entry.named, tree.scopes.tenancy.discriminator
     line = statement.line_at(insert.relation.location) if statement.exact else None
     fix = (
         f"name {column} in the INSERT's column list, or give it a default: "
