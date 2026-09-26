@@ -39,7 +39,7 @@ def test_an_insert_that_omits_the_discriminator_is_reported(tmp_path: Path) -> N
     )
 
     (finding,) = found
-    assert finding.object_name == "app.fn_create_order"
+    assert finding.object_name == "app.fn_create_order -> app.tb_order"
     assert "app.tb_order" in finding.message
     assert "tenant_id" in finding.message
     assert finding.line_number == 9

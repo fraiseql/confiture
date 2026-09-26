@@ -151,8 +151,9 @@ CheckTenantIsolationOpt = Annotated[
     bool,
     typer.Option(
         "--check-tenant-isolation",
-        help="Deprecated alias for `--select default,tenant` (tenant_001): flag "
-        "function INSERTs missing the FK column a tenant-scoped view requires.",
+        help="Deprecated alias for `--select default,tenant`: the tenant family "
+        "(tenant_001–tenant_005), which a `tenancy:` block in db/project.yaml "
+        "already turns on.",
     ),
 ]
 CheckSecurityDefinerOpt = Annotated[

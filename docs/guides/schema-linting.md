@@ -399,8 +399,8 @@ include_dirs:
 ```
 
 The blanked text is what the *parser* sees. The rules that want the real build —
-the `body` family, which materialises it into a throwaway database, and
-`tenant_001`, which scans it as text — still get every seed row.
+the `body` family, which materialises it into a throwaway database — still get
+every seed row.
 
 ---
 

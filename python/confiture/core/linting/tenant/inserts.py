@@ -50,6 +50,10 @@ if TYPE_CHECKING:
 #: Said of every statement that was not read: what the finding means.
 _NOT_JUDGED = "so an INSERT in it is not judged"
 
+#: How a finding names the routine and the table it writes, as ``build_003`` names
+#: a referrer and what it names: one baseline entry per pair, not per routine.
+_PAIR = " -> "
+
 
 @dataclass
 class _Tree:
@@ -133,8 +137,11 @@ def _missing(insert: Any, entry: TableScope, tree: _Tree) -> str | None:
     )
 
 
-def _finding(routine: SchemaObject, line: int, message: str, fix: str) -> TenancyFinding:
-    return TenancyFinding(routine.qualified, routine.file, line, message, fix)
+def _finding(
+    routine: SchemaObject, line: int, message: str, fix: str, table: str | None = None
+) -> TenancyFinding:
+    name = routine.qualified if table is None else f"{routine.qualified}{_PAIR}{table}"
+    return TenancyFinding(name, routine.file, line, message, fix)
 
 
 def _judge(
@@ -154,6 +161,7 @@ def _judge(
         f"{routine.qualified} inserts into {table} {why}",
         f"name {column} in the INSERT's column list, or give {table}.{column} a default "
         f"(DEFAULT current_setting('app.{column}'))",
+        table,
     )
 
 
