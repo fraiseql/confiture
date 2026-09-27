@@ -683,3 +683,52 @@ def test_a_fragment_the_reader_cannot_read_makes_the_file_unanalysed(monkeypatch
 
     assert scan.unparseable
     assert scan.assertions == []
+
+
+def test_a_lattice_of_derivations_is_read_in_linear_time() -> None:
+    """Each relation built from the two before it: 2^N paths, one answer each (#489)."""
+    import time
+
+    levels = 40
+    statements = ["CREATE TEMP TABLE t0 AS SELECT relname FROM pg_class;"]
+    statements.append("CREATE TEMP TABLE s0 AS SELECT relname FROM pg_class;")
+    statements.extend(
+        f"CREATE TEMP TABLE {name}{i} AS SELECT a.relname FROM t{i - 1} a, s{i - 1} b;"
+        for i in range(1, levels + 1)
+        for name in ("t", "s")
+    )
+    sql = (
+        "\n".join(statements)
+        + f"""
+    DO $$
+    DECLARE v int;
+    BEGIN
+      SELECT count(*) INTO v FROM t{levels};
+      IF v = 0 THEN RAISE EXCEPTION 'empty'; END IF;
+    END $$;
+    """
+    )
+    started = time.perf_counter()
+
+    found = find_data_assertions(sql, HERE)
+
+    assert found == []
+    assert time.perf_counter() - started < 5
+
+
+@pytest.mark.parametrize("guarded", ["_a", "_b"])
+def test_a_relation_on_a_cycle_is_not_derived_whichever_is_asked(guarded: str) -> None:
+    """``_a`` holds rows copied from ``_b`` and ``_b`` from ``_a``: nothing proves either full."""
+    sql = f"""
+    CREATE TEMP TABLE _a AS SELECT relname FROM pg_class;
+    CREATE TEMP TABLE _b AS SELECT relname FROM _a;
+    INSERT INTO _a SELECT relname FROM _b;
+
+    DO $$
+    DECLARE v int;
+    BEGIN
+      SELECT count(*) INTO v FROM {guarded};
+      IF v = 0 THEN RAISE EXCEPTION 'empty'; END IF;
+    END $$;
+    """
+    assert len(find_data_assertions(sql, HERE)) == 1
