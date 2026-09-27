@@ -53,6 +53,7 @@ import pglast.parser
 from confiture.core.ddl_walk import walk_nodes
 from confiture.core.plpgsql_fragments import Fragment, Mode, fragments, nodes
 from confiture.core.plpgsql_parse import parse_body
+from confiture.core.schema_model import RelationName
 from confiture.core.sql_lexer import blank_copy_blocks, split_statements, statement_type, tokens
 
 #: Relation schemas whose contents exist on a schema-only database.
@@ -146,19 +147,23 @@ def _is_catalogue(schema: str | None, relname: str) -> bool:
     return schema is None and relname.startswith("pg_")
 
 
-def _range_vars(tree: Any) -> list[tuple[str | None, str]]:
-    """Every ``RangeVar`` reachable from ``tree``, as ``(schema, relname)``."""
-    out: list[tuple[str | None, str]] = []
+def _range_vars(tree: Any) -> list[RelationName]:
+    """Every ``RangeVar`` reachable from ``tree``, its two parts kept apart."""
+    out: list[RelationName] = []
     for node in walk_nodes(tree):
         if type(node).__name__ != "RangeVar":
             continue
         rel = getattr(node, "relname", None)
         if rel:
-            out.append((getattr(node, "schemaname", None), rel))
+            out.append(RelationName(getattr(node, "schemaname", None), rel))
     return out
 
 
-def _user_relations(tree: Any, derivations: dict[str, set[str]] | None = None) -> list[str]:
+#: A relation this migration fills → the relations it is filled from.
+Derivations = dict[RelationName, set[RelationName]]
+
+
+def _user_relations(tree: Any, derivations: Derivations | None = None) -> list[str]:
     """Relations in a parsed fragment that are **empty** on a schema-only database.
 
     Excluded: the catalogue (see :func:`_is_catalogue`), and any relation this
@@ -167,20 +172,21 @@ def _user_relations(tree: Any, derivations: dict[str, set[str]] | None = None) -
     ``search_path`` to a user table.
     """
     names: list[str] = []
-    for schema, rel in _range_vars(tree):
-        if _is_catalogue(schema, rel):
+    for relation in _range_vars(tree):
+        if _is_catalogue(relation.schema, relation.name):
             continue
-        qualified = f"{schema}.{rel}" if schema else rel
-        if derivations and _catalogue_derived(qualified, rel, derivations):
+        if derivations and _catalogue_derived(relation, derivations):
             continue
-        names.append(qualified)
+        names.append(relation.qualified)
     return names
 
 
 def _catalogue_derived(
-    qualified: str, bare: str, derivations: dict[str, set[str]], _seen: frozenset[str] = frozenset()
+    relation: RelationName,
+    derivations: Derivations,
+    _seen: frozenset[RelationName] = frozenset(),
 ) -> bool:
-    """Whether this migration fills ``qualified`` from the catalogue, transitively.
+    """Whether this migration fills ``relation`` from the catalogue, transitively.
 
     A temp table or view populated from ``pg_class`` has rows at preflight time,
     and its *name* says nothing about that: without this check, every guard
@@ -190,27 +196,31 @@ def _catalogue_derived(
     is precisely the case worth flagging, so "created in this file" must not
     become a blanket excuse.
     """
-    for key in (qualified, bare):
+    keys = _lookup_keys(relation)
+    for key in keys:
         if key in _seen:
             continue
         sources = derivations.get(key)
         if not sources:
             continue
-        seen = _seen | {qualified, bare}
+        seen = _seen | set(keys)
         if all(
-            source in _CATALOGUE_SENTINEL
-            or _catalogue_derived(source, source.rpartition(".")[2], derivations, seen)
+            _is_catalogue(source.schema, source.name)
+            or _catalogue_derived(source, derivations, seen)
             for source in sources
         ):
             return True
     return False
 
 
-#: Marks a source already known to be a catalogue relation.
-_CATALOGUE_SENTINEL = frozenset({"<catalogue>"})
+def _lookup_keys(relation: RelationName) -> tuple[RelationName, ...]:
+    """The relation as written, and its bare name when it is written qualified."""
+    if relation.schema is None:
+        return (relation,)
+    return relation, RelationName(None, relation.name)
 
 
-def _derivations(sql: str) -> dict[str, set[str]]:
+def _derivations(sql: str) -> Derivations:
     """What each relation this migration creates or fills is populated *from*.
 
     Keyed under both the qualified and the bare name, because a migration
@@ -229,7 +239,7 @@ def _derivations(sql: str) -> dict[str, set[str]]:
     except pglast.parser.ParseError:
         return {}
 
-    found: dict[str, set[str]] = {}
+    found: Derivations = {}
     for raw in statements or []:
         stmt = raw.stmt
         target_attr = _TARGET_ATTR.get(type(stmt).__name__)
@@ -241,13 +251,9 @@ def _derivations(sql: str) -> dict[str, set[str]]:
         relname = getattr(target, "relname", None)
         if not relname:
             continue
-        schema = getattr(target, "schemaname", None)
         query = getattr(stmt, "query", None) or getattr(stmt, "selectStmt", None)
-        sources = {
-            "<catalogue>" if _is_catalogue(s, r) else (f"{s}.{r}" if s else r)
-            for s, r in _range_vars(query)
-        }
-        for key in {relname, f"{schema}.{relname}" if schema else relname}:
+        sources = set(_range_vars(query))
+        for key in _lookup_keys(RelationName(getattr(target, "schemaname", None), relname)):
             found.setdefault(key, set()).update(sources)
     return found
 
@@ -260,7 +266,7 @@ _TARGET_ATTR = {
 }
 
 
-def _counted_variables(read: list[Fragment], derivations: dict[str, set[str]]) -> dict[str, str]:
+def _counted_variables(read: list[Fragment], derivations: Derivations) -> dict[str, str]:
     """Variables assigned from a user relation: ``SELECT … INTO v`` or ``v := (SELECT …)``.
 
     Maps the variable's name to the relation it counted, which is what a
@@ -320,7 +326,7 @@ def _assertions_in(
     error_level: int,
     line_base: int,
     lines: list[str],
-    derivations: dict[str, set[str]],
+    derivations: Derivations,
 ) -> list[DataAssertion]:
     counted = _counted_variables(read, derivations)
     if not counted:

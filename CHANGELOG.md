@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A data assertion over a dotted name is read as that name** (#480). `migrate
+  preflight`'s data-assertion check skips a relation the migration fills from the
+  catalogue, and it found one by joining a `RangeVar`'s schema and name and
+  splitting the text back. So a catalogue-filled temp table `b` excused
+  `app."a.b"`, and a view `app.x` excused the unqualified table `"app.x"`, and a
+  guard over an empty user table went unreported. The two parts are now kept apart.
 - **Generated DDL quotes a name that needs quotes** (#479). `migrate diff` /
   `migrate generate` and `confiture.platform.diff` wrote every identifier bare,
   so a table `"New Table"`, a column `"Mixed Col"` or `user`, an index or a

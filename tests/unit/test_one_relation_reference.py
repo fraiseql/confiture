@@ -60,7 +60,6 @@ ALLOWED: dict[str, str] = {
     "core/type_lattice.py:_schema_and_type": "a type's name is one string: tracked in #480",
     "core/type_lattice.py:_argument_key": "a type's name is one string: tracked in #480",
     "core/schema_change.py:_written_ref": "an enum's name is one string: tracked in #480",
-    "core/data_assertions.py:_catalogue_derived": "a joined RangeVar split back: tracked in #480",
     "core/fk_extractor.py:_bare_table_name": "the regex FK extractor: tracked in #480",
 }
 
