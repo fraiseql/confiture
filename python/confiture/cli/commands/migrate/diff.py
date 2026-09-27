@@ -116,7 +116,10 @@ def migrate_diff(
 
         # Compare schemas
         differ = SchemaDiffer()
-        diff = differ.compare(old_sql, new_sql)
+        try:
+            diff = differ.compare(old_sql, new_sql)
+        except DifferError as exc:  # a name that needs quotes (DIFFER_403) carries its own code
+            fail(exc, json_mode=is_json(format_type), output_file=report_file)
 
         changes = [
             MigrateDiffChange(

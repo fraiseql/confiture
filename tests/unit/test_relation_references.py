@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 
 import pglast
+import pytest
 from pglast import ast
 
 from confiture.core.differ_sql import DifferSQLGenerator
@@ -85,6 +86,7 @@ def test_column_facts_name_the_dotted_target() -> None:
     assert isinstance(facts.foreign_key.table, ObjectRef)
 
 
+@pytest.mark.usefixtures("quoted_names_allowed")
 def test_a_generated_foreign_key_references_the_dotted_table() -> None:
     old = 'CREATE SCHEMA app;\nCREATE TABLE app."a.b" (id int PRIMARY KEY);\nCREATE TABLE app.c (id int PRIMARY KEY, fk int);'
     (change,) = [c for c in diff(old, DOTTED).changes if type(c).__name__ == "ForeignKeyAdded"]

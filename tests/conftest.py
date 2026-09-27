@@ -584,3 +584,13 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         layer = _layer_for(Path(str(item.path)))
         if layer is not None:
             item.add_marker(getattr(pytest.mark, layer))
+
+
+@pytest.fixture
+def quoted_names_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let the differ compare names that need quotes, which it refuses (``DIFFER_403``).
+
+    For the tests of what generated DDL does with such a name anyway: quoting is
+    the second layer behind the refusal, and is tested on its own.
+    """
+    monkeypatch.setattr("confiture.core.differ.refuse_quoted_names", lambda *_: None)

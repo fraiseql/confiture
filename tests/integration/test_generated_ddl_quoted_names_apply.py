@@ -9,10 +9,14 @@ from __future__ import annotations
 
 import pglast
 import psycopg
+import pytest
 
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.drift import SchemaDriftDetector
 from confiture.platform import diff, parse_schema
+
+#: Generated DDL is tested with names the differ refuses (DIFFER_403): the second layer.
+pytestmark = pytest.mark.usefixtures("quoted_names_allowed")
 
 _OLD = """CREATE SCHEMA app;
 CREATE TABLE app."Order Line" ("Line Id" int PRIMARY KEY, "Mixed Col" text, "user" text,

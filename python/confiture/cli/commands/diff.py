@@ -52,6 +52,8 @@ def schema_diff(
     try:
         differ = SchemaDiffer()
         diff = differ.compare(old_sql, new_sql)
+    except DifferError as exc:  # a refusal (DIFFER_403) carries its own code
+        fail(exc, json_mode=json_mode)
     # Reason: any parser failure on either schema is DIFFER_400 for the operator
     except Exception as exc:
         fail(

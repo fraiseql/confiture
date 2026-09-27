@@ -19,6 +19,9 @@ from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.platform import diff
 
+#: Generated DDL is tested with names the differ refuses (DIFFER_403): the second layer.
+pytestmark = pytest.mark.usefixtures("quoted_names_allowed")
+
 #: A column name that closes a triple-quoted string (`quote_identifier` wraps it in `"`).
 _CLOSES_THE_STRING = "\");__import__('os').system('x');self.execute(\""
 #: A name that ends a comment line and starts a statement.

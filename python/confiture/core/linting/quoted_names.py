@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import string
 import unicodedata
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -28,6 +28,7 @@ from confiture.core.schema_identity import quote_identifier
 
 if TYPE_CHECKING:
     from confiture.core.linting.inventory import Inventory, SchemaObject
+    from confiture.core.schema_model import Trigger
 
 _DOT = "."
 #: The characters a bare identifier is written with, after the first.
@@ -71,6 +72,17 @@ def quoted_names(inventory: Inventory) -> Iterator[QuotedName]:
         if needs_quotes(obj.folded_name):
             yield _named(obj.kind, _quoted(qualifier), obj.folded_name, obj.file, obj.line)
         yield from _parts(obj)
+
+
+def quoted_trigger_names(triggers: Iterable[Trigger]) -> Iterator[QuotedName]:
+    """Every trigger whose name needs quotes; the model holds no line, so ``line`` is 0.
+
+    A trigger is named per table and is not in the lint's inventory, so this is
+    the differ's (#487): it refuses a name a generated statement would write.
+    """
+    for trigger in triggers:
+        if needs_quotes(trigger.name):
+            yield _named("trigger", None, trigger.name, None, 0)
 
 
 def _parts(table: SchemaObject) -> Iterator[QuotedName]:

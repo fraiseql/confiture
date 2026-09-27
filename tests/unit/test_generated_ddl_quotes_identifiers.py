@@ -16,6 +16,9 @@ from pglast import ast
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.platform import diff
 
+#: Generated DDL is tested with names the differ refuses (DIFFER_403): the second layer.
+pytestmark = pytest.mark.usefixtures("quoted_names_allowed")
+
 OLD = """CREATE SCHEMA app;
 CREATE TABLE app."Order Line" ("Line Id" int PRIMARY KEY, "Mixed Col" text, "user" text,
     qty int CONSTRAINT "Qty Positive" CHECK (qty > 0));

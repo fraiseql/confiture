@@ -116,8 +116,9 @@ error  naming_004  app.t."Mixed Col" needs quotes: confiture supports a name onl
                    fix: rename it so it needs no quotes, e.g. app.t.mixed_col
 ```
 
-Generated DDL still quotes a name that needs it, so a tree that ignores the rules still
-gets SQL PostgreSQL accepts.
+`migrate diff`, `confiture diff` and `confiture.platform.diff` refuse such a name too
+(`DIFFER_403`, exit 5), on either side and a trigger's included, because generation does
+not run the lint. Generated DDL still quotes the names it writes, as a second layer.
 
 ## The `doc` family — every commentable object carries a `COMMENT`
 

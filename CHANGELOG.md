@@ -38,6 +38,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`migrate diff` refuses a schema whose names need quotes** (#487),
+  `DIFFER_403`, exit 5. The same holds for `confiture diff` and
+  `confiture.platform.diff`. `naming_003`/`naming_004` report such a name, but
+  generation does not run the lint. So a view's, routine's or type's `DROP`,
+  `ALTER TYPE … ADD VALUE` and a column's user-defined type, which the generator
+  writes as the model holds them, could carry a crafted name straight into SQL:
+  a view named `"v; DROP TABLE victim; --"` generated
+  `DROP VIEW IF EXISTS v; DROP TABLE victim; --;`. Either side of the comparison
+  is refused, naming the first such name (a trigger's included) and a snake_case
+  rename. An extension's package name (`"uuid-ossp"`) is not refused.
 - **A name in the schema never becomes code in a generated migration** (#486).
   A `.py` migration wrote its SQL inside `"""…"""` unescaped. Since names
   that need quotes are wrapped in `"`, a crafted column name could close the

@@ -91,6 +91,7 @@ the way the build resolves them (`DIFFER_402`).
 **Raises**
 
 - `ValueError`: unless exactly one side is `None` when *env* is given, and neither is when it is not.
+- `DifferError`: `DIFFER_403` when either side names an object that needs quotes, which confiture does not support.
 - `SchemaError`: `DIFFER_400` when PostgreSQL's parser rejects either side, `SCHEMA_201` for a path that does not exist, `SCHEMA_001` for a file that cannot be read as UTF-8 text.
 
 ### `SchemaSource`
