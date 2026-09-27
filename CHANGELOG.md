@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The data-assertion check reads a lattice of derived relations in linear
+  time** (#489). A relation reached by two paths was explored once per path.
+  So a migration with 22 temp tables, each built from the two before it, kept
+  `migrate preflight` busy for 7 seconds, and each extra level doubled that.
+  Each relation is now answered once per call.
 - **`migrate diff` refuses a schema whose names need quotes** (#487),
   `DIFFER_403`, exit 5. The same holds for `confiture diff` and
   `confiture.platform.diff`. `naming_003`/`naming_004` report such a name, but

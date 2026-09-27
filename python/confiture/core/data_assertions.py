@@ -184,7 +184,8 @@ def _user_relations(tree: Any, derivations: Derivations | None = None) -> list[s
 def _catalogue_derived(
     relation: RelationName,
     derivations: Derivations,
-    _seen: frozenset[RelationName] = frozenset(),
+    memo: dict[RelationName, bool] | None = None,
+    active: set[RelationName] | None = None,
 ) -> bool:
     """Whether this migration fills ``relation`` from the catalogue, transitively.
 
@@ -194,23 +195,32 @@ def _catalogue_derived(
 
     A relation created here with **no** sources is not derived: an empty table
     is precisely the case worth flagging, so "created in this file" must not
-    become a blanket excuse.
+    become a blanket excuse. Nor is one on a cycle (``INSERT INTO a SELECT … FROM
+    b`` and back), whichever member is asked first: a key already on the path
+    being followed (``active``) is skipped. Each relation is answered once per
+    call (``memo``), so a lattice of derivations is read in linear time, not once
+    per path (#489).
     """
-    keys = _lookup_keys(relation)
-    for key in keys:
-        if key in _seen:
-            continue
-        sources = derivations.get(key)
-        if not sources:
-            continue
-        seen = _seen | set(keys)
-        if all(
-            _is_catalogue(source.schema, source.name)
-            or _catalogue_derived(source, derivations, seen)
-            for source in sources
-        ):
-            return True
-    return False
+    memo = {} if memo is None else memo
+    active = set() if active is None else active
+    if relation in memo:
+        return memo[relation]
+    live = [key for key in _lookup_keys(relation) if key not in active]
+    active.update(live)
+    try:
+        derived = any(
+            (sources := derivations.get(key))
+            and all(
+                _is_catalogue(source.schema, source.name)
+                or _catalogue_derived(source, derivations, memo, active)
+                for source in sources
+            )
+            for key in live
+        )
+    finally:
+        active.difference_update(live)
+    memo[relation] = derived
+    return derived
 
 
 def _lookup_keys(relation: RelationName) -> tuple[RelationName, ...]:
