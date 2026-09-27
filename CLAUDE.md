@@ -266,8 +266,10 @@ name may hold a dot (`app."a.b"`). Compare `.identity`; write it with
 dot; its allow-list names what each remaining split reads instead (a module path, a
 file name, a configured label) or, for a type's key, that `naming_003` refuses the
 dotted name it would misread. confiture supports only names that need no quotes:
-`naming_003` and `naming_004` refuse the rest, and generated DDL still quotes through
-`quote_identifier`.
+`naming_003` and `naming_004` report the rest, `SchemaDiffer.compare` refuses them on
+either side (`DIFFER_403`) so no generated statement writes one, and generated DDL still
+quotes through `quote_identifier`. A test of that second layer uses the
+`quoted_names_allowed` fixture.
 
 **One identifier quoter** — `core/schema_identity.quote_identifier` writes an identifier
 into generated text, quoting it when PostgreSQL's own keyword lists (pglast's

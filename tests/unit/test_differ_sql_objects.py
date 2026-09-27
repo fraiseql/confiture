@@ -336,6 +336,7 @@ class TestEveryKindReappliesAndDrops:
         assert generator.generate_up(change) == "DROP POLICY IF EXISTS p_own ON tb_user;\n"
         assert generator.generate_down(change).startswith("DO $confiture$")
 
+    @pytest.mark.usefixtures("quoted_names_allowed")
     def test_a_quoted_trigger_name_is_quoted_in_its_drop(self) -> None:
         trigger = (
             'CREATE TRIGGER "Touch" BEFORE UPDATE ON tb_user FOR EACH ROW EXECUTE FUNCTION fn_t();'

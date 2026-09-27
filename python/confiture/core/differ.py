@@ -17,6 +17,7 @@ from confiture.core.ddl_objects import (
     OBJECT_KEYWORD,
     Collapsed,
     declared_objects,
+    declared_triggers,
     pair_definitions,
 )
 from confiture.core.linting.duplicates import WINS_TEXT, CreateFlags, wins
@@ -27,6 +28,7 @@ from confiture.core.linting.inventory import (
     group_definitions,
     schema_model,
 )
+from confiture.core.linting.quoted_names import QuotedName, quoted_names, quoted_trigger_names
 from confiture.core.schema_change import (
     CheckConstraintAdded,
     CheckConstraintDropped,
@@ -68,7 +70,9 @@ from confiture.core.schema_model import (
     qualified_name,
 )
 from confiture.core.sql_lexer import blank_copy_blocks
+from confiture.core.sql_utils import comment_text
 from confiture.core.type_lattice import same_type
+from confiture.exceptions import DifferError
 from confiture.models.warnings import BuildWarning
 
 logger = logging.getLogger(__name__)
@@ -92,6 +96,35 @@ class ParsedSchema:
     sequences: list[Sequence] = field(default_factory=list)
     objects: dict[Any, Any] = field(default_factory=dict)
     warnings: list[BuildWarning] = field(default_factory=list)
+    #: Every name the side gives that needs quotes, which :meth:`SchemaDiffer.compare` refuses.
+    quoted: list[QuotedName] = field(default_factory=list)
+
+
+def refuse_quoted_names(side: str, schema: ParsedSchema) -> None:
+    """Refuse a side that gives a name that needs quotes (``DIFFER_403``, #487).
+
+    confiture supports a name only as PostgreSQL writes it bare (#484), and the
+    lint that reports one (``naming_003``, ``naming_004``) is not what
+    generation runs. Refused here, such a name never reaches a generated
+    statement, where a crafted one (``"v; DROP TABLE t; --"``) would be SQL.
+
+    Raises:
+        DifferError: ``DIFFER_403``, naming the first such name and how many there are.
+    """
+    if not schema.quoted:
+        return
+    first = schema.quoted[0]
+    more = len(schema.quoted) - 1
+    others = f" (and {more} more)" if more else ""
+    raise DifferError(
+        f"The {side} schema names {first.kind} {comment_text(first.spelled)}{others}, "
+        "which needs quotes: confiture supports a name only as PostgreSQL writes it bare",
+        error_code="DIFFER_403",
+        resolution_hint=(
+            f"Rename it so it needs no quotes, e.g. {comment_text(first.suggested)}; "
+            "`confiture lint` lists every such name (naming_003, naming_004)"
+        ),
+    )
 
 
 def _identity(schema: str | None, name: str) -> tuple[str, str]:
@@ -298,6 +331,10 @@ class SchemaDiffer:
             sequences=list(model.sequences.values()),
             objects=declared.objects,
             warnings=duplicate_warnings(inventory, declared.collapsed),
+            quoted=[
+                *quoted_names(inventory),
+                *quoted_trigger_names(declared_triggers(declared.objects)),
+            ],
         )
 
     def compare(self, old_sql: str, new_sql: str) -> SchemaDiff:
@@ -320,6 +357,8 @@ class SchemaDiffer:
         """
         old_schema = self.parse_schema(old_sql)
         new_schema = self.parse_schema(new_sql)
+        refuse_quoted_names("old", old_schema)
+        refuse_quoted_names("new", new_schema)
 
         changes = self._compare_tables(old_schema, new_schema)
         changes.extend(self._compare_enum_types(old_schema.enum_types, new_schema.enum_types))

@@ -149,6 +149,7 @@ class TestTypeChanges:
         assert conn.execute("SELECT s FROM t").fetchone() == ("abcdef",)
 
 
+@pytest.mark.usefixtures("quoted_names_allowed")
 class TestDefinitionKinds:
     """A trigger, extension, schema, policy, domain and composite type re-apply and drop."""
 
