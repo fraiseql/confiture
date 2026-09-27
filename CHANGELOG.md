@@ -14,6 +14,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-09-27
+
+**confiture supports a name only as PostgreSQL writes it bare.** A name that
+exists only quoted (a space or other punctuation, a capital, a reserved word
+such as `user`, a leading digit, a dot) is now an error in two places:
+- `confiture lint` reports it (`naming_003` for a dot, `naming_004` for the
+  rest, both on by default);
+- `migrate diff`, `confiture diff` and `confiture.platform.diff` refuse a schema
+  that gives one, on either side of the comparison (`DIFFER_403`, exit 5).
+
+A tree that passed on 1.24.0 with such a name now fails both. Adopt the lint
+rules with `--baseline`; rename the object before diffing. Generated DDL still
+quotes every name it writes, as a second layer.
+
+**Breaking: the model's wire.** In `SchemaModel.to_json()` and in a change's
+`details`, a foreign key's `ref_table` and an index's `table` are now
+`{"schema": …, "name": …}`, no longer `"schema.name"` text.
+- `schema-model.schema.json` gains `$defs/RelationName`.
+- `RelationName` is exported from `confiture.platform`. Code that builds a
+  `Constraint`, an `Index` or a change through the seam passes one where it
+  passed a string.
+- `SchemaModel.from_json` still reads a model written before this change.
+
+**Security.** Four injection paths through a crafted object name are closed:
+- a Python string in a generated `.py` migration;
+- a comment line in generated SQL or Python;
+- a bare `DROP` or `ALTER TYPE`;
+- Rich markup and terminal escapes in `confiture lint`'s output.
+
+Prep-seed levels 2 and 3 now take a key's target from its `REFERENCES`, not
+from its name.
+
+### Security
+
+- **A name in the schema never becomes code in a generated migration** (#486).
+  A `.py` migration wrote its SQL inside `"""…"""` unescaped. Since names
+  that need quotes are wrapped in `"`, a crafted column name could close the
+  string and run Python when `up()` ran. A backslash in the SQL (`E'\n'`) was
+  read as a Python escape and changed the statement. The SQL is now written as
+  an exact Python literal. A newline in a name also ended the `# irreversible:`
+  comment, the `-- confiture:irreversible` directive and the `-- WARNING` /
+  `-- review` lines of generated SQL; every generated comment now escapes
+  control characters.
+- **`migrate diff` refuses a schema whose names need quotes** (#487),
+  `DIFFER_403`, exit 5. The same holds for `confiture diff` and
+  `confiture.platform.diff`. `naming_003`/`naming_004` report such a name, but
+  generation does not run the lint. So a view's, routine's or type's `DROP`,
+  `ALTER TYPE … ADD VALUE` and a column's user-defined type, which the generator
+  writes as the model holds them, could carry a crafted name straight into SQL:
+  a view named `"v; DROP TABLE victim; --"` generated
+  `DROP VIEW IF EXISTS v; DROP TABLE victim; --;`. Either side of the comparison
+  is refused, naming the first such name (a trigger's included) and a snake_case
+  rename. An extension's package name (`"uuid-ossp"`) is not refused.
+- **`confiture lint` prints an object's name as data** (#488). The location
+  column was rendered as Rich markup, so a table named
+  `"[link=https://evil.example]click[/link]"` printed a live hyperlink, and an
+  ESC in a name reached the terminal raw. The location and message cells are
+  now plain text. Every value the CLI prints through `verbatim` writes a control
+  character other than a newline or a tab as its escape (`\x1b`).
+
 ### Changed
 
 - **A relation one object names is held as its schema and its name, never one
@@ -36,6 +96,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   they read. A type's key is among them, and `naming_003` refuses the dotted name
   it would misread.
 
+### Added
+
+- **`naming_004`: no identifier needs quotes** (#484), at `error` and on by
+  default. confiture supports a name only as PostgreSQL writes it bare:
+  lowercase letters, digits, `_` and `$`, not starting with a digit, not a
+  reserved word. The rule reports every schema, relation, type, sequence,
+  routine, column, index and named constraint whose name exists only quoted,
+  including one a `RENAME` or `SET SCHEMA` gives, such as
+  `app."Order Line"`, `"MyTable"`, a column `"user"` or `"1st"`. It spells the
+  name as SQL writes it and suggests a snake_case one. A dotted name stays
+  `naming_003`'s alone, and neither `naming_001` nor `naming_002` reports such a
+  name again. A tree that trips it can adopt it with `--baseline`.
+- **`naming_003`: no identifier holds a dot** (#476), at `error` and on by
+  default. PostgreSQL accepts `CREATE TABLE app."a.b"`, but confiture carries
+  some names (a type's key among them) as one `schema.name` string, so a dot in
+  a name reads as the separator and what refers to it is misread. The rule
+  reports every schema, relation, type, sequence, routine, column and index
+  whose name holds a dot — a schema once, where it is declared
+  or first used — spelled as SQL writes it (`app."a.b"`), with the name's dots
+  made underscores as the suggested fix. `naming_001` and `naming_002` no longer
+  also report such a name as a spelling. A tree that trips it can adopt it with
+  `--baseline`.
+
 ### Fixed
 
 - **prep-seed levels 2 and 3 take a key's target from its `REFERENCES`**
@@ -52,42 +135,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     table's.
   - A routine named `fn_resolve_…` that takes arguments is not a resolver:
     levels 4 and 5 call one with none.
-- **`confiture lint` prints an object's name as data** (#488). The location
-  column was rendered as Rich markup, so a table named
-  `"[link=https://evil.example]click[/link]"` printed a live hyperlink, and an
-  ESC in a name reached the terminal raw. The location and message cells are
-  now plain text. Every value the CLI prints through `verbatim` writes a control
-  character other than a newline or a tab as its escape (`\x1b`).
-- **prep-seed level 1 finds a table whose name needed quotes again** (#490).
-  It looked the seed's table up by joining the statement's schema and name and
-  reading the text back. Since #478 that text is read as SQL reads it, so
-  `app.MyTable` was folded to `mytable`, and level 1 fell back to the UUID
-  naming convention. It now passes the two parts (`SeedWrite.relation`), and
-  `table_ref` accepts a `RelationName`.
 - **The data-assertion check reads a lattice of derived relations in linear
   time** (#489). A relation reached by two paths was explored once per path.
   So a migration with 22 temp tables, each built from the two before it, kept
   `migrate preflight` busy for 7 seconds, and each extra level doubled that.
   Each relation is now answered once per call.
-- **`migrate diff` refuses a schema whose names need quotes** (#487),
-  `DIFFER_403`, exit 5. The same holds for `confiture diff` and
-  `confiture.platform.diff`. `naming_003`/`naming_004` report such a name, but
-  generation does not run the lint. So a view's, routine's or type's `DROP`,
-  `ALTER TYPE … ADD VALUE` and a column's user-defined type, which the generator
-  writes as the model holds them, could carry a crafted name straight into SQL:
-  a view named `"v; DROP TABLE victim; --"` generated
-  `DROP VIEW IF EXISTS v; DROP TABLE victim; --;`. Either side of the comparison
-  is refused, naming the first such name (a trigger's included) and a snake_case
-  rename. An extension's package name (`"uuid-ossp"`) is not refused.
-- **A name in the schema never becomes code in a generated migration** (#486).
-  A `.py` migration wrote its SQL inside `"""…"""` unescaped. Since names
-  that need quotes are wrapped in `"`, a crafted column name could close the
-  string and run Python when `up()` ran. A backslash in the SQL (`E'\n'`) was
-  read as a Python escape and changed the statement. The SQL is now written as
-  an exact Python literal. A newline in a name also ended the `# irreversible:`
-  comment, the `-- confiture:irreversible` directive and the `-- WARNING` /
-  `-- review` lines of generated SQL; every generated comment now escapes
-  control characters.
 - **A data assertion over a dotted name is read as that name** (#480). `migrate
   preflight`'s data-assertion check skips a relation the migration fills from the
   catalogue, and it found one by joining a `RangeVar`'s schema and name and
@@ -106,30 +158,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in a model written before). `DROP INDEX` names the index in its table's schema,
   where a bare name dropped nothing. Checked by applying a generated migration up
   and down on a database and reading it back. A view's or a routine's `DROP`, and
-  an enum's `ALTER TYPE … ADD VALUE`, still spell the name as the model holds it.
-  `naming_004` refuses such a name.
-
-### Added
-
-- **`naming_004`: no identifier needs quotes** (#484), at `error` and on by
-  default. confiture supports a name only as PostgreSQL writes it bare:
-  lowercase letters, digits, `_` and `$`, not starting with a digit, not a
-  reserved word. The rule reports every schema, relation, type, sequence,
-  routine, column, index and named constraint whose name exists only quoted,
-  including one a `RENAME` or `SET SCHEMA` gives, such as
-  `app."Order Line"`, `"MyTable"`, a column `"user"` or `"1st"`. It spells the
-  name as SQL writes it and suggests a snake_case one. A dotted name stays
-  `naming_003`'s alone, and neither `naming_001` nor `naming_002` reports such a
-  name again. A tree that trips it can adopt it with `--baseline`.
-- **`naming_003`: no identifier holds a dot** (#476), at `error` and on by
-  default. PostgreSQL accepts `CREATE TABLE app."a.b"`, but confiture carries
-  some names (a type's key among them) as one `schema.name` string, so a dot in
-  a name reads as the separator and what refers to it is misread. The rule reports every schema, relation, type, sequence, routine,
-  column and index whose name holds a dot — a schema once, where it is declared
-  or first used — spelled as SQL writes it (`app."a.b"`), with the name's dots
-  made underscores as the suggested fix. `naming_001` and `naming_002` no longer
-  also report such a name as a spelling. A tree that trips it can adopt it with
-  `--baseline`.
+  an enum's `ALTER TYPE … ADD VALUE`, still spell the name as the model holds it;
+  `migrate diff` refuses such a name before it gets there (#487).
 
 ## [1.24.0] - 2026-09-26
 
