@@ -5,7 +5,8 @@ with a ``v`` holding ``[tree_001]``, ``int[]`` or ``db/[legacy]/x.sql`` drops th
 bracketed text, restyles the line, or raises ``MarkupError``. Under ``cli/``, a value
 interpolated into an f-string passed to a ``print``, ``log``, ``status``, ``rule`` or
 ``input`` method — every such receiver under ``cli/`` is a Rich console, whatever it
-is named (``console``, ``cons``, ``out``) — with markup on, is one of:
+is named (``console``, ``cons``, ``out``) — or to a table's ``add_row``, whose cells
+are markup too (#488), is one of:
 
 - ``verbatim(v)`` / ``verbatim(v, spec)`` (or rich's ``escape``): data;
 - ``markup(v)``: markup confiture built itself;
@@ -29,7 +30,7 @@ from confiture.cli.markup import markup, verbatim
 
 REPO = Path(__file__).resolve().parents[2]
 CLI = REPO / "python" / "confiture" / "cli"
-METHODS = frozenset({"print", "log", "status", "rule", "input"})
+METHODS = frozenset({"print", "log", "status", "rule", "input", "add_row"})
 SAFE_CALLS = frozenset({"verbatim", "markup", "escape", "len"})
 #: A format spec whose presentation type is a number's (or a thousands separator).
 NUMERIC_SPEC = re.compile(r"^[<>=^]?[+\- ]?#?0?\d*[,_]?(\.\d+)?[bcdeEfFgGnoxX%,]$")
