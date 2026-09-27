@@ -324,6 +324,7 @@ class PrepSeedOrchestrator:
             final_name=final_name,
             locate=lambda table: self._where(table.schema or DEFAULT_SCHEMA, table.name),
             locate_resolver=self._resolver_of,
+            resolver_for=self._resolver_for,
             prep_seed_schema=self.config.prep_seed_schema,
             catalog_schema=self.config.catalog_schema,
         )
@@ -757,10 +758,12 @@ class PrepSeedOrchestrator:
 
     def _resolver_of(self, table: Table) -> tuple[str, int] | None:
         """The file and line of the resolver that fills *table*, when the schema defines one."""
-        for resolver in self._discovered():
-            if resolver.name == f"fn_resolve_{table.name}" and resolver.file:
-                return resolver.file, resolver.line
-        return None
+        resolver = self._resolver_for(table)
+        return (resolver.file, resolver.line) if resolver is not None and resolver.file else None
+
+    def _resolver_for(self, table: Table) -> Resolver | None:
+        """The resolver that fills *table*, when the schema defines one."""
+        return next((r for r in self._discovered() if r.name == f"fn_resolve_{table.name}"), None)
 
 
 def validate_seeds(

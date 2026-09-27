@@ -38,6 +38,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **prep-seed levels 2 and 3 take a key's target from its `REFERENCES`**
+  (#498). Level 3 read `fk_owner` as a key to `tb_owner`. So a key named for
+  its role (an owner, a parent, a company that is an organization) drew a false
+  `MISSING_FK_TRANSFORMATION` against a resolver that joined the table the
+  final table's `REFERENCES` names. The rules now:
+  - The target is that table; only an `fk_*_id` with no `REFERENCES` on either
+    side falls back to the name.
+  - A key resolved in a second-pass `UPDATE` of the final table counts, and
+    level 2's self-reference warning is not raised when the resolver runs that
+    pass.
+  - A self-reference is read from `REFERENCES`, not from a name that ends in the
+    table's.
+  - A routine named `fn_resolve_…` that takes arguments is not a resolver:
+    levels 4 and 5 call one with none.
 - **`confiture lint` prints an object's name as data** (#488). The location
   column was rendered as Rich markup, so a table named
   `"[link=https://evil.example]click[/link]"` printed a live hyperlink, and an
