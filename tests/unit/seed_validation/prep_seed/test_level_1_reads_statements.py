@@ -146,6 +146,19 @@ def test_with_a_schema_a_uuid_is_whatever_column_the_schema_types_uuid() -> None
     assert validator.uuid_basis == "schema"
 
 
+@pytest.mark.parametrize("table", ['"MyTable"', '"My T"'])
+def test_a_table_named_with_quotes_is_found_in_the_schema(table: str) -> None:
+    """The statement's two parts are looked up, never re-read as typed text (#490)."""
+    model = platform.parse_schema(f"CREATE TABLE prep_seed.{table} (id TEXT, ref UUID);")
+    ins = f"INSERT INTO prep_seed.{table} VALUES ('Wi-Fi', 'not-a-uuid');"
+    validator = Level1SeedValidator(model)
+
+    (bad,) = _uuid(validator.validate_seed_file(ins, "x.sql"))
+
+    assert "typed uuid" in bad.message
+    assert validator.uuid_basis == "schema"
+
+
 def test_without_a_schema_the_convention_names_the_uuid_columns() -> None:
     ins = "INSERT INTO prep_seed.tb_x (id, ref, fk_y_id) VALUES ('Wi-Fi', 'not-a-uuid', 'x');"
     validator = Level1SeedValidator()

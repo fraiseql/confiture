@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **prep-seed level 1 finds a table whose name needed quotes again** (#490).
+  It looked the seed's table up by joining the statement's schema and name and
+  reading the text back. Since #478 that text is read as SQL reads it, so
+  `app.MyTable` was folded to `mytable`, and level 1 fell back to the UUID
+  naming convention. It now passes the two parts (`SeedWrite.relation`), and
+  `table_ref` accepts a `RelationName`.
 - **The data-assertion check reads a lattice of derived relations in linear
   time** (#489). A relation reached by two paths was explored once per path.
   So a migration with 22 temp tables, each built from the two before it, kept
