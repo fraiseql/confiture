@@ -25,6 +25,7 @@ from confiture.core import sql_lexer
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import walk_nodes
 from confiture.core.parser_info import parse_error_line
+from confiture.core.schema_model import RelationName
 from confiture.core.seed.copy_formatter import CsvOptions, copy_csv_rows, copy_row
 
 _SETOP_NONE = _pg_member("SetOperation", "SETOP_NONE")
@@ -78,8 +79,13 @@ class SeedWrite:
     form: Literal["insert", "copy"]
 
     @property
+    def relation(self) -> RelationName:
+        """The table as the parser read it: two parts, never joined and read again (#490)."""
+        return RelationName(self.schema, self.table)
+
+    @property
     def qualified(self) -> str:
-        """The table as the statement names it."""
+        """The table as the statement names it, for a message."""
         return f"{self.schema}.{self.table}" if self.schema else self.table
 
 

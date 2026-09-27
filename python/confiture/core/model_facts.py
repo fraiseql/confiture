@@ -84,8 +84,11 @@ def _read_name(written: str | None) -> RelationName | None:
     return RelationName(schema[0] if schema else None, name)
 
 
-def table_ref(model: SchemaModel, table: ObjectRef | str) -> ObjectRef:
+def table_ref(model: SchemaModel, table: ObjectRef | RelationName | str) -> ObjectRef:
     """*table*'s reference in *model*: a reference it holds, or a name resolved as DDL's is.
+
+    A :class:`RelationName` is taken as its two parts; text is read as a caller
+    typed it (:func:`resolve`).
 
     Raises:
         NotInModelError: when *model* holds no such table.

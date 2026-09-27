@@ -200,7 +200,7 @@ class Level1SeedValidator:
         """
         if self.model is not None:
             try:
-                table = self.model.tables[table_ref(self.model, write.qualified)]
+                table = self.model.tables[table_ref(self.model, write.relation)]
             except NotInModelError:
                 return write.columns, None
             typed = frozenset(c.folded for c in table.columns if c.type_key == "uuid")
