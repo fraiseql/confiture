@@ -14,6 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Live drift compares a named constraint by what it says, not only by its name**
+  (#501). A foreign key dropped and re-added under its own name against another
+  table was no drift: `migrate validate --check-live-drift` answered
+  `has_drift: false` and exited 0. A named constraint is still paired by name, then
+  its columns, referenced table and columns, referential actions, deferral and (for
+  an EXCLUDE) its method and operators are compared; a difference is the new drift
+  kind `constraint_mismatch` (warning), carrying both definitions in `expected` and
+  `actual`. A CHECK is still compared by name only: PostgreSQL stores its text
+  analysed. `constraint_mismatch` is added to the published `DriftItem` type enum.
+
 ## [1.25.0] - 2026-09-27
 
 **confiture supports a name only as PostgreSQL writes it bare.** A name that

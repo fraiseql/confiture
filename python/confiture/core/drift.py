@@ -17,6 +17,7 @@ import pglast
 import psycopg
 
 from confiture.core import live_catalog
+from confiture.core.ddl_clauses import constraint_body
 from confiture.core.ddl_objects import declared_triggers, objects_in
 from confiture.core.ddl_walk import canonical_default
 from confiture.core.desired_state import load_desired_state
@@ -71,6 +72,7 @@ class DriftType(Enum):
     EXTRA_INDEX = "extra_index"
     MISSING_CONSTRAINT = "missing_constraint"
     EXTRA_CONSTRAINT = "extra_constraint"
+    CONSTRAINT_MISMATCH = "constraint_mismatch"
     MISSING_VIEW = "missing_view"
     EXTRA_VIEW = "extra_view"
     MISSING_MATVIEW = "missing_matview"
@@ -441,23 +443,35 @@ def _index_label(index: Index) -> str:
 def _same_constraint(expected: Constraint, live: Constraint) -> bool:
     """Whether *live* is the constraint *expected* declares.
 
-    By name when the DDL wrote one; otherwise by what it says — its columns and, for
-    a foreign key, what it references (``REFERENCES p`` with no column list means the
-    referenced key, which the catalog always spells out), for an EXCLUDE the operator
-    each element is compared with. An unnamed CHECK matches any live CHECK still
-    unclaimed: its text is stored analysed and cannot be compared.
+    By name when the DDL wrote one — whether it still says what the DDL says is
+    :func:`_same_definition`'s question, and a difference is a mismatch, not a
+    missing constraint. Otherwise by what it says. An unnamed CHECK matches any live
+    CHECK still unclaimed: its text is stored analysed and cannot be compared.
     """
     if expected.kind != live.kind:
         return False
     if expected.name:
         return expected.name == live.name
-    if expected.kind == "check":
-        return True
+    return expected.kind == "check" or _same_definition(expected, live)
+
+
+def _same_definition(expected: Constraint, live: Constraint) -> bool:
+    """Whether two constraints of one kind say the same thing (#501).
+
+    Their columns; for a foreign key, what it references (``REFERENCES p`` with no
+    column list means the referenced key, which the catalog always spells out), its
+    referential actions; for an EXCLUDE, its access method and the operator each
+    element is compared with; and when it is checked. A CHECK's expression and an
+    EXCLUDE's predicate are not compared: PostgreSQL stores them analysed.
+    """
     return (
         expected.columns == live.columns
         and expected.operators == live.operators
+        and expected.method == live.method
         and _identity(expected.ref_table) == _identity(live.ref_table)
         and (not expected.ref_columns or expected.ref_columns == live.ref_columns)
+        and (expected.on_delete, expected.on_update) == (live.on_delete, live.on_update)
+        and expected.deferrable == live.deferrable
     )
 
 
@@ -823,16 +837,20 @@ class SchemaDriftDetector:
         Keyed by name where the DDL wrote one, and by what the constraint says where
         it did not — PostgreSQL names an unnamed constraint at apply time
         (``child_pid_fkey``), and two unnamed foreign keys on one table are two
-        (#315). A CHECK's text is not compared: PostgreSQL stores it analysed.
+        (#315). A named constraint that says something else is a mismatch (#501). A
+        CHECK's text is not compared: PostgreSQL stores it analysed.
         """
         unmatched = list(actual.constraints)
         missing: list[Constraint] = []
+        changed: list[tuple[Constraint, Constraint]] = []
         for constraint in sorted(expected.constraints, key=lambda c: not c.name):
             twin = next((live for live in unmatched if _same_constraint(constraint, live)), None)
             if twin is None:
                 missing.append(constraint)
-            else:
-                unmatched.remove(twin)
+                continue
+            unmatched.remove(twin)
+            if constraint.kind != "check" and not _same_definition(constraint, twin):
+                changed.append((constraint, twin))
 
         for constraint in missing:
             label = _constraint_label(constraint)
@@ -844,6 +862,17 @@ class SchemaDriftDetector:
                     expected=label,
                     actual=None,
                     message=f"Constraint '{label}' on '{table}' is missing",
+                )
+            )
+        for constraint, live in changed:
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.CONSTRAINT_MISMATCH,
+                    severity=DriftSeverity.WARNING,
+                    object_name=f"{table}.{constraint.name}",
+                    expected=constraint_body(constraint),
+                    actual=constraint_body(live),
+                    message=f"Constraint '{constraint.name}' on '{table}' is not what the DDL declares",
                 )
             )
         for constraint in unmatched:

@@ -11,7 +11,11 @@ foreign key and the name PostgreSQL gave it, ``'x'`` and ``'x'::text``.
 
 from __future__ import annotations
 
+from dataclasses import replace
+from typing import Any
 from unittest.mock import MagicMock
+
+import pytest
 
 from confiture.core.drift import DriftReport, DriftSeverity, DriftType, SchemaDriftDetector
 from confiture.core.schema_model import Constraint, RelationName, SchemaModel
@@ -224,3 +228,97 @@ class TestExclusionConstraints:
     def test_an_unnamed_missing_one_is_labelled_by_what_it_says(self) -> None:
         (item,) = _compare(_users(self.UNNAMED), _users()).drift_items
         assert "EXCLUDE (id)" in item.message
+
+
+class TestNamedConstraintDefinitions:
+    """#501: a named constraint is paired by name, then compared by what it says.
+
+    A foreign key dropped and re-added under its own name against another table
+    was no drift at all: the name matched, and nothing else was read.
+    """
+
+    DECLARED = Constraint(
+        kind="foreign_key",
+        name="tb_item_org_fk",
+        columns=("org_id",),
+        ref_table=RelationName("core", "tb_org"),
+        ref_columns=("id",),
+    )
+
+    def _items_for(self, live: Constraint) -> list[tuple[DriftType, DriftSeverity, str]]:
+        columns = (column("org_id"),)
+        expected = model(table("tb_item", *columns, constraints=[self.DECLARED]))
+        actual = model(table("tb_item", *columns, constraints=[live]))
+        return _items(_compare(expected, actual))
+
+    def test_a_key_repointed_at_another_schema_is_a_mismatch(self) -> None:
+        live = replace(self.DECLARED, ref_table=RelationName("app", "tb_org"))
+        assert self._items_for(live) == [
+            (DriftType.CONSTRAINT_MISMATCH, DriftSeverity.WARNING, "public.tb_item.tb_item_org_fk")
+        ]
+
+    def test_the_finding_carries_both_definitions(self) -> None:
+        live = replace(self.DECLARED, ref_table=RelationName("app", "tb_org"))
+        columns = (column("org_id"),)
+        (item,) = _compare(
+            model(table("tb_item", *columns, constraints=[self.DECLARED])),
+            model(table("tb_item", *columns, constraints=[live])),
+        ).drift_items
+        assert (item.expected, item.actual) == (
+            "FOREIGN KEY (org_id) REFERENCES core.tb_org (id)",
+            "FOREIGN KEY (org_id) REFERENCES app.tb_org (id)",
+        )
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            pytest.param({"columns": ("other_id",)}, id="columns"),
+            pytest.param({"ref_columns": ("code",)}, id="ref-columns"),
+            pytest.param({"on_delete": "CASCADE"}, id="on-delete"),
+            pytest.param({"on_update": "RESTRICT"}, id="on-update"),
+            pytest.param({"deferrable": "deferred"}, id="deferrable"),
+        ],
+    )
+    def test_each_fact_of_a_foreign_key_is_compared(self, change: dict[str, Any]) -> None:
+        live = replace(self.DECLARED, **change)
+        assert [kind for kind, _, _ in self._items_for(live)] == [DriftType.CONSTRAINT_MISMATCH]
+
+    def test_the_same_key_spelled_without_its_schema_is_the_same_key(self) -> None:
+        declared = replace(self.DECLARED, ref_table=RelationName(None, "tb_org"))
+        live = replace(self.DECLARED, ref_table=RelationName("public", "tb_org"))
+        columns = (column("org_id"),)
+        expected = model(table("tb_item", *columns, constraints=[declared]))
+        actual = model(table("tb_item", *columns, constraints=[live]))
+        assert _compare(expected, actual).drift_items == []
+
+    def test_references_with_no_column_list_is_the_key_the_catalog_spells(self) -> None:
+        declared = replace(self.DECLARED, ref_columns=())
+        columns = (column("org_id"),)
+        expected = model(table("tb_item", *columns, constraints=[declared]))
+        actual = model(table("tb_item", *columns, constraints=[self.DECLARED]))
+        assert _compare(expected, actual).drift_items == []
+
+    def test_a_unique_on_other_columns_is_a_mismatch(self) -> None:
+        live = replace(EMAIL_UQ, columns=("status",))
+        assert [i.drift_type for i in _compare(_users(EMAIL_UQ), _users(live)).drift_items] == [
+            DriftType.CONSTRAINT_MISMATCH
+        ]
+
+    def test_an_exclusion_with_another_operator_is_a_mismatch(self) -> None:
+        named = TestExclusionConstraints.NAMED
+        live = replace(named, operators=("=",))
+        assert [i.drift_type for i in _compare(_users(named), _users(live)).drift_items] == [
+            DriftType.CONSTRAINT_MISMATCH
+        ]
+
+    def test_a_check_is_still_compared_by_name(self) -> None:
+        """Its text is stored analysed (``id > 0`` reads back ``(id > 0)``)."""
+        live = replace(POSITIVE, expression="(id > 1)")
+        assert _compare(_users(POSITIVE), _users(live)).drift_items == []
+
+    def test_a_named_constraint_of_another_kind_is_missing_and_extra(self) -> None:
+        other = replace(EMAIL_UQ, kind="check", expression="true")
+        assert [i.drift_type for i in _compare(_users(EMAIL_UQ), _users(other)).drift_items] == [
+            DriftType.MISSING_CONSTRAINT,
+            DriftType.EXTRA_CONSTRAINT,
+        ]
