@@ -26,7 +26,6 @@ from confiture.core import builder as _core_builder
 from confiture.core import sql_lexer
 from confiture.core.builder import files_under
 from confiture.core.linting import seed_secrets
-from confiture.core.linting.dotted_names import dotted_names
 from confiture.core.linting.inventory import (
     Inventory,
     SchemaObject,
@@ -35,6 +34,7 @@ from confiture.core.linting.inventory import (
     distinct,
     label_for,
 )
+from confiture.core.linting.quoted_names import needs_quotes, quoted_names
 from confiture.core.linting.rule_registry import LINT_RULES, UNPARSEABLE_RULE_ID
 from confiture.core.linting.seed_secrets import SECRET_COLUMN_PATTERNS
 from confiture.core.linting.tenant import rules as tenant_rules
@@ -518,14 +518,15 @@ class SchemaLinter:
             self._schema_sql = ""
 
     def _check_naming_conventions(self, report: LintReport) -> None:
-        """Check naming conventions on the inventory: snake_case, and no dotted name.
+        """Check naming conventions on the inventory: snake_case, and no name that needs quotes.
 
-        A name holding a dot is ``naming_003``'s, an error, and is not reported
-        again as a spelling (``naming_001`` / ``naming_002``).
+        A name holding a dot is ``naming_003``'s and any other name that needs
+        quotes ``naming_004``'s, both errors; neither is reported again as a
+        spelling (``naming_001`` / ``naming_002``).
         """
-        self._check_dotted_names(report)
+        self._check_quoted_names(report)
         for table in distinct(self._inventory.tables):
-            if "." not in table.name and not self._is_snake_case(table.name):
+            if not needs_quotes(table.folded_name) and not self._is_snake_case(table.name):
                 report.add_violation(
                     LintViolation(
                         rule_id="naming_001",
@@ -546,7 +547,7 @@ class SchemaLinter:
     def _check_column_names(self, table: SchemaObject, report: LintReport) -> None:
         """Check column naming conventions in a table."""
         for column in table.columns:
-            if "." not in column.name and not self._is_snake_case(column.name):
+            if not needs_quotes(column.folded) and not self._is_snake_case(column.name):
                 report.add_violation(
                     LintViolation(
                         rule_id="naming_002",
@@ -562,23 +563,35 @@ class SchemaLinter:
                     )
                 )
 
-    def _check_dotted_names(self, report: LintReport) -> None:
-        """``naming_003``: a name holding a dot, which confiture reads as ``schema.name``."""
-        for found in dotted_names(self._inventory):
+    def _check_quoted_names(self, report: LintReport) -> None:
+        """``naming_003``: a name holding a dot; ``naming_004``: any other that needs quotes."""
+        for found in quoted_names(self._inventory):
+            if found.dotted:
+                rule_id, rule_name = "naming_003", "Dotted Identifier"
+                message = (
+                    f"{found.spelled} holds a dot in its name: confiture reads a "
+                    "dotted name as schema.name, so what refers to it is misread"
+                )
+                fix = f"rename it without the dot, e.g. {found.suggested}"
+            else:
+                rule_id, rule_name = "naming_004", "Quoted Identifier"
+                message = (
+                    f"{found.spelled} needs quotes: confiture supports a name only "
+                    "as PostgreSQL writes it bare (lowercase, digits, underscores, "
+                    "not a reserved word)"
+                )
+                fix = f"rename it so it needs no quotes, e.g. {found.suggested}"
             report.add_violation(
                 LintViolation(
-                    rule_id="naming_003",
-                    rule_name="Dotted Identifier",
+                    rule_id=rule_id,
+                    rule_name=rule_name,
                     severity=RuleSeverity.ERROR,
                     object_type=found.kind,
                     object_name=found.spelled,
-                    message=(
-                        f"{found.spelled} holds a dot in its name: confiture reads a "
-                        "dotted name as schema.name, so what refers to it is misread"
-                    ),
+                    message=message,
                     file_path=found.file,
                     line_number=found.line,
-                    suggested_fix=f"rename it without the dot, e.g. {found.suggested}",
+                    suggested_fix=fix,
                 )
             )
 

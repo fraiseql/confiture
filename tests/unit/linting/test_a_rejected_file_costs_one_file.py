@@ -185,6 +185,7 @@ class TestTheBlindedRulesSaySo:
             "naming_001",
             "naming_002",
             "naming_003",
+            "naming_004",
             "pk_001",
             "doc_001",
             "doc_002",

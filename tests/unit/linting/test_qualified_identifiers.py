@@ -52,14 +52,14 @@ def test_a_comment_documents_only_the_table_it_names() -> None:
 
 
 def test_naming_001_reads_the_identifier_as_written() -> None:
-    sql = 'CREATE TABLE tenant."BadTable" (id INT PRIMARY KEY);\nCOMMENT ON TABLE tenant."BadTable" IS \'x\';\n'
+    sql = "CREATE TABLE tenant.BadTable (id INT PRIMARY KEY);\nCOMMENT ON TABLE tenant.BadTable IS 'x';\n"
     assert _codes(sql) == ["naming_001"]
     assert _objects(sql, "naming_001") == ["tenant.BadTable"]
 
 
 CASES = {
     "camel_table": (
-        'CREATE TABLE {q}"UserAccounts" (id INT PRIMARY KEY);\nCOMMENT ON TABLE {q}"UserAccounts" IS \'x\';\n',
+        "CREATE TABLE {q}UserAccounts (id INT PRIMARY KEY);\nCOMMENT ON TABLE {q}UserAccounts IS 'x';\n",
         ["naming_001"],
     ),
     "camel_column": (

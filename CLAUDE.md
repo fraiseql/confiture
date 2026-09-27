@@ -264,7 +264,10 @@ name may hold a dot (`app."a.b"`). Compare `.identity`; write it with
 `ddl_clauses.relation`. A name a caller types is read by `sql_lexer.name_parts`.
 `tests/unit/test_one_relation_reference.py` fails on a module that splits text on a
 dot; its allow-list names what each remaining split reads instead (a module path, a
-file name, a configured label) or the issue that tracks it.
+file name, a configured label) or, for a type's key, that `naming_003` refuses the
+dotted name it would misread. confiture supports only names that need no quotes:
+`naming_003` and `naming_004` refuse the rest, and generated DDL still quotes through
+`quote_identifier`.
 
 **One identifier quoter** — `core/schema_identity.quote_identifier` writes an identifier
 into generated text, quoting it when PostgreSQL's own keyword lists (pglast's

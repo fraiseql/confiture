@@ -9,8 +9,8 @@ the catalog's two parts. A name a caller *types* is read by the scanner
 (``sql_lexer.name_parts``), which knows where a quoted part ends.
 
 This guard fails on a module that splits text on a dot. Its allow-list is keyed
-``module:function`` and each entry says why that text is not a relation's name,
-or names the issue that tracks it. An entry that matches nothing fails too.
+``module:function`` and each entry says why that text is not a relation's name.
+An entry that matches nothing fails too.
 """
 
 from __future__ import annotations
@@ -24,6 +24,12 @@ PACKAGE = Path(confiture.__file__).resolve().parent
 
 #: The string methods that take text apart at a separator.
 _SPLITTERS = frozenset({"split", "rsplit", "partition", "rpartition"})
+
+#: A type's key and the build's foreign-key mover hold a name as one ``schema.name``
+#: string. confiture supports only names that need no quotes (``naming_003`` refuses a
+#: dotted one, ``naming_004`` every other that needs quotes, #484), so the last dot of
+#: a tree that passes lint is the separator.
+_REFUSED_DOT = "one `schema.name` string; a name holding a dot is refused by naming_003"
 
 #: ``module:function`` → why the text it splits on a dot is not a relation's name.
 ALLOWED: dict[str, str] = {
@@ -56,11 +62,11 @@ ALLOWED: dict[str, str] = {
     "testing/fixtures/data_validator.py:get_row_count": (
         "a test fixture's `schema.table` argument, written by the test that calls it"
     ),
-    "core/linting/inventory.py:type_key": "a type's name is one string: tracked in #480",
-    "core/type_lattice.py:_schema_and_type": "a type's name is one string: tracked in #480",
-    "core/type_lattice.py:_argument_key": "a type's name is one string: tracked in #480",
-    "core/schema_change.py:_written_ref": "an enum's name is one string: tracked in #480",
-    "core/fk_extractor.py:_bare_table_name": "the regex FK extractor: tracked in #480",
+    "core/linting/inventory.py:type_key": _REFUSED_DOT,
+    "core/type_lattice.py:_schema_and_type": _REFUSED_DOT,
+    "core/type_lattice.py:_argument_key": _REFUSED_DOT,
+    "core/schema_change.py:_written_ref": _REFUSED_DOT,
+    "core/fk_extractor.py:_bare_table_name": _REFUSED_DOT,
 }
 
 

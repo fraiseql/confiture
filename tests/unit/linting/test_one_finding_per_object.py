@@ -21,8 +21,8 @@ from pathlib import Path
 from confiture.core.linting.schema_linter import LintConfig, LintReport, SchemaLinter
 
 _TWICE = """CREATE SCHEMA IF NOT EXISTS app;
-CREATE TABLE app."TbWidget" ("SomeCol" TEXT);
-CREATE TABLE app."TbWidget" ("SomeCol" TEXT);
+CREATE TABLE app.TbWidget (SomeCol TEXT);
+CREATE TABLE app.TbWidget (SomeCol TEXT);
 """
 
 
@@ -46,6 +46,12 @@ def test_a_table_defined_twice_is_one_naming_finding_per_name() -> None:
     codes = _codes(_lint(_TWICE))
 
     assert (codes["naming_001"], codes["naming_002"]) == (1, 1)
+
+
+def test_a_quoted_table_defined_twice_is_one_quoted_name_finding_per_name() -> None:
+    codes = _codes(_lint(_TWICE.replace("TbWidget", '"TbWidget"').replace("SomeCol", '"SomeCol"')))
+
+    assert codes["naming_004"] == 2
 
 
 def test_the_duplicate_itself_is_still_reported_once() -> None:

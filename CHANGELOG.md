@@ -33,7 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   caller types (`column_facts(model, "app.t", …)`) is read as SQL reads it, so
   an unquoted part is folded and `"My Table"` is quoted as in SQL. A guard fails
   on a module that splits text on a dot; the splits left are listed with what
-  they read, the type keys among them tracked in #480.
+  they read. A type's key is among them, and `naming_003` refuses the dotted name
+  it would misread.
 
 ### Fixed
 
@@ -55,16 +56,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in a model written before). `DROP INDEX` names the index in its table's schema,
   where a bare name dropped nothing. Checked by applying a generated migration up
   and down on a database and reading it back. A view's or a routine's `DROP`, and
-  an enum's `ALTER TYPE … ADD VALUE`, still spell the name as the model holds it:
-  tracked in #480.
+  an enum's `ALTER TYPE … ADD VALUE`, still spell the name as the model holds it.
+  `naming_004` refuses such a name.
 
 ### Added
 
+- **`naming_004`: no identifier needs quotes** (#484), at `error` and on by
+  default. confiture supports a name only as PostgreSQL writes it bare:
+  lowercase letters, digits, `_` and `$`, not starting with a digit, not a
+  reserved word. The rule reports every schema, relation, type, sequence,
+  routine, column and index whose name exists only quoted, such as
+  `app."Order Line"`, `"MyTable"`, a column `"user"` or `"1st"`. It spells the
+  name as SQL writes it and suggests a snake_case one. A dotted name stays
+  `naming_003`'s alone, and neither `naming_001` nor `naming_002` reports such a
+  name again. A tree that trips it can adopt it with `--baseline`.
 - **`naming_003`: no identifier holds a dot** (#476), at `error` and on by
-  default. PostgreSQL accepts `CREATE TABLE app."a.b"`, but confiture carries a
-  foreign key's target (among others) as one `schema.name` string, so a dot in a
-  name reads as the separator and the differ, drift and prep-seed misread what
-  refers to it. The rule reports every schema, relation, type, sequence, routine,
+  default. PostgreSQL accepts `CREATE TABLE app."a.b"`, but confiture carries
+  some names (a type's key among them) as one `schema.name` string, so a dot in
+  a name reads as the separator and what refers to it is misread. The rule reports every schema, relation, type, sequence, routine,
   column and index whose name holds a dot — a schema once, where it is declared
   or first used — spelled as SQL writes it (`app."a.b"`), with the name's dots
   made underscores as the suggested fix. `naming_001` and `naming_002` no longer

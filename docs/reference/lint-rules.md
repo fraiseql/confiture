@@ -14,6 +14,7 @@ Adopt a rule on a schema that already trips it with a
 | `naming_001` | naming | warning | on | Table names should be snake_case |
 | `naming_002` | naming | warning | on | Column names should be snake_case |
 | `naming_003` | naming | error | on | No identifier holds a dot: confiture would read it as schema.name |
+| `naming_004` | naming | error | on | No identifier needs quotes: a space, a capital, a reserved word |
 | `pk_001` | pk | warning | on | Every table should declare a primary key |
 | `doc_001` | doc | info | on | Every table should carry a COMMENT |
 | `doc_002` | doc | info | on | Every function and procedure should carry a COMMENT (per overload) |
@@ -81,26 +82,41 @@ not silence the rest of the tree.
 > `python -c "from confiture.core.linting.rule_registry import render_rule_table;
 > print(render_rule_table())"`; `tests/unit/test_lint_rules_doc.py` fails if it drifts.
 
-## `naming_003` — no identifier holds a dot
+## `naming_003` and `naming_004` — no identifier needs quotes
 
-PostgreSQL accepts a quoted name with a dot in it, `CREATE TABLE app."a.b"`. confiture
-does not always read it back: a foreign key's target, among others, is carried as one
-`schema.name` string, so a dot inside a name reads as the separator, and
-`REFERENCES app."a.b"` names table `b` in schema `app.a` to the differ, to drift and to
-prep-seed. That is a misreading, not a matter of taste, so the rule is an `error` and on
-by default.
+confiture supports a name only as PostgreSQL writes it bare: lowercase letters, digits,
+`_` and `$`, not starting with a digit, and not a reserved word. PostgreSQL accepts
+`CREATE TABLE app."Order Line"`, `"MyTable"` or a column named `"user"`, but confiture
+does not. Both rules are `error` and on by default.
 
-It reads every name the tree gives: each schema, relation, type, sequence and routine,
-and each table's columns and indexes. A schema is reported once, where it is declared or
-where it is first used as a qualifier. A name `naming_003` reports is not reported again
-by `naming_001` or `naming_002`. The finding spells the object as SQL writes it and
-suggests the name with each dot an underscore:
+- **`naming_003`** reports a name that holds a dot, `app."a.b"`. Some names are still
+  carried as one `schema.name` string, a type's key among them, so a dot inside a name
+  reads as the separator and what refers to it is misread. The fix it suggests makes
+  each dot an underscore.
+- **`naming_004`** reports every other name that needs quotes: a space or other
+  punctuation, a capital letter, a non-ASCII letter, a leading digit, or a reserved word.
+  The fix it suggests is the name in snake_case. An unquoted `CREATE TABLE BadName` is
+  not this rule's, because PostgreSQL folds it to `badname`; `naming_001` reports its
+  spelling.
+
+Both read every name the tree gives: each schema, relation, type, sequence and routine,
+and each table's columns and indexes. A name is reported once, under one of the two
+rules, and neither `naming_001` nor `naming_002` reports it again. A schema is reported
+once, where it is declared or where it is first used as a qualifier. The finding spells
+the object as SQL writes it:
 
 ```text
 error  naming_003  app."a.b" holds a dot in its name: confiture reads a dotted name as
                    schema.name, so what refers to it is misread
                    fix: rename it without the dot, e.g. app.a_b
+error  naming_004  app.t."Mixed Col" needs quotes: confiture supports a name only as
+                   PostgreSQL writes it bare (lowercase, digits, underscores, not a
+                   reserved word)
+                   fix: rename it so it needs no quotes, e.g. app.t.mixed_col
 ```
+
+Generated DDL still quotes a name that needs it, so a tree that ignores the rules still
+gets SQL PostgreSQL accepts.
 
 ## The `doc` family — every commentable object carries a `COMMENT`
 
