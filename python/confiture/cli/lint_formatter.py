@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import verbatim, verbatim_text
 from confiture.models.lint import LintReport, LintSeverity, Violation
 
 
@@ -60,16 +60,18 @@ def _severity_string(severity: LintSeverity) -> str:
     return "[blue]INFO[/blue]"
 
 
-def _location_cell(violation: Violation) -> str:
+def _location_cell(violation: Violation) -> Text:
     """The object, and under it the file and line — the answer to "where?".
 
     A finding with no file shows the object alone; a line without a file is not
-    a location and is never rendered on its own.
+    a location and is never rendered on its own. Both are data: an object's
+    name may hold ``[link=…]`` or an ESC, and neither is rendered (#488).
     """
+    location = verbatim_text(violation.location)
     if not violation.file:
-        return violation.location
+        return location
     where = f"{violation.file}:{violation.line}" if violation.line else violation.file
-    return f"{violation.location}\n[dim]{where}[/dim]"
+    return Text.assemble(location, "\n", (verbatim_text(where).plain, "dim"))
 
 
 def format_table(report: LintReport, console: Console) -> None:
@@ -117,8 +119,7 @@ def format_table(report: LintReport, console: Console) -> None:
             # Text, not str: a message can quote what an author wrote — doc_005
             # quotes the COMMENT it is about — and Rich reads `[a]` in a cell as
             # a style tag, rendering a different sentence from the one reported.
-            # The location cell keeps markup, which it composes itself.
-            Text(violation.message),
+            verbatim_text(violation.message),
         )
 
     console.print(table)

@@ -1019,9 +1019,10 @@ Rich reads `[...]` in a printed string as markup, so a value interpolated into
 `console.print(f"…")` is written `{verbatim(value)}` (or `{verbatim(value, ".2f")}`),
 and markup confiture builds itself `{markup(value)}` — both from `cli/markup.py`.
 `tests/unit/test_cli_prints_data_verbatim.py` fails on any other interpolation in
-an f-string passed to a `print`/`log`/`status`/`rule`/`input` method under `cli/`,
+an f-string passed to a `print`/`log`/`status`/`rule`/`input`/`add_row` method under `cli/`,
 whatever the console is named; a style-tag position, `len(…)` and a numeric format
-spec need neither.
+spec need neither. A table cell that is data is `verbatim_text(value)`, never a bare
+`str`. Both escape a control character, so a name holding an ESC commands nothing.
 
 ### Adding a `confiture lint` rule
 

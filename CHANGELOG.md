@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`confiture lint` prints an object's name as data** (#488). The location
+  column was rendered as Rich markup, so a table named
+  `"[link=https://evil.example]click[/link]"` printed a live hyperlink, and an
+  ESC in a name reached the terminal raw. The location and message cells are
+  now plain text. Every value the CLI prints through `verbatim` writes a control
+  character other than a newline or a tab as its escape (`\x1b`).
 - **prep-seed level 1 finds a table whose name needed quotes again** (#490).
   It looked the seed's table up by joining the statement's schema and name and
   reading the text back. Since #478 that text is read as SQL reads it, so

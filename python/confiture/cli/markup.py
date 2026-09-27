@@ -10,9 +10,15 @@ Rich reads ``[...]`` in a printed string as a style tag: a value interpolated in
 
 from __future__ import annotations
 
+import unicodedata
+
 from rich.markup import escape
+from rich.text import Text
 
 from confiture.url_redaction import redact_credentials_in
+
+#: Control characters a printed value keeps: they lay text out and command nothing.
+_LAYOUT = frozenset("\n\t")
 
 
 def verbatim(value: object, spec: str = "") -> str:
@@ -20,9 +26,24 @@ def verbatim(value: object, spec: str = "") -> str:
 
     Every credential in it is masked first (``postgresql://u:***@h``,
     ``password=***``): this is how every value reaches the console, so a
-    message that carries a DSN prints it without its password.
+    message that carries a DSN prints it without its password. A control
+    character is written as its escape (``\\x1b``), so a value — a quoted
+    identifier can hold an ESC — never sends the terminal a command.
     """
-    return escape(redact_credentials_in(format(value, spec)))
+    return escape(_shown(format(value, spec)))
+
+
+def verbatim_text(value: object) -> Text:
+    """*value* as a Rich :class:`~rich.text.Text`, for a table cell: :func:`verbatim`'s rules."""
+    return Text(_shown(str(value)))
+
+
+def _shown(text: str) -> str:
+    """*text* with its credentials masked and each control character but a newline or tab escaped."""
+    return "".join(
+        c if c in _LAYOUT or unicodedata.category(c) != "Cc" else repr(c)[1:-1]
+        for c in redact_credentials_in(text)
+    )
 
 
 def markup(value: str) -> str:
