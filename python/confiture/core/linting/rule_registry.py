@@ -165,6 +165,13 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="naming_004",
+        family="naming",
+        title="No identifier needs quotes: a space, a capital, a reserved word",
+        severity="error",
+        default_on=True,
+    ),
+    LintRule(
         code="pk_001",
         family="pk",
         title="Every table should declare a primary key",

@@ -30,7 +30,7 @@ EXPECTED: dict[str, dict[str, list]] = {
             ("create_table", "public.MyTable", "additive"),
             ("comment", "public.MyTable", "reversible"),
         ],
-        "lint": [("naming_001", "MyTable")],
+        "lint": [("naming_004", '"MyTable"')],
     },
     "quoted_table_with_space": {
         "idempotency": [("CREATE_TABLE", 1)],
@@ -39,7 +39,7 @@ EXPECTED: dict[str, dict[str, list]] = {
             ("create_table", "public.My Table", "additive"),
             ("comment", "public.My Table", "reversible"),
         ],
-        "lint": [("naming_001", "My Table")],
+        "lint": [("naming_004", '"My Table"')],
     },
     "semicolon_in_identifier": {
         "idempotency": [("CREATE_TABLE", 1)],
@@ -48,7 +48,7 @@ EXPECTED: dict[str, dict[str, list]] = {
             ("create_table", "public.a;b", "additive"),
             ("comment", "public.a;b", "reversible"),
         ],
-        "lint": [("naming_001", "a;b")],
+        "lint": [("naming_004", '"a;b"')],
     },
     "unnamed_index": {
         "idempotency": [("CREATE_TABLE", 1), ("CREATE_INDEX", 3)],

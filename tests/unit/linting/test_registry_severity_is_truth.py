@@ -88,6 +88,7 @@ FIXTURES: dict[str, Fixture] = {
     "naming_001": Fixture({"010.sql": "CREATE TABLE BadName (id INT PRIMARY KEY);\n"}),
     "naming_002": Fixture({"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, badCol INT);\n"}),
     "naming_003": Fixture({"010.sql": 'CREATE TABLE "tb.t" (id INT PRIMARY KEY);\n'}),
+    "naming_004": Fixture({"010.sql": 'CREATE TABLE "Tb T" (id INT PRIMARY KEY);\n'}),
     "pk_001": Fixture({"010.sql": "CREATE TABLE tb_t (id INT);\n"}),
     "doc_001": Fixture({"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY);\n"}),
     "doc_002": Fixture(
