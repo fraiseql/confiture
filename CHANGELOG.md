@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.25.1] - 2026-09-27
+
+**Live drift sees a constraint that kept its name and changed what it says.**
+
 ### Fixed
 
 - **Live drift compares a named constraint by what it says, not only by its name**
