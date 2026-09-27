@@ -604,6 +604,39 @@ class TestSchemaOnlyIsNotEmpty:
         """The regression guard for all of the above."""
         assert len(find_data_assertions(INCIDENT, HERE)) == 1
 
+    def test_a_dotted_name_is_not_its_last_part(self) -> None:
+        """`app."a.b"` is table `a.b` in schema `app`, not a relation named `b` (#480).
+
+        A derivation of `b` from the catalogue says nothing about `app."a.b"`,
+        which is a user table, empty at preflight.
+        """
+        sql = """
+        CREATE TEMP TABLE b AS SELECT relname FROM pg_class;
+        CREATE TEMP TABLE _f AS SELECT id FROM app."a.b";
+
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM _f;
+          IF v = 0 THEN RAISE EXCEPTION 'empty'; END IF;
+        END $$;
+        """
+        assert len(find_data_assertions(sql, HERE)) == 1
+
+    def test_a_dotted_name_is_not_a_qualified_one(self) -> None:
+        """`"app.x"` is one unqualified name; a view `app.x` built from the catalogue is another."""
+        sql = """
+        CREATE VIEW app.x AS SELECT relname FROM pg_class;
+
+        DO $$
+        DECLARE v int;
+        BEGIN
+          SELECT count(*) INTO v FROM "app.x";
+          IF v = 0 THEN RAISE EXCEPTION 'empty'; END IF;
+        END $$;
+        """
+        assert len(find_data_assertions(sql, HERE)) == 1
+
 
 class TestACountAssignedWithColonEquals:
     """`v := (SELECT count(*) …)` is the same count as `SELECT count(*) INTO v` (#363)."""
