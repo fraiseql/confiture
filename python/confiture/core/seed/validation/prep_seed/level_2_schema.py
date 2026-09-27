@@ -9,12 +9,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import Table
+from confiture.core.seed.validation.prep_seed import keys
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
     ViolationSeverity,
 )
+from confiture.core.seed.validation.prep_seed.resolvers import Resolver
 
 
 def _column_names(table: Table) -> list[str]:
@@ -47,6 +50,7 @@ class Level2SchemaValidator:
         final_name: Callable[[str], str | None] | None = None,
         locate: Callable[[Table], tuple[str, int]] | None = None,
         locate_resolver: Callable[[Table], tuple[str, int] | None] | None = None,
+        resolver_for: Callable[[Table], Resolver | None] | None = None,
         prep_seed_schema: str = "prep_seed",
         catalog_schema: str = "catalog",
     ) -> None:
@@ -62,6 +66,8 @@ class Level2SchemaValidator:
                 it; without one a finding names the table itself.
             locate_resolver: ``(file, line)`` of the resolver that fills a prep
                 table, when the schema defines one.
+            resolver_for: That resolver itself, whose second-pass ``UPDATE``
+                resolves a self-reference.
             prep_seed_schema: The schema seeds are loaded into.
             catalog_schema: The schema the resolvers fill when nothing says otherwise.
         """
@@ -69,6 +75,7 @@ class Level2SchemaValidator:
         self._final_name = final_name or (lambda name: f"{catalog_schema}.{name}")
         self._locate = locate
         self._locate_resolver = locate_resolver
+        self._resolver_for = resolver_for
         self.prep_seed_schema = prep_seed_schema
         self.catalog_schema = catalog_schema
 
@@ -129,7 +136,7 @@ class Level2SchemaValidator:
         violations.extend(self._validate_fk_mappings(prep_table, final_table))
 
         # Detect self-references
-        violations.extend(self.detect_self_references(prep_table))
+        violations.extend(self.detect_self_references(prep_table, final_table))
 
         return violations
 
@@ -212,48 +219,75 @@ class Level2SchemaValidator:
 
         return violations
 
+    @staticmethod
+    def _references_itself(table: Table, final: Table | None, column: str) -> bool:
+        """Whether *column* of staging *table* is a key to the table itself."""
+        parent, declared = keys.target(final, table, column)
+        if declared:
+            return parent == (final.name if final is not None else table.name)
+        # No REFERENCES: `fk_parent_product_id` in `tb_product` is one by its name.
+        role = column.removeprefix(keys.FK_PREFIX).removesuffix(keys.FK_SUFFIX)
+        own = table.name.removeprefix("tb_")
+        return role == own or role.endswith("_" + own)
+
+    @staticmethod
+    def _second_pass(resolver: Resolver, final: Table, column: str) -> bool:
+        """Whether *resolver* sets the key in an ``UPDATE`` of *final* that reads *column*."""
+        schema = (final.schema or DEFAULT_SCHEMA).lower()
+        updates = [
+            node
+            for node in keys.filling(resolver, schema, final.name)
+            if type(node).__name__ == "UpdateStmt"
+        ]
+        return keys.reads(updates, column)
+
     def detect_self_references(
         self,
         table: Table,
+        final: Table | None = None,
     ) -> list[PrepSeedViolation]:
-        """Detect self-referencing FK columns.
+        """Each self-referencing key the resolver does not set in a second pass.
 
         Self-references need two-pass resolution:
         1. INSERT all rows with NULL fk_*
         2. UPDATE fk_* columns with resolved PKs
+
+        A key references its own table when the final table's ``REFERENCES`` says
+        so (:func:`.keys.target`); only a key with no ``REFERENCES`` is judged by
+        its name. A resolver whose ``UPDATE`` of the final table reads the key
+        runs the second pass, and draws nothing (#498).
         """
         violations: list[PrepSeedViolation] = []
-
-        table_basename = table.name[3:]  # Remove tb_ prefix
+        resolver = self._resolver_for(table) if self._resolver_for is not None else None
 
         for col_name in _column_names(table):
-            if col_name.startswith("fk_") and col_name.endswith("_id"):
-                # Extract referenced table from column name
-                # fk_parent_product_id -> parent_product
-                fk_target = col_name[3:-3]  # Remove fk_ and _id
-
-                # Check if it references the same table
-                if fk_target == table_basename or fk_target.endswith("_" + table_basename):
-                    violations.append(
-                        PrepSeedViolation(
-                            pattern=PrepSeedPattern.MISSING_SELF_REFERENCE_HANDLING,
-                            severity=ViolationSeverity.WARNING,
-                            message=(
-                                f"Table {table.name} has self-referencing FK "
-                                f"'{col_name}' that requires two-pass resolution"
-                            ),
-                            file_path=self._resolver_or(table)[0],
-                            line_number=self._resolver_or(table)[1],
-                            impact=(
-                                "Self-references must use two-pass resolution (INSERT then UPDATE)"
-                            ),
-                            fix_available=True,
-                            suggestion=(
-                                "Ensure resolution function handles self-references: "
-                                "1) INSERT with NULL fk_*, "
-                                "2) UPDATE fk_* from same table"
-                            ),
-                        )
+            if keys.is_key(col_name) and self._references_itself(table, final, col_name):
+                if (
+                    resolver is not None
+                    and final is not None
+                    and self._second_pass(resolver, final, col_name)
+                ):
+                    continue
+                violations.append(
+                    PrepSeedViolation(
+                        pattern=PrepSeedPattern.MISSING_SELF_REFERENCE_HANDLING,
+                        severity=ViolationSeverity.WARNING,
+                        message=(
+                            f"Table {table.name} has self-referencing FK "
+                            f"'{col_name}' that requires two-pass resolution"
+                        ),
+                        file_path=self._resolver_or(table)[0],
+                        line_number=self._resolver_or(table)[1],
+                        impact=(
+                            "Self-references must use two-pass resolution (INSERT then UPDATE)"
+                        ),
+                        fix_available=True,
+                        suggestion=(
+                            "Ensure resolution function handles self-references: "
+                            "1) INSERT with NULL fk_*, "
+                            "2) UPDATE fk_* from same table"
+                        ),
                     )
+                )
 
         return violations

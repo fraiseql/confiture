@@ -1,8 +1,8 @@
 """The resolution functions a schema defines: found by name, never by file name (#385).
 
 A resolver is a routine whose own name starts ``fn_resolve`` — folded, so
-``Fn_Resolve_X`` is one and so is a quoted ``"Fn_resolve_X"`` — wherever its
-``CREATE`` is written. A tree that names its files ``019201004_fn_resolve_tb_x.sql``,
+``Fn_Resolve_X`` is one and so is a quoted ``"Fn_resolve_X"`` — and that takes
+no argument, wherever its ``CREATE`` is written. A tree that names its files ``019201004_fn_resolve_tb_x.sql``,
 or keeps every resolver in one file, holds the same resolvers as one that names
 each file after its function.
 
@@ -118,6 +118,12 @@ def read_resolution(
     for definition in read.definitions:
         obj = definition.obj
         if obj.kind not in _ROUTINE_KINDS or not obj.folded_name.lower().startswith(PREFIX):
+            continue
+        # Levels 4 and 5 call a resolver with no argument: one that takes some
+        # (`fn_resolve_or_create_widget(p_owner BIGINT)`) is a business routine
+        # named like one, and judged as a resolver drew findings on the table it
+        # writes (#498).
+        if obj.signature_key:
             continue
         found.append(
             Resolver(

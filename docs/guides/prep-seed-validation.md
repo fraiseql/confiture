@@ -153,7 +153,9 @@ confiture seed validate --prep-seed --level 1
 - Final table exists for each prep_seed table
 - FK columns map correctly (UUID columns → BIGINT columns)
 - Trinity pattern in final tables (id UUID, pk_* BIGINT, fk_* BIGINT)
-- Self-references handled correctly
+- Self-references handled correctly: a key whose final column `REFERENCES` its own table
+  (or, with no `REFERENCES`, is named for it) needs a second pass, and is warned about
+  unless the resolver has an `UPDATE` of the final table that reads the key
 
 Level 2 reads the schema directory as one model, the way `confiture build` reads
 it — every `.sql` under it, recursively, in path order — so an `ALTER TABLE` in
@@ -208,17 +210,23 @@ confiture seed validate --prep-seed --level 2
 ### Level 3: Resolution Function Validation 🔴 CRITICAL (~3s)
 
 A resolution function is every routine the schema defines whose name starts
-`fn_resolve` — whatever the file it is written in is called, and however many share a
-file. Its body is parsed (PL/pgSQL through the compiler, `LANGUAGE sql` as SQL) and
+`fn_resolve` and that takes no argument — whatever the file it is written in is called,
+and however many share a file. Levels 4 and 5 call a resolver with no argument, so a
+business routine such as `fn_resolve_or_create_widget(p_owner BIGINT)` is not one. Its body is parsed (PL/pgSQL through the compiler, `LANGUAGE sql` as SQL) and
 compared with the tables the schema declares.
 
 **What it checks:**
 - **Schema drift**: each `INSERT` targets the schema its table is declared in (e.g.,
   `catalog.tb_x`, not `tenant.tb_x`)
-- FK transformations: for each `fk_<entity>_id` of the prep-seed table, the `INSERT`
+- FK transformations: for each `fk_<role>_id` of the prep-seed table, the resolver
   equates the parent's `id` with it — in a `JOIN … ON`, a comma join's `WHERE`, a
-  subquery, or through a CTE. The parent is the table a declared foreign key names, or
-  `tb_<entity>` by convention.
+  scalar subquery, or through a CTE — in its `INSERT` into the final table or in a
+  second-pass `UPDATE` of it. The parent is the table the final table's `fk_<role>`
+  `REFERENCES`, so a key named for its role (`fk_owner` referencing `tb_person`) is
+  checked against `tb_person`. A key the staging table itself declares `REFERENCES`
+  for is read the same way. Only an `fk_*_id` column with no `REFERENCES` on either
+  side is taken for a key to `tb_<role>` by its name: that is the convention's call,
+  and declaring the foreign key on the final table is how to override it.
 - What it cannot read — a string `EXECUTE` builds, a statement the parser rejects, a
   body in another language — is reported as not checked, never passed
 - A schema that defines no resolver at all is reported
