@@ -150,6 +150,25 @@ MUTATIONS = [
         "core.tb_other.ck_other_id",
         id="extra-constraint",
     ),
+    # #501: a named constraint is paired by name, then compared by what it says.
+    pytest.param(
+        "ALTER TABLE core.tb_other DROP CONSTRAINT fk_other_widget, "
+        "ADD CONSTRAINT fk_other_widget FOREIGN KEY (id) REFERENCES core.tb_other (id) "
+        "ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED",
+        "constraint_mismatch",
+        "warning",
+        "core.tb_other.fk_other_widget",
+        id="repoint-foreign-key",
+    ),
+    pytest.param(
+        "ALTER TABLE core.tb_other DROP CONSTRAINT fk_other_widget, "
+        "ADD CONSTRAINT fk_other_widget FOREIGN KEY (id) REFERENCES core.tb_widget (id) "
+        "DEFERRABLE INITIALLY DEFERRED",
+        "constraint_mismatch",
+        "warning",
+        "core.tb_other.fk_other_widget",
+        id="foreign-key-loses-its-action",
+    ),
     # #322: an EXCLUDE is a constraint drift reads; the index behind it is PostgreSQL's.
     pytest.param(
         "ALTER TABLE core.tb_other ADD CONSTRAINT ex_other_id EXCLUDE USING btree (id WITH =)",

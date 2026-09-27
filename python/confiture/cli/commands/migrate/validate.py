@@ -189,7 +189,7 @@ CheckLiveDriftOpt = Annotated[
         "each difference by kind: missing_table / extra_table, missing_column / "
         "extra_column, type_mismatch, nullable_mismatch, default_mismatch, "
         "column_order_mismatch, missing_index / extra_index, missing_constraint / "
-        "extra_constraint, missing_view / extra_view, missing_matview / "
+        "extra_constraint, constraint_mismatch, missing_view / extra_view, missing_matview / "
         "extra_matview, missing_trigger / extra_trigger, missing_routine / "
         "extra_routine. Sequences are not compared; grants and ownership are "
         "separate checks (--check-acls, --check-ownership-coverage). "

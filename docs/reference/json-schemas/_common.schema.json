@@ -127,7 +127,8 @@
             "missing_grant",
             "extra_grant",
             "wrong_owner",
-            "column_order_mismatch"
+            "column_order_mismatch",
+            "constraint_mismatch"
           ]
         },
         "severity": {
