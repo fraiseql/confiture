@@ -19,15 +19,31 @@ from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.risk_tier import RiskTier, worst_tier
 from confiture.core.schema_change import SchemaChange, SchemaDiff
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX
-from confiture.core.sql_utils import strip_transaction_wrappers
+from confiture.core.sql_utils import comment_text, strip_transaction_wrappers
 from confiture.exceptions import DifferError, ExternalGeneratorError
 
 
 def _execute_call(sql: str) -> str:
-    """One ``self.execute(...)`` line; multi-line DDL (a ``CREATE TABLE``) rides in triple quotes."""
-    if "\n" in sql or '"' in sql:
-        return f'        self.execute("""{sql}""")'
-    return f'        self.execute("{sql}")'
+    """One ``self.execute(...)`` line whose argument is a Python literal of exactly *sql*."""
+    return f"        self.execute({_python_literal(sql)})"
+
+
+def _python_literal(sql: str) -> str:
+    """*sql* as a Python string literal, readable where that is safe.
+
+    A name in the SQL may hold any character, so the readable forms are used only
+    when nothing in *sql* can end them or be read as an escape: a one-line
+    statement with no ``"`` or backslash rides in double quotes, a multi-line one
+    (a ``CREATE TABLE``) in triple quotes when it holds no ``\"\"\"``, ends in no
+    ``"`` and has no backslash. Anything else is ``repr``.
+    """
+    if "\\" in sql or not all(c.isprintable() or c == "\n" for c in sql):
+        return repr(sql)
+    if "\n" not in sql and '"' not in sql:
+        return f'"{sql}"'
+    if '"""' not in sql and not sql.endswith('"'):
+        return f'"""{sql}"""'
+    return repr(sql)
 
 
 def _tier_of(statement: str) -> RiskTier | None:
@@ -200,7 +216,8 @@ class MigrationGenerator:
             sql = self._change_to_up_sql(change)
             if sql is None:
                 statements.append(
-                    f"-- WARNING: no SQL derived for: {change}. Edit this file before deploying."
+                    f"-- WARNING: no SQL derived for: {comment_text(str(change))}. "
+                    "Edit this file before deploying."
                 )
                 continue
             reason = _destructive.irreversible_reason(
@@ -435,7 +452,8 @@ class {class_name}(Migration):
             if sql:
                 statements.append(_execute_call(sql))
             else:
-                statements.append(f"        # irreversible: {_destructive.no_rollback(change)}")
+                reason = comment_text(_destructive.no_rollback(change))
+                statements.append(f"        # irreversible: {reason}")
 
         return "\n".join(statements) if statements else "        pass  # No operations"
 
