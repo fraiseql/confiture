@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,071 lines, 34% of `core/`.
+26,079 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -103,7 +103,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_signature_checker.py` | 187 | DDL transform |
 | `idempotency/` | 2,712 | DDL transform |
 | `introspection/dependency_graph.py` | 202 | DDL transform |
-| `linting/` | 9,163 | DDL transform |
+| `linting/` | 9,171 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
 | `migration_grant_extractor.py` | 525 | DDL transform |
@@ -124,7 +124,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-42,063 lines, 56% of `core/`.
+42,061 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -169,7 +169,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `migrator.py` | 206 | database orchestration |
 | `ownership_fixer.py` | 243 | database orchestration |
 | `pgtap_generator.py` | 63 | neutral |
-| `preconditions.py` | 659 | database orchestration |
+| `preconditions.py` | 657 | database orchestration |
 | `preflight.py` | 187 | database orchestration |
 | `progress.py` | 206 | neutral |
 | `psql_applier.py` | 274 | database orchestration |

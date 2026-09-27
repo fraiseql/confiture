@@ -58,7 +58,7 @@ def test_an_object_whose_name_needs_quotes_is_an_error(
     [
         ('"user"', 'app.t."user"', "app.t.user_"),
         ('"Mixed Col"', 'app.t."Mixed Col"', "app.t.mixed_col"),
-        ('"créé"', 'app.t."créé"', "app.t.cr"),
+        ('"créé"', 'app.t."créé"', "app.t.cree"),
     ],
 )
 def test_a_column_whose_name_needs_quotes_is_an_error(
@@ -136,3 +136,56 @@ def test_selecting_naming_004_alone_runs_it() -> None:
     config = linter_config(frozenset({"naming_004"}), Threshold.ERROR)
 
     assert config.check_naming
+
+
+def test_a_table_renamed_to_a_name_that_needs_quotes_is_an_error() -> None:
+    sql = 'CREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t RENAME TO "BadT";\n'
+
+    assert _quoted(sql) == [("table", '"BadT"')]
+    assert [v.rule_id for v in _findings(sql) if v.rule_id.startswith("naming")] == ["naming_004"]
+
+
+def test_a_column_renamed_to_a_name_that_needs_quotes_is_an_error() -> None:
+    sql = 'CREATE TABLE t (id int PRIMARY KEY, x int);\nALTER TABLE t RENAME COLUMN x TO "Bad X";\n'
+
+    assert _quoted(sql) == [("column", 't."Bad X"')]
+
+
+def test_a_table_moved_to_a_schema_that_needs_quotes_is_an_error() -> None:
+    sql = (
+        'CREATE SCHEMA "App";\nCREATE TABLE t (id int PRIMARY KEY);\n'
+        'ALTER TABLE t SET SCHEMA "App";\n'
+    )
+
+    assert _quoted(sql) == [("schema", '"App"')]
+
+
+@pytest.mark.parametrize(
+    ("clause", "spelled"),
+    [
+        ('CONSTRAINT "My Check" CHECK (id > 0)', 't."My Check"'),
+        ('CONSTRAINT "PK" PRIMARY KEY (id)', 't."PK"'),
+        ('CONSTRAINT "u q" UNIQUE (id)', 't."u q"'),
+    ],
+)
+def test_a_constraint_whose_name_needs_quotes_is_an_error(clause: str, spelled: str) -> None:
+    sql = f"CREATE TABLE t (id int,\n  {clause});\n"
+
+    assert _quoted(sql) == [("constraint", spelled)]
+
+
+def test_a_constraint_added_by_alter_is_read() -> None:
+    sql = (
+        'CREATE TABLE t (id int PRIMARY KEY);\nALTER TABLE t ADD CONSTRAINT "Pos" CHECK (id > 0);\n'
+    )
+
+    assert _quoted(sql) == [("constraint", 't."Pos"')]
+
+
+def test_the_suggestion_keeps_an_accented_letter_as_its_base_letter() -> None:
+    sql = 'CREATE TABLE t (id int PRIMARY KEY, "créé" int);\n'
+
+    (finding,) = _findings(sql, code="naming_004")
+
+    assert finding.suggested_fix is not None
+    assert finding.suggested_fix.endswith("t.cree")

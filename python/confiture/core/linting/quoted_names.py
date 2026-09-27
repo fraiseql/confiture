@@ -10,7 +10,7 @@ the dot reads as the separator, and ``REFERENCES app."a.b"`` would name table
 Each is reported once per object, under one rule, and spelled as SQL writes it.
 
 What is read is every name the tree gives: a schema, each relation, type,
-sequence and routine, each table's columns and each index. A schema is reported
+sequence and routine, each table's columns, indexes and named constraints. A schema is reported
 where it is declared, or — when the tree only ever uses it as a qualifier —
 where it is first used, and its objects are not reported again for it.
 """
@@ -18,6 +18,7 @@ where it is first used, and its objects are not reported again for it.
 from __future__ import annotations
 
 import string
+import unicodedata
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -73,7 +74,7 @@ def quoted_names(inventory: Inventory) -> Iterator[QuotedName]:
 
 
 def _parts(table: SchemaObject) -> Iterator[QuotedName]:
-    """A table's columns and indexes whose names need quotes."""
+    """A table's columns, indexes and constraints whose names need quotes."""
     within = _join(_quoted(table.folded_schema), quote_identifier(table.folded_name))
     for column in table.columns:
         if needs_quotes(column.folded):
@@ -82,6 +83,9 @@ def _parts(table: SchemaObject) -> Iterator[QuotedName]:
         if index.name and needs_quotes(index.name):
             line = table.index_lines.get(index, table.line)
             yield _named("index", _quoted(table.folded_schema), index.name, table.file, line)
+    for constraint in table.constraints:
+        if constraint.name and needs_quotes(constraint.name):
+            yield _named("constraint", within, constraint.name, table.file, table.line)
 
 
 def needs_quotes(name: str) -> bool:
@@ -108,10 +112,11 @@ def _named(kind: str, within: str | None, name: str, file: str | None, line: int
 def _bare(name: str) -> str:
     """*name* in snake_case, as a name that needs no quotes.
 
-    Lowercased, each run of other characters one underscore, a leading digit
-    prefixed and a reserved word suffixed with one.
+    Lowercased, an accented letter its base letter, each run of other characters
+    one underscore, a leading digit prefixed and a reserved word suffixed with one.
     """
-    written = "".join(c if c in _BARE else " " for c in name.lower())
+    base = unicodedata.normalize("NFKD", name.lower())
+    written = "".join(c if c in _BARE else "" if unicodedata.combining(c) else " " for c in base)
     snake = "_".join(written.split()) or "_"
     if snake[0].isdigit():
         snake = f"_{snake}"

@@ -74,7 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default. confiture supports a name only as PostgreSQL writes it bare:
   lowercase letters, digits, `_` and `$`, not starting with a digit, not a
   reserved word. The rule reports every schema, relation, type, sequence,
-  routine, column and index whose name exists only quoted, such as
+  routine, column, index and named constraint whose name exists only quoted,
+  including one a `RENAME` or `SET SCHEMA` gives, such as
   `app."Order Line"`, `"MyTable"`, a column `"user"` or `"1st"`. It spells the
   name as SQL writes it and suggests a snake_case one. A dotted name stays
   `naming_003`'s alone, and neither `naming_001` nor `naming_002` reports such a

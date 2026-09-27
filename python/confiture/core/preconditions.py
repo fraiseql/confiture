@@ -36,8 +36,6 @@ from confiture.exceptions import PreconditionError, PreconditionValidationError
 if TYPE_CHECKING:
     import psycopg
 
-    from confiture.core.schema_model import RelationName
-
 
 # PreconditionError and PreconditionValidationError live in confiture.exceptions
 # ; re-exported here
