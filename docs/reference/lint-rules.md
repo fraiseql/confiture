@@ -100,7 +100,8 @@ does not. Both rules are `error` and on by default.
   spelling.
 
 Both read every name the tree gives: each schema, relation, type, sequence and routine,
-and each table's columns and indexes. A name is reported once, under one of the two
+each table's columns, indexes and named constraints, and the name a `RENAME` or
+`SET SCHEMA` gives. A name is reported once, under one of the two
 rules, and neither `naming_001` nor `naming_002` reports it again. A schema is reported
 once, where it is declared or where it is first used as a qualifier. The finding spells
 the object as SQL writes it:

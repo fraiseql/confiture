@@ -870,19 +870,22 @@ def _apply_like(stmt: Any, table: SchemaObject | None, inventory: Inventory) -> 
             _mark_primary_key(table, constraint)
 
 
+# An edit's names are as the parser holds them: an unquoted one already folded,
+# a quoted one kept. Folding them again would turn "BadT" into a name the tree
+# never gave.
 def _renamed_object(obj: SchemaObject, edit: ObjectEdit) -> None:
     obj.name = edit.new_name or obj.name
-    obj.folded_name = (edit.new_name or obj.folded_name).lower()
+    obj.folded_name = edit.new_name or obj.folded_name
 
 
 def _moved_object(obj: SchemaObject, edit: ObjectEdit) -> None:
     obj.schema = edit.new_schema or obj.schema
-    obj.folded_schema = (edit.new_schema or obj.folded_schema or "").lower() or None
+    obj.folded_schema = edit.new_schema or obj.folded_schema
 
 
 def _renamed_column(obj: SchemaObject, edit: ObjectEdit) -> None:
     obj.columns = [
-        replace(column, name=edit.new_name or column.name, folded=(edit.new_name or "").lower())
+        replace(column, name=edit.new_name or column.name, folded=edit.new_name or column.folded)
         if column.folded == edit.column
         else column
         for column in obj.columns
