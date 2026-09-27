@@ -75,6 +75,7 @@ from confiture.core.schema_model import (
     Sequence,
     Table,
 )
+from confiture.core.sql_utils import comment_text
 from confiture.core.type_lattice import has_assignment_cast
 
 #: The kinds compared by definition that a migration is derived for, created and
@@ -108,6 +109,11 @@ _REPLACED_BY_DEFINITION: frozenset[str] = frozenset({"view", "function", "proced
 REPLACED_BY_DROP_AND_CREATE: frozenset[str] = frozenset({"matview", "aggregate"})
 
 
+def _comment(text: str) -> str:
+    """A ``--`` comment line holding *text*, which names objects: see :func:`comment_text`."""
+    return f"-- {comment_text(text)}\n"
+
+
 def _unnamed(change: SchemaChange, what: str) -> str:
     """The generator's "this changed, you write it" for a change with no object name.
 
@@ -117,20 +123,20 @@ def _unnamed(change: SchemaChange, what: str) -> str:
     being a legal identifier (``idx_tenant.t``).
     """
     wire = change.to_wire()
-    return f"-- WARNING: Cannot generate {wire.type} on {wire.table} without a {what} name\n"
+    return _comment(f"WARNING: Cannot generate {wire.type} on {wire.table} without a {what} name")
 
 
 def _incomplete(change: SchemaChange, what: str) -> str:
     """:func:`_unnamed`'s sibling, for a change that has a name but not a statement."""
     wire = change.to_wire()
-    return f"-- WARNING: Cannot generate {wire.type} on {wire.table} without {what}\n"
+    return _comment(f"WARNING: Cannot generate {wire.type} on {wire.table} without {what}")
 
 
 def _statement(sql: str | None, change: SchemaChange) -> str:
     """A definition the differ captured, terminated; a warning when it has none."""
     if not sql:
         wire = change.to_wire()
-        return f"-- WARNING: no definition captured for {wire.type} {wire.table}\n"
+        return _comment(f"WARNING: no definition captured for {wire.type} {wire.table}")
     return f"{sql.rstrip().rstrip(';')};\n"
 
 
@@ -160,9 +166,11 @@ def _replacing(before: DDLObject, after: DDLObject, change: SchemaChange) -> str
     if old is None or new is None or new[: len(old)] == old:
         return statement
     return (
-        f"-- review: {after.ref.qualified}'s columns change ({', '.join(old)} → "
-        f"{', '.join(new)}), which CREATE OR REPLACE VIEW refuses; it is dropped and "
-        "created, so its grants and comment go, and a dependent view fails the DROP\n"
+        _comment(
+            f"review: {after.ref.qualified}'s columns change ({', '.join(old)} → "
+            f"{', '.join(new)}), which CREATE OR REPLACE VIEW refuses; it is dropped and "
+            "created, so its grants and comment go, and a dependent view fails the DROP"
+        )
         + _drop("VIEW", after.ref.qualified)
         + statement
     )
@@ -276,9 +284,11 @@ def _retype(table: RelationName, old: Column, new: Column) -> str:
     if has_assignment_cast(before, after):
         return f"{statement};\n"
     return (
-        f"-- review: {before} to {after} has no assignment cast; each value is cast"
-        " explicitly, and one that does not cast fails the migration\n"
-        f"{statement} USING {name}::{after};\n"
+        _comment(
+            f"review: {before} to {after} has no assignment cast; each value is cast"
+            " explicitly, and one that does not cast fails the migration"
+        )
+        + f"{statement} USING {name}::{after};\n"
     )
 
 
@@ -362,8 +372,10 @@ def _table_indexes(table: Table) -> str:
             written.append(_index_statement(index, relation(table.relation), concurrently=False))
         else:
             written.append(
-                f"-- WARNING: Cannot generate the index on {table.qualified}"
-                f" ({_index_keys(index)}) without an index name\n"
+                _comment(
+                    f"WARNING: Cannot generate the index on {table.qualified}"
+                    f" ({_index_keys(index)}) without an index name"
+                )
             )
     return "".join(written)
 
@@ -497,10 +509,12 @@ def _enum_values(change: EnumValuesChanged) -> str:
     if change.removed:
         removed = ", ".join(_quoted(v) for v in change.removed)
         parts.append(
-            f"-- WARNING: Removing enum values ({removed}) from {name}"
-            " requires DROP + RECREATE. Edit this migration manually.\n"
+            _comment(
+                f"WARNING: Removing enum values ({removed}) from {name}"
+                " requires DROP + RECREATE. Edit this migration manually."
+            )
         )
-    return "".join(parts) if parts else f"-- No enum value changes for {name}\n"
+    return "".join(parts) if parts else _comment(f"No enum value changes for {name}")
 
 
 _BIGINT_MIN, _BIGINT_MAX = -(2**63), 2**63 - 1

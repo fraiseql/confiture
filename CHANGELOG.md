@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A name in the schema never becomes code in a generated migration** (#486).
+  A `.py` migration wrote its SQL inside `"""…"""` unescaped. Since names
+  that need quotes are wrapped in `"`, a crafted column name could close the
+  string and run Python when `up()` ran. A backslash in the SQL (`E'\n'`) was
+  read as a Python escape and changed the statement. The SQL is now written as
+  an exact Python literal. A newline in a name also ended the `# irreversible:`
+  comment, the `-- confiture:irreversible` directive and the `-- WARNING` /
+  `-- review` lines of generated SQL; every generated comment now escapes
+  control characters.
 - **A data assertion over a dotted name is read as that name** (#480). `migrate
   preflight`'s data-assertion check skips a relation the migration fills from the
   catalogue, and it found one by joining a `RangeVar`'s schema and name and

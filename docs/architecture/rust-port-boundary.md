@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,056 lines, 34% of `core/`.
+26,071 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -93,9 +93,9 @@ duplicate readers were deleted. The count below is what the port translates.
 | `ddl_clauses.py` | 152 | DDL transform |
 | `ddl_objects.py` | 662 | DDL transform |
 | `ddl_walk.py` | 1,477 | DDL transform |
-| `destructive.py` | 180 | DDL transform |
+| `destructive.py` | 181 | DDL transform |
 | `differ.py` | 768 | DDL transform |
-| `differ_sql.py` | 691 | DDL transform |
+| `differ_sql.py` | 705 | DDL transform |
 | `expand_contract.py` | 273 | DDL transform |
 | `fk_extractor.py` | 458 | DDL transform |
 | `function_body_checker.py` | 210 | DDL transform |
@@ -124,7 +124,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-42,033 lines, 56% of `core/`.
+42,063 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -164,7 +164,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `linting/unresolved.py` | 379 | database orchestration |
 | `live_catalog.py` | 893 | database orchestration |
 | `locking.py` | 625 | database orchestration |
-| `migration_generator.py` | 563 | database orchestration |
+| `migration_generator.py` | 581 | database orchestration |
 | `migration_verifier.py` | 229 | database orchestration |
 | `migrator.py` | 206 | database orchestration |
 | `ownership_fixer.py` | 243 | database orchestration |
@@ -184,7 +184,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_to_schema.py` | 634 | database orchestration |
 | `seed/` | 6,124 | database orchestration |
 | `sql_path.py` | 135 | database orchestration |
-| `sql_utils.py` | 74 | neutral |
+| `sql_utils.py` | 86 | neutral |
 | `ssh_tunnel.py` | 138 | database orchestration |
 | `step_runner.py` | 298 | database orchestration |
 | `stub_generator.py` | 137 | neutral |

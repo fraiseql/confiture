@@ -51,6 +51,7 @@ from confiture.core.schema_change import (
     UniqueConstraintDropped,
 )
 from confiture.core.sql_lexer import DIRECTIVE_PREFIX, directives
+from confiture.core.sql_utils import comment_text
 from confiture.exceptions import ValidationError
 
 Policy = Literal["gated", "allow", "forbid"]
@@ -95,7 +96,7 @@ IRREVERSIBLE_DIRECTIVE = "irreversible"
 
 def irreversible_line(reason: str) -> str:
     """The ``-- confiture:irreversible <reason>`` directive line."""
-    return f"-- {DIRECTIVE_PREFIX}{IRREVERSIBLE_DIRECTIVE} {reason}"
+    return f"-- {DIRECTIVE_PREFIX}{IRREVERSIBLE_DIRECTIVE} {comment_text(reason)}"
 
 
 def no_rollback(change: SchemaChange) -> str:

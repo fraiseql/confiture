@@ -16,6 +16,18 @@ from confiture.core.sql_lexer import code_text
 _WRAPPERS = frozenset({"BEGIN", "COMMIT"})
 
 
+def comment_text(text: str) -> str:
+    """*text* fit for a ``--`` or ``#`` comment: one line, each control character escaped.
+
+    A generated comment names schema objects, and a quoted identifier may hold a
+    newline: written raw, the rest of the name is a statement (or Python) on the
+    next line. Every character that is not printable is written as its Python
+    escape (``\\n``), so the comment reads as what the name holds and ends
+    where it started.
+    """
+    return "".join(c if c.isprintable() else repr(c)[1:-1] for c in text)
+
+
 def _is_transaction_wrapper(code_line: str) -> bool:
     """A line whose code is exactly ``BEGIN`` or ``COMMIT``, with at most one ``;``."""
     words = code_line.replace(";", " ").split()
