@@ -39,8 +39,13 @@ rng = random.Random(42)
 for number, table in enumerate(dependency_order(model), 1):
     columns = writable_columns(model, table)
     rows = [{c.name: my_value(column_facts(model, table, c.name), rng) for c in columns}]
-    write_copy_seed(Path(f"db/seeds/prep/{number:02}_{table.name}.sql"), table,
-                    [c.name for c in columns], rows, model=model)
+    write_copy_seed(
+        Path(f"db/seeds/prep/{number:02}_{table.name}.sql"),
+        table,
+        [c.name for c in columns],
+        rows,
+        model=model,
+    )
 
 apply_seeds("postgresql://localhost/dev", Path("db/seeds/prep"))
 report = validate_seeds(Path("db/seeds/prep"), schema_dir=Path("db/schema"), max_level=3)

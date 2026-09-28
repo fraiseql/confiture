@@ -81,7 +81,7 @@ insert = "INSERT INTO users (id, name) VALUES (1, 'Alice'), (2, 'Bob');"
 ast = parse_one(insert)
 
 print(f"Type: {type(ast).__name__}")  # Insert
-print(f"Table: {ast.this.name}")      # users (if accessible)
+print(f"Table: {ast.this.name}")  # users (if accessible)
 ```
 
 ### Extract Rows
@@ -93,7 +93,7 @@ insert = "INSERT INTO users (id, name) VALUES (1, 'Alice'), (2, 'Bob');"
 ast = parse_one(insert)
 
 # Get columns
-columns = [expr.name for expr in ast.expressions if hasattr(expr, 'name')]
+columns = [expr.name for expr in ast.expressions if hasattr(expr, "name")]
 
 # Get rows
 rows = []
@@ -103,7 +103,7 @@ for row_expr in ast.expression.expressions:
         rows.append(values)
 
 print(f"Columns: {columns}")  # ['id', 'name']
-print(f"Rows: {rows}")        # [['1', 'Alice'], ['2', 'Bob']]
+print(f"Rows: {rows}")  # [['1', 'Alice'], ['2', 'Bob']]
 ```
 
 ### Detect Incompatible Features
@@ -125,7 +125,7 @@ ON CONFLICT (id) DO UPDATE SET name = 'Alice Updated';
 """
 ast = parse_one(insert_with_upsert)
 
-if ast.args.get('conflict'):
+if ast.args.get("conflict"):
     print("Has ON CONFLICT - cannot convert to COPY")
 
 # Example 3: Detect INSERT...SELECT
@@ -142,7 +142,7 @@ INSERT INTO active_users SELECT * FROM filtered;
 """
 ast = parse_one(insert_with_cte)
 
-if ast.args.get('with_'):
+if ast.args.get("with_"):
     print("Has CTE - cannot convert to COPY")
 ```
 
@@ -150,6 +150,7 @@ if ast.args.get('with_'):
 
 ```python
 from sqlglot import parse_one, exp
+
 
 class InsertConverter:
     """Convert INSERT to COPY using sqlglot."""
@@ -169,11 +170,11 @@ class InsertConverter:
             return False, "Unknown INSERT type"
 
         # Cannot have ON CONFLICT, RETURNING, or CTE
-        if ast.args.get('conflict'):
+        if ast.args.get("conflict"):
             return False, "ON CONFLICT not compatible with COPY"
-        if ast.args.get('returning'):
+        if ast.args.get("returning"):
             return False, "RETURNING not compatible with COPY"
-        if ast.args.get('with_'):
+        if ast.args.get("with_"):
             return False, "CTE not compatible with COPY"
 
         # Cannot have functions
@@ -200,6 +201,7 @@ class InsertConverter:
 
         return False
 
+
 # Usage
 converter = InsertConverter()
 
@@ -222,17 +224,18 @@ for insert, expected in test_cases:
 ```python
 from sqlglot import parse_one, exp
 
+
 def extract_insert_info(insert_sql: str) -> dict:
     """Extract table name, columns, and row count."""
     ast = parse_one(insert_sql, dialect="postgres")
 
     # Table name
-    table = ast.this.name if hasattr(ast, 'this') else None
+    table = ast.this.name if hasattr(ast, "this") else None
 
     # Column names
     columns = []
     for expr in ast.expressions:
-        if hasattr(expr, 'name'):
+        if hasattr(expr, "name"):
             columns.append(expr.name)
 
     # Row count
@@ -241,19 +244,20 @@ def extract_insert_info(insert_sql: str) -> dict:
         row_count = len(ast.expression.expressions)
 
     return {
-        'table': table,
-        'columns': columns,
-        'row_count': row_count,
-        'is_values_based': isinstance(ast.expression, exp.Values),
+        "table": table,
+        "columns": columns,
+        "row_count": row_count,
+        "is_values_based": isinstance(ast.expression, exp.Values),
     }
+
 
 # Usage
 insert = "INSERT INTO users (id, name, email) VALUES (1, 'Alice', 'alice@ex.com'), (2, 'Bob', 'bob@ex.com');"
 info = extract_insert_info(insert)
 
-print(f"Table: {info['table']}")           # users
-print(f"Columns: {info['columns']}")       # ['id', 'name', 'email']
-print(f"Rows: {info['row_count']}")        # 2
+print(f"Table: {info['table']}")  # users
+print(f"Columns: {info['columns']}")  # ['id', 'name', 'email']
+print(f"Rows: {info['row_count']}")  # 2
 print(f"Type: {info['is_values_based']}")  # True
 ```
 
@@ -315,38 +319,39 @@ print(json.dumps(stmt, indent=2)[:500])
 ```python
 import sqloxide
 
+
 def parse_with_sqloxide(insert_sql: str) -> dict:
     """Parse INSERT with sqloxide."""
     result = sqloxide.parse_sql(insert_sql, "postgres")
     stmt = result[0]
 
-    if 'Insert' not in stmt:
+    if "Insert" not in stmt:
         return None
 
-    insert = stmt['Insert']
+    insert = stmt["Insert"]
 
     # Extract table
-    table_names = insert['table']['TableName']
-    table = table_names[0]['Identifier']['value']
+    table_names = insert["table"]["TableName"]
+    table = table_names[0]["Identifier"]["value"]
 
     # Extract columns
-    columns = [c['value'] for c in insert['columns']]
+    columns = [c["value"] for c in insert["columns"]]
 
     # Extract rows
     rows = []
-    if 'source' in insert and 'body' in insert['source']:
-        body = insert['source']['body']
-        if 'Values' in body:
-            values = body['Values']
-            for row in values['rows']:
+    if "source" in insert and "body" in insert["source"]:
+        body = insert["source"]["body"]
+        if "Values" in body:
+            values = body["Values"]
+            for row in values["rows"]:
                 row_data = []
                 for cell in row:
-                    if 'Value' in cell:
-                        value_info = cell['Value']['value']
-                        if 'Number' in value_info:
-                            row_data.append(value_info['Number'])
-                        elif 'SingleQuotedString' in value_info:
-                            row_data.append(value_info['SingleQuotedString'])
+                    if "Value" in cell:
+                        value_info = cell["Value"]["value"]
+                        if "Number" in value_info:
+                            row_data.append(value_info["Number"])
+                        elif "SingleQuotedString" in value_info:
+                            row_data.append(value_info["SingleQuotedString"])
                         else:
                             row_data.append(str(value_info))
                     else:
@@ -354,18 +359,19 @@ def parse_with_sqloxide(insert_sql: str) -> dict:
                 rows.append(row_data)
 
     return {
-        'table': table,
-        'columns': columns,
-        'rows': rows,
+        "table": table,
+        "columns": columns,
+        "rows": rows,
     }
+
 
 # Usage
 insert = "INSERT INTO users (id, name) VALUES (1, 'Alice'), (2, 'Bob');"
 info = parse_with_sqloxide(insert)
 
-print(f"Table: {info['table']}")     # users
+print(f"Table: {info['table']}")  # users
 print(f"Columns: {info['columns']}")  # ['id', 'name']
-print(f"Rows: {info['rows']}")        # [['1', 'Alice'], ['2', 'Bob']]
+print(f"Rows: {info['rows']}")  # [['1', 'Alice'], ['2', 'Bob']]
 ```
 
 ### Detecting Features
@@ -373,40 +379,41 @@ print(f"Rows: {info['rows']}")        # [['1', 'Alice'], ['2', 'Bob']]
 ```python
 import sqloxide
 
+
 def analyze_with_sqloxide(insert_sql: str) -> dict:
     """Analyze INSERT structure with sqloxide."""
     result = sqloxide.parse_sql(insert_sql, "postgres")
     stmt = result[0]
 
-    if 'Insert' not in stmt:
+    if "Insert" not in stmt:
         return None
 
-    insert = stmt['Insert']
+    insert = stmt["Insert"]
 
     analysis = {
-        'has_select': False,
-        'has_with': False,
-        'has_conflict': False,
-        'has_returning': False,
+        "has_select": False,
+        "has_with": False,
+        "has_conflict": False,
+        "has_returning": False,
     }
 
     # Check if values or select
-    if 'source' in insert and 'body' in insert['source']:
-        body = insert['source']['body']
-        analysis['has_select'] = 'Select' in body
-        analysis['has_values'] = 'Values' in body
+    if "source" in insert and "body" in insert["source"]:
+        body = insert["source"]["body"]
+        analysis["has_select"] = "Select" in body
+        analysis["has_values"] = "Values" in body
 
     # Check WITH clause
-    if 'source' in insert and 'with' in insert['source']:
-        analysis['has_with'] = insert['source']['with'] is not None
+    if "source" in insert and "with" in insert["source"]:
+        analysis["has_with"] = insert["source"]["with"] is not None
 
     # Check ON CONFLICT
-    if 'on' in insert:
-        analysis['has_conflict'] = insert['on'] is not None
+    if "on" in insert:
+        analysis["has_conflict"] = insert["on"] is not None
 
     # Check RETURNING
-    if 'returning' in insert:
-        analysis['has_returning'] = insert['returning'] is not None
+    if "returning" in insert:
+        analysis["has_returning"] = insert["returning"] is not None
 
     return analysis
 ```
@@ -433,49 +440,51 @@ print(f"Statement type: {list(stmt['stmt'].keys())}")  # ['InsertStmt']
 ```python
 import pg_query
 
+
 def parse_with_pg_query(insert_sql: str) -> dict:
     """Parse INSERT using pg_query (PostgreSQL native)."""
     result = pg_query.parse(insert_sql)
-    stmt_node = result[0]['stmt']
+    stmt_node = result[0]["stmt"]
 
-    if 'InsertStmt' not in stmt_node:
+    if "InsertStmt" not in stmt_node:
         return None
 
-    insert = stmt_node['InsertStmt']
+    insert = stmt_node["InsertStmt"]
 
     # Extract table
-    relation = insert['relation']
-    table_name = relation['relname']
-    if relation.get('schemaname'):
+    relation = insert["relation"]
+    table_name = relation["relname"]
+    if relation.get("schemaname"):
         table_name = f"{relation['schemaname']}.{table_name}"
 
     # Extract columns
     columns = []
-    if insert.get('cols'):
-        for col in insert['cols']:
-            columns.append(col['ResTarget']['name'])
+    if insert.get("cols"):
+        for col in insert["cols"]:
+            columns.append(col["ResTarget"]["name"])
 
     # Row count
     row_count = 0
-    if insert.get('selectStmt') is None:  # VALUES-based
-        values_lists = insert.get('valuesLists', [])
+    if insert.get("selectStmt") is None:  # VALUES-based
+        values_lists = insert.get("valuesLists", [])
         row_count = len(values_lists)
 
     return {
-        'table': table_name,
-        'columns': columns,
-        'row_count': row_count,
-        'is_values_based': insert.get('selectStmt') is None,
-        'has_on_conflict': insert.get('onConflict') is not None,
+        "table": table_name,
+        "columns": columns,
+        "row_count": row_count,
+        "is_values_based": insert.get("selectStmt") is None,
+        "has_on_conflict": insert.get("onConflict") is not None,
     }
+
 
 # Usage
 insert = "INSERT INTO users (id, name) VALUES (1, 'Alice');"
 info = parse_with_pg_query(insert)
 
-print(f"Table: {info['table']}")           # users
-print(f"Columns: {info['columns']}")       # ['id', 'name']
-print(f"Rows: {info['row_count']}")        # 1
+print(f"Table: {info['table']}")  # users
+print(f"Columns: {info['columns']}")  # ['id', 'name']
+print(f"Rows: {info['row_count']}")  # 1
 print(f"Type: {info['is_values_based']}")  # True
 ```
 
@@ -541,6 +550,7 @@ sqloxide:    10.20ms (0.034ms per statement)  [3x faster]
 ```python
 from sqlglot import parse_one, exp
 
+
 def safe_parse_insert(insert_sql: str) -> dict | None:
     """Parse INSERT with comprehensive error handling."""
     try:
@@ -557,7 +567,7 @@ def safe_parse_insert(insert_sql: str) -> dict | None:
 
     # Extract what we can
     try:
-        table = ast.this.name if hasattr(ast, 'this') else None
+        table = ast.this.name if hasattr(ast, "this") else None
         columns = [c.name for c in ast.expressions] if ast.expressions else []
         row_count = 0
 
@@ -565,14 +575,15 @@ def safe_parse_insert(insert_sql: str) -> dict | None:
             row_count = len(ast.expression.expressions)
 
         return {
-            'table': table,
-            'columns': columns,
-            'row_count': row_count,
-            'success': True,
+            "table": table,
+            "columns": columns,
+            "row_count": row_count,
+            "success": True,
         }
     except Exception as e:
         print(f"Warning: Could not extract details: {e}")
         return None
+
 
 # Usage
 test_cases = [
@@ -598,11 +609,12 @@ def parse_insert_with_fallback(insert_sql: str) -> dict:
     # Try sqlglot first
     try:
         from sqlglot import parse_one
+
         ast = parse_one(insert_sql, dialect="postgres")
         return {
-            'method': 'sqlglot',
-            'success': True,
-            'data': extract_with_sqlglot(ast),
+            "method": "sqlglot",
+            "success": True,
+            "data": extract_with_sqlglot(ast),
         }
     except Exception as e:
         print(f"sqlglot failed: {e}")
@@ -610,26 +622,29 @@ def parse_insert_with_fallback(insert_sql: str) -> dict:
     # Fall back to sqlparse
     try:
         import sqlparse
+
         parsed = sqlparse.parse(insert_sql)[0]
         return {
-            'method': 'sqlparse',
-            'success': True,
-            'data': extract_with_regex(str(parsed)),
+            "method": "sqlparse",
+            "success": True,
+            "data": extract_with_regex(str(parsed)),
         }
     except Exception as e:
         print(f"sqlparse failed: {e}")
 
     # Last resort: manual regex
     return {
-        'method': 'regex',
-        'success': False,
-        'reason': 'All parsers failed',
+        "method": "regex",
+        "success": False,
+        "reason": "All parsers failed",
     }
+
 
 def extract_with_sqlglot(ast):
     """Extract with sqlglot."""
     # ... implementation ...
     pass
+
 
 def extract_with_regex(sql: str):
     """Extract with regex fallback."""

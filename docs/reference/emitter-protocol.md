@@ -20,10 +20,10 @@ class ConfitureEmitter(Protocol):
 ```python
 @dataclass
 class EmittedFunction:
-    verb: str             # filename suffix (validated: ^[A-Za-z0-9][A-Za-z0-9_.\-]*$)
-    subtree: Path         # target directory under schema_dir
-    content: str          # SQL body (everything after the generated header)
-    generated_marker: str # first line of the file header, conventionally a SQL comment
+    verb: str  # filename suffix (validated: ^[A-Za-z0-9][A-Za-z0-9_.\-]*$)
+    subtree: Path  # target directory under schema_dir
+    content: str  # SQL body (everything after the generated header)
+    generated_marker: str  # first line of the file header, conventionally a SQL comment
 ```
 
 The orchestrator allocates the prefix automatically and writes:

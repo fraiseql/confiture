@@ -181,14 +181,14 @@ profile = StrategyProfile(
     name="gdpr_compliant",
     seed=42,
     columns={
-        "customer_id": "preserve",      # Keep for tracking
-        "name": "name",                 # Anonymize
-        "email": "text_redaction",      # Anonymize
-        "phone": "text_redaction",      # Anonymize
-        "ip_address": "ip_address",     # Anonymize
-        "order_total": "preserve",      # Business metric
+        "customer_id": "preserve",  # Keep for tracking
+        "name": "name",  # Anonymize
+        "email": "text_redaction",  # Anonymize
+        "phone": "text_redaction",  # Anonymize
+        "ip_address": "ip_address",  # Anonymize
+        "order_total": "preserve",  # Business metric
     },
-    defaults="preserve"
+    defaults="preserve",
 )
 ```
 
@@ -210,12 +210,12 @@ DELETE FROM audit_logs WHERE customer_id = :customer_id;
 ### Card Masking
 
 ```python
-@register_strategy('credit_card')
+@register_strategy("credit_card")
 def mask_credit_card(value, field_name, row_context=None):
     if not value:
         return None
 
-    card = re.sub(r'\D', '', value)
+    card = re.sub(r"\D", "", value)
     # Keep first 6 (BIN) and last 4 (PCI-DSS compliant)
     return f"{card[:6]}******{card[-4:]}"
 ```
@@ -252,17 +252,12 @@ class TenantMigration:
         with psycopg.connect(database_url) as conn:
             with conn.transaction():
                 # Verify tenant exists
-                cursor = conn.execute(
-                    "SELECT id FROM accounts WHERE id = %s", (tenant_id,)
-                )
+                cursor = conn.execute("SELECT id FROM accounts WHERE id = %s", (tenant_id,))
                 if not cursor.fetchone():
                     return False
 
                 # Execute tenant-specific migration
-                conn.execute(
-                    "UPDATE users SET migrated = true WHERE tenant_id = %s",
-                    (tenant_id,)
-                )
+                conn.execute("UPDATE users SET migrated = true WHERE tenant_id = %s", (tenant_id,))
                 return True
 ```
 
@@ -272,11 +267,14 @@ class TenantMigration:
 def rollback_tenant(tenant_id: str, database_url: str, migration: str) -> None:
     """Rollback single tenant without affecting others."""
     with psycopg.connect(database_url) as conn:
-        cursor = conn.execute("""
+        cursor = conn.execute(
+            """
             SELECT rollback_sql FROM migration_audit
             WHERE tenant_id = %s AND migration = %s
             ORDER BY executed_at DESC
-        """, (tenant_id, migration))
+        """,
+            (tenant_id, migration),
+        )
 
         for row in cursor.fetchall():
             conn.execute(row[0])
@@ -319,19 +317,20 @@ LOW (keep as-is):
 ### Masking Strategies
 
 ```python
-@register_strategy('customer_name')
+@register_strategy("customer_name")
 def mask_name(value, field_name, row_context=None):
     if not value:
         return None
-    customer_id = row_context.get('customer_id') if row_context else None
+    customer_id = row_context.get("customer_id") if row_context else None
     hash_val = hashlib.md5(str(customer_id).encode()).hexdigest()[:4]
     return f"Customer_{hash_val.upper()}"
 
-@register_strategy('email')
+
+@register_strategy("email")
 def mask_email(value, field_name, row_context=None):
-    if not value or '@' not in value:
+    if not value or "@" not in value:
         return "customer@example.com"
-    local, domain = value.rsplit('@', 1)
+    local, domain = value.rsplit("@", 1)
     hash_val = hashlib.sha256(local.encode()).hexdigest()[:8]
     return f"user_{hash_val}@{domain}"
 ```
@@ -353,9 +352,9 @@ Different regions have different requirements.
 
 ```python
 def get_compliance_profile(region: str) -> StrategyProfile:
-    if region in ['EU', 'UK', 'BR']:
+    if region in ["EU", "UK", "BR"]:
         return gdpr_strict_profile
-    elif region == 'CA':
+    elif region == "CA":
         return ccpa_profile
     else:
         return standard_profile

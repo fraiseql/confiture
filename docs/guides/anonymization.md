@@ -51,29 +51,32 @@ anonymization:
 ### Name Masking
 
 ```python
-strategy = StrategyRegistry.get("name", {
-    "seed": 42,
-    "format_type": "firstname_lastname"  # or "initials", "random"
-})
+strategy = StrategyRegistry.get(
+    "name",
+    {
+        "seed": 42,
+        "format_type": "firstname_lastname",  # or "initials", "random"
+    },
+)
 ```
 
 ### Date Masking
 
 ```python
-strategy = StrategyRegistry.get("date", {
-    "seed": 42,
-    "mode": "year_month",  # or "year", "none"
-    "format": "iso"        # or "us", "uk"
-})
+strategy = StrategyRegistry.get(
+    "date",
+    {
+        "seed": 42,
+        "mode": "year_month",  # or "year", "none"
+        "format": "iso",  # or "us", "uk"
+    },
+)
 ```
 
 ### Credit Card (PCI-DSS Compliant)
 
 ```python
-strategy = StrategyRegistry.get("credit_card", {
-    "preserve_last4": True,
-    "preserve_bin": True
-})
+strategy = StrategyRegistry.get("credit_card", {"preserve_last4": True, "preserve_bin": True})
 ```
 
 ### Text Redaction Patterns
@@ -109,6 +112,7 @@ profile = AnonymizationProfile.load("db/anonymization/production.yaml")
 ```python
 from confiture.core.anonymization.strategy import AnonymizationStrategy
 
+
 class MyStrategy(AnonymizationStrategy):
     config_type = MyStrategyConfig
     strategy_name = "my_strategy"
@@ -118,6 +122,7 @@ class MyStrategy(AnonymizationStrategy):
 
     def validate(self, value):
         return isinstance(value, str)
+
 
 # Register
 StrategyRegistry.register("my_strategy", MyStrategy)
@@ -173,10 +178,10 @@ columns={
 ### 3. Match Strategy to Data Type
 
 ```python
-columns={
-    "birth_date": "date",        # Not text_redaction
-    "email": "text_redaction",   # Not name
-    "full_name": "name",         # Not text_redaction
+columns = {
+    "birth_date": "date",  # Not text_redaction
+    "email": "text_redaction",  # Not name
+    "full_name": "name",  # Not text_redaction
 }
 ```
 
@@ -231,6 +236,7 @@ results = [StrategyFactory(profile).anonymize(r) for r in records]
 Check registration:
 ```python
 from confiture.core.anonymization.registry import StrategyRegistry
+
 print(StrategyRegistry.list_available())
 ```
 

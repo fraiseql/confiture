@@ -75,9 +75,14 @@ TransportConfig = Annotated[
 ]
 
 RendererConfig = Annotated[
-    SlackRendererConfig | DiscordRendererConfig | TeamsRendererConfig |
-    EmailRendererConfig | PagerDutyRendererConfig | OpsGenieRendererConfig |
-    RawJsonRendererConfig | JinjaRendererConfig,
+    SlackRendererConfig
+    | DiscordRendererConfig
+    | TeamsRendererConfig
+    | EmailRendererConfig
+    | PagerDutyRendererConfig
+    | OpsGenieRendererConfig
+    | RawJsonRendererConfig
+    | JinjaRendererConfig,
     Field(discriminator="type"),
 ]
 ```

@@ -107,10 +107,7 @@ builder = SchemaBuilder(env="local")
 schema = builder.build()
 
 # Build to specific file without seeds
-schema = builder.build(
-    output_path="dist/schema.sql",
-    include_seeds=False
-)
+schema = builder.build(output_path="dist/schema.sql", include_seeds=False)
 ```
 
 ---
@@ -137,10 +134,12 @@ async def build_async(
 ```python
 import asyncio
 
+
 async def main():
     builder = SchemaBuilder(env="local")
     schema = await builder.build_async()
     print(f"Built {len(schema)} bytes")
+
 
 asyncio.run(main())
 ```
@@ -341,13 +340,13 @@ print(f"Tables created: {result.tables_created}")
 class ExecutionResult:
     """Result of schema execution."""
 
-    duration: timedelta          # Total execution time
-    tables_created: int          # Number of tables created
-    indexes_created: int         # Number of indexes created
-    views_created: int           # Number of views created
-    functions_created: int       # Number of functions created
-    bytes_executed: int          # Total SQL bytes executed
-    warnings: list[str]          # Any warnings generated
+    duration: timedelta  # Total execution time
+    tables_created: int  # Number of tables created
+    indexes_created: int  # Number of indexes created
+    views_created: int  # Number of views created
+    functions_created: int  # Number of functions created
+    bytes_executed: int  # Total SQL bytes executed
+    warnings: list[str]  # Any warnings generated
 ```
 
 ### `ValidationError`
@@ -357,11 +356,11 @@ class ExecutionResult:
 class ValidationError:
     """Schema validation error."""
 
-    file: Path                   # File containing error
-    line: int                    # Line number
-    column: int                  # Column number
-    message: str                 # Error message
-    severity: str                # "error" or "warning"
+    file: Path  # File containing error
+    line: int  # Line number
+    column: int  # Column number
+    message: str  # Error message
+    severity: str  # "error" or "warning"
 ```
 
 ---

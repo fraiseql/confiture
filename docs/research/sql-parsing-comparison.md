@@ -145,8 +145,7 @@ print(f"Rows: {len(ast.expression.expressions)}")  # 2
 
 # Extract individual rows and values
 for i, row in enumerate(ast.expression.expressions):
-    values = [col.this.this if hasattr(col, 'this') else col.this
-              for col in row.expressions]
+    values = [col.this.this if hasattr(col, "this") else col.this for col in row.expressions]
     print(f"Row {i}: {values}")
 ```
 
@@ -258,6 +257,7 @@ SELECT id, name, is_active, created_at FROM prep_data;
 
 ast = parse_one(insert)
 
+
 # Can be converted to analysis:
 class ConversionAnalyzer:
     def can_convert_to_copy(self, insert_ast):
@@ -278,6 +278,7 @@ class ConversionAnalyzer:
             return False, "INSERT...SELECT cannot be converted to COPY"
 
         return False, "Unknown INSERT type"
+
 
 analyzer = ConversionAnalyzer()
 can_convert, reason = analyzer.can_convert_to_copy(ast)
@@ -301,6 +302,7 @@ print(f"{reason}")  # "INSERT...SELECT cannot be converted to COPY"
 ```python
 from sqlglot import parse_one, exp
 
+
 class ImprovedInsertToCopyConverter:
     """Using sqlglot for semantic parsing."""
 
@@ -318,7 +320,7 @@ class ImprovedInsertToCopyConverter:
                 return False
 
             # Check for ON CONFLICT
-            if ast.args.get('conflict'):
+            if ast.args.get("conflict"):
                 return False
 
             return True
@@ -400,12 +402,12 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
 result = pg_query.parse(upsert)
 
 # Navigate PostgreSQL AST structure
-insert_stmt = result[0]['stmt']['InsertStmt']
-has_on_conflict = insert_stmt.get('onConflict') is not None
+insert_stmt = result[0]["stmt"]["InsertStmt"]
+has_on_conflict = insert_stmt.get("onConflict") is not None
 # True
 
 # Extract columns
-col_names = [col['name'] for col in insert_stmt['cols']]
+col_names = [col["name"] for col in insert_stmt["cols"]]
 # ['id', 'email', 'name']
 ```
 
@@ -439,10 +441,7 @@ col_names = [col['name'] for col in insert_stmt['cols']]
 import sqloxide
 
 # Fast parsing to Python dict
-result = sqloxide.parse_sql(
-    "INSERT INTO users (id, name) VALUES (1, 'Alice');",
-    dialect="postgres"
-)
+result = sqloxide.parse_sql("INSERT INTO users (id, name) VALUES (1, 'Alice');", dialect="postgres")
 
 # Result: List[Dict] with nested structure representing full AST
 print(result)  # Rust-based AST converted to Python
@@ -503,11 +502,11 @@ result = sqloxide.parse_sql(complex, "postgres")
 stmt = result[0]  # First statement
 
 # Access nested structure
-if 'Insert' in stmt:
-    insert = stmt['Insert']
-    table = insert['table']['TableName'][0]['Identifier']['value']  # 'archive'
-    columns = [c['value'] for c in insert['columns']]  # ['id', 'name', 'archived_at']
-    has_with = insert['source'].get('with') is not None  # True
+if "Insert" in stmt:
+    insert = stmt["Insert"]
+    table = insert["table"]["TableName"][0]["Identifier"]["value"]  # 'archive'
+    columns = [c["value"] for c in insert["columns"]]  # ['id', 'name', 'archived_at']
+    has_with = insert["source"].get("with") is not None  # True
 ```
 
 #### Learning Curve & Effort
@@ -692,9 +691,10 @@ def _can_convert_to_copy(self, insert_sql: str) -> bool:
     normalized = insert_sql.strip().upper()
 
     # Check for clauses that make conversion impossible
-    if any(pattern in normalized for pattern in [
-        "ON CONFLICT", "ON DUPLICATE", "WITH ", "INSERT OR", "RETURNING"
-    ]):
+    if any(
+        pattern in normalized
+        for pattern in ["ON CONFLICT", "ON DUPLICATE", "WITH ", "INSERT OR", "RETURNING"]
+    ):
         return False
 
     # Extract VALUES clause with regex
@@ -716,6 +716,7 @@ def _can_convert_to_copy(self, insert_sql: str) -> bool:
 ```python
 from sqlglot import parse_one, exp
 
+
 def _can_convert_to_copy(self, insert_sql: str) -> bool:
     """Improved: 20 lines of semantic checks"""
     try:
@@ -726,7 +727,7 @@ def _can_convert_to_copy(self, insert_sql: str) -> bool:
             return False
 
         # Cannot have ON CONFLICT
-        if ast.args.get('conflict'):
+        if ast.args.get("conflict"):
             return False
 
         # Cannot have functions in VALUES
@@ -753,6 +754,7 @@ def _can_convert_to_copy(self, insert_sql: str) -> bool:
 ```python
 from sqlglot import parse_one, exp
 
+
 class PrepSeedAnalyzer:
     """Analyze INSERT statements for prep-seed validation."""
 
@@ -767,13 +769,13 @@ class PrepSeedAnalyzer:
             "valid": True,
             "is_values_based": isinstance(ast.expression, exp.Values),
             "is_select_based": isinstance(ast.expression, exp.Select),
-            "has_cte": ast.args.get('with_') is not None,
+            "has_cte": ast.args.get("with_") is not None,
             "has_functions": bool(ast.find(exp.Anonymous)),
             "has_subqueries": bool(ast.find(exp.Subquery)),
-            "has_on_conflict": ast.args.get('conflict') is not None,
-            "has_returning": ast.args.get('returning') is not None,
-            "table_name": ast.this.name if hasattr(ast, 'this') else None,
-            "columns": [c.this for c in ast.expressions] if hasattr(ast, 'expressions') else [],
+            "has_on_conflict": ast.args.get("conflict") is not None,
+            "has_returning": ast.args.get("returning") is not None,
+            "table_name": ast.this.name if hasattr(ast, "this") else None,
+            "columns": [c.this for c in ast.expressions] if hasattr(ast, "expressions") else [],
         }
 
         # Add conversion recommendation
@@ -783,6 +785,7 @@ class PrepSeedAnalyzer:
             analysis["can_convert_to_copy"] = False
 
         return analysis
+
 
 # Usage
 analyzer = PrepSeedAnalyzer()
@@ -802,6 +805,7 @@ print(result)
 
 ```python
 from sqlglot import parse_one, exp
+
 
 class MultiRowExtractor:
     """Extract rows from INSERT statement."""
@@ -832,6 +836,7 @@ class MultiRowExtractor:
             rows.append(dict(zip(columns, values)))
 
         return rows
+
 
 # Usage
 extractor = MultiRowExtractor()

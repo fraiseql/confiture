@@ -244,12 +244,11 @@ Always use type hints:
 
 ```python
 # Good
-def build_schema(env: str, output_path: Path | None = None) -> str:
-    ...
+def build_schema(env: str, output_path: Path | None = None) -> str: ...
+
 
 # Bad
-def build_schema(env, output_path=None):
-    ...
+def build_schema(env, output_path=None): ...
 ```
 
 #### Docstrings
@@ -281,16 +280,17 @@ def find_sql_files(directory: Path) -> list[Path]:
     sql_files = []
     ...
 
+
 # Classes: PascalCase
-class SchemaBuilder:
-    ...
+class SchemaBuilder: ...
+
 
 # Constants: UPPER_SNAKE_CASE
 DEFAULT_TRACKING_TABLE = "tb_confiture"
 
+
 # Private: prefix with underscore
-def _internal_helper():
-    ...
+def _internal_helper(): ...
 ```
 
 #### Import Order
@@ -399,9 +399,7 @@ async def test_build_creates_database(test_db):
 
     # Verify tables exist
     async with test_db.connection() as conn:
-        result = await conn.execute(
-            "SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public'"
-        )
+        result = await conn.execute("SELECT COUNT(*) FROM pg_tables WHERE schemaname = 'public'")
         assert result.scalar() > 0
 ```
 
@@ -447,6 +445,7 @@ def test_db():
     db = create_test_database()
     yield db
     db.drop()
+
 
 @pytest.fixture
 def schema_dir(tmp_path):

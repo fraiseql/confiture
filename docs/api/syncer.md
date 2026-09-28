@@ -21,9 +21,7 @@ from confiture.core.syncer import ProductionSyncer
 
 config = {
     "tables": ["users", "orders"],
-    "anonymize": {
-        "users": {"email": "email", "phone": "phone"}
-    }
+    "anonymize": {"users": {"email": "email", "phone": "phone"}},
 }
 
 with ProductionSyncer(source="production", target="local") as syncer:
@@ -109,15 +107,9 @@ def sync(
 ```python
 config = {
     "tables": ["users", "orders", "products"],
-    "anonymize": {
-        "users": {
-            "email": "email",
-            "phone": "phone",
-            "ssn": "redact"
-        }
-    },
+    "anonymize": {"users": {"email": "email", "phone": "phone", "ssn": "redact"}},
     "batch_size": 5000,
-    "show_progress": True
+    "show_progress": True,
 }
 
 with ProductionSyncer("production", "local") as syncer:
@@ -171,19 +163,12 @@ def sync_table(
 ```python
 # Sync with filter
 result = syncer.sync_table(
-    "orders",
-    where="status = 'completed' AND created_at > '2025-01-01'",
-    limit=10000
+    "orders", where="status = 'completed' AND created_at > '2025-01-01'", limit=10000
 )
 
 # Sync with anonymization
 result = syncer.sync_table(
-    "users",
-    anonymization={
-        "email": "email",
-        "phone": "phone",
-        "password_hash": "redact"
-    }
+    "users", anonymization={"email": "email", "phone": "phone", "password_hash": "redact"}
 )
 
 print(f"Synced {result.rows:,} rows in {result.duration}")
@@ -259,6 +244,7 @@ def save_checkpoint(
 ) -> None:
     """Save current progress for resume."""
 
+
 def load_checkpoint(
     self,
     file_path: Path | str = ".confiture_checkpoint.json",
@@ -312,9 +298,9 @@ class SyncConfig:
 
     tables: list[str] | TableSelection  # Tables to sync
     anonymization: dict[str, dict[str, str]]  # Table -> column -> strategy
-    batch_size: int = 5000              # Rows per batch
-    show_progress: bool = True          # Show progress bar
-    parallel: int = 1                   # Parallel table syncs
+    batch_size: int = 5000  # Rows per batch
+    show_progress: bool = True  # Show progress bar
+    parallel: int = 1  # Parallel table syncs
     checkpoint_file: str | None = None  # Checkpoint file path
 ```
 
@@ -325,11 +311,11 @@ class SyncConfig:
 class SyncResult:
     """Result of table sync."""
 
-    table: str                   # Table name
-    rows: int                    # Rows synced
-    duration: timedelta          # Total duration
-    rows_per_second: float       # Throughput
-    bytes_transferred: int       # Data volume
+    table: str  # Table name
+    rows: int  # Rows synced
+    duration: timedelta  # Total duration
+    rows_per_second: float  # Throughput
+    bytes_transferred: int  # Data volume
     anonymized_columns: list[str]  # Columns that were anonymized
 ```
 
@@ -340,12 +326,12 @@ class SyncResult:
 class TableInfo:
     """Information about a source table."""
 
-    name: str                    # Table name
-    schema: str                  # Schema name
-    row_count: int               # Approximate row count
-    size_bytes: int              # Table size
-    columns: list[ColumnInfo]    # Column details
-    has_pii: bool                # Contains PII columns
+    name: str  # Table name
+    schema: str  # Schema name
+    row_count: int  # Approximate row count
+    size_bytes: int  # Table size
+    columns: list[ColumnInfo]  # Column details
+    has_pii: bool  # Contains PII columns
 ```
 
 ---
@@ -371,17 +357,14 @@ config = {
     "tables": ["users", "orders"],
     "anonymize": {
         "users": {
-            "email": "email",           # Hash-based anonymization
-            "phone": "phone",           # Phone format preserved
-            "ssn": "redact",            # Replace with [REDACTED]
-            "password_hash": "null",    # Set to NULL
-            "first_name": "fake",       # Realistic fake name
+            "email": "email",  # Hash-based anonymization
+            "phone": "phone",  # Phone format preserved
+            "ssn": "redact",  # Replace with [REDACTED]
+            "password_hash": "null",  # Set to NULL
+            "first_name": "fake",  # Realistic fake name
         },
-        "orders": {
-            "credit_card": "redact",
-            "billing_address": "redact"
-        }
-    }
+        "orders": {"credit_card": "redact", "billing_address": "redact"},
+    },
 }
 ```
 
@@ -423,7 +406,7 @@ class CustomEmailStrategy(AnonymizationStrategy):
 # Parallel sync for independent tables
 config = SyncConfig(
     tables=["users", "orders", "products"],
-    parallel=3  # Sync 3 tables simultaneously
+    parallel=3,  # Sync 3 tables simultaneously
 )
 
 # Optimal batch size (determined by benchmarking)
@@ -432,10 +415,7 @@ config = SyncConfig(
 )
 
 # Filter to reduce data volume
-result = syncer.sync_table(
-    "logs",
-    where="created_at > NOW() - INTERVAL '30 days'"
-)
+result = syncer.sync_table("logs", where="created_at > NOW() - INTERVAL '30 days'")
 ```
 
 ---

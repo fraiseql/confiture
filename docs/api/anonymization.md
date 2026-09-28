@@ -142,7 +142,7 @@ Central registry of strategies by name.
 ```python
 from confiture import StrategyRegistry
 
-StrategyRegistry.is_registered("email")           # -> True
+StrategyRegistry.is_registered("email")  # -> True
 sorted_names = StrategyRegistry.list_available()  # all registered names
 strategy = StrategyRegistry.get("hash", {"length": 16})
 ```

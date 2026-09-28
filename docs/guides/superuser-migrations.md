@@ -34,7 +34,7 @@ from confiture.models.migration import Migration
 class FixHistoricalOwnership(Migration):
     version = "20260528160002"
     name = "fix_historical_ownership"
-    requires_superuser = True   # NEW
+    requires_superuser = True  # NEW
 
     def up(self) -> None:
         self.execute("ALTER TABLE tenant.tb_foo OWNER TO migrator")
