@@ -939,6 +939,10 @@ class SchemaDriftDetector:
         (``child_pid_fkey``), and two unnamed foreign keys on one table are two
         (#315). A named constraint that says something else is a mismatch (#501). A
         CHECK's text is not compared: PostgreSQL stores it analysed.
+
+        A lost constraint and a mismatched one are CRITICAL (#506): a dropped or
+        re-pointed foreign key lets rows exist that could not before, so it fails a
+        gate like a missing column. An extra one is INFO: it loses no data.
         """
         unmatched = list(actual.constraints)
         missing: list[Constraint] = []
@@ -961,7 +965,7 @@ class SchemaDriftDetector:
             report.drift_items.append(
                 DriftItem(
                     drift_type=DriftType.MISSING_CONSTRAINT,
-                    severity=DriftSeverity.WARNING,
+                    severity=DriftSeverity.CRITICAL,
                     object_name=f"{table}.{label}",
                     subject=_subject(expected, constraint.name),
                     expected=label,
@@ -973,7 +977,7 @@ class SchemaDriftDetector:
             report.drift_items.append(
                 DriftItem(
                     drift_type=DriftType.CONSTRAINT_MISMATCH,
-                    severity=DriftSeverity.WARNING,
+                    severity=DriftSeverity.CRITICAL,
                     object_name=f"{table}.{constraint.name}",
                     subject=_subject(expected, constraint.name),
                     expected=constraint_body(constraint),

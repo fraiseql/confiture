@@ -139,7 +139,7 @@ MUTATIONS = [
     pytest.param(
         "ALTER TABLE core.tb_other DROP CONSTRAINT uq_other_label",
         "missing_constraint",
-        "warning",
+        "critical",
         "core.tb_other.uq_other_label",
         id="drop-constraint",
     ),
@@ -156,7 +156,7 @@ MUTATIONS = [
         "ADD CONSTRAINT fk_other_widget FOREIGN KEY (id) REFERENCES core.tb_other (id) "
         "ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED",
         "constraint_mismatch",
-        "warning",
+        "critical",
         "core.tb_other.fk_other_widget",
         id="repoint-foreign-key",
     ),
@@ -165,7 +165,7 @@ MUTATIONS = [
         "ADD CONSTRAINT fk_other_widget FOREIGN KEY (id) REFERENCES core.tb_widget (id) "
         "DEFERRABLE INITIALLY DEFERRED",
         "constraint_mismatch",
-        "warning",
+        "critical",
         "core.tb_other.fk_other_widget",
         id="foreign-key-loses-its-action",
     ),
