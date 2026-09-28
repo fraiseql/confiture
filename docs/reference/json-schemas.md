@@ -1,6 +1,6 @@
 # JSON Output Schemas
 
-> **Frozen at 1.0.0.** The published schemas are a stability contract: fields are added, never renamed or removed. A change here is a breaking change: it needs a major version and a CHANGELOG entry.
+> **Stable since 1.0.0, by intent.** The published schemas (fields are added, never renamed or removed) are meant to stay stable across 1.x. A change here is a break: it's flagged ⚠️ in the CHANGELOG and announced to the known consumers. It needs a major only once confiture has external users. See [What 1.x promises](../operations/release-trains.md#what-1x-promises).
 
 The commands whose `--format json` output ships a machine-validatable JSON
 Schema are `bootstrap`, `build` (and `build --list-files`), `debug cte`, `diff`, `drift` (and

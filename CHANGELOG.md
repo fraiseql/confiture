@@ -23,6 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   back (`app.tb_dotted.tb_dotted.org.fk`). The live side is still read whatever
   it holds.
 
+### Documentation
+
+- **What 1.x promises, stated honestly** (#510). The 1.0.0 contracts (exit codes,
+  error codes and envelope, JSON schemas, CLI surface, library API) are stable by
+  **intent**, not guarantee, while confiture has no users outside its own stack.
+  A minor may break one when that's the right fix. When it does, the break is
+  flagged ⚠️, the known consumers are told, and `tests/contract/` is the
+  enforcement. `docs/operations/release-trains.md#what-1x-promises` says so, and
+  the "Frozen at 1.0.0" banners point to it. A consumer caps on a minor.
+
 ### Added
 
 - **The properties a consumer reads are pinned by what they answer** (#508).

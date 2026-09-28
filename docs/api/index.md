@@ -325,7 +325,7 @@ def build_and_migrate(env: str) -> MigrateUpResult:
 
 ## API Stability
 
-> **Note**: "Stable API" means the interface won't have breaking changes within the same major version.
+> **Note**: "Stable" means the interface is intended not to break within 1.x. A break is flagged ⚠️ in the CHANGELOG and announced to the known consumers; see [What 1.x promises](../operations/release-trains.md#what-1x-promises).
 
 | API | Interface | Since |
 |-----|-----------|-------|
@@ -339,7 +339,7 @@ def build_and_migrate(env: str) -> MigrateUpResult:
 | Wizard | Stable | v0.4.0 |
 
 **What "Stable" means:**
-- No breaking changes without major version bump
+- Intended not to break within 1.x; a break is flagged and announced
 - Does NOT mean "production-tested" or "battle-tested"
 
 ---

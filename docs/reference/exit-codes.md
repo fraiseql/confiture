@@ -1,6 +1,6 @@
 # Exit-code convention
 
-> **Frozen at 1.0.0.** The exit integers, their semantic classes and the per-code mapping below are a stability contract. A change here is a breaking change: it needs a major version and a CHANGELOG entry.
+> **Stable since 1.0.0, by intent.** The exit integers, their semantic classes and the per-code mapping below are meant to stay stable across 1.x. A change here is a break: it's flagged ⚠️ in the CHANGELOG and announced to the known consumers. It needs a major only once confiture has external users. See [What 1.x promises](../operations/release-trains.md#what-1x-promises).
 
 Confiture's process exit codes are a **stability contract**. Tooling that wraps
 Confiture — CI gates, deploy adapters, monitoring — branches on them, so they
@@ -214,8 +214,8 @@ Going forward, the exit-code convention is **frozen**:
   integers may be introduced for genuinely new failure classes.
 - **Meaning never changes** — the integer→meaning mapping above is stable. A
   code never silently changes which integer it exits with.
-- **Breaking changes require a major version bump** and a prominent
-  CHANGELOG old→new table.
+- **A breaking change is flagged**, with a prominent CHANGELOG old→new table
+  (see [What 1.x promises](../operations/release-trains.md#what-1x-promises)).
 
 The one sanctioned break before this contract took effect was the #146
 renumbering documented in the reconciliation appendix above. 0.51.0 removed 36
