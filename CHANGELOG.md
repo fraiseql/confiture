@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The properties a consumer reads are pinned by what they answer** (#508).
+  `tests/contract/test_consumer_semantics.py` holds a truth table per property —
+  `MigrateUpResult.has_errors`, `halted`, `error_summary`, `StatusResult.has_pending`,
+  `pending`, `applied` — over the results a consumer receives (succeeded, failed,
+  halted at a `requires_superuser` migration, …). The symbol probe could not see
+  1.24.0 redefine `has_errors`; this can, and every property named in the consumer
+  member table must have a row.
+
+### Added
+
 - **A guard pins the drift kinds fraisier escalates.** fraisier (from v0.82.0)
   validates `post_migrate_check.escalate` against a closed list of drift kinds and
   gates on their severity; `tests/unit/test_drift_downstream_contract.py` fails if
