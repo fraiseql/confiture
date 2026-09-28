@@ -274,3 +274,13 @@ def test_a_pristine_database_counts_the_objects_it_compared(built_from_corpus: B
     report = built_from_corpus.drift()
     assert report.drift_items == []
     assert report.objects_checked > 0, report.to_dict()
+
+
+def test_a_pristine_database_counts_the_constraint_definitions_it_compared(
+    built_from_corpus: Built,
+) -> None:
+    """#507: a comparison that read no definition would show 0 here (#501 did)."""
+    report = built_from_corpus.drift()
+    assert report.drift_items == []
+    assert report.constraints_checked > 0, report.to_dict()
+    assert report.constraint_definitions_compared > 0, report.to_dict()

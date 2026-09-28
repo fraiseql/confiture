@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   validates `post_migrate_check.escalate` against a closed list of drift kinds and
   gates on their severity; `tests/unit/test_drift_downstream_contract.py` fails if
   `constraint_mismatch` is renamed or emitted at anything but `warning`.
+- **Live drift says how many constraints it compared** (#507). The report (and
+  `drift.schema.json`) gains `constraints_checked` — every constraint the DDL
+  declares plus each extra one in the database — and
+  `constraint_definitions_compared`, the declared constraints paired with a live
+  one whose definition was read. The two differ where #501 hid: under #501 every
+  named constraint was paired and none was compared, and no counter could show it.
+  A CHECK is paired by name only, so it is checked and not compared.
 
 ## [1.25.1] - 2026-09-27
 
