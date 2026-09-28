@@ -1,6 +1,6 @@
 # Error-code codebook
 
-> **Frozen at 1.0.0.** The error codes, their exit codes and the envelope shape below are a stability contract. A change here is a breaking change: it needs a major version and a CHANGELOG entry.
+> **Stable since 1.0.0, by intent.** The error codes, their exit codes and the envelope shape below are meant to stay stable across 1.x. A change here is a break: it's flagged ⚠️ in the CHANGELOG and announced to the known consumers. It needs a major only once confiture has external users. See [What 1.x promises](../operations/release-trains.md#what-1x-promises).
 
 When a `confiture` command fails in `--format json` mode, it emits a structured
 **error envelope** on stdout (the process still exits with the
@@ -191,8 +191,8 @@ Symbolic error codes are **public API**:
 - **Additive only** — new codes may be added; existing codes are not renamed.
 - A code's meaning is stable. Its integer exit code follows the
   [exit-code convention](exit-codes.md) and is likewise frozen.
-- Removing or renaming a code requires a **major version bump** and a CHANGELOG
-  note.
+- Removing or renaming a code is a break: a ⚠️ CHANGELOG note, announced to
+  the known consumers (see [What 1.x promises](../operations/release-trains.md#what-1x-promises)).
 - The one exception was 0.51.0, which removed 36 codes that had been registered
   but were never emitted by any command (the list is in the CHANGELOG). Every
   code in the table above is one the package can produce; a test keeps it so.

@@ -30,7 +30,38 @@ the next train.
 Between trains, `main` may carry merged work that no release contains. A fix a
 consumer needs sooner ships as a patch on the previous minor, cut from its tag.
 
+## What 1.x promises
+
+1.0.0 named what consumers depend on: exit codes and their semantic classes,
+the error codes and the JSON error envelope, the published JSON schemas, the
+documented CLI surface and the library API. Those are **intended** to be stable
+across 1.x. That's a statement of intent, not a guarantee.
+
+While confiture has no users outside its own stack, a minor may break one of
+them when the break is the right fix. 1.24.0 redefined
+`MigrateUpResult.has_errors`, and 1.25.0 changed the model's wire from a dotted
+string to `{schema, name}`; both would have been majors under a guarantee
+(#510). What holds instead:
+
+- **Every break is flagged.** Its CHANGELOG entry is marked ⚠️ and says what
+  changed, old to new, and what a consumer does about it.
+- **The known consumers are told before the release.** Today they are fraisier
+  and printoptim_backend.
+- **The enforcement is a test, not a version number.** `tests/contract/` pins
+  what each known consumer imports, calls, runs and reads, with the consumer's
+  own `file:line`. That includes the answers of the properties they branch on
+  (`test_consumer_semantics.py`). Breaking a row is an edit that names who it
+  breaks.
+
+So a consumer should cap on a **minor** (`>=1.25,<1.26`) and read the
+CHANGELOG's ⚠️ entries before lifting the cap. A range like `<2` rests on a
+promise 1.x doesn't make. When confiture has external users, this section
+becomes a guarantee, and a break becomes a major.
+
 ## What a train may change
+
+These are the rules a train follows. A departure from one is a break, and is
+handled as above.
 
 **JSON envelopes only grow.** A key a consumer reads is never removed, renamed or
 retyped within 1.x; a train may add keys. Additive is not free: most published
