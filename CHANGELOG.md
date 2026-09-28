@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- ⚠️ **Live drift refuses a DDL tree that names an object needing quotes**
+  (`DIFFER_403`, exit 5; #505). `migrate diff` has refused one since 1.25.0;
+  `migrate validate --check-live-drift`, `confiture drift` and the MCP drift tool
+  accepted it and reported it under a dot-joined `object` that could not be split
+  back (`app.tb_dotted.tb_dotted.org.fk`). The live side is still read whatever
+  it holds.
+
 ### Added
 
 - **The properties a consumer reads are pinned by what they answer** (#508).
@@ -23,9 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   halted at a `requires_superuser` migration, …). The symbol probe could not see
   1.24.0 redefine `has_errors`; this can, and every property named in the consumer
   member table must have a row.
-
-### Added
-
+- **Every drift item names its subject in parts** (#505). `DriftItem` (and
+  `_common.schema.json#/$defs/DriftItem`) gains `subject`: `schema`, `relation`,
+  `name`, a routine's `arguments` and a grant's `role`, never joined — so a name
+  the database holds with a dot in it stays one name. `object` is unchanged.
 - **A guard pins the drift kinds fraisier escalates.** fraisier (from v0.82.0)
   validates `post_migrate_check.escalate` against a closed list of drift kinds and
   gates on their severity; `tests/unit/test_drift_downstream_contract.py` fails if

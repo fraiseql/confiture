@@ -77,7 +77,9 @@ def test_an_unqualified_table_lands_in_the_default_schema() -> None:
     ).schemas == frozenset({"app"})
 
 
+@pytest.mark.usefixtures("quoted_names_allowed")
 def test_quoted_mixed_case_identifiers_keep_their_case() -> None:
+    """Refused by default (``DIFFER_403``); read, when allowed, with the case kept."""
     expected = parse_expected_schema('CREATE TABLE "Tenant"."Tb" ("Id" int NOT NULL);')
     tables = _tables(expected.model)
     assert list(tables) == ["Tenant.Tb"]
