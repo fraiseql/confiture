@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A guard pins the drift kinds fraisier escalates.** fraisier (from v0.82.0)
+  validates `post_migrate_check.escalate` against a closed list of drift kinds and
+  gates on their severity; `tests/unit/test_drift_downstream_contract.py` fails if
+  `constraint_mismatch` is renamed or emitted at anything but `warning`.
+
 ## [1.25.1] - 2026-09-27
 
 **Live drift sees a constraint that kept its name and changed what it says.**
