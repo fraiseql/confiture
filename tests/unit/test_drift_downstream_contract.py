@@ -1,20 +1,27 @@
-"""A drift kind fraisier escalates keeps its name and its severity.
+"""A drift kind a downstream gate relies on keeps its name and its grade.
 
 fraisier (from v0.82.0) validates ``post_migrate_check.escalate`` against a closed
-list of confiture drift kinds, ``ESCALATABLE_KINDS``. A project that writes
-``escalate: [constraint_mismatch]`` is saying "fail my deploy when a named
-constraint no longer says what the DDL declares" — a foreign key re-pointed at
-another table under its own name. That promise holds only while confiture emits
-the kind under that exact string and at ``warning``:
+list of confiture drift kinds, ``ESCALATABLE_KINDS``, and fails a deploy on
+``critical`` drift. A project that writes ``escalate: [constraint_mismatch]`` is
+saying "fail my deploy when a named constraint no longer says what the DDL
+declares" — a foreign key re-pointed at another table under its own name.
 
-- rename the kind, and every fraisier config naming it fails validation;
-- downgrade it to ``info``, and fraisier's gate never sees it — the escalation
-  still validates but no longer escalates anything, which is worse than an error.
+Since #506 confiture grades a constraint the database lost (``missing_constraint``)
+and one that says something else (``constraint_mismatch``) ``critical`` itself: a
+lost or re-pointed foreign key is a loss of referential integrity, not a style
+difference, and a gate should not need a consumer's own table to fail on it. An
+``escalate`` naming either kind still validates, and now has nothing to promote.
+The grade is pinned because a gate relies on it:
 
-``extra_constraint`` is deliberately *not* in ``ESCALATABLE_KINDS``: it is
-``info``. So this table is exactly the kinds fraisier escalates, with the grade it
-depends on. Changing a row is a breaking change for fraisier: tell the fraisier
-maintainers, and flag it as breaking in the CHANGELOG, in the same change.
+- rename a kind, and every fraisier config naming it fails validation;
+- downgrade it, and deploys that failed on a lost foreign key pass — silently,
+  for every project that trusted the default rather than listing it in
+  ``escalate``.
+
+``extra_constraint`` stays ``info`` and is not in ``ESCALATABLE_KINDS``: a
+constraint the database has beyond the DDL loses no data. Changing a row is a
+breaking change for fraisier: tell the fraisier maintainers, and flag it ⚠️ in the
+CHANGELOG, in the same change.
 
 Each row is checked on what the detector *emits* and on the JSON it writes, not
 on the enum's declaration: severity is chosen where the item is built.
@@ -50,16 +57,21 @@ def _item_table(fk: Constraint) -> SchemaModel:
     return model(table("tb_item", column("org_id"), constraints=[fk]))
 
 
+def _item_table_without_fk() -> SchemaModel:
+    return model(table("tb_item", column("org_id")))
+
+
 def _compare(expected: SchemaModel, actual: SchemaModel) -> DriftReport:
     conn = MagicMock()
     conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("db",)
     return SchemaDriftDetector(conn).compare_schemas(expected, actual)
 
 
-#: kind (as fraisier spells it) → (severity fraisier relies on, a pair of models
+#: kind (as fraisier spells it) → (severity a gate relies on, a pair of models
 #: whose comparison emits that kind).
 FRAISIER_ESCALATABLE: dict[str, tuple[str, tuple[SchemaModel, SchemaModel]]] = {
-    "constraint_mismatch": ("warning", (_item_table(_DECLARED_FK), _item_table(_REPOINTED_FK))),
+    "constraint_mismatch": ("critical", (_item_table(_DECLARED_FK), _item_table(_REPOINTED_FK))),
+    "missing_constraint": ("critical", (_item_table(_DECLARED_FK), _item_table_without_fk())),
 }
 
 
@@ -74,8 +86,8 @@ def _emitted(kind: str) -> DriftItem:
 def test_an_escalatable_kind_is_emitted_at_the_severity_fraisier_gates_on(kind: str) -> None:
     severity, _ = FRAISIER_ESCALATABLE[kind]
     assert _emitted(kind).severity.value == severity, (
-        f"{kind} is in fraisier's ESCALATABLE_KINDS and must stay {severity}: "
-        f"fraisier's escalate gate relies on it. This is a breaking change for fraisier."
+        f"{kind} must stay {severity}: fraisier's deploy gate fails on it by default "
+        f"(#506). Changing it is a breaking change for fraisier."
     )
 
 

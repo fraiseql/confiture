@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ⚠️ **A lost or re-pointed constraint is critical drift** (#506).
+  `missing_constraint` and `constraint_mismatch` were `warning`, so a dropped or
+  re-pointed foreign key left `has_critical_drift: false` and exited 0 under
+  `migrate validate --check-live-drift` and `confiture drift`. That grade is for a
+  harmless type relaxation, and every consumer had to re-grade to get a failure.
+  Both kinds are now `critical` and fail the run (exit 1), like a missing column.
+  `extra_constraint` stays `info`. A fraisier `escalate:` naming either kind still
+  validates, and now has nothing to promote.
+
 - ⚠️ **Live drift refuses a DDL tree that names an object needing quotes**
   (`DIFFER_403`, exit 5; #505). `migrate diff` has refused one since 1.25.0;
   `migrate validate --check-live-drift`, `confiture drift` and the MCP drift tool
@@ -39,7 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A guard pins the drift kinds fraisier escalates.** fraisier (from v0.82.0)
   validates `post_migrate_check.escalate` against a closed list of drift kinds and
   gates on their severity; `tests/unit/test_drift_downstream_contract.py` fails if
-  `constraint_mismatch` is renamed or emitted at anything but `warning`.
+  `constraint_mismatch` or `missing_constraint` is renamed or emitted at anything
+  but `critical`.
 - **Live drift says how many constraints it compared** (#507). The report (and
   `drift.schema.json`) gains `constraints_checked` — every constraint the DDL
   declares plus each extra one in the database — and
