@@ -95,7 +95,7 @@ def test_two_models_compare_fact_by_fact() -> None:
         (DriftType.DEFAULT_MISMATCH, warning, "public.users.status"),
         (DriftType.MISSING_INDEX, warning, "public.users.idx_users_name"),
         (DriftType.EXTRA_INDEX, info, "public.users.idx_users_tmp"),
-        (DriftType.MISSING_CONSTRAINT, warning, "public.users.users_email_key"),
+        (DriftType.MISSING_CONSTRAINT, critical, "public.users.users_email_key"),
         (DriftType.EXTRA_CONSTRAINT, info, "public.users.users_id_positive"),
     ]
     assert (report.tables_checked, report.columns_checked, report.indexes_checked) == (1, 3, 2)
@@ -114,7 +114,10 @@ def test_a_constraint_the_database_lost_is_missing() -> None:
     report = _compare(_users(POSITIVE), _users())
 
     (item,) = report.drift_items
-    assert (item.drift_type, item.severity) == (DriftType.MISSING_CONSTRAINT, DriftSeverity.WARNING)
+    assert (item.drift_type, item.severity) == (
+        DriftType.MISSING_CONSTRAINT,
+        DriftSeverity.CRITICAL,
+    )
     assert item.object_name == "public.users.users_id_positive"
     assert (item.expected, item.actual) == ("users_id_positive", None)
 
@@ -180,7 +183,7 @@ def test_two_unnamed_foreign_keys_are_two() -> None:
     actual = model(table("t", *columns, constraints=[live_a]))
 
     assert _items(_compare(expected, actual)) == [
-        (DriftType.MISSING_CONSTRAINT, DriftSeverity.WARNING, "public.t.FOREIGN KEY (b_id)")
+        (DriftType.MISSING_CONSTRAINT, DriftSeverity.CRITICAL, "public.t.FOREIGN KEY (b_id)")
     ]
 
 
@@ -203,7 +206,7 @@ class TestExclusionConstraints:
 
     def test_one_the_database_lost_is_missing(self) -> None:
         assert _items(_compare(_users(self.NAMED), _users())) == [
-            (DriftType.MISSING_CONSTRAINT, DriftSeverity.WARNING, "public.users.no_overlap")
+            (DriftType.MISSING_CONSTRAINT, DriftSeverity.CRITICAL, "public.users.no_overlap")
         ]
 
     def test_an_unnamed_one_matches_the_name_postgresql_gave_it(self) -> None:
@@ -254,7 +257,7 @@ class TestNamedConstraintDefinitions:
     def test_a_key_repointed_at_another_schema_is_a_mismatch(self) -> None:
         live = replace(self.DECLARED, ref_table=RelationName("app", "tb_org"))
         assert self._items_for(live) == [
-            (DriftType.CONSTRAINT_MISMATCH, DriftSeverity.WARNING, "public.tb_item.tb_item_org_fk")
+            (DriftType.CONSTRAINT_MISMATCH, DriftSeverity.CRITICAL, "public.tb_item.tb_item_org_fk")
         ]
 
     def test_the_finding_carries_both_definitions(self) -> None:
