@@ -322,3 +322,34 @@ class TestNamedConstraintDefinitions:
             DriftType.MISSING_CONSTRAINT,
             DriftType.EXTRA_CONSTRAINT,
         ]
+
+
+class TestConstraintCounters:
+    """#507: the report says how many constraints it looked at, and how many it read.
+
+    Under #501 no named constraint's definition was ever compared, and nothing in
+    the payload could show it. Two counts, because they differ exactly where #501
+    did: a constraint *paired* by name is not a constraint whose definition was
+    *compared*.
+    """
+
+    def test_every_declared_and_every_extra_constraint_is_checked(self) -> None:
+        report = _compare(_users(EMAIL_UQ), _users(POSITIVE))
+        # PKEY and EMAIL_UQ declared, POSITIVE extra in the database.
+        assert report.constraints_checked == 3
+
+    def test_a_paired_constraint_counts_as_a_definition_compared(self) -> None:
+        report = _compare(_users(EMAIL_UQ), _users(EMAIL_UQ))
+        assert report.constraint_definitions_compared == 2
+
+    def test_a_check_is_paired_but_its_definition_is_not_compared(self) -> None:
+        report = _compare(_users(POSITIVE), _users(POSITIVE))
+        assert (report.constraints_checked, report.constraint_definitions_compared) == (2, 1)
+
+    def test_a_missing_constraint_has_no_definition_to_compare(self) -> None:
+        report = _compare(_users(EMAIL_UQ), _users())
+        assert (report.constraints_checked, report.constraint_definitions_compared) == (2, 1)
+
+    def test_both_counts_reach_the_json(self) -> None:
+        wire = _compare(_users(EMAIL_UQ), _users(EMAIL_UQ)).to_dict()
+        assert (wire["constraints_checked"], wire["constraint_definitions_compared"]) == (2, 2)

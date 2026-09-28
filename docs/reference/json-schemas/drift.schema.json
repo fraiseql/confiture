@@ -16,6 +16,8 @@
     "tables_checked",
     "columns_checked",
     "indexes_checked",
+    "constraints_checked",
+    "constraint_definitions_compared",
     "objects_checked",
     "detection_time_ms",
     "drift_items",
@@ -58,6 +60,16 @@
     "indexes_checked": {
       "type": "integer",
       "minimum": 0
+    },
+    "constraints_checked": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Constraints the DDL declares, plus each one the database has that the DDL does not (1.26.0, #507)."
+    },
+    "constraint_definitions_compared": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Declared constraints paired with a live one whose definition (columns, referenced table and columns, actions, deferral, exclusion operators) was compared (1.26.0, #507). A CHECK is paired by name only, so it counts in `constraints_checked` and not here."
     },
     "objects_checked": {
       "type": "integer",

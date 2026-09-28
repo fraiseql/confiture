@@ -134,6 +134,13 @@ class DriftReport:
     tables_checked: int = 0
     columns_checked: int = 0
     indexes_checked: int = 0
+    #: Every constraint the tree declares, plus every one the database has and the
+    #: tree does not (#507).
+    constraints_checked: int = 0
+    #: Declared constraints paired with a live one whose definition was compared.
+    #: A CHECK is paired by name only (PostgreSQL stores its text analysed), so it
+    #: is checked and not counted here: the two counts differ where #501 hid.
+    constraint_definitions_compared: int = 0
     #: Views, matviews, triggers and routines compared — the objects a tree
     #: declares whose *existence* is checked (#303).
     objects_checked: int = 0
@@ -177,6 +184,8 @@ class DriftReport:
             "tables_checked": self.tables_checked,
             "columns_checked": self.columns_checked,
             "indexes_checked": self.indexes_checked,
+            "constraints_checked": self.constraints_checked,
+            "constraint_definitions_compared": self.constraint_definitions_compared,
             "objects_checked": self.objects_checked,
             "detection_time_ms": self.detection_time_ms,
             "drift_items": [d.to_dict() for d in self.drift_items],
@@ -849,8 +858,12 @@ class SchemaDriftDetector:
                 missing.append(constraint)
                 continue
             unmatched.remove(twin)
-            if constraint.kind != "check" and not _same_definition(constraint, twin):
+            if constraint.kind == "check":
+                continue
+            report.constraint_definitions_compared += 1
+            if not _same_definition(constraint, twin):
                 changed.append((constraint, twin))
+        report.constraints_checked += len(expected.constraints) + len(unmatched)
 
         for constraint in missing:
             label = _constraint_label(constraint)

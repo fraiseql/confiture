@@ -11,6 +11,8 @@
     "tables_checked": 8,
     "columns_checked": 29,
     "indexes_checked": 1,
+    "constraints_checked": 23,
+    "constraint_definitions_compared": 22,
     "objects_checked": 3,
     "detection_time_ms": 0,
     "drift_items": [],
