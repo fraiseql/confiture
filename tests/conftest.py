@@ -588,9 +588,11 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 @pytest.fixture
 def quoted_names_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Let the differ compare names that need quotes, which it refuses (``DIFFER_403``).
+    """Let the differ and drift read names that need quotes, which both refuse (``DIFFER_403``).
 
-    For the tests of what generated DDL does with such a name anyway: quoting is
-    the second layer behind the refusal, and is tested on its own.
+    For the tests of what generated DDL, or the expected-schema reader, does with
+    such a name anyway: quoting is the second layer behind the refusal, and is
+    tested on its own.
     """
     monkeypatch.setattr("confiture.core.differ.refuse_quoted_names", lambda *_: None)
+    monkeypatch.setattr("confiture.core.drift.refuse_quoted_names", lambda *_: None)

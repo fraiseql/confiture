@@ -100,7 +100,7 @@ class ParsedSchema:
     quoted: list[QuotedName] = field(default_factory=list)
 
 
-def refuse_quoted_names(side: str, schema: ParsedSchema) -> None:
+def refuse_quoted_names(side: str, quoted: list[QuotedName]) -> None:
     """Refuse a side that gives a name that needs quotes (``DIFFER_403``, #487).
 
     confiture supports a name only as PostgreSQL writes it bare (#484), and the
@@ -111,10 +111,10 @@ def refuse_quoted_names(side: str, schema: ParsedSchema) -> None:
     Raises:
         DifferError: ``DIFFER_403``, naming the first such name and how many there are.
     """
-    if not schema.quoted:
+    if not quoted:
         return
-    first = schema.quoted[0]
-    more = len(schema.quoted) - 1
+    first = quoted[0]
+    more = len(quoted) - 1
     others = f" (and {more} more)" if more else ""
     raise DifferError(
         f"The {side} schema names {first.kind} {comment_text(first.spelled)}{others}, "
@@ -357,8 +357,8 @@ class SchemaDiffer:
         """
         old_schema = self.parse_schema(old_sql)
         new_schema = self.parse_schema(new_sql)
-        refuse_quoted_names("old", old_schema)
-        refuse_quoted_names("new", new_schema)
+        refuse_quoted_names("old", old_schema.quoted)
+        refuse_quoted_names("new", new_schema.quoted)
 
         changes = self._compare_tables(old_schema, new_schema)
         changes.extend(self._compare_enum_types(old_schema.enum_types, new_schema.enum_types))

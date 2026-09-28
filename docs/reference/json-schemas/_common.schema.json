@@ -141,7 +141,7 @@
         },
         "object": {
           "type": "string",
-          "description": "The object the item is about. Tables are schema-qualified (`tenant.tb_user`; an unqualified CREATE TABLE resolves to --default-schema, `public` by default) and columns are `schema.table.column` — since 0.52.0 (#227); before, tables were bare names and only `public` was compared."
+          "description": "The object the item is about. Tables are schema-qualified (`tenant.tb_user`; an unqualified CREATE TABLE resolves to --default-schema, `public` by default) and columns are `schema.table.column` — since 0.52.0 (#227); before, tables were bare names and only `public` was compared. The parts are in `subject`: a name may hold a dot, and this string cannot be split back into them."
         },
         "expected": {
           "type": [
@@ -161,13 +161,61 @@
         "details": {
           "type": "object",
           "description": "Item-specific structured detail. column_order_mismatch carries expected_order and actual_order (column name lists)."
+        },
+        "subject": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "description": "What the item is about, in parts, never joined (1.26.0, #505). `relation` is the table, view or trigger's table; `name` the column, index, constraint, trigger or routine in it, null for a finding on the relation itself or a constraint or index the DDL left unnamed. A routine carries its argument types in `arguments`, a grant its grantee in `role`.",
+          "required": [
+            "schema",
+            "relation",
+            "name",
+            "arguments",
+            "role"
+          ],
+          "properties": {
+            "schema": {
+              "type": "string"
+            },
+            "relation": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "arguments": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "role": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
         }
       },
       "required": [
         "type",
         "severity",
         "object",
-        "message"
+        "message",
+        "subject"
       ]
     },
     "Parser": {

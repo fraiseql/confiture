@@ -21,7 +21,9 @@ from confiture.core.ddl_clauses import constraint_body
 from confiture.core.ddl_objects import declared_triggers, objects_in
 from confiture.core.ddl_walk import canonical_default
 from confiture.core.desired_state import load_desired_state
+from confiture.core.differ import refuse_quoted_names
 from confiture.core.linting.inventory import inherit_columns, schema_model
+from confiture.core.linting.quoted_names import quoted_names, quoted_trigger_names
 from confiture.core.locking import LOCK_HOLDER_TABLE
 from confiture.core.schema_analyzer import SchemaAnalyzer
 from confiture.core.schema_model import (
@@ -94,6 +96,35 @@ class DriftSeverity(Enum):
     INFO = "info"  # Minor differences
 
 
+@dataclass(frozen=True)
+class DriftSubject:
+    """What a drift item is about, in parts: never joined, so a dot in a name stays in it (#505).
+
+    ``object`` joins these with dots, and ``app.tb.a.b`` has several readings;
+    the parts have one. ``relation`` is the table, view or trigger's table a
+    finding is on, ``name`` the column, index, constraint, trigger or routine in
+    it — ``None`` for a finding on the relation itself, or for a constraint or
+    index the DDL left unnamed (its definition is in ``expected``). A routine's
+    ``arguments`` are its argument types and a grant's ``role`` its grantee.
+    """
+
+    schema: str
+    relation: str | None = None
+    name: str | None = None
+    arguments: tuple[str, ...] | None = None
+    role: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """The parts as the payload's ``subject`` carries them."""
+        return {
+            "schema": self.schema,
+            "relation": self.relation,
+            "name": self.name,
+            "arguments": list(self.arguments) if self.arguments is not None else None,
+            "role": self.role,
+        }
+
+
 @dataclass
 class DriftItem:
     """A single drift item."""
@@ -105,6 +136,7 @@ class DriftItem:
     actual: Any = None
     message: str = ""
     details: dict[str, Any] | None = None
+    subject: DriftSubject | None = None
 
     def __str__(self) -> str:
         return f"[{self.severity.value}] {self.drift_type.value}: {self.message}"
@@ -118,6 +150,7 @@ class DriftItem:
             "expected": str(self.expected) if self.expected is not None else None,
             "actual": str(self.actual) if self.actual is not None else None,
             "message": self.message,
+            "subject": self.subject.to_dict() if self.subject is not None else None,
         }
         if self.details is not None:
             payload["details"] = self.details
@@ -217,11 +250,18 @@ class _Object:
     signature: Signature | None
     written: str
     catalogued: str
+    subject: DriftSubject
 
 
 def _objects(model: SchemaModel) -> list[_Object]:
     found = [
-        _Object(ref, None, view.qualified, f"{view.schema}.{view.name}")
+        _Object(
+            ref,
+            None,
+            view.qualified,
+            f"{view.schema}.{view.name}",
+            DriftSubject(ref.schema, view.name),
+        )
         for ref, view in model.views.items()
     ]
     found += [
@@ -231,12 +271,27 @@ def _objects(model: SchemaModel) -> list[_Object]:
             routine.identity,
             f"{routine.schema}.{routine.name}"
             f"({', '.join(name for _schema, name in routine.signature_key)})",
+            DriftSubject(
+                ref.schema,
+                None,
+                routine.name,
+                arguments=tuple(
+                    name if schema is None else f"{schema}.{name}"
+                    for schema, name in routine.signature_key
+                ),
+            ),
         )
         for ref, overloads in model.routines.items()
         for routine in overloads
     ]
     found += [
-        _Object(ref, None, trigger.qualified, f"{trigger.schema}.{trigger.table}.{trigger.name}")
+        _Object(
+            ref,
+            None,
+            trigger.qualified,
+            f"{trigger.schema}.{trigger.table}.{trigger.name}",
+            DriftSubject(ref.schema, trigger.table, trigger.name),
+        )
         for ref, trigger in model.triggers.items()
     ]
     return found
@@ -289,6 +344,7 @@ def _compare_objects(expected: SchemaModel, actual: SchemaModel) -> list[DriftIt
             drift_type=_OBJECT_DRIFT_TYPES[obj.ref.kind][0],
             severity=DriftSeverity.CRITICAL,
             object_name=obj.written,
+            subject=obj.subject,
             expected=obj.written,
             actual=None,
             message=f"{obj.ref.kind.capitalize()} '{obj.written}' is missing from database",
@@ -300,6 +356,7 @@ def _compare_objects(expected: SchemaModel, actual: SchemaModel) -> list[DriftIt
             drift_type=_OBJECT_DRIFT_TYPES[obj.ref.kind][1],
             severity=DriftSeverity.INFO,
             object_name=obj.catalogued,
+            subject=obj.subject,
             expected=None,
             actual=obj.catalogued,
             message=(
@@ -380,6 +437,10 @@ def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> Exp
             resolution_hint="Fix the SQL syntax in the schema file, or regenerate it with `confiture build`.",
         ) from exc
 
+    refuse_quoted_names(
+        "expected",
+        [*quoted_names(inventory), *quoted_trigger_names(declared_triggers(objects))],
+    )
     inventory = inherit_columns(inventory)
     triggers = {trigger_ref(t): t for t in declared_triggers(objects)}
     model = _in_schema(replace(schema_model(inventory), triggers=triggers), default_schema)
@@ -401,6 +462,11 @@ _CONSTRAINT_KEYWORDS = {
 def _named(table: Table) -> str:
     """``schema.table``: how a finding names a table."""
     return f"{table.schema or DEFAULT_SCHEMA}.{table.name}"
+
+
+def _subject(table: Table, name: str | None = None) -> DriftSubject:
+    """A finding on *table*, or on the column, index or constraint *name* in it."""
+    return DriftSubject(table.schema or DEFAULT_SCHEMA, table.name, name)
 
 
 def _column_facts(column: Column) -> dict[str, Any]:
@@ -629,6 +695,7 @@ class SchemaDriftDetector:
                     object_name=table,
                     expected=table,
                     actual=None,
+                    subject=_subject(expected_tables[table]),
                     message=f"Table '{table}' is missing from database",
                 )
             )
@@ -641,6 +708,7 @@ class SchemaDriftDetector:
                     object_name=table,
                     expected=None,
                     actual=table,
+                    subject=_subject(actual_tables[table]),
                     message=f"Table '{table}' exists but is not in expected schema",
                 )
             )
@@ -680,6 +748,7 @@ class SchemaDriftDetector:
                     severity=DriftSeverity.CRITICAL,
                     object_name=f"{table_name}.{col}",
                     expected=_column_facts(expected_cols[col]),
+                    subject=_subject(expected_table, col),
                     actual=None,
                     message=f"Column '{table_name}.{col}' is missing",
                 )
@@ -693,6 +762,7 @@ class SchemaDriftDetector:
                     object_name=f"{table_name}.{col}",
                     expected=None,
                     actual=_column_facts(actual_cols[col]),
+                    subject=_subject(actual_table, col),
                     message=f"Column '{table_name}.{col}' exists but is not expected",
                 )
             )
@@ -700,13 +770,25 @@ class SchemaDriftDetector:
         for col in sorted(expected_cols.keys() & actual_cols.keys()):
             report.columns_checked += 1
             self._compare_column(
-                f"{table_name}.{col}", expected_cols[col], actual_cols[col], report
+                f"{table_name}.{col}",
+                _subject(expected_table, col),
+                (expected_cols[col], actual_cols[col]),
+                report,
             )
 
-        self._compare_column_order(table_name, list(expected_cols), list(actual_cols), report)
+        self._compare_column_order(
+            table_name, _subject(expected_table), list(expected_cols), list(actual_cols), report
+        )
 
-    def _compare_column(self, name: str, exp: Column, act: Column, report: DriftReport) -> None:
+    def _compare_column(
+        self,
+        name: str,
+        subject: DriftSubject,
+        pair: tuple[Column, Column],
+        report: DriftReport,
+    ) -> None:
         """Type, nullability and default of one column present on both sides."""
+        exp, act = pair
         # One canonicaliser answers for both sides: the DDL's own spelling and
         # `format_type`'s are two vocabularies for one type (#302).
         exp_type, act_type = exp.type_text or "", act.type_text or ""
@@ -716,6 +798,7 @@ class SchemaDriftDetector:
                     drift_type=DriftType.TYPE_MISMATCH,
                     severity=DriftSeverity.WARNING,
                     object_name=name,
+                    subject=subject,
                     expected=exp_type,
                     actual=act_type,
                     message=f"Column '{name}' type mismatch: expected {exp_type}, got {act_type}",
@@ -728,6 +811,7 @@ class SchemaDriftDetector:
                     drift_type=DriftType.NULLABLE_MISMATCH,
                     severity=DriftSeverity.WARNING,
                     object_name=name,
+                    subject=subject,
                     expected=f"nullable={not exp.not_null}",
                     actual=f"nullable={not act.not_null}",
                     message=f"Column '{name}' nullable mismatch: "
@@ -742,6 +826,7 @@ class SchemaDriftDetector:
                     drift_type=DriftType.DEFAULT_MISMATCH,
                     severity=DriftSeverity.WARNING,
                     object_name=name,
+                    subject=subject,
                     expected=exp.default,
                     actual=act.default,
                     message=f"Column '{name}' default mismatch: "
@@ -752,6 +837,7 @@ class SchemaDriftDetector:
     def _compare_column_order(
         self,
         table_name: str,
+        subject: DriftSubject,
         expected_order: list[str],
         actual_order: list[str],
         report: DriftReport,
@@ -771,6 +857,7 @@ class SchemaDriftDetector:
                 drift_type=DriftType.COLUMN_ORDER_MISMATCH,
                 severity=self.column_order_severity,
                 object_name=table_name,
+                subject=subject,
                 expected=", ".join(expected_order),
                 actual=", ".join(actual_order),
                 message=(
@@ -815,12 +902,15 @@ class SchemaDriftDetector:
         missing = sorted(exp_named - act_by_name.keys())
         report.indexes_checked += len(expected.indexes) + len(extra)
 
-        for idx in [*missing, *(_index_label(ix) for ix in unnamed_missing)]:
+        labelled: list[tuple[str, str | None]] = [(idx, idx) for idx in missing]
+        labelled += [(_index_label(ix), None) for ix in unnamed_missing]
+        for idx, name in labelled:
             report.drift_items.append(
                 DriftItem(
                     drift_type=DriftType.MISSING_INDEX,
                     severity=DriftSeverity.WARNING,
                     object_name=f"{table}.{idx}",
+                    subject=_subject(expected, name),
                     expected=idx,
                     actual=None,
                     message=f"Index '{idx}' on '{table}' is missing",
@@ -832,6 +922,7 @@ class SchemaDriftDetector:
                     drift_type=DriftType.EXTRA_INDEX,
                     severity=DriftSeverity.INFO,
                     object_name=f"{table}.{idx}",
+                    subject=_subject(actual, idx),
                     expected=None,
                     actual=idx,
                     message=f"Index '{idx}' on '{table}' exists but is not expected",
@@ -872,6 +963,7 @@ class SchemaDriftDetector:
                     drift_type=DriftType.MISSING_CONSTRAINT,
                     severity=DriftSeverity.WARNING,
                     object_name=f"{table}.{label}",
+                    subject=_subject(expected, constraint.name),
                     expected=label,
                     actual=None,
                     message=f"Constraint '{label}' on '{table}' is missing",
@@ -883,6 +975,7 @@ class SchemaDriftDetector:
                     drift_type=DriftType.CONSTRAINT_MISMATCH,
                     severity=DriftSeverity.WARNING,
                     object_name=f"{table}.{constraint.name}",
+                    subject=_subject(expected, constraint.name),
                     expected=constraint_body(constraint),
                     actual=constraint_body(live),
                     message=f"Constraint '{constraint.name}' on '{table}' is not what the DDL declares",
@@ -895,6 +988,7 @@ class SchemaDriftDetector:
                     drift_type=DriftType.EXTRA_CONSTRAINT,
                     severity=DriftSeverity.INFO,
                     object_name=f"{table}.{label}",
+                    subject=_subject(actual, constraint.name),
                     expected=None,
                     actual=label,
                     message=f"Constraint '{label}' on '{table}' exists but is not expected",
@@ -1171,6 +1265,7 @@ class AclDriftDetector:
                         drift_type=DriftType.MISSING_GRANT,
                         severity=DriftSeverity.WARNING,
                         object_name=f"{display_name}({grant.role})",
+                        subject=DriftSubject(schema, table, role=grant.role),
                         expected=", ".join(grant.privileges),
                         actual=None,
                         message=(
@@ -1186,6 +1281,7 @@ class AclDriftDetector:
             drift_type=DriftType.MISSING_GRANT,
             severity=DriftSeverity.CRITICAL,
             object_name=f"{display_name}({grant.role})",
+            subject=DriftSubject(schema, table, role=grant.role),
             expected=", ".join(grant.privileges),
             actual=None,
             message=(
@@ -1233,6 +1329,7 @@ class AclDriftDetector:
             drift_type=DriftType.EXTRA_GRANT,
             severity=DriftSeverity.WARNING,
             object_name=f"{qualified}({grant.role})",
+            subject=DriftSubject(schema, table, role=grant.role),
             expected=", ".join(sorted(expected)) or "(none)",
             actual=", ".join(extras),
             message=(
@@ -1300,6 +1397,7 @@ class OwnershipDriftDetector:
                             drift_type=DriftType.WRONG_OWNER,
                             severity=DriftSeverity.CRITICAL,
                             object_name=qualified,
+                            subject=DriftSubject(schema, relname),
                             expected=expectation.expected_owner,
                             actual=actual_owner,
                             message=(
