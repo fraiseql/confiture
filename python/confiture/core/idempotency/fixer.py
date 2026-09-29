@@ -184,7 +184,8 @@ class IdempotencyFixer:
 
         # Match CREATE TABLE that doesn't already have IF NOT EXISTS, and is not a
         # pg_tviews TVIEW's CTAS: pg_tviews 0.1.0 answers a re-applied
-        # `CREATE TABLE IF NOT EXISTS tv_x AS` by dropping tv_x (#504, measured).
+        # `CREATE TABLE IF NOT EXISTS tv_x AS` by dropping tv_x (#504, measured;
+        # fraiseql/pg_tviews#79).
         pattern = re.compile(
             r"CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\b)"
             rf"(?!(?:\w+\.)?{re.escape(TVIEW_PREFIX)}\w+\s+AS\b)((?:\w+\.)?\w+)",

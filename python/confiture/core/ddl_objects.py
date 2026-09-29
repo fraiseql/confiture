@@ -264,7 +264,7 @@ _IDEMPOTENT_ATTR: dict[str, str] = {
 EXISTENCE_CLAUSE_IS_UNSAFE: dict[str, str] = {
     "tview": "pg_tviews 0.1.0 deletes a registered TVIEW's table when "
     "CREATE TABLE IF NOT EXISTS tv_x AS runs again, and leaves pg_tview_meta "
-    "pointing at it (measured)",
+    "pointing at it (measured; fraiseql/pg_tviews#79)",
 }
 
 
