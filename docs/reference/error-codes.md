@@ -102,6 +102,20 @@ resolution hint surfaced in the envelope.
 > print(render_error_codebook())"`; the codebook test
 > (`tests/unit/test_error_codebook.py`) fails if it drifts.
 
+## `DIFFER_403` — a name that needs quotes stops the comparison
+
+`DIFFER_403` is raised before anything is compared. `migrate diff` refuses
+either side, and live drift (`confiture drift`, `migrate validate
+--check-live-drift`, the MCP drift tool) refuses the DDL side. A single name
+anywhere in the tree stops the run, so **one name that needs quotes hides every
+other drift finding**: a lost foreign key in the same tree is not reported
+until the name is fixed. The message names the first such name and how many
+there are. `confiture lint` lists them all (`naming_003` for a dotted name,
+`naming_004` for the rest). Rename them, then re-run. What counts as needing
+quotes is what `schema_identity.quote_identifier` would quote: a capital, a
+space or other punctuation, a non-ASCII character, a leading digit, or a
+reserved word such as `user`. `confiture build` still builds such a tree.
+
 ## `LOCK_1300` — lock-holder identity (`details.holder`)
 
 When `migrate up`/`down`/`down-to` cannot acquire the migration lock, the

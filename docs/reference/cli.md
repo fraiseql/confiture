@@ -3086,7 +3086,12 @@ Structural drift compares tables, columns (type, nullability, order), indexes, a
 the **existence** of views, materialized views, triggers and routines. `migrate validate
 --check-live-drift` runs the same comparison; the two cannot disagree, because they share one detector.
 
-What it does **not** compare, so that nothing has to guess: constraints, sequences, column defaults,
+Constraints are compared too (since 1.25.1). A named constraint is paired by its name and an
+unnamed one by what it says; a pair that declares something else is `constraint_mismatch`. A CHECK
+is paired but its text is not compared, because PostgreSQL stores it analysed. A lost or mismatched
+constraint is `critical` (since 1.26.0), and an extra one is `info`.
+
+What it does **not** compare, so that nothing has to guess: sequences, column defaults,
 and the *bodies* of views and routines. Defaults are left out for a measured reason — PostgreSQL
 rewrites a default expression on storage, so `'x'` comes back as `'x'::text` and `1 + 2` as `(1 + 2)`,
 and only 5 of 12 measured columns agreed as text. Bodies have their own opt-in checks
@@ -3106,6 +3111,17 @@ Extension-owned objects are never reported — `citext` alone installs a dozen f
 `--fail-on-warning` exits 1 on **any** item including an `info` one, so a hand-made view in a managed
 schema trips it, as a hand-made index always has.
 
+### A name that needs quotes hides every other finding
+
+Confiture supports no name that needs quotes (a capital letter, a space, a reserved word like
+`user`). The expected DDL is read in full before anything is compared, and one such name anywhere
+in it refuses the whole run with `DIFFER_403` (exit 5). No drift item is reported, so a tree whose
+only fault is `"createdAt"` and a tree that has also lost a foreign key look the same. Rename the
+names first, then run drift again. `confiture lint` lists every one (`naming_003`, `naming_004`),
+all at once, where the refusal names only the first. The live side is read whatever it holds, so
+the refusal is about the DDL alone. `migrate validate --check-live-drift` and the MCP drift tool
+refuse the same way.
+
 ### Exit Codes
 
 | Code | Meaning |
@@ -3113,6 +3129,7 @@ schema trips it, as a hand-made index always has.
 | 0 | No drift detected |
 | 1 | Critical drift detected (or any drift with `--fail-on-warning`) |
 | 2 | Connection or configuration error (e.g. `--check-acls` without an `acls:` block) |
+| 5 | The expected DDL names an object that needs quotes (`DIFFER_403`): nothing was compared |
 
 ### Examples
 
