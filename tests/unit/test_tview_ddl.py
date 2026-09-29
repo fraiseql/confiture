@@ -67,3 +67,16 @@ def test_a_changed_tview_is_an_object_that_changed() -> None:
     ref = ref_for("tview", None, "tv_post")
     assert before.keys() == after.keys() == {ref}
     assert before[ref][0].definition != after[ref][0].definition
+
+
+def test_a_table_named_tv_with_columns_is_a_table() -> None:
+    """``tv_`` is a common naming convention with no pg_tviews anywhere: the shape decides.
+
+    A production project fraisier deploys holds ten ``CREATE TABLE public.tv_x (…)``
+    and no pg_tviews. Read by the prefix, each would be a TVIEW the database lacks —
+    ten critical ``missing_tview`` on a clean deploy.
+    """
+    model = build_model("CREATE TABLE public.tv_order (id bigint PRIMARY KEY, data jsonb);\n")
+
+    assert model.tviews == {}
+    assert ref_for("table", "public", "tv_order") in model.tables

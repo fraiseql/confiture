@@ -120,3 +120,13 @@ def test_a_tview_that_became_a_plain_table_is_caught(fresh_database: str) -> Non
     found = _drift(fresh_database, TREE)
     assert ("missing_tview", "critical", "tv_post") in found
     assert ("extra_table", "warning", "public.tv_post") in found
+
+
+def test_a_plain_tv_table_without_pg_tviews_is_a_table_on_both_sides(fresh_database: str) -> None:
+    """No prefix rule on either side: only a CTAS is a TVIEW, and only pg_tview_meta says one exists."""
+    tree = "CREATE TABLE tv_order (id bigint PRIMARY KEY, data jsonb);\n"
+    with psycopg.connect(fresh_database, autocommit=True) as conn:
+        conn.execute(tree)
+        assert live_catalog.tviews(conn, ["public"]) == []
+
+    assert _drift(fresh_database, tree) == []
