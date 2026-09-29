@@ -50,6 +50,7 @@ SECTIONS: list[tuple[str, list[str]]] = [
             "Routine",
             "View",
             "Trigger",
+            "TView",
         ],
     ),
     ("Ordering", ["dependency_order", "DependencyCycleError"]),

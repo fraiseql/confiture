@@ -43,6 +43,7 @@ MODEL = (
     "Routine",
     "View",
     "Trigger",
+    "TView",
 )
 CHANGES = (
     "SchemaChange",
@@ -255,6 +256,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("indexes", "tuple[Index, ...]"),
     ),
     "Trigger": (("name", "str"), ("table", "str"), ("schema", "str | None")),
+    "TView": (("name", "str"), ("schema", "str | None"), ("definition", "str | None")),
     "SchemaModel": (
         ("tables", "Mapping[ObjectRef, Table]"),
         ("enum_types", "Mapping[ObjectRef, EnumType]"),
@@ -262,6 +264,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("routines", "Mapping[ObjectRef, tuple[Routine, ...]]"),
         ("views", "Mapping[ObjectRef, View]"),
         ("triggers", "Mapping[ObjectRef, Trigger]"),
+        ("tviews", "Mapping[ObjectRef, TView]"),
     ),
     "SchemaDiff": (("changes", "list[SchemaChange]"), ("warnings", "list[BuildWarning]")),
     "ColumnReference": (("table", "ObjectRef"), ("column", "str | None")),
@@ -559,6 +562,7 @@ def test_diff_compares_two_sources_whole() -> None:
         "Routine",
         "View",
         "Trigger",
+        "TView",
     ],
 )
 def test_the_published_schema_declares_every_field(name: str) -> None:

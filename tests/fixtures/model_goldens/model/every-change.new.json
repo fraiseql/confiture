@@ -467,6 +467,7 @@
     }
   ],
   "triggers": [],
+  "tviews": [],
   "views": [
     {
       "definition": "SELECT 2 AS two",

@@ -449,6 +449,7 @@
     }
   ],
   "triggers": [],
+  "tviews": [],
   "views": [
     {
       "definition": "SELECT 1 AS one",

@@ -83,6 +83,8 @@ class DriftType(Enum):
     EXTRA_TRIGGER = "extra_trigger"
     MISSING_ROUTINE = "missing_routine"
     EXTRA_ROUTINE = "extra_routine"
+    MISSING_TVIEW = "missing_tview"
+    EXTRA_TVIEW = "extra_tview"
     MISSING_GRANT = "missing_grant"
     EXTRA_GRANT = "extra_grant"
     WRONG_OWNER = "wrong_owner"
@@ -233,6 +235,7 @@ _OBJECT_DRIFT_TYPES: dict[str, tuple[DriftType, DriftType]] = {
     "view": (DriftType.MISSING_VIEW, DriftType.EXTRA_VIEW),
     "matview": (DriftType.MISSING_MATVIEW, DriftType.EXTRA_MATVIEW),
     "trigger": (DriftType.MISSING_TRIGGER, DriftType.EXTRA_TRIGGER),
+    "tview": (DriftType.MISSING_TVIEW, DriftType.EXTRA_TVIEW),
     **dict.fromkeys(get_args(RoutineKind), (DriftType.MISSING_ROUTINE, DriftType.EXTRA_ROUTINE)),
 }
 
@@ -294,6 +297,16 @@ def _objects(model: SchemaModel) -> list[_Object]:
         )
         for ref, trigger in model.triggers.items()
     ]
+    found += [
+        _Object(
+            ref,
+            None,
+            tview.qualified,
+            f"{tview.schema}.{tview.name}",
+            DriftSubject(ref.schema, tview.name),
+        )
+        for ref, tview in model.tviews.items()
+    ]
     return found
 
 
@@ -302,7 +315,7 @@ def _order(obj: _Object) -> str:
 
 
 def _compare_objects(expected: SchemaModel, actual: SchemaModel) -> list[DriftItem]:
-    """Views, matviews, triggers and routines: what the tree declares against what exists.
+    """Views, matviews, triggers, routines and TVIEWs: what the tree declares against what exists.
 
     Paired by :class:`ObjectRef` and, inside a routine's bucket, by
     ``signatures_match`` — so ``fn(bigint)`` in a tree and ``fn(int8)`` in a
@@ -382,7 +395,7 @@ class ExpectedSchema:
 def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
     """*model* with every unqualified object placed in *default_schema* (#227).
 
-    A view, routine or trigger is *keyed* in *default_schema* and keeps the
+    A view, routine, trigger or TVIEW is *keyed* in *default_schema* and keeps the
     spelling the tree wrote, which is how a finding names one that is missing.
     """
 
@@ -408,6 +421,9 @@ def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
         sequences={
             ref_for("sequence", q.schema or default_schema, q.name): placed(q)
             for q in model.sequences.values()
+        },
+        tviews={
+            ref_for("tview", t.schema or default_schema, t.name): t for t in model.tviews.values()
         },
     )
 
@@ -1017,6 +1033,8 @@ class SchemaDriftDetector:
             routines=objects,
             views=objects,
             triggers=objects,
+            # Always: a TVIEW read as a table would be `extra_table` (#504).
+            tviews=True,
         )
 
     def compare_with_expected(self, expected: SchemaModel) -> DriftReport:

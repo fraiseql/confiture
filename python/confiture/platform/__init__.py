@@ -84,6 +84,7 @@ from confiture.core.schema_model import (
     Sequence,
     Table,
     Trigger,
+    TView,
     View,
 )
 from confiture.core.schema_sources import SchemaSource, diff, introspect, parse_schema
@@ -153,6 +154,7 @@ __all__ = [
     "Sequence",
     "SequenceAdded",
     "SequenceDropped",
+    "TView",
     "Table",
     "TableAdded",
     "TableDropped",

@@ -124,6 +124,8 @@
             "extra_trigger",
             "missing_routine",
             "extra_routine",
+            "missing_tview",
+            "extra_tview",
             "missing_grant",
             "extra_grant",
             "wrong_owner",

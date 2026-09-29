@@ -419,8 +419,12 @@ _OBJECT_COLUMN = _pg_member("ObjectType", "OBJECT_COLUMN")
 
 #: One statement kind names several object kinds: ``DROP ROUTINE f(int)`` drops a
 #: function, a procedure or an aggregate, whichever ``f`` turns out to be, and a
-#: reader of a tree does not know which until it looks.
-_KIND_ALIASES: dict[str, tuple[str, ...]] = {"routine": ("function", "procedure", "aggregate")}
+#: reader of a tree does not know which until it looks. ``DROP TABLE tv_post``
+#: drops a pg_tviews TVIEW, which is a table to PostgreSQL (#504).
+_KIND_ALIASES: dict[str, tuple[str, ...]] = {
+    "routine": ("function", "procedure", "aggregate"),
+    "table": ("table", "tview"),
+}
 
 
 def object_kinds(kind: str) -> tuple[str, ...]:
