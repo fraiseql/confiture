@@ -105,15 +105,17 @@ def test_the_parse_side_and_the_live_side_hold_one_tview(tview_database: str) ->
 
 
 def test_a_tview_that_became_a_plain_table_is_caught(fresh_database: str) -> None:
-    """Without pg_tviews loaded in the session, ``CREATE TABLE tv_post AS`` is a plain table.
+    """The tree declares a TVIEW and the database holds a plain ``tv_post`` table.
 
     Measured on PostgreSQL 18.4 + pg_tviews 0.1.0: a session that has not loaded the
     library (no ``shared_preload_libraries``, or the ``CREATE EXTENSION`` in the same
-    batch) creates ``tv_post`` and registers nothing, silently. Drift is where that
-    surfaces: the tree declares a TVIEW and the database holds a table.
+    batch) turns ``CREATE TABLE tv_post AS`` into a plain table and registers nothing,
+    silently. The table is made here with a column list, which pg_tviews never
+    intercepts, so the test is the same with the library preloaded or not.
     """
     with psycopg.connect(fresh_database, autocommit=True) as conn:
-        conn.execute(TREE)
+        conn.execute(TREE.split("CREATE TABLE tv_post", maxsplit=1)[0])
+        conn.execute("CREATE TABLE tv_post (pk_post bigint, id uuid, data jsonb)")
 
     found = _drift(fresh_database, TREE)
     assert ("missing_tview", "critical", "tv_post") in found
