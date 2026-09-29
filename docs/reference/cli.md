@@ -310,7 +310,7 @@ confiture build [OPTIONS]
 | `--validate-comments` / `--no-validate-comments` | - | Flag | - | Enable/disable comment validation (default: from config) |
 | `--fail-on-unclosed` / `--no-fail-on-unclosed` | - | Flag | - | Fail on unclosed block comments (default: from config) |
 | `--fail-on-spillover` / `--no-fail-on-spillover` | - | Flag | - | Fail on comment spillover into next file (default: from config) |
-| `--two-pass` / `--no-two-pass` | - | Flag | - | Two-pass FK emission: strip REFERENCES from CREATE TABLE, emit ALTER TABLE after (default: from config) |
+| `--two-pass` / `--no-two-pass` | - | Flag | - | Two-pass foreign keys: add each one with ALTER TABLE after every table (default: from config) |
 | `--separator-style` | - | str | - | Separator style: block_comment, line_comment, mysql, custom (default: from config) |
 | `--separator-template` | - | str | - | Custom separator template with {file_path} placeholder (default: none) |
 | `--sequential` | - | Flag | off | Apply seed files sequentially after build (default: off) |

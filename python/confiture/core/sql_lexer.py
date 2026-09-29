@@ -138,6 +138,17 @@ def split_statements(sql: str) -> list[str]:
     return [s.strip() for s in pglast.split(sql, with_parser=False) if s.strip()]
 
 
+def statement_spans(sql: str) -> list[slice]:
+    """Where each top-level statement lies in *sql*, found by the scanner.
+
+    The scanner reads the ASCII shadow, so each slice indexes *sql* itself even
+    after a multibyte character. A statement the scanner cannot start is not
+    listed; the text around the slices is whatever lies between statements.
+    """
+    shadow = sql if is_ascii(sql) else ascii_shadow(sql)
+    return list(pglast.split(shadow, with_parser=False, only_slices=True))
+
+
 def strip_comments(sql: str, *, replace_with: str = "") -> str:
     """``sql`` with every ``--`` and ``/* */`` comment removed.
 

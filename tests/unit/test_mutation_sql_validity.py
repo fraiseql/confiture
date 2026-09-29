@@ -83,3 +83,18 @@ def test_applied_mutation_is_valid_sql(mutation, sample: str) -> None:
         pglast.parse_sql(mutated)
     except pglast.parser.ParseError as exc:
         pytest.fail(f"{mutation.id} ({mutation.name}) produced invalid SQL:\n{mutated}\n{exc}")
+
+
+def test_remove_foreign_key_removes_every_key_and_nothing_a_literal_spells() -> None:
+    """Read by the one reader: a key with no column list goes, a string literal stays (#511)."""
+    [mutation] = [m for m in MutationRegistry().list_all() if m.name == "remove_foreign_key"]
+    sql = (
+        "CREATE TABLE o (\n"
+        "    w int REFERENCES widgets,\n"
+        "    v int REFERENCES widgets (id) MATCH FULL,\n"
+        "    note text DEFAULT 'REFERENCES x (y)'\n"
+        ");"
+    )
+    assert mutation.apply(sql) == (
+        "CREATE TABLE o (\n    w int,\n    v int,\n    note text DEFAULT 'REFERENCES x (y)'\n);"
+    )

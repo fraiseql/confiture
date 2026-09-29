@@ -182,6 +182,22 @@ ROWS: tuple[Row, ...] = (
         two_pass=True,
     ),
     Row(
+        "foreign-key-with-no-column-list-to-a-later-table-two-pass",
+        _tree("CREATE TABLE app.tb_y (id int, x_id int REFERENCES app.tb_x);\n", TABLE),
+        refused=False,
+        two_pass=True,
+    ),
+    Row(
+        "match-full-foreign-key-to-a-later-table-two-pass",
+        _tree(
+            "CREATE TABLE app.tb_y (id int, x_id int REFERENCES app.tb_x (id) MATCH FULL);\n",
+            TABLE,
+        ),
+        refused=True,
+        needs="app.tb_x",
+        two_pass=True,
+    ),
+    Row(
         "index-on-a-later-table",
         _tree("CREATE INDEX ix_x ON app.tb_x (name);\n", TABLE),
         refused=True,

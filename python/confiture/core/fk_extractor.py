@@ -1,458 +1,296 @@
-"""Two-pass FK extraction for cross-schema build ordering.
+"""Two-pass foreign keys: every table first, then every foreign key (``build.two_pass``).
 
-Extracts FOREIGN KEY constraints from CREATE TABLE statements and generates
-corresponding ALTER TABLE ADD CONSTRAINT statements. This allows all tables
-to be created first (pass 1), then all FK constraints added (pass 2),
-eliminating cross-schema ordering failures.
+A key written in its ``CREATE TABLE`` fails when the table it references comes
+later in the build, and across schemas no file order satisfies every key. Two
+passes do: each foreign key is taken out of its ``CREATE TABLE`` and added at
+the end with ``ALTER TABLE … ADD``, once every table exists.
 
-See: https://github.com/evoludigit/confiture/issues/94
+A key is read by the one reader (``ddl_walk.read_constraint``) and written by
+the one writer (``ddl_clauses.constraint_body``), so the key added at the end is
+the key the author wrote. It is cut out of the table by the parser's node
+locations, never by matching its text, so a string literal that spells
+``REFERENCES`` is a string literal and the comments around the key stay put. A
+key the model cannot hold whole (``ddl_walk.model_holds``) stays where it was
+written, as does every key of a statement the parser rejects.
 """
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field
+from collections.abc import Iterator
+from dataclasses import dataclass
+from typing import Any
+
+import pglast
+import pglast.parser
 
 from confiture.core import sql_lexer
-from confiture.core.sql_lexer import strip_comments
-
-# ── Identifier pattern (bare or double-quoted, optionally schema-qualified) ──
-
-_IDENT = r'(?:"[^"]+"|[A-Za-z_]\w*)'
-_QUAL_IDENT = rf"{_IDENT}(?:\.{_IDENT})*"
-
-# ── CREATE TABLE finder ─────────────────────────────────────────────────────
-
-_CREATE_TABLE_RE = re.compile(
-    rf"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?({_QUAL_IDENT})\s*\(",
-    re.IGNORECASE,
+from confiture.core.ddl_clauses import constraint_body, named, relation
+from confiture.core.ddl_walk import (
+    CONSTRAINT_READERS,
+    enum_int,
+    model_holds,
+    read_column_constraints,
+    read_constraint,
+    relation_name,
 )
+from confiture.core.parser_info import ascii_shadow, is_ascii
+from confiture.core.schema_model import Constraint, RelationName
 
-# ── ON DELETE / ON UPDATE / DEFERRABLE modifiers ─────────────────────────────
-
-_ON_DELETE_RE = re.compile(
-    r"\s+ON\s+DELETE\s+(CASCADE|SET\s+NULL|SET\s+DEFAULT|RESTRICT|NO\s+ACTION)",
-    re.IGNORECASE,
-)
-_ON_UPDATE_RE = re.compile(
-    r"\s+ON\s+UPDATE\s+(CASCADE|SET\s+NULL|SET\s+DEFAULT|RESTRICT|NO\s+ACTION)",
-    re.IGNORECASE,
-)
-_DEFERRABLE_RE = re.compile(
-    r"\s+((?:NOT\s+)?DEFERRABLE(?:\s+INITIALLY\s+(?:DEFERRED|IMMEDIATE))?)",
-    re.IGNORECASE,
-)
-
-# ── Inline REFERENCES (within a column definition line) ──────────────────────
-
-_INLINE_REF_RE = re.compile(
-    rf"(?:\s+CONSTRAINT\s+({_IDENT}))?"  # optional CONSTRAINT name
-    rf"\s+REFERENCES\s+({_QUAL_IDENT})"  # REFERENCES target_table
-    rf"(?:\s*\(([^)]+)\))?"  # optional (target_columns)
-    rf"("  # begin modifiers capture group
-    rf"(?:\s+ON\s+(?:DELETE|UPDATE)\s+(?:CASCADE|SET\s+NULL|SET\s+DEFAULT|RESTRICT|NO\s+ACTION))*"
-    rf"(?:\s+(?:NOT\s+)?DEFERRABLE(?:\s+INITIALLY\s+(?:DEFERRED|IMMEDIATE))?)?"
-    rf")",  # end modifiers
-    re.IGNORECASE,
-)
-
-# ── Table-level FOREIGN KEY ─────────────────────────────────────────────────
-
-_TABLE_FK_RE = re.compile(
-    rf"(?:CONSTRAINT\s+({_IDENT})\s+)?"  # optional CONSTRAINT name
-    rf"FOREIGN\s+KEY\s*\(([^)]+)\)"  # FOREIGN KEY (source_columns)
-    rf"\s*REFERENCES\s+({_QUAL_IDENT})"  # REFERENCES target_table
-    rf"\s*\(([^)]+)\)"  # (target_columns)
-    rf"("  # begin modifiers
-    rf"(?:\s+ON\s+(?:DELETE|UPDATE)\s+(?:CASCADE|SET\s+NULL|SET\s+DEFAULT|RESTRICT|NO\s+ACTION))*"
-    rf"(?:\s+(?:NOT\s+)?DEFERRABLE(?:\s+INITIALLY\s+(?:DEFERRED|IMMEDIATE))?)?"
-    rf")",  # end modifiers
-    re.IGNORECASE,
-)
+_OPEN, _CLOSE, _COMMA = "ASCII_40", "ASCII_41", "ASCII_44"
+_COMMENTS = frozenset({"SQL_COMMENT", "C_COMMENT"})
+#: A column constraint node that qualifies the one written before it.
+_ATTRIBUTE_PREFIX = "CONSTR_ATTR_"
 
 
 @dataclass(frozen=True)
-class ForeignKeyInfo:
-    """Represents an extracted foreign key constraint."""
+class MovedForeignKey:
+    """A foreign key taken out of its ``CREATE TABLE``: the table it is on, and the key."""
 
-    source_table: str
-    source_columns: list[str] = field(default_factory=list)
-    target_table: str = ""
-    target_columns: list[str] = field(default_factory=list)
-    constraint_name: str | None = None
-    on_delete: str | None = None
-    on_update: str | None = None
-    deferrable: str | None = None
+    table: RelationName
+    constraint: Constraint
 
 
-def _parse_modifiers(modifiers_text: str) -> tuple[str | None, str | None, str | None]:
-    """Extract ON DELETE, ON UPDATE, DEFERRABLE from a modifier string."""
-    on_delete = None
-    on_update = None
-    deferrable = None
+@dataclass(frozen=True)
+class _Cut:
+    """One foreign key in a ``CREATE TABLE``: where it starts, and how its text ends."""
 
-    m = _ON_DELETE_RE.search(modifiers_text)
-    if m:
-        on_delete = m.group(1).upper()
-
-    m = _ON_UPDATE_RE.search(modifiers_text)
-    if m:
-        on_update = m.group(1).upper()
-
-    m = _DEFERRABLE_RE.search(modifiers_text)
-    if m:
-        deferrable = m.group(1).upper()
-
-    return on_delete, on_update, deferrable
+    node: Any
+    constraint: Constraint
+    location: int
+    #: The element's index in ``tableElts``, for a table-level key; ``None`` on a column.
+    element: int | None
+    #: A column key's end: where the next clause on its column starts, or ``None`` for
+    #: the end of the column's element.
+    until: int | None = None
 
 
-def _split_columns(cols: str) -> list[str]:
-    """Split a comma-separated column list, trimming whitespace."""
-    return [c.strip() for c in cols.split(",")]
+def _is_attribute(node: Any) -> bool:
+    return getattr(node.contype, "name", "").startswith(_ATTRIBUTE_PREFIX)
 
 
-def _strip_comments(line: str) -> str:
-    """Strip comments from a line for matching purposes (the one lexer)."""
-    return strip_comments(line)
+def _column_cuts(element: Any, *, every: bool) -> Iterator[_Cut]:
+    """The foreign keys on one column that move, with the attributes that qualify them.
 
-
-def _find_create_table_blocks(sql: str) -> list[tuple[int, int, str]]:
-    """Find all CREATE TABLE blocks, tracking parenthesis nesting.
-
-    Returns list of (start, end, table_name) tuples where start..end
-    spans the full CREATE TABLE statement including the closing ;.
+    *every* takes a key the model cannot hold whole as well.
     """
-    parens = _ParenMatcher(sql)
-    blocks: list[tuple[int, int, str]] = []
-    for m in _CREATE_TABLE_RE.finditer(sql):
-        open_pos = sql.find("(", m.end() - 1)
-        close_pos = parens.close(open_pos) if open_pos != -1 else None
-        if close_pos is None:
+    clauses = list(element.constraints or ())
+    keys = iter(c for c in read_column_constraints(element)[1] if c.kind == "foreign_key")
+    for i, node in enumerate(clauses):
+        read = read_constraint(node, column=element.colname)
+        if not (isinstance(read, Constraint) and read.kind == "foreign_key"):
             continue
-        # Find the semicolon after the closing paren
-        end = close_pos + 1
-        while end < len(sql) and sql[end] in (" ", "\t", "\n", "\r"):
-            end += 1
-        if end < len(sql) and sql[end] == ";":
-            end += 1
-        blocks.append((m.start(), end, m.group(1)))
-    return blocks
-
-
-class _ParenMatcher:
-    """Matching parentheses from the scanner's tokens: comments and literals never count."""
-
-    def __init__(self, sql: str) -> None:
-        self._parens = [
-            (t.start, t.name == "ASCII_40")
-            for t in sql_lexer.tokens(sql)
-            if t.name in ("ASCII_40", "ASCII_41")
-        ]
-
-    def close(self, open_pos: int) -> int | None:
-        """The offset of the ``)`` that closes the ``(`` at ``open_pos``, or ``None``."""
-        depth = 0
-        for pos, is_open in self._parens:
-            if pos < open_pos:
-                continue
-            depth += 1 if is_open else -1
-            if depth == 0:
-                return pos
-        return None
-
-
-def _line_has_data(line: str) -> bool:
-    """Return True if `line` has any content beyond whitespace and `--` comments."""
-    return _strip_comments(line).strip() != ""
-
-
-def _strip_comments_with_map(body: str) -> tuple[str, list[int]]:
-    """Strip line and block comments, returning the stripped text and an index map.
-
-    `orig_idx[i]` is the position in `body` of the character that ends up at
-    position `i` in the returned stripped string. The map lets a regex match on
-    the stripped text be projected back onto exact positions in the original,
-    without a second regex pass that can re-snag on the very comment we stripped.
-    """
-    stripped_chars: list[str] = []
-    orig_idx: list[int] = []
-    i = 0
-    n = len(body)
-    while i < n:
-        if body[i : i + 2] == "/*":
-            end = body.find("*/", i + 2)
-            i = n if end == -1 else end + 2
-            continue
-        if body[i : i + 2] == "--":
-            end = body.find("\n", i + 2)
-            i = n if end == -1 else end
-            continue
-        stripped_chars.append(body[i])
-        orig_idx.append(i)
-        i += 1
-    return "".join(stripped_chars), orig_idx
-
-
-def _extract_fks_from_body(body: str, table_name: str) -> tuple[str, list[ForeignKeyInfo]]:
-    """Extract FK constraints from a CREATE TABLE body and return cleaned body + FK list.
-
-    Operates on the full body text (not line-by-line) to handle multi-line
-    FK constraints where CONSTRAINT name and FOREIGN KEY are on separate lines.
-    """
-    fks: list[ForeignKeyInfo] = []
-    cleaned = body
-
-    # Step 1: Extract and remove table-level FK constraints (multi-line safe).
-    # Positions are obtained by running the regex on a comment-stripped view of
-    # the text, then mapped back to original-text positions via orig_idx. A
-    # second regex search against the original text would re-snag on whatever
-    # whitespace abuts a stripped comment and cause comment displacement (#128).
-    while True:
-        check_text, orig_idx = _strip_comments_with_map(cleaned)
-        table_fk_match = _TABLE_FK_RE.search(check_text)
-        if not table_fk_match:
-            break
-
-        constraint_name = table_fk_match.group(1)
-        source_cols = _split_columns(table_fk_match.group(2))
-        target_table = table_fk_match.group(3)
-        target_cols = _split_columns(table_fk_match.group(4))
-        modifiers = table_fk_match.group(5) if table_fk_match.group(5) else ""
-        on_delete, on_update, deferrable = _parse_modifiers(modifiers)
-
-        fks.append(
-            ForeignKeyInfo(
-                constraint_name=constraint_name,
-                source_table=table_name,
-                source_columns=source_cols,
-                target_table=target_table,
-                target_columns=target_cols,
-                on_delete=on_delete,
-                on_update=on_update,
-                deferrable=deferrable,
-            )
+        # The column's reader folds the attributes after the key into it.
+        key = next(keys)
+        after = i + 1
+        while after < len(clauses) and _is_attribute(clauses[after]):
+            after += 1
+        attributes = clauses[i + 1 : after]
+        whole = model_holds(node) and all(
+            enum_int(a.contype) in CONSTRAINT_READERS for a in attributes
         )
+        if not (whole or every):
+            continue
+        until = clauses[after].location if after < len(clauses) else None
+        yield _Cut(node, key, node.location, None, until)
 
-        start = orig_idx[table_fk_match.start()]
-        end = orig_idx[table_fk_match.end() - 1] + 1
 
-        # Expand start backwards to consume leading whitespace/newline.
-        # The leading-newline pass is suppressed when the preceding line is
-        # comment-only: consuming its terminator would glue the comment onto
-        # whatever follows the deletion (#128).
-        while start > 0 and cleaned[start - 1] in (" ", "\t"):
+def _cuts(stmt: Any, *, every: bool = False) -> list[_Cut]:
+    cuts: list[_Cut] = []
+    for index, element in enumerate(stmt.tableElts or ()):
+        kind = type(element).__name__
+        if kind == "ColumnDef":
+            cuts.extend(_column_cuts(element, every=every))
+        elif kind == "Constraint" and (every or model_holds(element)):
+            read = read_constraint(element)
+            if isinstance(read, Constraint) and read.kind == "foreign_key":
+                cuts.append(_Cut(element, read, element.location, index))
+    return cuts
+
+
+def movable_keys(stmt: Any) -> list[Any]:
+    """The foreign-key nodes of a ``CreateStmt`` that two passes move to the end."""
+    if type(stmt).__name__ != "CreateStmt":
+        return []
+    return [cut.node for cut in _cuts(stmt)]
+
+
+class _Statement:
+    """One ``CREATE TABLE``'s text and tokens, and the spans that take its keys out."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.tokens = [t for t in sql_lexer.tokens(text) if t.name not in _COMMENTS]
+
+    def _index_at(self, offset: int) -> int:
+        return next(i for i, t in enumerate(self.tokens) if t.start >= offset)
+
+    def _boundary(self, start: int) -> int:
+        """The index of the ``,`` or ``)`` that ends the element holding token *start*."""
+        depth = 0
+        for i in range(start, len(self.tokens)):
+            name = self.tokens[i].name
+            if name == _OPEN:
+                depth += 1
+            elif name in (_CLOSE, _COMMA) and depth == 0:
+                return i
+            elif name == _CLOSE:
+                depth -= 1
+        return len(self.tokens)
+
+    def _last_end(self, before: int) -> int:
+        """Where the last token before token index *before* ends."""
+        return self.tokens[before - 1].end + 1
+
+    def _elements(self, stmt: Any) -> list[tuple[int, int]]:
+        """Each element's first token index, and the index of the ``,`` or ``)`` after it."""
+        first = self._index_at(stmt.relation.location)
+        opening = next(i for i in range(first, len(self.tokens)) if self.tokens[i].name == _OPEN)
+        spans: list[tuple[int, int]] = []
+        start = opening + 1
+        while start < len(self.tokens) and self.tokens[start].name != _CLOSE:
+            end = self._boundary(start)
+            spans.append((start, end))
+            if end >= len(self.tokens) or self.tokens[end].name == _CLOSE:
+                break
+            start = end + 1
+        return spans
+
+    def removals(self, stmt: Any, cuts: list[_Cut]) -> list[tuple[int, int]]:
+        """The character spans to delete: each key, and the commas its element leaves behind."""
+        spans: list[tuple[int, int]] = []
+        elements = self._elements(stmt)
+        gone = {cut.element for cut in cuts if cut.element is not None}
+        kept = [i for i in range(len(elements)) if i not in gone]
+        for i, (first, last) in enumerate(elements):
+            if i in gone:
+                spans.append((self.tokens[first].start, self._last_end(last)))
+            separator = last
+            if separator < len(self.tokens) and self.tokens[separator].name == _COMMA:
+                keeps_comma = i not in gone and any(k > i for k in kept)
+                if not keeps_comma:
+                    spans.append((self.tokens[separator].start, self.tokens[separator].end + 1))
+        for cut in cuts:
+            if cut.element is not None:
+                continue
+            first = self._index_at(cut.location)
+            stop = self._index_at(cut.until) if cut.until is not None else self._boundary(first)
+            spans.append((cut.location, self._last_end(stop)))
+        return [self._tidy(start, end) for start, end in _merged(spans)]
+
+    def _tidy(self, start: int, end: int) -> tuple[int, int]:
+        """*start*..*end* with the blanks before it, and its whole line when nothing else is on it."""
+        text = self.text
+        while start > 0 and text[start - 1] in " \t":
             start -= 1
-        if start > 0 and cleaned[start - 1] == "\n":
-            line_start = cleaned.rfind("\n", 0, start - 1) + 1
-            preceding_line = cleaned[line_start : start - 1]
-            if _line_has_data(preceding_line):
-                start -= 1
-
-        # Expand end forward to consume trailing comma and whitespace.
-        # The trailing-newline pass is suppressed when the following line is
-        # comment-only: consuming its leading newline would glue the comment
-        # onto the previous data line (#128).
-        while end < len(cleaned) and cleaned[end] in (" ", "\t"):
-            end += 1
-        if end < len(cleaned) and cleaned[end] == ",":
-            end += 1
-        while end < len(cleaned) and cleaned[end] in (" ", "\t"):
-            end += 1
-        if end < len(cleaned) and cleaned[end] == "\n":
-            after_nl = end + 1
-            next_nl = cleaned.find("\n", after_nl)
-            following_line = cleaned[after_nl:next_nl] if next_nl != -1 else cleaned[after_nl:]
-            if _line_has_data(following_line) or following_line == "":
-                end += 1
-
-        cleaned = cleaned[:start] + cleaned[end:]
-
-    # Step 2: Extract and remove inline REFERENCES (line-by-line is fine here,
-    # since inline REFERENCES are always on the same line as the column definition).
-    lines = cleaned.split("\n")
-    new_lines: list[str] = []
-
-    for line in lines:
-        stripped_for_check = _strip_comments(line)
-
-        inline_match = _INLINE_REF_RE.search(stripped_for_check)
-        if inline_match:
-            constraint_name = inline_match.group(1)
-            target_table = inline_match.group(2)
-            target_cols_raw = inline_match.group(3)
-            modifiers = inline_match.group(4) if inline_match.group(4) else ""
-            on_delete, on_update, deferrable = _parse_modifiers(modifiers)
-
-            # Extract source column name from the beginning of this line
-            col_match = re.match(
-                rf"\s*({_IDENT})\s+",
-                stripped_for_check,
-            )
-            source_col = col_match.group(1) if col_match else "unknown"
-
-            target_cols = _split_columns(target_cols_raw) if target_cols_raw else [source_col]
-
-            fks.append(
-                ForeignKeyInfo(
-                    constraint_name=constraint_name,
-                    source_table=table_name,
-                    source_columns=[source_col],
-                    target_table=target_table,
-                    target_columns=target_cols,
-                    on_delete=on_delete,
-                    on_update=on_update,
-                    deferrable=deferrable,
-                )
-            )
-
-            # Strip the REFERENCES clause from the original line
-            new_line = _INLINE_REF_RE.sub("", line)
-            new_lines.append(new_line)
-            continue
-
-        new_lines.append(line)
-
-    result = "\n".join(new_lines)
-    if fks:
-        result = _fix_trailing_commas(result)
-
-    return result, fks
+        if start == 0 or text[start - 1] == "\n":
+            rest = end
+            while rest < len(text) and text[rest] in " \t":
+                rest += 1
+            if rest == len(text) or text[rest] == "\n":
+                end = min(rest + 1, len(text))
+        return start, end
 
 
-def _fix_trailing_commas(body: str) -> str:
-    """Remove trailing comma before closing paren in CREATE TABLE body.
+def _merged(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """*spans* in order, those that touch or overlap joined into one."""
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
 
-    After FK lines are removed, we may end up with:
-        col BIGINT,
-        <blank lines>
 
-    This removes the trailing comma from the last non-blank line
-    and cleans up blank lines at the end, but preserves a final newline.
+def _without(text: str, spans: list[tuple[int, int]]) -> str:
+    out: list[str] = []
+    pos = 0
+    for start, end in _merged(spans):
+        out.append(text[pos:start])
+        pos = end
+    out.append(text[pos:])
+    return "".join(out)
+
+
+def _parse(text: str) -> Any | None:
+    try:
+        raws = pglast.parse_sql(text)
+    except pglast.parser.ParseError:
+        return None
+    return raws[0].stmt if len(raws) == 1 else None
+
+
+def _statement(real: str, shadow: str, *, every: bool) -> tuple[str, list[MovedForeignKey]]:
+    """One statement with its movable keys (or *every* key) taken out, and the keys."""
+    if "references" not in shadow.lower():
+        return real, []
+    stmt = _parse(real)
+    located = _parse(shadow)
+    if stmt is None or located is None or type(stmt).__name__ != "CreateStmt":
+        return real, []
+    table = relation_name(stmt.relation)
+    cuts = _cuts(located, every=every)
+    if table is None or not cuts:
+        return real, []
+    moved = [
+        MovedForeignKey(table, cut.constraint)
+        for cut in _cuts(stmt, every=every)
+        if every or constraint_body(cut.constraint) is not None
+    ]
+    if len(moved) != len(cuts):
+        return real, []
+    return _without(real, _Statement(shadow).removals(located, cuts)), moved
+
+
+def extract_and_strip_fks(sql: str) -> tuple[str, list[MovedForeignKey]]:
+    """*sql* with every movable foreign key taken out of its ``CREATE TABLE``, and the keys.
+
+    Everything that is not such a key is kept byte for byte, comments included.
     """
-    lines = body.split("\n")
-
-    # Remove blank lines at the end (from removed FK lines)
-    while lines and not lines[-1].strip():
-        lines.pop()
-
-    # Find the last line that carries actual column / constraint content
-    # (skip blank and comment-only lines) and strip its trailing comma.
-    for i in range(len(lines) - 1, -1, -1):
-        if not _line_has_data(lines[i]):
-            continue
-        rstripped = lines[i].rstrip()
-        if rstripped.endswith(","):
-            lines[i] = rstripped[:-1]
-        break
-
-    # Restore trailing newline
-    return "\n".join(lines) + "\n"
+    return _taken_out(sql, every=False)
 
 
-def extract_and_strip_fks(sql: str) -> tuple[str, list[ForeignKeyInfo]]:
-    """Extract all FK constraints from CREATE TABLE statements.
+def without_foreign_keys(sql: str) -> str:
+    """*sql* with every foreign key of every ``CREATE TABLE`` gone, movable or not.
 
-    Returns a tuple of (modified_sql, list_of_fk_infos) where:
-    - modified_sql has all FK constraints removed from CREATE TABLE bodies
-    - list_of_fk_infos contains the extracted FK information
-
-    Non-CREATE TABLE SQL (indexes, views, functions, etc.) is preserved unchanged.
+    The mutation that asks whether a migration's tests notice a missing key.
     """
-    blocks = _find_create_table_blocks(sql)
-
-    if not blocks:
-        return sql, []
-
-    all_fks: list[ForeignKeyInfo] = []
-    result_parts: list[str] = []
-    prev_end = 0
-
-    for start, end, table_name in blocks:
-        # Add everything before this CREATE TABLE block
-        result_parts.append(sql[prev_end:start])
-
-        block_text = sql[start:end]
-
-        # The body is everything between the outer parens
-        paren_pos = block_text.index("(")
-        header = block_text[: paren_pos + 1]
-        close_abs = _ParenMatcher(block_text).close(paren_pos)
-        pos = (close_abs if close_abs is not None else len(block_text) - 1) + 1
-        close_paren_pos = pos - 1
-        body = block_text[paren_pos + 1 : close_paren_pos]
-        footer = block_text[close_paren_pos:]
-
-        cleaned_body, fks = _extract_fks_from_body(body, table_name)
-        all_fks.extend(fks)
-
-        result_parts.append(header + cleaned_body + footer)
-        prev_end = end
-
-    # Add remaining SQL after last CREATE TABLE block
-    result_parts.append(sql[prev_end:])
-
-    return "".join(result_parts), all_fks
+    return _taken_out(sql, every=True)[0]
 
 
-def _bare_table_name(table_name: str) -> str:
-    """Extract the bare table name without schema prefix or quotes.
-
-    Examples:
-        'crm.tb_order' -> 'tb_order'
-        '"my_schema"."MyTable"' -> 'MyTable'
-        'orders' -> 'orders'
-    """
-    # Take the last dot-separated part
-    parts = table_name.split(".")
-    name = parts[-1]
-    # Remove quotes
-    return name.strip('"')
-
-
-def _bare_column_name(col_name: str) -> str:
-    """Remove quotes from a column name."""
-    return col_name.strip().strip('"')
+def _taken_out(sql: str, *, every: bool) -> tuple[str, list[MovedForeignKey]]:
+    blanked = sql_lexer.blank_copy_blocks(sql)
+    shadow = blanked if is_ascii(blanked) else ascii_shadow(blanked)
+    out: list[str] = []
+    moved: list[MovedForeignKey] = []
+    pos = 0
+    for span in sql_lexer.statement_spans(blanked):
+        out.append(sql[pos : span.start])
+        text, keys = _statement(sql[span], shadow[span], every=every)
+        out.append(text)
+        moved.extend(keys)
+        pos = span.stop
+    out.append(sql[pos:])
+    return "".join(out), moved
 
 
-def generate_alter_statements(fks: list[ForeignKeyInfo]) -> str:
-    """Generate ALTER TABLE ADD CONSTRAINT statements for extracted FKs.
+def generate_alter_statements(fks: list[MovedForeignKey]) -> str:
+    """One ``ALTER TABLE … ADD`` per key, written as the schema model holds it.
 
-    Returns empty string if no FKs provided.
+    A key the author left unnamed stays unnamed: PostgreSQL names it as it would
+    have named it in the ``CREATE TABLE``.
     """
     if not fks:
         return ""
-
     lines = [
         "-- ============================================",
         "-- Pass 2: Foreign Key Constraints",
         "-- ============================================",
         "",
     ]
-
     for fk in fks:
-        # Determine constraint name
-        if fk.constraint_name:
-            name = fk.constraint_name
-        else:
-            bare_table = _bare_table_name(fk.source_table)
-            bare_cols = "_".join(_bare_column_name(c) for c in fk.source_columns)
-            name = f"{bare_table}_{bare_cols}_fkey"
-
-        src_cols = ", ".join(fk.source_columns)
-        tgt_cols = ", ".join(fk.target_columns)
-
-        stmt = f"ALTER TABLE {fk.source_table}\n"
-        stmt += f"    ADD CONSTRAINT {name}\n"
-        stmt += f"    FOREIGN KEY ({src_cols}) REFERENCES {fk.target_table} ({tgt_cols})"
-
-        if fk.on_delete:
-            stmt += f"\n    ON DELETE {fk.on_delete}"
-        if fk.on_update:
-            stmt += f"\n    ON UPDATE {fk.on_update}"
-        if fk.deferrable:
-            stmt += f"\n    {fk.deferrable}"
-
-        stmt += ";\n"
-        lines.append(stmt)
-
+        body = constraint_body(fk.constraint) or ""
+        lines.append(
+            f"ALTER TABLE {relation(fk.table)}\n    ADD {named(fk.constraint.name, body)};\n"
+        )
     return "\n".join(lines)

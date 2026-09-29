@@ -56,6 +56,17 @@ _OTHER_CASES = [
             table="t", kind="check", not_valid=True, name="ck", definition="CHECK (c > 0)"
         ),
     ),
+    (
+        # The plan re-adds the key NOT VALID from this text: its actions come with it (#511).
+        "ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (a) REFERENCES p ON DELETE CASCADE NOT VALID;",
+        AddConstraint(
+            table="t",
+            kind="foreign_key",
+            not_valid=True,
+            name="fk",
+            definition="FOREIGN KEY (a) REFERENCES p ON DELETE CASCADE",
+        ),
+    ),
     ("CREATE TABLE t (id int);", CreateTable(table="t")),
 ]
 

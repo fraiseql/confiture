@@ -16,6 +16,7 @@ import pglast
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.ddl_clauses import constraint_body
 from confiture.core.ddl_walk import (
     column_has_default as _column_has_default,
 )
@@ -32,8 +33,12 @@ from confiture.core.ddl_walk import (
     qualified_relname as _relname,
 )
 from confiture.core.ddl_walk import (
+    read_constraint,
+)
+from confiture.core.ddl_walk import (
     type_name as _type_name,
 )
+from confiture.core.schema_model import Constraint
 from confiture.core.type_lattice import canonical_type
 
 # Resolved BY NAME, never by literal ordinal (#192): PG18 renumbered
@@ -515,15 +520,7 @@ def _column_default_sql(coldef: object) -> str | None:
 
 def _constraint_definition(constraint: object, kind: str | None) -> str | None:
     """The body of a CHECK or FOREIGN KEY constraint — the forms that accept NOT VALID."""
-    if kind == "check":
-        expr = _deparse(getattr(constraint, "raw_expr", None))
-        return f"CHECK ({expr})" if expr else None
-    if kind == "foreign_key":
-        cols = ", ".join(n.sval for n in (getattr(constraint, "fk_attrs", None) or ()))
-        ref = _relname(getattr(constraint, "pktable", None))
-        ref_cols = ", ".join(n.sval for n in (getattr(constraint, "pk_attrs", None) or ()))
-        if not (cols and ref):
-            return None
-        target = f"{ref} ({ref_cols})" if ref_cols else ref
-        return f"FOREIGN KEY ({cols}) REFERENCES {target}"
-    return None
+    if kind not in ("check", "foreign_key"):
+        return None
+    read = read_constraint(constraint)
+    return constraint_body(read) if isinstance(read, Constraint) else None

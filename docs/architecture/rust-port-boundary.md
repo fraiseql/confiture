@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,144 lines, 34% of `core/`.
+26,028 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -92,18 +92,18 @@ duplicate readers were deleted. The count below is what the port translates.
 | `data_assertions.py` | 562 | DDL transform |
 | `ddl_clauses.py` | 152 | DDL transform |
 | `ddl_objects.py` | 662 | DDL transform |
-| `ddl_walk.py` | 1,477 | DDL transform |
+| `ddl_walk.py` | 1,516 | DDL transform |
 | `destructive.py` | 181 | DDL transform |
 | `differ.py` | 807 | DDL transform |
 | `differ_sql.py` | 705 | DDL transform |
 | `expand_contract.py` | 273 | DDL transform |
-| `fk_extractor.py` | 458 | DDL transform |
+| `fk_extractor.py` | 296 | DDL transform |
 | `function_body_checker.py` | 210 | DDL transform |
 | `function_body_normalizer.py` | 69 | DDL transform |
 | `function_signature_checker.py` | 187 | DDL transform |
 | `idempotency/` | 2,712 | DDL transform |
 | `introspection/dependency_graph.py` | 202 | DDL transform |
-| `linting/` | 9,183 | DDL transform |
+| `linting/` | 9,182 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
 | `migration_grant_extractor.py` | 526 | DDL transform |
@@ -112,19 +112,19 @@ duplicate readers were deleted. The count below is what the port translates.
 | `path_globs.py` | 158 | DDL transform |
 | `plpgsql_fragments.py` | 374 | DDL transform |
 | `plpgsql_parse.py` | 514 | DDL transform |
-| `replica/` | 740 | DDL transform |
+| `replica/` | 737 | DDL transform |
 | `risk_tier.py` | 76 | DDL transform |
 | `schema_change.py` | 904 | DDL transform |
 | `schema_identity.py` | 71 | DDL transform |
 | `schema_model.py` | 817 | DDL transform |
-| `sql_lexer.py` | 665 | DDL transform |
+| `sql_lexer.py` | 676 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |
 | `type_lattice.py` | 511 | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 
-42,330 lines, 56% of `core/`.
+42,352 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -175,7 +175,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `psql_applier.py` | 274 | database orchestration |
 | `restorer.py` | 856 | database orchestration |
 | `scaffold/` | 296 | neutral |
-| `schema_analyzer.py` | 663 | database orchestration |
+| `schema_analyzer.py` | 685 | database orchestration |
 | `schema_artifact.py` | 214 | database orchestration |
 | `schema_exporter.py` | 196 | neutral |
 | `schema_facts.py` | 132 | database orchestration |
