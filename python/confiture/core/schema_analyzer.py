@@ -11,14 +11,31 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+import pglast
+import pglast.parser
 import psycopg
 
 from confiture.core import live_catalog
+from confiture.core.ddl_walk import declared_constraints
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.schema_model import Column, SchemaModel, Table, ref_for
+from confiture.core.schema_model import Column, Constraint, SchemaModel, Table, ref_for
 from confiture.core.sql_lexer import split_statements, statement_type
 
 logger = logging.getLogger(__name__)
+
+
+def _foreign_keys(sql: str) -> list[Constraint]:
+    """The foreign keys *sql* declares, read by the one reader; none when it does not parse."""
+    try:
+        raws = pglast.parse_sql(sql)
+    except pglast.parser.ParseError:
+        return []
+    return [
+        constraint
+        for raw in raws
+        for constraint in declared_constraints(raw.stmt)
+        if constraint.kind == "foreign_key"
+    ]
 
 
 class ValidationSeverity(Enum):
@@ -343,15 +360,17 @@ class SchemaAnalyzer:
         schema: LiveSchema,
         line_num: int,
     ) -> list[ValidationIssue]:
-        """Validate foreign key references in CREATE TABLE."""
+        """Every foreign key the statement declares names a table and columns that exist.
+
+        Only a target in ``public`` is checked: that is the schema :class:`LiveSchema` sees.
+        """
         issues: list[ValidationIssue] = []
 
-        # Find REFERENCES clauses
-        references_pattern = r"REFERENCES\s+(?:\")?(\w+)(?:\")?\s*\((?:\")?(\w+)(?:\")?\)"
-        for match in re.finditer(references_pattern, sql, re.IGNORECASE):
-            target_table = match.group(1).lower()
-            target_column = match.group(2).lower()
-
+        for fk in _foreign_keys(sql):
+            target = fk.ref_table
+            if target is None or (target.schema or DEFAULT_SCHEMA) != DEFAULT_SCHEMA:
+                continue
+            target_table = target.name
             if not schema.has_table(target_table):
                 issues.append(
                     ValidationIssue(
@@ -361,15 +380,18 @@ class SchemaAnalyzer:
                         line_number=line_num,
                     )
                 )
-            elif target_column not in schema.columns(target_table):
-                issues.append(
-                    ValidationIssue(
-                        severity=ValidationSeverity.ERROR,
-                        message=f"FK target column '{target_table}.{target_column}' does not exist",
-                        sql_fragment=sql[:100],
-                        line_number=line_num,
-                    )
+                continue
+            columns = schema.columns(target_table)
+            issues.extend(
+                ValidationIssue(
+                    severity=ValidationSeverity.ERROR,
+                    message=f"FK target column '{target_table}.{target_column}' does not exist",
+                    sql_fragment=sql[:100],
+                    line_number=line_num,
                 )
+                for target_column in fk.ref_columns
+                if target_column not in columns
+            )
 
         return issues
 

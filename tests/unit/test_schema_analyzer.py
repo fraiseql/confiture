@@ -583,3 +583,35 @@ class TestSchemaAnalyzer:
         )
 
         assert len(issues) == 0
+
+
+_ORG = {"org": {"id": {"type": "bigint"}, "x": {"type": "int"}}}
+
+
+def _fk_messages(sql: str) -> list[str]:
+    schema = _live(_ORG)
+    analyzer = SchemaAnalyzer(Mock())
+    analyzer._live = schema
+    return [i.message for i in analyzer._validate_create(sql, schema, 1) if "FK" in i.message]
+
+
+@pytest.mark.parametrize(
+    ("sql", "expected"),
+    [
+        ("CREATE TABLE b (org_id bigint REFERENCES org (id))", []),
+        (
+            "CREATE TABLE b (org_id bigint REFERENCES ghost)",
+            ["FK target table 'ghost' does not exist"],
+        ),
+        (
+            "CREATE TABLE b (a int, y int, FOREIGN KEY (a, y) REFERENCES org (x, y))",
+            ["FK target column 'org.y' does not exist"],
+        ),
+        ("CREATE TABLE b (note text DEFAULT 'see REFERENCES ghost(id)')", []),
+        ("CREATE TABLE b (org_id bigint REFERENCES elsewhere.org (id))", []),
+    ],
+    ids=["found", "no-column-list", "composite", "string-literal", "other-schema"],
+)
+def test_a_foreign_key_is_read_by_the_one_reader(sql: str, expected: list[str]) -> None:
+    """Each key the statement declares is checked, and nothing a string literal spells (#511)."""
+    assert _fk_messages(sql) == expected

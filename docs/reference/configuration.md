@@ -616,7 +616,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `sort_mode` | str | `alphabetical` | Options: alphabetical, hex |
-| `two_pass` | bool | `false` | Two-pass FK emission (issue #94) |
+| `two_pass` | bool | `false` | Take each foreign key out of its ``CREATE TABLE`` and add it with ``ALTER TABLE`` once every table exists, so no file order has to satisfy it. A key the schema model cannot hold whole (``MATCH FULL``, ``ON DELETE SET NULL (col)``, ``NOT ENFORCED``) stays where it is written. |
 | `validate_comments` | [CommentValidationConfig](#commentvalidationconfig) | (nested) | Block-comment validation before a build (``enabled``, ``fail_on_unclosed_blocks``, ``fail_on_spillover``). |
 | `separators` | [SeparatorConfig](#separatorconfig) | (nested) | How file boundaries are marked in the built schema (``style``: block_comment, line_comment, mysql, custom; ``custom_template``). |
 | `lint` | [BuildLintConfig](#buildlintconfig) | (nested) | Lint run as part of ``confiture build`` (``enabled``, ``fail_on_error``, ``fail_on_warning``, ``rules``). |

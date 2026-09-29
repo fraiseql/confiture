@@ -21,6 +21,8 @@ from typing import Any
 
 import psycopg
 
+from confiture.core.fk_extractor import without_foreign_keys
+
 # ---------------------------------------------------------------------------
 # Mutation transforms that must leave the SQL parseable.
 #
@@ -29,10 +31,6 @@ import psycopg
 # runs, and says nothing about the tests — tests/unit/test_mutation_sql_validity.py
 # holds every default mutation to that.
 # ---------------------------------------------------------------------------
-
-_FK_ACTIONS = (
-    r"(?:\s+ON\s+(?:DELETE|UPDATE)\s+(?:CASCADE|RESTRICT|NO\s+ACTION|SET\s+NULL|SET\s+DEFAULT))*"
-)
 
 
 def _remove_primary_key(sql: str) -> str:
@@ -44,15 +42,8 @@ def _remove_primary_key(sql: str) -> str:
 
 
 def _remove_foreign_key(sql: str) -> str:
-    """Drop a table-level ``FOREIGN KEY … REFERENCES …`` clause or an inline ``REFERENCES``."""
-    sql = re.sub(
-        r",\s*(?:CONSTRAINT\s+\w+\s+)?FOREIGN\s+KEY\s*\([^)]*\)\s*REFERENCES\s+\S+\s*\([^)]*\)"
-        + _FK_ACTIONS,
-        "",
-        sql,
-        flags=re.IGNORECASE,
-    )
-    return re.sub(r"\s+REFERENCES\s+\S+\s*\([^)]*\)" + _FK_ACTIONS, "", sql, flags=re.IGNORECASE)
+    """Drop every foreign key a ``CREATE TABLE`` declares, on a column or at table level."""
+    return without_foreign_keys(sql)
 
 
 def _remove_default(sql: str) -> str:

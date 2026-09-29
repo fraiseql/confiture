@@ -66,7 +66,6 @@ ALLOWED: dict[str, str] = {
     "core/type_lattice.py:_schema_and_type": _REFUSED_DOT,
     "core/type_lattice.py:_argument_key": _REFUSED_DOT,
     "core/schema_change.py:_written_ref": _REFUSED_DOT,
-    "core/fk_extractor.py:_bare_table_name": _REFUSED_DOT,
 }
 
 

@@ -226,7 +226,13 @@ fails on a `glob`/`rglob` of `.sql`, an `iterdir()` that keeps `.sql` files, or 
   `read_column_constraints` folds a column's clauses in order (a trailing
   `DEFERRABLE` qualifies the constraint before it). Every `ConstrType` member is in
   `MODELLED_CONSTRAINTS` or `NOT_MODELLED_CONSTRAINTS`
-  (`tests/unit/test_constraint_reader_is_exhaustive.py`). An unnamed constraint is
+  (`tests/unit/test_constraint_reader_is_exhaustive.py`). It is the one foreign-key reader:
+  `tests/unit/test_one_constraint_reader.py` fails on a module that reads a key's
+  fields off the node (`pktable`, `fk_attrs`, …) or matches one with a regex.
+  `build.two_pass` (`core/fk_extractor.py`) cuts a key out of its `CREATE TABLE`
+  by node location and writes it back through `constraint_body`. A key the model
+  cannot hold whole (`ddl_walk.model_holds`: `MATCH FULL`, `SET NULL (col)`,
+  `NOT ENFORCED`) stays where it was written. An unnamed constraint is
   identified by what it says, and generated DDL omits its `CONSTRAINT` clause so
   PostgreSQL names it as it would the author's own.
 - *Column types.* `Column.type_key` is the identity (typmod kept), `raw_sql_type` the
@@ -489,7 +495,7 @@ confiture/
 │   │   ├── error_handler.py      # CLI error handler for structured error output
 │   │   ├── expand_contract.py    # The expand/contract plan: the classifier's online advice as explicit, c…
 │   │   ├── expected_db.py        # Build an "expected" schema into a throwaway database for pg-normalised…
-│   │   ├── fk_extractor.py       # Two-pass FK extraction for cross-schema build ordering
+│   │   ├── fk_extractor.py       # Two-pass foreign keys: every table first, then every foreign key (``bui…
 │   │   ├── function_body_checker.py # Check that function/procedure body changes include an accompanying migr…
 │   │   ├── function_body_drift.py # Function body drift detection
 │   │   ├── function_body_normalizer.py # Normalise PostgreSQL function bodies for drift comparison

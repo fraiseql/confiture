@@ -14,6 +14,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`build.two_pass` moves each foreign key without changing it** (#511). Two-pass
+  builds read foreign keys with regexes, and five ordinary shapes came out wrong.
+  `org_fk bigint REFERENCES org` pointed at `org (org_fk)`, the source column. A
+  table-level key with no referenced columns produced
+  `FOREIGN KEY (FOREIGN) REFERENCES org (FOREIGN)` and left an invalid table. `MATCH
+  FULL` and `SET NULL (col)` were left in the table body, where they are a syntax
+  error. A `DEFAULT 'see REFERENCES manual'` literal was read as a key and cut short.
+  Each key is now read by the one reader (`ddl_walk.read_constraint`), cut out by
+  the parser's node locations, and written back by `ddl_clauses.constraint_body`.
+  Comments stay where they were. An unnamed key stays unnamed, so PostgreSQL names
+  it as it would have. The model holds no `MATCH` type, no `SET NULL (col)` list
+  and no `NOT ENFORCED`, so a key that uses one stays in its table, and `build_004`
+  reports it when it points forward. A statement the parser rejects keeps its keys.
+- **The expand/contract plan re-adds a foreign key with its actions**
+  (#511). The replica classifier wrote the `NOT VALID` key from the node's columns
+  and target only, so `ON DELETE CASCADE` and `ON UPDATE …` were dropped.
+- **`migrate` dry-run analysis checks every foreign key a statement declares**
+  (#511). A regex found only `REFERENCES t (col)` with one column. It missed a key
+  with no column list, a composite key and a schema-qualified target, and read
+  `REFERENCES` inside a string literal as a key.
+- **The `remove_foreign_key` mutation removes every foreign key** (#511),
+  including one with no column list, and never text inside a literal.
+
+### Added
+
+- `tests/unit/test_one_constraint_reader.py` fails on a module other than
+  `ddl_walk` that reads a foreign key's fields off a pglast node, or that
+  matches one in SQL text with a regex.
+
 ## [1.26.0] - 2026-09-29
 
 **A lost or re-pointed constraint fails the drift gate, and every drift item names

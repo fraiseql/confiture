@@ -70,7 +70,7 @@ TwoPassOpt = Annotated[
     bool | None,
     typer.Option(
         "--two-pass/--no-two-pass",
-        help="Two-pass FK emission: strip REFERENCES from CREATE TABLE, emit ALTER TABLE after (default: from config)",
+        help="Two-pass foreign keys: add each one with ALTER TABLE after every table (default: from config)",
     ),
 ]
 SeparatorStyleOpt = Annotated[

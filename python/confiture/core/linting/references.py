@@ -62,6 +62,7 @@ import pglast.parser
 from confiture.core import plpgsql_fragments, plpgsql_parse, sql_lexer
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import routine_body, walk_nodes
+from confiture.core.fk_extractor import movable_keys
 from confiture.core.linting.inventory import SchemaObject, object_from_statement, split_names
 
 #: A relation: a table, view, materialized view or sequence a statement reads
@@ -675,7 +676,6 @@ _CLAUSES = {
     _pg_member("ConstrType", "CONSTR_FOREIGN"): "FOREIGN KEY",
     _pg_member("ConstrType", "CONSTR_GENERATED"): "GENERATED",
 }
-_FOREIGN = _pg_member("ConstrType", "CONSTR_FOREIGN")
 
 
 def _clause_target(stmt: Any, kind: str) -> tuple[Any, str] | None:
@@ -699,17 +699,16 @@ def _constraint_clauses(stmt: Any, *, in_create: bool) -> tuple[dict[int, str], 
     """The clause each node under a constraint belongs to, and the movable foreign keys.
 
     A foreign key written in its ``CREATE TABLE`` is one the builder's two-pass
-    mode moves to the end of the build; one added by ``ALTER TABLE`` stays put.
+    mode moves to the end of the build — unless the model cannot hold it whole
+    (``fk_extractor.movable_keys``); one added by ``ALTER TABLE`` stays put.
     """
     clause_of: dict[int, str] = {}
-    movable: set[int] = set()
     for node in walk_nodes(stmt):
         if type(node).__name__ != "Constraint" or int(node.contype) not in _CLAUSES:
             continue
         for part in walk_nodes((node.raw_expr, node.pktable)):
             clause_of[id(part)] = _CLAUSES[int(node.contype)]
-        if int(node.contype) == _FOREIGN and in_create and node.pktable is not None:
-            movable.add(id(node.pktable))
+    movable = {id(node.pktable) for node in movable_keys(stmt)} if in_create else set()
     return clause_of, movable
 
 

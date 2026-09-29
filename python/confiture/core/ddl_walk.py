@@ -1172,6 +1172,23 @@ def read_constraint(node: Any, *, column: str | None = None) -> Constraint | Col
     return None if isinstance(read, _Deferrable) else read
 
 
+def model_holds(node: Any) -> bool:
+    """Whether what :func:`read_constraint` reads from *node* is all the node says.
+
+    The model carries a foreign key's columns, target, actions and deferral. It
+    does not carry a ``MATCH`` other than ``SIMPLE`` (the default), the column
+    list of ``ON DELETE SET NULL (…)``, or ``NOT ENFORCED``: a key rewritten from
+    the model would silently lose them.
+    """
+    if getattr(node, "pktable", None) is None:
+        return True
+    return (
+        node.fk_matchtype in ("s", "", None)
+        and not node.fk_del_set_cols
+        and getattr(node, "is_enforced", True) is not False
+    )
+
+
 def _deferred(constraint: Constraint, attribute: _Deferrable) -> Constraint:
     """*constraint* as a sibling ``DEFERRABLE`` / ``INITIALLY …`` node leaves it."""
     deferrable = constraint.deferrable is not None
@@ -1274,6 +1291,28 @@ def added_constraint(cmd: Any) -> Any | None:
         return None
     definition = getattr(cmd, "def_", None)
     return definition if type(definition).__name__ == "Constraint" else None
+
+
+def declared_constraints(stmt: Any) -> tuple[Constraint, ...]:
+    """Every constraint a ``CREATE TABLE`` or an ``ALTER TABLE`` declares, in order.
+
+    On a column, at table level, or added by ``ALTER TABLE … ADD CONSTRAINT``;
+    any other statement declares none.
+    """
+    kind = type(stmt).__name__
+    found: list[Constraint | ColumnFact | None] = []
+    if kind == "CreateStmt":
+        for element in stmt.tableElts or ():
+            if type(element).__name__ == "ColumnDef":
+                found.extend(read_column_constraints(element)[1])
+            elif type(element).__name__ == "Constraint":
+                found.append(read_constraint(element))
+    elif kind == "AlterTableStmt":
+        for cmd in stmt.cmds or ():
+            node = added_constraint(cmd)
+            if node is not None:
+                found.append(read_constraint(node))
+    return tuple(c for c in found if isinstance(c, Constraint))
 
 
 def type_name(type_node: Any) -> str | None:
