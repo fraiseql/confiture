@@ -194,6 +194,11 @@ src = ["python"]
 # `syntax_error` warning); ruff cannot lint what it cannot parse.
 extend-exclude = ["tests/fixtures/idempotency_shapes/db/migrations/20260101000030_syntax_error.py"]
 
+[tool.ruff.format]
+# Code in Markdown is prose: an aligned comment column, a deliberately "bad"
+# example, a release note's snippet as it shipped. The formatter leaves it alone.
+exclude = ["*.md"]
+
 [tool.ruff.lint]
 # Deliberate, focused ruleset (see ARCH-M3). Confiture runs a curated core
 # rather than the full prescribed superset: the families below catch real bugs
@@ -375,5 +380,5 @@ unresolved-attribute = "ignore"
 [dependency-groups]
 dev = [
     "maturin>=1.9.6",
-    "ruff==0.15.15",
+    "ruff==0.16.9",
 ]

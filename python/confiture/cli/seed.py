@@ -269,6 +269,7 @@ def _render_seed_validation(
 @seed_app.command("validate")
 @cli_boundary
 def validate(
+    *,
     seeds_dir: SeedsDirOpt = Path("db/seeds"),
     env: str | None = env_option(None),
     all_envs: AllEnvsOpt = False,
@@ -407,6 +408,7 @@ ProfileOpt = Annotated[
 @seed_app.command("apply")
 @cli_boundary
 def apply(
+    *,
     seeds_dir: SeedsDirOpt = DEFAULT_SEEDS_DIR,
     env: str = env_option(DEFAULT_ENV),
     continue_on_error: ContinueOnErrorOpt = False,

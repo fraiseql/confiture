@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,143 lines, 34% of `core/`.
+26,144 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -106,7 +106,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `linting/` | 9,183 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
-| `migration_grant_extractor.py` | 525 | DDL transform |
+| `migration_grant_extractor.py` | 526 | DDL transform |
 | `model_facts.py` | 222 | DDL transform |
 | `parser_info.py` | 116 | DDL transform |
 | `path_globs.py` | 158 | DDL transform |
@@ -124,7 +124,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-42,329 lines, 56% of `core/`.
+42,330 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -159,7 +159,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `linting/baseline.py` | 153 | neutral |
 | `linting/bodies.py` | 465 | database orchestration |
 | `linting/libraries/security_definer.py` | 405 | database orchestration |
-| `linting/schema_linter.py` | 1,234 | database orchestration |
+| `linting/schema_linter.py` | 1,235 | database orchestration |
 | `linting/selection.py` | 378 | database orchestration |
 | `linting/unresolved.py` | 379 | database orchestration |
 | `live_catalog.py` | 893 | database orchestration |

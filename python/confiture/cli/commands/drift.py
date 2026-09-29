@@ -136,6 +136,7 @@ def _demote_missing_grant_warnings(report: DriftReport) -> None:
 
 @cli_boundary
 def drift(
+    *,
     config: Path = config_option(CONFITURE_YAML),
     schema: Path | None = typer.Option(
         None,

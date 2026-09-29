@@ -30,6 +30,7 @@ from confiture.models.results import MigrateDiffChange, MigrateDiffResult
 
 @cli_boundary
 def migrate_diff(
+    *,
     old_schema: Path | None = typer.Argument(None, help="Old schema file"),
     new_schema: Path | None = typer.Argument(None, help="New schema file"),
     from_: str | None = typer.Option(

@@ -157,6 +157,7 @@ _SEPARATOR_STYLES = ("block_comment", "line_comment", "mysql", "custom")
 
 @cli_boundary
 def build(
+    *,
     env: str = env_option(),
     output: Path | None = output_option(
         help="Output file path (default: db/generated/schema_{env}.sql)"

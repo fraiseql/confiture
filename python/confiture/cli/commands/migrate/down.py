@@ -44,6 +44,7 @@ from confiture.error_codes import exit_code_of
 
 @cli_boundary
 def migrate_down(
+    *,
     ctx: typer.Context,
     migrations_dir: Path = migrations_dir_option(),
     config: Path = config_option(),
@@ -177,6 +178,7 @@ def migrate_down(
 
 @cli_boundary
 def migrate_down_to(
+    *,
     ctx: typer.Context,
     revision: str = typer.Argument(
         ...,

@@ -146,7 +146,7 @@ jobs:
       run: |
         uv venv
         # Pinned to match quality-gate.yml + [dependency-groups] / pre-commit.
-        uv pip install 'ruff==0.15.15'
+        uv pip install 'ruff==0.16.9'
     - name: Run ruff check
       run: uv run ruff check .
     - name: Run ruff format

@@ -170,6 +170,7 @@ class LintConfig:
 
     def __init__(
         self,
+        *,
         enabled: bool = True,
         fail_on_error: bool = True,
         fail_on_warning: bool = False,

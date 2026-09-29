@@ -80,6 +80,7 @@ def _write_tracking_backup(rows: Any, tracking_table: str, format_output: str) -
 
 @cli_boundary
 def migrate_rebuild(
+    *,
     config: Path = config_option(),
     migrations_dir: Path = migrations_dir_option(),
     drop_schemas: DropSchemasOpt = False,

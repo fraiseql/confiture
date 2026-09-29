@@ -175,6 +175,7 @@ YesOpt = Annotated[
 
 @cli_boundary
 def migrate_up(
+    *,
     ctx: typer.Context,
     migrations_dir: Path = migrations_dir_option(),
     config: Path = config_option(),

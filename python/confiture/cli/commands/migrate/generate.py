@@ -98,6 +98,7 @@ VerifySidecarOpt = Annotated[
 
 @cli_boundary
 def migrate_generate(
+    *,
     name: str = typer.Argument(..., help="Migration name (snake_case)"),
     migrations_dir: Path = migrations_dir_option(),
     format_output: str = format_option("text", "json"),

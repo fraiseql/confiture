@@ -77,6 +77,7 @@ CheckBodyOpt = Annotated[
 
 @cli_boundary
 def migrate_fix_signatures(
+    *,
     config: Path = config_option(CONFITURE_YAML),
     env: str | None = env_option(None),
     schema_file: SchemaFileOpt = None,
