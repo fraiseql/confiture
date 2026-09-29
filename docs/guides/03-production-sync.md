@@ -149,6 +149,30 @@ confiture sync --from "postgresql://user:pass@localhost:5433/proddb" --to local
 
 ---
 
+## Realistic data for a pg_tviews TVIEW
+
+A TVIEW's refresh cost depends on the distribution of your data (rows per parent,
+fan-out, `data` size), and `sync --anonymize` is the easiest way to get a realistic
+1M–10M-row copy of it, for benchmarks such as
+[fraiseql/pg_tviews#69](https://github.com/fraiseql/pg_tviews/issues/69).
+
+Sync the **base tables only**, and create the TVIEW **after** the load:
+
+```bash
+# 1. The target has the extension and the base tables, and no tv_* table yet
+confiture sync --from production --to bench --anonymize \
+    --tables tb_user,tb_post          # never a tv_* table
+
+# 2. Create the TVIEW on the loaded data (one statement builds and registers it)
+psql "$BENCH_URL" -c "CREATE TABLE tv_post AS SELECT p.pk_post, p.id, p.fk_user, \
+    jsonb_build_object('title', p.title) AS data FROM tb_post p"
+```
+
+Measured on pg_tviews 0.1.0-beta.17 with 50,000 rows: creating the TVIEW after the
+load populated all 50,000 rows and registered it in 0.17 s. With the TVIEW created
+*before* the sync, `tb_post` held 50,000 rows and `tv_post` held none. Nothing
+refreshed it, so a benchmark run that way measures an empty table.
+
 ## Common Issues
 
 ### "Connection refused"
