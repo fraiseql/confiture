@@ -53,6 +53,7 @@ from confiture.core.ddl_walk import type_name as ddl_type_name
 # can have it; imported here because this is where object identity is decided.
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import (
+    TVIEW_PREFIX,
     Column,
     Constraint,
     EnumType,
@@ -64,10 +65,12 @@ from confiture.core.schema_model import (
     SchemaModel,
     Signature,
     Table,
+    TView,
     View,
     ref_for,
     routine_ref,
     trigger_ref,
+    tview_ref,
     view_ref,
 )
 from confiture.core.schema_model import Sequence as SequenceModel
@@ -94,7 +97,7 @@ _PLAIN_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 
 #: Which inventory kinds a ``COMMENT ON <object type>`` statement documents.
 _COMMENT_TARGETS: dict[int | None, tuple[str, ...]] = {
-    _OBJECT_TABLE: ("table",),
+    _OBJECT_TABLE: ("table", "tview"),
     _OBJECT_FUNCTION: ("function",),
     _OBJECT_PROCEDURE: ("procedure",),
     _OBJECT_ROUTINE: ("function", "procedure"),
@@ -118,6 +121,8 @@ KIND_KEYWORD: dict[str, str] = {
     "domain": "DOMAIN",
     "aggregate": "AGGREGATE",
     "sequence": "SEQUENCE",
+    # A pg_tviews TVIEW is created, commented on and dropped as a TABLE (#504).
+    "tview": "TABLE",
 }
 
 #: Parameter modes that take part in a function's identity (IN, INOUT, VARIADIC
@@ -139,8 +144,8 @@ class SchemaObject:
     """One ``CREATE`` statement, with what the rules need to know about it.
 
     ``kind`` is one of ``table``, ``function``, ``procedure``, ``aggregate``,
-    ``view``, ``matview``, ``type`` (composite or enum), ``domain`` or
-    ``sequence`` — the keys of :data:`KIND_KEYWORD`. ``signature`` is the
+    ``view``, ``matview``, ``type`` (composite or enum), ``domain``,
+    ``sequence`` or ``tview`` — the keys of :data:`KIND_KEYWORD`. ``signature`` is the
     comma-joined input parameter types of a routine *as written*, which is what
     a finding prints; ``signature_key`` is the same types canonicalised, which
     is what decides whether two routines are the same routine. Both ``None``
@@ -200,6 +205,7 @@ class SchemaObject:
     #: ``ALTER … RENAME`` edits; :func:`schema_model` puts the two together.
     routine: Routine | None = None
     view: View | None = None
+    tview: TView | None = None
 
     @property
     def documented(self) -> bool:
@@ -664,10 +670,19 @@ def _view_from_create(sql: str, stmt: Any, offset: int) -> SchemaObject:
     return view
 
 
-def _matview_from_create_table_as(sql: str, stmt: Any, offset: int) -> SchemaObject | None:
-    """``CREATE TABLE AS`` also spells ``CREATE MATERIALIZED VIEW``; only the latter counts."""
+def _from_create_table_as(sql: str, stmt: Any, offset: int) -> SchemaObject | None:
+    """``CREATE MATERIALIZED VIEW``, or a pg_tviews TVIEW; any other ``CREATE TABLE AS`` is data.
+
+    pg_tviews takes a ``CREATE TABLE … AS`` whose target is named ``tv_*`` and
+    nothing else (#504); the reader applies its rule.
+    """
     if _enum_value(stmt.objtype) != _OBJECT_MATVIEW:
-        return None
+        rel = stmt.into.rel
+        if _enum_value(stmt.objtype) != _OBJECT_TABLE or not rel.relname.startswith(TVIEW_PREFIX):
+            return None
+        tview = _relation_object(sql, "tview", rel, offset)
+        tview.tview = TView(name=tview.name, definition=RawStream()(stmt.query))
+        return tview
     matview = _relation_object(sql, "matview", stmt.into.rel, offset)
     matview.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
     matview.view = View(name=matview.name, materialized=True, definition=RawStream()(stmt.query))
@@ -706,7 +721,7 @@ _BUILDERS: dict[str, Callable[[str, Any, int], SchemaObject | None]] = {
     "CreateFunctionStmt": _routine_from_create,
     "DefineStmt": _aggregate_from_define,
     "ViewStmt": _view_from_create,
-    "CreateTableAsStmt": _matview_from_create_table_as,
+    "CreateTableAsStmt": _from_create_table_as,
     "CompositeTypeStmt": _composite_type_from_create,
     "CreateEnumStmt": _enum_from_create,
     "CreateDomainStmt": _domain_from_create,
@@ -1204,6 +1219,7 @@ def schema_model(inventory: Inventory) -> SchemaModel:
     sequences: dict[Any, SequenceModel] = {}
     routines: dict[ObjectRef, list[Routine]] = {}
     views: dict[ObjectRef, View] = {}
+    tviews: dict[ObjectRef, TView] = {}
     for obj in (kept(group) for group in group_definitions(inventory.objects)):
         if obj.kind == "table":
             tables[_model_ref(obj)] = _model_table(obj)
@@ -1219,12 +1235,16 @@ def schema_model(inventory: Inventory) -> SchemaModel:
         elif obj.view is not None:
             view = _model_view(obj, obj.view)
             views[view_ref(view)] = view
+        elif obj.tview is not None:
+            tview = replace(obj.tview, name=obj.folded_name, schema=obj.folded_schema)
+            tviews[tview_ref(tview)] = tview
     return SchemaModel(
         tables=tables,
         enum_types=enum_types,
         sequences=sequences,
         routines={ref: tuple(found) for ref, found in routines.items()},
         views=views,
+        tviews=tviews,
     )
 
 

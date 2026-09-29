@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Any
 
 import pglast
 from pglast.stream import RawStream
+from psycopg import sql
 
 from confiture.core.ddl_walk import read_constraint, read_index, render_default, written_type
 from confiture.core.ddl_walk import type_name as ddl_type_name
@@ -65,11 +66,13 @@ from confiture.core.schema_model import (
     SchemaModel,
     Table,
     Trigger,
+    TView,
     View,
     Volatility,
     ref_for,
     routine_ref,
     trigger_ref,
+    tview_ref,
     view_ref,
 )
 from confiture.core.schema_model import Sequence as SequenceModel
@@ -282,6 +285,7 @@ def read(
     routines: bool = False,
     views: bool = False,
     triggers: bool = False,
+    tviews: bool = False,
 ) -> SchemaModel:
     """The schema the database holds in *schemas*, in the model DDL is read into.
 
@@ -293,6 +297,11 @@ def read(
     *routines*, *views* and *triggers* read those too — each a query, and a
     view's a deparse per view — for the callers that compare them. An
     extension's own routines and views are left out, as its tables are.
+
+    *tviews* reads each pg_tviews TVIEW (#504) as one object, and leaves its
+    parts — the ``tv_*`` table and the backing ``v_*`` view — out of the tables
+    and views: they are the TVIEW's. The triggers pg_tviews puts on a base
+    table run its own functions and are never read as a user's.
     """
     wanted = list(schemas)
     enum_types = {
@@ -318,18 +327,30 @@ def read(
             if not row.extension_owned:
                 routine = routine_of(row)
                 routine_models[routine_ref(routine)].append(routine)
+    registered = _tviews(conn, wanted) if tviews else []
+    parts = {oid for _tview, oid in registered}
     view_models = (
-        {view_ref(view): view for view in _views(conn, wanted, extensions=False, indexes=True)}
+        {
+            view_ref(view): view
+            for view in _views(conn, wanted, extensions=False, indexes=True, skip=parts)
+        }
         if views
         else {}
     )
+    tview_models = {tview_ref(tview): tview for tview, _oid in registered}
+    tables = {
+        ref: table
+        for ref, table in _tables(conn, wanted, kinds).items()
+        if ref_for("tview", ref.schema, ref.name) not in tview_models
+    }
     return SchemaModel(
-        tables=_tables(conn, wanted, kinds),
+        tables=tables,
         enum_types=enum_types,
         sequences=sequences,
         routines={ref: tuple(found) for ref, found in routine_models.items()},
         views=view_models,
         triggers=({trigger_ref(t): t for t in _triggers(conn, wanted)} if triggers else {}),
+        tviews=tview_models,
     )
 
 
@@ -615,6 +636,9 @@ ORDER BY n.nspname, c.relname
 
 # `NOT tgisinternal` is load-bearing: a FOREIGN KEY creates internal triggers on
 # both tables, and reporting those would put two items on every FK in the schema.
+# A trigger that runs a pg_tviews function is the TVIEW's refresh machinery,
+# created by the extension on each base table (#504), never the tree's. Only
+# pg_tviews': a user may declare a trigger on another extension's function.
 _TRIGGERS = """
 SELECT n.nspname, c.relname, t.tgname
 FROM pg_trigger t
@@ -622,7 +646,29 @@ JOIN pg_class c ON c.oid = t.tgrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE NOT t.tgisinternal
   AND n.nspname = ANY(%s)
+  AND NOT EXISTS (
+    SELECT 1 FROM pg_depend d JOIN pg_extension e ON e.oid = d.refobjid
+    WHERE d.classid = 'pg_proc'::regclass AND d.objid = t.tgfoid
+      AND d.deptype = 'e' AND e.extname = 'pg_tviews'
+  )
 ORDER BY n.nspname, c.relname, t.tgname
+"""
+
+#: Where pg_tviews is installed: the schema holding ``pg_tview_meta``.
+_TVIEW_HOME = """
+SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+WHERE e.extname = 'pg_tviews'
+"""
+
+#: Each registered TVIEW: its relation, the query pg_tviews recorded, and its
+#: backing view's oid, whose relation is the TVIEW's and not a view of the tree's.
+_TVIEWS = """
+SELECT n.nspname, c.relname, m.definition, m.view_oid::bigint
+FROM {meta} m
+JOIN pg_class c ON c.oid = m.table_oid
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = ANY(%s)
+ORDER BY n.nspname, c.relname
 """
 
 # The argument types are spelled inside the one query, in order: a round trip
@@ -739,11 +785,12 @@ def _views(
     definitions: bool = True,
     extensions: bool,
     indexes: bool,
+    skip: frozenset[int] | set[int] = frozenset(),
 ) -> list[View]:
     rows = [
         row
         for row in conn.execute(_VIEWS, (definitions, list(schemas))).fetchall()
-        if extensions or not row[5]
+        if (extensions or not row[5]) and row[0] not in skip
     ]
     on: dict[int, list[Index]] = defaultdict(list)
     matviews = {oid: RelationName(schema, name) for oid, schema, name, mat, *_ in rows if mat}
@@ -761,6 +808,35 @@ def _views(
         )
         for oid, schema, name, materialized, definition, _extension_owned in rows
     ]
+
+
+def tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[TView]:
+    """Every pg_tviews TVIEW in *schemas*; none where the extension is not installed."""
+    return [tview for tview, _view_oid in _tviews(conn, schemas)]
+
+
+def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TView, int]]:
+    home = _scalar(conn, _TVIEW_HOME, ())
+    if home is None:
+        return []
+    query = sql.SQL(_TVIEWS).format(meta=sql.Identifier(home, "pg_tview_meta"))
+    return [
+        (TView(name=name, schema=schema, definition=_rendered_query(definition)), view_oid)
+        for schema, name, definition, view_oid in conn.execute(query, (list(schemas),)).fetchall()
+    ]
+
+
+def _rendered_query(text: str) -> str:
+    """The query pg_tviews recorded, rendered as the DDL side renders its ``SELECT``.
+
+    pg_tviews keeps the author's text verbatim; one deparser on both sides is
+    what makes two spellings of one query one definition. Text the parser
+    refuses is kept as recorded.
+    """
+    try:
+        return RawStream()(pglast.parse_sql(text)[0].stmt)
+    except pglast.parser.ParseError:
+        return text
 
 
 def triggers(conn: psycopg.Connection, schemas: Sequence[str]) -> list[Trigger]:

@@ -176,6 +176,7 @@ it is made.
 | `routines` | `Mapping[ObjectRef, tuple[Routine, ...]]` | empty |
 | `views` | `Mapping[ObjectRef, View]` | empty |
 | `triggers` | `Mapping[ObjectRef, Trigger]` | empty |
+| `tviews` | `Mapping[ObjectRef, TView]` | empty |
 
 #### `SchemaModel.all_routines`
 
@@ -507,6 +508,26 @@ A trigger's name is unique per *table*, not per schema, so its identity is
 | `name` | `str` | required |
 | `table` | `str` | required |
 | `schema` | `str \| None` | `None` |
+
+### `TView`
+
+```python
+class TView
+```
+
+A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`.
+
+pg_tviews turns that statement into a table, a backing view `v_<entity>`
+and triggers on each base table, and registers them in `pg_tview_meta`.
+The model holds the TVIEW as one object — its relation and its query — and
+its parts belong to it. `definition` is the query as the reader holds it:
+the DDL's `SELECT` rendered, or what pg_tviews recorded.
+
+| Field | Type | Default |
+|---|---|---|
+| `name` | `str` | required |
+| `schema` | `str \| None` | `None` |
+| `definition` | `str \| None` | `None` |
 
 ## Ordering
 

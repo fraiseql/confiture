@@ -14,7 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A pg_tviews TVIEW is one object in the schema model** (#504). A
+  `CREATE TABLE tv_<entity> AS SELECT …` is read as a TVIEW (`SchemaModel.tviews`,
+  `confiture.platform.TView`), the way pg_tviews reads it. It is read from the DDL
+  and, where the extension is installed, from `pg_tview_meta`, with its query
+  rendered by one deparser on both sides. Drift compares it as one object:
+  `missing_tview` is critical and `extra_tview` is info. `migrate validate
+  --require-migration` notices a TVIEW whose query changed. The model's wire gains
+  a `tviews` section, and a wire written before it reads as holding none.
+- `tests/unit/test_one_constraint_reader.py` fails on a module other than
+  `ddl_walk` that reads a foreign key's fields off a pglast node, or that
+  matches one in SQL text with a regex.
+
 ### Fixed
+
+- **A TVIEW project has no drift against its own DDL** (#504). The DDL side
+  dropped `CREATE TABLE tv_post AS SELECT …`, and the live side read `tv_post` as
+  a table. Every TVIEW project reported `extra_table warning public.tv_post`, so
+  `--fail-on-warning` failed on a database built from its own tree. The
+  TVIEW's backing view and the triggers pg_tviews puts on each base table are no
+  longer read as the tree's either.
+
 
 - **`build.two_pass` moves each foreign key without changing it** (#511). Two-pass
   builds read foreign keys with regexes, and five ordinary shapes came out wrong.
@@ -45,12 +67,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   --check-live-drift` already reported `DIFFER_403`, exit 5, as documented. Every
   confiture error now keeps its own code and exit, and `CONFIG_006` is kept for
   real connection and driver failures.
-
-### Added
-
-- `tests/unit/test_one_constraint_reader.py` fails on a module other than
-  `ddl_walk` that reads a foreign key's fields off a pglast node, or that
-  matches one in SQL text with a regex.
 
 ## [1.26.0] - 2026-09-29
 

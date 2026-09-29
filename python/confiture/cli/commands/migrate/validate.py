@@ -191,7 +191,7 @@ CheckLiveDriftOpt = Annotated[
         "column_order_mismatch, missing_index / extra_index, missing_constraint / "
         "extra_constraint, constraint_mismatch, missing_view / extra_view, missing_matview / "
         "extra_matview, missing_trigger / extra_trigger, missing_routine / "
-        "extra_routine. Sequences are not compared; grants and ownership are "
+        "extra_routine, missing_tview / extra_tview (pg_tviews). Sequences are not compared; grants and ownership are "
         "separate checks (--check-acls, --check-ownership-coverage). "
         "Requires --config and a database connection.",
     ),

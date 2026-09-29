@@ -287,7 +287,7 @@ carries `owner_identity` (compared) and `owner_spelling` (written). SQL that is
 `"` into an identifier or undoubles one out of it; the allow-list is empty.
 
 **One schema model** — `core/schema_model.py`: `Table`, `Column`, `Constraint`,
-`Index`, `EnumType`, `Sequence`, `Routine`, `View`, `Trigger`, and the `SchemaModel` that
+`Index`, `EnumType`, `Sequence`, `Routine`, `View`, `Trigger`, `TView` (a pg_tviews TVIEW), and the `SchemaModel` that
 keys them by `ObjectRef`. It imports no parser and no driver (a subprocess test pins
 that, which is why `confiture/core/__init__.py` resolves its names lazily).
 `inventory.build_model(sql)` reads a DDL tree into it; the differ, drift and prep-seed
@@ -634,6 +634,7 @@ confiture/
 ├── scripts/                      # generators (--check in CI) and developer helpers
 ├── src/                          # the confiture._core extension (file hashing)
 ├── ci/                           # local Dagger pipeline mirroring quality-gate.yml
+│   └── pg-tviews/
 │
 ├── .github/workflows/
 │   ├── examples.yml

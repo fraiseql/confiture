@@ -11,7 +11,8 @@
     "sequences",
     "routines",
     "views",
-    "triggers"
+    "triggers",
+    "tviews"
   ],
   "properties": {
     "tables": {
@@ -48,6 +49,12 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/Trigger"
+      }
+    },
+    "tviews": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TView"
       }
     }
   },
@@ -585,6 +592,33 @@
           "type": "string"
         },
         "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TView": {
+      "type": "object",
+      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view `v_<entity>` and triggers belong to it. `definition` is the query as the reader holds it. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none.",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "schema",
+        "definition"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "schema": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "definition": {
           "type": [
             "string",
             "null"

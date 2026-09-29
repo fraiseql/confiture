@@ -156,4 +156,12 @@ def test_drop_routine_may_name_a_function_a_procedure_or_an_aggregate() -> None:
     (edit,) = edits_of("DROP ROUTINE core.f(bigint)")
     assert edit.object_kind == "routine"
     assert object_kinds(edit.object_kind) == ("function", "procedure", "aggregate")
-    assert object_kinds("table") == ("table",)
+    assert object_kinds("sequence") == ("sequence",)
+
+
+def test_drop_table_may_name_a_tview() -> None:
+    """A pg_tviews TVIEW is a table to PostgreSQL, and ``DROP TABLE tv_post`` drops it (#504)."""
+    from confiture.core.ddl_walk import object_kinds
+
+    (edit,) = edits_of("DROP TABLE tv_post")
+    assert object_kinds(edit.object_kind) == ("table", "tview")

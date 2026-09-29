@@ -427,6 +427,43 @@ def routine_ref(routine: Routine) -> ObjectRef:
     )
 
 
+#: The prefix pg_tviews reads a ``CREATE TABLE … AS`` target by: ``tv_<entity>``.
+TVIEW_PREFIX = "tv_"
+
+
+@dataclass(frozen=True)
+class TView:
+    """A pg_tviews TVIEW: ``CREATE TABLE tv_<entity> AS SELECT …``.
+
+    pg_tviews turns that statement into a table, a backing view ``v_<entity>``
+    and triggers on each base table, and registers them in ``pg_tview_meta``.
+    The model holds the TVIEW as one object — its relation and its query — and
+    its parts belong to it. ``definition`` is the query as the reader holds it:
+    the DDL's ``SELECT`` rendered, or what pg_tviews recorded.
+    """
+
+    name: str
+    schema: str | None = None
+    definition: str | None = None
+
+    @property
+    def entity(self) -> str:
+        return self.name.removeprefix(TVIEW_PREFIX)
+
+    @property
+    def backing_view(self) -> str:
+        return f"v_{self.entity}"
+
+    @property
+    def qualified(self) -> str:
+        return qualified_name(self.schema, self.name)
+
+
+def tview_ref(tview: TView) -> ObjectRef:
+    """The bucket of a TVIEW: its schema and its ``tv_*`` relation."""
+    return ref_for("tview", tview.schema, tview.name)
+
+
 def view_ref(view: View) -> ObjectRef:
     """The bucket of a view or a materialized view."""
     return ref_for(view.kind, view.schema, view.name)
@@ -483,6 +520,7 @@ class SchemaModel:
     routines: Mapping[ObjectRef, tuple[Routine, ...]] = field(default_factory=dict)
     views: Mapping[ObjectRef, View] = field(default_factory=dict)
     triggers: Mapping[ObjectRef, Trigger] = field(default_factory=dict)
+    tviews: Mapping[ObjectRef, TView] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for mapping in fields(self):
@@ -507,6 +545,7 @@ class SchemaModel:
             "routines": [asdict(routine) for routine in self.all_routines()],
             "views": section(self.views),
             "triggers": section(self.triggers),
+            "tviews": section(self.tviews),
         }
 
     def to_json(self) -> str:
@@ -636,6 +675,8 @@ def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
         routines={ref: tuple(found) for ref, found in routines.items()},
         views=_keyed(data["views"], _view_from, view_ref),
         triggers=_keyed(data["triggers"], lambda d: Trigger(**d), trigger_ref),
+        # A wire written before TVIEWs were modelled has none (#504).
+        tviews=_keyed(data.get("tviews", []), lambda d: TView(**d), tview_ref),
     )
 
 
@@ -813,5 +854,9 @@ def normalise_for_parity(model: SchemaModel) -> SchemaModel:
         triggers={
             ref: replace(t, schema=(t.schema or DEFAULT_SCHEMA).lower())
             for ref, t in model.triggers.items()
+        },
+        tviews={
+            ref: replace(t, schema=(t.schema or DEFAULT_SCHEMA).lower())
+            for ref, t in model.tviews.items()
         },
     )
