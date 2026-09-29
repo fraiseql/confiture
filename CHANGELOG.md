@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `REFERENCES` inside a string literal as a key.
 - **The `remove_foreign_key` mutation removes every foreign key** (#511),
   including one with no column list, and never text inside a literal.
+- **`confiture drift` reports a name that needs quotes as `DIFFER_403`, exit 5**
+  (#525). The command wrapped every error it did not name as `CONFIG_006`
+  ("Connection or configuration error", exit 3) and printed a "cannot reach
+  PostgreSQL" hint against a reachable database. `migrate validate
+  --check-live-drift` already reported `DIFFER_403`, exit 5, as documented. Every
+  confiture error now keeps its own code and exit, and `CONFIG_006` is kept for
+  real connection and driver failures.
 
 ### Added
 
