@@ -56,6 +56,7 @@ from confiture.exceptions import ConfiturError
 
 @cli_boundary
 def migrate_status(
+    *,
     ctx: typer.Context,
     migrations_dir: Path = migrations_dir_option(),
     config: Path = config_option(

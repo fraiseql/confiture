@@ -637,6 +637,7 @@ def validate_config(
 
 @cli_boundary
 def restore(
+    *,
     backup_file: Path = typer.Argument(
         ...,
         help="Path to pg_dump backup file. Must be custom (-Fc) or directory (-Fd) format.",

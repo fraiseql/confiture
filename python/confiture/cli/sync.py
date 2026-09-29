@@ -141,6 +141,7 @@ def _split_csv(value: str | None) -> list[str] | None:
 
 @cli_boundary
 def sync(
+    *,
     from_: str = typer.Option(..., "--from", help="Source database: env name or DSN."),
     to: str = typer.Option(..., "--to", help="Target database: env name or DSN."),
     anonymize: bool = typer.Option(

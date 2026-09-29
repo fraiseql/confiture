@@ -89,6 +89,7 @@ def _get_connection(database_url: str | None = None) -> psycopg.Connection:
 @coordinate_app.command()
 @cli_boundary
 def register(
+    *,
     agent_id: str = typer.Option(
         ..., help="Identifier for the agent, e.g. claude-payments (required)"
     ),

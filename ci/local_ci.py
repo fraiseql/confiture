@@ -33,7 +33,7 @@ POSTGRES_IMAGE = "postgres:15"
 # Pinned tool versions — must match the pins in quality-gate.yml (and uv.lock)
 # so this local gate reproduces CI exactly rather than chasing whatever Astral
 # shipped today.
-RUFF = "ruff@0.15.15"
+RUFF = "ruff@0.16.9"
 TY = "ty@0.0.43"
 
 PG_USER = "confiture"

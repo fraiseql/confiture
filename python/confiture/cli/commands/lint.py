@@ -172,6 +172,7 @@ CheckSecurityDefinerOpt = Annotated[
 
 @cli_boundary
 def lint(
+    *,
     ctx: typer.Context,
     env: str = env_option(),
     project_dir: ProjectDirOpt = Path(),

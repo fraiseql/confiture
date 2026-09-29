@@ -467,6 +467,7 @@ StrictOpt = Annotated[
 
 @cli_boundary
 def migrate_preflight(
+    *,
     ctx: typer.Context,
     migrations_dir: Path = migrations_dir_option(),
     format_type: str = format_option("table", "json"),

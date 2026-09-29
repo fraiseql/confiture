@@ -404,6 +404,7 @@ SchemaFileOpt = Annotated[
 
 @cli_boundary
 def migrate_validate(
+    *,
     ctx: typer.Context,
     migrations_dir: Path = migrations_dir_option(),
     fix_naming: FixNamingOpt = False,

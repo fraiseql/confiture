@@ -412,14 +412,14 @@ class MigrationGrantExtractor:
                         continue
                     self._emit_statements(
                         statements,
-                        action,
-                        modeled,
-                        "ALL_IN_SCHEMA",
-                        schema_name,
-                        None,
-                        grantees,
-                        privs,
-                        grant_option,
+                        action=action,
+                        objtype=modeled,
+                        target_kind="ALL_IN_SCHEMA",
+                        schema=schema_name,
+                        obj=None,
+                        grantees=grantees,
+                        privs=privs,
+                        grant_option=grant_option,
                     )
                 continue
 
@@ -435,19 +435,20 @@ class MigrationGrantExtractor:
                     continue
                 self._emit_statements(
                     statements,
-                    action,
-                    modeled,
-                    "OBJECT",
-                    schema_name,
-                    obj_name,
-                    grantees,
-                    privs,
-                    grant_option,
+                    action=action,
+                    objtype=modeled,
+                    target_kind="OBJECT",
+                    schema=schema_name,
+                    obj=obj_name,
+                    grantees=grantees,
+                    privs=privs,
+                    grant_option=grant_option,
                 )
 
     @staticmethod
     def _emit_statements(
         statements: list[GrantStatement],
+        *,
         action: str,
         objtype: str,
         target_kind: str,

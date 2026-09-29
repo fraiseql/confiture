@@ -50,7 +50,7 @@ def test_no_concern_module_imports_its_host() -> None:
 
 def _members(protocol: type) -> list[str]:
     """What a protocol declares: its annotated attributes, properties and methods."""
-    declared = set(protocol.__dict__.get("__annotations__", {}))
+    declared = set(inspect.get_annotations(protocol))
     declared |= {
         name
         for name, value in protocol.__dict__.items()

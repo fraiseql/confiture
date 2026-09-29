@@ -42,6 +42,7 @@ from confiture.models.results import VerifyAllResult
 
 @cli_boundary
 def migrate_verify(
+    *,
     ctx: typer.Context,
     migrations_dir: Path = migrations_dir_option(),
     config: Path | None = config_option(None),

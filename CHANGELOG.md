@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accepted it and reported it under a dot-joined `object` that could not be split
   back (`app.tb_dotted.tb_dotted.org.fk`). The live side is still read whatever
   it holds.
+- `LintConfig(...)` takes its switches by keyword only: `LintConfig(True, False)`
+  named no switch a reader could see. Every CLI command's parameters are
+  keyword-only as well; Typer passes them by name. ruff 0.16.9 (PLR0917) asked for
+  both, and it is now the one pinned ruff (dev group, pre-commit, CI). ruff 0.16
+  formats code in Markdown by default; `[tool.ruff.format]` excludes `*.md`, so an
+  example or a released note keeps the spelling it was written with.
 
 ### Documentation
 
