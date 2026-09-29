@@ -214,6 +214,30 @@ class TestDriftCommand:
         assert data["ok"] is False
         assert data["error"]["code"] == "SCHEMA_202"
 
+    @patch("confiture.cli.helpers.create_connection")
+    @patch("confiture.cli.commands.drift.load_config")
+    def test_a_name_needing_quotes_is_differ_403_exit_5(
+        self, mock_load_config, mock_create_connection, tmp_path
+    ):
+        """The refusal keeps its own code and exit, as under ``migrate validate`` (#525).
+
+        It was wrapped as CONFIG_006 (exit 3) with a "cannot reach PostgreSQL" hint.
+        """
+        config_file = tmp_path / "confiture.yaml"
+        config_file.write_text("database_url: postgresql://localhost/test\n")
+        schema_file = tmp_path / "schema.sql"
+        schema_file.write_text('CREATE TABLE t (id int PRIMARY KEY, "createdAt" timestamptz);\n')
+        mock_load_config.return_value = MagicMock()
+        mock_create_connection.return_value = MagicMock()
+        argv = ["drift", "--config", str(config_file), "--schema", str(schema_file)]
+
+        as_json = runner.invoke(app, [*argv, "--format", "json"])
+        as_text = runner.invoke(app, argv)
+
+        assert (as_json.exit_code, as_text.exit_code) == (5, 5)
+        assert json.loads(as_json.stdout)["error"]["code"] == "DIFFER_403"
+        assert "Cannot reach PostgreSQL" not in as_text.output
+
     def test_drift_command_missing_schema_flag_is_config_error(self, tmp_path):
         """Missing --schema is a config error (exit 5), not the reserved exit 2."""
         config_file = tmp_path / "confiture.yaml"

@@ -25,7 +25,7 @@ from confiture.core.validation.config_loaders import (
     load_ownership_expectation,
 )
 from confiture.error_codes import FINDINGS
-from confiture.exceptions import ConfigurationError, SchemaError
+from confiture.exceptions import ConfigurationError, ConfiturError, SchemaError
 
 
 @dataclass(frozen=True)
@@ -230,17 +230,16 @@ def drift(
         _run_drift(config, request, format_output=format_output, json_mode=json_mode)
     except typer.Exit:
         raise
-    except ConfigurationError as e:
+    except ConfiturError as e:
+        # Confiture's own refusals keep their code and exit: SCHEMA_202 for a
+        # --schema file that parsed to no tables (#175), DIFFER_403 for a name
+        # that needs quotes (#525) — never a connection error they are not.
         fail(e, json_mode=json_mode)
     except FileNotFoundError as e:
         fail(
             SchemaError(str(e), error_code="SCHEMA_201"),
             json_mode=json_mode,
         )
-    except SchemaError as e:
-        # e.g. SCHEMA_202: the --schema file declares tables but parsed to zero
-        # (issue #175) — surface with its own code/exit, not as a config error.
-        fail(e, json_mode=json_mode)
     # Reason: configuration or connection failure of any kind → the CONFIG_006 envelope
     except Exception as e:
         fail(
