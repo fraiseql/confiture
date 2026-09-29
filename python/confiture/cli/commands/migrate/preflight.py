@@ -47,6 +47,7 @@ from confiture.core.dependent_objects import DependentObjectsChecker
 from confiture.core.large_tables import large_tables
 from confiture.core.migrator import Migrator, MigratorSession, parse_migration_filename
 from confiture.core.schema_facts import SchemaFacts, collect_schema_facts
+from confiture.core.tview_preflight import live_issues
 from confiture.error_codes import FINDINGS, USAGE
 from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.models.preflight import DependentAnalysisReport
@@ -643,7 +644,12 @@ def migrate_preflight(
     replica_issues = replica_preflight_issues(
         migrations_dir, has_replicas=_has_replicas, bypass=_replica_bypass
     )
-    all_issues = result.issues + replica_issues + run.result.replay_issues
+    all_issues = (
+        result.issues
+        + replica_issues
+        + live_issues(pending_files, run.facts.tviews)
+        + run.result.replay_issues
+    )
     summary = _preflight_summary(
         all_issues,
         migrations_checked=len(run.result.migrations),

@@ -47,6 +47,10 @@ class SchemaFacts:
     analysed; the mapping itself is ``None`` when it was not read, so "no large
     table" is never said of a database nobody asked."""
 
+    tviews: Mapping[str, str] = field(default_factory=dict)
+    """``schema.tv_name`` (case-folded) → the query pg_tviews recorded for each registered
+    TVIEW; empty when the extension is absent or the read failed."""
+
     def column_type(self, qualified: str | None) -> str | None:
         """The current type of ``schema.table.column``, or ``None`` if unknown."""
         if not qualified:
@@ -58,6 +62,7 @@ class SchemaFacts:
         return (
             self.server_version is not None
             or bool(self.column_types)
+            or bool(self.tviews)
             or self.row_estimates is not None
         )
 
@@ -72,6 +77,7 @@ def collect_schema_facts(conn: Any) -> SchemaFacts:
         server_version=_server_version(conn),
         column_types=_column_types(conn),
         row_estimates=_row_estimates(conn),
+        tviews=_tviews(conn),
     )
 
 
@@ -130,3 +136,24 @@ def _scalar(conn: Any, sql: str) -> object | None:
     except Exception:  # Reason: schema facts are advisory; any failure to read them means 'unknown', never a preflight error
         return None
     return row[0] if row else None
+
+
+def _tviews(conn: Any) -> dict[str, str]:
+    """Each registered TVIEW and its recorded query; ``{}`` when they cannot be read."""
+    # Reason: start-up — the no-database path never reads the catalog, and live_catalog imports pglast
+    import psycopg
+
+    # Reason: start-up — the no-database path never reads the catalog, and live_catalog imports pglast
+    from confiture.core import live_catalog
+
+    # Reason: start-up — the no-database path never reads the catalog, and live_catalog imports pglast
+    from confiture.core.schema_identity import DEFAULT_SCHEMA
+
+    try:
+        found = live_catalog.tviews(conn, live_catalog.user_schemas(conn))
+    except psycopg.Error:
+        return {}
+    return {
+        f"{(tview.schema or DEFAULT_SCHEMA)}.{tview.name}".lower(): tview.definition or ""
+        for tview in found
+    }

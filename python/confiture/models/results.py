@@ -823,6 +823,8 @@ class MigrationPreflightInfo:
     filename: str | None = None  # source filename, for issue attribution (#148)
     parse_error: str | None = None  # pglast rejected the file (PFLIGHT_UNPARSEABLE)
     parse_error_line: int | None = None
+    # PFLIGHT_TVIEW_SAME_BATCH / PFLIGHT_TVIEW_IF_NOT_EXISTS: what the file's own text decides
+    tview_issues: list[PreflightIssue] = field(default_factory=list)
     # -- confiture:destructive gate (PFLIGHT_DESTRUCTIVE_GATED) and its -- confiture:irreversible reasons
     destructive: bool = False
     irreversible_reasons: list[str] = field(default_factory=list)
@@ -942,6 +944,7 @@ class PreflightResult:
                     line=m.parse_error_line,
                 )
             )
+        out.extend(issue for m in self.migrations for issue in m.tview_issues)
         out.extend(
             PreflightIssue.of(
                 "PFLIGHT_MISSING_DOWN",
@@ -1056,6 +1059,22 @@ PFLIGHT_CODES: dict[str, tuple[str, str]] = {
     "PFLIGHT_REPLAY_FAILED": (
         "error",
         "Fix the failing migration SQL; see details for the database error.",
+    ),
+    # Delete with fraiseql/pg_tviews#80 (the server converts a tv_ CTAS in one script).
+    "PFLIGHT_TVIEW_SAME_BATCH": (
+        "error",
+        "Create the pg_tviews extension in an earlier migration than the first tv_* table: "
+        "one script is one batch, and preloading the library does not change that.",
+    ),
+    # Delete with fraiseql/pg_tviews#79 (applied again, IF NOT EXISTS deletes the TVIEW).
+    "PFLIGHT_TVIEW_IF_NOT_EXISTS": (
+        "error",
+        "Write DROP TABLE IF EXISTS tv_x; CREATE TABLE tv_x AS …; instead: "
+        "IF NOT EXISTS deletes a registered TVIEW when it is applied again.",
+    ),
+    "PFLIGHT_TVIEW_BASE_COLUMN": (
+        "error",
+        "Drop the TVIEW first (DROP TABLE tv_x), change the base table, then create it again.",
     ),
     "PFLIGHT_LIVE_DEPENDENTS": (
         "warning",

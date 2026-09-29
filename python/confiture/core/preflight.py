@@ -23,6 +23,7 @@ from confiture.core.destructive import irreversible_reasons, is_gated
 from confiture.core.expand_contract import StagedPlan, plannable
 from confiture.core.migration_analyzer import MigrationAnalyzer
 from confiture.core.parser_info import parse_error_line as parse_error_line_of
+from confiture.core.tview_preflight import static_issues as tview_issues
 from confiture.models.results import MigrationPreflightInfo, PreflightResult
 
 if TYPE_CHECKING:
@@ -138,6 +139,7 @@ def run_preflight(
                 filename=up_file.name,
                 parse_error=parse_error,
                 parse_error_line=parse_error_line,
+                tview_issues=tview_issues(sql_content, version=version, file=up_file.name),
                 destructive=is_gated(sql_content),
                 irreversible_reasons=irreversible_reasons(sql_content),
                 online_available=plans is not None,

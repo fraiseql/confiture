@@ -554,6 +554,7 @@ confiture/
 │   │   ├── tree_allocator.py     # SQL function tree file allocation
 │   │   ├── tree_prefix.py        # What a numbered filename's prefix is, and where the file it names sorts
 │   │   ├── tree_renumber.py      # SQL function tree renumber — safe file-move with cross-reference rewrit…
+│   │   ├── tview_preflight.py    # What preflight says about a migration that a pg_tviews TVIEW cannot sur…
 │   │   ├── type_lattice.py       # Is an `ALTER COLUMN … TYPE` widening or narrowing (issue #199)?
 │   │   ├── unified_linter.py     # Unified SQL linter orchestrating Squawk, SQLFluff, and other tools
 │   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection

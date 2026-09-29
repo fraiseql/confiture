@@ -9,6 +9,7 @@ with the reason.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import psycopg
 import pytest
@@ -18,6 +19,8 @@ from confiture.core.change_order import apply_order
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.linting.inventory import build_model
+from confiture.core.schema_facts import collect_schema_facts
+from confiture.core.tview_preflight import live_issues
 
 pytestmark = pytest.mark.integration
 
@@ -122,3 +125,22 @@ def test_a_dropped_tview_is_unregistered_and_its_down_restores_it(tview_database
 
     _apply(tview_database, down)
     assert _registered(tview_database) == _declared(OLD)
+
+
+def test_preflight_names_a_change_to_a_column_the_registered_tview_reads(
+    tview_database: str, tmp_path: Path
+) -> None:
+    """PostgreSQL refuses the DROP COLUMN; preflight says so before it is tried."""
+    _apply(tview_database, OLD)
+    migration = tmp_path / "20260929000009_drop_title.up.sql"
+    migration.write_text("ALTER TABLE tb_post DROP COLUMN title;")
+    with psycopg.connect(tview_database) as conn:
+        facts = collect_schema_facts(conn)
+
+    (issue,) = live_issues([migration], facts.tviews)
+    assert issue.code == "PFLIGHT_TVIEW_BASE_COLUMN"
+    with (
+        psycopg.connect(tview_database) as conn,
+        pytest.raises(psycopg.errors.DependentObjectsStillExist),
+    ):
+        conn.execute(migration.read_text())

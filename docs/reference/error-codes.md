@@ -156,7 +156,15 @@ warnings → 0 unless `--strict`.
 | `PFLIGHT_DUPLICATE_VERSION` | error | Two migration files share a version prefix |
 | `PFLIGHT_CHECKSUM_MISMATCH` | error | An applied migration's file changed after it was applied |
 | `PFLIGHT_REPLAY_FAILED` | error | A migration failed to replay against the `--against` DB (the DB error is in `details.error`) |
+| `PFLIGHT_TVIEW_SAME_BATCH` | error | A transactional migration creates the `pg_tviews` extension and a `tv_*` table in one script: the table stays plain, unregistered (pg_tviews#80) |
+| `PFLIGHT_TVIEW_IF_NOT_EXISTS` | error | `CREATE TABLE IF NOT EXISTS tv_* AS`: applied again it deletes the TVIEW (pg_tviews#79) |
+| `PFLIGHT_TVIEW_BASE_COLUMN` | error | `--against` only: the migration drops or retypes a column a registered TVIEW reads, or drops its base table, without dropping the TVIEW first |
 | `PFLIGHT_LIVE_DEPENDENTS` | warning | (reserved) live dependents found for a replaced object |
+
+The first two `PFLIGHT_TVIEW_*` codes work around pg_tviews defects
+(fraiseql/pg_tviews#80 and #79) and are removed when those are fixed;
+`PFLIGHT_TVIEW_BASE_COLUMN` is PostgreSQL's own dependency of the TVIEW's backing view
+on its base columns and stays.
 
 ### Replica-safety codes (`PFLIGHT_REPLICA_*`, lint `replica_001`, #139)
 
