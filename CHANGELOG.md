@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `missing_tview` is critical and `extra_tview` is info. `migrate validate
   --require-migration` notices a TVIEW whose query changed. The model's wire gains
   a `tviews` section, and a wire written before it reads as holding none.
+- **`migrate diff --generate` writes the migration a TVIEW change needs** (#504).
+  An added TVIEW is its `CREATE TABLE tv_x AS …`, a dropped one `DROP TABLE IF
+  EXISTS tv_x`, and a replaced one both. Each down is derived, so none of the
+  three is `no SQL derived` or `irreversible` any more. A TVIEW is tiered as a
+  materialized view, because its rows are derived from its base tables: adding
+  one is `additive`, while dropping or replacing one is `destructive` and gated.
 - `tests/unit/test_one_constraint_reader.py` fails on a module other than
   `ddl_walk` that reads a foreign key's fields off a pglast node, or that
   matches one in SQL text with a regex.
@@ -36,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--fail-on-warning` failed on a database built from its own tree. The
   TVIEW's backing view and the triggers pg_tviews puts on each base table are no
   longer read as the tree's either.
+- **confiture never writes `CREATE TABLE IF NOT EXISTS tv_x AS`** (#504). On
+  pg_tviews 0.1.0, running that statement again on a registered TVIEW deletes
+  `tv_x`, leaves `pg_tview_meta` pointing at it, and every later write to a base
+  table warns (measured). `migrate fix --idempotent` wrote exactly that. It now
+  leaves a TVIEW's CTAS alone, and a generated migration drops the author's
+  `IF NOT EXISTS`.
 
 
 - **`build.two_pass` moves each foreign key without changing it** (#511). Two-pass

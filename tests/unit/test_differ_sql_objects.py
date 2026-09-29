@@ -29,6 +29,7 @@ DERIVED = {
     "extension": "CREATE EXTENSION pgcrypto;",
     "schema": "CREATE SCHEMA app;",
     "policy": "CREATE POLICY p_own ON tb_user USING (true);",
+    "tview": "CREATE TABLE tv_user AS SELECT pk_user FROM tb_user;",
 }
 
 TRIGGER = (
@@ -147,6 +148,61 @@ class TestMaterializedViewDDL:
         assert "DROP MATERIALIZED VIEW IF EXISTS mv_user" in sql
         assert "CREATE MATERIALIZED VIEW IF NOT EXISTS mv_user AS" in sql
         assert "name" in sql
+
+
+class TestTViewDDL:
+    """A pg_tviews TVIEW (#504): created by its CTAS, dropped as a table, never ``IF NOT EXISTS``.
+
+    Measured on PostgreSQL 18.4 + pg_tviews 0.1.0: ``CREATE TABLE IF NOT EXISTS tv_x AS``
+    run again on a registered TVIEW deletes ``tv_x`` and leaves ``pg_tview_meta``
+    pointing at it; a CTAS in a ``DO`` block is never converted. ``DROP TABLE IF
+    EXISTS`` then the CTAS re-registers it, applied once or twice.
+    """
+
+    OLD = "CREATE TABLE tv_user AS SELECT pk_user FROM tb_user;"
+    NEW = "CREATE TABLE tv_user AS SELECT pk_user, name FROM tb_user;"
+
+    @staticmethod
+    def _kinds(sql: str) -> list[tuple[str, str, bool]]:
+        """Each statement's node, relation and ``IF NOT EXISTS``/``IF EXISTS`` flag."""
+        found = []
+        for stmt in _statements(sql):
+            node = type(stmt).__name__
+            if node == "CreateTableAsStmt":
+                found.append((node, stmt.into.rel.relname, bool(stmt.if_not_exists)))
+            else:
+                found.append((node, stmt.objects[0][-1].sval, bool(stmt.missing_ok)))
+        return found
+
+    def test_add_tview_creates_it_without_if_not_exists(self):
+        change = change_of("", self.OLD, "ADD_TVIEW")
+        generator = DifferSQLGenerator()
+        assert self._kinds(generator.generate_up(change)) == [
+            ("CreateTableAsStmt", "tv_user", False)
+        ]
+        assert self._kinds(generator.generate_down(change)) == [("DropStmt", "tv_user", True)]
+
+    def test_an_authors_if_not_exists_does_not_reach_the_migration(self):
+        change = change_of("", self.OLD.replace("TABLE", "TABLE IF NOT EXISTS"), "ADD_TVIEW")
+        assert "IF NOT EXISTS" not in DifferSQLGenerator().generate_up(change)
+
+    def test_replace_tview_drops_and_creates_it(self):
+        change = change_of(self.OLD, self.NEW, "REPLACE_TVIEW")
+        generator = DifferSQLGenerator()
+        up, down = generator.generate_up(change), generator.generate_down(change)
+        rebuilt = [("DropStmt", "tv_user", True), ("CreateTableAsStmt", "tv_user", False)]
+        assert self._kinds(up) == rebuilt
+        assert self._kinds(down) == rebuilt
+        assert "name" in up
+        assert "name" not in down
+
+    def test_drop_tview_drops_the_table_and_rolls_back_by_creating_it(self):
+        change = change_of(self.OLD, "", "DROP_TVIEW")
+        generator = DifferSQLGenerator()
+        assert self._kinds(generator.generate_up(change)) == [("DropStmt", "tv_user", True)]
+        assert self._kinds(generator.generate_down(change)) == [
+            ("CreateTableAsStmt", "tv_user", False)
+        ]
 
 
 class TestTheMigrationIsNotShort:

@@ -74,8 +74,9 @@ from confiture.core.type_lattice import TypeChange, changes_rewrite_table, compa
 
 __all__ = ["tier_of"]
 
-#: Where an object kind's change-set noun is not its own name.
-_NOUN: dict[str, str] = {"matview": "materialized_view"}
+#: Where an object kind's change-set noun is not its own name. A pg_tviews TVIEW
+#: is tiered as a materialized view: its rows are derived from its base tables.
+_NOUN: dict[str, str] = {"matview": "materialized_view", "tview": "materialized_view"}
 
 
 def _noun(kind: str) -> str:
