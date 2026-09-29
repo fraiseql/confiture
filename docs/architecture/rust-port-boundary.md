@@ -81,18 +81,18 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,336 lines, 34% of `core/`.
+26,576 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
-| `_pglast_enums.py` | 148 | DDL transform |
+| `_pglast_enums.py` | 152 | DDL transform |
 | `change_order.py` | 184 | DDL transform |
 | `change_set/` | 1,268 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 562 | DDL transform |
 | `ddl_clauses.py` | 152 | DDL transform |
 | `ddl_objects.py` | 676 | DDL transform |
-| `ddl_walk.py` | 1,520 | DDL transform |
+| `ddl_walk.py` | 1,555 | DDL transform |
 | `destructive.py` | 181 | DDL transform |
 | `differ.py` | 807 | DDL transform |
 | `differ_sql.py` | 706 | DDL transform |
@@ -103,7 +103,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_signature_checker.py` | 187 | DDL transform |
 | `idempotency/` | 2,717 | DDL transform |
 | `introspection/dependency_graph.py` | 202 | DDL transform |
-| `linting/` | 9,202 | DDL transform |
+| `linting/` | 9,403 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
 | `migration_grant_extractor.py` | 526 | DDL transform |
@@ -125,7 +125,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-42,475 lines, 56% of `core/`.
+42,536 lines, 55% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -160,8 +160,8 @@ duplicate readers were deleted. The count below is what the port translates.
 | `linting/baseline.py` | 153 | neutral |
 | `linting/bodies.py` | 465 | database orchestration |
 | `linting/libraries/security_definer.py` | 405 | database orchestration |
-| `linting/schema_linter.py` | 1,235 | database orchestration |
-| `linting/selection.py` | 378 | database orchestration |
+| `linting/schema_linter.py` | 1,282 | database orchestration |
+| `linting/selection.py` | 392 | database orchestration |
 | `linting/unresolved.py` | 379 | database orchestration |
 | `live_catalog.py` | 969 | database orchestration |
 | `locking.py` | 625 | database orchestration |

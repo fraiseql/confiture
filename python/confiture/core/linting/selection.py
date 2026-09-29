@@ -64,7 +64,11 @@ def severity_escalations(env: str, project_dir: Path, selected: frozenset[str]) 
 
 
 def linter_config(
-    selected: frozenset[str], threshold: Threshold, server_url: str | None = None
+    selected: frozenset[str],
+    threshold: Threshold,
+    server_url: str | None = None,
+    *,
+    has_replicas: bool = False,
 ) -> LinterConfig:
     """``LintConfig``'s coarse switches, from the exact set of selected codes.
 
@@ -89,6 +93,11 @@ def linter_config(
         check_tenant_views="tenant_003" in selected,
         check_tenant_foreign_keys="tenant_004" in selected,
         check_tenant_unique_keys="tenant_005" in selected,
+        check_tview_foreign_keys="tview_001" in selected,
+        check_tview_hot="tview_002" in selected,
+        check_tview_fillfactor="tview_003" in selected,
+        check_tview_replicas="tview_004" in selected,
+        has_replicas=has_replicas,
         check_acl_coverage="acl_001" in selected,
         check_qualification="qual_001" in selected,
         check_qualification_relations="qual_002" in selected,
@@ -241,6 +250,11 @@ def _replica_findings(env: str, project_dir: Path, migrations_dir: Path) -> list
     return Replica001ForwardCompat(has_replicas=has_replicas, bypass=bypass).check(
         _under(migrations_dir, project_dir)
     )
+
+
+def replicas_declared(env: str, project_dir: Path) -> bool:
+    """Whether the environment declares streaming replicas."""
+    return _replica_policy(env, project_dir)[0]
 
 
 def _replica_policy(env: str, project_dir: Path) -> tuple[bool, bool]:

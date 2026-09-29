@@ -335,6 +335,8 @@ jobs:
           tests/unit/test_replica_corpus.py \
           tests/unit/test_replica_rule.py \
           tests/unit/test_replica_preflight.py \
+          tests/unit/test_tview_preflight.py \
+          tests/unit/linting/test_tview_rules.py \
           tests/unit/test_idempotency_captures.py \
           tests/unit/test_idempotency_suggestion_wiring.py \
           tests/unit/test_pglast_enum_binding.py \

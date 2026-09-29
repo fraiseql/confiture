@@ -208,6 +208,41 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
     return build(cmd) if build is not None else None
 
 
+@dataclass(frozen=True)
+class StorageEdit:
+    """What one ``ALTER TABLE`` subcommand does to a table's storage, for the lint.
+
+    ``kind`` is ``fillfactor`` (``value`` its number, ``None`` after a ``RESET``) or
+    ``logged`` (``value`` is ``True`` after ``SET LOGGED``, ``False`` after
+    ``SET UNLOGGED``). No expected schema is built from these; the lint's ``tview``
+    rules ask what a table's storage was left as.
+    """
+
+    kind: Literal["fillfactor", "logged"]
+    value: int | bool | None
+
+
+def storage_edit(cmd: Any) -> StorageEdit | None:
+    """The fillfactor or persistence *cmd* sets, or ``None`` for any other subcommand."""
+    subtype = enum_int(getattr(cmd, "subtype", None))
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetLogged")):
+        return StorageEdit("logged", True)
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetUnLogged")):
+        return StorageEdit("logged", False)
+    setting = subtype == enum_int(_pg_member("AlterTableType", "AT_SetRelOptions"))
+    if not setting and subtype != enum_int(_pg_member("AlterTableType", "AT_ResetRelOptions")):
+        return None
+    for option in getattr(cmd, "def_", None) or ():
+        if getattr(option, "defname", None) == "fillfactor":
+            argument = getattr(option, "arg", None)
+            number = getattr(argument, "ival", None)
+            text = getattr(argument, "sval", None)
+            if number is None and text:
+                number = int(text)
+            return StorageEdit("fillfactor", number if setting else None)
+    return None
+
+
 #: ``AlterTableType`` members an expected schema is built from some *other* way,
 #: with where.
 MODELLED_ELSEWHERE: dict[str, str] = {
@@ -216,6 +251,10 @@ MODELLED_ELSEWHERE: dict[str, str] = {
         "`differ._collect_alter_table_constraints` models FK / CHECK / UNIQUE for "
         "`migrate diff`. A table-level constraint is the table's fact, not a column's"
     ),
+    "AT_SetLogged": "`storage_edit` reads it for the lint's `tview_004`, and nothing else",
+    "AT_SetUnLogged": "`storage_edit` reads it for the lint's `tview_004`, and nothing else",
+    "AT_SetRelOptions": "`storage_edit` reads a fillfactor for the lint's `tview_003`, and nothing else",
+    "AT_ResetRelOptions": "`storage_edit` reads a fillfactor for the lint's `tview_003`, and nothing else",
     "AT_ChangeOwner": (
         "ownership is its own expectation and its own drift type (`wrong_owner`), "
         "read from the live catalogue rather than folded out of DDL"
@@ -285,13 +324,9 @@ _NOT_A_FACT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "AT_ClusterOn",
             "AT_DropCluster",
-            "AT_SetLogged",
-            "AT_SetUnLogged",
             "AT_DropOids",
             "AT_SetAccessMethod",
             "AT_SetTableSpace",
-            "AT_SetRelOptions",
-            "AT_ResetRelOptions",
             "AT_ReplaceRelOptions",
             "AT_GenericOptions",
         ),
