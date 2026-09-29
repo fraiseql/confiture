@@ -116,6 +116,9 @@ quotes is what `schema_identity.quote_identifier` would quote: a capital, a
 space or other punctuation, a non-ASCII character, a leading digit, or a
 reserved word such as `user`. `confiture build` still builds such a tree.
 
+`confiture lint --select naming_003,naming_004` predicts the refusal exactly. A
+quoted view output alias and an extension name do not trigger it.
+
 ## `LOCK_1300` — lock-holder identity (`details.holder`)
 
 When `migrate up`/`down`/`down-to` cannot acquire the migration lock, the
