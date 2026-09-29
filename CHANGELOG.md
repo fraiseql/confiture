@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-09-29
+
+**A lost or re-pointed constraint fails the drift gate, and every drift item names
+its subject in parts.** Two changes are breaking (⚠️): `missing_constraint` and
+`constraint_mismatch` are now `critical`, and live drift refuses DDL that names an
+object needing quotes, as `migrate diff` already did.
+
 ### Changed
 
 - ⚠️ **A lost or re-pointed constraint is critical drift** (#506).
