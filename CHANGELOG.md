@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-09-30
+
+**`migrate up` guards TVIEW migrations, and `generate renumber` says when a move
+changes the build order.** A pending migration that creates or drops a TVIEW is
+refused on a pg_tviews older than 0.1.0-beta.19 (`CONFIG_014`); any other migration
+deploys as before. An explicit renumber that reorders the build is reported, not
+refused.
+
 ### Changed
 
 - **`migrate up` refuses a TVIEW migration on an unsupported pg_tviews** (#541).
