@@ -506,6 +506,15 @@ jobs:
           sleep 1
         done
 
+    - name: PostgreSQL 18 client tools
+      # The restore round trip runs pg_dump and pg_restore here, and the
+      # runner's stock client is older than the server: pg_dump refuses that.
+      run: |
+        sudo apt-get install -y --no-install-recommends postgresql-common
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+        sudo apt-get install -y --no-install-recommends postgresql-client-18
+        echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
@@ -528,6 +537,7 @@ jobs:
             assert c.execute(\"SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'\").fetchone(), 'no pg_tviews'
             assert 'pg_tviews' in c.execute('SHOW shared_preload_libraries').fetchone()[0], 'pg_tviews not preloaded'
         "
+        pg_dump --version
 
     - name: Run the TVIEW suites
       env:
@@ -536,6 +546,7 @@ jobs:
         uv run pytest \
           tests/integration/test_tview_live.py \
           tests/integration/test_tview_migrate.py \
+          tests/integration/test_tview_restore.py \
           tests/unit/test_tview_model.py \
           tests/unit/test_tview_ddl.py \
           tests/unit/test_drift_tviews.py \

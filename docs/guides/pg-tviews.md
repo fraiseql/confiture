@@ -36,10 +36,34 @@ pg_tviews 0.1.0-beta.18 indexes each `fk_*` column and sets fillfactor 85 itself
 accepts `CREATE INDEX` and `ALTER TABLE … SET LOGGED` after the conversion; `WITH (…)`
 on the `CREATE` it refuses. See the [rule reference](../reference/lint-rules.md).
 
+## Restore
+
+`confiture restore` brings a TVIEW back registered, and it keeps following its base
+tables, cascades included. Two conditions, both measured on pg_tviews 0.1.0-beta.19:
+
+- **The source database's extension was created by pg_tviews 0.1.0-beta.19 or
+  later.** From that release `pg_dump` carries `pg_tview_meta`; an extension created
+  by an earlier build does not, even after the server is upgraded (both report
+  version `0.1.0`, so there is no `ALTER EXTENSION … UPDATE`). A dump of such a
+  database restores `tv_x` and its rows, and the TVIEW silently stops propagating.
+  Check the source before you rely on its dumps:
+
+  ```sql
+  SELECT EXISTS (
+      SELECT FROM pg_class c
+      WHERE c.oid = ANY (e.extconfig) AND c.relname = 'pg_tview_meta'
+  ) AS dumps_its_tviews
+  FROM pg_extension e WHERE e.extname = 'pg_tviews';
+  ```
+
+  `false` means recreate the TVIEWs under a new extension, or rebuild them after
+  the restore.
+- **No `--disable-triggers`.** pg_tviews rebinds each OID it recorded in a trigger as
+  `pg_tview_meta` loads; `pg_restore --section=data --disable-triggers` keeps the
+  source database's OIDs, and the TVIEW stops following its base tables without an
+  error. `confiture restore` never passes it; do not add it to a `pg_restore` of
+  your own.
+
 ## Not supported yet
 
-- **`confiture restore`** of a database that holds a TVIEW: on pg_tviews
-  0.1.0-beta.18, `pg_restore` brings back `tv_x` and its rows but not its
-  `pg_tview_meta` row, so the restored TVIEW no longer follows its base tables
-  (fraiseql/pg_tviews#96). Confiture waits for the fix rather than working around it.
 - **Benchmark data**: see [Realistic data for a pg_tviews TVIEW](./03-production-sync.md#realistic-data-for-a-pg_tviews-tview).

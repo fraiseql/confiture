@@ -14,7 +14,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 RUN cargo install --locked cargo-pgrx --version 0.17.0
 RUN cargo pgrx init --pg18 /usr/lib/postgresql/18/bin/pg_config
-ARG PG_TVIEWS_REF=v0.1.0-beta.18
+ARG PG_TVIEWS_REF=v0.1.0-beta.19
 RUN git clone --depth 1 --branch "$PG_TVIEWS_REF" https://github.com/fraiseql/pg_tviews /src
 WORKDIR /src
 RUN cargo pgrx package --no-default-features --features pg18 \
