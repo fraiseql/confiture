@@ -430,16 +430,20 @@ def routine_ref(routine: Routine) -> ObjectRef:
 #: The prefix pg_tviews reads a ``CREATE TABLE … AS`` target by: ``tv_<entity>``.
 TVIEW_PREFIX = "tv_"
 
+#: The schema pg_tviews keeps every object of its own in, whatever ``search_path``
+#: says (its control file's ``schema``, from 0.1.0-beta.20).
+TVIEWS_SCHEMA = "tviews"
+
 
 @dataclass(frozen=True)
 class TView:
     """A pg_tviews TVIEW: ``CREATE TABLE tv_<entity> AS SELECT …``.
 
     pg_tviews turns that statement into a table, a backing view ``v_<entity>``
-    and triggers on each base table, and registers them in ``pg_tview_meta``.
-    The model holds the TVIEW as one object — its relation and its query — and
-    its parts belong to it. ``definition`` is the query as the reader holds it:
-    the DDL's ``SELECT`` rendered, or what pg_tviews recorded.
+    and triggers on each base table, and lists it in ``tviews.registry``. The
+    model holds the TVIEW as one object — its relation and its query — and its
+    parts belong to it. ``definition`` is the query as the reader holds it: the
+    DDL's ``SELECT`` rendered, or the registry's ``query``.
     """
 
     name: str

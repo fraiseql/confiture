@@ -124,3 +124,27 @@ def test_anything_else_does_not(sql: str) -> None:
     from confiture.core.tview_preflight import touches_tview
 
     assert not touches_tview(sql)
+
+
+def test_dropping_the_tview_through_pg_tviews_first_is_fine(tmp_path: Path) -> None:
+    sql = (
+        "SELECT tviews.pg_tviews_drop('public.tv_post', if_exists => true);\n"
+        "ALTER TABLE tb_post DROP COLUMN title;"
+    )
+
+    assert _live(tmp_path, sql) == []
+
+
+@pytest.mark.parametrize(
+    ("sql", "touches"),
+    [
+        ("SELECT tviews.pg_tviews_create_or_replace('tv_post', 'SELECT 1');", True),
+        ("SELECT tviews.pg_tviews_drop('app.tv_post', if_exists => true);", True),
+        ("CREATE TABLE tv_post AS SELECT 1 AS pk_post;", True),
+        ("SELECT count(*) FROM tb_post;", False),
+    ],
+)
+def test_a_migration_touches_a_tview_through_pg_tviews_calls(sql: str, touches: bool) -> None:
+    from confiture.core.tview_preflight import touches_tview
+
+    assert touches_tview(sql) is touches

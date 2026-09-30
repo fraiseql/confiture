@@ -17,7 +17,7 @@ import pglast.parser
 from pglast.stream import RawStream
 
 from confiture.core._migrator.discovery import _version_from_migration_filename
-from confiture.core.ddl_walk import column_edit, object_edits, walk_nodes
+from confiture.core.ddl_walk import column_edit, object_edits, tview_calls, walk_nodes
 from confiture.core.linting.inventory import build_model
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import TVIEW_PREFIX
@@ -57,7 +57,9 @@ def touches_tview(sql: str) -> bool:
     except pglast.parser.ParseError:
         return False
     return any(
-        _dropped_tviews(statement.stmt) or _creates_tview(statement.stmt)
+        _dropped_tviews(statement.stmt)
+        or _creates_tview(statement.stmt)
+        or tview_calls(statement.stmt)
         for statement in statements
     )
 
@@ -90,10 +92,16 @@ def _issue(
 
 
 def _dropped_tviews(stmt: Any) -> set[str]:
-    return {
+    """What *stmt* drops: ``DROP TABLE tv_*``, or ``tviews.pg_tviews_drop()``."""
+    dropped = {
         _key(edit.schema, edit.name)
         for edit in object_edits(stmt)
         if edit.kind == "drop" and edit.name.startswith(TVIEW_PREFIX)
+    }
+    return dropped | {
+        _key(call.schema, call.name)
+        for call in tview_calls(stmt)
+        if call.action == "drop" and call.name is not None
     }
 
 

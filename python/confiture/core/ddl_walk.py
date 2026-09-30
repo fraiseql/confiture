@@ -30,7 +30,10 @@ from pglast.stream import RawStream
 from pglast.visitors import Visitor
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.schema_identity import identifier_identity
 from confiture.core.schema_model import (
+    TVIEW_PREFIX,
+    TVIEWS_SCHEMA,
     Column,
     Constraint,
     Deferral,
@@ -40,6 +43,7 @@ from confiture.core.schema_model import (
     RelationName,
     Volatility,
 )
+from confiture.core.sql_lexer import name_parts as written_name_parts
 from confiture.core.type_lattice import canonical_type, parse_type
 
 _CONSTR_NOTNULL = _pg_member("ConstrType", "CONSTR_NOTNULL")
@@ -220,6 +224,80 @@ def sets_logged(cmd: Any) -> bool | None:
     if subtype == enum_int(_pg_member("AlterTableType", "AT_SetUnLogged")):
         return False
     return None
+
+
+def tview_options(stmt: Any) -> dict[str, bool | int]:
+    """The storage a TVIEW's ``CREATE TABLE … AS`` pins, as pg_tviews' ``options`` keys.
+
+    ``UNLOGGED`` is ``logged: false`` and ``WITH (fillfactor = n)`` is ``fillfactor``,
+    as pg_tviews reads the statement. A key the statement does not say is absent:
+    pg_tviews then applies its own default on create and keeps the current value
+    on replace, which is what the author who wrote nothing asked for.
+    """
+    into = getattr(stmt, "into", None)
+    rel = getattr(into, "rel", None)
+    options: dict[str, bool | int] = {}
+    if getattr(rel, "relpersistence", "p") == "u":
+        options["logged"] = False
+    for option in getattr(into, "options", None) or ():
+        value = getattr(getattr(option, "arg", None), "ival", None)
+        if option.defname == "fillfactor" and isinstance(value, int):
+            options["fillfactor"] = value
+    return options
+
+
+#: pg_tviews' functions that register or drop a TVIEW, each naming it by its first
+#: argument, and what each does: ``create_or_replace`` may create, replace or rebuild.
+TVIEW_FUNCTIONS: dict[str, Literal["create", "create_or_replace", "drop"]] = {
+    "pg_tviews_create_or_replace": "create_or_replace",
+    "pg_tviews_create": "create",
+    "pg_tviews_create_aggregate": "create",
+    "pg_tviews_drop": "drop",
+}
+
+
+@dataclass(frozen=True)
+class TViewCall:
+    """One call to a :data:`TVIEW_FUNCTIONS` function, and the TVIEW it names.
+
+    ``name`` is the ``tv_*`` relation, from ``tv_post``, ``post`` or ``app.tv_post``
+    alike; ``None`` when the argument is not a constant this reader can name.
+    """
+
+    action: Literal["create", "create_or_replace", "drop"]
+    schema: str | None
+    name: str | None
+
+
+def tview_calls(stmt: Any) -> list[TViewCall]:
+    """The pg_tviews calls a ``SELECT`` makes, in source order; ``[]`` for any other statement.
+
+    A call is pg_tviews' when its function is in :data:`TVIEW_FUNCTIONS` and is
+    qualified by ``tviews`` or not at all (``tviews`` on ``search_path``).
+    """
+    if type(stmt).__name__ != "SelectStmt":
+        return []
+    calls = []
+    for node in walk_nodes(stmt):
+        if type(node).__name__ != "FuncCall":
+            continue
+        function = [getattr(part, "sval", None) for part in node.funcname]
+        action = TVIEW_FUNCTIONS.get(str(function[-1]))
+        if action is None or function[:-1] not in ([], [TVIEWS_SCHEMA]):
+            continue
+        calls.append(TViewCall(action, *_tview_named(node.args[0] if node.args else None)))
+    return calls
+
+
+def _tview_named(arg: Any) -> tuple[str | None, str | None]:
+    written = getattr(getattr(arg, "val", None), "sval", None)
+    parts = None if written is None else written_name_parts(written)
+    if not parts or len(parts) > 2:  # noqa: PLR2004 — schema and name
+        return None, None
+    *schema, name = [identifier_identity(part) for part in parts]
+    if not name.startswith(TVIEW_PREFIX):
+        name = TVIEW_PREFIX + name
+    return (schema[0] if schema else None), name
 
 
 #: ``AlterTableType`` members an expected schema is built from some *other* way,

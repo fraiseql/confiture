@@ -2,7 +2,7 @@
 
 [pg_tviews](https://github.com/fraiseql/pg_tviews) keeps a table in step with a query.
 `CREATE TABLE tv_post AS SELECT …` becomes a table, a backing view `v_post`, triggers
-on each base table and a row in `pg_tview_meta`. Confiture reads a TVIEW as **one
+on each base table and a row in `tviews.registry`. Confiture reads a TVIEW as **one
 object**, whose relation and query are its whole definition.
 
 ## What confiture does with one
@@ -11,18 +11,42 @@ object**, whose relation and query are its whole definition.
 |---|---|
 | `confiture build` | builds `CREATE TABLE tv_x AS …` as written |
 | `confiture drift`, `migrate validate --check-live-drift` | `missing_tview` / `extra_tview` against a live database with `pg_tviews` installed |
-| `migrate diff --generate` | writes `DROP TABLE IF EXISTS tv_x;` and `CREATE TABLE IF NOT EXISTS tv_x AS …;` for a changed TVIEW, with the matching down |
+| `migrate diff --generate` | writes `SELECT tviews.pg_tviews_create_or_replace('tv_x', $tview$…$tview$);` for an added or changed TVIEW and `SELECT tviews.pg_tviews_drop('tv_x', if_exists => true);` for a dropped one, with the matching down |
 | `migrate fix --idempotent` | adds `IF NOT EXISTS` to a `tv_*` CTAS as to any table |
 | `migrate preflight --against` | the finding below |
 | `confiture lint --select tview` | the two storage rules below |
 
-Confiture supports pg_tviews **0.1.0-beta.19 or later**. Where it reads TVIEWs from a
-live database (drift, `schema dump-model`, `migrate preflight --against`, the platform's
-`introspect`), an older build is refused with `CONFIG_014` (exit 5), naming the build
-installed. `migrate up` refuses the same way, before applying anything, when a pending
-migration creates or drops a TVIEW: an older build loses a TVIEW a migration
-re-applies. A migration that touches no TVIEW deploys as before. It reads the build from `pg_tviews_version()`: `pg_extension.extversion`
-is `0.1.0` on every 0.1.0 beta.
+Confiture reads pg_tviews through its **read contract 1**, which pg_tviews
+0.1.0-beta.20 and later offer: `tviews.registry` for what a database registers,
+`tviews.pg_tviews_create_or_replace()` and `tviews.pg_tviews_drop()` for what a
+migration writes, and `tviews.contract_version()` to say which contract they keep.
+Where confiture reads TVIEWs from a live database (drift, `schema dump-model`,
+`migrate preflight --against`, the platform's `introspect`), a pg_tviews that answers
+another contract, or has none, is refused with `CONFIG_014` (exit 5), naming the
+release installed. `migrate up` refuses the same way, before applying anything, when a
+pending migration creates or drops a TVIEW. A migration that touches no TVIEW deploys
+as before.
+
+pg_tviews 0.1.0-beta.19 and earlier kept their objects wherever `search_path` put
+them and have no contract. An extension created by one of them is moved with
+pg_tviews' `scripts/migrate-from-0.1.0.sql`, not `ALTER EXTENSION … UPDATE`.
+
+### What a generated migration writes
+
+`pg_tviews_create_or_replace()` creates the TVIEW, replaces its query in place when
+the columns stay the same, or rebuilds it when they change, and returns `unchanged`
+when applied again, so the migration re-applies. A replacement keeps the table's
+grants, comment and the indexes you added; the base tables' writers wait while the
+rows are reconciled, which is why the change set reads the call as
+`replace_materialized_view` (`lock_risky`). A rebuild pg_tviews cannot carry out
+safely (a view reads the TVIEW, the table has RLS policies, …) is refused, naming the
+reason.
+
+The TVIEW is named as the tree names it (`tv_x` or `app.tv_x`). `options` holds only
+what the `CREATE TABLE … AS` pins: `UNLOGGED` is `"logged": false`, `WITH
+(fillfactor = n)` is `"fillfactor": n`. A key left out takes pg_tviews' default on
+create and keeps its current value on replace, so a setting tuned on the database is
+not reset by a migration that only changes the query.
 
 A table named `tv_*` is a TVIEW only when it is created `AS SELECT`; `CREATE TABLE
 tv_x (…)` with a column list is a plain table.
@@ -40,32 +64,17 @@ tv_x (…)` with a column list is a plain table.
 - `tview_001`: an index over `data` or `updated_at`, which every refresh rewrites, so no update is HOT
 - `tview_002`: replicas declared and the TVIEW never `SET LOGGED` (UNLOGGED is the default, and a standby cannot read it)
 
-pg_tviews 0.1.0-beta.18 indexes each `fk_*` column and sets fillfactor 85 itself. It
-accepts `CREATE INDEX` and `ALTER TABLE … SET LOGGED` after the conversion; `WITH (…)`
-on the `CREATE` it refuses. See the [rule reference](../reference/lint-rules.md).
+pg_tviews indexes each `fk_*` column and sets fillfactor 85 itself. It accepts
+`CREATE INDEX` and `ALTER TABLE … SET LOGGED` after the conversion, and `UNLOGGED` and
+`WITH (fillfactor = n)` on the `CREATE`. See the [rule reference](../reference/lint-rules.md).
 
 ## Restore
 
 `confiture restore` brings a TVIEW back registered, and it keeps following its base
-tables, cascades included. Two conditions, both measured on pg_tviews 0.1.0-beta.19:
+tables, cascades included, when the source database runs a pg_tviews confiture reads
+(0.1.0-beta.20 or later): `pg_dump` carries pg_tviews' registration with the extension.
+One condition, measured on pg_tviews 0.1.0-beta.19:
 
-- **The source database's extension was created by pg_tviews 0.1.0-beta.19 or
-  later.** From that release `pg_dump` carries `pg_tview_meta`; an extension created
-  by an earlier build does not, even after the server is upgraded (both report
-  version `0.1.0`, so there is no `ALTER EXTENSION … UPDATE`). A dump of such a
-  database restores `tv_x` and its rows, and the TVIEW silently stops propagating.
-  Check the source before you rely on its dumps:
-
-  ```sql
-  SELECT EXISTS (
-      SELECT FROM pg_class c
-      WHERE c.oid = ANY (e.extconfig) AND c.relname = 'pg_tview_meta'
-  ) AS dumps_its_tviews
-  FROM pg_extension e WHERE e.extname = 'pg_tviews';
-  ```
-
-  `false` means recreate the TVIEWs under a new extension, or rebuild them after
-  the restore.
 - **No `--disable-triggers`.** pg_tviews rebinds each OID it recorded in a trigger as
   `pg_tview_meta` loads; `pg_restore --section=data --disable-triggers` keeps the
   source database's OIDs, and the TVIEW stops following its base tables without an

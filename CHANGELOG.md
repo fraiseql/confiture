@@ -14,6 +14,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**TVIEWs through pg_tviews' read contract.** confiture reads and writes pg_tviews
+TVIEWs through the surface pg_tviews 0.1.0-beta.20 publishes for tools
+(pg_tviews ADR 0136), and refuses any pg_tviews that does not offer it.
+
+### Changed
+
+- ⚠️ **pg_tviews 0.1.0-beta.20 or later is required** wherever confiture reads
+  TVIEWs from a live database, and for `migrate up` of a migration that creates or
+  drops one. confiture checks `tviews.contract_version()` and refuses anything but
+  contract 1 with `CONFIG_014` (exit 5): a pg_tviews with no contract (0.1.0-beta.19
+  and earlier, moved with pg_tviews' `scripts/migrate-from-0.1.0.sql`) or another one.
+  `CONFIG_014`'s message now names the contract, not a minimum build.
+- **The live side reads `tviews.registry`**, never the internal `pg_tview_meta`.
+- ⚠️ **`migrate diff --generate` writes TVIEWs with pg_tviews' functions.** An added
+  or changed TVIEW is `SELECT tviews.pg_tviews_create_or_replace('tv_x',
+  $tview$…$tview$[, options => '{…}'])`, a dropped one `SELECT
+  tviews.pg_tviews_drop('tv_x', if_exists => true)`. A changed TVIEW is no longer
+  dropped and created: pg_tviews replaces it in place, keeping its grants and
+  indexes, or rebuilds it. `options` carries what the `CREATE TABLE … AS` pins
+  (`UNLOGGED`, `WITH (fillfactor = n)`).
+- **The change set reads those calls**: `create_or_replace` is
+  `replace_materialized_view` (`lock_risky`, new), `pg_tviews_create` is
+  `create_materialized_view`, `pg_tviews_drop` is `drop_materialized_view`. A
+  replaced TVIEW's diff tier is `lock_risky` (was `destructive`). Preflight and the
+  `migrate up` gate count a `pg_tviews_drop()` as the drop it is.
+
 ## [1.28.0] - 2026-09-30
 
 **`migrate up` guards TVIEW migrations, and `generate renumber` says when a move

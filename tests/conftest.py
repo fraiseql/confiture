@@ -327,7 +327,7 @@ def fresh_database(fresh_database_factory: Callable[[str], str]) -> str:
 
 
 def create_supported_pg_tviews(conn: psycopg.Connection) -> None:
-    """``CREATE EXTENSION pg_tviews``; skip, with the reason, where confiture refuses its build.
+    """``CREATE EXTENSION pg_tviews``; skip, with the reason, where confiture does not read its contract.
 
     The ``pg-tviews`` CI leg proves its build is supported before the suites run,
     so a skip there cannot pass for a green run.
@@ -336,9 +336,8 @@ def create_supported_pg_tviews(conn: psycopg.Connection) -> None:
     from confiture.exceptions import ConfigurationError
 
     conn.execute("CREATE EXTENSION pg_tviews")
-    installed = conn.execute("SELECT pg_tviews_version()").fetchone()
     try:
-        live_catalog.require_supported_pg_tviews(None if installed is None else installed[0])
+        live_catalog.require_supported_pg_tviews_on(conn)
     except ConfigurationError as refused:
         pytest.skip(str(refused))
 

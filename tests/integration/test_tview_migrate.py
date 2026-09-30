@@ -129,6 +129,40 @@ def test_a_dropped_tview_is_unregistered_and_its_down_restores_it(tview_database
     assert _registered(tview_database) == _declared(OLD)
 
 
+def test_a_replaced_tview_keeps_its_grants_and_indexes(tview_database: str) -> None:
+    """``pg_tviews_create_or_replace`` replaces in place: nothing the table carries is lost."""
+    _apply(tview_database, OLD)
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute("CREATE ROLE confiture_tv_reader")
+        conn.execute("GRANT SELECT ON tv_post TO confiture_tv_reader")
+        conn.execute("CREATE INDEX tv_post_data_title ON tv_post ((data->>'title'))")
+    try:
+        _apply(tview_database, _migration(OLD, NEW)[0])
+        with psycopg.connect(tview_database) as conn:
+            granted = conn.execute(
+                "SELECT has_table_privilege('confiture_tv_reader', 'tv_post', 'SELECT')"
+            ).fetchone()
+            index = conn.execute("SELECT to_regclass('tv_post_data_title')").fetchone()
+        assert granted == (True,)
+        assert index is not None and index[0] is not None
+    finally:
+        with psycopg.connect(tview_database, autocommit=True) as conn:
+            conn.execute("DROP OWNED BY confiture_tv_reader")
+            conn.execute("DROP ROLE confiture_tv_reader")
+
+
+def test_the_storage_the_tree_pins_reaches_the_registry(tview_database: str) -> None:
+    unlogged = OLD.replace(
+        "CREATE TABLE tv_post", "CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70)"
+    )
+    _apply(tview_database, _migration("", unlogged)[0])
+
+    with psycopg.connect(tview_database) as conn:
+        options = conn.execute("SELECT options FROM tviews.registry").fetchone()
+    assert options is not None
+    assert (options[0]["logged"], options[0]["fillfactor"]) == (False, 70)
+
+
 def test_preflight_names_a_change_to_a_column_the_registered_tview_reads(
     tview_database: str, tmp_path: Path
 ) -> None:
@@ -156,11 +190,11 @@ def _write(directory: Path, stem: str, up: str) -> None:
 def test_migrate_up_refuses_a_tview_migration_on_an_unsupported_pg_tviews(
     tview_database: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """pg_tviews before 0.1.0-beta.19 loses a TVIEW a migration re-applies (#541)."""
+    """A pg_tviews whose contract confiture does not read is refused before anything applies."""
     from confiture.core.migrator import MigratorSession
     from confiture.exceptions import ConfigurationError
 
-    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
     _write(tmp_path, "20260101000000_tview", OLD)
 
     with MigratorSession(None, tmp_path, database_url_override=tview_database) as session:
@@ -177,7 +211,7 @@ def test_migrate_up_applies_a_migration_that_touches_no_tview_there(
 ) -> None:
     from confiture.core.migrator import MigratorSession
 
-    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
     _write(tmp_path, "20260101000000_column", "ALTER TABLE tb_post ADD COLUMN body text;\n")
 
     with MigratorSession(None, tmp_path, database_url_override=tview_database) as session:

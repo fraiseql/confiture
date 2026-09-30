@@ -1,4 +1,4 @@
-"""The live side reads a TVIEW from ``pg_tview_meta`` (#504).
+"""The live side reads a TVIEW from ``tviews.registry`` (#504).
 
 pg_tviews is in no stock PostgreSQL: these tests run where the extension is
 available, which the ``pg-tviews`` CI leg guarantees, and skip with the reason
@@ -126,7 +126,7 @@ def test_a_tview_that_became_a_plain_table_is_caught(fresh_database: str) -> Non
 
 
 def test_a_plain_tv_table_without_pg_tviews_is_a_table_on_both_sides(fresh_database: str) -> None:
-    """No prefix rule on either side: only a CTAS is a TVIEW, and only pg_tview_meta says one exists."""
+    """No prefix rule on either side: only a CTAS is a TVIEW, and only the registry says one exists."""
     tree = "CREATE TABLE tv_order (id bigint PRIMARY KEY, data jsonb);\n"
     with psycopg.connect(fresh_database, autocommit=True) as conn:
         conn.execute(tree)
@@ -135,11 +135,11 @@ def test_a_plain_tv_table_without_pg_tviews_is_a_table_on_both_sides(fresh_datab
     assert _drift(fresh_database, tree) == []
 
 
-def test_a_pg_tviews_older_than_confiture_supports_is_refused(
+def test_a_pg_tviews_offering_another_contract_is_refused(
     tview_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The live model, drift and preflight all read TVIEWs here (#541)."""
-    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+    """The live model, drift and preflight all read TVIEWs through the contract."""
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
 
     with psycopg.connect(tview_database) as conn:
         for read in (
@@ -156,7 +156,7 @@ def test_a_pg_tviews_older_than_confiture_supports_is_refused(
 def test_a_database_without_pg_tviews_is_never_refused(
     fresh_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
 
     with psycopg.connect(fresh_database) as conn:
         assert live_catalog.read(conn, schemas=["public"], tviews=True).tviews == {}

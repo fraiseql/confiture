@@ -47,13 +47,10 @@ DISAGREEMENTS: dict[str, str] = {
     ),
     "ObjectAdded[type]": "as a domain: a composite or range type's CREATE is guarded in DO",
     "ObjectAdded[policy]": "as a domain: a policy's CREATE is guarded in DO",
-    "ObjectDropped[tview]": (
-        "a pg_tviews TVIEW is dropped with DROP TABLE, which the change set reads as a "
-        "table's irreversible drop: a statement cannot tell a TVIEW's relation from a "
-        "table (only its CTAS or pg_tview_meta can, #504), and a TVIEW's rows are "
-        "derived and come back with it, as a matview's do"
+    "ObjectAdded[tview]": (
+        "a pg_tviews TVIEW is written tviews.pg_tviews_create_or_replace() so the "
+        "migration re-applies; the call reads as a replacement, the change is an addition"
     ),
-    "ObjectReplaced[tview]": "as a dropped TVIEW: its rebuild is a DROP TABLE and its CTAS",
 }
 
 _TABLE = "CREATE TABLE t (a int);"
@@ -156,11 +153,15 @@ def test_every_declared_disagreement_is_seen() -> None:
     [
         ("", _DEFINITIONS["tview"][0], RiskTier.ADDITIVE),
         (_DEFINITIONS["tview"][0], "", RiskTier.DESTRUCTIVE),
-        (*_DEFINITIONS["tview"], RiskTier.DESTRUCTIVE),
+        (*_DEFINITIONS["tview"], RiskTier.LOCK_RISKY),
     ],
     ids=["add", "drop", "replace"],
 )
 def test_a_tview_is_tiered_as_a_materialized_view(old: str, new: str, tier: RiskTier) -> None:
-    """Its rows are derived from its base tables, as a matview's are (#504)."""
+    """Its rows are derived from its base tables, as a matview's are (#504).
+
+    A replacement is ``pg_tviews_create_or_replace()``: nothing is dropped, and the
+    base tables' writers wait while the rows are reconciled or recomputed.
+    """
     (change,) = SchemaDiffer().compare(_TABLE + old, _TABLE + new).changes
     assert tier_of(change) == tier

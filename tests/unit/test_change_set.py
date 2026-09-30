@@ -263,3 +263,38 @@ def test_unreadable_sql_is_an_unclassified_entry_not_an_empty_set(tmp_path) -> N
     change_set = build_change_set(migs)
     assert change_set.changes
     assert all(c.tier is None for c in change_set.changes)
+
+
+@pytest.mark.parametrize(
+    ("sql", "kind", "obj", "tier"),
+    [
+        (
+            "SELECT tviews.pg_tviews_create_or_replace('app.tv_post', $q$SELECT 1$q$);",
+            "replace_materialized_view",
+            "app.tv_post",
+            RiskTier.LOCK_RISKY,
+        ),
+        (
+            "SELECT pg_tviews_create('post', 'SELECT 1');",
+            "create_materialized_view",
+            "public.tv_post",
+            RiskTier.ADDITIVE,
+        ),
+        (
+            "SELECT tviews.pg_tviews_drop('tv_post', if_exists => true);",
+            "drop_materialized_view",
+            "public.tv_post",
+            RiskTier.DESTRUCTIVE,
+        ),
+    ],
+    ids=["create_or_replace", "create", "drop"],
+)
+def test_a_pg_tviews_call_is_a_tview_change(sql: str, kind: str, obj: str, tier: RiskTier) -> None:
+    """The statement a generated TVIEW migration carries is classified, never unclassified."""
+    (entry,) = classify_statements(sql)
+    assert (entry.kind, entry.object, entry.tier) == (kind, obj, tier)
+
+
+def test_any_other_select_is_unclassified() -> None:
+    (entry,) = classify_statements("SELECT other.pg_tviews_drop('tv_post');")
+    assert entry.tier is None

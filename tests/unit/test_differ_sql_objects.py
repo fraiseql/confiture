@@ -151,53 +151,109 @@ class TestMaterializedViewDDL:
 
 
 class TestTViewDDL:
-    """A pg_tviews TVIEW (#504): created by its CTAS, dropped as a table.
+    """A pg_tviews TVIEW (#504) is written through pg_tviews' own functions.
 
-    Measured on PostgreSQL 18 + pg_tviews 0.1.0-beta.18: ``CREATE TABLE IF NOT EXISTS
-    tv_x AS`` run again on a registered TVIEW leaves it as it was, and ``DROP TABLE IF
-    EXISTS`` then the CTAS re-registers it, applied once or twice.
+    ``tviews.pg_tviews_create_or_replace()`` creates, replaces in place or rebuilds,
+    and returns ``unchanged`` when applied again; ``tviews.pg_tviews_drop(…,
+    if_exists => true)`` drops. Both are pg_tviews' read contract 1, so the
+    migration re-applies and never guesses at a ``CREATE TABLE … AS``.
     """
 
     OLD = "CREATE TABLE tv_user AS SELECT pk_user FROM tb_user;"
     NEW = "CREATE TABLE tv_user AS SELECT pk_user, name FROM tb_user;"
 
     @staticmethod
-    def _kinds(sql: str) -> list[tuple[str, str, bool]]:
-        """Each statement's node, relation and ``IF NOT EXISTS``/``IF EXISTS`` flag."""
+    def _calls(sql: str) -> list[tuple[str, list, dict]]:
+        """Each statement as ``(function, positional args, named args)``; it must be a call."""
         found = []
         for stmt in _statements(sql):
-            node = type(stmt).__name__
-            if node == "CreateTableAsStmt":
-                found.append((node, stmt.into.rel.relname, bool(stmt.if_not_exists)))
-            else:
-                found.append((node, stmt.objects[0][-1].sval, bool(stmt.missing_ok)))
+            assert type(stmt).__name__ == "SelectStmt", sql
+            (target,) = stmt.targetList
+            call = target.val
+            function = ".".join(part.sval for part in call.funcname)
+            positional = [a.val.sval for a in call.args if type(a).__name__ == "A_Const"]
+            named = {
+                a.name: getattr(a.arg.val, "sval", getattr(a.arg.val, "boolval", None))
+                for a in call.args
+                if type(a).__name__ == "NamedArgExpr"
+            }
+            found.append((function, positional, named))
         return found
 
-    def test_add_tview_creates_it_if_not_exists(self):
+    @staticmethod
+    def _query(select: str) -> str:
+        from pglast.stream import RawStream
+
+        return RawStream()(pglast.parse_sql(select)[0].stmt)
+
+    def test_add_tview_creates_or_replaces_it(self):
         change = change_of("", self.OLD, "ADD_TVIEW")
         generator = DifferSQLGenerator()
-        assert self._kinds(generator.generate_up(change)) == [
-            ("CreateTableAsStmt", "tv_user", True)
+        assert self._calls(generator.generate_up(change)) == [
+            (
+                "tviews.pg_tviews_create_or_replace",
+                ["tv_user", self._query("SELECT pk_user FROM tb_user")],
+                {},
+            )
         ]
-        assert self._kinds(generator.generate_down(change)) == [("DropStmt", "tv_user", True)]
+        assert self._calls(generator.generate_down(change)) == [
+            ("tviews.pg_tviews_drop", ["tv_user"], {"if_exists": True})
+        ]
 
-    def test_replace_tview_drops_and_creates_it(self):
+    def test_replace_tview_replaces_it_without_a_drop(self):
+        """pg_tviews replaces in place, or rebuilds, keeping grants and user indexes."""
         change = change_of(self.OLD, self.NEW, "REPLACE_TVIEW")
         generator = DifferSQLGenerator()
         up, down = generator.generate_up(change), generator.generate_down(change)
-        rebuilt = [("DropStmt", "tv_user", True), ("CreateTableAsStmt", "tv_user", True)]
-        assert self._kinds(up) == rebuilt
-        assert self._kinds(down) == rebuilt
-        assert "name" in up
-        assert "name" not in down
+        assert [c[0] for c in self._calls(up)] == ["tviews.pg_tviews_create_or_replace"]
+        assert [c[0] for c in self._calls(down)] == ["tviews.pg_tviews_create_or_replace"]
+        assert self._calls(up)[0][1][1] == self._query("SELECT pk_user, name FROM tb_user")
+        assert self._calls(down)[0][1][1] == self._query("SELECT pk_user FROM tb_user")
 
-    def test_drop_tview_drops_the_table_and_rolls_back_by_creating_it(self):
+    def test_drop_tview_drops_it_and_rolls_back_by_creating_it(self):
         change = change_of(self.OLD, "", "DROP_TVIEW")
         generator = DifferSQLGenerator()
-        assert self._kinds(generator.generate_up(change)) == [("DropStmt", "tv_user", True)]
-        assert self._kinds(generator.generate_down(change)) == [
-            ("CreateTableAsStmt", "tv_user", True)
+        assert self._calls(generator.generate_up(change)) == [
+            ("tviews.pg_tviews_drop", ["tv_user"], {"if_exists": True})
         ]
+        assert [c[0] for c in self._calls(generator.generate_down(change))] == [
+            "tviews.pg_tviews_create_or_replace"
+        ]
+
+    def test_the_name_is_spelled_as_the_author_wrote_it(self):
+        """``app.tv_user`` stays qualified; a bare ``tv_user`` is never given ``public.``."""
+        change = change_of(
+            "", "CREATE TABLE app.tv_user AS SELECT pk_user FROM tb_user;", "ADD_TVIEW"
+        )
+        generator = DifferSQLGenerator()
+        assert self._calls(generator.generate_up(change))[0][1][0] == "app.tv_user"
+        assert self._calls(generator.generate_down(change))[0][1][0] == "app.tv_user"
+
+    @pytest.mark.parametrize(
+        ("ctas", "options"),
+        [
+            ("CREATE UNLOGGED TABLE tv_user AS", {"logged": False}),
+            ("CREATE TABLE tv_user WITH (fillfactor = 70) AS", {"fillfactor": 70}),
+            (
+                "CREATE UNLOGGED TABLE tv_user WITH (fillfactor = 90) AS",
+                {"fillfactor": 90, "logged": False},
+            ),
+        ],
+        ids=["unlogged", "fillfactor", "both"],
+    )
+    def test_the_storage_the_tree_pins_is_passed_as_options(self, ctas, options):
+        """What the CTAS says is pinned; what it leaves out keeps pg_tviews' current value."""
+        import json
+
+        change = change_of("", f"{ctas} SELECT pk_user FROM tb_user;", "ADD_TVIEW")
+        ((_, _, named),) = self._calls(DifferSQLGenerator().generate_up(change))
+        assert json.loads(named["options"]) == options
+
+    def test_a_query_holding_a_dollar_quote_is_kept_whole(self):
+        select = "SELECT pk_user, $tview$x$tview$ AS tag FROM tb_user"
+        change = change_of("", f"CREATE TABLE tv_user AS {select};", "ADD_TVIEW")
+        ((_, positional, _),) = self._calls(DifferSQLGenerator().generate_up(change))
+        assert positional[1] == self._query(select)
 
 
 class TestTheMigrationIsNotShort:
@@ -421,7 +477,10 @@ class TestOnlyTheDerivedKindsDeriveSQL:
         """The destructive gate weighs it, as it does ``DROP TABLE`` (#335)."""
         (change,) = SchemaDiffer().compare(BASE + DERIVED[kind], BASE).changes
         sql = DifferSQLGenerator().generate_up(change)
-        assert sql.startswith(f"DROP {OBJECT_KEYWORD[kind]} IF EXISTS ")
+        if kind == "tview":
+            assert sql.startswith("SELECT tviews.pg_tviews_drop(")
+        else:
+            assert sql.startswith(f"DROP {OBJECT_KEYWORD[kind]} IF EXISTS ")
 
     def test_every_add_and_drop_of_a_derived_kind_renders_and_no_other_does(self):
         """A derived kind renders a statement either way; every other kind derives none."""

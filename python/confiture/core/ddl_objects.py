@@ -24,13 +24,14 @@ not what the object is.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
 import pglast
 from pglast.stream import RawStream
 
-from confiture.core.ddl_walk import ObjectEdit, object_edits, object_kinds
+from confiture.core.ddl_walk import ObjectEdit, object_edits, object_kinds, tview_options
 from confiture.core.linting.duplicates import CreateFlags, wins
 from confiture.core.linting.inventory import (
     DEFAULT_SCHEMA,
@@ -44,7 +45,7 @@ from confiture.core.linting.inventory import (
 )
 
 # Defined with the rest of the model; re-exported for the callers that name it here.
-from confiture.core.schema_model import ObjectRef, Trigger
+from confiture.core.schema_model import TVIEWS_SCHEMA, ObjectRef, Trigger
 
 #: Which parse nodes this module turns into objects, and why each one that
 #: creates something is absent. A node that is neither tracked nor named here
@@ -408,7 +409,7 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
     return DDLObject(
         ref=ref,
         definition=_canonical_definition(stmt),
-        create_sql=_creating_statement(stmt),
+        create_sql=_tview_create(ref, stmt) if ref.kind == "tview" else _creating_statement(stmt),
         signature=signature,
         trigger=_trigger(stmt) if ref.kind == "trigger" else None,
     )
@@ -454,6 +455,35 @@ def _output_name(target: Any) -> str | None:
             return None
 
 
+def _literal(text: str) -> str:
+    """*text* as a standard SQL string constant."""
+    return "'" + text.replace("'", "''") + "'"
+
+
+def _dollar_quoted(text: str) -> str:
+    """*text* between dollar quotes whose tag it does not hold, so it reads as written."""
+    tag, n = "$tview$", 0
+    while tag in text:
+        n += 1
+        tag = f"$tview{n}$"
+    return f"{tag}{text}{tag}"
+
+
+def _tview_create(ref: ObjectRef, stmt: Any) -> str:
+    """A TVIEW as a migration writes it: ``tviews.pg_tviews_create_or_replace(…)``.
+
+    pg_tviews' read contract 1: the call creates, replaces in place or rebuilds,
+    and answers ``unchanged`` when applied again, so the migration re-applies.
+    The name is the author's spelling; ``options`` holds what the ``CREATE TABLE
+    … AS`` pins (:func:`~confiture.core.ddl_walk.tview_options`) and is left out
+    when it pins nothing.
+    """
+    arguments = [_literal(ref.qualified), _dollar_quoted(RawStream()(stmt.query))]
+    if options := tview_options(stmt):
+        arguments.append(f"options => {_literal(json.dumps(options, sort_keys=True))}")
+    return f"SELECT {TVIEWS_SCHEMA}.pg_tviews_create_or_replace({', '.join(arguments)})"
+
+
 def drop_statement(obj: DDLObject) -> str | None:
     """``DROP <kind> IF EXISTS <name>`` for a kind this module reads itself; ``None`` otherwise.
 
@@ -465,6 +495,8 @@ def drop_statement(obj: DDLObject) -> str | None:
     A template is parsed and its names replaced in the parse nodes, so the printer
     quotes each identifier as PostgreSQL needs it and nothing here decides that.
     """
+    if obj.ref.kind == "tview":
+        return f"SELECT {TVIEWS_SCHEMA}.pg_tviews_drop({_literal(obj.ref.qualified)}, if_exists => true)"
     stmt = pglast.parse_sql(obj.create_sql)[0].stmt
     spec = _EXTRA.get(type(stmt).__name__)
     if spec is None:

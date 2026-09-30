@@ -81,18 +81,18 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,396 lines, 34% of `core/`.
+26,555 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `_pglast_enums.py` | 150 | DDL transform |
 | `change_order.py` | 184 | DDL transform |
-| `change_set/` | 1,268 | DDL transform |
+| `change_set/` | 1,305 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 562 | DDL transform |
 | `ddl_clauses.py` | 152 | DDL transform |
-| `ddl_objects.py` | 662 | DDL transform |
-| `ddl_walk.py` | 1,534 | DDL transform |
+| `ddl_objects.py` | 694 | DDL transform |
+| `ddl_walk.py` | 1,612 | DDL transform |
 | `destructive.py` | 181 | DDL transform |
 | `differ.py` | 807 | DDL transform |
 | `differ_sql.py` | 706 | DDL transform |
@@ -116,16 +116,16 @@ duplicate readers were deleted. The count below is what the port translates.
 | `risk_tier.py` | 76 | DDL transform |
 | `schema_change.py` | 904 | DDL transform |
 | `schema_identity.py` | 71 | DDL transform |
-| `schema_model.py` | 862 | DDL transform |
+| `schema_model.py` | 866 | DDL transform |
 | `sql_lexer.py` | 676 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |
-| `tview_preflight.py` | 167 | DDL transform |
+| `tview_preflight.py` | 175 | DDL transform |
 | `type_lattice.py` | 511 | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 
-43,617 lines, 56% of `core/`.
+43,612 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -163,7 +163,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `linting/schema_linter.py` | 1,268 | database orchestration |
 | `linting/selection.py` | 390 | database orchestration |
 | `linting/unresolved.py` | 379 | database orchestration |
-| `live_catalog.py` | 1,043 | database orchestration |
+| `live_catalog.py` | 1,038 | database orchestration |
 | `locking.py` | 625 | database orchestration |
 | `migration_generator.py` | 581 | database orchestration |
 | `migration_verifier.py` | 229 | database orchestration |
