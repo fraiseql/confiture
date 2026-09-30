@@ -55,6 +55,7 @@ resolution hint surfaced in the envelope.
 | `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=6.0, current major) |
 | `CONFIG_012` | 5 | error | Lint baseline file is missing or malformed: {file} | Create or regenerate it with `confiture lint --baseline <file> --write-baseline` |
 | `CONFIG_013` | 5 | error | {call} needs a connection {mode}: {reason} | Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open |
+| `CONFIG_014` | 5 | error | pg_tviews {installed} is installed; confiture supports pg_tviews {minimum} or later | Upgrade the server's pg_tviews; `SELECT pg_tviews_version()` names the build a database runs |
 | `DDL_001` | 4 | error | Destructive DDL operation refused without --force: {operation} | Re-run with --force if the destructive change is intended |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |
@@ -119,6 +120,9 @@ quotes is what `schema_identity.quote_identifier` would quote: a capital, a
 space or other punctuation, a non-ASCII character, a leading digit, or a
 reserved word such as `user`. `confiture build` still builds such a tree.
 
+`confiture lint --select naming_003,naming_004` predicts the refusal exactly. A
+quoted view output alias and an extension name do not trigger it.
+
 ## `LOCK_1300` — lock-holder identity (`details.holder`)
 
 When `migrate up`/`down`/`down-to` cannot acquire the migration lock, the
@@ -159,7 +163,11 @@ warnings → 0 unless `--strict`.
 | `PFLIGHT_DUPLICATE_VERSION` | error | Two migration files share a version prefix |
 | `PFLIGHT_CHECKSUM_MISMATCH` | error | An applied migration's file changed after it was applied |
 | `PFLIGHT_REPLAY_FAILED` | error | A migration failed to replay against the `--against` DB (the DB error is in `details.error`) |
+| `PFLIGHT_TVIEW_BASE_COLUMN` | error | `--against` only: the migration drops or retypes a column a registered TVIEW reads, or drops its base table, without dropping the TVIEW first |
 | `PFLIGHT_LIVE_DEPENDENTS` | warning | (reserved) live dependents found for a replaced object |
+
+`PFLIGHT_TVIEW_BASE_COLUMN` is PostgreSQL's own dependency of a TVIEW's backing view
+on its base columns.
 
 ### Replica-safety codes (`PFLIGHT_REPLICA_*`, lint `replica_001`, #139)
 

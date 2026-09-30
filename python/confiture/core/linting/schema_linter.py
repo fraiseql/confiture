@@ -38,6 +38,7 @@ from confiture.core.linting.quoted_names import needs_quotes, quoted_names
 from confiture.core.linting.rule_registry import LINT_RULES, UNPARSEABLE_RULE_ID
 from confiture.core.linting.seed_secrets import SECRET_COLUMN_PATTERNS
 from confiture.core.linting.tenant import rules as tenant_rules
+from confiture.core.linting.tview_rules import tview_findings
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import blank_copy_blocks, blank_preserving_lines
 from confiture.exceptions import ConfiturError
@@ -185,6 +186,9 @@ class LintConfig:
         check_tenant_views: bool = False,
         check_tenant_foreign_keys: bool = False,
         check_tenant_unique_keys: bool = False,
+        check_tview_hot: bool = False,
+        check_tview_replicas: bool = False,
+        has_replicas: bool = False,
         check_acl_coverage: bool = True,
         check_duplicates: bool = True,
         check_qualification: bool = True,
@@ -226,6 +230,11 @@ class LintConfig:
                 (``tenant_004``).
             check_tenant_unique_keys: A tenant table's primary key, UNIQUEs and
                 unique indexes lead with the discriminator (``tenant_005``).
+            check_tview_hot: No index over ``data`` or ``updated_at`` on a pg_tviews
+                TVIEW (``tview_001``).
+            check_tview_replicas: A TVIEW is made LOGGED where replicas are
+                declared (``tview_002``); needs *has_replicas*.
+            has_replicas: Whether the environment declares replicas.
             check_acl_coverage: Allow the ACL coverage rule (``acl_001``) to run.
             check_duplicates: Report objects defined more than once in one build
                 (``build_001`` / ``build_002``).
@@ -272,6 +281,9 @@ class LintConfig:
         self.check_tenant_views = check_tenant_views
         self.check_tenant_foreign_keys = check_tenant_foreign_keys
         self.check_tenant_unique_keys = check_tenant_unique_keys
+        self.check_tview_hot = check_tview_hot
+        self.check_tview_replicas = check_tview_replicas
+        self.has_replicas = has_replicas
         self.check_acl_coverage = check_acl_coverage
         self.check_duplicates = check_duplicates
         self.check_qualification = check_qualification
@@ -460,6 +472,8 @@ class SchemaLinter:
                 partial(self._check_tenancy, "tenant_005"),
                 "tenant",
             ),
+            (self.config.check_tview_hot, partial(self._check_tview, "tview_001"), "tview"),
+            (self.config.check_tview_replicas, partial(self._check_tview, "tview_002"), "tview"),
         ):
             if enabled:
                 check(report)
@@ -615,6 +629,25 @@ class SchemaLinter:
                     line_number=table.line,
                 )
             )
+
+    def _check_tview(self, code: str, report: LintReport) -> None:
+        """One rule of the ``tview`` family over the TVIEWs the tree declares (#504)."""
+        for found, name, severity, obj, message, fix, line in tview_findings(
+            self._inventory, has_replicas=self.config.has_replicas
+        ):
+            if found == code:
+                report.add_violation(
+                    LintViolation(
+                        rule_id=code,
+                        rule_name=name,
+                        severity=RuleSeverity(severity),
+                        object_type="tview",
+                        object_name=obj,
+                        message=message,
+                        line_number=line,
+                        suggested_fix=fix,
+                    )
+                )
 
     def _check_documentation(self, report: LintReport) -> None:
         """The ``doc`` family: every commentable object carries a COMMENT (#217)."""

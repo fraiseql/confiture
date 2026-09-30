@@ -45,6 +45,7 @@ from confiture.core.linting.selection import (
     apply_baseline,
     keep_selected_rules,
     linter_config,
+    replicas_declared,
     resolve_lint_rules,
     severity_escalations,
     tree_rule_findings,
@@ -284,7 +285,9 @@ def lint(
             check_security_definer=check_security_definer,
             declared=load_project_config(project_dir).declared_blocks(),
         )
-        config = linter_config(selected, threshold, server_url)
+        config = linter_config(
+            selected, threshold, server_url, has_replicas=replicas_declared(env, project_dir)
+        )
         if format_type == "table":
             # The banner is for humans; in json/csv mode stdout is the payload alone.
             console.print(f"[cyan]🔍 Linting schema for environment: {verbatim(env)}[/cyan]")

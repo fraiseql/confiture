@@ -1057,6 +1057,10 @@ PFLIGHT_CODES: dict[str, tuple[str, str]] = {
         "error",
         "Fix the failing migration SQL; see details for the database error.",
     ),
+    "PFLIGHT_TVIEW_BASE_COLUMN": (
+        "error",
+        "Drop the TVIEW first (DROP TABLE tv_x), change the base table, then create it again.",
+    ),
     "PFLIGHT_LIVE_DEPENDENTS": (
         "warning",
         "Review the live dependents before replacing the target object.",

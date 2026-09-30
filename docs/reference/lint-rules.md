@@ -35,6 +35,8 @@ Adopt a rule on a schema that already trips it with a
 | `tenant_003` | tenant | warning | with `tenancy:` | A view reading tenant data publishes the discriminator as a plain column, or is declared global |
 | `tenant_004` | tenant | warning | with `tenancy:` | A foreign key between tenant tables carries the discriminator on both sides |
 | `tenant_005` | tenant | warning | with `tenancy:` | A tenant table's primary key and unique keys lead with the discriminator |
+| `tview_001` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT |
+| `tview_002` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
 | `own_001` | own | error | off | Every created relation is paired with an ALTER … OWNER TO |
@@ -920,6 +922,23 @@ them can adopt the family with a `--baseline`, or with
 `--ignore tenant_003,tenant_004,tenant_005` until its views and keys are rebuilt;
 the [guide](../guides/multi-tenant-schemas.md#moving-an-existing-schema) walks the
 migration step by step.
+
+## The `tview` family — how a pg_tviews TVIEW's storage is left
+
+`--select tview` (off by default). pg_tviews turns `CREATE TABLE tv_x AS SELECT …`
+into a table it keeps in step with its base tables. From 0.1.0-beta.18 it indexes
+each `fk_*` column and sets fillfactor 85 itself; what it leaves to the author is
+said in statements it accepts *after* the conversion. Measured on pg_tviews
+0.1.0-beta.18: `CREATE INDEX` and `ALTER TABLE tv_x SET LOGGED` work;
+`WITH (…)` on the `CREATE` is refused. The rules read the tree, with no database.
+
+| Rule | Says | Fix |
+|---|---|---|
+| `tview_001` | an index covers `data` or `updated_at`, which every refresh rewrites, so no update is HOT | drop it |
+| `tview_002` | replicas are declared and the TVIEW is UNLOGGED (pg_tviews' default): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED` |
+
+`tview_002` works around fraiseql/pg_tviews#75, names it in its message, and is
+removed when it is fixed. `tview_001` sees only the indexes the tree declares.
 
 ## The `body` family — a routine's body resolves, checked by PostgreSQL
 

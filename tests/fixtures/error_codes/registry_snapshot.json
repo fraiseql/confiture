@@ -334,5 +334,11 @@
     "severity": "error",
     "exit_code": 5,
     "resolution_hint": "Rename the unnumbered sibling, or renumber the files one at a time"
+  },
+  "CONFIG_014": {
+    "message_template": "pg_tviews {installed} is installed; confiture supports pg_tviews {minimum} or later",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Upgrade the server's pg_tviews; `SELECT pg_tviews_version()` names the build a database runs"
   }
 }

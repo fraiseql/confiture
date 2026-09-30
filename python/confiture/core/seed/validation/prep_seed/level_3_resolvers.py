@@ -139,8 +139,10 @@ class Level3ResolutionValidator:
             name = column.folded
             if not keys.is_key(name):
                 continue
-            parent, _ = keys.target(final, prep, name)
+            parent, declared = keys.target(final, prep, name)
             if keys.resolves(statements, parent, name):
+                continue
+            if not declared and keys.joins_any(statements, name):
                 continue
             violations.append(
                 PrepSeedViolation(

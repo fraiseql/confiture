@@ -45,6 +45,7 @@ from confiture.core.ddl_walk import (
     render_default,
     routine_body,
     routine_options,
+    sets_logged,
     written_type,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
@@ -188,6 +189,8 @@ class SchemaObject:
     has_primary_key: bool = False
     is_partition: bool = False
     is_temporary: bool = False
+    #: Whether ``ALTER TABLE … SET LOGGED`` left a ``tview`` durable.
+    logged: bool = False
     comment: str | None = None
     signature: str | None = None
     signature_key: Signature | None = None
@@ -828,6 +831,11 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
     rv = stmt.relation
     table = inventory.find(rv.schemaname, rv.relname)
     if table is None:
+        # A TVIEW is a table to PostgreSQL, and what the tree does to its storage is read.
+        tviews = inventory.find_all(("tview",), rv.schemaname, rv.relname)
+        for cmd in stmt.cmds or []:
+            if tviews and (logged := sets_logged(cmd)) is not None:
+                tviews[0].logged = logged
         return
     for cmd in stmt.cmds or []:
         node = added_constraint(cmd)
@@ -837,6 +845,10 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
             read = read_constraint(node)
             if isinstance(read, Constraint):
                 _add_constraints(table, (read,))
+            continue
+        logged = sets_logged(cmd)
+        if logged is not None:
+            table.logged = logged
             continue
         edit = column_edit(cmd)
         apply = _COLUMN_APPLIERS.get(edit.kind) if edit is not None else None
@@ -944,7 +956,7 @@ def _targets(inventory: Inventory, edit: ObjectEdit, offset: int) -> list[Schema
 
 
 #: The kinds an index can be built on.
-_INDEXED_KINDS = ("table", "matview")
+_INDEXED_KINDS = ("table", "matview", "tview")
 
 
 def _apply_index(sql: str, raw: Any, inventory: Inventory) -> None:

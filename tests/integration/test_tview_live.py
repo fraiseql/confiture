@@ -11,10 +11,13 @@ from collections.abc import Callable
 
 import psycopg
 import pytest
+from tests.conftest import create_supported_pg_tviews
 
 from confiture.core import live_catalog
 from confiture.core.linting.inventory import build_model
+from confiture.core.schema_facts import collect_schema_facts
 from confiture.core.schema_model import TView, ref_for
+from confiture.exceptions import ConfigurationError
 
 pytestmark = pytest.mark.integration
 
@@ -39,7 +42,7 @@ def tview_database(fresh_database_factory: Callable[[str], str]) -> str:
             pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
         # Its own round trip: in one batch with the CREATE EXTENSION, pg_tviews'
         # hook is not loaded yet and `tv_post` becomes a plain table (measured).
-        conn.execute("CREATE EXTENSION pg_tviews")
+        create_supported_pg_tviews(conn)
         conn.execute(TREE)
     return url
 
@@ -130,3 +133,30 @@ def test_a_plain_tv_table_without_pg_tviews_is_a_table_on_both_sides(fresh_datab
         assert live_catalog.tviews(conn, ["public"]) == []
 
     assert _drift(fresh_database, tree) == []
+
+
+def test_a_pg_tviews_older_than_confiture_supports_is_refused(
+    tview_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The live model, drift and preflight all read TVIEWs here (#541)."""
+    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+
+    with psycopg.connect(tview_database) as conn:
+        for read in (
+            lambda: live_catalog.tviews(conn, ["public"]),
+            lambda: live_catalog.read(conn, schemas=["public"], tviews=True),
+            lambda: collect_schema_facts(conn),
+        ):
+            with pytest.raises(ConfigurationError) as refused:
+                read()
+            assert refused.value.error_code == "CONFIG_014"
+            conn.rollback()
+
+
+def test_a_database_without_pg_tviews_is_never_refused(
+    fresh_database: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+
+    with psycopg.connect(fresh_database) as conn:
+        assert live_catalog.read(conn, schemas=["public"], tviews=True).tviews == {}
