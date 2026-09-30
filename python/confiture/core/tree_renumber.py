@@ -41,6 +41,10 @@ order. It refuses (``VALID_005``) when the new names would change the order
 ``confiture build`` reads the tree in, for instance against an unnumbered sibling
 whose name sorts between an old prefix and its new one.
 
+An explicit move may change the order on purpose (it is how a file is made to build
+earlier), so it is not refused; :attr:`RenumberResult.reordered` names the files each
+moved one now builds before or after.
+
 Example::
 
     from pathlib import Path
@@ -129,6 +133,23 @@ class RefRewrite:
     new_name: str
 
 
+@dataclasses.dataclass(frozen=True)
+class OrderChange:
+    """A moved file whose place in the build changes against the files that stay.
+
+    Attributes:
+        old_path: The file as it is now.
+        new_path: Where it goes.
+        now_before: Files it built after and now builds before.
+        now_after: Files it built before and now builds after.
+    """
+
+    old_path: Path
+    new_path: Path
+    now_before: tuple[Path, ...]
+    now_after: tuple[Path, ...]
+
+
 @dataclasses.dataclass
 class RenumberResult:
     """The outcome of a :meth:`TreeRenumber.execute` call.
@@ -147,6 +168,8 @@ class RenumberResult:
             returning.
         unresolved_reads: Reads by a migration whose path is not static, which
             ``force=True`` proceeded past.
+        reordered: Each moved file whose place in the build changes. Reported,
+            not refused: building a file earlier or later is what a move is for.
     """
 
     plans: list[RenumberPlan]
@@ -154,6 +177,7 @@ class RenumberResult:
     dangling_refs: list[tuple[Path, str]]
     cross_repo_refs: list[Path] = dataclasses.field(default_factory=list)
     unresolved_reads: list[MigrationRead] = dataclasses.field(default_factory=list)
+    reordered: list[OrderChange] = dataclasses.field(default_factory=list)
 
 
 class TreeRenumber:
@@ -321,6 +345,8 @@ class TreeRenumber:
                 f"{ref_list}\nUse force=True (CLI: --force) to proceed anyway."
             )
 
+        reordered = self.order_changes(plans)
+
         # Gather other schema files before any moves.
         other_files = [
             p.resolve()
@@ -343,6 +369,7 @@ class TreeRenumber:
             dangling_refs=dangling_refs,
             cross_repo_refs=cross_repo_refs,
             unresolved_reads=unresolved,
+            reordered=reordered,
         )
 
     # ------------------------------------------------------------------
@@ -382,6 +409,25 @@ class TreeRenumber:
                 resolution_hint="Check those reads, then re-run with --force",
             )
         return unresolved
+
+    def order_changes(self, plans: list[RenumberPlan]) -> list[OrderChange]:
+        """Each file *plans* move to another place in the build, against the files that stay."""
+        before = [path.resolve() for path in files_under(self.schema_dir)]
+        was = {path: index for index, path in enumerate(before)}
+        will = {
+            path: index
+            for index, path in enumerate(sorted(before, key=lambda p: _destination(p, plans)))
+        }
+        staying = [path for path in before if _moved_by(path, plans) is None]
+        changes: list[OrderChange] = []
+        for path in before:
+            if _moved_by(path, plans) is None:
+                continue
+            now_before = tuple(o for o in staying if was[o] < was[path] and will[o] > will[path])
+            now_after = tuple(o for o in staying if was[o] > was[path] and will[o] < will[path])
+            if now_before or now_after:
+                changes.append(OrderChange(path, _destination(path, plans), now_before, now_after))
+        return changes
 
     def _refuse_reordering(self, plans: list[RenumberPlan]) -> None:
         """Refuse plans whose new names change the order the build reads the tree in."""

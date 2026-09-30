@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`generate renumber` reports a move that changes the build order** (#538). The
+  move is not refused, since building a file earlier is what a renumber is for. The
+  output names each file the moved one now builds before or after (`reordered` in
+  `--json`), so a reorder against a sibling directory that sorts in between is
+  seen. `--compact` still refuses any reorder (`VALID_005`).
+
 ## [1.27.0] - 2026-09-30
 
 **Retire old migrations without losing their history, keep new ones from reading

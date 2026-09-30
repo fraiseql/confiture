@@ -244,6 +244,15 @@ def _renumber_payload(result: RenumberResult) -> dict[str, Any]:
             {"migration": str(r.migration), "line": r.line, "reason": r.reason}
             for r in result.unresolved_reads
         ],
+        "reordered": [
+            {
+                "file": str(change.old_path),
+                "new": str(change.new_path),
+                "now_before": [str(p) for p in change.now_before],
+                "now_after": [str(p) for p in change.now_after],
+            }
+            for change in result.reordered
+        ],
     }
 
 
@@ -273,6 +282,14 @@ def _print_renumber_result(result: RenumberResult, *, dry_run: bool) -> None:
         console.print("[yellow]⚠ proceeded with --force despite cross-repo refs:[/yellow]")
         for p in result.cross_repo_refs:
             console.print(f"  {verbatim(p)}")
+    for change in result.reordered:
+        for label, others in (("before", change.now_before), ("after", change.now_after)):
+            if others:
+                names = ", ".join(str(p) for p in others)
+                console.print(
+                    f"[yellow]⚠ build order:[/yellow] {verbatim(change.new_path)} now builds "
+                    f"{verbatim(label)} {verbatim(names)}"
+                )
     if result.unresolved_reads:
         console.print(
             "[yellow]⚠ proceeded with --force past migration reads it cannot resolve:[/yellow]"
