@@ -22,7 +22,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 import pglast
 from pglast import ast as _pg_ast
@@ -226,7 +226,14 @@ def sets_logged(cmd: Any) -> bool | None:
     return None
 
 
-def tview_options(stmt: Any) -> dict[str, bool | int]:
+class TViewOptions(TypedDict, total=False):
+    """pg_tviews' ``options`` keys a tree can pin; a key it does not pin is absent."""
+
+    logged: bool
+    fillfactor: int
+
+
+def tview_options(stmt: Any) -> TViewOptions:
     """The storage a TVIEW's ``CREATE TABLE … AS`` pins, as pg_tviews' ``options`` keys.
 
     ``UNLOGGED`` is ``logged: false`` and ``WITH (fillfactor = n)`` is ``fillfactor``,
@@ -236,7 +243,7 @@ def tview_options(stmt: Any) -> dict[str, bool | int]:
     """
     into = getattr(stmt, "into", None)
     rel = getattr(into, "rel", None)
-    options: dict[str, bool | int] = {}
+    options: TViewOptions = {}
     if getattr(rel, "relpersistence", "p") == "u":
         options["logged"] = False
     for option in getattr(into, "options", None) or ():

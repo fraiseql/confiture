@@ -523,11 +523,17 @@ model holds the TVIEW as one object — its relation and its query — and its
 parts belong to it. `definition` is the query as the reader holds it: the
 DDL's `SELECT` rendered, or the registry's `query`.
 
+`logged` and `fillfactor` are pg_tviews' `options` keys of those names:
+what the tree pins (`UNLOGGED`, `WITH (fillfactor = n)`, `SET LOGGED`),
+`None` where it pins nothing, or what the registry holds, every key set.
+
 | Field | Type | Default |
 |---|---|---|
 | `name` | `str` | required |
 | `schema` | `str \| None` | `None` |
 | `definition` | `str \| None` | `None` |
+| `logged` | `bool \| None` | `None` |
+| `fillfactor` | `int \| None` | `None` |
 
 ## Ordering
 

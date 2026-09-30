@@ -107,6 +107,77 @@ def test_the_parse_side_and_the_live_side_hold_one_tview(tview_database: str) ->
     assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(TREE)).tviews
 
 
+PINNED = TREE.replace(
+    "CREATE TABLE tv_post AS", "CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70) AS"
+)
+
+
+@pytest.fixture
+def pinned_database(fresh_database_factory: Callable[[str], str]) -> str:
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        conn.execute(PINNED)
+    return url
+
+
+def test_the_live_side_reads_every_option_the_registry_holds(tview_database: str) -> None:
+    """The registry holds each key, pinned or not; stock pg_tviews: unlogged, fillfactor 85."""
+    with psycopg.connect(tview_database) as conn:
+        (found,) = live_catalog.tviews(conn, ["public"])
+
+    assert (found.logged, found.fillfactor) == (False, 85)
+
+
+def test_a_tview_left_at_pg_tviews_defaults_reads_as_pinning_nothing(tview_database: str) -> None:
+    """Measured for ``PARITY_NORMALISATIONS["tview_defaults"]``: the tree wrote no option, the
+    registry holds pg_tviews' defaults. The day they change, this fails and the normalisation goes.
+    """
+    (declared,) = build_model(TREE).tviews.values()
+    with psycopg.connect(tview_database) as conn:
+        (found,) = live_catalog.tviews(conn, ["public"])
+
+    assert ((declared.logged, declared.fillfactor), (found.logged, found.fillfactor)) == (
+        (None, None),
+        (False, 85),
+    )
+
+
+def test_the_parse_side_and_the_live_side_hold_one_pinned_tview(pinned_database: str) -> None:
+    from confiture.core.schema_model import normalise_for_parity
+
+    with psycopg.connect(pinned_database) as conn:
+        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+
+    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(PINNED)).tviews
+
+
+def test_a_database_built_from_a_pinned_tree_has_no_drift(pinned_database: str) -> None:
+    assert _drift(pinned_database, PINNED) == []
+
+
+def test_a_pinned_option_changed_by_hand_is_drift(pinned_database: str) -> None:
+    with psycopg.connect(pinned_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET LOGGED")
+        conn.execute("ALTER TABLE tv_post SET (fillfactor = 60)")
+
+    assert _drift(pinned_database, PINNED) == [
+        ("tview_option_mismatch", "warning", "tv_post"),
+        ("tview_option_mismatch", "warning", "tv_post"),
+    ]
+
+
+def test_an_option_the_tree_does_not_pin_is_never_drift(tview_database: str) -> None:
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET LOGGED")
+
+    assert _drift(tview_database, TREE) == []
+
+
 def test_a_tview_that_became_a_plain_table_is_caught(fresh_database: str) -> None:
     """The tree declares a TVIEW and the database holds a plain ``tv_post`` table.
 

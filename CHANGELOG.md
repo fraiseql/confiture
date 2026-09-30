@@ -40,6 +40,17 @@ TVIEWs through the surface pg_tviews 0.1.0-beta.20 publishes for tools
   replaced TVIEW's diff tier is `lock_risky` (was `destructive`). Preflight and the
   `migrate up` gate count a `pg_tviews_drop()` as the drop it is.
 
+### Added
+
+- **Drift compares the storage a TVIEW pins.** `TView` carries `logged` and
+  `fillfactor`: what the tree pins, `None` where it pins nothing, or what
+  `tviews.registry` holds. A pinned option the database does not hold is the new
+  drift kind **`tview_option_mismatch`** (`warning`, one item per option, `subject.name`
+  the option); an option the tree does not pin is never drift. The kind's name and
+  grade are a contract, as every drift kind's is (fraisier's `escalate`). The model's
+  wire and `schema-model.schema.json` gain both fields; a wire written without them
+  reads as pinning nothing.
+
 ## [1.28.0] - 2026-09-30
 
 **`migrate up` guards TVIEW migrations, and `generate renumber` says when a move

@@ -256,7 +256,13 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("indexes", "tuple[Index, ...]"),
     ),
     "Trigger": (("name", "str"), ("table", "str"), ("schema", "str | None")),
-    "TView": (("name", "str"), ("schema", "str | None"), ("definition", "str | None")),
+    "TView": (
+        ("name", "str"),
+        ("schema", "str | None"),
+        ("definition", "str | None"),
+        ("logged", "bool | None"),
+        ("fillfactor", "int | None"),
+    ),
     "SchemaModel": (
         ("tables", "Mapping[ObjectRef, Table]"),
         ("enum_types", "Mapping[ObjectRef, EnumType]"),

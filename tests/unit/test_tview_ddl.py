@@ -80,3 +80,20 @@ def test_a_table_named_tv_with_columns_is_a_table() -> None:
 
     assert model.tviews == {}
     assert ref_for("table", "public", "tv_order") in model.tables
+
+
+def test_a_tview_carries_the_storage_its_statement_pins() -> None:
+    """``UNLOGGED`` and ``WITH (fillfactor = n)`` are pg_tviews' ``logged`` and ``fillfactor``."""
+    model = build_model(
+        f"{TABLES}CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70) AS {SELECT};\n"
+    )
+
+    (tview,) = model.tviews.values()
+    assert (tview.logged, tview.fillfactor) == (False, 70)
+
+
+def test_a_tview_that_pins_nothing_carries_no_storage() -> None:
+    """An unpinned key is pg_tviews' to choose, and the tree's to leave alone."""
+    (tview,) = build_model(f"{TABLES}CREATE TABLE tv_post AS {SELECT};\n").tviews.values()
+
+    assert (tview.logged, tview.fillfactor) == (None, None)

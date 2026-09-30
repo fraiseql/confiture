@@ -667,12 +667,12 @@ CONTRACT_VERSION = 1
 
 _HAS_CONTRACT = "SELECT to_regprocedure(%s) IS NOT NULL"
 
-#: Each registered TVIEW: its relation, the query pg_tviews holds, and its backing
-#: view's oid, whose relation is the TVIEW's and not a view of the tree's. The
-#: registry names no backing view; pg_tviews creates it as ``v_<entity>`` beside
-#: the table.
+#: Each registered TVIEW: its relation, the query pg_tviews holds, the storage
+#: options it reads from the catalog, and its backing view's oid, whose relation
+#: is the TVIEW's and not a view of the tree's. The registry names no backing
+#: view; pg_tviews creates it as ``v_<entity>`` beside the table.
 _TVIEWS = """
-SELECT r.schema, r.name, r.query,
+SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
        to_regclass(format('%%I.%%I', r.schema, 'v_' || r.entity))::oid::bigint
 FROM {registry} r
 WHERE r.schema = ANY(%s)
@@ -890,8 +890,19 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
     require_supported_pg_tviews(installed[0], _contract(conn))
     query = sql.SQL(_TVIEWS).format(registry=sql.Identifier(TVIEWS_SCHEMA, "registry"))
     return [
-        (TView(name=name, schema=schema, definition=_rendered_query(definition)), view_oid)
-        for schema, name, definition, view_oid in conn.execute(query, (list(schemas),)).fetchall()
+        (
+            TView(
+                name=name,
+                schema=schema,
+                definition=_rendered_query(definition),
+                logged=logged,
+                fillfactor=fillfactor,
+            ),
+            view_oid,
+        )
+        for schema, name, definition, logged, fillfactor, view_oid in conn.execute(
+            query, (list(schemas),)
+        ).fetchall()
     ]
 
 

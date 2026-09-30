@@ -46,6 +46,7 @@ from confiture.core.ddl_walk import (
     routine_body,
     routine_options,
     sets_logged,
+    tview_options,
     written_type,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
@@ -684,7 +685,13 @@ def _from_create_table_as(sql: str, stmt: Any, offset: int) -> SchemaObject | No
         if _enum_value(stmt.objtype) != _OBJECT_TABLE or not rel.relname.startswith(TVIEW_PREFIX):
             return None
         tview = _relation_object(sql, "tview", rel, offset)
-        tview.tview = TView(name=tview.name, definition=RawStream()(stmt.query))
+        options = tview_options(stmt)
+        tview.tview = TView(
+            name=tview.name,
+            definition=RawStream()(stmt.query),
+            logged=options.get("logged"),
+            fillfactor=options.get("fillfactor"),
+        )
         return tview
     matview = _relation_object(sql, "matview", stmt.into.rel, offset)
     matview.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
