@@ -188,3 +188,70 @@ def test_moving_a_tview_from_ctas_to_a_call_changes_nothing() -> None:
     from confiture import platform
 
     assert platform.diff(CTAS, CALL).changes == []
+
+
+@pytest.mark.parametrize(
+    ("tree", "logged"),
+    [
+        (f"{CTAS}ALTER TABLE tv_post SET LOGGED;\n", True),
+        (f"{CTAS}ALTER TABLE public.tv_post SET LOGGED;\n", True),
+        (f"{CALL}ALTER TABLE tv_post SET LOGGED;\n", True),
+        (f"{CTAS}ALTER TABLE tv_post SET LOGGED;\nALTER TABLE tv_post SET UNLOGGED;\n", False),
+        (CTAS.replace("CREATE TABLE", "CREATE UNLOGGED TABLE"), False),
+        (CTAS, None),
+    ],
+    ids=["set-logged", "qualified", "call", "set-unlogged-after", "unlogged-ctas", "nothing"],
+)
+def test_set_logged_pins_the_tview_logged(tree: str, logged: bool | None) -> None:
+    """``ALTER TABLE … SET LOGGED`` is how pg_tviews' docs say to keep a TVIEW on a standby."""
+    (tview,) = build_model(tree).tviews.values()
+
+    assert tview.logged is logged
+
+
+@pytest.mark.parametrize(
+    "tree",
+    [
+        CTAS,
+        f"{CTAS}ALTER TABLE tv_post SET LOGGED;\n",
+        f"{CTAS}ALTER TABLE tv_post SET LOGGED;\nALTER TABLE tv_post SET UNLOGGED;\n",
+        CALL.replace("$q$);", """$q$, options => '{"logged": true}');"""),
+        CALL.replace("$q$);", """$q$, options => '{"logged": false}');"""),
+    ],
+    ids=["ctas", "set-logged", "set-unlogged-after", "call-logged", "call-unlogged"],
+)
+def test_the_lint_and_the_model_agree_on_whether_a_tview_is_logged(tree: str) -> None:
+    """``tview_002`` fires exactly when the model does not pin the TVIEW logged."""
+    from confiture.core.linting.inventory import build_inventory
+    from confiture.core.linting.tview_rules import tview_findings
+
+    flagged = any(
+        f[0] == "tview_002" for f in tview_findings(build_inventory(tree), has_replicas=True)
+    )
+    (tview,) = build_model(tree).tviews.values()
+
+    assert flagged is (tview.logged is not True)
+
+
+def test_a_generated_tview_passes_the_logged_its_tree_set() -> None:
+    """``migrate diff --generate`` writes the TVIEW the tree ends with, ``SET LOGGED`` included."""
+    from confiture.core.ddl_walk import tview_calls
+
+    tracked = _tracked(f"{CTAS}ALTER TABLE tv_post SET LOGGED;\n")
+    ((obj,),) = tracked.values()
+    (call,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
+    assert call.options == {"logged": True}
+    called = _tracked(CALL.replace("$q$);", """$q$, options => '{"logged": true}');"""))
+    ((same,),) = called.values()
+    assert obj.definition == same.definition
+
+
+def test_set_logged_reaches_a_tview_the_tree_defines_twice() -> None:
+    """Two definitions are one object (``duplicates.wins``); the fold keeps what decides it."""
+    tree = f"{CTAS}{CALL.removeprefix(TABLES)}ALTER TABLE tv_post SET LOGGED;\n"
+
+    from confiture.core.ddl_walk import tview_calls
+
+    ((obj,),) = _tracked(tree).values()
+    (call,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
+    assert call.options == {"logged": True}

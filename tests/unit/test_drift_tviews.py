@@ -117,3 +117,15 @@ def test_a_pinned_persistence_is_compared() -> None:
 
 def test_the_option_kind_is_published() -> None:
     assert DriftType.TVIEW_OPTION_MISMATCH.value == "tview_option_mismatch"
+
+
+def test_set_logged_in_the_tree_is_a_pin_drift_compares() -> None:
+    """The tree ``tview_002`` asks for: a TVIEW left unlogged on the database is drift."""
+    ddl = f"{DECLARED}ALTER TABLE tv_post SET LOGGED;\n"
+    found = compare_pinned(
+        ddl, live(TView(name="tv_post", schema="public", logged=False, fillfactor=85))
+    )
+
+    assert [(i.drift_type.value, i.expected, i.actual) for i in found] == [
+        ("tview_option_mismatch", "logged = true", "logged = false")
+    ]

@@ -31,7 +31,13 @@ from typing import Any
 import pglast
 from pglast.stream import RawStream
 
-from confiture.core.ddl_walk import ObjectEdit, object_edits, object_kinds
+from confiture.core.ddl_walk import (
+    ObjectEdit,
+    object_edits,
+    object_kinds,
+    sets_logged,
+    tview_calls,
+)
 from confiture.core.linting.duplicates import CreateFlags, wins
 from confiture.core.linting.inventory import (
     DEFAULT_SCHEMA,
@@ -412,7 +418,8 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
     if ref is None:
         return None
     if ref.kind == "tview":
-        return _tview_object(ref, object_from_statement(sql, raw))
+        obj = object_from_statement(sql, raw)
+        return _tview_object(ref, obj.tview if obj is not None and obj.tview else TView(ref.name))
     return DDLObject(
         ref=ref,
         definition=_canonical_definition(stmt),
@@ -424,18 +431,54 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
 
 def tview_objects_of(sql: str, raw: Any) -> list[DDLObject]:
     """Each TVIEW a ``SELECT`` creates through pg_tviews' functions, in call order."""
-    return [_tview_object(_ref_of(obj), obj) for obj in tviews_from_calls(sql, raw)]
+    return [
+        _tview_object(_ref_of(obj), obj.tview)
+        for obj in tviews_from_calls(sql, raw)
+        if obj.tview is not None
+    ]
 
 
-def _tview_object(ref: ObjectRef, obj: SchemaObject | None) -> DDLObject:
+def _tview_object(ref: ObjectRef, tview: TView) -> DDLObject:
     """A TVIEW, one object whether the tree wrote a ``CREATE TABLE … AS`` or a call.
 
     Its definition is the call a migration writes, so moving a TVIEW from one
     spelling to the other changes nothing, and a changed query or option does.
     """
-    tview = obj.tview if obj is not None else None
-    text = _tview_create(ref, tview if tview is not None else TView(name=ref.name))
+    text = _tview_create(ref, tview)
     return DDLObject(ref=ref, definition=text, create_sql=text, signature=None, trigger=None)
+
+
+def _apply_logged(
+    objects: dict[ObjectRef, list[DDLObject]], flags: dict[int, CreateFlags], stmt: Any
+) -> None:
+    """``ALTER TABLE tv_x SET LOGGED`` pins the TVIEW's ``logged``, as the inventory folds it.
+
+    The TVIEW is re-rendered from its ``create_sql``, the call :func:`_tview_create`
+    wrote, read back by :func:`~confiture.core.ddl_walk.tview_calls`; each rendering
+    keeps the flags that decide which of two definitions a build keeps.
+    """
+    if type(stmt).__name__ != "AlterTableStmt":
+        return
+    rv = stmt.relation
+    for logged in (sets_logged(cmd) for cmd in stmt.cmds or ()):
+        if logged is None:
+            continue
+        for ref in [ref for ref in objects if _names(ref, "tview", rv.schemaname, rv.relname)]:
+            relogged = [_relogged(obj, logged) for obj in objects[ref]]
+            for before, after in zip(objects[ref], relogged, strict=True):
+                flags[id(after)] = flags.pop(id(before))
+            objects[ref] = relogged
+
+
+def _relogged(obj: DDLObject, logged: bool) -> DDLObject:
+    (call,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
+    tview = TView(
+        obj.ref.name,
+        definition=call.query,
+        logged=logged,
+        fillfactor=call.options.get("fillfactor"),
+    )
+    return _tview_object(obj.ref, tview)
 
 
 def output_columns(obj: DDLObject) -> tuple[str, ...] | None:
@@ -569,9 +612,13 @@ def _matches(ref: ObjectRef, edit: ObjectEdit) -> bool:
     not say which schema it meant. The same wildcard ``find_all`` applies to an
     object's own schema.
     """
-    if ref.kind not in object_kinds(edit.object_kind) or ref.name != edit.name.lower():
+    return _names(ref, edit.object_kind, edit.schema, edit.name)
+
+
+def _names(ref: ObjectRef, kind: str, schema: str | None, name: str) -> bool:
+    if ref.kind not in object_kinds(kind) or ref.name != name.lower():
         return False
-    return edit.schema is None or ref.schema == edit.schema.lower()
+    return schema is None or ref.schema == schema.lower()
 
 
 def _apply_drop(objects: dict[ObjectRef, list[DDLObject]], edit: ObjectEdit) -> None:
@@ -670,6 +717,7 @@ def declared_objects(sql: str, raws: list[Any]) -> Declared:
         for obj in [found] if found is not None else tview_objects_of(sql, raw):
             objects.setdefault(obj.ref, []).append(obj)
             flags[id(obj)] = _flags(raw.stmt)
+        _apply_logged(objects, flags, raw.stmt)
     collapsed: list[Collapsed] = []
     for ref, bucket in objects.items():
         kept: list[DDLObject] = []

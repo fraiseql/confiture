@@ -209,6 +209,23 @@ def test_a_tree_that_calls_pg_tviews_is_the_database_it_builds(
     assert _drift(url, CALLED) == []
 
 
+LOGGED = f"{TREE}ALTER TABLE tv_post SET LOGGED;\n"
+
+
+def test_set_logged_in_the_tree_is_what_the_database_holds(tview_database: str) -> None:
+    """The tree ``tview_002`` asks for, built, reads back as itself; left unlogged, it drifts."""
+    from confiture.core.schema_model import normalise_for_parity
+
+    assert _drift(tview_database, LOGGED) == [("tview_option_mismatch", "warning", "tv_post")]
+
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET LOGGED")
+        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+
+    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(LOGGED)).tviews
+    assert _drift(tview_database, LOGGED) == []
+
+
 def test_a_tview_that_became_a_plain_table_is_caught(fresh_database: str) -> None:
     """The tree declares a TVIEW and the database holds a plain ``tv_post`` table.
 

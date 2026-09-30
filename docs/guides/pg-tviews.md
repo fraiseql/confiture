@@ -43,8 +43,9 @@ safely (a view reads the TVIEW, the table has RLS policies, …) is refused, nam
 reason.
 
 The TVIEW is named as the tree names it (`tv_x` or `app.tv_x`). `options` holds only
-what the `CREATE TABLE … AS` pins: `UNLOGGED` is `"logged": false`, `WITH
-(fillfactor = n)` is `"fillfactor": n`. A key left out takes pg_tviews' default on
+what the tree pins: `UNLOGGED` is `"logged": false`, `WITH (fillfactor = n)` is
+`"fillfactor": n`, and a later `ALTER TABLE tv_x SET LOGGED` (or `SET UNLOGGED`) is
+`"logged": true` (or `false`), the same pin drift compares and `tview_002` reads. A key left out takes pg_tviews' default on
 create and keeps its current value on replace, so a setting tuned on the database is
 not reset by a migration that only changes the query.
 
@@ -79,7 +80,7 @@ is no change: `migrate diff` generates nothing for it.
 `confiture lint --select tview` (off by default) reads the tree:
 
 - `tview_001`: an index over `data` or `updated_at`, which every refresh rewrites, so no update is HOT
-- `tview_002`: replicas declared and the TVIEW never `SET LOGGED` (UNLOGGED is the default, and a standby cannot read it)
+- `tview_002`: replicas declared and the TVIEW not pinned logged, by `SET LOGGED` or `options => '{"logged": true}'` (UNLOGGED is the default, and a standby cannot read it)
 
 pg_tviews indexes each `fk_*` column and sets fillfactor 85 itself. It accepts
 `CREATE INDEX` and `ALTER TABLE … SET LOGGED` after the conversion, and `UNLOGGED` and

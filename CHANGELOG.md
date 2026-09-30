@@ -57,6 +57,10 @@ TVIEWs through the surface pg_tviews 0.1.0-beta.20 publishes for tools
   drops one the tree declared, order-aware. The two spellings are one definition, so
   moving a TVIEW between them generates nothing. A name or query that is not a string
   constant names no TVIEW.
+- **`ALTER TABLE tv_x SET LOGGED` / `SET UNLOGGED` pins the TVIEW's `logged`.** The
+  model, `migrate diff --generate` (`options => '{"logged": true}'`) and drift
+  (`tview_option_mismatch`) now read the same pin `tview_002` does, and `tview_002`
+  also accepts a call passing `"logged": true`.
 
 ## [1.28.0] - 2026-09-30
 

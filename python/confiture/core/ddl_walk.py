@@ -217,8 +217,9 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
 def sets_logged(cmd: Any) -> bool | None:
     """``True`` after ``SET LOGGED``, ``False`` after ``SET UNLOGGED``, else ``None``.
 
-    No expected schema is built from it; the lint's ``tview_002`` asks whether a
-    TVIEW was left UNLOGGED.
+    On a TVIEW it pins pg_tviews' ``logged`` option, as ``UNLOGGED`` on the
+    ``CREATE`` does (:func:`tview_options`); a plain table's persistence is no fact
+    an expected schema holds.
     """
     subtype = enum_int(getattr(cmd, "subtype", None))
     if subtype == enum_int(_pg_member("AlterTableType", "AT_SetLogged")):
@@ -405,8 +406,14 @@ MODELLED_ELSEWHERE: dict[str, str] = {
         "`differ._collect_alter_table_constraints` models FK / CHECK / UNIQUE for "
         "`migrate diff`. A table-level constraint is the table's fact, not a column's"
     ),
-    "AT_SetLogged": "`sets_logged` reads it for the lint's `tview_002`, and nothing else",
-    "AT_SetUnLogged": "`sets_logged` reads it for the lint's `tview_002`, and nothing else",
+    "AT_SetLogged": (
+        "`sets_logged` reads it into a TVIEW's pinned `logged` option, which drift, "
+        "generation and the lint's `tview_002` read; a plain table's persistence is not modelled"
+    ),
+    "AT_SetUnLogged": (
+        "`sets_logged` reads it into a TVIEW's pinned `logged` option, which drift, "
+        "generation and the lint's `tview_002` read; a plain table's persistence is not modelled"
+    ),
     "AT_ChangeOwner": (
         "ownership is its own expectation and its own drift type (`wrong_owner`), "
         "read from the live catalogue rather than folded out of DDL"

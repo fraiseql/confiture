@@ -2,10 +2,12 @@
 
 pg_tviews turns ``CREATE TABLE tv_x AS SELECT …`` into a table it keeps in step with
 its base tables. From 0.1.0-beta.18 it indexes each ``fk_*`` column and sets
-fillfactor 85 itself; what it leaves to the author is said in statements it accepts
-after the conversion, ``CREATE INDEX`` and ``ALTER TABLE … SET LOGGED`` (measured;
-``WITH (…)`` on the ``CREATE`` it refuses). ``tview_002`` waits on
-fraiseql/pg_tviews#75 and is deleted with it.
+fillfactor 85 itself; what it leaves to the author is said on the ``CREATE``
+(``UNLOGGED``, ``WITH (fillfactor = n)``), in a ``pg_tviews_create_or_replace()``
+call's ``options``, or after the conversion (``CREATE INDEX``, ``ALTER TABLE … SET
+LOGGED``). ``tview_002`` reads the ``logged`` the schema model pins, so the lint,
+drift and generation agree on it. It waits on fraiseql/pg_tviews#75 and is deleted
+with it.
 """
 
 from __future__ import annotations
@@ -57,7 +59,7 @@ def _hot_blockers(tview: SchemaObject) -> Iterator[Finding]:
 
 
 def _unlogged(tview: SchemaObject) -> Iterator[Finding]:
-    if not tview.logged:
+    if tview.tview is None or tview.tview.logged is not True:
         yield (
             "tview_002",
             "TVIEW Unlogged With Replicas",
