@@ -15,7 +15,9 @@ CREATE TABLE tb_confiture (
     name              VARCHAR(255) NOT NULL,
     applied_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     execution_time_ms INTEGER,
-    checksum          VARCHAR(64)
+    checksum          VARCHAR(64),
+    applied_by        TEXT,
+    archived_into     VARCHAR(255)
 );
 
 CREATE INDEX idx_tb_confiture_pk_confiture ON tb_confiture(pk_confiture);
@@ -36,6 +38,8 @@ CREATE INDEX idx_tb_confiture_applied_at   ON tb_confiture(applied_at DESC);
 | `applied_at` | `TIMESTAMPTZ` | When the migration was recorded. Defaults to `NOW()`. |
 | `execution_time_ms` | `INTEGER` | Wall-clock time spent running the migration's SQL. `NULL` for rows inserted by `migrate baseline`. |
 | `checksum` | `VARCHAR(64)` | SHA-256 of the migration file at apply time. Compared by `migrate validate` and `migrate preflight`. `NULL` for baselined rows. |
+| `applied_by` | `TEXT` | The role that applied the migration (`current_user`, or the `apply-as` role). `NULL` on rows from before 0.17.0. |
+| `archived_into` | `VARCHAR(255)` | The squashed baseline this row was archived into, or `NULL`. An archived row stays applied and keeps its `applied_at`, checksum and role, but it is history: never pending, never checked against a file, never rolled back. A ledger created before the column gains it the next time `migrate up` runs; read-only commands treat its absence as `NULL`. |
 
 > The three-key identity pattern (`id` / `pk_confiture` / `slug`) is the same Trinity pattern Confiture recommends for application tables. See [ARCHITECTURE.md](https://github.com/fraiseql/confiture/blob/main/ARCHITECTURE.md) for the rationale.
 
@@ -130,6 +134,8 @@ $ psql $DATABASE_URL
  applied_at          | timestamp with time zone | not null | now()
  execution_time_ms   | integer                  |          |
  checksum            | character varying(64)    |          |
+ applied_by          | text                     |          |
+ archived_into       | character varying(255)   |          |
 Indexes:
     "tb_confiture_pkey" PRIMARY KEY, btree (id)
     "tb_confiture_pk_confiture_key" UNIQUE CONSTRAINT, btree (pk_confiture)

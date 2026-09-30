@@ -124,12 +124,12 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-42,446 lines, 56% of `core/`.
+42,462 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `__init__.py` | 124 | neutral |
-| `_migrator/` | 4,889 | database orchestration |
+| `_migrator/` | 4,897 | database orchestration |
 | `anonymization/` | 4,437 | database orchestration |
 | `backfill.py` | 124 | database orchestration |
 | `baseline_detector.py` | 248 | database orchestration |
@@ -155,7 +155,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `introspection/` | 302 | database orchestration |
 | `introspection/type_mapping.py` | 112 | neutral |
 | `large_tables.py` | 929 | database orchestration |
-| `ledger.py` | 505 | database orchestration |
+| `ledger.py` | 513 | database orchestration |
 | `linting/baseline.py` | 153 | neutral |
 | `linting/bodies.py` | 465 | database orchestration |
 | `linting/libraries/security_definer.py` | 405 | database orchestration |

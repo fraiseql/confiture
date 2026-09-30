@@ -13,7 +13,7 @@ import psycopg
 from psycopg import sql as pgsql
 
 from confiture.core.hooks.context import ExecutionContext, HookContext
-from confiture.core.ledger import ledger_exists
+from confiture.core.ledger import LIVE_ROWS, ledger_exists
 from confiture.core.step_runner import CheckpointStore, steps_table
 from confiture.exceptions import ConfiturError, MigrationError
 
@@ -65,7 +65,8 @@ def initialize(migrator: EngineHost) -> None:
                     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     execution_time_ms INTEGER,
                     checksum VARCHAR(64),
-                    applied_by TEXT
+                    applied_by TEXT,
+                    archived_into VARCHAR(255)
                 )
                 """).format(migrator._table_ident)
             )
@@ -105,6 +106,12 @@ def initialize(migrator: EngineHost) -> None:
                     migrator._table_ident
                 )
             )
+            # Issue #539 — rows `migrate squash` archived into a baseline.
+            migrator._execute_sql(
+                pgsql.SQL(
+                    "ALTER TABLE {} ADD COLUMN IF NOT EXISTS archived_into VARCHAR(255)"
+                ).format(migrator._table_ident)
+            )
 
         migrator.connection.commit()
         # The online runner's checkpoints live beside the ledger (issue #200).
@@ -135,8 +142,8 @@ def get_applied_versions(migrator: EngineHost) -> list[str]:
     """Return all applied migration versions, ordered by applied_at ascending."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(
-            pgsql.SQL("SELECT version FROM {} ORDER BY applied_at ASC").format(
-                migrator._table_ident
+            pgsql.SQL("SELECT version FROM {} AS ledger WHERE {} ORDER BY applied_at ASC").format(
+                migrator._table_ident, LIVE_ROWS
             )
         )
         return [row[0] for row in cursor.fetchall()]
@@ -146,9 +153,10 @@ def get_applied_migrations_with_timestamps(migrator: EngineHost) -> list[dict[st
     """Return applied migrations with version, name, and applied_at timestamp."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(
-            pgsql.SQL("SELECT version, name, applied_at FROM {} ORDER BY applied_at ASC").format(
-                migrator._table_ident
-            )
+            pgsql.SQL(
+                "SELECT version, name, applied_at FROM {} AS ledger WHERE {} "
+                "ORDER BY applied_at ASC"
+            ).format(migrator._table_ident, LIVE_ROWS)
         )
         return [
             {
@@ -169,9 +177,9 @@ def get_current_revision_row(migrator: EngineHost) -> dict[str, Any] | None:
     with migrator.connection.cursor() as cursor:
         cursor.execute(
             pgsql.SQL(
-                "SELECT version, name, applied_at, checksum FROM {} "
+                "SELECT version, name, applied_at, checksum FROM {} AS ledger WHERE {} "
                 "ORDER BY applied_at DESC LIMIT 1"
-            ).format(migrator._table_ident)
+            ).format(migrator._table_ident, LIVE_ROWS)
         )
         row = cursor.fetchone()
     if row is None:

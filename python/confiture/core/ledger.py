@@ -477,6 +477,14 @@ def record_migration(connection: Any, table: pgsql.Composable, row: LedgerRow) -
         )
 
 
+#: The rows that are not history. A row ``migrate squash`` archived into a baseline
+#: (#539) is applied and kept for the record, but it is never pending, never checked
+#: against a file and never rolled back. It is read through ``to_jsonb`` so that a
+#: ledger created before the column existed, which no read-only command upgrades,
+#: filters the same. The query names the ledger ``ledger``.
+LIVE_ROWS = pgsql.SQL("(to_jsonb(ledger) ->> 'archived_into') IS NULL")
+
+
 def write_backup(rows: Any, table: str, directory: Path | None = None) -> Path:
     """Write the ledger's *rows* to a JSON file in *directory* (the cwd), named after *table*.
 
