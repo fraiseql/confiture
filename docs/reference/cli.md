@@ -1789,6 +1789,7 @@ confiture migrate validate [OPTIONS]
 | `--check-ownership-coverage` | - | Flag | off | Static: verify every `CREATE { TABLE \| VIEW \| MATERIALIZED VIEW \| SEQUENCE }` in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` in the same file (`own_001`). Also flags bare `ALTER … OWNER TO` on objects the migration didn't create (`own_002` — three severity tiers: silent when guarded + companion `requires_superuser=True`, WARNING when only guarded, ERROR when bare). No-op when the config has no `ownership:` block, or when `ownership.lint_enabled` is false. |
 | `--check-function-uniqueness` | - | Flag | off | Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` in the configured DDL directories has a unique fully-qualified signature. Two files defining the same `schema.name(args)` are silently shadowed by `confiture build` — this rule (`func_001`) catches the duplicate first. No-op when the config has no `function_coverage:` block, or when `function_coverage.enabled` is false. |
 | `--check-data-assertions` | - | Flag | off | Static: warn when a migration asserts on DATA inside up() — a `RAISE EXCEPTION` guarded on a row count. `migrate preflight` replays up() against a schema-only database where every table is empty, so such a guard aborts it however correct the migration is. Assertions belong in a .verify.sql sidecar. Heuristic, so findings are warnings and never fail the gate. |
+| `--check-path-reads` | - | Flag | off | Static: fail when a .py migration reads a file under the schema directories (--ddl-dir, default db/schema) at run time. A replay installs the file's current text, and the file can never be renamed; embed the SQL as a module constant instead. With --since/--base-ref/--staged, only migrations in that scope fail; older ones are reported. |
 | `--check-security-definer` | - | Flag | off | Flag `SECURITY DEFINER` functions/procedures that do not pin `search_path` (CVE-2018-1058). Rule `sec_002`. Without `--against-db`: static DDL scan (no DB). With `--against-db`: live `pg_proc` query (authoritative; works even when ALTER FUNCTION patched the search_path separately from the CREATE). No-op when config has no `security_lint:` block or `security_lint.enabled` is false. Default severity advisory (warning, exit 0); set `security_lint.severity: error` for exit 1. See docs/guides/security-definer-lint.md. |
 | `--against-db` | - | Flag | off | Used with `--check-security-definer`: query the live database (`pg_proc.proconfig`) instead of scanning DDL source files. Authoritative for migrate-strategy databases where `ALTER FUNCTION … SET search_path` may have been applied after the original CREATE. |
 | `--emit-remediation` | - | path | - | Used with `--check-security-definer`: write a SQL remediation script containing one `ALTER FUNCTION … SET search_path = …` statement per flagged callable to the given file path. Does nothing when no violations are found. |
@@ -2548,6 +2549,7 @@ confiture migrate validate [OPTIONS]
 | `--check-ownership-coverage` | - | Flag | off | Static: verify every `CREATE { TABLE \| VIEW \| MATERIALIZED VIEW \| SEQUENCE }` in db/migrations/ is paired with a matching `ALTER … OWNER TO <expected_owner>` in the same file (`own_001`). Also flags bare `ALTER … OWNER TO` on objects the migration didn't create (`own_002` — three severity tiers: silent when guarded + companion `requires_superuser=True`, WARNING when only guarded, ERROR when bare). No-op when the config has no `ownership:` block, or when `ownership.lint_enabled` is false. |
 | `--check-function-uniqueness` | - | Flag | off | Static: verify every `CREATE FUNCTION` / `CREATE PROCEDURE` in the configured DDL directories has a unique fully-qualified signature. Two files defining the same `schema.name(args)` are silently shadowed by `confiture build` — this rule (`func_001`) catches the duplicate first. No-op when the config has no `function_coverage:` block, or when `function_coverage.enabled` is false. |
 | `--check-data-assertions` | - | Flag | off | Static: warn when a migration asserts on DATA inside up() — a `RAISE EXCEPTION` guarded on a row count. `migrate preflight` replays up() against a schema-only database where every table is empty, so such a guard aborts it however correct the migration is. Assertions belong in a .verify.sql sidecar. Heuristic, so findings are warnings and never fail the gate. |
+| `--check-path-reads` | - | Flag | off | Static: fail when a .py migration reads a file under the schema directories (--ddl-dir, default db/schema) at run time. A replay installs the file's current text, and the file can never be renamed; embed the SQL as a module constant instead. With --since/--base-ref/--staged, only migrations in that scope fail; older ones are reported. |
 | `--check-security-definer` | - | Flag | off | Flag `SECURITY DEFINER` functions/procedures that do not pin `search_path` (CVE-2018-1058). Rule `sec_002`. Without `--against-db`: static DDL scan (no DB). With `--against-db`: live `pg_proc` query (authoritative; works even when ALTER FUNCTION patched the search_path separately from the CREATE). No-op when config has no `security_lint:` block or `security_lint.enabled` is false. Default severity advisory (warning, exit 0); set `security_lint.severity: error` for exit 1. See docs/guides/security-definer-lint.md. |
 | `--against-db` | - | Flag | off | Used with `--check-security-definer`: query the live database (`pg_proc.proconfig`) instead of scanning DDL source files. Authoritative for migrate-strategy databases where `ALTER FUNCTION … SET search_path` may have been applied after the original CREATE. |
 | `--emit-remediation` | - | path | - | Used with `--check-security-definer`: write a SQL remediation script containing one `ALTER FUNCTION … SET search_path = …` statement per flagged callable to the given file path. Does nothing when no violations are found. |
@@ -3387,7 +3389,7 @@ Move a SQL file or subtree and rewrite cross-references.
 **Usage**
 
 ```bash
-confiture generate renumber [OPTIONS] {old_path} {new_path}
+confiture generate renumber [OPTIONS] {old_path} [new_path]
 ```
 
 **Arguments**
@@ -3395,7 +3397,7 @@ confiture generate renumber [OPTIONS] {old_path} {new_path}
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `old_path` | path | yes | Source file or directory to move. |
-| `new_path` | path | yes | Target file path or directory. When a directory is given, the next available prefix is allocated automatically. |
+| `new_path` | path | no | Target file path or directory. When a directory is given, the next available prefix is allocated automatically. Not given with --compact. |
 
 **Options**
 
@@ -3403,10 +3405,27 @@ confiture generate renumber [OPTIONS] {old_path} {new_path}
 |---|---|---|---|---|
 | `--schema-dir` | - | path | `db/schema` | Root of the schema tree (default: db/schema). |
 | `--dry-run` | - | Flag | off | Show what would move and what refs would be rewritten, without touching disk. |
-| `--force` | - | Flag | off | Proceed even if the old filename is referenced outside the db/ tree (e.g. by application code that loads SQL files by literal path). |
+| `--force` | - | Flag | off | Proceed even if the old filename is referenced outside the db/ tree (e.g. by application code that loads SQL files by literal path), or a migration reads a path confiture cannot resolve. Never moves a file a migration reads. |
+| `--compact` | - | Flag | off | Give OLD_PATH's numbered children (files and subdirectories) the lowest contiguous prefixes, in build order. Refused when that would change the order confiture build reads the tree in. |
+| `--migrations-dir` | - | path | `db/migrations` | Migrations whose file reads pin a schema path (default: db/migrations). |
 | `--json` | - | Flag | off | Emit structured JSON output. |
 
 <!-- END GENERATED: cli confiture generate renumber -->
+
+**Files a migration reads.** A `.py` migration that reads a schema file at run time
+(`(SCHEMA_DIR / "0219_x.sql").read_text()`, a path joined from constants, a loop over
+a module-level tuple) pins that path. Renumber refuses to move it (`VALID_003`, exit 5),
+with or without `--force`: rewriting an applied migration changes its checksum, and not
+rewriting it breaks every replay. A read whose path confiture cannot resolve statically
+refuses too (`VALID_004`), and `--force` proceeds past it. `migrate validate
+--check-path-reads` keeps new migrations from pinning files.
+
+**`--compact DIR`** gives DIR's numbered children, files and subdirectories alike, the
+lowest contiguous prefixes in build order, at the directory's prefix width:
+`01_a.sql 02_b.sql 05_c.sql 07_d/` becomes `01_a.sql 02_b.sql 03_c.sql 04_d/`. It
+refuses (`VALID_005`) when the new names would change the order `confiture build`
+reads the tree in, for instance against an unnumbered sibling like `02x/`. A directory
+without gaps is left as it is.
 
 ### `confiture generate scaffold`
 

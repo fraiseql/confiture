@@ -516,6 +516,7 @@ confiture/
 │   │   ├── migration_analyzer.py # Analyze migration SQL for non-transactional statements
 │   │   ├── migration_generator.py # Migration file generator from schema diffs
 │   │   ├── migration_grant_extractor.py # Static extraction of ``CREATE TABLE`` and ``GRANT`` statements from a
+│   │   ├── migration_reads.py    # Which files a migration reads at run time, and which of them sit under…
 │   │   ├── migration_verifier.py # Migration verification using .verify.sql sidecar files
 │   │   ├── migrator.py           # The migrator's public face: :class:`Migrator`, :class:`MigratorSession`…
 │   │   ├── model_facts.py        # What the model says about the objects in it, for a caller that writes i…
@@ -555,6 +556,7 @@ confiture/
 │   │   ├── tree_allocator.py     # SQL function tree file allocation
 │   │   ├── tree_prefix.py        # What a numbered filename's prefix is, and where the file it names sorts
 │   │   ├── tree_renumber.py      # SQL function tree renumber — safe file-move with cross-reference rewrit…
+│   │   ├── tview_preflight.py    # What preflight says about a migration that a pg_tviews TVIEW cannot sur…
 │   │   ├── type_lattice.py       # Is an `ALTER COLUMN … TYPE` widening or narrowing (issue #199)?
 │   │   ├── unified_linter.py     # Unified SQL linter orchestrating Squawk, SQLFluff, and other tools
 │   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection
@@ -563,13 +565,13 @@ confiture/
 │   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
 │   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (5 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
-│   │   ├── idempotency/          # Idempotency validation for SQL migrations (19 modules)
+│   │   ├── idempotency/          # Idempotency validation for SQL migrations (20 modules)
 │   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (5 modules)
-│   │   ├── linting/              # Rule Library System (38 modules)
+│   │   ├── linting/              # Rule Library System (39 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
 │   │   ├── seed/                 # Seed data management and optimization (28 modules)
-│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (16 modules)
+│   │   └── validation/           # Validation orchestration for ``confiture migrate validate`` modes (17 modules)
 │   ├── models/                   # Confiture migration models
 │   │   ├── __init__.py           # Confiture migration models
 │   │   ├── debug_models.py       # Data models for CTE step-through debugging

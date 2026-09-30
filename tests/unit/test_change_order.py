@@ -109,3 +109,20 @@ def test_the_order_of_independent_changes_is_the_differs(old: str) -> None:
     new = "CREATE TABLE t (a INT, b INT, c INT);\nCREATE TABLE u (x INT);\n"
     changes = SchemaDiffer().compare(old, new).changes
     assert apply_order(changes) == changes
+
+
+def test_a_tview_is_created_after_what_it_reads_and_dropped_before_it() -> None:
+    """A pg_tviews TVIEW reads tables, views and routines (#504); its view depends on them."""
+    tree = (
+        "CREATE TABLE tv_user AS SELECT pk_user, label FROM v_user;\n"
+        "CREATE VIEW v_user AS SELECT pk_user, fn_label(name) AS label FROM tb_user;\n"
+        "CREATE FUNCTION fn_label(t TEXT) RETURNS TEXT LANGUAGE sql AS $$ SELECT t $$;\n"
+        "CREATE TABLE tb_user (pk_user BIGINT PRIMARY KEY, name TEXT);\n"
+    )
+    assert _ordered("", tree) == [
+        "ADD_TABLE tb_user",
+        "ADD_FUNCTION fn_label(text)",
+        "ADD_VIEW v_user",
+        "ADD_TVIEW tv_user",
+    ]
+    assert _ordered(tree, "")[0] == "DROP_TVIEW tv_user"

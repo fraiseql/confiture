@@ -119,6 +119,7 @@ nav:
       - 'Notification Hooks': guides/notifications.md
       - 'Ownership Coverage': guides/ownership-coverage.md
       - 'Parallel, cacheable CI provisioning': guides/parallel-ci-provisioning.md
+      - 'pgtviews TVIEWs': guides/pg-tviews.md
       - 'Prep-Seed Validation Guide': guides/prep-seed-validation.md
       - 'Replica-safe migrations': guides/replica-safe-migrations.md
       - 'Restoring a backup with confiture restore': guides/restore.md

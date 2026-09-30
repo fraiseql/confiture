@@ -53,6 +53,12 @@ class TestCreateTableFix:
 
         assert result == sql
 
+    def test_a_tview_ctas_is_fixed_like_any_table(self):
+        """pg_tviews 0.1.0-beta.18 skips a re-applied ``IF NOT EXISTS`` TVIEW (#504, measured)."""
+        result = IdempotencyFixer().fix("CREATE TABLE tv_post AS SELECT pk_post FROM tb_post;")
+
+        assert result == "CREATE TABLE IF NOT EXISTS tv_post AS SELECT pk_post FROM tb_post;"
+
 
 class TestCreateIndexFix:
     """Tests for CREATE INDEX auto-fix."""

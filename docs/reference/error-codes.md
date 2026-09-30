@@ -55,6 +55,7 @@ resolution hint surfaced in the envelope.
 | `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=6.0, current major) |
 | `CONFIG_012` | 5 | error | Lint baseline file is missing or malformed: {file} | Create or regenerate it with `confiture lint --baseline <file> --write-baseline` |
 | `CONFIG_013` | 5 | error | {call} needs a connection {mode}: {reason} | Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open |
+| `CONFIG_014` | 5 | error | pg_tviews {installed} is installed; confiture supports pg_tviews {minimum} or later | Upgrade the server's pg_tviews; `SELECT pg_tviews_version()` names the build a database runs |
 | `DDL_001` | 4 | error | Destructive DDL operation refused without --force: {operation} | Re-run with --force if the destructive change is intended |
 | `DIFF_001` | 5 | error | Schema diff error | Check SQL DDL for parsing issues |
 | `DIFFER_400` | 5 | error | Cannot parse SQL DDL | Fix the SQL syntax in your schema files |
@@ -94,6 +95,9 @@ resolution hint surfaced in the envelope.
 | `SYNC_001` | 5 | error | Sync error | Check source and target database connections |
 | `VALID_001` | 5 | error | Validation error | Check validation rules and data integrity |
 | `VALID_002` | 5 | error | Destructive migration refused: data is lost when it applies | Review the migration, then run migrate up --allow-destructive |
+| `VALID_003` | 5 | error | renumber refused: {migration} reads {file} at its current path | Leave the file where it is. --force does not override this: rewriting an applied migration changes its checksum |
+| `VALID_004` | 5 | error | renumber refused: {migration} reads a path confiture cannot resolve statically | Check those reads, then re-run with --force |
+| `VALID_005` | 5 | error | compaction refused: {file} would be built in a different position | Rename the unnumbered sibling, or renumber the files one at a time |
 | `VALID_006` | 5 | error | squash refused: the tree is not the schema migrations 1..{through} build | Squash from the replay (drop --from-build), or cut where the tree is |
 | `VALID_007` | 5 | error | squash refused: the baseline needs a version after {through} | Pass --version with a version that sorts after the cut |
 | `VALID_008` | 5 | error | migration {version} is the baseline of {count} squashed migration(s), and this database's ledger holds part of that history | Bring the database to the squashed version with the archived migrations first, or restore the squashed files |

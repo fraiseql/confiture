@@ -313,6 +313,18 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "changes the mode of a connection it did not open"
         ),
     },
+    {
+        "code": "CONFIG_014",
+        "message_template": (
+            "pg_tviews {installed} is installed; confiture supports pg_tviews {minimum} or later"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Upgrade the server's pg_tviews; `SELECT pg_tviews_version()` names the build "
+            "a database runs"
+        ),
+    },
     # ========== Default error codes for exception types ==========
     # These are the base codes used as defaults in exception __init__ methods.
     # More specific codes (e.g., MIGR_100, SCHEMA_201) are used at raise sites.
@@ -364,6 +376,32 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": "Review the migration, then run migrate up --allow-destructive",
+    },
+    {
+        "code": "VALID_003",
+        "message_template": "renumber refused: {migration} reads {file} at its current path",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Leave the file where it is. --force does not override this: rewriting an "
+            "applied migration changes its checksum"
+        ),
+    },
+    {
+        "code": "VALID_004",
+        "message_template": (
+            "renumber refused: {migration} reads a path confiture cannot resolve statically"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Check those reads, then re-run with --force",
+    },
+    {
+        "code": "VALID_005",
+        "message_template": "compaction refused: {file} would be built in a different position",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Rename the unnumbered sibling, or renumber the files one at a time",
     },
     {
         "code": "VALID_006",

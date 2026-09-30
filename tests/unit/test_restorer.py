@@ -209,6 +209,20 @@ class TestBuildCommand:
         cmd = DatabaseRestorer()._build_command("pre-data", self._opts(), False)
         assert cmd[-1] == "dump.pgdump"
 
+    @pytest.mark.parametrize("section", ["pre-data", "data", "post-data", None])
+    def test_triggers_are_never_disabled(self, section):
+        """pg_tviews rebinds a TVIEW's recorded OIDs in a trigger as ``pg_tview_meta`` loads.
+
+        Measured on pg_tviews 0.1.0-beta.19: ``--section=data --disable-triggers``
+        keeps the source database's OIDs, and the restored TVIEW stops following
+        its base tables without an error (#504).
+        """
+        options = self._opts(superuser="postgres", username="u", no_owner=True, no_acl=True)
+
+        for parallel in (False, True):
+            cmd = DatabaseRestorer()._build_command(section, options, parallel)
+            assert not any(arg.startswith("--disable-triggers") for arg in cmd)
+
 
 # ---------------------------------------------------------------------------
 # _run_section

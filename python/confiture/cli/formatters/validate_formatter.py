@@ -24,7 +24,7 @@ from rich.markup import escape
 
 from confiture.cli.formatters.common import display_drift_report, display_signature_drift_report
 from confiture.cli.helpers import console
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import markup, verbatim
 from confiture.core.linting.schema_linter import RuleSeverity
 
 
@@ -176,6 +176,67 @@ def render_data_assertions(report: Any, *, json_mode: bool) -> dict[str, Any] | 
         console.print(
             f"  [dim]?[/dim] {verbatim(path)} — not analysed (unreadable body or dynamic SQL)"
         )
+    return None
+
+
+_PATH_READ_REMEDY = (
+    "Embed the SQL in the migration as a module constant; a replay then installs "
+    "the text the migration shipped with, and the file stays free to move."
+)
+
+
+def _path_read_dict(report: Any, read: Any) -> dict[str, Any]:
+    entry: dict[str, Any] = {"migration": report.shown(read.migration), "line": read.line}
+    if read.file is None:
+        entry["reason"] = read.reason
+    else:
+        entry["file"] = report.shown(read.file)
+        entry["exists"] = read.exists
+    return entry
+
+
+def render_path_reads(
+    report: Any, *, json_mode: bool, scope: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Render the ``--check-path-reads`` result."""
+    if json_mode:
+        return {
+            "check": "path_reads",
+            "scanned": report.scanned,
+            "scope": scope,
+            "violations": [_path_read_dict(report, r) for r in report.violations],
+            "out_of_scope": [_path_read_dict(report, r) for r in report.out_of_scope],
+            "unresolved": [_path_read_dict(report, r) for r in report.unresolved],
+            "remedy": _PATH_READ_REMEDY,
+        }
+    if not report.violations:
+        console.print(
+            f"[green]✅ No migration in scope reads a schema file "
+            f"({verbatim(report.scanned)} migration(s) scanned)[/green]"
+        )
+    else:
+        console.print(
+            f"[red]✗ {len(report.violations)} read(s) of a schema file by a migration[/red]"
+        )
+    for mark, reads in (
+        ("[red]✗[/red]", report.violations),
+        ("[yellow]![/yellow]", report.out_of_scope),
+    ):
+        for read in reads:
+            gone = "" if read.exists else " (already gone: replay is broken)"
+            console.print(
+                f"  {markup(mark)} {verbatim(report.shown(read.migration))}:{verbatim(read.line)} "
+                f"reads {verbatim(report.shown(read.file))}{verbatim(gone)}"
+            )
+    if report.out_of_scope:
+        console.print("  [dim]! outside the git scope: already history, reported only[/dim]")
+    for read in report.unresolved:
+        console.print(
+            f"  [dim]?[/dim] {verbatim(report.shown(read.migration))}:{verbatim(read.line)} "
+            f"reads a path that is not static: {verbatim(read.reason)}"
+        )
+    if report.violations:
+        console.print(f"\n  [dim]{verbatim(_PATH_READ_REMEDY)}[/dim]")
     return None
 
 

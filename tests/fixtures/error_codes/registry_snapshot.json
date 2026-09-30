@@ -340,5 +340,29 @@
     "severity": "error",
     "exit_code": 5,
     "resolution_hint": "Deploy the squashed migrations there first, cut at an older version, or list an environment that cannot be reached in db/project.yaml squash.skip_environments"
+  },
+  "CONFIG_014": {
+    "message_template": "pg_tviews {installed} is installed; confiture supports pg_tviews {minimum} or later",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Upgrade the server's pg_tviews; `SELECT pg_tviews_version()` names the build a database runs"
+  },
+  "VALID_003": {
+    "message_template": "renumber refused: {migration} reads {file} at its current path",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Leave the file where it is. --force does not override this: rewriting an applied migration changes its checksum"
+  },
+  "VALID_004": {
+    "message_template": "renumber refused: {migration} reads a path confiture cannot resolve statically",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Check those reads, then re-run with --force"
+  },
+  "VALID_005": {
+    "message_template": "compaction refused: {file} would be built in a different position",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Rename the unnumbered sibling, or renumber the files one at a time"
   }
 }

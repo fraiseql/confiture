@@ -72,6 +72,15 @@ def resolves(statements: list[Any], parent: str, column: str) -> bool:
     return any(_joined(parent, column, _sources(node), _equalities(node)) for node in statements)
 
 
+def joins_any(statements: list[Any], column: str) -> bool:
+    """Whether one of *statements* matches some table's ``id`` to ``<…>.<column>``.
+
+    A key with no ``REFERENCES`` (a key into a partitioned table cannot have
+    one) is resolved by what its resolver joins, whatever the key is named (#530).
+    """
+    return any(_joined(None, column, _sources(node), _equalities(node)) for node in statements)
+
+
 def reads(statements: list[Any], column: str) -> bool:
     """Whether one of *statements* reads *column* at all: the second pass a self-reference needs."""
     return any(
@@ -135,19 +144,22 @@ def _equalities(root: Any) -> list[tuple[tuple[str, ...], tuple[str, ...]]]:
 
 
 def _joined(
-    parent: str,
+    parent: str | None,
     column: str,
     sources: dict[str, set[str]],
     equalities: list[tuple[tuple[str, ...], tuple[str, ...]]],
 ) -> bool:
-    """Whether some ``<parent>.id = <…>.<column>`` is written, in either order."""
+    """Whether some ``<parent>.id = <…>.<column>`` is written, in either order.
+
+    With no *parent*, any table's ``id`` will do.
+    """
     for left, right in equalities:
         for id_side, fk_side in ((left, right), (right, left)):
             if id_side[-1] != _ID or fk_side[-1] != column:
                 continue
             if len(id_side) == 1:
-                if any(parent in tables for tables in sources.values()):
+                if parent is None or any(parent in tables for tables in sources.values()):
                     return True
-            elif parent in sources.get(id_side[-2], set()):
+            elif parent is None or parent in sources.get(id_side[-2], set()):
                 return True
     return False

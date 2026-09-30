@@ -168,6 +168,19 @@ FIXTURES: dict[str, Fixture] = {
         {"010.sql": "CREATE TABLE tb_user (id INT PRIMARY KEY, tenant_id INT NOT NULL);\n"},
         extra_files={"db/project.yaml": "tenancy: {}\n"},
     ),
+    "tview_001": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_p (pk_p bigint PRIMARY KEY, fk_u bigint, t text);\n"
+            "CREATE TABLE tv_p AS SELECT p.pk_p, p.fk_u, p.t AS data FROM tb_p p;\nCREATE INDEX ix ON tv_p USING gin (data);\n"
+        },
+    ),
+    "tview_002": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_p (pk_p bigint PRIMARY KEY, fk_u bigint, t text);\n"
+            "CREATE TABLE tv_p AS SELECT p.pk_p, p.fk_u, p.t AS data FROM tb_p p;\n"
+        },
+        env_extra="infrastructure:\n  replicas:\n    - read-1\n",
+    ),
     "replica_001": Fixture(
         {"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, c INT);\n"},
         escalated_env_extra="infrastructure:\n  replicas:\n    - read-1\n",

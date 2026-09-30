@@ -64,6 +64,12 @@ no decorators. Parameters are bound from the call, ``*parts`` becomes a
 ``Seq``, defaults evaluate in the helper's own scope.
 
 Depth is capped at :data:`MAX_DEPTH` names-or-helpers; cycles are refused.
+
+**Which files a migration reads** is a second question, answered by
+``ModuleModel.file_reads()`` (``file_reads.py``): every ``read_text`` /
+``read_bytes`` / ``open`` / ``execute_file`` site with the paths it can open.
+There, and only there, a ``for`` loop over a sequence the grammar evaluates fans
+out, one path per item.
 Under-resolving is a warning the CLI shows with the reason; over-resolving
 would be a wrong verdict, which is why every rule here errs toward refusal.
 """
@@ -74,6 +80,7 @@ from confiture.core.idempotency.static_eval import (
     file_io,  # noqa: F401 — the resolver seam tests patch
 )
 from confiture.core.idempotency.static_eval.evaluator import ModuleModel
+from confiture.core.idempotency.static_eval.file_reads import FileReadSite
 from confiture.core.idempotency.static_eval.values import (
     MAX_DEPTH,
     REMEDIES,
@@ -89,6 +96,7 @@ from confiture.core.idempotency.static_eval.values import (
 __all__ = [
     "MAX_DEPTH",
     "REMEDIES",
+    "FileReadSite",
     "ModuleModel",
     "PathV",
     "Refusal",
