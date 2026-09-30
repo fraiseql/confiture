@@ -29,6 +29,9 @@ confiture migrate validate --require-grant-migration --staged
 # schema-only `migrate preflight` cannot survive
 confiture migrate validate --check-data-assertions
 
+# Fail when a new migration reads a schema file at run time
+confiture migrate validate --check-path-reads --since origin/main
+
 # Compose: every check you pass runs, and all of them report
 confiture migrate validate --check-acls --check-imports --check-ownership-coverage
 ```
@@ -548,9 +551,42 @@ JSON reports it under `meta.scope`:
 An unscoped run emits no `scope` key at all, so a consumer can tell the two
 apart.
 
-⚠️ Only `--idempotent` is scopable today. The other directory-wide checks —
-`--check-acls`, `--check-ownership-coverage`, `--check-function-uniqueness`,
-`--check-security-definer`, `--check-imports` — still scan everything.
+⚠️ Only `--idempotent` and `--check-path-reads` are scopable today. The other
+directory-wide checks — `--check-acls`, `--check-ownership-coverage`,
+`--check-function-uniqueness`, `--check-security-definer`, `--check-imports` —
+still scan everything.
+
+## `--check-path-reads`
+
+A migration that reads a schema file at run time ties an entry of an immutable
+history to a file that keeps changing:
+
+```python
+SCHEMA = Path(__file__).resolve().parent.parent / "schema"
+
+def up(self):
+    self.execute((SCHEMA / "functions/0219_attach.sql").read_text())
+```
+
+A replay (a fresh database, a restore from an older dump, a test calling `up()`)
+installs the file's **current** text, not the one the migration shipped with, and
+`generate renumber` can never move the file. Embed the SQL in the migration as a
+module constant instead.
+
+The check reads every `.py` migration with the same static evaluator as
+`--idempotent`: `read_text()`, `read_bytes()`, `open()`, `Path.open()` and
+`self.execute_file()`, paths built from `Path(__file__)` and module constants, and
+a `for` loop over a module-level tuple (one finding per file). A read of a file
+under `--ddl-dir` (default `db/schema`) is a finding; a CSV fixture elsewhere is not.
+
+- **Scope.** With `--since`, `--base-ref` or `--staged`, a migration in that scope
+  fails the gate and an older one is listed under `out_of_scope` without failing:
+  it is already applied, and editing it would change its checksum. Without a scope
+  flag every offender fails.
+- **Unresolved reads** (a path the file does not fix) are listed under `unresolved`
+  with the reason and never counted as clean.
+- **A file already gone** is still reported (`"exists": false`): that migration's
+  replay is already broken.
 
 ## `--check-signatures` and `--check-body`
 

@@ -125,7 +125,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-42,596 lines, 56% of `core/`.
+42,832 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -193,15 +193,15 @@ duplicate readers were deleted. The count below is what the port translates.
 | `temp_database.py` | 275 | database orchestration |
 | `test_db.py` | 1,017 | database orchestration |
 | `tree_allocator.py` | 266 | database orchestration |
-| `tree_renumber.py` | 486 | database orchestration |
+| `tree_renumber.py` | 636 | database orchestration |
 | `unified_linter.py` | 186 | database orchestration |
-| `validation/` | 2,101 | database orchestration |
+| `validation/` | 2,187 | database orchestration |
 | `view_body_drift.py` | 198 | database orchestration |
 | `view_manager.py` | 524 | database orchestration |
 
 ### What does not port
 
-6,852 lines, 9% of `core/`.
+7,122 lines, 9% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -209,9 +209,10 @@ duplicate readers were deleted. The count below is what the port translates.
 | `anonymization/plugins/` | 302 | Python-bound |
 | `hooks/` | 3,274 | Python-bound |
 | `idempotency/python_migration_extractor.py` | 294 | Python-bound |
-| `idempotency/static_eval/` | 1,730 | Python-bound |
+| `idempotency/static_eval/` | 1,898 | Python-bound |
 | `import_checker.py` | 493 | Python-bound |
 | `mcp_http.py` | 191 | Python-bound |
 | `mcp_server.py` | 435 | Python-bound |
+| `migration_reads.py` | 102 | Python-bound |
 
 <!-- END GENERATED: port-boundary -->

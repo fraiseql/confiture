@@ -325,6 +325,18 @@ CheckDataAssertionsOpt = Annotated[
     ),
 ]
 
+CheckPathReadsOpt = Annotated[
+    bool,
+    typer.Option(
+        "--check-path-reads",
+        help="Static: fail when a .py migration reads a file under the schema "
+        "directories (--ddl-dir, default db/schema) at run time. A replay installs "
+        "the file's current text, and the file can never be renamed; embed the SQL "
+        "as a module constant instead. With --since/--base-ref/--staged, only "
+        "migrations in that scope fail; older ones are reported.",
+    ),
+]
+
 CheckFunctionUniquenessOpt = Annotated[
     bool,
     typer.Option(
@@ -436,6 +448,7 @@ def migrate_validate(
     check_ownership_coverage: CheckOwnershipCoverageOpt = False,
     check_function_uniqueness: CheckFunctionUniquenessOpt = False,
     check_data_assertions: CheckDataAssertionsOpt = False,
+    check_path_reads: CheckPathReadsOpt = False,
     check_security_definer: CheckSecurityDefinerOpt = False,
     secdef_against_db: SecdefAgainstDbOpt = False,
     emit_remediation: EmitRemediationOpt = None,
@@ -559,6 +572,7 @@ def migrate_validate(
         check_ownership_coverage=check_ownership_coverage,
         check_function_uniqueness=check_function_uniqueness,
         check_data_assertions=check_data_assertions,
+        check_path_reads=check_path_reads,
         check_security_definer=check_security_definer,
         check_imports=check_imports,
         check_live_drift=check_live_drift,
@@ -583,7 +597,7 @@ def migrate_validate(
         # Gate on the parameter source; without this every unscoped run
         # would silently scope, and a plain --idempotent in a non-git tree
         # would exit 7.
-        idempotent_base_ref=(
+        scope_base_ref=(
             (since or base_ref)
             if (param_is_explicit(ctx, "base_ref", "since") and not staged)
             else None

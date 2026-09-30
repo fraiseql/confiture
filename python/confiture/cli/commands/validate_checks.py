@@ -36,6 +36,7 @@ from confiture.cli.formatters.validate_formatter import (
     render_live_drift,
     render_naming,
     render_ownership_coverage,
+    render_path_reads,
     render_replay_drift,
     render_security_definer,
     render_signature_drift,
@@ -53,6 +54,8 @@ from confiture.core.validation.data_assertions import check_data_assertions
 from confiture.core.validation.function_uniqueness import check_function_uniqueness
 from confiture.core.validation.live_drift import check_live_drift
 from confiture.core.validation.ownership_coverage import check_ownership_coverage
+from confiture.core.validation.path_reads import check_path_reads
+from confiture.core.validation.scope import read_staged_content, scope_to_git
 from confiture.core.validation.security_definer import (
     check_security_definer,
     check_security_definer_live,
@@ -77,7 +80,7 @@ class ValidateOptions:
 
     Carries the Typer options verbatim, plus the two values the command
     resolves before building the registry: ``git_env`` and
-    ``idempotent_base_ref`` (which encodes #181's "was scoping actually asked
+    ``scope_base_ref`` (which encodes #181's "was scoping actually asked
     for?" decision, since ``--base-ref``'s default is truthy).
     """
 
@@ -107,6 +110,7 @@ class ValidateOptions:
     check_ownership_coverage: bool = False
     check_function_uniqueness: bool = False
     check_data_assertions: bool = False
+    check_path_reads: bool = False
     check_security_definer: bool = False
     check_imports: bool = False
     check_live_drift: bool = False
@@ -127,7 +131,7 @@ class ValidateOptions:
     emit_remediation: Path | None = None
     fix_naming: bool = False
     dry_run: bool = False
-    idempotent_base_ref: str | None = None
+    scope_base_ref: str | None = None
 
     @property
     def scan_paths(self) -> list[Path]:
@@ -409,6 +413,26 @@ def _run_data_assertions(opts: ValidateOptions, _ctx: ValidationContext) -> Chec
     return CheckOutcome("data_assertions", passed=True, payload=payload)
 
 
+def _run_path_reads(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
+    """A migration in the git scope that reads a schema file fails; one outside it is reported."""
+    _require_migrations_dir(opts)
+    in_scope: list[Path] | None = None
+    staged_text: dict[Path, str] = {}
+    scope_meta: dict[str, Any] | None = None
+    if opts.staged or opts.scope_base_ref is not None:
+        candidates = sorted(opts.migrations_dir.glob("*.py"))
+        in_scope, scope_meta = scope_to_git(
+            candidates, opts.migrations_dir, base_ref=opts.scope_base_ref, staged=opts.staged
+        )
+        if opts.staged:
+            staged_text = read_staged_content(in_scope)
+    report = check_path_reads(
+        opts.migrations_dir, opts.scan_paths, in_scope=in_scope, staged_text=staged_text
+    )
+    payload = render_path_reads(report, json_mode=opts.json_mode, scope=scope_meta)
+    return CheckOutcome("path_reads", passed=not report.violations, payload=payload)
+
+
 def _run_imports(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutcome:
 
     result = ImportChecker(opts.migrations_dir).check()
@@ -527,7 +551,7 @@ def _run_idempotent(opts: ValidateOptions, _ctx: ValidationContext) -> CheckOutc
         opts.format_output,
         strict_cor=opts.strict_cor,
         fail_on_unanalyzable=opts.fail_on_unanalyzable,
-        base_ref=opts.idempotent_base_ref,
+        base_ref=opts.scope_base_ref,
         staged=opts.staged,
     )
     return CheckOutcome(
@@ -628,6 +652,12 @@ def build_registry(opts: ValidateOptions) -> list[ValidationCheck]:
             name="data_assertions",
             enabled=opts.check_data_assertions,
             run=lambda ctx: _run_data_assertions(opts, ctx),
+        ),
+        ValidationCheck(
+            flag="--check-path-reads",
+            name="path_reads",
+            enabled=opts.check_path_reads,
+            run=lambda ctx: _run_path_reads(opts, ctx),
         ),
         ValidationCheck(
             flag="--check-imports",

@@ -23,6 +23,23 @@ string literal**, which the rewriter intentionally leaves untouched to avoid
 corrupting dynamic SQL strings.  :attr:`RenumberResult.dangling_refs` lists
 them; the CLI exits with code 2 when any are present.
 
+Files a migration reads
+-----------------------
+A migration that reads a schema file at run time (``(SCHEMA_DIR /
+"0219_x.sql").read_text()``) pins its path: rewriting the migration changes its
+checksum, and not rewriting it breaks every replay. :meth:`TreeRenumber.execute`
+asks ``core/migration_reads`` which files the migrations read and refuses to move
+one (``VALID_003``), ``force`` or not. A read whose path the static evaluator
+cannot fix might be one, so it refuses too (``VALID_004``), unless ``force``.
+
+Compaction
+----------
+:meth:`TreeRenumber.build_compact_plans` gives a directory's numbered children,
+files and subdirectories alike, the lowest contiguous prefixes in their build
+order. It refuses (``VALID_005``) when the new names would change the order
+``confiture build`` reads the tree in, for instance against an unnumbered sibling
+whose name sorts between an old prefix and its new one.
+
 Example::
 
     from pathlib import Path
@@ -47,8 +64,11 @@ from pathlib import Path
 
 from confiture.core import sql_lexer
 from confiture.core.builder import files_under
-from confiture.core.tree_allocator import PrefixConfig, TreeAllocator
-from confiture.core.tree_prefix import prefix_text
+from confiture.core.idempotency.python_migration_extractor import is_migration_file
+from confiture.core.migration_reads import MigrationRead, reads
+from confiture.core.tree_allocator import PrefixConfig, PrefixScheme, TreeAllocator
+from confiture.core.tree_prefix import is_hex_group, is_numbered, prefix_text
+from confiture.exceptions import ValidationError
 
 
 def _stem_from_path(path: Path) -> str:
@@ -73,12 +93,13 @@ def _stem_from_path(path: Path) -> str:
 
 @dataclasses.dataclass
 class RenumberPlan:
-    """A single file-move plan.
+    """A single move: a file, or a whole directory when compacting.
 
     Attributes:
         old_path: Absolute source path.
         new_path: Absolute target path (fully resolved, including filename).
-        old_name: Function name derived from *old_path* stem.
+        old_name: Function name derived from *old_path* stem; empty for a
+            directory, which names no function.
         new_name: Function name derived from *new_path* stem.
             When ``old_name == new_name`` no reference rewriting is done.
     """
@@ -123,12 +144,15 @@ class RenumberResult:
             the moved filenames by name.  Populated only when ``force=True``
             is passed; otherwise ``execute`` raises ``ValueError`` before
             returning.
+        unresolved_reads: Reads by a migration whose path is not static, which
+            ``force=True`` proceeded past.
     """
 
     plans: list[RenumberPlan]
     ref_rewrites: list[RefRewrite]
     dangling_refs: list[tuple[Path, str]]
     cross_repo_refs: list[Path] = dataclasses.field(default_factory=list)
+    unresolved_reads: list[MigrationRead] = dataclasses.field(default_factory=list)
 
 
 class TreeRenumber:
@@ -143,11 +167,19 @@ class TreeRenumber:
             proceed without ``force=True``.  When ``None`` the cross-repo
             scan is skipped (best-effort default for non-git or unusual
             project layouts).
+        migrations_dir: The migrations whose file reads pin a path. ``None``,
+            or a directory that does not exist, pins nothing.
     """
 
-    def __init__(self, schema_dir: Path, repo_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        schema_dir: Path,
+        repo_root: Path | None = None,
+        migrations_dir: Path | None = None,
+    ) -> None:
         self.schema_dir = schema_dir.resolve()
         self.repo_root = repo_root.resolve() if repo_root is not None else None
+        self.migrations_dir = migrations_dir
 
     # ------------------------------------------------------------------
     # Public API
@@ -183,6 +215,50 @@ class TreeRenumber:
         if old_resolved.is_dir():
             return self._plans_for_subtree(old_resolved, new_resolved)
         return self._plans_for_file(old_resolved, new_resolved)
+
+    def build_compact_plans(self, directory: Path) -> list[RenumberPlan]:
+        """Plans giving *directory*'s numbered children the lowest contiguous prefixes.
+
+        Files and subdirectories are numbered together, in the order the build
+        reads them, from 1 at the directory's modal prefix width and in its base.
+        A child already at its prefix does not move; a directory without gaps
+        gives no plan.
+
+        Raises:
+            ValidationError: ``VALID_005`` when the new names would change the
+                order ``confiture build`` reads the tree in.
+        """
+        directory = directory.resolve()
+        children = sorted(
+            (
+                child
+                for child in directory.iterdir()
+                if is_numbered(child.name) and (child.is_dir() or child.suffix == ".sql")
+            ),
+            key=lambda child: child.name,
+        )
+        if not children:
+            return []
+        raws = [prefix_text(child.name) or "" for child in children]
+        widths = [len(raw) for raw in raws]
+        config = PrefixConfig(
+            scheme=PrefixScheme.HEX
+            if is_hex_group(child.name for child in children)
+            else PrefixScheme.DECIMAL,
+            width=max(set(widths), key=widths.count),
+        )
+        plans: list[RenumberPlan] = []
+        for value, (child, raw) in enumerate(zip(children, raws, strict=True), start=config.start):
+            new_path = directory / (
+                TreeAllocator._format_prefix(value, config) + child.name[len(raw) :]
+            )
+            if new_path.name == child.name:
+                continue
+            stem = "" if child.is_dir() else _stem_from_path(child)
+            new_stem = "" if child.is_dir() else _stem_from_path(new_path)
+            plans.append(RenumberPlan(child, new_path, stem, new_stem))
+        self._refuse_reordering(plans)
+        return plans
 
     def execute(
         self,
@@ -223,15 +299,19 @@ class TreeRenumber:
         moved_old = {p.old_path for p in plans}
         moved_new = {p.new_path for p in plans}
 
-        # 1. Collision check — refuse to clobber existing files.
+        # 1. Collision check — refuse to clobber a file that is not itself moving.
         for plan in plans:
-            if plan.new_path.exists() and plan.new_path.resolve() != plan.old_path.resolve():
+            if plan.new_path.exists() and plan.new_path.resolve() not in moved_old:
                 raise ValueError(
                     f"renumber collision: target {plan.new_path!s} already exists "
                     "— refusing to overwrite"
                 )
 
-        # 2. Cross-repo reference scan.
+        # 2. A file a migration reads is never moved; a read it cannot resolve
+        #    might be one.
+        unresolved = self._refuse_pinned(plans, force=force)
+
+        # 3. Cross-repo reference scan.
         cross_repo_refs = self._scan_cross_repo_refs(plans) if self.repo_root else []
         if cross_repo_refs and not force:
             ref_list = "\n  ".join(str(p) for p in cross_repo_refs)
@@ -244,7 +324,7 @@ class TreeRenumber:
         other_files = [
             p.resolve()
             for p in files_under(self.schema_dir)
-            if p.resolve() not in moved_old and p.resolve() not in moved_new
+            if _moved_by(p.resolve(), plans) is None and p.resolve() not in moved_new
         ]
 
         # Move files.
@@ -253,48 +333,68 @@ class TreeRenumber:
                 plan.new_path.parent.mkdir(parents=True, exist_ok=True)
                 plan.old_path.rename(plan.new_path)
 
-        # Find refs and (optionally) rewrite them.
-        ref_rewrites: list[RefRewrite] = []
-        for plan in plans:
-            for sql_file in other_files:
-                content = sql_file.read_text()
-                if _references(content, plan.old_name):
-                    ref_rewrites.append(
-                        RefRewrite(
-                            ref_file=sql_file,
-                            old_name=plan.old_name,
-                            new_name=plan.new_name,
-                        )
-                    )
-                    needs_rewrite = plan.old_name != plan.new_name
-                    if needs_rewrite and not dry_run:
-                        sql_file.write_text(_rewrite(content, plan.old_name, plan.new_name))
-
-        # Detect dangling refs: old_name still present after rewriting.
-        dangling_refs: list[tuple[Path, str]] = []
-        if not dry_run:
-            seen: set[tuple[Path, str]] = set()
-            for rw in ref_rewrites:
-                if rw.old_name == rw.new_name:
-                    continue
-                key = (rw.ref_file, rw.old_name)
-                if key in seen:
-                    continue
-                seen.add(key)
-                remaining = rw.ref_file.read_text()
-                if _references(remaining, rw.old_name):
-                    dangling_refs.append((rw.ref_file, rw.old_name))
+        ref_rewrites = _rewrite_references(plans, other_files, dry_run=dry_run)
+        dangling_refs = [] if dry_run else _dangling(ref_rewrites)
 
         return RenumberResult(
             plans=plans,
             ref_rewrites=ref_rewrites,
             dangling_refs=dangling_refs,
             cross_repo_refs=cross_repo_refs,
+            unresolved_reads=unresolved,
         )
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _refuse_pinned(self, plans: list[RenumberPlan], *, force: bool) -> list[MigrationRead]:
+        """Refuse a move of a file a migration reads; return the reads ``force`` passed."""
+        if self.migrations_dir is None or not self.migrations_dir.is_dir():
+            return []
+        found = [
+            read
+            for migration in sorted(self.migrations_dir.glob("*.py"))
+            if is_migration_file(migration)
+            for read in reads(migration)
+        ]
+        pinned = [r for r in found if r.file is not None and _moved_by(r.file, plans) is not None]
+        if pinned:
+            listed = "\n  ".join(f"{r.migration.name}:{r.line} reads {r.file}" for r in pinned)
+            raise ValidationError(
+                "renumber refused: a migration reads the file(s) at their current path, so "
+                f"moving them breaks its replay:\n  {listed}",
+                error_code="VALID_003",
+                resolution_hint=(
+                    "Leave the file where it is. --force does not override this: rewriting "
+                    "an applied migration changes its checksum"
+                ),
+            )
+        unresolved = [r for r in found if r.file is None]
+        if unresolved and not force:
+            listed = "\n  ".join(f"{r.migration.name}:{r.line}: {r.reason}" for r in unresolved)
+            raise ValidationError(
+                "renumber refused: a migration reads a path confiture cannot resolve "
+                f"statically, so it may read a file this moves:\n  {listed}",
+                error_code="VALID_004",
+                resolution_hint="Check those reads, then re-run with --force",
+            )
+        return unresolved
+
+    def _refuse_reordering(self, plans: list[RenumberPlan]) -> None:
+        """Refuse plans whose new names change the order the build reads the tree in."""
+        before = [path.resolve() for path in files_under(self.schema_dir)]
+        after = sorted(before, key=lambda path: _destination(path, plans))
+        if after != before:
+            moved = next(a for a, b in zip(after, before, strict=True) if a != b)
+            raise ValidationError(
+                f"compaction refused: {_destination(moved, plans)} would be built in a "
+                "different position than it is now",
+                error_code="VALID_005",
+                resolution_hint=(
+                    "Rename the unnumbered sibling, or renumber the files one at a time"
+                ),
+            )
 
     def _scan_cross_repo_refs(self, plans: list[RenumberPlan]) -> list[Path]:
         """Find non-``db/`` files mentioning any moved filename.
@@ -437,6 +537,56 @@ class TreeRenumber:
             next_val += config.step
 
         return plans
+
+
+def _rewrite_references(
+    plans: list[RenumberPlan], other_files: list[Path], *, dry_run: bool
+) -> list[RefRewrite]:
+    """Every other file calling a moved function, rewritten when its name changes."""
+    ref_rewrites: list[RefRewrite] = []
+    for plan in plans:
+        if not plan.old_name:
+            continue
+        for sql_file in other_files:
+            content = sql_file.read_text()
+            if not _references(content, plan.old_name):
+                continue
+            ref_rewrites.append(
+                RefRewrite(ref_file=sql_file, old_name=plan.old_name, new_name=plan.new_name)
+            )
+            if plan.old_name != plan.new_name and not dry_run:
+                sql_file.write_text(_rewrite(content, plan.old_name, plan.new_name))
+    return ref_rewrites
+
+
+def _dangling(ref_rewrites: list[RefRewrite]) -> list[tuple[Path, str]]:
+    """``(file, old_name)`` where a rewritten name survives the rewrite (a string literal)."""
+    dangling: list[tuple[Path, str]] = []
+    seen: set[tuple[Path, str]] = set()
+    for rw in ref_rewrites:
+        key = (rw.ref_file, rw.old_name)
+        if rw.old_name == rw.new_name or key in seen:
+            continue
+        seen.add(key)
+        if _references(rw.ref_file.read_text(), rw.old_name):
+            dangling.append(key)
+    return dangling
+
+
+def _moved_by(path: Path, plans: list[RenumberPlan]) -> RenumberPlan | None:
+    """The plan that moves *path*: its own, or its directory's."""
+    return next(
+        (plan for plan in plans if path == plan.old_path or path.is_relative_to(plan.old_path)),
+        None,
+    )
+
+
+def _destination(path: Path, plans: list[RenumberPlan]) -> Path:
+    """Where *path* is once *plans* have run."""
+    plan = _moved_by(path, plans)
+    if plan is None:
+        return path
+    return plan.new_path / path.relative_to(plan.old_path)
 
 
 # ---------------------------------------------------------------------------

@@ -157,6 +157,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "idempotency/python_migration_extractor.py": (STAYS, PYTHON),
     "idempotency/static_eval": (STAYS, PYTHON),
     "import_checker.py": (STAYS, PYTHON),
+    "migration_reads.py": (STAYS, PYTHON),
     "mcp_http.py": (STAYS, PYTHON),
     "mcp_server.py": (STAYS, PYTHON),
 }
