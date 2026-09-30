@@ -29,8 +29,9 @@ A migration that reads a schema file at run time (``(SCHEMA_DIR /
 "0219_x.sql").read_text()``) pins its path: rewriting the migration changes its
 checksum, and not rewriting it breaks every replay. :meth:`TreeRenumber.execute`
 asks ``core/migration_reads`` which files the migrations read and refuses to move
-one (``VALID_003``), ``force`` or not. A read whose path the static evaluator
-cannot fix might be one, so it refuses too (``VALID_004``), unless ``force``.
+one (``VALID_003``), ``force`` or not, until ``migrate squash`` archives the
+migration. A read whose path the static evaluator cannot fix might be one, so it
+refuses too (``VALID_004``), unless ``force``.
 
 Compaction
 ----------
@@ -366,8 +367,9 @@ class TreeRenumber:
                 f"moving them breaks its replay:\n  {listed}",
                 error_code="VALID_003",
                 resolution_hint=(
-                    "Leave the file where it is. --force does not override this: rewriting "
-                    "an applied migration changes its checksum"
+                    "Leave the file where it is, or archive the migration with `migrate squash`. "
+                    "--force does not override this: rewriting an applied migration changes "
+                    "its checksum"
                 ),
             )
         unresolved = [r for r in found if r.file is None]

@@ -100,3 +100,12 @@ confiture migrate up --config db/environments/staging.yaml   # records the basel
 A later squash can include an earlier baseline: the baseline is a migration like any
 other. Its ledger row becomes `archived_into` the new baseline, and the rows already
 archived keep pointing at the first one.
+
+## Related
+
+- [`migrate validate --check-path-reads`](./migrate-validate.md#-check-path-reads) keeps
+  new migrations from reading schema files by path, which is what makes old ones
+  worth squashing.
+- [`generate renumber`](../reference/cli.md#confiture-generate-renumber) never moves a
+  file a migration reads (`VALID_003`). Once the squash archives that migration, the
+  file is free to move.

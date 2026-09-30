@@ -187,3 +187,19 @@ def test_compact_does_not_move_a_pinned_file(tmp_path: Path) -> None:
 
     assert refused.value.error_code == "VALID_003"
     assert _tree(root) == ["t/01_a.sql", "t/05_c.sql"]
+
+
+def test_a_migration_archived_by_a_squash_releases_its_pin(tmp_path: Path) -> None:
+    """``migrate squash`` moves the migration to ``archive/``: its reads pin nothing (#539)."""
+    root = _project(tmp_path, "x/002_a.sql")
+    _migration(root, "", 'self.execute(Path("db/schema/x/002_a.sql").read_text())')
+    archive = root / "db/migrations/archive"
+    archive.mkdir()
+    (root / "db/migrations/20260101000000_m.py").rename(archive / "20260101000000_m.py")
+    renumber = _renumber(root)
+
+    renumber.execute(
+        renumber.build_plans(root / "db/schema/x/002_a.sql", root / "db/schema/x/001_a.sql")
+    )
+
+    assert _tree(root) == ["x/001_a.sql"]

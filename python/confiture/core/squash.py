@@ -52,6 +52,7 @@ from confiture.core.sql_lexer import name_parts
 from confiture.core.step_runner import DONE, CheckpointStore, steps_table
 from confiture.core.temp_database import clean_pg_dump_output, pg_dump_schema
 from confiture.exceptions import ConfigurationError, MigrationError, ValidationError
+from confiture.url_redaction import redact_credentials_in
 
 _TIMESTAMP = "%Y%m%d%H%M%S"
 _TIMESTAMP_DIGITS = 14
@@ -222,7 +223,7 @@ def _environment_problems(
                 conn, environment.migration.tracking_table, versions, through, latest
             )
     except (psycopg.Error, ConfigurationError) as exc:
-        return [f"cannot be asked ({exc})"]
+        return [f"cannot be asked ({redact_credentials_in(str(exc))})"]
 
 
 def _ledger_problems(

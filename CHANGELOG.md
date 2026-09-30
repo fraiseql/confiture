@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DROP TABLE IF EXISTS tv_x`, and a replaced one both. Each down is derived, so
   none of the three is `no SQL derived` or `irreversible` any more. Re-applying
   one is safe from pg_tviews 0.1.0-beta.18, which skips an existing TVIEW
-  (fraiseql/pg_tviews#79); the `pg-tviews` CI leg runs that release. A TVIEW is
+  (fraiseql/pg_tviews#79); the `pg-tviews` CI leg runs 0.1.0-beta.19. A TVIEW is
   tiered as a materialized view, because its rows are derived from its base
   tables: adding one is `additive`, while dropping or replacing one is
   `destructive` and gated.
@@ -43,8 +43,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ddl_walk` that reads a foreign key's fields off a pglast node, or that
   matches one in SQL text with a regex.
 
+- **`migrate preflight --against` names a change a TVIEW cannot survive** (#504).
+  `PFLIGHT_TVIEW_BASE_COLUMN` (error): the migration drops or retypes a column a
+  registered TVIEW reads, or drops its base table, without dropping the TVIEW
+  first. It is PostgreSQL's own dependency on the TVIEW's backing view.
+- **`confiture lint --select tview`** (#504), off by default and read from the
+  tree: `tview_001`, an index over `data` or `updated_at` (every refresh rewrites
+  them, so no update is HOT); `tview_002`, replicas declared and the TVIEW never
+  `SET LOGGED`. pg_tviews 0.1.0-beta.18 indexes each `fk_*` column and sets
+  fillfactor 85 itself, so no rule asks for either.
+- **`confiture restore` brings a TVIEW back registered and propagating** (#504),
+  cascades included, on pg_tviews 0.1.0-beta.19. The restorer never passes
+  `--disable-triggers`: with it, the data section keeps the source database's
+  OIDs and the TVIEW stops following its base tables without an error. A source
+  whose extension was created by an earlier build dumps no `pg_tview_meta`; the
+  [TVIEW guide](docs/guides/pg-tviews.md) gives a query to check one, and the
+  recipe for benchmark data through `confiture sync`.
+- **`migrate validate --check-path-reads`** (#540). A `.py` migration that reads a
+  file under the schema directories at run time (`(SCHEMA_DIR / "fn.sql")
+  .read_text()`, `open()`, `execute_file()`, a path joined from constants, a loop
+  over a module tuple) replays that file's current text, and pins its path. A
+  migration inside the git scope (`--since`, `--base-ref`, `--staged`; all of them
+  without one) fails the gate; older ones are reported as `out_of_scope`. The
+  static evaluator answers which files a migration reads
+  (`ModuleModel.file_reads()`, where a loop over a static sequence fans out), and
+  `sql_path` resolves them, as the runtime does.
+- **`generate renumber` never moves a file a migration reads** (#538):
+  `VALID_003`, `--force` or not, since rewriting an applied migration changes its
+  checksum. A read confiture cannot resolve statically refuses as `VALID_004`,
+  which `--force` passes. **`generate renumber --compact DIR`** gives DIR's
+  numbered files and subdirectories the lowest contiguous prefixes in build order,
+  and refuses (`VALID_005`) when that would change the order the build reads.
+- **`migrate squash --through V`** (#539) replaces every migration up to V with one
+  baseline: the schema they build on a scratch database, dumped without
+  confiture's own tables, or the tree with `--from-build` once a drift check shows
+  it is that schema (`VALID_006`). Its SQL is embedded under a
+  `-- confiture:squashed-baseline` header carrying a digest of the squashed
+  versions and checksums; the squashed files move to `db/migrations/archive/`.
+  First it asks every `db/environments/*.yaml`: each must have applied every
+  squashed migration, the cut at least `squash.min_age_days` ago (`db/project.yaml`,
+  default 90), with no online migration unfinished (`VALID_009`). `migrate up` then
+  applies the baseline on a fresh database, **records it without running it** on
+  one whose ledger matches the digest, and refuses anything in between
+  (`VALID_008`). `migrate squash-ledger` runs that step alone. The ledger keeps
+  every squashed row, with its `applied_at`, checksum and role, marked with the new
+  `archived_into` column: never pending, never checked against a file, never
+  rolled back. See [Squashing old migrations](docs/guides/migrate-squash.md).
+
+### Changed
+
+- **Confiture requires pg_tviews 0.1.0-beta.19 or later** (#541). Where it reads
+  TVIEWs from a live database (drift, `schema dump-model`, `migrate preflight
+  --against`, the platform's `introspect`), an older build is refused with
+  `CONFIG_014`, naming both builds. The build is read from `pg_tviews_version()`:
+  `pg_extension.extversion` is `0.1.0` on every 0.1.0 beta. The minimum is one
+  constant, held equal to the CI pin by a test.
+- **The ledger gains a nullable `archived_into` column** (#539), added by the next
+  `migrate up` like `applied_by` was; read-only commands treat its absence as
+  `NULL`. `migrate down --steps N` no longer counts an applied row whose file is
+  gone toward N.
+- **`--exit-codes-json` gains `CONFIG_014` and `VALID_003` … `VALID_009`**, all exit
+  5; no new integer. fraisier-core's vendored copy is regenerated on its next bump.
+
 ### Fixed
 
+- **prep-seed level 3 resolves a key with no `REFERENCES` by what its resolver
+  joins** (#530). A key into a partitioned table cannot declare `REFERENCES`, so a
+  role-named key (`fk_origin`) fell back to `tb_origin` and drew a false
+  `MISSING_FK_TRANSFORMATION`. When neither the final nor the staging table
+  declares one, the key is resolved if the resolver matches some table's `id` to
+  `<fk>_id` (join, comma join, scalar subquery, CTE).
 - **A TVIEW project has no drift against its own DDL** (#504). The DDL side
   dropped `CREATE TABLE tv_post AS SELECT …`, and the live side read `tv_post` as
   a table. Every TVIEW project reported `extra_table warning public.tv_post`, so

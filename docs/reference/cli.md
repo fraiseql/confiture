@@ -3416,7 +3416,8 @@ confiture generate renumber [OPTIONS] {old_path} [new_path]
 (`(SCHEMA_DIR / "0219_x.sql").read_text()`, a path joined from constants, a loop over
 a module-level tuple) pins that path. Renumber refuses to move it (`VALID_003`, exit 5),
 with or without `--force`: rewriting an applied migration changes its checksum, and not
-rewriting it breaks every replay. A read whose path confiture cannot resolve statically
+rewriting it breaks every replay. Once [`migrate squash`](../guides/migrate-squash.md)
+archives the migration, the file is free. A read whose path confiture cannot resolve statically
 refuses too (`VALID_004`), and `--force` proceeds past it. `migrate validate
 --check-path-reads` keeps new migrations from pinning files.
 

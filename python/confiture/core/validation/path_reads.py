@@ -9,7 +9,7 @@ Which files a migration reads is ``core/migration_reads``'s answer. A read insid
 the git scope (``--since``, ``--base-ref``, ``--staged``; every migration when no
 scope is given) is a violation. One outside it is reported and does not fail: the
 migration is already applied somewhere, and changing it now would change its
-checksum. A read whose path is not static is reported with the reason, never
+checksum; ``migrate squash`` retires it, and with it the pin. A read whose path is not static is reported with the reason, never
 counted as clean.
 """
 
