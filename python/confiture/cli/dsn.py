@@ -98,7 +98,7 @@ def resolve_database_url(
         if not flag.startswith(("postgresql://", "postgres://")):
             raise ConfigurationError(
                 f"Invalid --database-url: must start with postgresql:// or "
-                f"postgres://, got: {flag}",
+                f"postgres://, got: {redact_url(flag)}",
                 error_code="CONFIG_003",
                 resolution_hint="Use format: postgresql://user:password@host:port/database",
             )
