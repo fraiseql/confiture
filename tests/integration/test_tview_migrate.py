@@ -146,3 +146,41 @@ def test_preflight_names_a_change_to_a_column_the_registered_tview_reads(
         pytest.raises(psycopg.errors.DependentObjectsStillExist),
     ):
         conn.execute(migration.read_text())
+
+
+def _write(directory: Path, stem: str, up: str) -> None:
+    (directory / f"{stem}.up.sql").write_text(up)
+    (directory / f"{stem}.down.sql").write_text("SELECT 1;\n")
+
+
+def test_migrate_up_refuses_a_tview_migration_on_an_unsupported_pg_tviews(
+    tview_database: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """pg_tviews before 0.1.0-beta.19 loses a TVIEW a migration re-applies (#541)."""
+    from confiture.core.migrator import MigratorSession
+    from confiture.exceptions import ConfigurationError
+
+    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+    _write(tmp_path, "20260101000000_tview", OLD)
+
+    with MigratorSession(None, tmp_path, database_url_override=tview_database) as session:
+        with pytest.raises(ConfigurationError) as refused:
+            session.up()
+
+    assert refused.value.error_code == "CONFIG_014"
+    with psycopg.connect(tview_database) as conn:
+        assert conn.execute("SELECT to_regclass('tv_post')").fetchone() == (None,)
+
+
+def test_migrate_up_applies_a_migration_that_touches_no_tview_there(
+    tview_database: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from confiture.core.migrator import MigratorSession
+
+    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+    _write(tmp_path, "20260101000000_column", "ALTER TABLE tb_post ADD COLUMN body text;\n")
+
+    with MigratorSession(None, tmp_path, database_url_override=tview_database) as session:
+        result = session.up()
+
+    assert [m.version for m in result.migrations_applied] == ["20260101000000"]

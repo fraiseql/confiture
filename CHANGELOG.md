@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`migrate up` refuses a TVIEW migration on an unsupported pg_tviews** (#541).
+  When a pending migration creates or drops a TVIEW and the database runs a
+  pg_tviews older than 0.1.0-beta.19, `migrate up` refuses with `CONFIG_014`
+  before applying anything: an older build loses a TVIEW a migration re-applies.
+  A migration that touches no TVIEW deploys as before.
+
 ## [1.27.0] - 2026-09-30
 
 **Retire old migrations without losing their history, keep new ones from reading

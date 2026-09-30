@@ -875,6 +875,19 @@ def _installed_pg_tviews(conn: psycopg.Connection, home: str) -> str | None:
     return None if row is None else str(row[0])
 
 
+def require_supported_pg_tviews_on(conn: psycopg.Connection) -> None:
+    """Refuse this database's pg_tviews when it is older than confiture supports.
+
+    A database without the extension passes: there is nothing to refuse.
+
+    Raises:
+        ConfigurationError: ``CONFIG_014``, as :func:`require_supported_pg_tviews`.
+    """
+    home = _scalar(conn, _TVIEW_HOME, ())
+    if home is not None:
+        require_supported_pg_tviews(_installed_pg_tviews(conn, home))
+
+
 def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TView, int]]:
     home = _scalar(conn, _TVIEW_HOME, ())
     if home is None:
