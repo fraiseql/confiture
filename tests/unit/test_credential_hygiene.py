@@ -18,11 +18,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from confiture.cli.dsn import resolve_database_url
 from confiture.config.environment import DatabaseConfig, Environment
 from confiture.core.hooks.builtin.backup_hook import BackupConfig, BackupHook
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.phases import HookPhase
 from confiture.core.validation.config_validator import ConfigValidator
+from confiture.exceptions import ConfigurationError
 from confiture.models.results import PreflightAgainstResult
 from confiture.url_redaction import redact_url, split_password
 
@@ -119,6 +121,17 @@ class TestValidatorsRedact:
             DatabaseConfig.from_url(f"mysql://u:{PW}@h/db")
         assert PW not in str(excinfo.value)
         assert "***" in str(excinfo.value)
+
+    def test_database_url_flag_rejects_without_echoing_the_password(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("CONFITURE_DATABASE_URL", raising=False)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        with pytest.raises(ConfigurationError) as excinfo:
+            resolve_database_url(f"mysql://u:{PW}@h/db", None)
+        assert excinfo.value.error_code == "CONFIG_003"
+        assert PW not in str(excinfo.value)
+        assert "mysql://u:***@h/db" in str(excinfo.value)
 
     def test_config_validator_dsn_issue_is_redacted(self) -> None:
         validator = ConfigValidator.from_flags(database_url=f"mysql://u:{PW}@h/db")
