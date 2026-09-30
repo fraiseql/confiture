@@ -132,7 +132,8 @@ def _collect_preflight_facts(session: MigratorSession) -> SchemaFacts:
 
     Any failure yields empty facts and every consumer falls back to the static
     answer. Losing the refinement is acceptable; failing a preflight over it is
-    not.
+    not. A pg_tviews older than confiture supports is not a missing fact: it is
+    refused (``CONFIG_014``, #541).
     """
 
     conn = getattr(session, "_conn", None)
@@ -140,6 +141,8 @@ def _collect_preflight_facts(session: MigratorSession) -> SchemaFacts:
         return SchemaFacts()
     try:
         facts = collect_schema_facts(conn)
+    except ConfigurationError:
+        raise
     # Reason: schema facts are advisory; any failure to collect them means 'unknown'
     except Exception:
         facts = SchemaFacts()

@@ -68,7 +68,10 @@ class SchemaFacts:
 
 
 def collect_schema_facts(conn: Any) -> SchemaFacts:
-    """Read the facts above from an open connection. Never raises.
+    """Read the facts above from an open connection.
+
+    A fact that cannot be read is unknown, never an error. The one refusal is a
+    pg_tviews older than confiture supports: ``ConfigurationError`` (``CONFIG_014``).
 
     ``conn`` is a psycopg connection, typed loosely so this module stays
     importable on the no-database path without dragging psycopg in with it.

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from confiture.core.tview_preflight import live_issues
 from confiture.models.results import PFLIGHT_CODES, PreflightIssue
 
@@ -58,3 +60,37 @@ def test_dropping_the_tview_after_the_change_is_too_late(tmp_path: Path) -> None
 
 def test_the_tview_code_has_a_severity_and_an_actionable() -> None:
     assert PFLIGHT_CODES["PFLIGHT_TVIEW_BASE_COLUMN"][0] == "error"
+
+
+class _Session:
+    """A session whose connection is only handed on: ``collect_schema_facts`` is patched."""
+
+    _conn = object()
+
+
+def test_preflight_refuses_a_pg_tviews_confiture_does_not_support(monkeypatch) -> None:
+    """Its facts are advisory, but an unsupported pg_tviews is not a missing fact (#541)."""
+    from confiture.cli.commands.migrate import preflight
+    from confiture.exceptions import ConfigurationError
+
+    def refuse(_conn: object) -> None:
+        raise ConfigurationError("pg_tviews 0.1.0-beta.18 is installed", error_code="CONFIG_014")
+
+    monkeypatch.setattr(preflight, "collect_schema_facts", refuse)
+
+    with pytest.raises(ConfigurationError) as refused:
+        preflight._collect_preflight_facts(_Session())  # type: ignore[arg-type]
+
+    assert refused.value.error_code == "CONFIG_014"
+
+
+def test_any_other_failure_to_read_the_facts_leaves_them_empty(monkeypatch) -> None:
+    from confiture.cli.commands.migrate import preflight
+    from confiture.core.schema_facts import SchemaFacts
+
+    def fail(_conn: object) -> None:
+        raise RuntimeError("the catalog is unreadable")
+
+    monkeypatch.setattr(preflight, "collect_schema_facts", fail)
+
+    assert preflight._collect_preflight_facts(_Session()) == SchemaFacts()  # type: ignore[arg-type]

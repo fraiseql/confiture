@@ -13,6 +13,7 @@ from pathlib import Path
 
 import psycopg
 import pytest
+from tests.conftest import create_supported_pg_tviews
 
 from confiture.core import live_catalog
 from confiture.core.change_order import apply_order
@@ -48,7 +49,7 @@ def tview_database(fresh_database_factory: Callable[[str], str]) -> str:
     with psycopg.connect(url, autocommit=True) as conn:
         if "pg_tviews" not in conn.execute("SHOW shared_preload_libraries").fetchone()[0]:
             pytest.skip("pg_tviews is not preloaded on this server (the pg-tviews CI leg is)")
-        conn.execute("CREATE EXTENSION pg_tviews")
+        create_supported_pg_tviews(conn)
         conn.execute(BASE)
         conn.execute("INSERT INTO tb_user VALUES (1, gen_random_uuid(), 'ann')")
         conn.execute("INSERT INTO tb_post VALUES (1, gen_random_uuid(), 1, 'hello')")

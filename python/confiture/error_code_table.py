@@ -313,6 +313,18 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "changes the mode of a connection it did not open"
         ),
     },
+    {
+        "code": "CONFIG_014",
+        "message_template": (
+            "pg_tviews {installed} is installed; confiture supports pg_tviews {minimum} or later"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Upgrade the server's pg_tviews; `SELECT pg_tviews_version()` names the build "
+            "a database runs"
+        ),
+    },
     # ========== Default error codes for exception types ==========
     # These are the base codes used as defaults in exception __init__ methods.
     # More specific codes (e.g., MIGR_100, SCHEMA_201) are used at raise sites.

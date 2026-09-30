@@ -14,7 +14,13 @@ object**, whose relation and query are its whole definition.
 | `migrate diff --generate` | writes `DROP TABLE IF EXISTS tv_x;` and `CREATE TABLE IF NOT EXISTS tv_x AS …;` for a changed TVIEW, with the matching down |
 | `migrate fix --idempotent` | adds `IF NOT EXISTS` to a `tv_*` CTAS as to any table |
 | `migrate preflight --against` | the finding below |
-| `confiture lint --select tview` | the four storage rules below |
+| `confiture lint --select tview` | the two storage rules below |
+
+Confiture supports pg_tviews **0.1.0-beta.19 or later**. Where it reads TVIEWs from a
+live database (drift, `schema dump-model`, `migrate preflight --against`, the platform's
+`introspect`), an older build is refused with `CONFIG_014` (exit 5), naming the build
+installed. It reads the build from `pg_tviews_version()`: `pg_extension.extversion`
+is `0.1.0` on every 0.1.0 beta.
 
 A table named `tv_*` is a TVIEW only when it is created `AS SELECT`; `CREATE TABLE
 tv_x (…)` with a column list is a plain table.

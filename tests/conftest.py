@@ -326,6 +326,23 @@ def fresh_database(fresh_database_factory: Callable[[str], str]) -> str:
     return fresh_database_factory("confiture_t")
 
 
+def create_supported_pg_tviews(conn: psycopg.Connection) -> None:
+    """``CREATE EXTENSION pg_tviews``; skip, with the reason, where confiture refuses its build.
+
+    The ``pg-tviews`` CI leg proves its build is supported before the suites run,
+    so a skip there cannot pass for a green run.
+    """
+    from confiture.core import live_catalog
+    from confiture.exceptions import ConfigurationError
+
+    conn.execute("CREATE EXTENSION pg_tviews")
+    installed = conn.execute("SELECT pg_tviews_version()").fetchone()
+    try:
+        live_catalog.require_supported_pg_tviews(None if installed is None else installed[0])
+    except ConfigurationError as refused:
+        pytest.skip(str(refused))
+
+
 def drop_roles(conn: psycopg.Connection, *roles: str) -> None:
     """Best-effort ``DROP OWNED BY`` + ``DROP ROLE`` for test roles on *conn*."""
     for role in roles:

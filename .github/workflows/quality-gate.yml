@@ -536,6 +536,11 @@ jobs:
         with psycopg.connect('postgresql://confiture:confiture@localhost:5432/confiture_test') as c:
             assert c.execute(\"SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'\").fetchone(), 'no pg_tviews'
             assert 'pg_tviews' in c.execute('SHOW shared_preload_libraries').fetchone()[0], 'pg_tviews not preloaded'
+        from confiture.core import live_catalog
+        with psycopg.connect('postgresql://confiture:confiture@localhost:5432/confiture_test', autocommit=True) as c:
+            c.execute('CREATE EXTENSION pg_tviews')
+            live_catalog.require_supported_pg_tviews(c.execute('SELECT pg_tviews_version()').fetchone()[0])
+            c.execute('DROP EXTENSION pg_tviews')
         "
         pg_dump --version
 
@@ -550,6 +555,7 @@ jobs:
           tests/unit/test_tview_model.py \
           tests/unit/test_tview_ddl.py \
           tests/unit/test_drift_tviews.py \
+          tests/unit/test_pg_tviews_minimum.py \
           -q -rs -p no:randomly
 
   lint:
