@@ -12,6 +12,7 @@ from typing import ClassVar
 
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import detect_non_idempotent_patterns
+from confiture.core.schema_model import TVIEW_PREFIX
 
 
 @dataclass
@@ -181,9 +182,13 @@ class IdempotencyFixer:
         if not self._should_fix(IdempotencyPattern.CREATE_TABLE):
             return sql
 
-        # Match CREATE TABLE that doesn't already have IF NOT EXISTS
+        # Match CREATE TABLE that doesn't already have IF NOT EXISTS, and is not a
+        # pg_tviews TVIEW's CTAS: pg_tviews 0.1.0 answers a re-applied
+        # `CREATE TABLE IF NOT EXISTS tv_x AS` by dropping tv_x (#504, measured;
+        # fraiseql/pg_tviews#79).
         pattern = re.compile(
-            r"CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\b)((?:\w+\.)?\w+)",
+            r"CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS\b)"
+            rf"(?!(?:\w+\.)?{re.escape(TVIEW_PREFIX)}\w+\s+AS\b)((?:\w+\.)?\w+)",
             re.IGNORECASE,
         )
         return pattern.sub(r"CREATE TABLE IF NOT EXISTS \1", sql)

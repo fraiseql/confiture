@@ -81,27 +81,27 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,097 lines, 34% of `core/`.
+26,118 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `_pglast_enums.py` | 148 | DDL transform |
 | `change_order.py` | 184 | DDL transform |
-| `change_set/` | 1,267 | DDL transform |
+| `change_set/` | 1,268 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 562 | DDL transform |
 | `ddl_clauses.py` | 152 | DDL transform |
-| `ddl_objects.py` | 662 | DDL transform |
+| `ddl_objects.py` | 676 | DDL transform |
 | `ddl_walk.py` | 1,520 | DDL transform |
 | `destructive.py` | 181 | DDL transform |
 | `differ.py` | 807 | DDL transform |
-| `differ_sql.py` | 705 | DDL transform |
+| `differ_sql.py` | 706 | DDL transform |
 | `expand_contract.py` | 273 | DDL transform |
 | `fk_extractor.py` | 296 | DDL transform |
 | `function_body_checker.py` | 210 | DDL transform |
 | `function_body_normalizer.py` | 69 | DDL transform |
 | `function_signature_checker.py` | 187 | DDL transform |
-| `idempotency/` | 2,712 | DDL transform |
+| `idempotency/` | 2,717 | DDL transform |
 | `introspection/dependency_graph.py` | 202 | DDL transform |
 | `linting/` | 9,202 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |

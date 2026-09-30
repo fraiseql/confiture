@@ -533,6 +533,7 @@ jobs:
       run: |
         uv run pytest \
           tests/integration/test_tview_live.py \
+          tests/integration/test_tview_migrate.py \
           tests/unit/test_tview_model.py \
           tests/unit/test_tview_ddl.py \
           tests/unit/test_drift_tviews.py \

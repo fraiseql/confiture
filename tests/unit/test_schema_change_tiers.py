@@ -25,7 +25,7 @@ from confiture.core.change_set.diff_tiers import tier_of
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DERIVED_KINDS, DifferSQLGenerator
 from confiture.core.risk_tier import RiskTier, worst_tier
-from confiture.core.schema_change import ObjectAdded, SchemaChange
+from confiture.core.schema_change import ObjectAdded, ObjectDropped, ObjectReplaced, SchemaChange
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "every_change"
 
@@ -47,6 +47,13 @@ DISAGREEMENTS: dict[str, str] = {
     ),
     "ObjectAdded[type]": "as a domain: a composite or range type's CREATE is guarded in DO",
     "ObjectAdded[policy]": "as a domain: a policy's CREATE is guarded in DO",
+    "ObjectDropped[tview]": (
+        "a pg_tviews TVIEW is dropped with DROP TABLE, which the change set reads as a "
+        "table's irreversible drop: a statement cannot tell a TVIEW's relation from a "
+        "table (only its CTAS or pg_tview_meta can, #504), and a TVIEW's rows are "
+        "derived and come back with it, as a matview's do"
+    ),
+    "ObjectReplaced[tview]": "as a dropped TVIEW: its rebuild is a DROP TABLE and its CTAS",
 }
 
 _TABLE = "CREATE TABLE t (a int);"
@@ -81,12 +88,16 @@ _DEFINITIONS: dict[str, tuple[str, str]] = {
         "CREATE POLICY p ON t USING (true);",
         "CREATE POLICY p ON t USING (a > 0);",
     ),
+    "tview": (
+        "CREATE TABLE tv_t AS SELECT a FROM t;",
+        "CREATE TABLE tv_t AS SELECT a, a + 1 AS b FROM t;",
+    ),
 }
 
 
 def _label(change: SchemaChange) -> str:
-    if isinstance(change, ObjectAdded):
-        return f"ObjectAdded[{change.ref.kind}]"
+    if isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced):
+        return f"{type(change).__name__}[{change.ref.kind}]"
     return type(change).__name__
 
 
@@ -138,3 +149,18 @@ def test_a_change_declares_the_tier_of_what_confiture_writes_for_it(
 
 def test_every_declared_disagreement_is_seen() -> None:
     assert set(DISAGREEMENTS) <= {_label(change) for change in CHANGES}
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "tier"),
+    [
+        ("", _DEFINITIONS["tview"][0], RiskTier.ADDITIVE),
+        (_DEFINITIONS["tview"][0], "", RiskTier.DESTRUCTIVE),
+        (*_DEFINITIONS["tview"], RiskTier.DESTRUCTIVE),
+    ],
+    ids=["add", "drop", "replace"],
+)
+def test_a_tview_is_tiered_as_a_materialized_view(old: str, new: str, tier: RiskTier) -> None:
+    """Its rows are derived from its base tables, as a matview's are (#504)."""
+    (change,) = SchemaDiffer().compare(_TABLE + old, _TABLE + new).changes
+    assert tier_of(change) == tier
