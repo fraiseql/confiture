@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-09-30
+
+**Retire old migrations without losing their history, keep new ones from reading
+schema files, and treat pg_tviews TVIEWs as first-class objects.** `migrate squash`
+replaces every migration up to a version with one baseline, which `migrate up`
+records without running on a database that already applied that history.
+`migrate validate --check-path-reads` and `generate renumber` protect the files a
+migration reads. One change is breaking (⚠️): confiture refuses a pg_tviews older
+than 0.1.0-beta.19 where it reads TVIEWs live (`CONFIG_014`).
+
 ### Security
 
 - **`--database-url` refused as `CONFIG_003` no longer echoes its password.** The
@@ -92,7 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Confiture requires pg_tviews 0.1.0-beta.19 or later** (#541). Where it reads
+- ⚠️ **Confiture requires pg_tviews 0.1.0-beta.19 or later** (#541). Where it reads
   TVIEWs from a live database (drift, `schema dump-model`, `migrate preflight
   --against`, the platform's `introspect`), an older build is refused with
   `CONFIG_014`, naming both builds. The build is read from `pg_tviews_version()`:
