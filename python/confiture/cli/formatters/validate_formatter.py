@@ -229,7 +229,10 @@ def render_path_reads(
                 f"reads {verbatim(report.shown(read.file))}{verbatim(gone)}"
             )
     if report.out_of_scope:
-        console.print("  [dim]! outside the git scope: already history, reported only[/dim]")
+        console.print(
+            "  [dim]! outside the git scope: already history, reported only; "
+            "`migrate squash` retires it[/dim]"
+        )
     for read in report.unresolved:
         console.print(
             f"  [dim]?[/dim] {verbatim(report.shown(read.migration))}:{verbatim(read.line)} "

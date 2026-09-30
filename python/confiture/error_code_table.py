@@ -383,8 +383,8 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": (
-            "Leave the file where it is. --force does not override this: rewriting an "
-            "applied migration changes its checksum"
+            "Leave the file where it is, or archive the migration with `migrate squash`. "
+            "--force does not override this: rewriting an applied migration changes its checksum"
         ),
     },
     {

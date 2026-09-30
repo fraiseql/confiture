@@ -229,3 +229,18 @@ def test_the_text_report_names_the_migration_and_the_file(tmp_path: Path) -> Non
     assert result.exit_code == 1
     assert "db/migrations/20260101000000_m.py:8 reads db/schema/functions/a.sql" in result.stdout
     assert "module constant" in result.stdout
+
+
+def test_a_migration_archived_by_a_squash_is_not_read(tmp_path: Path) -> None:
+    """``migrate squash`` moves it to ``archive/``, out of the migrations the check reads."""
+    root = _project(tmp_path)
+    migration = _migration(
+        root, "20260101000000", "", 'Path("db/schema/functions/a.sql").read_text()'
+    )
+    (root / "db/migrations/archive").mkdir()
+    migration.rename(root / "db/migrations/archive" / migration.name)
+
+    code, payload = _validate(root)
+
+    assert code == 0
+    assert payload["scanned"] == 0

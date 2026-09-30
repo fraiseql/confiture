@@ -171,3 +171,22 @@ def test_an_undated_version_with_no_environment_asked_is_refused(project: Path) 
         check_environments(project, ("001", "002"), "002")
 
     assert "age" in str(refused.value)
+
+
+def test_a_refusal_never_echoes_an_environment_s_password(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """libpq repeats a malformed conninfo in its error, password included."""
+    from confiture.core import squash
+
+    def echoing(url: str, **_kwargs: object) -> None:
+        raise psycopg.OperationalError(f'missing "=" after "{url}" in connection info string')
+
+    _environment(project, "production", "postgresql://user:secret@db.example.internal:5432/app")
+    monkeypatch.setattr(squash.psycopg, "connect", echoing)
+
+    with pytest.raises(ValidationError) as refused:
+        _check(project)
+
+    assert "production: cannot be asked" in str(refused.value)
+    assert "secret@" not in str(refused.value)

@@ -95,7 +95,7 @@ resolution hint surfaced in the envelope.
 | `SYNC_001` | 5 | error | Sync error | Check source and target database connections |
 | `VALID_001` | 5 | error | Validation error | Check validation rules and data integrity |
 | `VALID_002` | 5 | error | Destructive migration refused: data is lost when it applies | Review the migration, then run migrate up --allow-destructive |
-| `VALID_003` | 5 | error | renumber refused: {migration} reads {file} at its current path | Leave the file where it is. --force does not override this: rewriting an applied migration changes its checksum |
+| `VALID_003` | 5 | error | renumber refused: {migration} reads {file} at its current path | Leave the file where it is, or archive the migration with `migrate squash`. --force does not override this: rewriting an applied migration changes its checksum |
 | `VALID_004` | 5 | error | renumber refused: {migration} reads a path confiture cannot resolve statically | Check those reads, then re-run with --force |
 | `VALID_005` | 5 | error | compaction refused: {file} would be built in a different position | Rename the unnumbered sibling, or renumber the files one at a time |
 | `VALID_006` | 5 | error | squash refused: the tree is not the schema migrations 1..{through} build | Squash from the replay (drop --from-build), or cut where the tree is |

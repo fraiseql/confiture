@@ -582,7 +582,8 @@ under `--ddl-dir` (default `db/schema`) is a finding; a CSV fixture elsewhere is
 - **Scope.** With `--since`, `--base-ref` or `--staged`, a migration in that scope
   fails the gate and an older one is listed under `out_of_scope` without failing:
   it is already applied, and editing it would change its checksum. Without a scope
-  flag every offender fails.
+  flag every offender fails. [`migrate squash`](./migrate-squash.md) retires such
+  migrations into a baseline whose SQL is embedded, and releases their files.
 - **Unresolved reads** (a path the file does not fix) are listed under `unresolved`
   with the reason and never counted as clean.
 - **A file already gone** is still reported (`"exists": false`): that migration's
