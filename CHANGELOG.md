@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`--database-url` refused as `CONFIG_003` no longer echoes its password.** The
+  refusal of a URL that is not PostgreSQL's repeated it verbatim; it now shows
+  `redact_url`'s spelling, as the config file's own refusal already did.
+
 ### Added
 
 - **A pg_tviews TVIEW is one object in the schema model** (#504). A
