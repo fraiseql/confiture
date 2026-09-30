@@ -97,3 +97,94 @@ def test_a_tview_that_pins_nothing_carries_no_storage() -> None:
     (tview,) = build_model(f"{TABLES}CREATE TABLE tv_post AS {SELECT};\n").tviews.values()
 
     assert (tview.logged, tview.fillfactor) == (None, None)
+
+
+CTAS = f"{TABLES}CREATE TABLE tv_post AS {SELECT};\n"
+CALL = f"{TABLES}SELECT tviews.pg_tviews_create_or_replace('tv_post', $q${SELECT}$q$);\n"
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        f"SELECT tviews.pg_tviews_create_or_replace('tv_post', $q${SELECT}$q$)",
+        f"SELECT pg_tviews_create_or_replace('post', '{SELECT}')",
+        f"SELECT tviews.pg_tviews_create_or_replace(tview_name => 'tv_post', query => $q${SELECT}$q$)",
+        f"SELECT tviews.pg_tviews_create('tv_post', $q${SELECT}$q$)",
+    ],
+    ids=["create_or_replace", "entity-unqualified", "named", "create"],
+)
+def test_a_pg_tviews_call_declares_the_tview_its_ctas_would(call: str) -> None:
+    """``pg_tviews_create_or_replace()`` is how a generated migration writes a TVIEW (#504)."""
+    assert build_model(f"{TABLES}{call};\n").tviews == build_model(CTAS).tviews
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        """options => '{"logged": false, "fillfactor": 70}'""",
+        """'{"fillfactor": 70, "logged": false}'::jsonb""",
+    ],
+    ids=["named", "positional-cast"],
+)
+def test_a_call_pins_the_options_it_passes(options: str) -> None:
+    call = f"SELECT tviews.pg_tviews_create_or_replace('tv_post', $q${SELECT}$q$, {options});\n"
+    pinned = f"{TABLES}CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70) AS {SELECT};\n"
+
+    assert build_model(f"{TABLES}{call}").tviews == build_model(pinned).tviews
+
+
+def test_a_call_names_its_schema() -> None:
+    call = f"SELECT tviews.pg_tviews_create_or_replace('app.tv_post', $q${SELECT}$q$);\n"
+
+    assert list(build_model(f"{TABLES}{call}").tviews) == [ref_for("tview", "app", "tv_post")]
+
+
+@pytest.mark.parametrize("created", [CTAS, CALL], ids=["ctas", "call"])
+def test_pg_tviews_drop_in_the_tree_drops_the_tview(created: str) -> None:
+    assert (
+        build_model(
+            f"{created}SELECT tviews.pg_tviews_drop('tv_post', if_exists => true);\n"
+        ).tviews
+        == {}
+    )
+
+
+def test_a_drop_before_the_create_keeps_the_tview() -> None:
+    """``drop; create`` is the everyday idiom, and the fold is order-aware."""
+    tree = f"{TABLES}SELECT tviews.pg_tviews_drop('tv_post', true);\n{CALL.removeprefix(TABLES)}"
+
+    assert list(build_model(tree).tviews) == [ref_for("tview", None, "tv_post")]
+
+
+def test_a_call_naming_no_constant_declares_nothing() -> None:
+    """A name this reader cannot read is no TVIEW it can name."""
+    tree = f"{TABLES}SELECT tviews.pg_tviews_create_or_replace(d.name, d.query) FROM defs d;\n"
+
+    assert build_model(tree).tviews == {}
+
+
+def _tracked(sql: str) -> dict:
+    from confiture.core.ddl_objects import objects_in
+
+    return objects_in(sql, list(pglast.parse_sql(sql)))
+
+
+def test_a_tview_written_as_a_call_is_the_object_its_ctas_is() -> None:
+    """``migrate validate --require-migration`` and the diff see one TVIEW, however it is written."""
+    ctas, call = _tracked(CTAS), _tracked(CALL)
+
+    assert ctas.keys() == call.keys() == {ref_for("tview", None, "tv_post")}
+    ((written,),) = ctas.values()
+    ((called,),) = call.values()
+    assert (written.definition, written.create_sql) == (called.definition, called.create_sql)
+
+
+@pytest.mark.parametrize("created", [CTAS, CALL], ids=["ctas", "call"])
+def test_a_tview_dropped_by_a_call_is_no_tracked_object(created: str) -> None:
+    assert _tracked(f"{created}SELECT tviews.pg_tviews_drop('tv_post');\n") == {}
+
+
+def test_moving_a_tview_from_ctas_to_a_call_changes_nothing() -> None:
+    from confiture import platform
+
+    assert platform.diff(CTAS, CALL).changes == []

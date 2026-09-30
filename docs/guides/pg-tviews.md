@@ -51,6 +51,23 @@ not reset by a migration that only changes the query.
 A table named `tv_*` is a TVIEW only when it is created `AS SELECT`; `CREATE TABLE
 tv_x (…)` with a column list is a plain table.
 
+### Writing a TVIEW in the tree
+
+The tree may declare a TVIEW either way, and confiture reads both as one object:
+
+```sql
+CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70) AS SELECT …;
+
+SELECT tviews.pg_tviews_create_or_replace('tv_post', $$SELECT …$$,
+    options => '{"logged": false, "fillfactor": 70}');
+```
+
+The call is read when its name and query are string constants (`tv_post`, `post` and
+`app.tv_post` alike, arguments positional or named); `options` pins the keys it
+passes. `SELECT tviews.pg_tviews_drop('tv_post')` drops a TVIEW the tree declared
+before it, as `DROP TABLE tv_post` does. Moving a TVIEW from one spelling to the other
+is no change: `migrate diff` generates nothing for it.
+
 ## Preflight finding
 
 | Code | When |

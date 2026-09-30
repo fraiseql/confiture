@@ -49,7 +49,13 @@ import pglast
 from pglast.stream import RawStream
 from psycopg import sql
 
-from confiture.core.ddl_walk import read_constraint, read_index, render_default, written_type
+from confiture.core.ddl_walk import (
+    read_constraint,
+    read_index,
+    render_default,
+    rendered_query,
+    written_type,
+)
 from confiture.core.ddl_walk import type_name as ddl_type_name
 from confiture.core.schema_identity import quote_identifier
 from confiture.core.schema_model import (
@@ -894,7 +900,7 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
             TView(
                 name=name,
                 schema=schema,
-                definition=_rendered_query(definition),
+                definition=rendered_query(definition),
                 logged=logged,
                 fillfactor=fillfactor,
             ),
@@ -904,19 +910,6 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
             query, (list(schemas),)
         ).fetchall()
     ]
-
-
-def _rendered_query(text: str) -> str:
-    """The query pg_tviews recorded, rendered as the DDL side renders its ``SELECT``.
-
-    pg_tviews keeps the author's text verbatim; one deparser on both sides is
-    what makes two spellings of one query one definition. Text the parser
-    refuses is kept as recorded.
-    """
-    try:
-        return RawStream()(pglast.parse_sql(text)[0].stmt)
-    except pglast.parser.ParseError:
-        return text
 
 
 def triggers(conn: psycopg.Connection, schemas: Sequence[str]) -> list[Trigger]:

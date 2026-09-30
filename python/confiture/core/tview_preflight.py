@@ -93,15 +93,10 @@ def _issue(
 
 def _dropped_tviews(stmt: Any) -> set[str]:
     """What *stmt* drops: ``DROP TABLE tv_*``, or ``tviews.pg_tviews_drop()``."""
-    dropped = {
+    return {
         _key(edit.schema, edit.name)
         for edit in object_edits(stmt)
         if edit.kind == "drop" and edit.name.startswith(TVIEW_PREFIX)
-    }
-    return dropped | {
-        _key(call.schema, call.name)
-        for call in tview_calls(stmt)
-        if call.action == "drop" and call.name is not None
     }
 
 

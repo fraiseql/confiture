@@ -19,12 +19,14 @@ nobody considered looks exactly like one that was decided (#288, #301).
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal, TypedDict
 
 import pglast
+import pglast.parser
 from pglast import ast as _pg_ast
 from pglast.stream import RawStream
 from pglast.visitors import Visitor
@@ -269,11 +271,26 @@ class TViewCall:
 
     ``name`` is the ``tv_*`` relation, from ``tv_post``, ``post`` or ``app.tv_post``
     alike; ``None`` when the argument is not a constant this reader can name.
+    ``query`` is the definition a create passes, rendered as :func:`rendered_query`
+    renders it, and ``options`` the keys it pins; ``None`` and ``{}`` when it passes
+    no constant, and for a drop.
     """
 
     action: Literal["create", "create_or_replace", "drop"]
     schema: str | None
     name: str | None
+    query: str | None = None
+    options: TViewOptions = field(default_factory=TViewOptions)
+
+
+#: Each argument a call's reader reads: its parameter names, and its position.
+#: Only ``pg_tviews_create_or_replace`` takes ``options`` third;
+#: ``pg_tviews_create_aggregate``'s third is its group keys.
+_TVIEW_ARGUMENTS: dict[str, tuple[frozenset[str], int | None]] = {
+    "name": (frozenset({"tview_name"}), 0),
+    "query": (frozenset({"query", "select_sql"}), 1),
+    "options": (frozenset({"options"}), None),
+}
 
 
 def tview_calls(stmt: Any) -> list[TViewCall]:
@@ -292,12 +309,85 @@ def tview_calls(stmt: Any) -> list[TViewCall]:
         action = TVIEW_FUNCTIONS.get(str(function[-1]))
         if action is None or function[:-1] not in ([], [TVIEWS_SCHEMA]):
             continue
-        calls.append(TViewCall(action, *_tview_named(node.args[0] if node.args else None)))
+        arguments = _tview_arguments(node, action)
+        schema, name = _tview_named(arguments.get("name"))
+        if action == "drop":
+            calls.append(TViewCall(action, schema, name))
+            continue
+        query = _constant_text(arguments.get("query"))
+        calls.append(
+            TViewCall(
+                action,
+                schema,
+                name,
+                None if query is None else rendered_query(query),
+                _options_passed(arguments.get("options")),
+            )
+        )
     return calls
 
 
+def _tview_arguments(node: Any, action: str) -> dict[str, Any]:
+    """The call's arguments by the role :data:`_TVIEW_ARGUMENTS` gives them."""
+    positions = {role: at for role, (_names, at) in _TVIEW_ARGUMENTS.items() if at is not None}
+    if action == "create_or_replace":
+        positions["options"] = 2
+    found: dict[str, Any] = {}
+    for at, arg in enumerate(node.args or ()):
+        if type(arg).__name__ == "NamedArgExpr":
+            role = next(
+                (r for r, (names, _) in _TVIEW_ARGUMENTS.items() if arg.name in names), None
+            )
+            if role is not None:
+                found[role] = arg.arg
+            continue
+        role = next((r for r, position in positions.items() if position == at), None)
+        if role is not None:
+            found[role] = arg
+    return found
+
+
+def _constant_text(arg: Any) -> str | None:
+    """The text of a string constant, cast or not; ``None`` for anything else."""
+    while type(arg).__name__ == "TypeCast":
+        arg = arg.arg
+    value = getattr(getattr(arg, "val", None), "sval", None)
+    return value if isinstance(value, str) else None
+
+
+def _options_passed(arg: Any) -> TViewOptions:
+    """The keys a constant ``options`` object pins, as :func:`tview_options` reads a CTAS."""
+    text = _constant_text(arg)
+    try:
+        passed = json.loads(text) if text is not None else None
+    except json.JSONDecodeError:
+        passed = None
+    options = TViewOptions()
+    if not isinstance(passed, dict):
+        return options
+    if isinstance(logged := passed.get("logged"), bool):
+        options["logged"] = logged
+    fillfactor = passed.get("fillfactor")
+    if isinstance(fillfactor, int) and not isinstance(fillfactor, bool):
+        options["fillfactor"] = fillfactor
+    return options
+
+
+def rendered_query(text: str) -> str:
+    """A TVIEW's query as confiture holds it: *text* parsed and rendered.
+
+    The one rendering for the tree's ``CREATE TABLE … AS``, a ``pg_tviews_create_or_replace()``
+    call's query and the registry's ``query``, so two spellings of one query are one
+    definition. Text the parser refuses is kept as written.
+    """
+    try:
+        return RawStream()(pglast.parse_sql(text)[0].stmt)
+    except (pglast.parser.ParseError, IndexError):
+        return text
+
+
 def _tview_named(arg: Any) -> tuple[str | None, str | None]:
-    written = getattr(getattr(arg, "val", None), "sval", None)
+    written = _constant_text(arg)
     parts = None if written is None else written_name_parts(written)
     if not parts or len(parts) > 2:  # noqa: PLR2004 — schema and name
         return None, None
@@ -677,10 +767,16 @@ def object_edits(stmt: Any) -> list[ObjectEdit]:
 
     A list because one statement may carry several edits (``DROP TABLE a, b``).
     An unmodelled statement, or one naming a kind no expected schema models,
-    yields no edit at all rather than a partial one.
+    yields no edit at all rather than a partial one. A ``SELECT`` calling
+    ``pg_tviews_drop()`` drops the TVIEW it names (:func:`tview_calls`).
     """
     read = _OBJECT_EDITS_BY_NODE.get(type(stmt).__name__)
-    return read(stmt) if read is not None else []
+    edits = read(stmt) if read is not None else []
+    return edits + [
+        ObjectEdit("drop", "tview", call.schema, call.name)
+        for call in tview_calls(stmt)
+        if call.action == "drop" and call.name is not None
+    ]
 
 
 #: Statement kinds an expected schema reaches some other way, with where.

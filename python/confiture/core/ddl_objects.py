@@ -31,21 +31,23 @@ from typing import Any
 import pglast
 from pglast.stream import RawStream
 
-from confiture.core.ddl_walk import ObjectEdit, object_edits, object_kinds, tview_options
+from confiture.core.ddl_walk import ObjectEdit, object_edits, object_kinds
 from confiture.core.linting.duplicates import CreateFlags, wins
 from confiture.core.linting.inventory import (
     DEFAULT_SCHEMA,
     KIND_KEYWORD,
+    SchemaObject,
     Signature,
     object_from_statement,
     signature_bucket,
     signature_from_type_names,
     signatures_match,
     split_names,
+    tviews_from_calls,
 )
 
 # Defined with the rest of the model; re-exported for the callers that name it here.
-from confiture.core.schema_model import TVIEWS_SCHEMA, ObjectRef, Trigger
+from confiture.core.schema_model import TVIEWS_SCHEMA, ObjectRef, Trigger, TView
 
 #: Which parse nodes this module turns into objects, and why each one that
 #: creates something is absent. A node that is neither tracked nor named here
@@ -371,14 +373,17 @@ def _inventory_ref(sql: str, raw: Any) -> tuple[ObjectRef, Signature | None] | N
     obj = object_from_statement(sql, raw)
     if obj is None:
         return None
-    ref = ObjectRef(
+    return _ref_of(obj), obj.signature_key
+
+
+def _ref_of(obj: SchemaObject) -> ObjectRef:
+    return ObjectRef(
         kind=obj.kind,
         schema=(obj.folded_schema or DEFAULT_SCHEMA).lower(),
         name=obj.folded_name,
         signature=signature_bucket(obj.signature_key),
         display=obj.identity,
     )
-    return ref, obj.signature_key
 
 
 def object_of(sql: str, raw: Any) -> DDLObject | None:
@@ -406,13 +411,31 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
         ref, signature = found
     if ref is None:
         return None
+    if ref.kind == "tview":
+        return _tview_object(ref, object_from_statement(sql, raw))
     return DDLObject(
         ref=ref,
         definition=_canonical_definition(stmt),
-        create_sql=_tview_create(ref, stmt) if ref.kind == "tview" else _creating_statement(stmt),
+        create_sql=_creating_statement(stmt),
         signature=signature,
         trigger=_trigger(stmt) if ref.kind == "trigger" else None,
     )
+
+
+def tview_objects_of(sql: str, raw: Any) -> list[DDLObject]:
+    """Each TVIEW a ``SELECT`` creates through pg_tviews' functions, in call order."""
+    return [_tview_object(_ref_of(obj), obj) for obj in tviews_from_calls(sql, raw)]
+
+
+def _tview_object(ref: ObjectRef, obj: SchemaObject | None) -> DDLObject:
+    """A TVIEW, one object whether the tree wrote a ``CREATE TABLE … AS`` or a call.
+
+    Its definition is the call a migration writes, so moving a TVIEW from one
+    spelling to the other changes nothing, and a changed query or option does.
+    """
+    tview = obj.tview if obj is not None else None
+    text = _tview_create(ref, tview if tview is not None else TView(name=ref.name))
+    return DDLObject(ref=ref, definition=text, create_sql=text, signature=None, trigger=None)
 
 
 def output_columns(obj: DDLObject) -> tuple[str, ...] | None:
@@ -469,17 +492,21 @@ def _dollar_quoted(text: str) -> str:
     return f"{tag}{text}{tag}"
 
 
-def _tview_create(ref: ObjectRef, stmt: Any) -> str:
+def _tview_create(ref: ObjectRef, tview: TView) -> str:
     """A TVIEW as a migration writes it: ``tviews.pg_tviews_create_or_replace(…)``.
 
     pg_tviews' read contract 1: the call creates, replaces in place or rebuilds,
     and answers ``unchanged`` when applied again, so the migration re-applies.
-    The name is the author's spelling; ``options`` holds what the ``CREATE TABLE
-    … AS`` pins (:func:`~confiture.core.ddl_walk.tview_options`) and is left out
-    when it pins nothing.
+    The name is the author's spelling; ``options`` holds what the tree pins
+    (``logged``, ``fillfactor``) and is left out when it pins nothing.
     """
-    arguments = [_literal(ref.qualified), _dollar_quoted(RawStream()(stmt.query))]
-    if options := tview_options(stmt):
+    arguments = [_literal(ref.qualified), _dollar_quoted(tview.definition or "")]
+    options = {
+        key: value
+        for key, value in (("fillfactor", tview.fillfactor), ("logged", tview.logged))
+        if value is not None
+    }
+    if options:
         arguments.append(f"options => {_literal(json.dumps(options, sort_keys=True))}")
     return f"SELECT {TVIEWS_SCHEMA}.pg_tviews_create_or_replace({', '.join(arguments)})"
 
@@ -634,14 +661,15 @@ def declared_objects(sql: str, raws: list[Any]) -> Declared:
     # Keyed by identity: two definitions written alike are equal, and are still two.
     flags: dict[int, CreateFlags] = {}
     for raw in raws:
-        found = object_of(sql, raw)
-        if found is not None:
-            objects.setdefault(found.ref, []).append(found)
-            flags[id(found)] = _flags(raw.stmt)
-            continue
+        # A drop first: `SELECT pg_tviews_drop('tv_x'), pg_tviews_create_or_replace('tv_x', …)`
+        # drops and creates, as `DROP …; CREATE …` does, and no other statement does both.
         for edit in object_edits(raw.stmt):
             if edit.kind == "drop":
                 _apply_drop(objects, edit)
+        found = object_of(sql, raw)
+        for obj in [found] if found is not None else tview_objects_of(sql, raw):
+            objects.setdefault(obj.ref, []).append(obj)
+            flags[id(obj)] = _flags(raw.stmt)
     collapsed: list[Collapsed] = []
     for ref, bucket in objects.items():
         kept: list[DDLObject] = []

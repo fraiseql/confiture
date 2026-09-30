@@ -50,6 +50,13 @@ TVIEWs through the surface pg_tviews 0.1.0-beta.20 publishes for tools
   grade are a contract, as every drift kind's is (fraisier's `escalate`). The model's
   wire and `schema-model.schema.json` gain both fields; a wire written without them
   reads as pinning nothing.
+- **A tree may declare a TVIEW as a call.** `SELECT
+  tviews.pg_tviews_create_or_replace('tv_x', $$…$$[, options => '{…}'])` (or
+  `pg_tviews_create`) is the TVIEW its `CREATE TABLE tv_x AS …` would be, for the
+  model, drift, the lint and `migrate diff`; `SELECT tviews.pg_tviews_drop('tv_x')`
+  drops one the tree declared, order-aware. The two spellings are one definition, so
+  moving a TVIEW between them generates nothing. A name or query that is not a string
+  constant names no TVIEW.
 
 ## [1.28.0] - 2026-09-30
 

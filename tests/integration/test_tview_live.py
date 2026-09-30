@@ -178,6 +178,37 @@ def test_an_option_the_tree_does_not_pin_is_never_drift(tview_database: str) -> 
     assert _drift(tview_database, TREE) == []
 
 
+CALLED = TREE.replace(
+    "CREATE TABLE tv_post AS\n",
+    "SELECT tviews.pg_tviews_create_or_replace('tv_post', $q$\n",
+).replace(
+    "JOIN tb_user u ON u.pk_user = p.fk_user;",
+    """JOIN tb_user u ON u.pk_user = p.fk_user$q$, options => '{"logged": true, "fillfactor": 70}');""",
+)
+
+
+def test_a_tree_that_calls_pg_tviews_is_the_database_it_builds(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """The form a generated migration writes, read back as the tree it is."""
+    from confiture.core.schema_model import normalise_for_parity
+
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        conn.execute(CALLED)
+        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+
+    (found,) = live.tviews.values()
+    assert (found.logged, found.fillfactor) == (True, 70)
+    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(CALLED)).tviews
+    assert _drift(url, CALLED) == []
+
+
 def test_a_tview_that_became_a_plain_table_is_caught(fresh_database: str) -> None:
     """The tree declares a TVIEW and the database holds a plain ``tv_post`` table.
 

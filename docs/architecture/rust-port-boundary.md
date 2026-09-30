@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,591 lines, 34% of `core/`.
+26,741 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -91,8 +91,8 @@ duplicate readers were deleted. The count below is what the port translates.
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 562 | DDL transform |
 | `ddl_clauses.py` | 152 | DDL transform |
-| `ddl_objects.py` | 694 | DDL transform |
-| `ddl_walk.py` | 1,619 | DDL transform |
+| `ddl_objects.py` | 722 | DDL transform |
+| `ddl_walk.py` | 1,715 | DDL transform |
 | `destructive.py` | 181 | DDL transform |
 | `differ.py` | 807 | DDL transform |
 | `differ_sql.py` | 706 | DDL transform |
@@ -103,7 +103,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_signature_checker.py` | 187 | DDL transform |
 | `idempotency/` | 2,712 | DDL transform |
 | `introspection/dependency_graph.py` | 202 | DDL transform |
-| `linting/` | 9,323 | DDL transform |
+| `linting/` | 9,354 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
 | `migration_grant_extractor.py` | 526 | DDL transform |
@@ -120,12 +120,12 @@ duplicate readers were deleted. The count below is what the port translates.
 | `sql_lexer.py` | 676 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |
-| `tview_preflight.py` | 175 | DDL transform |
+| `tview_preflight.py` | 170 | DDL transform |
 | `type_lattice.py` | 511 | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 
-43,665 lines, 56% of `core/`.
+43,658 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -163,7 +163,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `linting/schema_linter.py` | 1,268 | database orchestration |
 | `linting/selection.py` | 390 | database orchestration |
 | `linting/unresolved.py` | 379 | database orchestration |
-| `live_catalog.py` | 1,049 | database orchestration |
+| `live_catalog.py` | 1,042 | database orchestration |
 | `locking.py` | 625 | database orchestration |
 | `migration_generator.py` | 581 | database orchestration |
 | `migration_verifier.py` | 229 | database orchestration |

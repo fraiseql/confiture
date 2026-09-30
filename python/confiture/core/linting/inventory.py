@@ -46,6 +46,7 @@ from confiture.core.ddl_walk import (
     routine_body,
     routine_options,
     sets_logged,
+    tview_calls,
     tview_options,
     written_type,
 )
@@ -752,6 +753,35 @@ def object_from_statement(sql: str, raw: Any) -> SchemaObject | None:
     return obj
 
 
+def tviews_from_calls(sql: str, raw: Any) -> list[SchemaObject]:
+    """Each TVIEW a ``SELECT`` creates through pg_tviews' functions, in call order.
+
+    ``SELECT tviews.pg_tviews_create_or_replace('tv_post', $$…$$, options => …)`` is
+    the TVIEW its ``CREATE TABLE tv_post AS …`` would be, the options passed pinned
+    as the CTAS pins them. A call whose name is not a constant names nothing.
+    """
+    calls = [
+        call for call in tview_calls(raw.stmt) if call.action != "drop" and call.name is not None
+    ]
+    if not calls:
+        return []
+    offset = _statement_offset(sql, raw)
+    line = _line_of(sql, offset)
+    found = []
+    for call in calls:
+        tview = _object("tview", call.schema, str(call.name), line, offset)
+        tview.statement_line = line
+        tview.logged = call.options.get("logged") is True
+        tview.tview = TView(
+            name=tview.name,
+            definition=call.query,
+            logged=call.options.get("logged"),
+            fillfactor=call.options.get("fillfactor"),
+        )
+        found.append(tview)
+    return found
+
+
 def _schema_declaration(sql: str, raw: Any) -> SchemaObject | None:
     """``CREATE SCHEMA app``, or ``None`` for any other statement.
 
@@ -1065,6 +1095,7 @@ def build_inventory(sql: str, raws: Sequence[Any] | None = None) -> Inventory:
         if obj is not None:
             (inventory.schemas if obj.kind == "schema" else inventory.objects).append(obj)
             created[id(raw)] = obj
+        inventory.objects.extend(tviews_from_calls(sql, raw))
     for raw in raws:
         stmt = raw.stmt
         kind = type(stmt).__name__
