@@ -94,3 +94,33 @@ def test_any_other_failure_to_read_the_facts_leaves_them_empty(monkeypatch) -> N
     monkeypatch.setattr(preflight, "collect_schema_facts", fail)
 
     assert preflight._collect_preflight_facts(_Session()) == SchemaFacts()  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "CREATE TABLE tv_post AS SELECT p.id FROM tb_post p;",
+        "CREATE TABLE IF NOT EXISTS app.tv_post AS SELECT 1 AS id;",
+        "DROP TABLE IF EXISTS tv_post;",
+        "ALTER TABLE tb_post ADD COLUMN body text; DROP TABLE app.tv_post;",
+    ],
+)
+def test_a_migration_that_creates_or_drops_a_tview_touches_one(sql: str) -> None:
+    from confiture.core.tview_preflight import touches_tview
+
+    assert touches_tview(sql)
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "CREATE TABLE tv_post (id int);",
+        "CREATE TABLE archive AS SELECT * FROM tb_post;",
+        "ALTER TABLE tb_post ADD COLUMN body text;",
+        "not sql at all (",
+    ],
+)
+def test_anything_else_does_not(sql: str) -> None:
+    from confiture.core.tview_preflight import touches_tview
+
+    assert not touches_tview(sql)

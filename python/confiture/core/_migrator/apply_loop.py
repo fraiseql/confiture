@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from confiture.core import live_catalog
 from confiture.core._migrator import online as _online
 from confiture.core._migrator import policy as _policy
 from confiture.core._migrator import squashed as _squashed
@@ -23,7 +24,9 @@ from confiture.core.checksum import (
     ChecksumMismatchBehavior,
     MigrationChecksumVerifier,
 )
+from confiture.core.function_body_checker import migration_sql
 from confiture.core.step_runner import RunOptions
+from confiture.core.tview_preflight import touches_tview
 from confiture.exceptions import ConfigurationError, MigrationError, ValidationError
 from confiture.models.results import MigrateUpResult, MigrationApplied, SkippedMigration
 
@@ -99,6 +102,28 @@ def record_squashed_baselines(
         return record()
     with session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout).acquire():
         return record()
+
+
+def _require_tview_support(session: SessionHost, pending_files: list[Path]) -> None:
+    """Refuse a pending TVIEW migration on a pg_tviews confiture does not support (#541).
+
+    Only a migration that creates or drops a TVIEW is at risk: an older build
+    loses a TVIEW a migration re-applies. Anything else deploys as it would.
+
+    Raises:
+        ConfigurationError: ``CONFIG_014``, before anything is applied.
+    """
+    if any(_touches_tview(path) for path in pending_files):
+        live_catalog.require_supported_pg_tviews_on(session._conn)
+
+
+def _touches_tview(path: Path) -> bool:
+    """A file it cannot read touches none: applying it reports why."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return any(touches_tview(sql) for sql in migration_sql(path, text))
 
 
 def _verify_checksums(
@@ -202,6 +227,7 @@ def _plan(session: SessionHost, options: UpOptions) -> _Plan:
         pending_files, skipped_versions = _record_squashed(
             session, pending_files, skipped_versions, dry_run=options.dry_run, on_event=on_event
         )
+    _require_tview_support(session, pending_files)
     if _policy.wants_view_helpers(options.install_view_helpers, session._config):
         _policy.install_view_helpers(session._conn, on_event)
     checksums_verified, checksum_warnings = _verify_checksums(
