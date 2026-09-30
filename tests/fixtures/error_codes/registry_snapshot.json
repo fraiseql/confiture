@@ -316,5 +316,23 @@
     "severity": "error",
     "exit_code": 5,
     "resolution_hint": "Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open"
+  },
+  "VALID_003": {
+    "message_template": "renumber refused: {migration} reads {file} at its current path",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Leave the file where it is. --force does not override this: rewriting an applied migration changes its checksum"
+  },
+  "VALID_004": {
+    "message_template": "renumber refused: {migration} reads a path confiture cannot resolve statically",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Check those reads, then re-run with --force"
+  },
+  "VALID_005": {
+    "message_template": "compaction refused: {file} would be built in a different position",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Rename the unnumbered sibling, or renumber the files one at a time"
   }
 }

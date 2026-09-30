@@ -366,6 +366,32 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "resolution_hint": "Review the migration, then run migrate up --allow-destructive",
     },
     {
+        "code": "VALID_003",
+        "message_template": "renumber refused: {migration} reads {file} at its current path",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Leave the file where it is. --force does not override this: rewriting an "
+            "applied migration changes its checksum"
+        ),
+    },
+    {
+        "code": "VALID_004",
+        "message_template": (
+            "renumber refused: {migration} reads a path confiture cannot resolve statically"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Check those reads, then re-run with --force",
+    },
+    {
+        "code": "VALID_005",
+        "message_template": "compaction refused: {file} would be built in a different position",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Rename the unnumbered sibling, or renumber the files one at a time",
+    },
+    {
         "code": "VERIFY_001",
         "message_template": "Verify file contains forbidden SQL",
         "severity": "error",

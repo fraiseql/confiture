@@ -3339,7 +3339,7 @@ Move a SQL file or subtree and rewrite cross-references.
 **Usage**
 
 ```bash
-confiture generate renumber [OPTIONS] {old_path} {new_path}
+confiture generate renumber [OPTIONS] {old_path} [new_path]
 ```
 
 **Arguments**
@@ -3347,7 +3347,7 @@ confiture generate renumber [OPTIONS] {old_path} {new_path}
 | Argument | Type | Required | Description |
 |---|---|---|---|
 | `old_path` | path | yes | Source file or directory to move. |
-| `new_path` | path | yes | Target file path or directory. When a directory is given, the next available prefix is allocated automatically. |
+| `new_path` | path | no | Target file path or directory. When a directory is given, the next available prefix is allocated automatically. Not given with --compact. |
 
 **Options**
 
@@ -3355,10 +3355,27 @@ confiture generate renumber [OPTIONS] {old_path} {new_path}
 |---|---|---|---|---|
 | `--schema-dir` | - | path | `db/schema` | Root of the schema tree (default: db/schema). |
 | `--dry-run` | - | Flag | off | Show what would move and what refs would be rewritten, without touching disk. |
-| `--force` | - | Flag | off | Proceed even if the old filename is referenced outside the db/ tree (e.g. by application code that loads SQL files by literal path). |
+| `--force` | - | Flag | off | Proceed even if the old filename is referenced outside the db/ tree (e.g. by application code that loads SQL files by literal path), or a migration reads a path confiture cannot resolve. Never moves a file a migration reads. |
+| `--compact` | - | Flag | off | Give OLD_PATH's numbered children (files and subdirectories) the lowest contiguous prefixes, in build order. Refused when that would change the order confiture build reads the tree in. |
+| `--migrations-dir` | - | path | `db/migrations` | Migrations whose file reads pin a schema path (default: db/migrations). |
 | `--json` | - | Flag | off | Emit structured JSON output. |
 
 <!-- END GENERATED: cli confiture generate renumber -->
+
+**Files a migration reads.** A `.py` migration that reads a schema file at run time
+(`(SCHEMA_DIR / "0219_x.sql").read_text()`, a path joined from constants, a loop over
+a module-level tuple) pins that path. Renumber refuses to move it (`VALID_003`, exit 5),
+with or without `--force`: rewriting an applied migration changes its checksum, and not
+rewriting it breaks every replay. A read whose path confiture cannot resolve statically
+refuses too (`VALID_004`), and `--force` proceeds past it. `migrate validate
+--check-path-reads` keeps new migrations from pinning files.
+
+**`--compact DIR`** gives DIR's numbered children, files and subdirectories alike, the
+lowest contiguous prefixes in build order, at the directory's prefix width:
+`01_a.sql 02_b.sql 05_c.sql 07_d/` becomes `01_a.sql 02_b.sql 03_c.sql 04_d/`. It
+refuses (`VALID_005`) when the new names would change the order `confiture build`
+reads the tree in, for instance against an unnumbered sibling like `02x/`. A directory
+without gaps is left as it is.
 
 ### `confiture generate scaffold`
 

@@ -232,6 +232,9 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     # VALID family → 5.
     "VALID_001": 5,
     "VALID_002": 5,
+    "VALID_003": 5,  # renumber of a file a migration reads (#538)
+    "VALID_004": 5,  # renumber past a read it cannot resolve, without --force (#538)
+    "VALID_005": 5,  # renumber --compact that would reorder the build (#538)
     "VERIFY_001": 5,
     # ROLLBACK family → 8 (irreversible / inconsistent state).
     "ROLLBACK_001": 8,

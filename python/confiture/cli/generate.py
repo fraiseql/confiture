@@ -18,6 +18,7 @@ import importlib
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -25,7 +26,7 @@ from rich.console import Console
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import emit
 from confiture.cli.markup import markup, verbatim
-from confiture.cli.options import database_url_option, output_option
+from confiture.cli.options import database_url_option, migrations_dir_option, output_option
 from confiture.core.connection import DatabaseError, connect_url
 from confiture.core.git import GitRepository
 from confiture.core.pgtap_generator import PgTAPGenerator
@@ -33,7 +34,7 @@ from confiture.core.scaffold.emitter import EmittedFunction
 from confiture.core.scaffold.orchestrator import ScaffoldOrchestrator
 from confiture.core.stub_generator import StubGenerator
 from confiture.core.tree_allocator import TreeAllocator
-from confiture.core.tree_renumber import TreeRenumber
+from confiture.core.tree_renumber import RenumberResult, TreeRenumber
 from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError, ConfiturError
 from confiture.models.stub_models import StubFormat
@@ -225,6 +226,61 @@ def scaffold_functions(
 # ---------------------------------------------------------------------------
 
 
+def _renumber_payload(result: RenumberResult) -> dict[str, Any]:
+    """``generate renumber --json``'s document."""
+    return {
+        "moves": [{"old": str(p.old_path), "new": str(p.new_path)} for p in result.plans],
+        "ref_rewrites": [
+            {
+                "file": str(rw.ref_file),
+                "old_name": rw.old_name,
+                "new_name": rw.new_name,
+            }
+            for rw in result.ref_rewrites
+        ],
+        "dangling_refs": [{"file": str(f), "name": name} for f, name in result.dangling_refs],
+        "cross_repo_refs": [str(p) for p in result.cross_repo_refs],
+        "unresolved_reads": [
+            {"migration": str(r.migration), "line": r.line, "reason": r.reason}
+            for r in result.unresolved_reads
+        ],
+    }
+
+
+def _print_renumber_result(result: RenumberResult, *, dry_run: bool) -> None:
+    """``generate renumber``'s text report."""
+    dry_tag = " [dim](dry run)[/dim]" if dry_run else ""
+    for plan in result.plans:
+        console.print(
+            f"[green]→[/green] move{markup(dry_tag)}: {verbatim(plan.old_path)} → {verbatim(plan.new_path)}"
+        )
+    for rw in result.ref_rewrites:
+        if rw.old_name != rw.new_name:
+            console.print(
+                f"[cyan]~[/cyan] rewrite{markup(dry_tag)}: {verbatim(rw.ref_file)} "
+                f"({verbatim(rw.old_name)} → {verbatim(rw.new_name)})"
+            )
+        else:
+            console.print(
+                f"[dim]ℹ refs:[/dim] {verbatim(rw.ref_file)} calls {verbatim(rw.old_name)}"
+            )
+    for ref_file, name in result.dangling_refs:
+        console.print(
+            f"[red]⚠ dangling:[/red] {verbatim(ref_file)} still references '{verbatim(name)}' "
+            f"(likely inside a string literal — fix manually)"
+        )
+    if result.cross_repo_refs:
+        console.print("[yellow]⚠ proceeded with --force despite cross-repo refs:[/yellow]")
+        for p in result.cross_repo_refs:
+            console.print(f"  {verbatim(p)}")
+    if result.unresolved_reads:
+        console.print(
+            "[yellow]⚠ proceeded with --force past migration reads it cannot resolve:[/yellow]"
+        )
+        for r in result.unresolved_reads:
+            console.print(f"  {verbatim(r.migration)}:{verbatim(r.line)}: {verbatim(r.reason)}")
+
+
 @generate_app.command("renumber")
 @cli_boundary
 def renumber_path(
@@ -232,10 +288,11 @@ def renumber_path(
         ...,
         help="Source file or directory to move.",
     ),
-    new_path: Path = typer.Argument(
-        ...,
+    new_path: Path | None = typer.Argument(
+        None,
         help="Target file path or directory. "
-        "When a directory is given, the next available prefix is allocated automatically.",
+        "When a directory is given, the next available prefix is allocated automatically. "
+        "Not given with --compact.",
     ),
     schema_dir: Path = typer.Option(
         Path("db/schema"),
@@ -251,7 +308,19 @@ def renumber_path(
         False,
         "--force",
         help="Proceed even if the old filename is referenced outside the db/ tree "
-        "(e.g. by application code that loads SQL files by literal path).",
+        "(e.g. by application code that loads SQL files by literal path), or a "
+        "migration reads a path confiture cannot resolve. Never moves a file a "
+        "migration reads.",
+    ),
+    compact: bool = typer.Option(
+        False,
+        "--compact",
+        help="Give OLD_PATH's numbered children (files and subdirectories) the lowest "
+        "contiguous prefixes, in build order. Refused when that would change the "
+        "order confiture build reads the tree in.",
+    ),
+    migrations_dir: Path = migrations_dir_option(
+        help="Migrations whose file reads pin a schema path (default: db/migrations)."
     ),
     output_json: bool = typer.Option(
         False,
@@ -267,7 +336,8 @@ def renumber_path(
     the rewrite pass (e.g. inside string literals).  Refuses to proceed
     when the old filename is referenced outside the ``db/`` tree (e.g. by
     application code that loads SQL files by literal path) — use
-    ``--force`` to override.
+    ``--force`` to override.  Never moves a file a migration reads at run
+    time: that would break the migration's replay (``VALID_003``).
 
     Examples::
 
@@ -275,63 +345,40 @@ def renumber_path(
                                     db/schema/functions/00005_create_item.sql
         confiture generate renumber db/schema/functions/catalog/ \\
                                     db/schema/functions/public/ --dry-run
+        confiture generate renumber --compact db/schema/functions/catalog/
     """
+    if compact and new_path is not None:
+        fail(
+            ConfigurationError("--compact takes one directory, not a NEW_PATH"),
+            json_mode=output_json,
+        )
+    if not compact and new_path is None:
+        fail(ConfigurationError("Missing NEW_PATH: where to move OLD_PATH"), json_mode=output_json)
     repo_root = _detect_repo_root(schema_dir)
-    renumber = TreeRenumber(schema_dir, repo_root=repo_root)
+    renumber = TreeRenumber(schema_dir, repo_root=repo_root, migrations_dir=migrations_dir)
 
     try:
-        plans = renumber.build_plans(old_path, new_path)
+        if compact:
+            plans = renumber.build_compact_plans(old_path)
+        else:
+            assert new_path is not None
+            plans = renumber.build_plans(old_path, new_path)
     except ValueError as exc:
         fail(ConfigurationError(str(exc)), json_mode=output_json)
+    except ConfiturError as exc:
+        fail(exc, json_mode=output_json)
 
     try:
         result = renumber.execute(plans, dry_run=dry_run, force=force)
     except ValueError as exc:
         fail(ConfigurationError(str(exc)), json_mode=output_json)
+    except ConfiturError as exc:
+        fail(exc, json_mode=output_json)
 
     if output_json:
-        emit(
-            {
-                "moves": [{"old": str(p.old_path), "new": str(p.new_path)} for p in result.plans],
-                "ref_rewrites": [
-                    {
-                        "file": str(rw.ref_file),
-                        "old_name": rw.old_name,
-                        "new_name": rw.new_name,
-                    }
-                    for rw in result.ref_rewrites
-                ],
-                "dangling_refs": [
-                    {"file": str(f), "name": name} for f, name in result.dangling_refs
-                ],
-                "cross_repo_refs": [str(p) for p in result.cross_repo_refs],
-            }
-        )
+        emit(_renumber_payload(result))
     else:
-        dry_tag = " [dim](dry run)[/dim]" if dry_run else ""
-        for plan in result.plans:
-            console.print(
-                f"[green]→[/green] move{markup(dry_tag)}: {verbatim(plan.old_path)} → {verbatim(plan.new_path)}"
-            )
-        for rw in result.ref_rewrites:
-            if rw.old_name != rw.new_name:
-                console.print(
-                    f"[cyan]~[/cyan] rewrite{markup(dry_tag)}: {verbatim(rw.ref_file)} "
-                    f"({verbatim(rw.old_name)} → {verbatim(rw.new_name)})"
-                )
-            else:
-                console.print(
-                    f"[dim]ℹ refs:[/dim] {verbatim(rw.ref_file)} calls {verbatim(rw.old_name)}"
-                )
-        for ref_file, name in result.dangling_refs:
-            console.print(
-                f"[red]⚠ dangling:[/red] {verbatim(ref_file)} still references '{verbatim(name)}' "
-                f"(likely inside a string literal — fix manually)"
-            )
-        if result.cross_repo_refs:
-            console.print("[yellow]⚠ proceeded with --force despite cross-repo refs:[/yellow]")
-            for p in result.cross_repo_refs:
-                console.print(f"  {verbatim(p)}")
+        _print_renumber_result(result, dry_run=dry_run)
 
     if result.dangling_refs:
         # success-signal: the renumber completed and already emitted its full
