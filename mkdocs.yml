@@ -108,6 +108,7 @@ nav:
       - 'Migration Hooks': guides/hooks.md
       - 'Integrations Guide': guides/integrations.md
       - 'Adopting Confiture on a database that already has migrations applied': guides/legacy-bootstrap.md
+      - 'Squashing old migrations': guides/migrate-squash.md
       - 'migrate validate': guides/migrate-validate.md
       - 'Migration Decision Tree': guides/migration-decision-tree.md
       - 'Migration Naming Best Practices': guides/migration-naming-best-practices.md
