@@ -522,6 +522,11 @@ class _UpReporter:
         elif kind == "applying":
             self._announce()
             console.print(f"[cyan]⚡ Applying {verbatim(event.label)}...[/cyan]", end=" ")
+        elif kind == "squashed_baseline_recorded":
+            console.print(
+                f"[green]📚 Recorded {verbatim(event.label)} without running it: this database "
+                "applied every migration it squashed[/green]"
+            )
         elif kind == "target_reached":
             console.print(f"[yellow]⏭️  Skipping {verbatim(event.version)} (after target)[/yellow]")
         elif kind == "skipped_non_transactional":

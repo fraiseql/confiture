@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from confiture.core._migrator import online as _online
 from confiture.core._migrator import policy as _policy
+from confiture.core._migrator import squashed as _squashed
 from confiture.core._migrator.apply import Online
 from confiture.core._migrator.discovery import parse_migration_filename
 from confiture.core._migrator.events import UpObserver, emit
@@ -55,6 +56,49 @@ def _plan_under_lock(session: SessionHost, *, force: bool) -> tuple[list[Path], 
     ]
 
     return pending_files, skipped_versions
+
+
+def _record_squashed(
+    session: SessionHost,
+    pending_files: list[Path],
+    skipped_versions: list[str],
+    *,
+    dry_run: bool,
+    on_event: UpObserver | None,
+) -> tuple[list[Path], list[str]]:
+    """Record the pending squashed baselines whose history the ledger holds — the lock is held.
+
+    A recorded baseline is no longer pending; it joins the versions the ledger records.
+    """
+    assert session._migrator is not None
+    named = [(path, *parse_migration_filename(path.name)) for path in pending_files]
+    recorded = _squashed.record_squashed(session._migrator, named, dry_run=dry_run)
+    for _path, version, name in named:
+        if version in recorded:
+            emit(on_event, "squashed_baseline_recorded", version=version, name=name)
+    return (
+        [path for path, version, _ in named if version not in recorded],
+        [*skipped_versions, *recorded],
+    )
+
+
+def record_squashed_baselines(
+    session: SessionHost, *, dry_run: bool = False, lock_timeout: int, no_lock: bool
+) -> list[str]:
+    """See :meth:`MigratorSession.record_squashed_baselines`."""
+    assert session._migrator is not None
+    migrator = session._migrator
+
+    def record() -> list[str]:
+        migrator.initialize()
+        pending = migrator.find_pending(migrations_dir=session._migrations_dir)
+        named = [(path, *parse_migration_filename(path.name)) for path in pending]
+        return _squashed.record_squashed(migrator, named, dry_run=dry_run)
+
+    if dry_run:
+        return record()
+    with session._migration_lock(no_lock=no_lock, lock_timeout=lock_timeout).acquire():
+        return record()
 
 
 def _verify_checksums(
@@ -154,6 +198,10 @@ def _plan(session: SessionHost, options: UpOptions) -> _Plan:
             on_event=on_event,
         )
     pending_files, skipped_versions = _plan_under_lock(session, force=force)
+    if not force:
+        pending_files, skipped_versions = _record_squashed(
+            session, pending_files, skipped_versions, dry_run=options.dry_run, on_event=on_event
+        )
     if _policy.wants_view_helpers(options.install_view_helpers, session._config):
         _policy.install_view_helpers(session._conn, on_event)
     checksums_verified, checksum_warnings = _verify_checksums(

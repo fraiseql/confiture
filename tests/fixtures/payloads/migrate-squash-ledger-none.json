@@ -1,0 +1,10 @@
+{
+  "recorded": [],
+  "dry_run": true,
+  "ok": true,
+  "command": "migrate squash-ledger",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

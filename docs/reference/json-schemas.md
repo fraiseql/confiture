@@ -168,6 +168,14 @@ attribute names are scheduled to follow them at 1.0.0.
 
 [migrate-reinit.schema.json](./json-schemas/migrate-reinit.schema.json) — `{success, deleted_count, marked[], total_duration_ms, dry_run, warnings, error}` after clearing the tracking table and re-marking the migration files as applied.
 
+### `confiture migrate squash --format json`
+
+[migrate-squash.schema.json](./json-schemas/migrate-squash.schema.json) — `{environments[], through, versions[], baseline, version, source, digest, archived[], deleted, dry_run}`: the environments asked first, the migrations replaced by one baseline, where the baseline is, whether its SQL is a dump of the replay or the proven tree (`source`), and the digest `migrate up` compares with each ledger. A refusal (`VALID_006`, `VALID_007`, `VALID_009`) emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
+
+### `confiture migrate squash-ledger --format json`
+
+[migrate-squash-ledger.schema.json](./json-schemas/migrate-squash-ledger.schema.json) — `{recorded[], dry_run}`: the squashed baselines recorded without running on a database that applied what they squashed. A ledger holding part of that history emits the error envelope (`VALID_008`).
+
 ### `confiture migrate rebuild --format json`
 
 [migrate-rebuild.schema.json](./json-schemas/migrate-rebuild.schema.json) — `{success, schemas_dropped, ddl_statements_executed, marked[], total_duration_ms, dry_run, warnings, error, seeds_applied, verified}` after dropping the schemas, building from DDL and marking every migration applied. `seeds_applied` is `null` unless `--seed` was given, `verified` `null` unless `--verify` ran.

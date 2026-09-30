@@ -98,6 +98,10 @@ resolution hint surfaced in the envelope.
 | `VALID_003` | 5 | error | renumber refused: {migration} reads {file} at its current path | Leave the file where it is. --force does not override this: rewriting an applied migration changes its checksum |
 | `VALID_004` | 5 | error | renumber refused: {migration} reads a path confiture cannot resolve statically | Check those reads, then re-run with --force |
 | `VALID_005` | 5 | error | compaction refused: {file} would be built in a different position | Rename the unnumbered sibling, or renumber the files one at a time |
+| `VALID_006` | 5 | error | squash refused: the tree is not the schema migrations 1..{through} build | Squash from the replay (drop --from-build), or cut where the tree is |
+| `VALID_007` | 5 | error | squash refused: the baseline needs a version after {through} | Pass --version with a version that sorts after the cut |
+| `VALID_008` | 5 | error | migration {version} is the baseline of {count} squashed migration(s), and this database's ledger holds part of that history | Bring the database to the squashed version with the archived migrations first, or restore the squashed files |
+| `VALID_009` | 5 | error | squash refused: {environment} {problem} | Deploy the squashed migrations there first, cut at an older version, or list an environment that cannot be reached in db/project.yaml squash.skip_environments |
 | `VERIFY_001` | 5 | error | Verify file contains forbidden SQL | Verify files must only contain SELECT queries |
 <!-- END GENERATED -->
 
@@ -119,9 +123,6 @@ there are. `confiture lint` lists them all (`naming_003` for a dotted name,
 quotes is what `schema_identity.quote_identifier` would quote: a capital, a
 space or other punctuation, a non-ASCII character, a leading digit, or a
 reserved word such as `user`. `confiture build` still builds such a tree.
-
-`confiture lint --select naming_003,naming_004` predicts the refusal exactly. A
-quoted view output alias and an extension name do not trigger it.
 
 ## `LOCK_1300` — lock-holder identity (`details.holder`)
 
@@ -163,11 +164,7 @@ warnings → 0 unless `--strict`.
 | `PFLIGHT_DUPLICATE_VERSION` | error | Two migration files share a version prefix |
 | `PFLIGHT_CHECKSUM_MISMATCH` | error | An applied migration's file changed after it was applied |
 | `PFLIGHT_REPLAY_FAILED` | error | A migration failed to replay against the `--against` DB (the DB error is in `details.error`) |
-| `PFLIGHT_TVIEW_BASE_COLUMN` | error | `--against` only: the migration drops or retypes a column a registered TVIEW reads, or drops its base table, without dropping the TVIEW first |
 | `PFLIGHT_LIVE_DEPENDENTS` | warning | (reserved) live dependents found for a replaced object |
-
-`PFLIGHT_TVIEW_BASE_COLUMN` is PostgreSQL's own dependency of a TVIEW's backing view
-on its base columns.
 
 ### Replica-safety codes (`PFLIGHT_REPLICA_*`, lint `replica_001`, #139)
 

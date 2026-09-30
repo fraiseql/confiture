@@ -2996,6 +2996,56 @@ confiture migrate steps [OPTIONS]
 
 <!-- END GENERATED: cli confiture migrate steps -->
 
+### `confiture migrate squash`
+
+Replace every migration through a version with one baseline.
+
+<!-- BEGIN GENERATED: cli confiture migrate squash -->
+
+**Usage**
+
+```bash
+confiture migrate squash [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--through` | `-t` | str | - | The last migration version to squash. |
+| `--from-build` | - | Flag | off | Write the tree `confiture build` produces instead of a dump, once a drift check shows it is the schema the squashed migrations build (default: off). |
+| `--version` | - | str | - | The baseline's version, when the one after --through is taken. It must sort after --through and before every later migration. |
+| `--delete` | - | Flag | off | Delete the squashed files instead of moving them to <migrations-dir>/archive/. |
+| `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
+| `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
+| `--dry-run` | - | Flag | off | Show the plan and write nothing (default: off). |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture migrate squash -->
+
+### `confiture migrate squash-ledger`
+
+Record a pending squashed baseline on a database that applied what it squashed.
+
+<!-- BEGIN GENERATED: cli confiture migrate squash-ledger -->
+
+**Usage**
+
+```bash
+confiture migrate squash-ledger [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
+| `--config` | `-c` | path | `db/environments/local.yaml` | Configuration file (default: db/environments/local.yaml) |
+| `--dry-run` | - | Flag | off | Show the plan and write nothing (default: off). |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
+
+<!-- END GENERATED: cli confiture migrate squash-ledger -->
+
 ## `confiture lint`
 
 Lint the schema DDL of an environment against the registered rules — naming,

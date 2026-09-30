@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-squash-ledger.schema.json",
+  "title": "confiture migrate squash-ledger --format json",
+  "description": "The pending squashed baselines `migrate squash-ledger` recorded without running them, on a database that applied every migration each one squashed. A database whose ledger holds part of that history is refused (VALID_008) with the error envelope (error-envelope.schema.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recorded",
+    "dry_run"
+  ],
+  "properties": {
+    "recorded": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The baselines' versions, in order; with --dry-run, those that would be recorded. Empty when there is none to record."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "True with --dry-run: the ledger was not changed."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate squash-ledger",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

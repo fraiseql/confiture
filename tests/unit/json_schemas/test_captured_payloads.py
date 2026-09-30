@@ -13,8 +13,9 @@ the one that is). The ``migrate fix-signatures`` payloads come from a project wh
 ``db/schema/`` declares ``app.total(bigint)`` against a database holding
 ``app.total(integer)`` (and, for ``--check-body``, another body); the ``migrate
 generate`` payloads' absolute paths had the capture directory replaced with
-``/tmp/project``, the one edit made. Recapture the same way when a payload changes
-on purpose.
+``/tmp/project``, the one edit made, as were the ``migrate squash`` payloads' (captured from a
+one-migration project: ``squash-ledger-none`` before the migration was applied, the
+others after). Recapture the same way when a payload changes on purpose.
 """
 
 from __future__ import annotations
@@ -71,6 +72,11 @@ CAPTURED = {
     "seed-validate-prep-seed-clean.json": "seed-validate.schema.json",
     "migrate-apply-as.json": "migrate-apply-as.schema.json",
     "migrate-baseline.json": "migrate-baseline.schema.json",
+    "migrate-squash.json": "migrate-squash.schema.json",
+    "migrate-squash-dry-run.json": "migrate-squash.schema.json",
+    "migrate-squash-ledger.json": "migrate-squash-ledger.schema.json",
+    "migrate-squash-ledger-dry-run.json": "migrate-squash-ledger.schema.json",
+    "migrate-squash-ledger-none.json": "migrate-squash-ledger.schema.json",
     "migrate-baseline-dry-run.json": "migrate-baseline.schema.json",
     "migrate-baseline-already-applied.json": "migrate-baseline.schema.json",
     "migrate-baseline-from-db.json": "migrate-baseline.schema.json",

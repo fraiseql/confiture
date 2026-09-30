@@ -404,6 +404,43 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "resolution_hint": "Rename the unnumbered sibling, or renumber the files one at a time",
     },
     {
+        "code": "VALID_006",
+        "message_template": "squash refused: the tree is not the schema migrations 1..{through} build",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Squash from the replay (drop --from-build), or cut where the tree is",
+    },
+    {
+        "code": "VALID_007",
+        "message_template": "squash refused: the baseline needs a version after {through}",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Pass --version with a version that sorts after the cut",
+    },
+    {
+        "code": "VALID_008",
+        "message_template": (
+            "migration {version} is the baseline of {count} squashed migration(s), and this "
+            "database's ledger holds part of that history"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Bring the database to the squashed version with the archived migrations first, "
+            "or restore the squashed files"
+        ),
+    },
+    {
+        "code": "VALID_009",
+        "message_template": "squash refused: {environment} {problem}",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Deploy the squashed migrations there first, cut at an older version, or list an "
+            "environment that cannot be reached in db/project.yaml squash.skip_environments"
+        ),
+    },
+    {
         "code": "VERIFY_001",
         "message_template": "Verify file contains forbidden SQL",
         "severity": "error",

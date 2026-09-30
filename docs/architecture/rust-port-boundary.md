@@ -125,12 +125,12 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-42,832 lines, 56% of `core/`.
+43,529 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
 | `__init__.py` | 124 | neutral |
-| `_migrator/` | 4,889 | database orchestration |
+| `_migrator/` | 5,141 | database orchestration |
 | `anonymization/` | 4,437 | database orchestration |
 | `backfill.py` | 124 | database orchestration |
 | `baseline_detector.py` | 248 | database orchestration |
@@ -146,7 +146,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `dry_run_summary.py` | 156 | neutral |
 | `error_context.py` | 286 | neutral |
 | `error_handler.py` | 284 | neutral |
-| `expected_db.py` | 217 | database orchestration |
+| `expected_db.py` | 227 | database orchestration |
 | `function_body_drift.py` | 211 | database orchestration |
 | `function_signature_drift.py` | 375 | database orchestration |
 | `git.py` | 521 | neutral |
@@ -156,7 +156,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `introspection/` | 302 | database orchestration |
 | `introspection/type_mapping.py` | 112 | neutral |
 | `large_tables.py` | 929 | database orchestration |
-| `ledger.py` | 505 | database orchestration |
+| `ledger.py` | 513 | database orchestration |
 | `linting/baseline.py` | 153 | neutral |
 | `linting/bodies.py` | 465 | database orchestration |
 | `linting/libraries/security_definer.py` | 405 | database orchestration |
@@ -167,7 +167,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `locking.py` | 625 | database orchestration |
 | `migration_generator.py` | 581 | database orchestration |
 | `migration_verifier.py` | 229 | database orchestration |
-| `migrator.py` | 206 | database orchestration |
+| `migrator.py` | 211 | database orchestration |
 | `ownership_fixer.py` | 243 | database orchestration |
 | `pgtap_generator.py` | 63 | neutral |
 | `preconditions.py` | 657 | database orchestration |
@@ -178,7 +178,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `scaffold/` | 296 | neutral |
 | `schema_analyzer.py` | 685 | database orchestration |
 | `schema_artifact.py` | 214 | database orchestration |
-| `schema_exporter.py` | 196 | neutral |
+| `schema_exporter.py` | 198 | neutral |
 | `schema_facts.py` | 162 | database orchestration |
 | `schema_snapshot.py` | 104 | database orchestration |
 | `schema_sources.py` | 318 | database orchestration |
@@ -186,11 +186,12 @@ duplicate readers were deleted. The count below is what the port translates.
 | `seed/` | 6,260 | database orchestration |
 | `sql_path.py` | 135 | database orchestration |
 | `sql_utils.py` | 86 | neutral |
+| `squash.py` | 402 | database orchestration |
 | `ssh_tunnel.py` | 138 | database orchestration |
 | `step_runner.py` | 298 | database orchestration |
 | `stub_generator.py` | 137 | neutral |
 | `syncer.py` | 654 | database orchestration |
-| `temp_database.py` | 275 | database orchestration |
+| `temp_database.py` | 293 | database orchestration |
 | `test_db.py` | 1,017 | database orchestration |
 | `tree_allocator.py` | 266 | database orchestration |
 | `tree_renumber.py` | 636 | database orchestration |

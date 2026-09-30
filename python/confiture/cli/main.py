@@ -40,6 +40,7 @@ from confiture.cli.commands.migrate.introspect import migrate_introspect
 from confiture.cli.commands.migrate.preflight import migrate_preflight
 from confiture.cli.commands.migrate.rebuild import migrate_rebuild
 from confiture.cli.commands.migrate.reinit import migrate_reinit
+from confiture.cli.commands.migrate.squash import migrate_squash, migrate_squash_ledger
 from confiture.cli.commands.migrate.status import migrate_status
 from confiture.cli.commands.migrate.steps import migrate_steps
 from confiture.cli.commands.migrate.up import migrate_up
@@ -226,6 +227,8 @@ migrate_app.command("generate")(migrate_generate)
 migrate_app.command("baseline")(migrate_baseline)
 migrate_app.command("reinit")(migrate_reinit)
 migrate_app.command("rebuild")(migrate_rebuild)
+migrate_app.command("squash")(migrate_squash)
+migrate_app.command("squash-ledger")(migrate_squash_ledger)
 
 # Register migrate analysis commands
 migrate_app.command("diff")(migrate_diff)

@@ -60,6 +60,7 @@ DELEGATES: dict[str, Any] = {
     "current_revision": reporting.current_revision,
     "preflight": reporting.preflight,
     "up": apply_loop.up,
+    "record_squashed_baselines": apply_loop.record_squashed_baselines,
     "apply_one": apply_loop.apply_one,
     "down": rollback_loop.down,
     "down_to": rollback_loop.down_to,

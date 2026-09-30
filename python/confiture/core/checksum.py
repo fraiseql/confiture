@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from psycopg import sql as pgsql
 
-from confiture.core.ledger import table_identifier
+from confiture.core.ledger import LIVE_ROWS, table_identifier
 
 if TYPE_CHECKING:
     import psycopg
@@ -270,9 +270,9 @@ class MigrationChecksumVerifier:
         """
         with self.connection.cursor() as cur:
             cur.execute(
-                pgsql.SQL("SELECT version, name, checksum FROM {} ORDER BY version").format(
-                    self._table_ident
-                )
+                pgsql.SQL(
+                    "SELECT version, name, checksum FROM {} AS ledger WHERE {} ORDER BY version"
+                ).format(self._table_ident, LIVE_ROWS)
             )
             return {row[0]: (row[1], row[2]) for row in cur.fetchall()}
 

@@ -236,6 +236,10 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     "VALID_003": 5,  # renumber of a file a migration reads (#538)
     "VALID_004": 5,  # renumber past a read it cannot resolve, without --force (#538)
     "VALID_005": 5,  # renumber --compact that would reorder the build (#538)
+    "VALID_006": 5,  # squash --from-build of a tree that is not the state at the cut (#539)
+    "VALID_007": 5,  # squash with no usable baseline version (#539)
+    "VALID_008": 5,  # migrate up meets a baseline whose history the ledger holds in part (#539)
+    "VALID_009": 5,  # squash refused by an environment it asked first (#539)
     "VERIFY_001": 5,
     # ROLLBACK family → 8 (irreversible / inconsistent state).
     "ROLLBACK_001": 8,

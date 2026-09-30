@@ -57,6 +57,7 @@ ALLOWED: dict[str, str] = {
     ),
     "core/preflight.py:migrations_dir": _MIGRATIONS,
     "core/strategy.py:migrations_dir": _MIGRATIONS,
+    "core/squash.py:migrations_dir": _MIGRATIONS,
     "core/validation/config_validator.py:migrations_dir": _MIGRATIONS,
     "core/validation/data_assertions.py:migrations_dir": _MIGRATIONS,
     "core/linting/libraries/replica.py:migrations_dir": _MIGRATIONS,
