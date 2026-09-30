@@ -3428,6 +3428,11 @@ refuses (`VALID_005`) when the new names would change the order `confiture build
 reads the tree in, for instance against an unnumbered sibling like `02x/`. A directory
 without gaps is left as it is.
 
+**A move that changes the build order says so.** Moving `005_e.sql` to `002_e.sql` is
+how a file is made to build earlier, so it is not refused. The output names each file
+the moved one now builds before or after (`reordered` in `--json`), so a reorder nobody
+meant, such as one against a sibling directory that sorts in between, is seen.
+
 ### `confiture generate scaffold`
 
 Write SQL files produced by a pluggable framework emitter.
