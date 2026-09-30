@@ -19,7 +19,9 @@ object**, whose relation and query are its whole definition.
 Confiture supports pg_tviews **0.1.0-beta.19 or later**. Where it reads TVIEWs from a
 live database (drift, `schema dump-model`, `migrate preflight --against`, the platform's
 `introspect`), an older build is refused with `CONFIG_014` (exit 5), naming the build
-installed. It reads the build from `pg_tviews_version()`: `pg_extension.extversion`
+installed. `migrate up` refuses the same way, before applying anything, when a pending
+migration creates or drops a TVIEW: an older build loses a TVIEW a migration
+re-applies. A migration that touches no TVIEW deploys as before. It reads the build from `pg_tviews_version()`: `pg_extension.extversion`
 is `0.1.0` on every 0.1.0 beta.
 
 A table named `tv_*` is a TVIEW only when it is created `AS SELECT`; `CREATE TABLE

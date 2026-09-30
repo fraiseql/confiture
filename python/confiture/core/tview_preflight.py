@@ -14,9 +14,11 @@ from typing import Any
 
 import pglast
 import pglast.parser
+from pglast.stream import RawStream
 
 from confiture.core._migrator.discovery import _version_from_migration_filename
 from confiture.core.ddl_walk import column_edit, object_edits, walk_nodes
+from confiture.core.linting.inventory import build_model
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import TVIEW_PREFIX
 from confiture.core.sql_lexer import ParsedStatement, parse
@@ -46,6 +48,25 @@ def live_issues(files: Iterable[Path], tviews: Mapping[str, str]) -> list[Prefli
                 if tview not in dropped
             )
     return issues
+
+
+def touches_tview(sql: str) -> bool:
+    """Whether *sql* creates or drops a pg_tviews TVIEW; SQL the parser rejects touches none."""
+    try:
+        statements = parse(sql)
+    except pglast.parser.ParseError:
+        return False
+    return any(
+        _dropped_tviews(statement.stmt) or _creates_tview(statement.stmt)
+        for statement in statements
+    )
+
+
+def _creates_tview(stmt: Any) -> bool:
+    """``CREATE TABLE tv_* AS …``: the statement pg_tviews converts into a TVIEW."""
+    into = getattr(stmt, "into", None)
+    rel = getattr(into, "rel", None) if type(stmt).__name__ == "CreateTableAsStmt" else None
+    return rel is not None and bool(build_model(RawStream()(stmt) + ";").tviews)
 
 
 def _issue(
