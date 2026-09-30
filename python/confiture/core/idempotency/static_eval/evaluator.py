@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from confiture.core.idempotency.static_eval.file_io import _FileIOMixin
+from confiture.core.idempotency.static_eval.file_reads import _FileReadsMixin
 from confiture.core.idempotency.static_eval.scope import (
     _INLINED_COMPREHENSIONS,
     _BindingCollector,
@@ -67,7 +68,7 @@ def _scope_body(node: ast.AST, collector: _BindingCollector) -> list[ast.AST]:
     raise _ScopeMismatch(type(node).__name__)  # pragma: no cover — every scope node is listed above
 
 
-class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin):
+class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin, _FileReadsMixin):
     """One parsed migration: its scopes, its bindings, and an evaluator over them.
 
     Args:
@@ -93,6 +94,7 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin):
         self._setattr_on_self = False
         self._global_rebinders: set[str] = set()
         self._nonlocal_rebinders: set[str] = set()
+        self._parents: dict[int, ast.AST] | None = None
         self.scopes_ok = True
         top: symtable.SymbolTable | None
         try:
