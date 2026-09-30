@@ -232,6 +232,9 @@ CANONICAL_EXIT_CODES: dict[str, int] = {
     # VALID family → 5.
     "VALID_001": 5,
     "VALID_002": 5,
+    "VALID_006": 5,  # squash --from-build of a tree that is not the state at the cut (#539)
+    "VALID_007": 5,  # squash with no usable baseline version (#539)
+    "VALID_008": 5,  # migrate up meets a baseline whose history the ledger holds in part (#539)
     "VERIFY_001": 5,
     # ROLLBACK family → 8 (irreversible / inconsistent state).
     "ROLLBACK_001": 8,

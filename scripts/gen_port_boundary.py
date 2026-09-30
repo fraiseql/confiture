@@ -94,6 +94,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "drift.py": (GLUE, ORCHESTRATION),
     "dry_run.py": (GLUE, ORCHESTRATION),
     "expected_db.py": (GLUE, ORCHESTRATION),
+    "squash.py": (GLUE, ORCHESTRATION),
     "function_body_drift.py": (GLUE, ORCHESTRATION),
     "function_signature_drift.py": (GLUE, ORCHESTRATION),
     "grant_accompaniment.py": (GLUE, ORCHESTRATION),

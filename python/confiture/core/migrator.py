@@ -181,12 +181,17 @@ def _progress_observer(progress: ProgressManager) -> Any:
 
 
 def replay_migrations(
-    database_url: str, migrations_dir: Path, migration_table: str | None = None
+    database_url: str,
+    migrations_dir: Path,
+    migration_table: str | None = None,
+    *,
+    target: str | None = None,
 ) -> None:
     """``migrate up`` every migration in *migrations_dir* against *database_url*.
 
     What ``ExpectedSchemaDB.from_base_plus_migrations`` is handed to build the
-    schema a repository's migrations produce.
+    schema a repository's migrations produce; with *target*, the schema as of
+    that version.
 
     Raises:
         SchemaError: A migration failed to apply.
@@ -198,7 +203,7 @@ def replay_migrations(
         migration_table_override=migration_table,
     )
     with session:
-        result = session.up()
+        result = session.up(target=target)
     if not result.success:
         raise SchemaError(
             f"Migration replay into the scratch database failed: {result.errors}",

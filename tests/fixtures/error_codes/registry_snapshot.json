@@ -316,5 +316,23 @@
     "severity": "error",
     "exit_code": 5,
     "resolution_hint": "Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open"
+  },
+  "VALID_006": {
+    "message_template": "squash refused: the tree is not the schema migrations 1..{through} build",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Squash from the replay (drop --from-build), or cut where the tree is"
+  },
+  "VALID_007": {
+    "message_template": "squash refused: the baseline needs a version after {through}",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Pass --version with a version that sorts after the cut"
+  },
+  "VALID_008": {
+    "message_template": "migration {version} is the baseline of {count} squashed migration(s), and this database's ledger holds part of that history",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Bring the database to the squashed version with the archived migrations first, or restore the squashed files"
   }
 }

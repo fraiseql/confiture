@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import subprocess
 import uuid
+from collections.abc import Sequence
 from urllib.parse import urlparse, urlunparse
 
 import psycopg
@@ -209,11 +210,13 @@ class TempDatabase:
             raise
 
 
-def pg_dump_schema(database_url: str) -> str:
+def pg_dump_schema(database_url: str, *, exclude_tables: Sequence[str] = ()) -> str:
     """Run ``pg_dump --schema-only`` and return the DDL output.
 
     Args:
         database_url: PostgreSQL connection URL for the database to dump.
+        exclude_tables: ``pg_dump --exclude-table`` patterns; a bare name
+            matches the table in every schema.
 
     Returns:
         Raw ``pg_dump`` output as a string.
@@ -225,7 +228,14 @@ def pg_dump_schema(database_url: str) -> str:
     safe_url, password = split_password(database_url)
     try:
         result = subprocess.run(
-            ["pg_dump", "--schema-only", "--no-owner", "--no-privileges", safe_url],
+            [
+                "pg_dump",
+                "--schema-only",
+                "--no-owner",
+                "--no-privileges",
+                *(f"--exclude-table={table}" for table in exclude_tables),
+                safe_url,
+            ],
             capture_output=True,
             text=True,
             check=True,
@@ -264,12 +274,20 @@ _PG_DUMP_NOISE_RE = re.compile(
 )
 
 
-def clean_pg_dump_output(raw: str) -> str:
+def clean_pg_dump_output(raw: str, *, keep_extensions: bool = False) -> str:
     """Strip ``pg_dump`` preamble noise from raw output.
 
     Removes ``SET`` session variables, ``SELECT pg_catalog.set_config``,
     ``CREATE EXTENSION``, ``COMMENT ON EXTENSION``, and
-    ``-- Dumped from/by`` version comments.
+    ``-- Dumped from/by`` version comments. With *keep_extensions*, the two
+    extension statements stay: a schema that is to be recreated needs them.
     """
     lines = raw.splitlines(keepends=True)
-    return "".join(line for line in lines if not _PG_DUMP_NOISE_RE.match(line))
+    return "".join(line for line in lines if not _is_noise(line, keep_extensions=keep_extensions))
+
+
+def _is_noise(line: str, *, keep_extensions: bool) -> bool:
+    match = _PG_DUMP_NOISE_RE.match(line)
+    if match is None:
+        return False
+    return not (keep_extensions and match.group(1).upper().startswith(("CREATE", "COMMENT")))

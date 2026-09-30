@@ -263,6 +263,38 @@ class MigratorSession:
     # High-level library methods                                         #
     # ------------------------------------------------------------------ #
 
+    def record_squashed_baselines(
+        self,
+        *,
+        dry_run: bool = False,
+        lock_timeout: int | None = None,
+        no_lock: bool | None = None,
+    ) -> list[str]:
+        """Record every pending squashed baseline whose history this database applied.
+
+        What ``up()`` does first, run alone (``migrate squash-ledger``): a
+        baseline whose squashed versions the ledger holds, with the checksums its
+        digest was made from, is recorded without running, and those rows are
+        marked ``archived_into``. No other migration is applied.
+
+        Args:
+            dry_run: Decide, and change nothing (no lock is taken).
+            lock_timeout: How long to wait for the migration lock, in ms;
+                ``None`` reads the environment's ``migration.locking``.
+            no_lock: Skip the migration lock; ``None`` reads the environment.
+
+        Returns:
+            The baselines recorded (or, under ``dry_run``, that would be).
+
+        Raises:
+            ValidationError: ``VALID_008`` when the ledger holds part of a
+                baseline's history.
+        """
+        lock_timeout, no_lock = self._lock_settings(lock_timeout, no_lock)
+        return _apply_loop.record_squashed_baselines(
+            self, dry_run=dry_run, lock_timeout=lock_timeout, no_lock=no_lock
+        )
+
     def status(self) -> StatusResult:
         """Get migration status: which migrations are applied, pending, or unknown.
 

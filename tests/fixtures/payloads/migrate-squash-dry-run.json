@@ -1,0 +1,22 @@
+{
+  "through": "001",
+  "versions": [
+    "001"
+  ],
+  "baseline": "db/migrations/002_squashed_baseline.up.sql",
+  "version": "002",
+  "source": "replay",
+  "digest": "ece87b7b6dda0521e6594c597878b4d35fb0875c2c9af76b251234c61cd71257",
+  "archived": [
+    "db/migrations/001_t.down.sql",
+    "db/migrations/001_t.up.sql"
+  ],
+  "deleted": false,
+  "dry_run": true,
+  "ok": true,
+  "command": "migrate squash",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

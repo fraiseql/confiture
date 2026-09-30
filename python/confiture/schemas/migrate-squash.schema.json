@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/migrate-squash.schema.json",
+  "title": "confiture migrate squash --format json",
+  "description": "The migrations `migrate squash` replaced with one baseline, and the baseline. With --dry-run nothing is written and the payload says what would be. A refusal (VALID_006, VALID_007) or a failed replay writes the error envelope (error-envelope.schema.json) instead.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "through",
+    "versions",
+    "baseline",
+    "version",
+    "source",
+    "digest",
+    "archived",
+    "deleted",
+    "dry_run"
+  ],
+  "properties": {
+    "through": {
+      "type": "string",
+      "description": "The --through version: the last one squashed."
+    },
+    "versions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "description": "Every version squashed, in order."
+    },
+    "baseline": {
+      "type": "string",
+      "description": "The baseline's .up.sql path; its .down.sql, which refuses, sits beside it."
+    },
+    "version": {
+      "type": "string",
+      "description": "The baseline's version: the one after --through, or --version."
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "replay",
+        "build"
+      ],
+      "description": "`replay`: the schema dumped from a scratch database the squashed migrations built. `build` (--from-build): the tree, proven by a drift check to be that schema."
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of the squashed versions and their checksums, carried in the baseline's header; `migrate up` compares it with each database's ledger."
+    },
+    "archived": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Every file of the squashed versions (.py, .up.sql, .down.sql, .verify.sql): moved to <migrations-dir>/archive/, or deleted with --delete."
+    },
+    "deleted": {
+      "type": "boolean",
+      "description": "True with --delete."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "True with --dry-run: nothing was written or moved."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "migrate squash",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    }
+  }
+}

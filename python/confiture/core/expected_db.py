@@ -147,6 +147,16 @@ class ExpectedSchemaDB:
         self._replay = replay
         return self
 
+    @property
+    def url(self) -> str:
+        """The scratch database's URL, while the context is open."""
+        if self._temp_url is None:
+            raise ConfigurationError(
+                "ExpectedSchemaDB.url is only known inside the context.",
+                resolution_hint="Read it inside `with ExpectedSchemaDB(...) as conn:`.",
+            )
+        return self._temp_url
+
     # -- context management ---------------------------------------------- #
 
     def __enter__(self) -> psycopg.Connection:

@@ -366,6 +366,33 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         "resolution_hint": "Review the migration, then run migrate up --allow-destructive",
     },
     {
+        "code": "VALID_006",
+        "message_template": "squash refused: the tree is not the schema migrations 1..{through} build",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Squash from the replay (drop --from-build), or cut where the tree is",
+    },
+    {
+        "code": "VALID_007",
+        "message_template": "squash refused: the baseline needs a version after {through}",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": "Pass --version with a version that sorts after the cut",
+    },
+    {
+        "code": "VALID_008",
+        "message_template": (
+            "migration {version} is the baseline of {count} squashed migration(s), and this "
+            "database's ledger holds part of that history"
+        ),
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Bring the database to the squashed version with the archived migrations first, "
+            "or restore the squashed files"
+        ),
+    },
+    {
         "code": "VERIFY_001",
         "message_template": "Verify file contains forbidden SQL",
         "severity": "error",

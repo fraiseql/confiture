@@ -94,6 +94,9 @@ resolution hint surfaced in the envelope.
 | `SYNC_001` | 5 | error | Sync error | Check source and target database connections |
 | `VALID_001` | 5 | error | Validation error | Check validation rules and data integrity |
 | `VALID_002` | 5 | error | Destructive migration refused: data is lost when it applies | Review the migration, then run migrate up --allow-destructive |
+| `VALID_006` | 5 | error | squash refused: the tree is not the schema migrations 1..{through} build | Squash from the replay (drop --from-build), or cut where the tree is |
+| `VALID_007` | 5 | error | squash refused: the baseline needs a version after {through} | Pass --version with a version that sorts after the cut |
+| `VALID_008` | 5 | error | migration {version} is the baseline of {count} squashed migration(s), and this database's ledger holds part of that history | Bring the database to the squashed version with the archived migrations first, or restore the squashed files |
 | `VERIFY_001` | 5 | error | Verify file contains forbidden SQL | Verify files must only contain SELECT queries |
 <!-- END GENERATED -->
 

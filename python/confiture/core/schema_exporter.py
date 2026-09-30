@@ -79,6 +79,8 @@ CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "migrate-apply-as.schema.json",
     "migrate-baseline.schema.json",
     "migrate-diff.schema.json",
+    "migrate-squash-ledger.schema.json",
+    "migrate-squash.schema.json",
     "migrate-steps.schema.json",
     "migrate-fix.schema.json",
     "migrate-fix-signatures.schema.json",

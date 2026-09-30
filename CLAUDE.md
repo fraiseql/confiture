@@ -460,7 +460,7 @@ confiture/
 │   │   ├── seed_copy.py          # ``confiture seed convert``: the COPY-format tool
 │   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
 │   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
-│   │   ├── commands/             # CLI command modules for Confiture (35 modules)
+│   │   ├── commands/             # CLI command modules for Confiture (36 modules)
 │   │   └── formatters/           # (7 modules)
 │   ├── config/                   # Configuration module for Confiture
 │   │   ├── __init__.py           # Configuration module for Confiture
@@ -544,6 +544,7 @@ confiture/
 │   │   ├── sql_lexer.py          # The one SQL lexer: libpg_query's scanner and parser, nothing hand-writt…
 │   │   ├── sql_path.py           # Where does a SQL-file path written in a migration point? One answer
 │   │   ├── sql_utils.py          # Shared SQL utility functions
+│   │   ├── squash.py             # Retire old migrations into one baseline: the schema they build, as one…
 │   │   ├── ssh_tunnel.py         # SSH tunnel context manager for remote database access
 │   │   ├── step_runner.py        # Drive an expand/contract plan stage by stage, with a checkpoint after e…
 │   │   ├── strategy.py           # Migration strategy header parser
@@ -558,7 +559,7 @@ confiture/
 │   │   ├── unified_linter.py     # Unified SQL linter orchestrating Squawk, SQLFluff, and other tools
 │   │   ├── view_body_drift.py    # View (and materialized-view) body-drift detection
 │   │   ├── view_manager.py       # View dependency manager for ALTER COLUMN TYPE migrations
-│   │   ├── _migrator/            # (22 modules)
+│   │   ├── _migrator/            # (23 modules)
 │   │   ├── anonymization/        # PII anonymization framework (library API) (24 modules)
 │   │   ├── change_set/           # The preflight change set: what a migration set changes, and how risky i… (5 modules)
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)

@@ -12,6 +12,7 @@ comments do not count: a code that only appears in prose is still dead.
 from __future__ import annotations
 
 import ast
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -76,3 +77,41 @@ def test_no_registered_code_is_unreferenced() -> None:
     """The aggregate view: one failure naming every dead code at once."""
     dead = [code for code in _registered_codes() if code not in _referenced_strings()]
     assert dead == [], f"{len(dead)} registered codes are never emitted: {dead}"
+
+
+#: A registry code: ``FAMILY_NNN``. ``core/error_context.py`` passes its own
+#: vocabulary (``DB_CONNECTION_FAILED``) through the same keyword, never registered.
+_REGISTRY_SHAPE = re.compile(r"[A-Z]+_[0-9]+")
+
+
+def _emitted_codes() -> dict[str, list[str]]:
+    """Each registry-shaped ``error_code="…"`` literal in the package, with where it is passed."""
+    emitted: dict[str, list[str]] = {}
+    for path in sorted(_PACKAGE_ROOT.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call):
+                continue
+            for keyword in node.keywords:
+                value = keyword.value
+                if (
+                    keyword.arg == "error_code"
+                    and isinstance(value, ast.Constant)
+                    and isinstance(value.value, str)
+                    and _REGISTRY_SHAPE.fullmatch(value.value)
+                ):
+                    where = f"{path.relative_to(_PACKAGE_ROOT)}:{node.lineno}"
+                    emitted.setdefault(value.value, []).append(where)
+    return emitted
+
+
+def test_every_emitted_code_is_registered() -> None:
+    """The other direction: a raise site naming a code the codebook does not list.
+
+    Its exit class would be the default, and a consumer reading the codebook would
+    never learn it exists.
+    """
+    registered = set(_registered_codes())
+    unregistered = {
+        code: sites for code, sites in _emitted_codes().items() if code not in registered
+    }
+    assert unregistered == {}, f"error codes raised but never registered: {unregistered}"
