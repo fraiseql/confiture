@@ -33,7 +33,6 @@ from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import (
     ColumnEdit,
     ObjectEdit,
-    StorageEdit,
     added_constraint,
     column_edit,
     object_edits,
@@ -46,7 +45,7 @@ from confiture.core.ddl_walk import (
     render_default,
     routine_body,
     routine_options,
-    storage_edit,
+    sets_logged,
     written_type,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
@@ -190,9 +189,7 @@ class SchemaObject:
     has_primary_key: bool = False
     is_partition: bool = False
     is_temporary: bool = False
-    #: A ``tview``'s storage as the tree leaves it: the ``fillfactor`` an
-    #: ``ALTER TABLE … SET`` gave it, and whether ``SET LOGGED`` made it durable.
-    fillfactor: int | None = None
+    #: Whether ``ALTER TABLE … SET LOGGED`` left a ``tview`` durable.
     logged: bool = False
     comment: str | None = None
     signature: str | None = None
@@ -837,8 +834,8 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
         # A TVIEW is a table to PostgreSQL, and what the tree does to its storage is read.
         tviews = inventory.find_all(("tview",), rv.schemaname, rv.relname)
         for cmd in stmt.cmds or []:
-            if tviews and (storage := storage_edit(cmd)) is not None:
-                _apply_storage(tviews[0], storage)
+            if tviews and (logged := sets_logged(cmd)) is not None:
+                tviews[0].logged = logged
         return
     for cmd in stmt.cmds or []:
         node = added_constraint(cmd)
@@ -849,22 +846,14 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
             if isinstance(read, Constraint):
                 _add_constraints(table, (read,))
             continue
-        storage = storage_edit(cmd)
-        if storage is not None:
-            _apply_storage(table, storage)
+        logged = sets_logged(cmd)
+        if logged is not None:
+            table.logged = logged
             continue
         edit = column_edit(cmd)
         apply = _COLUMN_APPLIERS.get(edit.kind) if edit is not None else None
         if apply is not None and edit is not None:
             apply(sql, table, edit)
-
-
-def _apply_storage(table: SchemaObject, storage: StorageEdit) -> None:
-    """Fold a fillfactor or a persistence change onto the object it names."""
-    if storage.kind == "fillfactor":
-        table.fillfactor = storage.value if isinstance(storage.value, int) else None
-    else:
-        table.logged = bool(storage.value)
 
 
 def _held_table(

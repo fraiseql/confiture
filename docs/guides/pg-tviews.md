@@ -29,14 +29,12 @@ tv_x (…)` with a column list is a plain table.
 
 `confiture lint --select tview` (off by default) reads the tree:
 
-- `tview_001`: an `fk_*` column with no index leading with it, so each cascade step scans the TVIEW
-- `tview_002`: an index over `data` or `updated_at`, which every refresh rewrites, so no update is HOT
-- `tview_003`: no `fillfactor` below 100
-- `tview_004`: replicas declared and the TVIEW never `SET LOGGED` (UNLOGGED is the default, and a standby cannot read it)
+- `tview_001`: an index over `data` or `updated_at`, which every refresh rewrites, so no update is HOT
+- `tview_002`: replicas declared and the TVIEW never `SET LOGGED` (UNLOGGED is the default, and a standby cannot read it)
 
-pg_tviews accepts `CREATE INDEX`, `ALTER TABLE … SET (fillfactor = 85)` and
-`ALTER TABLE … SET LOGGED` after the conversion; `WITH (…)` on the `CREATE` it
-refuses. See the [rule reference](../reference/lint-rules.md).
+pg_tviews 0.1.0-beta.18 indexes each `fk_*` column and sets fillfactor 85 itself. It
+accepts `CREATE INDEX` and `ALTER TABLE … SET LOGGED` after the conversion; `WITH (…)`
+on the `CREATE` it refuses. See the [rule reference](../reference/lint-rules.md).
 
 ## Not supported yet
 

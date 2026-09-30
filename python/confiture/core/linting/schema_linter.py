@@ -186,9 +186,7 @@ class LintConfig:
         check_tenant_views: bool = False,
         check_tenant_foreign_keys: bool = False,
         check_tenant_unique_keys: bool = False,
-        check_tview_foreign_keys: bool = False,
         check_tview_hot: bool = False,
-        check_tview_fillfactor: bool = False,
         check_tview_replicas: bool = False,
         has_replicas: bool = False,
         check_acl_coverage: bool = True,
@@ -232,14 +230,10 @@ class LintConfig:
                 (``tenant_004``).
             check_tenant_unique_keys: A tenant table's primary key, UNIQUEs and
                 unique indexes lead with the discriminator (``tenant_005``).
-            check_tview_foreign_keys: A pg_tviews TVIEW's ``fk_*`` column has an
-                index leading with it (``tview_001``).
-            check_tview_hot: No index over ``data`` or ``updated_at`` on a TVIEW
-                (``tview_002``).
-            check_tview_fillfactor: A TVIEW is given a fillfactor below 100
-                (``tview_003``).
+            check_tview_hot: No index over ``data`` or ``updated_at`` on a pg_tviews
+                TVIEW (``tview_001``).
             check_tview_replicas: A TVIEW is made LOGGED where replicas are
-                declared (``tview_004``); needs *has_replicas*.
+                declared (``tview_002``); needs *has_replicas*.
             has_replicas: Whether the environment declares replicas.
             check_acl_coverage: Allow the ACL coverage rule (``acl_001``) to run.
             check_duplicates: Report objects defined more than once in one build
@@ -287,9 +281,7 @@ class LintConfig:
         self.check_tenant_views = check_tenant_views
         self.check_tenant_foreign_keys = check_tenant_foreign_keys
         self.check_tenant_unique_keys = check_tenant_unique_keys
-        self.check_tview_foreign_keys = check_tview_foreign_keys
         self.check_tview_hot = check_tview_hot
-        self.check_tview_fillfactor = check_tview_fillfactor
         self.check_tview_replicas = check_tview_replicas
         self.has_replicas = has_replicas
         self.check_acl_coverage = check_acl_coverage
@@ -480,14 +472,8 @@ class SchemaLinter:
                 partial(self._check_tenancy, "tenant_005"),
                 "tenant",
             ),
-            (
-                self.config.check_tview_foreign_keys,
-                partial(self._check_tview, "tview_001"),
-                "tview",
-            ),
-            (self.config.check_tview_hot, partial(self._check_tview, "tview_002"), "tview"),
-            (self.config.check_tview_fillfactor, partial(self._check_tview, "tview_003"), "tview"),
-            (self.config.check_tview_replicas, partial(self._check_tview, "tview_004"), "tview"),
+            (self.config.check_tview_hot, partial(self._check_tview, "tview_001"), "tview"),
+            (self.config.check_tview_replicas, partial(self._check_tview, "tview_002"), "tview"),
         ):
             if enabled:
                 check(report)

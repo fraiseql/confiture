@@ -171,22 +171,10 @@ FIXTURES: dict[str, Fixture] = {
     "tview_001": Fixture(
         {
             "010.sql": "CREATE TABLE tb_p (pk_p bigint PRIMARY KEY, fk_u bigint, t text);\n"
-            "CREATE TABLE tv_p AS SELECT p.pk_p, p.fk_u, p.t AS data FROM tb_p p;\n"
-        },
-    ),
-    "tview_002": Fixture(
-        {
-            "010.sql": "CREATE TABLE tb_p (pk_p bigint PRIMARY KEY, fk_u bigint, t text);\n"
             "CREATE TABLE tv_p AS SELECT p.pk_p, p.fk_u, p.t AS data FROM tb_p p;\nCREATE INDEX ix ON tv_p USING gin (data);\n"
         },
     ),
-    "tview_003": Fixture(
-        {
-            "010.sql": "CREATE TABLE tb_p (pk_p bigint PRIMARY KEY, fk_u bigint, t text);\n"
-            "CREATE TABLE tv_p AS SELECT p.pk_p, p.fk_u, p.t AS data FROM tb_p p;\n"
-        },
-    ),
-    "tview_004": Fixture(
+    "tview_002": Fixture(
         {
             "010.sql": "CREATE TABLE tb_p (pk_p bigint PRIMARY KEY, fk_u bigint, t text);\n"
             "CREATE TABLE tv_p AS SELECT p.pk_p, p.fk_u, p.t AS data FROM tb_p p;\n"

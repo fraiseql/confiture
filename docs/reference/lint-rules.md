@@ -35,10 +35,8 @@ Adopt a rule on a schema that already trips it with a
 | `tenant_003` | tenant | warning | with `tenancy:` | A view reading tenant data publishes the discriminator as a plain column, or is declared global |
 | `tenant_004` | tenant | warning | with `tenancy:` | A foreign key between tenant tables carries the discriminator on both sides |
 | `tenant_005` | tenant | warning | with `tenancy:` | A tenant table's primary key and unique keys lead with the discriminator |
-| `tview_001` | tview | warning | off | A TVIEW's fk_* column has an index leading with it (pg_tviews#71) |
-| `tview_002` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT (pg_tviews#70) |
-| `tview_003` | tview | info | off | A TVIEW is given a fillfactor below 100 (pg_tviews#73) |
-| `tview_004` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
+| `tview_001` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT |
+| `tview_002` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
 | `own_001` | own | error | off | Every created relation is paired with an ALTER … OWNER TO |
@@ -928,22 +926,19 @@ migration step by step.
 ## The `tview` family — how a pg_tviews TVIEW's storage is left
 
 `--select tview` (off by default). pg_tviews turns `CREATE TABLE tv_x AS SELECT …`
-into a table it keeps in step with its base tables, and what it leaves to the author
-is said in statements it accepts *after* the conversion. Measured on pg_tviews
-0.1.0-beta.17: `CREATE INDEX`, `ALTER TABLE tv_x SET (fillfactor = 85)` and
-`ALTER TABLE tv_x SET LOGGED` work; `WITH (fillfactor = 85)` on the `CREATE` is
-refused. The rules read the tree, with no database.
+into a table it keeps in step with its base tables. From 0.1.0-beta.18 it indexes
+each `fk_*` column and sets fillfactor 85 itself; what it leaves to the author is
+said in statements it accepts *after* the conversion. Measured on pg_tviews
+0.1.0-beta.18: `CREATE INDEX` and `ALTER TABLE tv_x SET LOGGED` work;
+`WITH (…)` on the `CREATE` is refused. The rules read the tree, with no database.
 
 | Rule | Says | Fix |
 |---|---|---|
-| `tview_001` | an `fk_*` output column has no index leading with it, so each cascade step seq-scans | `CREATE INDEX ON tv_x (fk_y, pk_x)` |
-| `tview_002` | an index covers `data` or `updated_at`, which every refresh rewrites, so no update is HOT | drop it |
-| `tview_003` | no `fillfactor` below 100, so pages are full (info) | `ALTER TABLE tv_x SET (fillfactor = 85)` |
-| `tview_004` | replicas are declared and the TVIEW is UNLOGGED (pg_tviews' default): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED` |
+| `tview_001` | an index covers `data` or `updated_at`, which every refresh rewrites, so no update is HOT | drop it |
+| `tview_002` | replicas are declared and the TVIEW is UNLOGGED (pg_tviews' default): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED` |
 
-Each message names the pg_tviews issue (#71, #70, #73, #75) it works around, and the
-rule is removed when the issue is fixed. The GIN index pg_tviews itself creates on
-`data` is not in the DDL, so `tview_002` sees only indexes the tree declares.
+`tview_002` works around fraiseql/pg_tviews#75, names it in its message, and is
+removed when it is fixed. `tview_001` sees only the indexes the tree declares.
 
 ## The `body` family — a routine's body resolves, checked by PostgreSQL
 

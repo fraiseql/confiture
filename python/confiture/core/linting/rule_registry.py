@@ -325,26 +325,12 @@ LINT_RULES: tuple[LintRule, ...] = (
     LintRule(
         code="tview_001",
         family="tview",
-        title="A TVIEW's fk_* column has an index leading with it (pg_tviews#71)",
+        title="No index over data or updated_at on a TVIEW: it blocks HOT",
         severity="warning",
         default_on=False,
     ),
     LintRule(
         code="tview_002",
-        family="tview",
-        title="No index over data or updated_at on a TVIEW: it blocks HOT (pg_tviews#70)",
-        severity="warning",
-        default_on=False,
-    ),
-    LintRule(
-        code="tview_003",
-        family="tview",
-        title="A TVIEW is given a fillfactor below 100 (pg_tviews#73)",
-        severity="info",
-        default_on=False,
-    ),
-    LintRule(
-        code="tview_004",
         family="tview",
         title="A TVIEW is made LOGGED where replicas are declared (pg_tviews#75)",
         severity="warning",

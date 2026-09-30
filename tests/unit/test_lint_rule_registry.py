@@ -56,8 +56,6 @@ class TestRegistryContents:
             "tenant_005",
             "tview_001",
             "tview_002",
-            "tview_003",
-            "tview_004",
             "replica_001",
             "sec_002",
             "func_001",
