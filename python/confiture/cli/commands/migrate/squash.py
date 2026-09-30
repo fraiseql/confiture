@@ -15,7 +15,15 @@ from confiture.config.environment import Environment
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
 from confiture.core.builder import SchemaBuilder
-from confiture.core.squash import SquashPlan, SquashResult, execute_squash, plan_squash
+from confiture.core.squash import (
+    EnvironmentCheck,
+    SquashPlan,
+    SquashResult,
+    check_environments,
+    execute_squash,
+    plan_squash,
+    squashed_versions,
+)
 from confiture.exceptions import ConfigurationError
 
 ThroughOpt = Annotated[
@@ -67,6 +75,10 @@ def migrate_squash(
     PROCESS:
       Run it in the repository, with a local --config: its database_url's server
       holds the scratch database, and --from-build builds its environment.
+      First it asks every db/environments/*.yaml: each must have applied every
+      squashed migration, the cut at least squash.min_age_days ago (db/project.yaml,
+      default 90), and finished any online migration up to it (VALID_009).
+      squash.skip_environments lists those it cannot reach.
       Replays the migrations up to --through into a scratch database and dumps
       its schema (without confiture's own tables) as one migration, the
       baseline, whose SQL is embedded. The squashed files move to
@@ -93,6 +105,7 @@ def migrate_squash(
             json_mode=json_mode,
         )
     config_data = _core_connection.load_config(config)
+    checked = check_environments(Path(), squashed_versions(migrations_dir, through), through)
     build_sql = (
         SchemaBuilder(env=Environment.model_validate(config_data)).build(schema_only=True)
         if from_build
@@ -108,15 +121,21 @@ def migrate_squash(
     )
     result = None if dry_run else execute_squash(plan, migrations_dir, delete=delete)
     if json_mode:
-        emit(_squash_payload(plan, result, migrations_dir, delete=delete))
+        emit(_squash_payload(plan, result, migrations_dir, checked, delete=delete))
     else:
-        _print_squash(plan, result, migrations_dir, delete=delete)
+        _print_squash(plan, result, migrations_dir, checked, delete=delete)
 
 
 def _squash_payload(
-    plan: SquashPlan, result: SquashResult | None, migrations_dir: Path, *, delete: bool
+    plan: SquashPlan,
+    result: SquashResult | None,
+    migrations_dir: Path,
+    checked: list[EnvironmentCheck],
+    *,
+    delete: bool,
 ) -> dict[str, Any]:
     return {
+        "environments": [{"name": c.name, "skipped": c.skipped} for c in checked],
         "through": plan.through,
         "versions": list(plan.versions),
         "baseline": str(migrations_dir / plan.baseline_name),
@@ -130,9 +149,17 @@ def _squash_payload(
 
 
 def _print_squash(
-    plan: SquashPlan, result: SquashResult | None, migrations_dir: Path, *, delete: bool
+    plan: SquashPlan,
+    result: SquashResult | None,
+    migrations_dir: Path,
+    checked: list[EnvironmentCheck],
+    *,
+    delete: bool,
 ) -> None:
     dry = result is None
+    for check in checked:
+        state = "skipped (squash.skip_environments)" if check.skipped else "ready"
+        console.print(f"[dim]environment {verbatim(check.name)}: {verbatim(state)}[/dim]")
     verb = "Would squash" if dry else "Squashed"
     console.print(
         f"[cyan]📚 {verbatim(verb)} {len(plan.versions)} migration(s) through {verbatim(plan.through)} "

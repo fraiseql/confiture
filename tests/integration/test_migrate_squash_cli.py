@@ -29,7 +29,9 @@ THROUGH = "20260102000000"
 
 
 @pytest.fixture
-def project(tmp_path: Path) -> Path:
+def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A project the squash runs in: it asks this project's db/environments/, never the repo's."""
+    monkeypatch.chdir(tmp_path)
     migrations = tmp_path / "db/migrations"
     migrations.mkdir(parents=True)
     for stem, (up, down) in MIGRATIONS.items():
@@ -78,6 +80,7 @@ def test_squash_writes_the_baseline(project: Path, test_db_url: str) -> None:
     assert result.exit_code == 0, result.output
     payload = json.loads(result.stdout)
     assert payload["versions"] == ["20260101000000", THROUGH]
+    assert payload["environments"] == []
     assert payload["dry_run"] is False
     assert Path(payload["baseline"]).exists()
     assert len(list((project / "db/migrations/archive").iterdir())) == 4
@@ -169,3 +172,29 @@ def test_squash_ledger_records_the_baseline(
             "SELECT count(*) FROM tb_confiture WHERE archived_into = '20260102000001'"
         ).fetchone()
     assert archived == (2,)
+
+
+def test_squash_refuses_an_environment_that_has_not_caught_up(
+    project: Path, test_db_url: str, fresh_database_factory: Callable[[str], str]
+) -> None:
+    behind = fresh_database_factory("confiture_sq_behind")
+    (project / "db/environments").mkdir()
+    _config(project, behind, "staging").rename(project / "db/environments/staging.yaml")
+
+    result = _cli(
+        [
+            "migrate",
+            "squash",
+            "--through",
+            THROUGH,
+            "--config",
+            str(_config(project, test_db_url, "local")),
+            "--migrations-dir",
+            str(project / "db/migrations"),
+        ]
+    )
+
+    assert result.exit_code == 5
+    error = json.loads(result.stdout)["error"]
+    assert error["code"] == "VALID_009"
+    assert "staging" in error["message"]

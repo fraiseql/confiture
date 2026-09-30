@@ -791,6 +791,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `tenancy` | [TenancyConfig](#tenancyconfig) \| NoneType | - | Declares the project tenant-scoped; absent, no tenant rule runs. |
+| `squash` | [SquashConfig](#squashconfig) \| NoneType | - | What ``migrate squash`` checks before it cuts; absent, its defaults. |
 
 #### `TenancyConfig`
 
@@ -799,6 +800,13 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `discriminator` | str | `tenant_id` | The column every tenant-scoped relation carries, ``NOT NULL``. |
 | `root` | str \| NoneType | - | The table of tenants, schema-qualified (``management.tb_organization``, or ``"my.schema".tb_org`` quoted as SQL quotes it): its key is the tenant id, so it carries no discriminator of its own. |
 | `global_schemas` | list[str] | `[]` | Schemas holding shared reference data — every relation in them is global, never tenant-scoped. |
+
+#### `SquashConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `min_age_days` | int | `90` | The cut must have been applied at least this many days ago in every environment the squash asks: a restore from a backup taken before that replays the history the baseline replaced. With no environment asked, the age of a timestamp version is its own date. |
+| `skip_environments` | list[str] | `[]` | ``db/environments/<name>.yaml`` files the squash does not connect to, because they cannot be reached from where it runs. Each is named in its output; ``migrate up`` still refuses a baseline there when the ledger holds part of its history. |
 
 ### Complete skeleton (every field at its default)
 
@@ -945,6 +953,9 @@ tenancy:
   discriminator: tenant_id
   root: null
   global_schemas: []
+squash:
+  min_age_days: 90
+  skip_environments: []
 ```
 
 <!-- END GENERATED: config-fields -->

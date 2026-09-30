@@ -170,7 +170,7 @@ attribute names are scheduled to follow them at 1.0.0.
 
 ### `confiture migrate squash --format json`
 
-[migrate-squash.schema.json](./json-schemas/migrate-squash.schema.json) — `{through, versions[], baseline, version, source, digest, archived[], deleted, dry_run}`: the migrations replaced by one baseline, where the baseline is, whether its SQL is a dump of the replay or the proven tree (`source`), and the digest `migrate up` compares with each ledger. A refusal (`VALID_006`, `VALID_007`) emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
+[migrate-squash.schema.json](./json-schemas/migrate-squash.schema.json) — `{environments[], through, versions[], baseline, version, source, digest, archived[], deleted, dry_run}`: the environments asked first, the migrations replaced by one baseline, where the baseline is, whether its SQL is a dump of the replay or the proven tree (`source`), and the digest `migrate up` compares with each ledger. A refusal (`VALID_006`, `VALID_007`, `VALID_009`) emits the [error envelope](./json-schemas/error-envelope.schema.json) instead.
 
 ### `confiture migrate squash-ledger --format json`
 

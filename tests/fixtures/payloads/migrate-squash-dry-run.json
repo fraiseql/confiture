@@ -1,4 +1,10 @@
 {
+  "environments": [
+    {
+      "name": "local",
+      "skipped": false
+    }
+  ],
   "through": "001",
   "versions": [
     "001"

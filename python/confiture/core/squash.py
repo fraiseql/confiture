@@ -27,10 +27,15 @@ from __future__ import annotations
 import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
 
+import psycopg
+from psycopg import sql as pgsql
+
+from confiture.config.environment import Environment
+from confiture.config.project import SquashConfig, load_project_config
 from confiture.core import live_catalog
 from confiture.core._migrator.discovery import (
     discover_migration_files,
@@ -40,12 +45,13 @@ from confiture.core._migrator.squashed import DIRECTIVE, archived_digest
 from confiture.core.checksum import compute_checksum
 from confiture.core.drift import SchemaDriftDetector
 from confiture.core.expected_db import ExpectedSchemaDB
+from confiture.core.ledger import LIVE_ROWS, ledger_exists, table_identifier
 from confiture.core.linting.inventory import build_model
 from confiture.core.migrator import replay_migrations
 from confiture.core.sql_lexer import name_parts
-from confiture.core.step_runner import steps_table
+from confiture.core.step_runner import DONE, CheckpointStore, steps_table
 from confiture.core.temp_database import clean_pg_dump_output, pg_dump_schema
-from confiture.exceptions import MigrationError, ValidationError
+from confiture.exceptions import ConfigurationError, MigrationError, ValidationError
 
 _TIMESTAMP = "%Y%m%d%H%M%S"
 _TIMESTAMP_DIGITS = 14
@@ -155,6 +161,134 @@ def usable_version(version: str, through: str, later: Sequence[str]) -> bool:
     return through < version and all(version < other for other in later)
 
 
+@dataclass(frozen=True)
+class EnvironmentCheck:
+    """One environment :func:`check_environments` asked, or skipped."""
+
+    name: str
+    skipped: bool
+
+
+def check_environments(
+    project_dir: Path, versions: Sequence[str], through: str, *, now: datetime | None = None
+) -> list[EnvironmentCheck]:
+    """Ask every ``db/environments/*.yaml`` whether a squash through ``through`` is safe there.
+
+    An environment passes when its ledger records every squashed version, recorded
+    ``through`` at least ``squash.min_age_days`` ago, and has no online migration
+    up to the cut unfinished. Those listed in ``squash.skip_environments`` are not
+    asked. With none asked, a timestamp version's own date is its age.
+
+    Raises:
+        ValidationError: ``VALID_009``, naming each environment that fails and why.
+    """
+    settings = load_project_config(project_dir).squash or SquashConfig()
+    min_age = timedelta(days=settings.min_age_days)
+    moment = now or datetime.now(UTC)
+    checked: list[EnvironmentCheck] = []
+    problems: list[str] = []
+    for path in sorted((project_dir / "db" / "environments").glob("*.yaml")):
+        name = path.stem
+        skipped = name in settings.skip_environments
+        checked.append(EnvironmentCheck(name, skipped))
+        if not skipped:
+            problems.extend(
+                f"{name}: {problem}"
+                for problem in _environment_problems(
+                    project_dir, name, versions, through, moment - min_age
+                )
+            )
+    if not any(not check.skipped for check in checked):
+        problems.extend(_undated_problems(through, moment - min_age, settings.min_age_days))
+    if problems:
+        raise ValidationError(
+            "squash refused:\n  " + "\n  ".join(problems),
+            error_code="VALID_009",
+            resolution_hint=(
+                "Deploy the squashed migrations there first, cut at an older version, or list "
+                "an environment that cannot be reached in db/project.yaml squash.skip_environments"
+            ),
+        )
+    return checked
+
+
+def _environment_problems(
+    project_dir: Path, name: str, versions: Sequence[str], through: str, latest: datetime
+) -> list[str]:
+    try:
+        environment = Environment.load(name, project_dir=project_dir)
+        with psycopg.connect(environment.database_url, connect_timeout=10) as conn:
+            return _ledger_problems(
+                conn, environment.migration.tracking_table, versions, through, latest
+            )
+    except (psycopg.Error, ConfigurationError) as exc:
+        return [f"cannot be asked ({exc})"]
+
+
+def _ledger_problems(
+    conn: psycopg.Connection, table: str, versions: Sequence[str], through: str, latest: datetime
+) -> list[str]:
+    if not ledger_exists(conn, table):
+        return [f"has no ledger ({table}): every squashed migration is pending"]
+    rows = dict(
+        conn.execute(
+            pgsql.SQL("SELECT version, applied_at FROM {} AS ledger WHERE {}").format(
+                table_identifier(table), LIVE_ROWS
+            )
+        ).fetchall()
+    )
+    problems: list[str] = []
+    pending = [version for version in versions if version not in rows]
+    if pending:
+        problems.append("has " + ", ".join(pending) + " pending")
+    applied = rows.get(through)
+    if applied is not None and applied > latest:
+        days = (datetime.now(UTC) - latest).days
+        problems.append(f"applied {through} on {applied:%Y-%m-%d}, less than {days} days ago")
+    steps = steps_table(table)
+    if ledger_exists(conn, steps):
+        unfinished = sorted(
+            {r.migration for r in CheckpointStore(conn, steps).records() if r.state != DONE}
+            & set(versions)
+        )
+        if unfinished:
+            problems.append("has an online migration unfinished: " + ", ".join(unfinished))
+    return problems
+
+
+def _undated_problems(through: str, latest: datetime, min_age_days: int) -> list[str]:
+    """With no environment asked, a timestamp version's own date is its age."""
+    if min_age_days == 0:
+        return []
+    if len(through) == _TIMESTAMP_DIGITS and through.isdigit():
+        written = datetime.strptime(through, _TIMESTAMP).replace(tzinfo=UTC)
+        if written <= latest:
+            return []
+        return [f"{through} is less than {min_age_days} days old, and no environment was asked"]
+    return [
+        f"no environment was asked, and {through} carries no date: its age cannot be "
+        "established (set squash.min_age_days to 0 to cut without one)"
+    ]
+
+
+def squashed_versions(migrations_dir: Path, through: str) -> tuple[str, ...]:
+    """Every migration version up to and including ``through``, in order.
+
+    Raises:
+        MigrationError: ``through`` is not a migration in the directory.
+    """
+    ordered = [
+        parse_migration_filename(f.name)[0] for f in discover_migration_files(migrations_dir)
+    ]
+    if through not in ordered:
+        raise MigrationError(
+            f"Migration version '{through}' not found in {migrations_dir}",
+            through,
+            resolution_hint="Run 'confiture migrate status' to list the versions on disk",
+        )
+    return tuple(ordered[: ordered.index(through) + 1])
+
+
 def plan_squash(
     migrations_dir: Path,
     through: str,
@@ -181,15 +315,8 @@ def plan_squash(
         SchemaError: A migration failed to replay, or ``pg_dump`` failed.
     """
     files = discover_migration_files(migrations_dir)
-    ordered = [parse_migration_filename(f.name)[0] for f in files]
-    if through not in ordered:
-        raise MigrationError(
-            f"Migration version '{through}' not found in {migrations_dir}",
-            through,
-            resolution_hint="Run 'confiture migrate status' to list the versions on disk",
-        )
-    cut = ordered.index(through) + 1
-    versions, later = tuple(ordered[:cut]), ordered[cut:]
+    versions = squashed_versions(migrations_dir, through)
+    later = [parse_migration_filename(f.name)[0] for f in files[len(versions) :]]
     chosen = _chosen_version(through, later, version)
     digest = archived_digest(
         (v, compute_checksum(f)) for v, f in zip(versions, files, strict=False)

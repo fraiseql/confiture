@@ -393,6 +393,16 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
         ),
     },
     {
+        "code": "VALID_009",
+        "message_template": "squash refused: {environment} {problem}",
+        "severity": "error",
+        "exit_code": 5,
+        "resolution_hint": (
+            "Deploy the squashed migrations there first, cut at an older version, or list an "
+            "environment that cannot be reached in db/project.yaml squash.skip_environments"
+        ),
+    },
+    {
         "code": "VERIFY_001",
         "message_template": "Verify file contains forbidden SQL",
         "severity": "error",

@@ -97,6 +97,7 @@ resolution hint surfaced in the envelope.
 | `VALID_006` | 5 | error | squash refused: the tree is not the schema migrations 1..{through} build | Squash from the replay (drop --from-build), or cut where the tree is |
 | `VALID_007` | 5 | error | squash refused: the baseline needs a version after {through} | Pass --version with a version that sorts after the cut |
 | `VALID_008` | 5 | error | migration {version} is the baseline of {count} squashed migration(s), and this database's ledger holds part of that history | Bring the database to the squashed version with the archived migrations first, or restore the squashed files |
+| `VALID_009` | 5 | error | squash refused: {environment} {problem} | Deploy the squashed migrations there first, cut at an older version, or list an environment that cannot be reached in db/project.yaml squash.skip_environments |
 | `VERIFY_001` | 5 | error | Verify file contains forbidden SQL | Verify files must only contain SELECT queries |
 <!-- END GENERATED -->
 

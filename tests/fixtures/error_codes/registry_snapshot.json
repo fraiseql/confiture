@@ -334,5 +334,11 @@
     "severity": "error",
     "exit_code": 5,
     "resolution_hint": "Bring the database to the squashed version with the archived migrations first, or restore the squashed files"
+  },
+  "VALID_009": {
+    "message_template": "squash refused: {environment} {problem}",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Deploy the squashed migrations there first, cut at an older version, or list an environment that cannot be reached in db/project.yaml squash.skip_environments"
   }
 }

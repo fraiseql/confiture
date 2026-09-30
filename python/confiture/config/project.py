@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from confiture.config.environment import _read_config_yaml
 from confiture.core import sql_lexer
@@ -64,16 +64,38 @@ class TenancyConfig(BaseModel):
                 )
 
 
+class SquashConfig(BaseModel):
+    """How far back ``migrate squash`` may cut, and which environments it asks first.
+
+    Attributes:
+        min_age_days: The cut must have been applied at least this many days ago in
+            every environment the squash asks: a restore from a backup taken before
+            that replays the history the baseline replaced. With no environment
+            asked, the age of a timestamp version is its own date.
+        skip_environments: ``db/environments/<name>.yaml`` files the squash does not
+            connect to, because they cannot be reached from where it runs. Each is
+            named in its output; ``migrate up`` still refuses a baseline there when
+            the ledger holds part of its history.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    min_age_days: int = Field(default=90, ge=0)
+    skip_environments: list[str] = []
+
+
 class ProjectConfig(BaseModel):
     """``db/project.yaml``: facts about the schema, the same in every environment.
 
     Attributes:
         tenancy: Declares the project tenant-scoped; absent, no tenant rule runs.
+        squash: What ``migrate squash`` checks before it cuts; absent, its defaults.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     tenancy: TenancyConfig | None = None
+    squash: SquashConfig | None = None
 
     def declared_blocks(self) -> frozenset[str]:
         """The blocks this file declares — what ``LintRule.enabled_by`` names."""

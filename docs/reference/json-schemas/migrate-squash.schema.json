@@ -6,6 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "environments",
     "through",
     "versions",
     "baseline",
@@ -17,6 +18,26 @@
     "dry_run"
   ],
   "properties": {
+    "environments": {
+      "type": "array",
+      "description": "Each db/environments/*.yaml the squash asked first, by file name; `skipped` when db/project.yaml lists it in squash.skip_environments.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "skipped"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "skipped": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
     "through": {
       "type": "string",
       "description": "The --through version: the last one squashed."
