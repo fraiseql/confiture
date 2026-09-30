@@ -258,16 +258,6 @@ _IDEMPOTENT_ATTR: dict[str, str] = {
 }
 
 
-#: The kinds whose creating statement a generated migration carries without its
-#: existence clause, with the reason. ``differ_sql`` makes their creation re-apply
-#: another way.
-EXISTENCE_CLAUSE_IS_UNSAFE: dict[str, str] = {
-    "tview": "pg_tviews 0.1.0 deletes a registered TVIEW's table when "
-    "CREATE TABLE IF NOT EXISTS tv_x AS runs again, and leaves pg_tview_meta "
-    "pointing at it (measured; fraiseql/pg_tviews#79)",
-}
-
-
 def _clause_applies(stmt: Any) -> bool:
     """Whether PostgreSQL accepts the node's existence clause on this statement.
 
@@ -418,11 +408,7 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
     return DDLObject(
         ref=ref,
         definition=_canonical_definition(stmt),
-        create_sql=(
-            _canonical_definition(stmt)
-            if ref.kind in EXISTENCE_CLAUSE_IS_UNSAFE
-            else _creating_statement(stmt)
-        ),
+        create_sql=_creating_statement(stmt),
         signature=signature,
         trigger=_trigger(stmt) if ref.kind == "trigger" else None,
     )

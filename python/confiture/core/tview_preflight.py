@@ -1,15 +1,8 @@
 """What preflight says about a migration that a pg_tviews TVIEW cannot survive (#504).
 
-Two findings hold only until pg_tviews fixes what they work around, and each is
-deleted with its issue: :func:`static_issues` reports ``PFLIGHT_TVIEW_SAME_BATCH``
-(fraiseql/pg_tviews#80: a ``tv_*`` ``CREATE TABLE … AS`` sent in one script with
-``CREATE EXTENSION pg_tviews`` is silently a plain table) and
-``PFLIGHT_TVIEW_IF_NOT_EXISTS`` (fraiseql/pg_tviews#79: ``CREATE TABLE IF NOT EXISTS
-tv_x AS`` applied again deletes the TVIEW).
-
-:func:`live_issues` is PostgreSQL's own rule, and stays: the backing view of a TVIEW
-depends on the columns of its base tables, so a migration that drops or retypes one,
-or drops the table, fails unless it drops the TVIEW first. It needs the TVIEWs a
+The backing view of a TVIEW depends on the columns of its base tables, so a
+migration that drops or retypes one, or drops the table, fails unless it drops the
+TVIEW first. :func:`live_issues` names each such change; it needs the TVIEWs a
 database registers, which only a live database knows.
 """
 
@@ -23,60 +16,11 @@ import pglast
 import pglast.parser
 
 from confiture.core._migrator.discovery import _version_from_migration_filename
-from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.ddl_walk import column_edit, enum_int, object_edits, walk_nodes
-from confiture.core.migration_analyzer import MigrationAnalyzer
+from confiture.core.ddl_walk import column_edit, object_edits, walk_nodes
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import TVIEW_PREFIX
 from confiture.core.sql_lexer import ParsedStatement, parse
 from confiture.models.results import PreflightIssue
-
-_OBJECT_TABLE = _pg_member("ObjectType", "OBJECT_TABLE")
-_EXTENSION = "pg_tviews"
-
-
-def static_issues(sql: str, *, version: str, file: str | None = None) -> list[PreflightIssue]:
-    """The two findings a migration's own text decides; ``[]`` for text pglast rejects.
-
-    A file pglast rejects is ``PFLIGHT_UNPARSEABLE``'s, reported once by the caller.
-    """
-    try:
-        statements = parse(sql)
-        transactional = not MigrationAnalyzer().analyze(sql)
-    except pglast.parser.ParseError:
-        return []
-    creates_extension = any(_creates_extension(s.stmt) for s in statements)
-    issues: list[PreflightIssue] = []
-    for statement in statements:
-        table = _tview_created_as(statement.stmt)
-        if table is None:
-            continue
-        if statement.stmt.if_not_exists:
-            issues.append(
-                PreflightIssue.of(
-                    "PFLIGHT_TVIEW_IF_NOT_EXISTS",
-                    f"Migration {version} runs CREATE TABLE IF NOT EXISTS {table} AS: "
-                    "applied again it deletes the TVIEW (fraiseql/pg_tviews#79).",
-                    migration=version,
-                    file=file,
-                    line=statement.line,
-                    details={"tview": table},
-                )
-            )
-        if creates_extension and transactional:
-            issues.append(
-                PreflightIssue.of(
-                    "PFLIGHT_TVIEW_SAME_BATCH",
-                    f"Migration {version} creates the pg_tviews extension and {table} in "
-                    "one script: the server converts nothing, and it is a plain table "
-                    "(fraiseql/pg_tviews#80).",
-                    migration=version,
-                    file=file,
-                    line=statement.line,
-                    details={"tview": table},
-                )
-            )
-    return issues
 
 
 def live_issues(files: Iterable[Path], tviews: Mapping[str, str]) -> list[PreflightIssue]:
@@ -122,22 +66,6 @@ def _issue(
         line=statement.line,
         details={"tview": tview, "table": table, "column": column},
     )
-
-
-def _creates_extension(stmt: Any) -> bool:
-    return type(stmt).__name__ == "CreateExtensionStmt" and stmt.extname == _EXTENSION
-
-
-def _tview_created_as(stmt: Any) -> str | None:
-    """``tv_x`` when *stmt* is ``CREATE TABLE tv_x AS``, the shape pg_tviews converts."""
-    if type(stmt).__name__ != "CreateTableAsStmt":
-        return None
-    if enum_int(stmt.objtype) != enum_int(_OBJECT_TABLE):
-        return None
-    relation = stmt.into.rel
-    if not relation.relname.startswith(TVIEW_PREFIX):
-        return None
-    return relation.relname
 
 
 def _dropped_tviews(stmt: Any) -> set[str]:

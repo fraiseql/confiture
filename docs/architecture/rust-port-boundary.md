@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,576 lines, 34% of `core/`.
+26,485 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -91,7 +91,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 562 | DDL transform |
 | `ddl_clauses.py` | 152 | DDL transform |
-| `ddl_objects.py` | 676 | DDL transform |
+| `ddl_objects.py` | 662 | DDL transform |
 | `ddl_walk.py` | 1,555 | DDL transform |
 | `destructive.py` | 181 | DDL transform |
 | `differ.py` | 807 | DDL transform |
@@ -101,7 +101,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_body_checker.py` | 210 | DDL transform |
 | `function_body_normalizer.py` | 69 | DDL transform |
 | `function_signature_checker.py` | 187 | DDL transform |
-| `idempotency/` | 2,717 | DDL transform |
+| `idempotency/` | 2,712 | DDL transform |
 | `introspection/dependency_graph.py` | 202 | DDL transform |
 | `linting/` | 9,403 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
@@ -120,12 +120,12 @@ duplicate readers were deleted. The count below is what the port translates.
 | `sql_lexer.py` | 676 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |
-| `tview_preflight.py` | 218 | DDL transform |
+| `tview_preflight.py` | 146 | DDL transform |
 | `type_lattice.py` | 511 | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 
-42,536 lines, 55% of `core/`.
+42,534 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -171,7 +171,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `ownership_fixer.py` | 243 | database orchestration |
 | `pgtap_generator.py` | 63 | neutral |
 | `preconditions.py` | 657 | database orchestration |
-| `preflight.py` | 189 | database orchestration |
+| `preflight.py` | 187 | database orchestration |
 | `progress.py` | 206 | neutral |
 | `psql_applier.py` | 274 | database orchestration |
 | `restorer.py` | 856 | database orchestration |

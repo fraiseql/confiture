@@ -83,6 +83,7 @@ def test_an_added_tview_is_registered_and_its_down_removes_it(tview_database: st
     up, down = _migration("", OLD)
 
     _apply(tview_database, up)
+    _apply(tview_database, up)
     assert _registered(tview_database) == _declared(OLD)
 
     _apply(tview_database, down)

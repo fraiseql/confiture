@@ -151,11 +151,10 @@ class TestMaterializedViewDDL:
 
 
 class TestTViewDDL:
-    """A pg_tviews TVIEW (#504): created by its CTAS, dropped as a table, never ``IF NOT EXISTS``.
+    """A pg_tviews TVIEW (#504): created by its CTAS, dropped as a table.
 
-    Measured on PostgreSQL 18.4 + pg_tviews 0.1.0: ``CREATE TABLE IF NOT EXISTS tv_x AS``
-    run again on a registered TVIEW deletes ``tv_x`` and leaves ``pg_tview_meta``
-    pointing at it; a CTAS in a ``DO`` block is never converted. ``DROP TABLE IF
+    Measured on PostgreSQL 18 + pg_tviews 0.1.0-beta.18: ``CREATE TABLE IF NOT EXISTS
+    tv_x AS`` run again on a registered TVIEW leaves it as it was, and ``DROP TABLE IF
     EXISTS`` then the CTAS re-registers it, applied once or twice.
     """
 
@@ -174,23 +173,19 @@ class TestTViewDDL:
                 found.append((node, stmt.objects[0][-1].sval, bool(stmt.missing_ok)))
         return found
 
-    def test_add_tview_creates_it_without_if_not_exists(self):
+    def test_add_tview_creates_it_if_not_exists(self):
         change = change_of("", self.OLD, "ADD_TVIEW")
         generator = DifferSQLGenerator()
         assert self._kinds(generator.generate_up(change)) == [
-            ("CreateTableAsStmt", "tv_user", False)
+            ("CreateTableAsStmt", "tv_user", True)
         ]
         assert self._kinds(generator.generate_down(change)) == [("DropStmt", "tv_user", True)]
-
-    def test_an_authors_if_not_exists_does_not_reach_the_migration(self):
-        change = change_of("", self.OLD.replace("TABLE", "TABLE IF NOT EXISTS"), "ADD_TVIEW")
-        assert "IF NOT EXISTS" not in DifferSQLGenerator().generate_up(change)
 
     def test_replace_tview_drops_and_creates_it(self):
         change = change_of(self.OLD, self.NEW, "REPLACE_TVIEW")
         generator = DifferSQLGenerator()
         up, down = generator.generate_up(change), generator.generate_down(change)
-        rebuilt = [("DropStmt", "tv_user", True), ("CreateTableAsStmt", "tv_user", False)]
+        rebuilt = [("DropStmt", "tv_user", True), ("CreateTableAsStmt", "tv_user", True)]
         assert self._kinds(up) == rebuilt
         assert self._kinds(down) == rebuilt
         assert "name" in up
@@ -201,7 +196,7 @@ class TestTViewDDL:
         generator = DifferSQLGenerator()
         assert self._kinds(generator.generate_up(change)) == [("DropStmt", "tv_user", True)]
         assert self._kinds(generator.generate_down(change)) == [
-            ("CreateTableAsStmt", "tv_user", False)
+            ("CreateTableAsStmt", "tv_user", True)
         ]
 
 
