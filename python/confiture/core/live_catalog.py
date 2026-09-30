@@ -40,6 +40,7 @@ holds, an introspector what the *database* holds.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
@@ -77,6 +78,7 @@ from confiture.core.schema_model import (
 )
 from confiture.core.schema_model import Sequence as SequenceModel
 from confiture.core.type_lattice import canonical_type, signature_from_type_names
+from confiture.exceptions import ConfigurationError
 
 if TYPE_CHECKING:
     import psycopg
@@ -660,6 +662,23 @@ SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespa
 WHERE e.extname = 'pg_tviews'
 """
 
+#: The oldest pg_tviews build confiture supports, the one the ``pg-tviews`` CI leg
+#: runs (``ci/pg-tviews/Dockerfile``; a test holds the two equal). Its dumps carry
+#: ``pg_tview_meta``, so a restored TVIEW stays registered.
+MINIMUM_PG_TVIEWS = "0.1.0-beta.19"
+
+#: A pg_tviews build: ``0.1.0``, ``0.1.0-beta.19``. ``extversion`` is ``0.1.0`` on
+#: every 0.1.0 beta (measured on beta.17, 18 and 19), so the build is what
+#: ``pg_tviews_version()`` answers.
+_BUILD = re.compile(r"(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?")
+_PRERELEASE_RANK = {"alpha": 0, "beta": 1, "rc": 2}
+_RELEASE_RANK = len(_PRERELEASE_RANK)
+
+_TVIEWS_BUILD_FUNCTION = """
+SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = %s AND p.proname = 'pg_tviews_version' AND p.pronargs = 0
+"""
+
 #: Each registered TVIEW: its relation, the query pg_tviews recorded, and its
 #: backing view's oid, whose relation is the TVIEW's and not a view of the tree's.
 _TVIEWS = """
@@ -815,10 +834,52 @@ def tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[TView]:
     return [tview for tview, _view_oid in _tviews(conn, schemas)]
 
 
+def pg_tviews_build(text: str) -> tuple[int, ...] | None:
+    """*text* as a build that orders as releases do; ``None`` when it is not one."""
+    match = _BUILD.fullmatch(text)
+    if match is None:
+        return None
+    major, minor, patch, stage, number = match.groups()
+    rank = _RELEASE_RANK if stage is None else _PRERELEASE_RANK[stage]
+    return (int(major), int(minor), int(patch), rank, int(number or 0))
+
+
+def require_supported_pg_tviews(installed: str | None) -> None:
+    """Refuse a pg_tviews build older than :data:`MINIMUM_PG_TVIEWS`, or one it cannot read.
+
+    Raises:
+        ConfigurationError: ``CONFIG_014``, naming the installed and the required build.
+    """
+    build = None if installed is None else pg_tviews_build(installed)
+    minimum = pg_tviews_build(MINIMUM_PG_TVIEWS)
+    if build is not None and minimum is not None and build >= minimum:
+        return
+    raise ConfigurationError(
+        f"pg_tviews {installed or 'of an unknown build'} is installed; "
+        f"confiture supports pg_tviews {MINIMUM_PG_TVIEWS} or later.",
+        error_code="CONFIG_014",
+        resolution_hint=(
+            f"Upgrade the server's pg_tviews to {MINIMUM_PG_TVIEWS} or later; "
+            "`SELECT pg_tviews_version()` names the build a database runs"
+        ),
+    )
+
+
+def _installed_pg_tviews(conn: psycopg.Connection, home: str) -> str | None:
+    if _scalar(conn, _TVIEWS_BUILD_FUNCTION, (home,)) is None:
+        return None
+    query = sql.SQL("SELECT {}()").format(sql.Identifier(home, "pg_tviews_version"))
+    with conn.cursor() as cursor:
+        cursor.execute(query)
+        row = cursor.fetchone()
+    return None if row is None else str(row[0])
+
+
 def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TView, int]]:
     home = _scalar(conn, _TVIEW_HOME, ())
     if home is None:
         return []
+    require_supported_pg_tviews(_installed_pg_tviews(conn, home))
     query = sql.SQL(_TVIEWS).format(meta=sql.Identifier(home, "pg_tview_meta"))
     return [
         (TView(name=name, schema=schema, definition=_rendered_query(definition)), view_oid)

@@ -9,15 +9,19 @@ with the reason.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 import psycopg
 import pytest
+from tests.conftest import create_supported_pg_tviews
 
 from confiture.core import live_catalog
 from confiture.core.change_order import apply_order
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.linting.inventory import build_model
+from confiture.core.schema_facts import collect_schema_facts
+from confiture.core.tview_preflight import live_issues
 
 pytestmark = pytest.mark.integration
 
@@ -45,7 +49,7 @@ def tview_database(fresh_database_factory: Callable[[str], str]) -> str:
     with psycopg.connect(url, autocommit=True) as conn:
         if "pg_tviews" not in conn.execute("SHOW shared_preload_libraries").fetchone()[0]:
             pytest.skip("pg_tviews is not preloaded on this server (the pg-tviews CI leg is)")
-        conn.execute("CREATE EXTENSION pg_tviews")
+        create_supported_pg_tviews(conn)
         conn.execute(BASE)
         conn.execute("INSERT INTO tb_user VALUES (1, gen_random_uuid(), 'ann')")
         conn.execute("INSERT INTO tb_post VALUES (1, gen_random_uuid(), 1, 'hello')")
@@ -79,6 +83,7 @@ def _declared(tree: str) -> dict[str, str | None]:
 def test_an_added_tview_is_registered_and_its_down_removes_it(tview_database: str) -> None:
     up, down = _migration("", OLD)
 
+    _apply(tview_database, up)
     _apply(tview_database, up)
     assert _registered(tview_database) == _declared(OLD)
 
@@ -122,3 +127,22 @@ def test_a_dropped_tview_is_unregistered_and_its_down_restores_it(tview_database
 
     _apply(tview_database, down)
     assert _registered(tview_database) == _declared(OLD)
+
+
+def test_preflight_names_a_change_to_a_column_the_registered_tview_reads(
+    tview_database: str, tmp_path: Path
+) -> None:
+    """PostgreSQL refuses the DROP COLUMN; preflight says so before it is tried."""
+    _apply(tview_database, OLD)
+    migration = tmp_path / "20260929000009_drop_title.up.sql"
+    migration.write_text("ALTER TABLE tb_post DROP COLUMN title;")
+    with psycopg.connect(tview_database) as conn:
+        facts = collect_schema_facts(conn)
+
+    (issue,) = live_issues([migration], facts.tviews)
+    assert issue.code == "PFLIGHT_TVIEW_BASE_COLUMN"
+    with (
+        psycopg.connect(tview_database) as conn,
+        pytest.raises(psycopg.errors.DependentObjectsStillExist),
+    ):
+        conn.execute(migration.read_text())

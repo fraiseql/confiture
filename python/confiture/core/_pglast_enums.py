@@ -51,6 +51,8 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "AT_ColumnDefault",
         "AT_SetNotNull",
         "AT_DropNotNull",
+        "AT_SetLogged",
+        "AT_SetUnLogged",
     ),
     "ConstrType": (
         "CONSTR_NOTNULL",

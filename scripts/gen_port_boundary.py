@@ -77,6 +77,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "sql_lexer.py": (CRATE, TRANSFORM),
     "strategy.py": (CRATE, TRANSFORM),
     "tree_prefix.py": (CRATE, TRANSFORM),
+    "tview_preflight.py": (CRATE, TRANSFORM),
     "type_lattice.py": (CRATE, TRANSFORM),
     # Glue: talks to a database, a file system, git or a process, and hands the
     # crate text and the caller JSON.

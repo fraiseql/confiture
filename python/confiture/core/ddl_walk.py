@@ -208,6 +208,20 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
     return build(cmd) if build is not None else None
 
 
+def sets_logged(cmd: Any) -> bool | None:
+    """``True`` after ``SET LOGGED``, ``False`` after ``SET UNLOGGED``, else ``None``.
+
+    No expected schema is built from it; the lint's ``tview_002`` asks whether a
+    TVIEW was left UNLOGGED.
+    """
+    subtype = enum_int(getattr(cmd, "subtype", None))
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetLogged")):
+        return True
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetUnLogged")):
+        return False
+    return None
+
+
 #: ``AlterTableType`` members an expected schema is built from some *other* way,
 #: with where.
 MODELLED_ELSEWHERE: dict[str, str] = {
@@ -216,6 +230,8 @@ MODELLED_ELSEWHERE: dict[str, str] = {
         "`differ._collect_alter_table_constraints` models FK / CHECK / UNIQUE for "
         "`migrate diff`. A table-level constraint is the table's fact, not a column's"
     ),
+    "AT_SetLogged": "`sets_logged` reads it for the lint's `tview_002`, and nothing else",
+    "AT_SetUnLogged": "`sets_logged` reads it for the lint's `tview_002`, and nothing else",
     "AT_ChangeOwner": (
         "ownership is its own expectation and its own drift type (`wrong_owner`), "
         "read from the live catalogue rather than folded out of DDL"
@@ -285,8 +301,6 @@ _NOT_A_FACT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "AT_ClusterOn",
             "AT_DropCluster",
-            "AT_SetLogged",
-            "AT_SetUnLogged",
             "AT_DropOids",
             "AT_SetAccessMethod",
             "AT_SetTableSpace",

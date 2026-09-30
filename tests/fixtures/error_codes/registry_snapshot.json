@@ -316,5 +316,11 @@
     "severity": "error",
     "exit_code": 5,
     "resolution_hint": "Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open"
+  },
+  "CONFIG_014": {
+    "message_template": "pg_tviews {installed} is installed; confiture supports pg_tviews {minimum} or later",
+    "severity": "error",
+    "exit_code": 5,
+    "resolution_hint": "Upgrade the server's pg_tviews; `SELECT pg_tviews_version()` names the build a database runs"
   }
 }

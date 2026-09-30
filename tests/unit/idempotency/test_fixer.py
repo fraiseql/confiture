@@ -53,24 +53,11 @@ class TestCreateTableFix:
 
         assert result == sql
 
-    def test_leaves_a_tview_ctas_alone(self):
-        """``IF NOT EXISTS`` on a pg_tviews TVIEW deletes it when re-applied (#504, measured).
+    def test_a_tview_ctas_is_fixed_like_any_table(self):
+        """pg_tviews 0.1.0-beta.18 skips a re-applied ``IF NOT EXISTS`` TVIEW (#504, measured)."""
+        result = IdempotencyFixer().fix("CREATE TABLE tv_post AS SELECT pk_post FROM tb_post;")
 
-        pg_tviews 0.1.0 answers a second ``CREATE TABLE IF NOT EXISTS tv_x AS`` by
-        dropping ``tv_x`` and keeping its ``pg_tview_meta`` row.
-        """
-        sql = "CREATE TABLE tv_post AS SELECT pk_post FROM tb_post;"
-        qualified = "CREATE TABLE app.tv_post\nAS SELECT pk_post FROM tb_post;"
-
-        assert IdempotencyFixer().fix(sql) == sql
-        assert IdempotencyFixer().fix(qualified) == qualified
-        assert IdempotencyFixer().dry_run(sql) == []
-
-    def test_a_plain_table_named_tv_is_still_fixed(self):
-        """Only the CTAS is a TVIEW: a ``tv_`` table with columns is a table (#504)."""
-        result = IdempotencyFixer().fix("CREATE TABLE tv_order (id BIGINT);")
-
-        assert result == "CREATE TABLE IF NOT EXISTS tv_order (id BIGINT);"
+        assert result == "CREATE TABLE IF NOT EXISTS tv_post AS SELECT pk_post FROM tb_post;"
 
 
 class TestCreateIndexFix:
