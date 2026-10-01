@@ -479,7 +479,7 @@ jobs:
     name: TVIEWs (pg_tviews)
     runs-on: ubuntu-latest
     # pg_tviews is in no distribution and ships no installable package, so the
-    # leg builds it (ci/pg-tviews/Dockerfile, pinned tag and pgrx) and caches
+    # leg builds it (ci/pg-tviews/Dockerfile, pinned commit and pgrx) and caches
     # the build layers. Every other leg skips the live TVIEW tests; this one is
     # where they run (#504).
     steps:
