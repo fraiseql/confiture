@@ -126,6 +126,7 @@
             "extra_routine",
             "missing_tview",
             "extra_tview",
+            "tview_option_mismatch",
             "missing_grant",
             "extra_grant",
             "wrong_owner",

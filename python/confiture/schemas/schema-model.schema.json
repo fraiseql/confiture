@@ -601,12 +601,14 @@
     },
     "TView": {
       "type": "object",
-      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view `v_<entity>` and triggers belong to it. `definition` is the query as the reader holds it. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none.",
+      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view `v_<entity>` and triggers belong to it. `definition` is the query as the reader holds it. `logged` and `fillfactor` are pg_tviews' `options` keys of those names: what a tree pins, `null` where it pins nothing, or what `tviews.registry` holds, every key set. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none. A TVIEW written before its options were modelled has neither key and pins nothing.",
       "additionalProperties": false,
       "required": [
         "name",
         "schema",
-        "definition"
+        "definition",
+        "logged",
+        "fillfactor"
       ],
       "properties": {
         "name": {
@@ -621,6 +623,18 @@
         "definition": {
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "logged": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "fillfactor": {
+          "type": [
+            "integer",
             "null"
           ]
         }

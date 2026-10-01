@@ -25,7 +25,10 @@ Measured on PostgreSQL 15 (CI) and 18.4 (local), 2026-09-21:
    ``pg_get_constraintdef`` spell it only when ``search_path`` would not find it;
 9. a routine's argument and result types are ``format_type``'s spelling, not the
    file's (``int8`` reads back ``bigint``);
-10. a view's query is stored as a parse tree and read back deparsed.
+10. a view's query is stored as a parse tree and read back deparsed;
+11. a TVIEW's options are all in ``tviews.registry``, those the tree left to pg_tviews'
+    defaults included — measured where pg_tviews is installed, in
+    ``tests/integration/test_tview_live.py``.
 
 And one the first draft of the plan listed that does **not** exist: an index whose
 statement writes no ``USING`` is ``btree`` on both sides, because PostgreSQL's

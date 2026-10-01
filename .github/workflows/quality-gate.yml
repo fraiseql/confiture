@@ -479,7 +479,7 @@ jobs:
     name: TVIEWs (pg_tviews)
     runs-on: ubuntu-latest
     # pg_tviews is in no distribution and ships no installable package, so the
-    # leg builds it (ci/pg-tviews/Dockerfile, pinned tag and pgrx) and caches
+    # leg builds it (ci/pg-tviews/Dockerfile, pinned commit and pgrx) and caches
     # the build layers. Every other leg skips the live TVIEW tests; this one is
     # where they run (#504).
     steps:
@@ -539,7 +539,7 @@ jobs:
         from confiture.core import live_catalog
         with psycopg.connect('postgresql://confiture:confiture@localhost:5432/confiture_test', autocommit=True) as c:
             c.execute('CREATE EXTENSION pg_tviews')
-            live_catalog.require_supported_pg_tviews(c.execute('SELECT pg_tviews_version()').fetchone()[0])
+            live_catalog.require_supported_pg_tviews_on(c)
             c.execute('DROP EXTENSION pg_tviews')
         "
         pg_dump --version
@@ -555,7 +555,7 @@ jobs:
           tests/unit/test_tview_model.py \
           tests/unit/test_tview_ddl.py \
           tests/unit/test_drift_tviews.py \
-          tests/unit/test_pg_tviews_minimum.py \
+          tests/unit/test_pg_tviews_contract.py \
           -q -rs -p no:randomly
 
   lint:

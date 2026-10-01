@@ -1,4 +1,4 @@
-"""The live side reads a TVIEW from ``pg_tview_meta`` (#504).
+"""The live side reads a TVIEW from ``tviews.registry`` (#504).
 
 pg_tviews is in no stock PostgreSQL: these tests run where the extension is
 available, which the ``pg-tviews`` CI leg guarantees, and skip with the reason
@@ -85,6 +85,26 @@ def _drift(url: str, ddl: str) -> list[tuple[str, str, str]]:
     return sorted((i.drift_type.value, i.severity.value, i.object_name) for i in report.drift_items)
 
 
+def test_a_view_that_took_a_stale_backing_views_name_is_the_trees(tview_database: str) -> None:
+    """The registry names the backing view; ``v_<entity>`` by name is only a guess.
+
+    Once ``v_post`` is dropped, the registration is stale (``view`` is NULL) and a
+    view the author creates under that name is theirs, read like any other view.
+    """
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_attribute WHERE attrelid = 'tviews.registry'::regclass"
+            " AND attname = 'view'"
+        ).fetchone():
+            pytest.skip("this pg_tviews' registry has no `view` column (fraiseql/pg_tviews#153)")
+        conn.execute("DROP VIEW v_post")
+        conn.execute("CREATE VIEW v_post AS SELECT 1 AS mine")
+        model = live_catalog.read(conn, schemas=["public"], views=True, tviews=True)
+
+    assert list(model.tviews) == [ref_for("tview", "public", "tv_post")]
+    assert ref_for("view", "public", "v_post") in model.views
+
+
 def test_a_database_built_from_its_tree_has_no_drift(tview_database: str) -> None:
     """1.26.0 reported `extra_table warning public.tv_post` here (measured)."""
     assert _drift(tview_database, TREE) == []
@@ -107,6 +127,144 @@ def test_the_parse_side_and_the_live_side_hold_one_tview(tview_database: str) ->
     assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(TREE)).tviews
 
 
+PINNED = TREE.replace(
+    "CREATE TABLE tv_post AS", "CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70) AS"
+)
+
+
+@pytest.fixture
+def pinned_database(fresh_database_factory: Callable[[str], str]) -> str:
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        conn.execute(PINNED)
+    return url
+
+
+def test_the_live_side_reads_every_option_the_registry_holds(tview_database: str) -> None:
+    """The registry holds each key, pinned or not; stock pg_tviews: unlogged, fillfactor 85."""
+    with psycopg.connect(tview_database) as conn:
+        (found,) = live_catalog.tviews(conn, ["public"])
+
+    assert (found.logged, found.fillfactor) == (False, 85)
+
+
+def test_a_tview_left_at_pg_tviews_defaults_reads_as_pinning_nothing(tview_database: str) -> None:
+    """Measured for ``PARITY_NORMALISATIONS["tview_defaults"]``: the tree wrote no option, the
+    registry holds pg_tviews' defaults. The day they change, this fails and the normalisation goes.
+    """
+    (declared,) = build_model(TREE).tviews.values()
+    with psycopg.connect(tview_database) as conn:
+        (found,) = live_catalog.tviews(conn, ["public"])
+
+    assert ((declared.logged, declared.fillfactor), (found.logged, found.fillfactor)) == (
+        (None, None),
+        (False, 85),
+    )
+
+
+def test_the_parse_side_and_the_live_side_hold_one_pinned_tview(pinned_database: str) -> None:
+    from confiture.core.schema_model import normalise_for_parity
+
+    with psycopg.connect(pinned_database) as conn:
+        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+
+    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(PINNED)).tviews
+
+
+def test_a_database_built_from_a_pinned_tree_has_no_drift(pinned_database: str) -> None:
+    assert _drift(pinned_database, PINNED) == []
+
+
+def test_a_pinned_option_changed_by_hand_is_drift(pinned_database: str) -> None:
+    with psycopg.connect(pinned_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET LOGGED")
+        conn.execute("ALTER TABLE tv_post SET (fillfactor = 60)")
+
+    assert _drift(pinned_database, PINNED) == [
+        ("tview_option_mismatch", "warning", "tv_post"),
+        ("tview_option_mismatch", "warning", "tv_post"),
+    ]
+
+
+def test_an_option_the_tree_does_not_pin_is_never_drift(tview_database: str) -> None:
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET LOGGED")
+
+    assert _drift(tview_database, TREE) == []
+
+
+CALLED = TREE.replace(
+    "CREATE TABLE tv_post AS\n",
+    "SELECT tviews.pg_tviews_create_or_replace('tv_post', $q$\n",
+).replace(
+    "JOIN tb_user u ON u.pk_user = p.fk_user;",
+    """JOIN tb_user u ON u.pk_user = p.fk_user$q$, options => '{"logged": true, "fillfactor": 70}');""",
+)
+
+
+def test_a_tree_that_calls_pg_tviews_is_the_database_it_builds(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """The form a generated migration writes, read back as the tree it is."""
+    from confiture.core.schema_model import normalise_for_parity
+
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        conn.execute(CALLED)
+        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+
+    (found,) = live.tviews.values()
+    assert (found.logged, found.fillfactor) == (True, 70)
+    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(CALLED)).tviews
+    assert _drift(url, CALLED) == []
+
+
+LOGGED = f"{TREE}ALTER TABLE tv_post SET LOGGED;\n"
+
+
+def test_set_logged_in_the_tree_is_what_the_database_holds(tview_database: str) -> None:
+    """The tree ``tview_002`` asks for, built, reads back as itself; left unlogged, it drifts."""
+    from confiture.core.schema_model import normalise_for_parity
+
+    assert _drift(tview_database, LOGGED) == [("tview_option_mismatch", "warning", "tv_post")]
+
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET LOGGED")
+        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+
+    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(LOGGED)).tviews
+    assert _drift(tview_database, LOGGED) == []
+
+
+FILLED = f"{TREE}ALTER TABLE tv_post SET (fillfactor = 70);\n"
+RESET = f"{FILLED}ALTER TABLE tv_post RESET (fillfactor);\n"
+
+
+def test_set_fillfactor_in_the_tree_is_what_the_database_holds(tview_database: str) -> None:
+    """``SET (fillfactor = n)`` built reads back as itself; ``RESET`` reads back as 100."""
+    from confiture.core.schema_model import normalise_for_parity
+
+    assert _drift(tview_database, FILLED) == [("tview_option_mismatch", "warning", "tv_post")]
+
+    for tree, statement in ((FILLED, "SET (fillfactor = 70)"), (RESET, "RESET (fillfactor)")):
+        with psycopg.connect(tview_database, autocommit=True) as conn:
+            conn.execute(f"ALTER TABLE tv_post {statement}")
+            live = live_catalog.read(conn, schemas=["public"], tviews=True)
+
+        assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(tree)).tviews
+        assert _drift(tview_database, tree) == []
+
+
 def test_a_tview_that_became_a_plain_table_is_caught(fresh_database: str) -> None:
     """The tree declares a TVIEW and the database holds a plain ``tv_post`` table.
 
@@ -126,7 +284,7 @@ def test_a_tview_that_became_a_plain_table_is_caught(fresh_database: str) -> Non
 
 
 def test_a_plain_tv_table_without_pg_tviews_is_a_table_on_both_sides(fresh_database: str) -> None:
-    """No prefix rule on either side: only a CTAS is a TVIEW, and only pg_tview_meta says one exists."""
+    """No prefix rule on either side: only a CTAS is a TVIEW, and only the registry says one exists."""
     tree = "CREATE TABLE tv_order (id bigint PRIMARY KEY, data jsonb);\n"
     with psycopg.connect(fresh_database, autocommit=True) as conn:
         conn.execute(tree)
@@ -135,11 +293,11 @@ def test_a_plain_tv_table_without_pg_tviews_is_a_table_on_both_sides(fresh_datab
     assert _drift(fresh_database, tree) == []
 
 
-def test_a_pg_tviews_older_than_confiture_supports_is_refused(
+def test_a_pg_tviews_offering_another_contract_is_refused(
     tview_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The live model, drift and preflight all read TVIEWs here (#541)."""
-    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+    """The live model, drift and preflight all read TVIEWs through the contract."""
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
 
     with psycopg.connect(tview_database) as conn:
         for read in (
@@ -156,7 +314,7 @@ def test_a_pg_tviews_older_than_confiture_supports_is_refused(
 def test_a_database_without_pg_tviews_is_never_refused(
     fresh_database: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(live_catalog, "MINIMUM_PG_TVIEWS", "99.0.0")
+    monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
 
     with psycopg.connect(fresh_database) as conn:
         assert live_catalog.read(conn, schemas=["public"], tviews=True).tviews == {}

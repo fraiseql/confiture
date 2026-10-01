@@ -40,7 +40,6 @@ holds, an introspector what the *database* holds.
 
 from __future__ import annotations
 
-import re
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
@@ -50,10 +49,17 @@ import pglast
 from pglast.stream import RawStream
 from psycopg import sql
 
-from confiture.core.ddl_walk import read_constraint, read_index, render_default, written_type
+from confiture.core.ddl_walk import (
+    read_constraint,
+    read_index,
+    render_default,
+    rendered_query,
+    written_type,
+)
 from confiture.core.ddl_walk import type_name as ddl_type_name
 from confiture.core.schema_identity import quote_identifier
 from confiture.core.schema_model import (
+    TVIEWS_SCHEMA,
     Column,
     Constraint,
     EnumType,
@@ -656,38 +662,40 @@ WHERE NOT t.tgisinternal
 ORDER BY n.nspname, c.relname, t.tgname
 """
 
-#: Where pg_tviews is installed: the schema holding ``pg_tview_meta``.
-_TVIEW_HOME = """
-SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
-WHERE e.extname = 'pg_tviews'
-"""
+#: The release a database runs: ``extversion`` is pg_tviews' own version from
+#: 0.1.0-beta.20 on (every earlier beta said ``0.1.0``).
+_PG_TVIEWS = "SELECT extversion FROM pg_extension WHERE extname = 'pg_tviews'"
 
-#: The oldest pg_tviews build confiture supports, the one the ``pg-tviews`` CI leg
-#: runs (``ci/pg-tviews/Dockerfile``; a test holds the two equal). Its dumps carry
-#: ``pg_tview_meta``, so a restored TVIEW stays registered.
-MINIMUM_PG_TVIEWS = "0.1.0-beta.19"
+#: The read contract confiture reads: ``tviews.registry``, its ``options`` keys, and
+#: what ``pg_tviews_create_or_replace()`` takes and returns. pg_tviews bumps
+#: ``tviews.contract_version()`` on any change a reader could misread.
+CONTRACT_VERSION = 1
 
-#: A pg_tviews build: ``0.1.0``, ``0.1.0-beta.19``. ``extversion`` is ``0.1.0`` on
-#: every 0.1.0 beta (measured on beta.17, 18 and 19), so the build is what
-#: ``pg_tviews_version()`` answers.
-_BUILD = re.compile(r"(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?")
-_PRERELEASE_RANK = {"alpha": 0, "beta": 1, "rc": 2}
-_RELEASE_RANK = len(_PRERELEASE_RANK)
+_HAS_CONTRACT = "SELECT to_regprocedure(%s) IS NOT NULL"
 
-_TVIEWS_BUILD_FUNCTION = """
-SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-WHERE n.nspname = %s AND p.proname = 'pg_tviews_version' AND p.pronargs = 0
-"""
-
-#: Each registered TVIEW: its relation, the query pg_tviews recorded, and its
-#: backing view's oid, whose relation is the TVIEW's and not a view of the tree's.
+#: Each registered TVIEW: its relation, the query pg_tviews holds, the storage
+#: options it reads from the catalog, and its backing view's oid, whose relation
+#: is the TVIEW's and not a view of the tree's (``NULL`` once that view is gone).
 _TVIEWS = """
-SELECT n.nspname, c.relname, m.definition, m.view_oid::bigint
-FROM {meta} m
-JOIN pg_class c ON c.oid = m.table_oid
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = ANY(%s)
-ORDER BY n.nspname, c.relname
+SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
+       {backing_view}::oid::bigint
+FROM {registry} r
+WHERE r.schema = ANY(%s)
+ORDER BY r.schema, r.name
+"""
+
+#: The registry's ``view`` column, which pg_tviews appended under contract 1: an
+#: earlier contract-1 build has none, and its backing view is the one it creates
+#: beside the table, ``v_<entity>``, found by name. Either is the view's oid, so the
+#: reader's ``search_path`` does not change it.
+_BACKING_VIEW = sql.SQL("r.view")
+_BACKING_VIEW_BY_NAME = sql.SQL("to_regclass(format('%%I.%%I', r.schema, 'v_' || r.entity))")
+
+_HAS_VIEW_COLUMN = """
+SELECT EXISTS (
+    SELECT 1 FROM pg_attribute
+    WHERE attrelid = to_regclass(%s) AND attname = 'view' AND NOT attisdropped
+)
 """
 
 # The argument types are spelled inside the one query, in order: a round trip
@@ -834,83 +842,91 @@ def tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[TView]:
     return [tview for tview, _view_oid in _tviews(conn, schemas)]
 
 
-def pg_tviews_build(text: str) -> tuple[int, ...] | None:
-    """*text* as a build that orders as releases do; ``None`` when it is not one."""
-    match = _BUILD.fullmatch(text)
-    if match is None:
-        return None
-    major, minor, patch, stage, number = match.groups()
-    rank = _RELEASE_RANK if stage is None else _PRERELEASE_RANK[stage]
-    return (int(major), int(minor), int(patch), rank, int(number or 0))
+def require_supported_pg_tviews(installed: str | None, contract: int | None) -> None:
+    """Refuse a pg_tviews whose read contract is not the one confiture reads.
 
-
-def require_supported_pg_tviews(installed: str | None) -> None:
-    """Refuse a pg_tviews build older than :data:`MINIMUM_PG_TVIEWS`, or one it cannot read.
+    *contract* is what ``tviews.contract_version()`` answers, ``None`` where the
+    function does not exist: pg_tviews 0.1.0-beta.19 and earlier, which kept
+    their objects wherever ``search_path`` put them.
 
     Raises:
-        ConfigurationError: ``CONFIG_014``, naming the installed and the required build.
+        ConfigurationError: ``CONFIG_014``, naming the installed release and both contracts.
     """
-    build = None if installed is None else pg_tviews_build(installed)
-    minimum = pg_tviews_build(MINIMUM_PG_TVIEWS)
-    if build is not None and minimum is not None and build >= minimum:
+    if contract == CONTRACT_VERSION:
         return
+    release = installed or "of an unknown release"
+    if contract is None:
+        raise ConfigurationError(
+            f"pg_tviews {release} has no read contract (tviews.contract_version()); "
+            f"confiture reads contract {CONTRACT_VERSION}, which pg_tviews 0.1.0-beta.20 "
+            "and later offer.",
+            error_code="CONFIG_014",
+            resolution_hint=(
+                "Upgrade the server's pg_tviews. An extension created by 0.1.0-beta.19 or "
+                "earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql, "
+                "not ALTER EXTENSION UPDATE"
+            ),
+        )
     raise ConfigurationError(
-        f"pg_tviews {installed or 'of an unknown build'} is installed; "
-        f"confiture supports pg_tviews {MINIMUM_PG_TVIEWS} or later.",
+        f"pg_tviews {release} offers read contract {contract}; "
+        f"confiture reads contract {CONTRACT_VERSION}.",
         error_code="CONFIG_014",
         resolution_hint=(
-            f"Upgrade the server's pg_tviews to {MINIMUM_PG_TVIEWS} or later; "
-            "`SELECT pg_tviews_version()` names the build a database runs"
+            f"Run a confiture that reads contract {contract}, or a pg_tviews that offers "
+            f"contract {CONTRACT_VERSION}"
         ),
     )
 
 
-def _installed_pg_tviews(conn: psycopg.Connection, home: str) -> str | None:
-    if _scalar(conn, _TVIEWS_BUILD_FUNCTION, (home,)) is None:
+def _contract(conn: psycopg.Connection) -> int | None:
+    if not _scalar(conn, _HAS_CONTRACT, (f"{TVIEWS_SCHEMA}.contract_version()",)):
         return None
-    query = sql.SQL("SELECT {}()").format(sql.Identifier(home, "pg_tviews_version"))
     with conn.cursor() as cursor:
-        cursor.execute(query)
+        cursor.execute(
+            sql.SQL("SELECT {}()").format(sql.Identifier(TVIEWS_SCHEMA, "contract_version"))
+        )
         row = cursor.fetchone()
-    return None if row is None else str(row[0])
+    return None if row is None else int(row[0])
 
 
 def require_supported_pg_tviews_on(conn: psycopg.Connection) -> None:
-    """Refuse this database's pg_tviews when it is older than confiture supports.
+    """Refuse this database's pg_tviews when confiture does not read its contract.
 
     A database without the extension passes: there is nothing to refuse.
 
     Raises:
         ConfigurationError: ``CONFIG_014``, as :func:`require_supported_pg_tviews`.
     """
-    home = _scalar(conn, _TVIEW_HOME, ())
-    if home is not None:
-        require_supported_pg_tviews(_installed_pg_tviews(conn, home))
+    installed = conn.execute(_PG_TVIEWS).fetchone()
+    if installed is not None:
+        require_supported_pg_tviews(installed[0], _contract(conn))
 
 
-def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TView, int]]:
-    home = _scalar(conn, _TVIEW_HOME, ())
-    if home is None:
+def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TView, int | None]]:
+    installed = conn.execute(_PG_TVIEWS).fetchone()
+    if installed is None:
         return []
-    require_supported_pg_tviews(_installed_pg_tviews(conn, home))
-    query = sql.SQL(_TVIEWS).format(meta=sql.Identifier(home, "pg_tview_meta"))
+    require_supported_pg_tviews(installed[0], _contract(conn))
+    registry = sql.Identifier(TVIEWS_SCHEMA, "registry")
+    has_view = _scalar(conn, _HAS_VIEW_COLUMN, (registry.as_string(conn),))
+    query = sql.SQL(_TVIEWS).format(
+        registry=registry, backing_view=_BACKING_VIEW if has_view else _BACKING_VIEW_BY_NAME
+    )
     return [
-        (TView(name=name, schema=schema, definition=_rendered_query(definition)), view_oid)
-        for schema, name, definition, view_oid in conn.execute(query, (list(schemas),)).fetchall()
+        (
+            TView(
+                name=name,
+                schema=schema,
+                definition=rendered_query(definition),
+                logged=logged,
+                fillfactor=fillfactor,
+            ),
+            view_oid,
+        )
+        for schema, name, definition, logged, fillfactor, view_oid in conn.execute(
+            query, (list(schemas),)
+        ).fetchall()
     ]
-
-
-def _rendered_query(text: str) -> str:
-    """The query pg_tviews recorded, rendered as the DDL side renders its ``SELECT``.
-
-    pg_tviews keeps the author's text verbatim; one deparser on both sides is
-    what makes two spellings of one query one definition. Text the parser
-    refuses is kept as recorded.
-    """
-    try:
-        return RawStream()(pglast.parse_sql(text)[0].stmt)
-    except pglast.parser.ParseError:
-        return text
 
 
 def triggers(conn: psycopg.Connection, schemas: Sequence[str]) -> list[Trigger]:

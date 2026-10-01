@@ -5,6 +5,7 @@ to detect unauthorized changes or migration mishaps.
 """
 
 import fnmatch
+import json
 import logging
 import time
 from collections import defaultdict
@@ -85,6 +86,7 @@ class DriftType(Enum):
     EXTRA_ROUTINE = "extra_routine"
     MISSING_TVIEW = "missing_tview"
     EXTRA_TVIEW = "extra_tview"
+    TVIEW_OPTION_MISMATCH = "tview_option_mismatch"
     MISSING_GRANT = "missing_grant"
     EXTRA_GRANT = "extra_grant"
     WRONG_OWNER = "wrong_owner"
@@ -378,6 +380,45 @@ def _compare_objects(expected: SchemaModel, actual: SchemaModel) -> list[DriftIt
         )
         for obj in sorted(extra, key=_order)
     ]
+    return items
+
+
+#: The pg_tviews ``options`` keys a tree can pin, as the model holds them.
+_TVIEW_OPTIONS = ("logged", "fillfactor")
+
+
+def _compare_tview_options(expected: SchemaModel, actual: SchemaModel) -> list[DriftItem]:
+    """Each option a TVIEW's tree pins that the database's TVIEW does not hold.
+
+    A key the tree does not pin is pg_tviews' default or a choice made by hand,
+    which the tree left open: never drift. A TVIEW missing on either side is
+    ``_compare_objects``' finding.
+    """
+    items = []
+    for ref, declared in sorted(
+        expected.tviews.items(), key=lambda item: (item[0].schema, item[0].name)
+    ):
+        found = actual.tviews.get(ref)
+        if found is None:
+            continue
+        for key in _TVIEW_OPTIONS:
+            pinned, held = getattr(declared, key), getattr(found, key)
+            if pinned is None or pinned == held:
+                continue
+            items.append(
+                DriftItem(
+                    drift_type=DriftType.TVIEW_OPTION_MISMATCH,
+                    severity=DriftSeverity.WARNING,
+                    object_name=declared.qualified,
+                    subject=DriftSubject(ref.schema, declared.name, key),
+                    expected=f"{key} = {json.dumps(pinned)}",
+                    actual=f"{key} = {json.dumps(held)}",
+                    message=(
+                        f"TVIEW '{declared.qualified}' pins {key} = {json.dumps(pinned)}; "
+                        f"the database holds {json.dumps(held)}"
+                    ),
+                )
+            )
     return items
 
 
@@ -739,6 +780,7 @@ class SchemaDriftDetector:
         # declares and the database has not got is drift, not exit 0 (#303).
         if objects:
             report.drift_items.extend(_compare_objects(expected, actual))
+            report.drift_items.extend(_compare_tview_options(expected, actual))
             report.objects_checked = (
                 len(expected.views) + len(expected.routines) + len(expected.triggers)
             )

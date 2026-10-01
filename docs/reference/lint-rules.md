@@ -928,14 +928,16 @@ migration step by step.
 `--select tview` (off by default). pg_tviews turns `CREATE TABLE tv_x AS SELECT …`
 into a table it keeps in step with its base tables. From 0.1.0-beta.18 it indexes
 each `fk_*` column and sets fillfactor 85 itself; what it leaves to the author is
-said in statements it accepts *after* the conversion. Measured on pg_tviews
-0.1.0-beta.18: `CREATE INDEX` and `ALTER TABLE tv_x SET LOGGED` work;
-`WITH (…)` on the `CREATE` is refused. The rules read the tree, with no database.
+said on the `CREATE` (`UNLOGGED`, `WITH (fillfactor = n)`, which pg_tviews
+0.1.0-beta.20 accepts), in a `pg_tviews_create_or_replace()` call's `options`, or
+*after* the conversion (`CREATE INDEX`, `ALTER TABLE tv_x SET LOGGED`). The rules read
+the tree, with no database; `tview_002` reads the `logged` the schema model pins, the
+one drift compares and a generated migration passes.
 
 | Rule | Says | Fix |
 |---|---|---|
 | `tview_001` | an index covers `data` or `updated_at`, which every refresh rewrites, so no update is HOT | drop it |
-| `tview_002` | replicas are declared and the TVIEW is UNLOGGED (pg_tviews' default): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED` |
+| `tview_002` | replicas are declared and the TVIEW is not pinned logged (UNLOGGED is pg_tviews' default): a standby cannot read it | `ALTER TABLE tv_x SET LOGGED`, or `options => '{"logged": true}'` |
 
 `tview_002` works around fraiseql/pg_tviews#75, names it in its message, and is
 removed when it is fixed. `tview_001` sees only the indexes the tree declares.

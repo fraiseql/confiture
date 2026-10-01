@@ -53,6 +53,8 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "AT_DropNotNull",
         "AT_SetLogged",
         "AT_SetUnLogged",
+        "AT_SetRelOptions",
+        "AT_ResetRelOptions",
     ),
     "ConstrType": (
         "CONSTR_NOTNULL",

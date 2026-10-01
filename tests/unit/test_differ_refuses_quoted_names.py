@@ -40,6 +40,11 @@ _PLAIN = "CREATE SCHEMA app;\nCREATE TABLE app.t (id int PRIMARY KEY);\n"
             'CREATE TRIGGER "Trg" BEFORE INSERT ON app.t FOR EACH ROW EXECUTE FUNCTION app.f();',
             '"Trg"',
         ),
+        (
+            "SELECT tviews.pg_tviews_create_or_replace('app.\"tv_Q\"', 'SELECT id FROM app.t');",
+            'app."tv_Q"',
+        ),
+        ("SELECT pg_tviews_create('app.\"Q\"', 'SELECT id FROM app.t');", 'app."tv_Q"'),
     ],
 )
 @pytest.mark.parametrize("side", ["old", "new"])

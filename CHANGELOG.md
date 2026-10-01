@@ -14,6 +14,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+**TVIEWs through pg_tviews' read contract.** confiture reads and writes pg_tviews
+TVIEWs through the surface pg_tviews 0.1.0-beta.20 publishes for tools
+(pg_tviews ADR 0136), and refuses any pg_tviews that does not offer it.
+
+### Changed
+
+- ⚠️ **pg_tviews 0.1.0-beta.20 or later is required** wherever confiture reads
+  TVIEWs from a live database, and for `migrate up` of a migration that creates or
+  drops one. confiture checks `tviews.contract_version()` and refuses anything but
+  contract 1 with `CONFIG_014` (exit 5): a pg_tviews with no contract (0.1.0-beta.19
+  and earlier, moved with pg_tviews' `scripts/migrate-from-0.1.0.sql`) or another one.
+  `CONFIG_014`'s message now names the contract, not a minimum build.
+- **The live side reads `tviews.registry`**, never the internal `pg_tview_meta`.
+  A TVIEW's backing view is the registry's `view` column where pg_tviews has it
+  (fraiseql/pg_tviews#153, still contract 1), so a stale registration's `v_<entity>`
+  name, taken by a view of the author's, is read as that view; an earlier
+  contract-1 build has no column and its backing view is found as `v_<entity>`.
+- ⚠️ **`migrate diff --generate` writes TVIEWs with pg_tviews' functions.** An added
+  or changed TVIEW is `SELECT tviews.pg_tviews_create_or_replace('tv_x',
+  $tview$…$tview$[, options => '{…}'])`, a dropped one `SELECT
+  tviews.pg_tviews_drop('tv_x', if_exists => true)`. A changed TVIEW is no longer
+  dropped and created: pg_tviews replaces it in place, keeping its grants and
+  indexes, or rebuilds it. `options` carries what the `CREATE TABLE … AS` pins
+  (`UNLOGGED`, `WITH (fillfactor = n)`).
+- **The change set reads those calls**: `create_or_replace` is
+  `replace_materialized_view` (`lock_risky`, new), `pg_tviews_create` is
+  `create_materialized_view`, `pg_tviews_drop` is `drop_materialized_view`. A
+  replaced TVIEW's diff tier is `lock_risky` (was `destructive`). Preflight and the
+  `migrate up` gate count a `pg_tviews_drop()` as the drop it is.
+
+### Added
+
+- **Drift compares the storage a TVIEW pins.** `TView` carries `logged` and
+  `fillfactor`: what the tree pins, `None` where it pins nothing, or what
+  `tviews.registry` holds. A pinned option the database does not hold is the new
+  drift kind **`tview_option_mismatch`** (`warning`, one item per option, `subject.name`
+  the option); an option the tree does not pin is never drift. The kind's name and
+  grade are a contract, as every drift kind's is (fraisier's `escalate`). The model's
+  wire and `schema-model.schema.json` gain both fields; a wire written without them
+  reads as pinning nothing.
+- **A tree may declare a TVIEW as a call.** `SELECT
+  tviews.pg_tviews_create_or_replace('tv_x', $$…$$[, options => '{…}'])` (or
+  `pg_tviews_create`) is the TVIEW its `CREATE TABLE tv_x AS …` would be, for the
+  model, drift, the lint and `migrate diff`; `SELECT tviews.pg_tviews_drop('tv_x')`
+  drops one the tree declared, order-aware. The two spellings are one definition, so
+  moving a TVIEW between them generates nothing. A name or query that is not a string
+  constant names no TVIEW.
+- **`ALTER TABLE tv_x SET LOGGED` / `SET UNLOGGED` pins the TVIEW's `logged`.** The
+  model, `migrate diff --generate` (`options => '{"logged": true}'`) and drift
+  (`tview_option_mismatch`) now read the same pin `tview_002` does, and `tview_002`
+  also accepts a call passing `"logged": true`.
+- **`ALTER TABLE tv_x SET (fillfactor = n)` pins the TVIEW's `fillfactor`**, and
+  `RESET (fillfactor)` pins 100, PostgreSQL's default, which is what pg_tviews'
+  registry reads back. The model, `migrate diff --generate` and drift read it as they
+  read `WITH (fillfactor = n)` on the `CREATE`; a quoted value (`'70'`) is read too.
+
 ## [1.28.0] - 2026-09-30
 
 **`migrate up` guards TVIEW migrations, and `generate renumber` says when a move

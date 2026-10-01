@@ -45,7 +45,9 @@ from confiture.core.ddl_walk import (
     render_default,
     routine_body,
     routine_options,
-    sets_logged,
+    storage_pinned,
+    tview_calls,
+    tview_options,
     written_type,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
@@ -189,8 +191,6 @@ class SchemaObject:
     has_primary_key: bool = False
     is_partition: bool = False
     is_temporary: bool = False
-    #: Whether ``ALTER TABLE … SET LOGGED`` left a ``tview`` durable.
-    logged: bool = False
     comment: str | None = None
     signature: str | None = None
     signature_key: Signature | None = None
@@ -684,7 +684,13 @@ def _from_create_table_as(sql: str, stmt: Any, offset: int) -> SchemaObject | No
         if _enum_value(stmt.objtype) != _OBJECT_TABLE or not rel.relname.startswith(TVIEW_PREFIX):
             return None
         tview = _relation_object(sql, "tview", rel, offset)
-        tview.tview = TView(name=tview.name, definition=RawStream()(stmt.query))
+        options = tview_options(stmt)
+        tview.tview = TView(
+            name=tview.name,
+            definition=RawStream()(stmt.query),
+            logged=options.get("logged"),
+            fillfactor=options.get("fillfactor"),
+        )
         return tview
     matview = _relation_object(sql, "matview", stmt.into.rel, offset)
     matview.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
@@ -743,6 +749,34 @@ def object_from_statement(sql: str, raw: Any) -> SchemaObject | None:
     if obj is not None:
         obj.statement_line = _line_of(sql, offset)
     return obj
+
+
+def tviews_from_calls(sql: str, raw: Any) -> list[SchemaObject]:
+    """Each TVIEW a ``SELECT`` creates through pg_tviews' functions, in call order.
+
+    ``SELECT tviews.pg_tviews_create_or_replace('tv_post', $$…$$, options => …)`` is
+    the TVIEW its ``CREATE TABLE tv_post AS …`` would be, the options passed pinned
+    as the CTAS pins them. A call whose name is not a constant names nothing.
+    """
+    calls = [
+        call for call in tview_calls(raw.stmt) if call.action != "drop" and call.name is not None
+    ]
+    if not calls:
+        return []
+    offset = _statement_offset(sql, raw)
+    line = _line_of(sql, offset)
+    found = []
+    for call in calls:
+        tview = _object("tview", call.schema, str(call.name), line, offset)
+        tview.statement_line = line
+        tview.tview = TView(
+            name=tview.name,
+            definition=call.query,
+            logged=call.options.get("logged"),
+            fillfactor=call.options.get("fillfactor"),
+        )
+        found.append(tview)
+    return found
 
 
 def _schema_declaration(sql: str, raw: Any) -> SchemaObject | None:
@@ -831,11 +865,12 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
     rv = stmt.relation
     table = inventory.find(rv.schemaname, rv.relname)
     if table is None:
-        # A TVIEW is a table to PostgreSQL, and what the tree does to its storage is read.
-        tviews = inventory.find_all(("tview",), rv.schemaname, rv.relname)
-        for cmd in stmt.cmds or []:
-            if tviews and (logged := sets_logged(cmd)) is not None:
-                tviews[0].logged = logged
+        # A TVIEW is a table to PostgreSQL, and `SET LOGGED` or `SET (fillfactor = n)`
+        # pins its storage as `UNLOGGED` or `WITH (…)` on the `CREATE` does.
+        for tview in inventory.find_all(("tview",), rv.schemaname, rv.relname):
+            for cmd in stmt.cmds or []:
+                if tview.tview is not None and (pinned := storage_pinned(cmd)):
+                    tview.tview = replace(tview.tview, **pinned)
         return
     for cmd in stmt.cmds or []:
         node = added_constraint(cmd)
@@ -845,10 +880,6 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
             read = read_constraint(node)
             if isinstance(read, Constraint):
                 _add_constraints(table, (read,))
-            continue
-        logged = sets_logged(cmd)
-        if logged is not None:
-            table.logged = logged
             continue
         edit = column_edit(cmd)
         apply = _COLUMN_APPLIERS.get(edit.kind) if edit is not None else None
@@ -1058,6 +1089,7 @@ def build_inventory(sql: str, raws: Sequence[Any] | None = None) -> Inventory:
         if obj is not None:
             (inventory.schemas if obj.kind == "schema" else inventory.objects).append(obj)
             created[id(raw)] = obj
+        inventory.objects.extend(tviews_from_calls(sql, raw))
     for raw in raws:
         stmt = raw.stmt
         kind = type(stmt).__name__

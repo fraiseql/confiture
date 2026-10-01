@@ -18,6 +18,9 @@ from confiture.core.ddl_walk import (
     relation_parts as _rel,
 )
 from confiture.core.ddl_walk import (
+    tview_calls as _tview_calls,
+)
+from confiture.core.ddl_walk import (
     type_name as _type_name,
 )
 from confiture.core.type_lattice import (
@@ -313,6 +316,36 @@ def _ast_drop(node: object, ctx: _Context) -> list[ChangeEntry]:
     return entries
 
 
+#: What each pg_tviews call is, in the change set's words. A TVIEW's rows are
+#: derived, so it is tiered as a materialized view. ``create_or_replace`` may
+#: create, replace in place or rebuild, and a statement cannot say which: it is
+#: read as a replacement, which blocks the base tables' writers while it runs.
+_TVIEW_KIND: Final[dict[str, str]] = {
+    "create": "create_materialized_view",
+    "create_or_replace": "replace_materialized_view",
+    "drop": "drop_materialized_view",
+}
+
+
+def _ast_select(node: object, ctx: _Context) -> list[ChangeEntry]:
+    """A ``SELECT`` that calls pg_tviews creates or drops a TVIEW; any other is unclassified."""
+    calls = _tview_calls(node)
+    if not calls:
+        return [
+            ctx.unclassified(
+                "unclassified", None, "SELECT — confiture does not classify this statement"
+            )
+        ]
+    return [
+        ctx.entry(
+            _TVIEW_KIND[call.action],
+            ctx.qualified(call.schema, call.name) if call.name else None,
+            detail=_detail_for(_TVIEW_KIND[call.action]),
+        )
+        for call in calls
+    ]
+
+
 def _ast_truncate(node: object, ctx: _Context) -> list[ChangeEntry]:
     return [
         ctx.entry("truncate", ctx.qualified(*_rel(relation)), detail="TRUNCATE")
@@ -429,6 +462,7 @@ _AST_HANDLERS: Final[dict[str, Any]] = {
     "CommentStmt": _ast_comment,
     "AlterOwnerStmt": _ast_simple("change_owner"),
     "AlterDefaultPrivilegesStmt": _ast_simple("alter_default_privileges"),
+    "SelectStmt": _ast_select,
     "RefreshMatViewStmt": _relation_stmt("refresh_materialized_view", "REFRESH MATERIALIZED VIEW"),
     "ClusterStmt": _relation_stmt("cluster", "CLUSTER"),
     "ReindexStmt": _relation_stmt("reindex", "REINDEX"),

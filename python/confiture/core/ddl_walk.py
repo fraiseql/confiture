@@ -19,18 +19,23 @@ nobody considered looks exactly like one that was decided (#288, #301).
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
-from typing import Any, Literal
+from dataclasses import dataclass, field, replace
+from typing import Any, Literal, TypedDict
 
 import pglast
+import pglast.parser
 from pglast import ast as _pg_ast
 from pglast.stream import RawStream
 from pglast.visitors import Visitor
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.schema_identity import identifier_identity
 from confiture.core.schema_model import (
+    TVIEW_PREFIX,
+    TVIEWS_SCHEMA,
     Column,
     Constraint,
     Deferral,
@@ -40,6 +45,7 @@ from confiture.core.schema_model import (
     RelationName,
     Volatility,
 )
+from confiture.core.sql_lexer import name_parts as written_name_parts
 from confiture.core.type_lattice import canonical_type, parse_type
 
 _CONSTR_NOTNULL = _pg_member("ConstrType", "CONSTR_NOTNULL")
@@ -208,18 +214,212 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
     return build(cmd) if build is not None else None
 
 
-def sets_logged(cmd: Any) -> bool | None:
-    """``True`` after ``SET LOGGED``, ``False`` after ``SET UNLOGGED``, else ``None``.
+class TViewOptions(TypedDict, total=False):
+    """pg_tviews' ``options`` keys a tree can pin; a key it does not pin is absent."""
 
-    No expected schema is built from it; the lint's ``tview_002`` asks whether a
-    TVIEW was left UNLOGGED.
+    logged: bool
+    fillfactor: int
+
+
+def tview_options(stmt: Any) -> TViewOptions:
+    """The storage a TVIEW's ``CREATE TABLE … AS`` pins, as pg_tviews' ``options`` keys.
+
+    ``UNLOGGED`` is ``logged: false`` and ``WITH (fillfactor = n)`` is ``fillfactor``,
+    as pg_tviews reads the statement. A key the statement does not say is absent:
+    pg_tviews then applies its own default on create and keeps the current value
+    on replace, which is what the author who wrote nothing asked for.
+    """
+    into = getattr(stmt, "into", None)
+    rel = getattr(into, "rel", None)
+    options: TViewOptions = {}
+    if getattr(rel, "relpersistence", "p") == "u":
+        options["logged"] = False
+    options.update(_fillfactor_set(getattr(into, "options", None)))
+    return options
+
+
+#: PostgreSQL's fillfactor for a table whose ``reloptions`` set none, which is what
+#: pg_tviews' registry reports after ``RESET (fillfactor)``.
+_RESET_FILLFACTOR = 100
+
+
+def storage_pinned(cmd: Any) -> TViewOptions:
+    """The storage an ``ALTER TABLE`` subcommand pins, as pg_tviews' ``options`` keys.
+
+    ``SET LOGGED`` / ``SET UNLOGGED`` pin ``logged``, ``SET (fillfactor = n)`` pins
+    ``fillfactor`` and ``RESET (fillfactor)`` pins PostgreSQL's 100, as pg_tviews'
+    registry reads the table back. On a TVIEW this is the pin the ``CREATE`` writes
+    (:func:`tview_options`); a plain table's storage is no fact an expected schema
+    holds. A subcommand that pins neither is ``{}``.
     """
     subtype = enum_int(getattr(cmd, "subtype", None))
     if subtype == enum_int(_pg_member("AlterTableType", "AT_SetLogged")):
-        return True
+        return {"logged": True}
     if subtype == enum_int(_pg_member("AlterTableType", "AT_SetUnLogged")):
-        return False
-    return None
+        return {"logged": False}
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetRelOptions")):
+        return _fillfactor_set(getattr(cmd, "def_", None))
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_ResetRelOptions")) and any(
+        option.defname == "fillfactor" for option in getattr(cmd, "def_", None) or ()
+    ):
+        return {"fillfactor": _RESET_FILLFACTOR}
+    return {}
+
+
+def _fillfactor_set(options: Any) -> TViewOptions:
+    """``fillfactor`` from a ``WITH (…)`` or ``SET (…)`` list, written ``70`` or ``'70'``."""
+    pinned: TViewOptions = {}
+    for option in options or ():
+        arg = getattr(option, "arg", None)
+        value = getattr(arg, "ival", None)
+        text = getattr(arg, "sval", None)
+        if isinstance(text, str) and text.isdigit():
+            value = int(text)
+        if option.defname == "fillfactor" and isinstance(value, int):
+            pinned["fillfactor"] = value
+    return pinned
+
+
+#: pg_tviews' functions that register or drop a TVIEW, each naming it by its first
+#: argument, and what each does: ``create_or_replace`` may create, replace or rebuild.
+TVIEW_FUNCTIONS: dict[str, Literal["create", "create_or_replace", "drop"]] = {
+    "pg_tviews_create_or_replace": "create_or_replace",
+    "pg_tviews_create": "create",
+    "pg_tviews_create_aggregate": "create",
+    "pg_tviews_drop": "drop",
+}
+
+
+@dataclass(frozen=True)
+class TViewCall:
+    """One call to a :data:`TVIEW_FUNCTIONS` function, and the TVIEW it names.
+
+    ``name`` is the ``tv_*`` relation, from ``tv_post``, ``post`` or ``app.tv_post``
+    alike; ``None`` when the argument is not a constant this reader can name.
+    ``query`` is the definition a create passes, rendered as :func:`rendered_query`
+    renders it, and ``options`` the keys it pins; ``None`` and ``{}`` when it passes
+    no constant, and for a drop.
+    """
+
+    action: Literal["create", "create_or_replace", "drop"]
+    schema: str | None
+    name: str | None
+    query: str | None = None
+    options: TViewOptions = field(default_factory=TViewOptions)
+
+
+#: Each argument a call's reader reads: its parameter names, and its position.
+#: Only ``pg_tviews_create_or_replace`` takes ``options`` third;
+#: ``pg_tviews_create_aggregate``'s third is its group keys.
+_TVIEW_ARGUMENTS: dict[str, tuple[frozenset[str], int | None]] = {
+    "name": (frozenset({"tview_name"}), 0),
+    "query": (frozenset({"query", "select_sql"}), 1),
+    "options": (frozenset({"options"}), None),
+}
+
+
+def tview_calls(stmt: Any) -> list[TViewCall]:
+    """The pg_tviews calls a ``SELECT`` makes, in source order; ``[]`` for any other statement.
+
+    A call is pg_tviews' when its function is in :data:`TVIEW_FUNCTIONS` and is
+    qualified by ``tviews`` or not at all (``tviews`` on ``search_path``).
+    """
+    if type(stmt).__name__ != "SelectStmt":
+        return []
+    calls = []
+    for node in walk_nodes(stmt):
+        if type(node).__name__ != "FuncCall":
+            continue
+        function = [getattr(part, "sval", None) for part in node.funcname]
+        action = TVIEW_FUNCTIONS.get(str(function[-1]))
+        if action is None or function[:-1] not in ([], [TVIEWS_SCHEMA]):
+            continue
+        arguments = _tview_arguments(node, action)
+        schema, name = _tview_named(arguments.get("name"))
+        if action == "drop":
+            calls.append(TViewCall(action, schema, name))
+            continue
+        query = _constant_text(arguments.get("query"))
+        calls.append(
+            TViewCall(
+                action,
+                schema,
+                name,
+                None if query is None else rendered_query(query),
+                _options_passed(arguments.get("options")),
+            )
+        )
+    return calls
+
+
+def _tview_arguments(node: Any, action: str) -> dict[str, Any]:
+    """The call's arguments by the role :data:`_TVIEW_ARGUMENTS` gives them."""
+    positions = {role: at for role, (_names, at) in _TVIEW_ARGUMENTS.items() if at is not None}
+    if action == "create_or_replace":
+        positions["options"] = 2
+    found: dict[str, Any] = {}
+    for at, arg in enumerate(node.args or ()):
+        if type(arg).__name__ == "NamedArgExpr":
+            role = next(
+                (r for r, (names, _) in _TVIEW_ARGUMENTS.items() if arg.name in names), None
+            )
+            if role is not None:
+                found[role] = arg.arg
+            continue
+        role = next((r for r, position in positions.items() if position == at), None)
+        if role is not None:
+            found[role] = arg
+    return found
+
+
+def _constant_text(arg: Any) -> str | None:
+    """The text of a string constant, cast or not; ``None`` for anything else."""
+    while type(arg).__name__ == "TypeCast":
+        arg = arg.arg
+    value = getattr(getattr(arg, "val", None), "sval", None)
+    return value if isinstance(value, str) else None
+
+
+def _options_passed(arg: Any) -> TViewOptions:
+    """The keys a constant ``options`` object pins, as :func:`tview_options` reads a CTAS."""
+    text = _constant_text(arg)
+    try:
+        passed = json.loads(text) if text is not None else None
+    except json.JSONDecodeError:
+        passed = None
+    options = TViewOptions()
+    if not isinstance(passed, dict):
+        return options
+    if isinstance(logged := passed.get("logged"), bool):
+        options["logged"] = logged
+    fillfactor = passed.get("fillfactor")
+    if isinstance(fillfactor, int) and not isinstance(fillfactor, bool):
+        options["fillfactor"] = fillfactor
+    return options
+
+
+def rendered_query(text: str) -> str:
+    """A TVIEW's query as confiture holds it: *text* parsed and rendered.
+
+    The one rendering for the tree's ``CREATE TABLE … AS``, a ``pg_tviews_create_or_replace()``
+    call's query and the registry's ``query``, so two spellings of one query are one
+    definition. Text the parser refuses is kept as written.
+    """
+    try:
+        return RawStream()(pglast.parse_sql(text)[0].stmt)
+    except (pglast.parser.ParseError, IndexError):
+        return text
+
+
+def _tview_named(arg: Any) -> tuple[str | None, str | None]:
+    written = _constant_text(arg)
+    parts = None if written is None else written_name_parts(written)
+    if not parts or len(parts) > 2:  # noqa: PLR2004 — schema and name
+        return None, None
+    *schema, name = [identifier_identity(part) for part in parts]
+    if not name.startswith(TVIEW_PREFIX):
+        name = TVIEW_PREFIX + name
+    return (schema[0] if schema else None), name
 
 
 #: ``AlterTableType`` members an expected schema is built from some *other* way,
@@ -230,8 +430,22 @@ MODELLED_ELSEWHERE: dict[str, str] = {
         "`differ._collect_alter_table_constraints` models FK / CHECK / UNIQUE for "
         "`migrate diff`. A table-level constraint is the table's fact, not a column's"
     ),
-    "AT_SetLogged": "`sets_logged` reads it for the lint's `tview_002`, and nothing else",
-    "AT_SetUnLogged": "`sets_logged` reads it for the lint's `tview_002`, and nothing else",
+    "AT_SetLogged": (
+        "`storage_pinned` reads it into a TVIEW's pinned `logged` option, which drift, "
+        "generation and the lint's `tview_002` read; a plain table's persistence is not modelled"
+    ),
+    "AT_SetUnLogged": (
+        "`storage_pinned` reads it into a TVIEW's pinned `logged` option, which drift, "
+        "generation and the lint's `tview_002` read; a plain table's persistence is not modelled"
+    ),
+    "AT_SetRelOptions": (
+        "`storage_pinned` reads `fillfactor` into a TVIEW's pinned option, which drift and "
+        "generation read; a plain table's storage options are not modelled"
+    ),
+    "AT_ResetRelOptions": (
+        "`storage_pinned` reads `RESET (fillfactor)` into a TVIEW's pinned option (100, as "
+        "pg_tviews' registry reads it back); a plain table's storage options are not modelled"
+    ),
     "AT_ChangeOwner": (
         "ownership is its own expectation and its own drift type (`wrong_owner`), "
         "read from the live catalogue rather than folded out of DDL"
@@ -304,8 +518,6 @@ _NOT_A_FACT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "AT_DropOids",
             "AT_SetAccessMethod",
             "AT_SetTableSpace",
-            "AT_SetRelOptions",
-            "AT_ResetRelOptions",
             "AT_ReplaceRelOptions",
             "AT_GenericOptions",
         ),
@@ -592,10 +804,16 @@ def object_edits(stmt: Any) -> list[ObjectEdit]:
 
     A list because one statement may carry several edits (``DROP TABLE a, b``).
     An unmodelled statement, or one naming a kind no expected schema models,
-    yields no edit at all rather than a partial one.
+    yields no edit at all rather than a partial one. A ``SELECT`` calling
+    ``pg_tviews_drop()`` drops the TVIEW it names (:func:`tview_calls`).
     """
     read = _OBJECT_EDITS_BY_NODE.get(type(stmt).__name__)
-    return read(stmt) if read is not None else []
+    edits = read(stmt) if read is not None else []
+    return edits + [
+        ObjectEdit("drop", "tview", call.schema, call.name)
+        for call in tview_calls(stmt)
+        if call.action == "drop" and call.name is not None
+    ]
 
 
 #: Statement kinds an expected schema reaches some other way, with where.

@@ -316,13 +316,15 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
     {
         "code": "CONFIG_014",
         "message_template": (
-            "pg_tviews {installed} is installed; confiture supports pg_tviews {minimum} or later"
+            "pg_tviews {installed} offers read contract {contract}; confiture reads "
+            "contract {supported}"
         ),
         "severity": "error",
         "exit_code": 5,
         "resolution_hint": (
-            "Upgrade the server's pg_tviews; `SELECT pg_tviews_version()` names the build "
-            "a database runs"
+            "Run a pg_tviews whose `tviews.contract_version()` is the contract confiture "
+            "reads; an extension created by 0.1.0-beta.19 or earlier is moved with pg_tviews' "
+            "scripts/migrate-from-0.1.0.sql"
         ),
     },
     # ========== Default error codes for exception types ==========

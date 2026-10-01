@@ -518,16 +518,22 @@ class TView
 A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`.
 
 pg_tviews turns that statement into a table, a backing view `v_<entity>`
-and triggers on each base table, and registers them in `pg_tview_meta`.
-The model holds the TVIEW as one object — its relation and its query — and
-its parts belong to it. `definition` is the query as the reader holds it:
-the DDL's `SELECT` rendered, or what pg_tviews recorded.
+and triggers on each base table, and lists it in `tviews.registry`. The
+model holds the TVIEW as one object — its relation and its query — and its
+parts belong to it. `definition` is the query as the reader holds it: the
+DDL's `SELECT` rendered, or the registry's `query`.
+
+`logged` and `fillfactor` are pg_tviews' `options` keys of those names:
+what the tree pins (`UNLOGGED`, `WITH (fillfactor = n)`, `SET LOGGED`),
+`None` where it pins nothing, or what the registry holds, every key set.
 
 | Field | Type | Default |
 |---|---|---|
 | `name` | `str` | required |
 | `schema` | `str \| None` | `None` |
 | `definition` | `str \| None` | `None` |
+| `logged` | `bool \| None` | `None` |
+| `fillfactor` | `int \| None` | `None` |
 
 ## Ordering
 

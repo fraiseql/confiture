@@ -137,6 +137,9 @@ _TIER_BY_KIND: Final[dict[str, RiskTier | None]] = {
     "set_not_null": RiskTier.LOCK_RISKY,
     "cluster": RiskTier.LOCK_RISKY,
     "refresh_materialized_view": RiskTier.LOCK_RISKY,
+    # a TVIEW's `pg_tviews_create_or_replace()`: rows reconciled or recomputed while
+    # the base tables' writers wait. PostgreSQL has no replace for a matview.
+    "replace_materialized_view": RiskTier.LOCK_RISKY,
     "reindex": RiskTier.LOCK_RISKY,
     # destructive — destroys data or an object, restorable from backup
     "drop_index": RiskTier.DESTRUCTIVE,

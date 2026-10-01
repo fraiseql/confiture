@@ -106,8 +106,8 @@ _GUARDED_KINDS: frozenset[str] = frozenset({"domain", "type", "policy"})
 
 #: The kinds whose redefinition is a statement confiture writes. Every other
 #: ``REPLACE`` is in ``ddl_objects.REPLACE_IS_AUTHORS_WORK``, with its reason.
-_REPLACED_BY_DEFINITION: frozenset[str] = frozenset({"view", "function", "procedure"})
-REPLACED_BY_DROP_AND_CREATE: frozenset[str] = frozenset({"matview", "aggregate", "tview"})
+_REPLACED_BY_DEFINITION: frozenset[str] = frozenset({"view", "function", "procedure", "tview"})
+REPLACED_BY_DROP_AND_CREATE: frozenset[str] = frozenset({"matview", "aggregate"})
 
 
 def _comment(text: str) -> str:

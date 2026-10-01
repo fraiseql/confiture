@@ -430,21 +430,31 @@ def routine_ref(routine: Routine) -> ObjectRef:
 #: The prefix pg_tviews reads a ``CREATE TABLE … AS`` target by: ``tv_<entity>``.
 TVIEW_PREFIX = "tv_"
 
+#: The schema pg_tviews keeps every object of its own in, whatever ``search_path``
+#: says (its control file's ``schema``, from 0.1.0-beta.20).
+TVIEWS_SCHEMA = "tviews"
+
 
 @dataclass(frozen=True)
 class TView:
     """A pg_tviews TVIEW: ``CREATE TABLE tv_<entity> AS SELECT …``.
 
     pg_tviews turns that statement into a table, a backing view ``v_<entity>``
-    and triggers on each base table, and registers them in ``pg_tview_meta``.
-    The model holds the TVIEW as one object — its relation and its query — and
-    its parts belong to it. ``definition`` is the query as the reader holds it:
-    the DDL's ``SELECT`` rendered, or what pg_tviews recorded.
+    and triggers on each base table, and lists it in ``tviews.registry``. The
+    model holds the TVIEW as one object — its relation and its query — and its
+    parts belong to it. ``definition`` is the query as the reader holds it: the
+    DDL's ``SELECT`` rendered, or the registry's ``query``.
+
+    ``logged`` and ``fillfactor`` are pg_tviews' ``options`` keys of those names:
+    what the tree pins (``UNLOGGED``, ``WITH (fillfactor = n)``, ``SET LOGGED``),
+    ``None`` where it pins nothing, or what the registry holds, every key set.
     """
 
     name: str
     schema: str | None = None
     definition: str | None = None
+    logged: bool | None = None
+    fillfactor: int | None = None
 
     @property
     def entity(self) -> str:
@@ -728,6 +738,11 @@ PARITY_NORMALISATIONS: dict[str, str] = {
         "`RETURNS int4`) are spelling; the catalog knows format_type's (`bigint`, "
         "`integer`). signature_key is the identity compared"
     ),
+    "tview_defaults": (
+        "a TVIEW option the tree does not pin is pg_tviews' to choose, and the registry "
+        "holds every key: a stock pg_tviews creates a TVIEW unlogged with fillfactor 85, "
+        "so those values are no pin, on either side"
+    ),
     "view_definitions": (
         "a view's query is stored as a parse tree and read back through "
         "pg_get_viewdef's deparse — qualified, reparenthesised, `*` expanded — so what "
@@ -822,6 +837,20 @@ def _parity_view(view: View) -> View:
     )
 
 
+#: The fillfactor a stock pg_tviews creates a TVIEW with (``pg_tviews.fillfactor``);
+#: ``pg_tviews.unlogged_by_default`` is on, so it is created unlogged.
+_TVIEW_DEFAULT_FILLFACTOR = 85
+
+
+def _parity_tview(tview: TView) -> TView:
+    return replace(
+        tview,
+        schema=(tview.schema or DEFAULT_SCHEMA).lower(),
+        logged=True if tview.logged else None,
+        fillfactor=None if tview.fillfactor == _TVIEW_DEFAULT_FILLFACTOR else tview.fillfactor,
+    )
+
+
 def _parity_sequence(sequence: Sequence) -> Sequence:
     unbounded = sequence.min_value in (None, 1) and (
         sequence.max_value is None or sequence.max_value in _DEFAULT_MAX
@@ -855,8 +884,5 @@ def normalise_for_parity(model: SchemaModel) -> SchemaModel:
             ref: replace(t, schema=(t.schema or DEFAULT_SCHEMA).lower())
             for ref, t in model.triggers.items()
         },
-        tviews={
-            ref: replace(t, schema=(t.schema or DEFAULT_SCHEMA).lower())
-            for ref, t in model.tviews.items()
-        },
+        tviews={ref: _parity_tview(t) for ref, t in model.tviews.items()},
     )

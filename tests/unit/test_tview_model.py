@@ -27,7 +27,13 @@ def test_the_wire_carries_tviews_and_reads_them_back() -> None:
     model = SchemaModel(tviews={tview_ref(POST): POST})
 
     assert json.loads(model.to_json())["tviews"] == [
-        {"name": "tv_post", "schema": "app", "definition": "SELECT 1 AS pk_post"}
+        {
+            "name": "tv_post",
+            "schema": "app",
+            "definition": "SELECT 1 AS pk_post",
+            "logged": None,
+            "fillfactor": None,
+        }
     ]
     assert SchemaModel.from_json(model.to_json()) == model
 
@@ -37,3 +43,19 @@ def test_a_wire_written_before_tviews_reads_as_none() -> None:
     del wire["tviews"]
 
     assert SchemaModel.from_json(json.dumps(wire)).tviews == {}
+
+
+def test_the_wire_carries_the_storage_a_tview_pins() -> None:
+    pinned = TView(name="tv_post", schema="app", logged=True, fillfactor=70)
+    model = SchemaModel(tviews={tview_ref(pinned): pinned})
+
+    assert SchemaModel.from_json(model.to_json()).tviews[tview_ref(pinned)] == pinned
+
+
+def test_a_wire_written_before_storage_was_modelled_pins_none() -> None:
+    wire = json.loads(SchemaModel(tviews={tview_ref(POST): POST}).to_json())
+    for tview in wire["tviews"]:
+        del tview["logged"], tview["fillfactor"]
+
+    (read,) = SchemaModel.from_json(json.dumps(wire)).tviews.values()
+    assert (read.logged, read.fillfactor) == (None, None)
