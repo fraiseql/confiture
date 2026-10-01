@@ -81,18 +81,18 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,792 lines, 34% of `core/`.
+26,827 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
-| `_pglast_enums.py` | 150 | DDL transform |
+| `_pglast_enums.py` | 152 | DDL transform |
 | `change_order.py` | 184 | DDL transform |
 | `change_set/` | 1,305 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
 | `data_assertions.py` | 562 | DDL transform |
 | `ddl_clauses.py` | 152 | DDL transform |
-| `ddl_objects.py` | 770 | DDL transform |
-| `ddl_walk.py` | 1,722 | DDL transform |
+| `ddl_objects.py` | 773 | DDL transform |
+| `ddl_walk.py` | 1,752 | DDL transform |
 | `destructive.py` | 181 | DDL transform |
 | `differ.py` | 807 | DDL transform |
 | `differ_sql.py` | 706 | DDL transform |

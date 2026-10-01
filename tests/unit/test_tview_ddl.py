@@ -255,3 +255,49 @@ def test_set_logged_reaches_a_tview_the_tree_defines_twice() -> None:
     ((obj,),) = _tracked(tree).values()
     (call,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
     assert call.options == {"logged": True}
+
+
+@pytest.mark.parametrize(
+    ("tree", "fillfactor"),
+    [
+        (f"{CTAS}ALTER TABLE tv_post SET (fillfactor = 70);\n", 70),
+        (f"{CTAS}ALTER TABLE public.tv_post SET (fillfactor = '70');\n", 70),
+        (f"{CALL}ALTER TABLE tv_post SET (fillfactor = 70, autovacuum_enabled = false);\n", 70),
+        (
+            f"{CTAS}ALTER TABLE tv_post SET (fillfactor = 70);\nALTER TABLE tv_post RESET (fillfactor);\n",
+            100,
+        ),
+        (f"{CTAS}ALTER TABLE tv_post SET (autovacuum_enabled = false);\n", None),
+        (f"{CTAS}ALTER TABLE tv_post SET LOGGED, SET (fillfactor = 70);\n", 70),
+        (CTAS, None),
+    ],
+    ids=["set", "quoted-value", "call", "reset-after", "other-option", "with-logged", "nothing"],
+)
+def test_set_fillfactor_pins_the_tview_fillfactor(tree: str, fillfactor: int | None) -> None:
+    """``SET (fillfactor = n)`` pins n; ``RESET`` pins PostgreSQL's 100, as the registry reads it."""
+    (tview,) = build_model(tree).tviews.values()
+
+    assert tview.fillfactor == fillfactor
+
+
+def test_set_logged_and_fillfactor_in_one_alter_pin_both() -> None:
+    (tview,) = build_model(
+        f"{CTAS}ALTER TABLE tv_post SET LOGGED, SET (fillfactor = 70);\n"
+    ).tviews.values()
+
+    assert (tview.logged, tview.fillfactor) == (True, 70)
+
+
+def test_a_generated_tview_passes_the_fillfactor_its_tree_set() -> None:
+    """``migrate diff --generate`` writes the TVIEW the tree ends with, ``SET (fillfactor)`` included."""
+    from confiture.core.ddl_walk import tview_calls
+
+    tree = f"{CTAS}ALTER TABLE tv_post SET LOGGED;\nALTER TABLE tv_post SET (fillfactor = 70);\n"
+    ((obj,),) = _tracked(tree).values()
+    (call,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
+    assert call.options == {"fillfactor": 70, "logged": True}
+    called = _tracked(
+        CALL.replace("$q$);", """$q$, options => '{"logged": true, "fillfactor": 70}');""")
+    )
+    ((same,),) = called.values()
+    assert obj.definition == same.definition

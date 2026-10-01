@@ -129,3 +129,15 @@ def test_set_logged_in_the_tree_is_a_pin_drift_compares() -> None:
     assert [(i.drift_type.value, i.expected, i.actual) for i in found] == [
         ("tview_option_mismatch", "logged = true", "logged = false")
     ]
+
+
+def test_set_fillfactor_in_the_tree_is_a_pin_drift_compares() -> None:
+    """A TVIEW whose fillfactor the tree set by ``ALTER`` drifts when the database holds another."""
+    ddl = f"{DECLARED}ALTER TABLE tv_post SET (fillfactor = 70);\n"
+    found = compare_pinned(
+        ddl, live(TView(name="tv_post", schema="public", logged=False, fillfactor=85))
+    )
+
+    assert [(i.drift_type.value, i.expected, i.actual) for i in found] == [
+        ("tview_option_mismatch", "fillfactor = 70", "fillfactor = 85")
+    ]

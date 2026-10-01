@@ -61,6 +61,10 @@ TVIEWs through the surface pg_tviews 0.1.0-beta.20 publishes for tools
   model, `migrate diff --generate` (`options => '{"logged": true}'`) and drift
   (`tview_option_mismatch`) now read the same pin `tview_002` does, and `tview_002`
   also accepts a call passing `"logged": true`.
+- **`ALTER TABLE tv_x SET (fillfactor = n)` pins the TVIEW's `fillfactor`**, and
+  `RESET (fillfactor)` pins 100, PostgreSQL's default, which is what pg_tviews'
+  registry reads back. The model, `migrate diff --generate` and drift read it as they
+  read `WITH (fillfactor = n)` on the `CREATE`; a quoted value (`'70'`) is read too.
 
 ## [1.28.0] - 2026-09-30
 

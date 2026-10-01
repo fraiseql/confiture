@@ -226,6 +226,25 @@ def test_set_logged_in_the_tree_is_what_the_database_holds(tview_database: str) 
     assert _drift(tview_database, LOGGED) == []
 
 
+FILLED = f"{TREE}ALTER TABLE tv_post SET (fillfactor = 70);\n"
+RESET = f"{FILLED}ALTER TABLE tv_post RESET (fillfactor);\n"
+
+
+def test_set_fillfactor_in_the_tree_is_what_the_database_holds(tview_database: str) -> None:
+    """``SET (fillfactor = n)`` built reads back as itself; ``RESET`` reads back as 100."""
+    from confiture.core.schema_model import normalise_for_parity
+
+    assert _drift(tview_database, FILLED) == [("tview_option_mismatch", "warning", "tv_post")]
+
+    for tree, statement in ((FILLED, "SET (fillfactor = 70)"), (RESET, "RESET (fillfactor)")):
+        with psycopg.connect(tview_database, autocommit=True) as conn:
+            conn.execute(f"ALTER TABLE tv_post {statement}")
+            live = live_catalog.read(conn, schemas=["public"], tviews=True)
+
+        assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(tree)).tviews
+        assert _drift(tview_database, tree) == []
+
+
 def test_a_tview_that_became_a_plain_table_is_caught(fresh_database: str) -> None:
     """The tree declares a TVIEW and the database holds a plain ``tv_post`` table.
 

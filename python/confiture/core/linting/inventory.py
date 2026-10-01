@@ -45,7 +45,7 @@ from confiture.core.ddl_walk import (
     render_default,
     routine_body,
     routine_options,
-    sets_logged,
+    storage_pinned,
     tview_calls,
     tview_options,
     written_type,
@@ -865,12 +865,12 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
     rv = stmt.relation
     table = inventory.find(rv.schemaname, rv.relname)
     if table is None:
-        # A TVIEW is a table to PostgreSQL, and `SET LOGGED` / `SET UNLOGGED` pins its
-        # `logged` as `UNLOGGED` on the `CREATE` does.
+        # A TVIEW is a table to PostgreSQL, and `SET LOGGED` or `SET (fillfactor = n)`
+        # pins its storage as `UNLOGGED` or `WITH (…)` on the `CREATE` does.
         for tview in inventory.find_all(("tview",), rv.schemaname, rv.relname):
             for cmd in stmt.cmds or []:
-                if tview.tview is not None and (logged := sets_logged(cmd)) is not None:
-                    tview.tview = replace(tview.tview, logged=logged)
+                if tview.tview is not None and (pinned := storage_pinned(cmd)):
+                    tview.tview = replace(tview.tview, **pinned)
         return
     for cmd in stmt.cmds or []:
         node = added_constraint(cmd)

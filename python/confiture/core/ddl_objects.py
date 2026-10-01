@@ -33,9 +33,10 @@ from pglast.stream import RawStream
 
 from confiture.core.ddl_walk import (
     ObjectEdit,
+    TViewOptions,
     object_edits,
     object_kinds,
-    sets_logged,
+    storage_pinned,
     tview_calls,
 )
 from confiture.core.linting.duplicates import CreateFlags, wins
@@ -448,35 +449,37 @@ def _tview_object(ref: ObjectRef, tview: TView) -> DDLObject:
     return DDLObject(ref=ref, definition=text, create_sql=text, signature=None, trigger=None)
 
 
-def _apply_logged(
+def _apply_storage(
     objects: dict[ObjectRef, list[DDLObject]], flags: dict[int, CreateFlags], stmt: Any
 ) -> None:
-    """``ALTER TABLE tv_x SET LOGGED`` pins the TVIEW's ``logged``, as the inventory folds it.
+    """``ALTER TABLE tv_x SET LOGGED`` or ``SET (fillfactor = n)`` pins the TVIEW's storage.
 
-    The TVIEW is re-rendered from its ``create_sql``, the call :func:`_tview_create`
-    wrote, read back by :func:`~confiture.core.ddl_walk.tview_calls`; each rendering
-    keeps the flags that decide which of two definitions a build keeps.
+    The same fold as the inventory's. The TVIEW is re-rendered from its ``create_sql``,
+    the call :func:`_tview_create` wrote, read back by
+    :func:`~confiture.core.ddl_walk.tview_calls`; each rendering keeps the flags that
+    decide which of two definitions a build keeps.
     """
     if type(stmt).__name__ != "AlterTableStmt":
         return
     rv = stmt.relation
-    for logged in (sets_logged(cmd) for cmd in stmt.cmds or ()):
-        if logged is None:
+    for pinned in (storage_pinned(cmd) for cmd in stmt.cmds or ()):
+        if not pinned:
             continue
         for ref in [ref for ref in objects if _names(ref, "tview", rv.schemaname, rv.relname)]:
-            relogged = [_relogged(obj, logged) for obj in objects[ref]]
-            for before, after in zip(objects[ref], relogged, strict=True):
+            repinned = [_repinned(obj, pinned) for obj in objects[ref]]
+            for before, after in zip(objects[ref], repinned, strict=True):
                 flags[id(after)] = flags.pop(id(before))
-            objects[ref] = relogged
+            objects[ref] = repinned
 
 
-def _relogged(obj: DDLObject, logged: bool) -> DDLObject:
+def _repinned(obj: DDLObject, pinned: TViewOptions) -> DDLObject:
     (call,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
+    options = {**call.options, **pinned}
     tview = TView(
         obj.ref.name,
         definition=call.query,
-        logged=logged,
-        fillfactor=call.options.get("fillfactor"),
+        logged=options.get("logged"),
+        fillfactor=options.get("fillfactor"),
     )
     return _tview_object(obj.ref, tview)
 
@@ -717,7 +720,7 @@ def declared_objects(sql: str, raws: list[Any]) -> Declared:
         for obj in [found] if found is not None else tview_objects_of(sql, raw):
             objects.setdefault(obj.ref, []).append(obj)
             flags[id(obj)] = _flags(raw.stmt)
-        _apply_logged(objects, flags, raw.stmt)
+        _apply_storage(objects, flags, raw.stmt)
     collapsed: list[Collapsed] = []
     for ref, bucket in objects.items():
         kept: list[DDLObject] = []

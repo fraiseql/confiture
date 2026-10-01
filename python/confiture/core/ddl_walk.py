@@ -214,21 +214,6 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
     return build(cmd) if build is not None else None
 
 
-def sets_logged(cmd: Any) -> bool | None:
-    """``True`` after ``SET LOGGED``, ``False`` after ``SET UNLOGGED``, else ``None``.
-
-    On a TVIEW it pins pg_tviews' ``logged`` option, as ``UNLOGGED`` on the
-    ``CREATE`` does (:func:`tview_options`); a plain table's persistence is no fact
-    an expected schema holds.
-    """
-    subtype = enum_int(getattr(cmd, "subtype", None))
-    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetLogged")):
-        return True
-    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetUnLogged")):
-        return False
-    return None
-
-
 class TViewOptions(TypedDict, total=False):
     """pg_tviews' ``options`` keys a tree can pin; a key it does not pin is absent."""
 
@@ -249,11 +234,50 @@ def tview_options(stmt: Any) -> TViewOptions:
     options: TViewOptions = {}
     if getattr(rel, "relpersistence", "p") == "u":
         options["logged"] = False
-    for option in getattr(into, "options", None) or ():
-        value = getattr(getattr(option, "arg", None), "ival", None)
-        if option.defname == "fillfactor" and isinstance(value, int):
-            options["fillfactor"] = value
+    options.update(_fillfactor_set(getattr(into, "options", None)))
     return options
+
+
+#: PostgreSQL's fillfactor for a table whose ``reloptions`` set none, which is what
+#: pg_tviews' registry reports after ``RESET (fillfactor)``.
+_RESET_FILLFACTOR = 100
+
+
+def storage_pinned(cmd: Any) -> TViewOptions:
+    """The storage an ``ALTER TABLE`` subcommand pins, as pg_tviews' ``options`` keys.
+
+    ``SET LOGGED`` / ``SET UNLOGGED`` pin ``logged``, ``SET (fillfactor = n)`` pins
+    ``fillfactor`` and ``RESET (fillfactor)`` pins PostgreSQL's 100, as pg_tviews'
+    registry reads the table back. On a TVIEW this is the pin the ``CREATE`` writes
+    (:func:`tview_options`); a plain table's storage is no fact an expected schema
+    holds. A subcommand that pins neither is ``{}``.
+    """
+    subtype = enum_int(getattr(cmd, "subtype", None))
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetLogged")):
+        return {"logged": True}
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetUnLogged")):
+        return {"logged": False}
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_SetRelOptions")):
+        return _fillfactor_set(getattr(cmd, "def_", None))
+    if subtype == enum_int(_pg_member("AlterTableType", "AT_ResetRelOptions")) and any(
+        option.defname == "fillfactor" for option in getattr(cmd, "def_", None) or ()
+    ):
+        return {"fillfactor": _RESET_FILLFACTOR}
+    return {}
+
+
+def _fillfactor_set(options: Any) -> TViewOptions:
+    """``fillfactor`` from a ``WITH (…)`` or ``SET (…)`` list, written ``70`` or ``'70'``."""
+    pinned: TViewOptions = {}
+    for option in options or ():
+        arg = getattr(option, "arg", None)
+        value = getattr(arg, "ival", None)
+        text = getattr(arg, "sval", None)
+        if isinstance(text, str) and text.isdigit():
+            value = int(text)
+        if option.defname == "fillfactor" and isinstance(value, int):
+            pinned["fillfactor"] = value
+    return pinned
 
 
 #: pg_tviews' functions that register or drop a TVIEW, each naming it by its first
@@ -407,12 +431,20 @@ MODELLED_ELSEWHERE: dict[str, str] = {
         "`migrate diff`. A table-level constraint is the table's fact, not a column's"
     ),
     "AT_SetLogged": (
-        "`sets_logged` reads it into a TVIEW's pinned `logged` option, which drift, "
+        "`storage_pinned` reads it into a TVIEW's pinned `logged` option, which drift, "
         "generation and the lint's `tview_002` read; a plain table's persistence is not modelled"
     ),
     "AT_SetUnLogged": (
-        "`sets_logged` reads it into a TVIEW's pinned `logged` option, which drift, "
+        "`storage_pinned` reads it into a TVIEW's pinned `logged` option, which drift, "
         "generation and the lint's `tview_002` read; a plain table's persistence is not modelled"
+    ),
+    "AT_SetRelOptions": (
+        "`storage_pinned` reads `fillfactor` into a TVIEW's pinned option, which drift and "
+        "generation read; a plain table's storage options are not modelled"
+    ),
+    "AT_ResetRelOptions": (
+        "`storage_pinned` reads `RESET (fillfactor)` into a TVIEW's pinned option (100, as "
+        "pg_tviews' registry reads it back); a plain table's storage options are not modelled"
     ),
     "AT_ChangeOwner": (
         "ownership is its own expectation and its own drift type (`wrong_owner`), "
@@ -486,8 +518,6 @@ _NOT_A_FACT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "AT_DropOids",
             "AT_SetAccessMethod",
             "AT_SetTableSpace",
-            "AT_SetRelOptions",
-            "AT_ResetRelOptions",
             "AT_ReplaceRelOptions",
             "AT_GenericOptions",
         ),
