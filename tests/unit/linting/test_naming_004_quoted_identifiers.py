@@ -40,6 +40,13 @@ def _quoted(sql: str) -> list[tuple[str, str]]:
             "function",
             'app."order"',
         ),
+        ('CREATE TABLE app."tv_Q" AS SELECT 1 AS id;', "tview", 'app."tv_Q"'),
+        (
+            "SELECT tviews.pg_tviews_create_or_replace('app.\"tv_Q\"', 'SELECT 1 AS id');",
+            "tview",
+            'app."tv_Q"',
+        ),
+        ("SELECT pg_tviews_create('app.\"Q\"', 'SELECT 1 AS id');", "tview", 'app."tv_Q"'),
     ],
 )
 def test_an_object_whose_name_needs_quotes_is_an_error(

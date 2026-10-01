@@ -40,6 +40,11 @@ def _dotted(sql: str) -> list[tuple[str, str]]:
             "function",
             'app."f.n"',
         ),
+        (
+            "SELECT tviews.pg_tviews_create_or_replace('app.\"tv_a.b\"', 'SELECT 1 AS id');",
+            "tview",
+            'app."tv_a.b"',
+        ),
     ],
 )
 def test_an_object_whose_name_holds_a_dot_is_an_error(
