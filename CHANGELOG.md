@@ -14,9 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-10-01
+
 **TVIEWs through pg_tviews' read contract.** confiture reads and writes pg_tviews
 TVIEWs through the surface pg_tviews 0.1.0-beta.20 publishes for tools
-(pg_tviews ADR 0136), and refuses any pg_tviews that does not offer it.
+(pg_tviews ADR 0136), and refuses any pg_tviews that does not offer it. Drift now
+compares the storage a TVIEW's tree pins, and a tree may declare a TVIEW as a
+pg_tviews call. Two changes are breaking (⚠️): pg_tviews read contract 1 is
+required where confiture reads TVIEWs live (`CONFIG_014`), and `migrate diff
+--generate` writes TVIEWs with pg_tviews' functions.
 
 ### Changed
 
