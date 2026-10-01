@@ -27,6 +27,10 @@ TVIEWs through the surface pg_tviews 0.1.0-beta.20 publishes for tools
   and earlier, moved with pg_tviews' `scripts/migrate-from-0.1.0.sql`) or another one.
   `CONFIG_014`'s message now names the contract, not a minimum build.
 - **The live side reads `tviews.registry`**, never the internal `pg_tview_meta`.
+  A TVIEW's backing view is the registry's `view` column where pg_tviews has it
+  (fraiseql/pg_tviews#153, still contract 1), so a stale registration's `v_<entity>`
+  name, taken by a view of the author's, is read as that view; an earlier
+  contract-1 build has no column and its backing view is found as `v_<entity>`.
 - ⚠️ **`migrate diff --generate` writes TVIEWs with pg_tviews' functions.** An added
   or changed TVIEW is `SELECT tviews.pg_tviews_create_or_replace('tv_x',
   $tview$…$tview$[, options => '{…}'])`, a dropped one `SELECT

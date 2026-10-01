@@ -85,6 +85,26 @@ def _drift(url: str, ddl: str) -> list[tuple[str, str, str]]:
     return sorted((i.drift_type.value, i.severity.value, i.object_name) for i in report.drift_items)
 
 
+def test_a_view_that_took_a_stale_backing_views_name_is_the_trees(tview_database: str) -> None:
+    """The registry names the backing view; ``v_<entity>`` by name is only a guess.
+
+    Once ``v_post`` is dropped, the registration is stale (``view`` is NULL) and a
+    view the author creates under that name is theirs, read like any other view.
+    """
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_attribute WHERE attrelid = 'tviews.registry'::regclass"
+            " AND attname = 'view'"
+        ).fetchone():
+            pytest.skip("this pg_tviews' registry has no `view` column (fraiseql/pg_tviews#153)")
+        conn.execute("DROP VIEW v_post")
+        conn.execute("CREATE VIEW v_post AS SELECT 1 AS mine")
+        model = live_catalog.read(conn, schemas=["public"], views=True, tviews=True)
+
+    assert list(model.tviews) == [ref_for("tview", "public", "tv_post")]
+    assert ref_for("view", "public", "v_post") in model.views
+
+
 def test_a_database_built_from_its_tree_has_no_drift(tview_database: str) -> None:
     """1.26.0 reported `extra_table warning public.tv_post` here (measured)."""
     assert _drift(tview_database, TREE) == []

@@ -675,14 +675,27 @@ _HAS_CONTRACT = "SELECT to_regprocedure(%s) IS NOT NULL"
 
 #: Each registered TVIEW: its relation, the query pg_tviews holds, the storage
 #: options it reads from the catalog, and its backing view's oid, whose relation
-#: is the TVIEW's and not a view of the tree's. The registry names no backing
-#: view; pg_tviews creates it as ``v_<entity>`` beside the table.
+#: is the TVIEW's and not a view of the tree's (``NULL`` once that view is gone).
 _TVIEWS = """
 SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
-       to_regclass(format('%%I.%%I', r.schema, 'v_' || r.entity))::oid::bigint
+       {backing_view}::oid::bigint
 FROM {registry} r
 WHERE r.schema = ANY(%s)
 ORDER BY r.schema, r.name
+"""
+
+#: The registry's ``view`` column, which pg_tviews appended under contract 1: an
+#: earlier contract-1 build has none, and its backing view is the one it creates
+#: beside the table, ``v_<entity>``, found by name. Either is the view's oid, so the
+#: reader's ``search_path`` does not change it.
+_BACKING_VIEW = sql.SQL("r.view")
+_BACKING_VIEW_BY_NAME = sql.SQL("to_regclass(format('%%I.%%I', r.schema, 'v_' || r.entity))")
+
+_HAS_VIEW_COLUMN = """
+SELECT EXISTS (
+    SELECT 1 FROM pg_attribute
+    WHERE attrelid = to_regclass(%s) AND attname = 'view' AND NOT attisdropped
+)
 """
 
 # The argument types are spelled inside the one query, in order: a round trip
@@ -894,7 +907,11 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
     if installed is None:
         return []
     require_supported_pg_tviews(installed[0], _contract(conn))
-    query = sql.SQL(_TVIEWS).format(registry=sql.Identifier(TVIEWS_SCHEMA, "registry"))
+    registry = sql.Identifier(TVIEWS_SCHEMA, "registry")
+    has_view = _scalar(conn, _HAS_VIEW_COLUMN, (registry.as_string(conn),))
+    query = sql.SQL(_TVIEWS).format(
+        registry=registry, backing_view=_BACKING_VIEW if has_view else _BACKING_VIEW_BY_NAME
+    )
     return [
         (
             TView(
