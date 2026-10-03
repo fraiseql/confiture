@@ -6,29 +6,17 @@ This module provides functionality to:
 - Generate migrations from schema diffs
 """
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-import pglast
-
 from confiture.core.ddl_objects import (
-    OBJECT_KEYWORD,
-    Collapsed,
-    declared_objects,
-    declared_triggers,
     pair_definitions,
 )
-from confiture.core.linting.duplicates import WINS_TEXT, CreateFlags, wins
-from confiture.core.linting.inventory import (
-    Inventory,
-    SchemaObject,
-    build_inventory,
-    group_definitions,
-    schema_model,
-)
-from confiture.core.linting.quoted_names import QuotedName, quoted_names, quoted_trigger_names
+from confiture.core.linting.quoted_names import QuotedName
 from confiture.core.schema_change import (
     CheckConstraintAdded,
     CheckConstraintDropped,
@@ -67,9 +55,8 @@ from confiture.core.schema_model import (
     RelationName,
     Sequence,
     Table,
-    qualified_name,
 )
-from confiture.core.sql_lexer import blank_copy_blocks
+from confiture.core.schema_read import SchemaRead, read_text
 from confiture.core.sql_utils import comment_text
 from confiture.core.type_lattice import same_type
 from confiture.exceptions import DifferError
@@ -98,6 +85,19 @@ class ParsedSchema:
     warnings: list[BuildWarning] = field(default_factory=list)
     #: Every name the side gives that needs quotes, which :meth:`SchemaDiffer.compare` refuses.
     quoted: list[QuotedName] = field(default_factory=list)
+
+    @classmethod
+    def from_read(cls, read: SchemaRead) -> ParsedSchema:
+        """The side a tree is: what it writes, its objects, and what its read had to say."""
+        model = read.model
+        return cls(
+            tables=list(model.tables.values()),
+            enum_types=list(model.enum_types.values()),
+            sequences=list(model.sequences.values()),
+            objects=read.declared.objects,
+            warnings=read.warnings,
+            quoted=read.quoted,
+        )
 
 
 def refuse_quoted_names(side: str, quoted: list[QuotedName]) -> None:
@@ -141,66 +141,6 @@ def _identity(schema: str | None, name: str) -> tuple[str, str]:
     statements are about one relation.
     """
     return (schema or DEFAULT_SCHEMA).lower(), name
-
-
-#: The kinds this module compares structurally, as a duplicate warning names them.
-_DUPLICATE_KINDS: dict[str, str] = {"table": "Table", "type": "Type", "sequence": "Sequence"}
-
-
-def _structural(obj: SchemaObject) -> bool:
-    """A table, an enum or a sequence — what the model holds and this module compares."""
-    return obj.kind in ("table", "sequence") or (obj.kind == "type" and obj.enum_values is not None)
-
-
-def duplicate_warnings(
-    inventory: Inventory, collapsed: Iterable[Collapsed] = ()
-) -> list[BuildWarning]:
-    """Say so when one ``(schema, name)`` is defined more than once in one tree.
-
-    Tables, enum types and sequences are read from *inventory*; every object
-    compared by definition — a view, a routine, a trigger — from *collapsed*,
-    ``ddl_objects.declared_objects``' account of what it folded into one.
-
-    Two definitions of one ``(schema, name)`` collapse into one entry of the
-    model (#313). The model keeps the definition a build keeps — a later
-    ``IF NOT EXISTS`` is a no-op, a later plain ``CREATE`` fails the build at
-    that statement — and the collapse is reported either way. The verdict is ``duplicates.wins``,
-    ``build_001``'s own rule. A warning, not a failure: a duplicate is
-    ``confiture lint``'s and ``build --fail-on-duplicates``' problem, and failing
-    ``--require-migration`` for it would fail the gate for a reason it is not about.
-    """
-    warnings: list[BuildWarning] = []
-    for kind in ("table", "type", "sequence"):
-        objects = [obj for obj in inventory.objects if obj.kind == kind and _structural(obj)]
-        for group in group_definitions(objects):
-            if len(group) == 1:
-                continue
-            verdict = wins(
-                [CreateFlags(replace=obj.replace, if_not_exists=obj.if_not_exists) for obj in group]
-            )
-            first = group[0]
-            warnings.append(
-                BuildWarning.of(
-                    "DIFFER_402",
-                    kind=_DUPLICATE_KINDS[kind],
-                    identity=qualified_name(first.folded_schema, first.folded_name),
-                    count=len(group),
-                    outcome=WINS_TEXT[verdict],
-                    used="last" if verdict == "last" else "first",
-                )
-            )
-    warnings.extend(
-        BuildWarning.of(
-            "DIFFER_402",
-            kind=OBJECT_KEYWORD[one.kept.ref.kind].capitalize(),
-            identity=one.kept.ref.display,
-            count=one.count,
-            outcome=WINS_TEXT[one.verdict],
-            used="last" if one.verdict == "last" else "first",
-        )
-        for one in collapsed
-    )
-    return warnings
 
 
 def _merged_warnings(old_schema: ParsedSchema, new_schema: ParsedSchema) -> list[BuildWarning]:
@@ -295,7 +235,7 @@ class SchemaDiffer:
     def parse_schema(self, sql: str) -> ParsedSchema:
         """Parse SQL DDL into the schema model, plus the objects compared by definition.
 
-        One parse: ``pglast.parse_sql`` once, the statements handed
+        One read (``schema_read.read_text``): the statements parsed once, handed
         to the lint inventory — which reads a table whole through
         ``ddl_walk``'s one constraint reader, folds every ``ALTER``, ``DROP``
         and rename order-aware (#301), and keys every object by ``(schema,
@@ -310,32 +250,12 @@ class SchemaDiffer:
             ParsedSchema with the model's tables, enum types and sequences
 
         Raises:
-            pglast.parser.ParseError: what PostgreSQL rejects is not a schema
-                to diff; ``migrate diff`` reports it as ``DIFFER_400``.
+            SchemaError: ``DIFFER_400`` when PostgreSQL rejects a statement: what it
+                rejects is not a schema to diff.
         """
         if not sql or not sql.strip():
             return ParsedSchema()
-
-        # Blank inline-COPY data blocks before the parser sees the text: pglast
-        # rejects them outright (#194). Blanked, not deleted: the block keeps its
-        # length and its newlines, so the `DIFFER_400` a rejected statement
-        # raises carries a position into the text the author wrote.
-        sql = blank_copy_blocks(sql)
-        raws = list(pglast.parse_sql(sql) or [])
-        inventory = build_inventory(sql, raws)
-        model = schema_model(inventory)
-        declared = declared_objects(sql, raws)
-        return ParsedSchema(
-            tables=list(model.tables.values()),
-            enum_types=list(model.enum_types.values()),
-            sequences=list(model.sequences.values()),
-            objects=declared.objects,
-            warnings=duplicate_warnings(inventory, declared.collapsed),
-            quoted=[
-                *quoted_names(inventory),
-                *quoted_trigger_names(declared_triggers(declared.objects)),
-            ],
-        )
+        return ParsedSchema.from_read(read_text(sql))
 
     def compare(self, old_sql: str, new_sql: str) -> SchemaDiff:
         """Compare two schemas and detect changes.
@@ -355,8 +275,16 @@ class SchemaDiffer:
             >>> print(len(diff.changes))
             1
         """
-        old_schema = self.parse_schema(old_sql)
-        new_schema = self.parse_schema(new_sql)
+        return self.compare_reads(read_text(old_sql), read_text(new_sql))
+
+    def compare_reads(self, old: SchemaRead, new: SchemaRead) -> SchemaDiff:
+        """:meth:`compare`, over two trees already read — each read once, by file.
+
+        Raises:
+            DifferError: ``DIFFER_403`` when either side names an object that needs quotes.
+        """
+        old_schema = ParsedSchema.from_read(old)
+        new_schema = ParsedSchema.from_read(new)
         refuse_quoted_names("old", old_schema.quoted)
         refuse_quoted_names("new", new_schema.quoted)
 

@@ -74,6 +74,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "schema_change.py": (CRATE, TRANSFORM),
     "schema_identity.py": (CRATE, TRANSFORM),
     "schema_model.py": (CRATE, TRANSFORM),
+    "schema_read.py": (CRATE, TRANSFORM),
     "sql_lexer.py": (CRATE, TRANSFORM),
     "strategy.py": (CRATE, TRANSFORM),
     "tree_prefix.py": (CRATE, TRANSFORM),

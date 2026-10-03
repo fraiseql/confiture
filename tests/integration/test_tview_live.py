@@ -14,9 +14,9 @@ import pytest
 from tests.conftest import create_supported_pg_tviews
 
 from confiture.core import live_catalog
-from confiture.core.linting.inventory import build_model
 from confiture.core.schema_facts import collect_schema_facts
 from confiture.core.schema_model import TView, ref_for
+from confiture.core.schema_read import read_text
 from confiture.exceptions import ConfigurationError
 
 pytestmark = pytest.mark.integration
@@ -53,7 +53,7 @@ def test_the_live_side_reads_each_tview(tview_database: str) -> None:
 
     assert [(t.schema, t.name) for t in found] == [("public", "tv_post")]
     # One deparser on both sides: the query reads the same from the DDL and the database.
-    (declared,) = build_model(TREE).tviews.values()
+    (declared,) = read_text(TREE).model.tviews.values()
     assert found[0].definition == declared.definition
 
 
@@ -124,7 +124,7 @@ def test_the_parse_side_and_the_live_side_hold_one_tview(tview_database: str) ->
     with psycopg.connect(tview_database) as conn:
         live = live_catalog.read(conn, schemas=["public"], tviews=True)
 
-    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(TREE)).tviews
+    assert normalise_for_parity(live).tviews == normalise_for_parity(read_text(TREE).model).tviews
 
 
 PINNED = TREE.replace(
@@ -157,7 +157,7 @@ def test_a_tview_left_at_pg_tviews_defaults_reads_as_pinning_nothing(tview_datab
     """Measured for ``PARITY_NORMALISATIONS["tview_defaults"]``: the tree wrote no option, the
     registry holds pg_tviews' defaults. The day they change, this fails and the normalisation goes.
     """
-    (declared,) = build_model(TREE).tviews.values()
+    (declared,) = read_text(TREE).model.tviews.values()
     with psycopg.connect(tview_database) as conn:
         (found,) = live_catalog.tviews(conn, ["public"])
 
@@ -173,7 +173,7 @@ def test_the_parse_side_and_the_live_side_hold_one_pinned_tview(pinned_database:
     with psycopg.connect(pinned_database) as conn:
         live = live_catalog.read(conn, schemas=["public"], tviews=True)
 
-    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(PINNED)).tviews
+    assert normalise_for_parity(live).tviews == normalise_for_parity(read_text(PINNED).model).tviews
 
 
 def test_a_database_built_from_a_pinned_tree_has_no_drift(pinned_database: str) -> None:
@@ -225,7 +225,7 @@ def test_a_tree_that_calls_pg_tviews_is_the_database_it_builds(
 
     (found,) = live.tviews.values()
     assert (found.logged, found.fillfactor) == (True, 70)
-    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(CALLED)).tviews
+    assert normalise_for_parity(live).tviews == normalise_for_parity(read_text(CALLED).model).tviews
     assert _drift(url, CALLED) == []
 
 
@@ -242,7 +242,7 @@ def test_set_logged_in_the_tree_is_what_the_database_holds(tview_database: str) 
         conn.execute("ALTER TABLE tv_post SET LOGGED")
         live = live_catalog.read(conn, schemas=["public"], tviews=True)
 
-    assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(LOGGED)).tviews
+    assert normalise_for_parity(live).tviews == normalise_for_parity(read_text(LOGGED).model).tviews
     assert _drift(tview_database, LOGGED) == []
 
 
@@ -261,7 +261,9 @@ def test_set_fillfactor_in_the_tree_is_what_the_database_holds(tview_database: s
             conn.execute(f"ALTER TABLE tv_post {statement}")
             live = live_catalog.read(conn, schemas=["public"], tviews=True)
 
-        assert normalise_for_parity(live).tviews == normalise_for_parity(build_model(tree)).tviews
+        assert (
+            normalise_for_parity(live).tviews == normalise_for_parity(read_text(tree).model).tviews
+        )
         assert _drift(tview_database, tree) == []
 
 

@@ -17,10 +17,10 @@ through the ``\\.`` terminator), not statement-split.
 
 from __future__ import annotations
 
-import pglast.parser
 import pytest
 
 from confiture.core.differ import SchemaDiffer
+from confiture.exceptions import SchemaError
 
 COPY_BLOCK = """\
 COPY prep_seed.tb_generic_item (id, identifier, fk_product_id) FROM stdin;
@@ -66,5 +66,6 @@ def test_unparseable_schema_raises_instead_of_degrading_silently() -> None:
     # never silently read by something less exact — the silent fallback is
     # what turned a blocking gate into a no-op.
     sql = "CREATE TABLE ok (id INT);\nTHIS IS NOT SQL AT ALL;\n"
-    with pytest.raises(pglast.parser.ParseError):
+    with pytest.raises(SchemaError) as caught:
         SchemaDiffer().parse_schema(sql)
+    assert (caught.value.error_code, caught.value.context["line"]) == ("DIFFER_400", 2)

@@ -14,8 +14,8 @@ import pytest
 
 from confiture.core.ddl_walk import read_column_constraints, read_constraint
 from confiture.core.fk_extractor import extract_and_strip_fks, generate_alter_statements
-from confiture.core.linting.inventory import build_model
 from confiture.core.schema_model import Constraint, SchemaModel
+from confiture.core.schema_read import read_text
 
 ROWS: dict[str, str] = {
     "inline": """\
@@ -172,7 +172,7 @@ def _foreign_keys_in_tables(sql: str) -> list[Constraint]:
 def test_the_two_pass_tree_declares_the_schema_the_tree_declares(name: str) -> None:
     sql = ROWS[name]
     stripped, alters, _moved = _two_pass(sql)
-    assert _by_table(build_model(stripped + "\n" + alters)) == _by_table(build_model(sql))
+    assert _by_table(read_text(stripped + "\n" + alters).model) == _by_table(read_text(sql).model)
 
 
 @pytest.mark.parametrize("name", ROWS)

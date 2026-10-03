@@ -3,7 +3,7 @@
 pglast is the one parser; ``core/drift.py`` was the last analyzer
 still matching ``CREATE TABLE (\\w+)`` by hand — which is how ``tenant.tb_user``
 became a table called ``tenant``. This pins the replacement: no DDL regex in
-the module, and the expected side built from the shared inventory.
+the module, and the expected side built from the one schema read (``schema_read``).
 """
 
 from __future__ import annotations
@@ -38,12 +38,17 @@ def test_the_regex_helpers_are_gone() -> None:
     )
 
 
-def test_the_expected_side_is_built_from_the_inventory() -> None:
-    tree = ast.parse(_SOURCE)
-    parser = next(
-        n
-        for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "parse_expected_schema"
-    )
-    calls = {ast.unparse(n.func) for n in ast.walk(parser) if isinstance(n, ast.Call)}
-    assert "build_inventory" in calls
+def test_the_expected_side_is_built_from_the_one_schema_read() -> None:
+    functions = {n.name: n for n in ast.walk(ast.parse(_SOURCE)) if isinstance(n, ast.FunctionDef)}
+    calls = {
+        ast.unparse(n.func)
+        for n in ast.walk(functions["parse_expected_schema"])
+        if isinstance(n, ast.Call)
+    }
+    assert "read_text" in calls
+    attributes = {
+        ast.unparse(n)
+        for n in ast.walk(functions["expected_schema"])
+        if isinstance(n, ast.Attribute)
+    }
+    assert "read.catalogued" in attributes

@@ -9,7 +9,7 @@ import json
 import logging
 import time
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar, get_args
@@ -19,12 +19,9 @@ import psycopg
 
 from confiture.core import live_catalog
 from confiture.core.ddl_clauses import constraint_body
-from confiture.core.ddl_objects import declared_triggers, objects_in
 from confiture.core.ddl_walk import canonical_default
 from confiture.core.desired_state import load_desired_state
 from confiture.core.differ import refuse_quoted_names
-from confiture.core.linting.inventory import inherit_columns, schema_model
-from confiture.core.linting.quoted_names import quoted_names, quoted_trigger_names
 from confiture.core.locking import LOCK_HOLDER_TABLE
 from confiture.core.schema_analyzer import SchemaAnalyzer
 from confiture.core.schema_model import (
@@ -42,6 +39,7 @@ from confiture.core.schema_model import (
     routine_ref,
     trigger_ref,
 )
+from confiture.core.schema_read import SchemaRead, read_segments, read_text
 from confiture.core.type_lattice import same_type, signatures_match
 from confiture.exceptions import ConfigurationError, SchemaError
 
@@ -54,8 +52,6 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from confiture.config.environment import DriftConfig
-from confiture.core.linting.inventory import build_inventory
-from confiture.core.parser_info import parse_error_line
 
 logger = logging.getLogger(__name__)
 
@@ -470,40 +466,52 @@ def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
 
 
 def parse_expected_schema(sql: str, default_schema: str = DEFAULT_SCHEMA) -> ExpectedSchema:
-    """Read the expected schema out of DDL into the schema model (#227).
+    """Read the expected schema out of DDL text into the schema model (#227).
 
-    The lint inventory reads the tree — every column, constraint and index, wherever
-    it was written — and an unqualified object belongs to ``default_schema``. A
-    ``PARTITION OF`` or ``INHERITS`` child holds its parents' columns when they are
-    in the same DDL, as the live catalog lists them (:func:`inherit_columns`). ``CREATE SCHEMA`` declares a schema and no table.
+    :func:`expected_schema` over :func:`~confiture.core.schema_read.read_text`.
 
     Raises:
-        SchemaError: ``SCHEMA_202`` when pglast rejects the DDL — a parser
-            failure surfaced loudly rather than as an empty expectation that
-            would report every live table as spurious drift.
+        SchemaError: as :func:`expected_schema`.
+    """
+    return expected_schema(_read_expected(lambda: read_text(sql)), default_schema)
+
+
+def expected_schema(read: SchemaRead, default_schema: str = DEFAULT_SCHEMA) -> ExpectedSchema:
+    """The expected schema a tree declares, as PostgreSQL would hold it.
+
+    The tree's catalogued model (``SchemaRead.catalogued``): a ``PARTITION OF`` or
+    ``INHERITS`` child holds its parents' columns, as the live catalog lists them,
+    and an unqualified object belongs to ``default_schema``. ``CREATE SCHEMA``
+    declares a schema and no table.
+
+    Raises:
+        DifferError: ``DIFFER_403`` when the tree names an object that needs quotes.
+    """
+    refuse_quoted_names("expected", read.quoted)
+    model = _in_schema(read.catalogued, default_schema)
+    schemas = {default_schema} | {t.schema for t in model.tables.values() if t.schema}
+    schemas |= {declared.name for declared in read.inventory.schemas}
+    return ExpectedSchema(model=model, schemas=frozenset(schemas))
+
+
+def _read_expected(read: Callable[[], SchemaRead]) -> SchemaRead:
+    """*read*'s answer; a parse failure is ``SCHEMA_202``, naming the file and line.
+
+    Loudly, rather than as an empty expectation that would report every live
+    table as spurious drift.
     """
     try:
-        raws = list(pglast.parse_sql(sql) or [])
-        inventory = build_inventory(sql, raws)
-        objects = objects_in(sql, raws)
-    except pglast.parser.ParseError as exc:
+        return read()
+    except SchemaError as exc:
+        if exc.error_code != "DIFFER_400":
+            raise
         raise SchemaError(
-            f"The expected schema could not be parsed (line {parse_error_line(sql, exc)}): {exc}. "
+            f"The expected schema could not be parsed: {exc.message}. "
             "Comparing against it would report every live table as spurious drift.",
             error_code="SCHEMA_202",
-            resolution_hint="Fix the SQL syntax in the schema file, or regenerate it with `confiture build`.",
+            context=exc.context,
+            resolution_hint="Fix the SQL syntax at the file and line named.",
         ) from exc
-
-    refuse_quoted_names(
-        "expected",
-        [*quoted_names(inventory), *quoted_trigger_names(declared_triggers(objects))],
-    )
-    inventory = inherit_columns(inventory)
-    triggers = {trigger_ref(t): t for t in declared_triggers(objects)}
-    model = _in_schema(replace(schema_model(inventory), triggers=triggers), default_schema)
-    schemas = {default_schema} | {t.schema for t in model.tables.values() if t.schema}
-    schemas |= {declared.name for declared in inventory.schemas}
-    return ExpectedSchema(model=model, schemas=frozenset(schemas))
 
 
 #: How a finding names a constraint the DDL left unnamed.
@@ -1110,8 +1118,10 @@ class SchemaDriftDetector:
         if not path.exists():
             raise FileNotFoundError(f"Schema file not found: {schema_file_path}")
 
-        sql = load_desired_state(schema_file_path).read()
-        expected = parse_expected_schema(sql, default_schema=default_schema)
+        source = load_desired_state(schema_file_path)
+        expected = expected_schema(
+            _read_expected(lambda: read_segments(source.segments())), default_schema
+        )
         actual = self.get_live_schema(expected.schemas, objects=True)
         report = self.compare_schemas(expected.model, actual, objects=True)
         report.expected_schema_source = f"file:{schema_file_path}"

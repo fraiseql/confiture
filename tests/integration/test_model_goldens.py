@@ -1,6 +1,6 @@
 """The schema model each example tree declares, pinned.
 
-``inventory.build_model`` is the one representation every comparison of a DDL
+``schema_read.read_text(…).model`` is the one representation every comparison of a DDL
 tree is moving onto. What it holds for each tree — every column with both its
 type identity and its spelling, every constraint wherever it was written, every
 index with its method — is recorded here, so a change to what the model reads is

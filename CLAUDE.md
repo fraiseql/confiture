@@ -209,6 +209,17 @@ fails on a `glob`/`rglob` of `.sql`, an `iterdir()` that keeps `.sql` files, or 
 `module:receiver`, names the directories that are flat listings read by name
 (migrations, schema snapshots, `.verify.sql` sidecars), not trees.
 
+**One schema read** — `core/schema_read.py`: a tree is read once, as the files it is
+made of (`Segment`), joined one way (`joined`), `COPY … FROM stdin` data blanked, parsed
+once, into a `SchemaRead` carrying the statements, the inventory, `ddl_objects`'
+declared objects, the warnings, the names that need quotes, and two models — `model`,
+what the tree *writes*, and `catalogued`, what PostgreSQL *holds* once it is applied
+(a partition with its parent's columns). A reader comparing with a database reads
+`catalogued`; a reader generating DDL reads `model`. `drift`, `squash`, `migrate diff`,
+`platform.parse_schema`/`diff` and the signature checkers all read through it, and a
+statement PostgreSQL rejects is `DIFFER_400` (`SCHEMA_202` from drift) naming the file
+and the line in it (`SchemaRead.where`).
+
 **One DDL reader: `core/ddl_walk.py`**, shared by every walker of a DDL tree.
 - *ALTER folding.* `column_edit`, `adds_primary_key` and `object_edits` decide what an
   `ALTER`, `DROP` or rename does to the schema a tree declares. Every `AlterTableType`
@@ -539,6 +550,7 @@ confiture/
 │   │   ├── schema_facts.py       # What a live database can tell preflight that migration files cannot (is…
 │   │   ├── schema_identity.py    # Where an unqualified schema object lands: the one default schema
 │   │   ├── schema_model.py       # The one model of what a schema declares: tables, types, sequences, rout…
+│   │   ├── schema_read.py        # One read of DDL: the files it came from in, statements, objects and the…
 │   │   ├── schema_snapshot.py    # Schema history snapshot writer
 │   │   ├── schema_sources.py     # Where a schema is read from: DDL text, files, a project's build, or a l…
 │   │   ├── schema_to_schema.py   # Schema-to-Schema Migration using Foreign Data Wrapper (FDW)

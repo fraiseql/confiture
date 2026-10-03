@@ -17,9 +17,9 @@ from confiture.core.drift import parse_expected_schema
 from confiture.core.linting.inventory import (
     SchemaObject,
     build_inventory,
-    build_model,
     inherit_columns,
 )
+from confiture.core.schema_read import read_text
 
 _SOURCE = (
     "CREATE TABLE app.src (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n"
@@ -101,7 +101,7 @@ def test_like_of_a_table_the_tree_does_not_declare_copies_nothing() -> None:
 
 
 def test_the_model_carries_the_copied_columns() -> None:
-    model = build_model(_SOURCE + "CREATE TABLE app.cp (LIKE app.src);\n")
+    model = read_text(_SOURCE + "CREATE TABLE app.cp (LIKE app.src);\n").model
 
     (copy,) = [t for t in model.tables.values() if t.name == "cp"]
     assert [c.folded for c in copy.columns] == ["id", "code", "fk", "total"]

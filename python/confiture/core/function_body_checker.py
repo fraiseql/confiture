@@ -20,8 +20,6 @@ import dataclasses
 import difflib
 from typing import TYPE_CHECKING
 
-import pglast.parser
-
 from confiture.core.function_body_drift import paired
 from confiture.core.function_body_normalizer import FunctionBodyNormalizer
 from confiture.core.function_signature_drift import (
@@ -29,7 +27,7 @@ from confiture.core.function_signature_drift import (
     function_key,
     printed_signature,
 )
-from confiture.exceptions import GitError
+from confiture.exceptions import GitError, SchemaError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -190,7 +188,7 @@ class FunctionBodyChecker:
             for sql in migration_sql(mig_path, content):
                 try:
                     routines = declared_routines(sql)
-                except pglast.parser.ParseError:
+                except SchemaError:
                     # A migration pglast rejects carries nothing here; the
                     # migration's own checks report it as unparseable.
                     continue

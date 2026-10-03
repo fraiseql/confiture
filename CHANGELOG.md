@@ -14,6 +14,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`drift --schema` reads a `confiture build` bundle that seeds with `COPY … FROM
+  stdin`** (#561). drift handed the bundle to the parser whole, which refused the
+  first data row (`SCHEMA_202`). A tree is now read once, by one reader
+  (`core/schema_read.py`), which blanks `COPY` data for every caller: drift,
+  `migrate diff`, `squash`, `platform.parse_schema`/`diff`, and the signature and
+  body checks (`migrate validate --check-signatures`, `migrate fix-signatures`),
+  which refused such a tree too.
+- **`migrate squash --from-build` accepts a tree with a partitioned table.** Its
+  drift check compared the tree as written with the database. A partition holds
+  its parent's columns in the catalog but not in the tree, so the check refused
+  every such tree (`VALID_006`). It now reads the tree as PostgreSQL holds it, the
+  way `drift` does.
+
+### Changed
+
+- A `SCHEMA_202` from `drift --schema`, and a `DIFFER_400` from `migrate diff --to
+  <directory>`, name the file and the line in it (`context.file`, `context.line`),
+  not a line of the files joined together.
+- `SchemaDiffer.parse_schema`/`compare` raise `SchemaError` (`DIFFER_400`, with
+  the file and line) where they raised pglast's `ParseError`.
+
 ## [1.29.0] - 2026-10-01
 
 **TVIEWs through pg_tviews' read contract.** confiture reads and writes pg_tviews

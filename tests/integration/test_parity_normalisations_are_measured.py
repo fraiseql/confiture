@@ -42,7 +42,7 @@ from collections.abc import Callable
 import psycopg
 import pytest
 
-from confiture.core.linting.inventory import build_model
+from confiture.core.schema_read import read_text
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def test_an_unnamed_constraint_is_given_a_name(conn: psycopg.Connection) -> None
         conn,
         "SELECT conname FROM pg_constraint WHERE conrelid = 'child'::regclass AND contype = 'f'",
     )
-    parsed = build_model(ddl).tables
+    parsed = read_text(ddl).model.tables
     (fk,) = next(t for t in parsed.values() if t.name == "child").constraints
     assert (fk.name, live) == ("", "child_pid_fkey")
 
@@ -165,7 +165,7 @@ def test_an_index_method_is_btree_on_both_sides(conn: psycopg.Connection) -> Non
         conn,
         "SELECT am.amname FROM pg_class c JOIN pg_am am ON am.oid = c.relam WHERE c.relname = 'ix'",
     )
-    (table,) = build_model(ddl).tables.values()
+    (table,) = read_text(ddl).model.tables.values()
     assert (table.indexes[0].method, live) == ("btree", "btree")
 
 

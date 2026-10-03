@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import ClassVar, Protocol
 
 from confiture.core.builder import files_under
+from confiture.core.schema_read import Segment, joined
 from confiture.exceptions import SchemaError
 
 STDIN = "-"
@@ -24,8 +25,11 @@ STDIN = "-"
 class DesiredStateSource(Protocol):
     """A desired state the differ can compare against."""
 
+    def segments(self) -> list[Segment]:
+        """The DDL, file by file, in the order it is read."""
+
     def read(self) -> str:
-        """The DDL text."""
+        """The DDL text: :meth:`segments` joined."""
 
     def describe(self) -> dict[str, str]:
         """``{"kind": …, "path": …}`` for the JSON payload."""
@@ -42,8 +46,11 @@ class SqlFileSource:
         return {"kind": self.kind, "path": self.target}
 
     def read(self) -> str:
+        return joined(self.segments())
+
+    def segments(self) -> list[Segment]:
         if self.target == STDIN:
-            return sys.stdin.read()
+            return [Segment(None, sys.stdin.read())]
         path = Path(self.target)
         if path.is_dir():
             files = files_under(path)
@@ -54,18 +61,14 @@ class SqlFileSource:
                     resolution_hint="Point --to at a directory of DDL files "
                     "(e.g. the output of `fraiseql compile --emit-ddl`) or at one SQL file.",
                 )
-            return "".join(_with_newline(f.read_text()) for f in files)
+            return [Segment(f, f.read_text()) for f in files]
         if not path.exists():
             raise SchemaError(
                 f"Desired-state file not found: {path}",
                 error_code="SCHEMA_201",
                 resolution_hint="Check the path passed to --to / --from.",
             )
-        return path.read_text()
-
-
-def _with_newline(text: str) -> str:
-    return text if text.endswith("\n") else text + "\n"
+        return [Segment(path, path.read_text())]
 
 
 def load_desired_state(spec: str) -> DesiredStateSource:
