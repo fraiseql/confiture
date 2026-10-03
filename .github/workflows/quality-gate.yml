@@ -341,6 +341,7 @@ jobs:
           tests/unit/test_idempotency_suggestion_wiring.py \
           tests/unit/test_pglast_enum_binding.py \
           tests/unit/test_plpgsql_parse.py \
+          tests/unit/test_plpgsql_into_targets.py \
           tests/unit/test_plpgsql_fragments.py \
           tests/unit/test_fragment_census.py \
           tests/unit/test_data_assertions.py \
