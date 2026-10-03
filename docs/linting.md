@@ -329,7 +329,7 @@ it — visible to no tenant and invisible to every tenant-filtered read.
 `tenant_001` is one of five rules in the `tenant` family, which checks that every
 table carries the discriminator or is declared global (`tenant_002`), every view
 publishes it (`tenant_003`), no foreign key crosses tenants (`tenant_004`) and every
-unique key leads with it (`tenant_005`). The
+unique key contains it (`tenant_005`). The
 [multi-tenant schemas guide](guides/multi-tenant-schemas.md) describes the design,
 and [lint-rules.md](reference/lint-rules.md) each rule's findings.
 

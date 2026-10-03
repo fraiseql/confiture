@@ -86,7 +86,7 @@ The directive also applies to `CREATE [MATERIALIZED] VIEW` and to
 `CREATE UNIQUE INDEX` (see `tenant_005`). A declaration is honest or it is a
 finding: a directive without a reason, a table declared global that carries the
 discriminator anyway, a directive on a view that reads no tenant relation, or on a
-unique index that already leads with the discriminator. A view that reads only
+unique index that already keeps tenants apart. A view that reads only
 global relations is global without a declaration.
 
 ## The rules
@@ -290,20 +290,24 @@ both copies. Declaring the contract global instead would be wrong twice over: it
 not reference data, and a global relation has no tenant to filter on, so any view
 over it would show every tenant's contracts.
 
-### `tenant_005` — keys lead with it
+### `tenant_005` — keys keep tenants apart
 
-A tenant table's primary key, each `UNIQUE` constraint and each unique index has
-the discriminator as its first key.
+A tenant table's primary key, each `UNIQUE` constraint and each unique index
+contains the discriminator — or is one column whose value is unique whoever writes
+the row: an identity, a sequence, a generated uuid. `pk_order bigint GENERATED
+ALWAYS AS IDENTITY PRIMARY KEY` and `id uuid DEFAULT gen_random_uuid() UNIQUE` are
+not reported; a *natural* key — one whose value a writer supplies — is.
 
 `UNIQUE (email)` on a tenant table is two defects. Tenant A's row blocks tenant B's
 insert of the same address, which is a correctness bug. And the error B receives —
 `duplicate key value violates unique constraint`, with `Key (email)=(…) already
 exists` in its detail — tells B that the address exists in some other tenant: an
 existence oracle across tenants, answerable by anyone who can attempt an insert.
-`UNIQUE (tenant_id, email)` is neither. `UNIQUE (email, tenant_id)` prevents the
-collision but does not lead with the discriminator, and is reported too: it cannot
-serve a scoped lookup by its leading column, and it is not the `(tenant_id, …)`
-target a composite foreign key names.
+`UNIQUE (tenant_id, email)` is neither, and nor is `UNIQUE (email, tenant_id)`: it
+prevents the collision too. Lead with the discriminator all the same where the key
+also serves lookups: an index serves a scoped query by its leading columns, and a
+composite foreign key (`tenant_004`) names a `(tenant_id, …)` target. That is index
+advice, not isolation, so the rule does not report the order.
 
 A primary key `(tenant_id, id)` is also the target every composite foreign key to
 the table needs, so it serves `tenant_004` with no second index. Non-unique indexes

@@ -31,6 +31,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer decided.
 - **`tree_001` compares a prefix's number**, not its spelling: `0001_a.sql` and
   `001_b.sql` both number 1.
+||||||| merged common ancestors
+- **`tenant_005` reports only a key that can let one tenant's row collide with
+  another's** (#559). It judged a key's *position*: `PRIMARY KEY (reading_date,
+  tenant_id, sensor_id)` was reported though it cannot collide across tenants, and
+  so was every identity or `gen_random_uuid()` key. A key now passes when it
+  **contains** the discriminator, or is one column whose value no other row has
+  whoever writes it (`ValueSource.unique_without_author_input`): constraints and
+  unique indexes alike. Leading with the discriminator is index advice, which the
+  guide gives. Baselined `tenant_005` findings for such keys disappear.
+- **`sec_001`/`sec_003` read a column name and a placeholder by their words**
+  (#560). `smtp_passwd`, `db_credential` and `stripeApiKey` are credentials;
+  `tokenizer` and `lessons` are not; `'PLACEHOLDER-not-a-real-credential'`,
+  `'test_password'` and `'test'` are placeholders. A column naming two kinds is one
+  `sec_001` finding; personal data (`credit card`, `ssn`, `iban`) is named as such,
+  with a fix that fits it.
 ||||||| 3c325381
 - **A routine that selects `INTO` several variables, one of them of an extension or
   domain type, is read** (#558). `confiture lint` reported it under `build_003 ran on
@@ -79,6 +94,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`tree_002` sees a hex prefix that starts with a letter** (`a001.sql` is
   numbered, with no verb): it decided "numbered" by the first character being a
   decimal digit.
+- **Every reader of a database holds a pg_tviews TVIEW as one object.** Only
+  `drift` asked the live reader to fold a TVIEW; `platform.introspect`, `squash`'s
+  `--from-build` check, the schema snapshotter and the dry-run analyser read its
+  `tv_*` table and backing `v_*` view as a table and a view the tree never
+  declared — so `squash --from-build` refused every tree with a TVIEW
+  (`VALID_006`). `live_catalog.read` loses its `tviews=` switch: it always folds.
 - **The lint rules read the files the lint parsed, once.** Each rule that re-parsed
   a file's text on its own — `build_003`/`build_004`, the `body` family's locations
   and `TEMP`-table reading, `tenant_001`/`tenant_003` — reads the statements the
@@ -103,6 +124,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answer `writable_columns`, parity and drift now read. `filled_by_postgresql` and
   `unique_without_author_input` are kept apart: a `gen_random_uuid()` default is
   writable, and unique either way.
+- ⚠️ **`platform.introspect` folds TVIEWs** (no `tv_*` table, no backing view),
+  and refuses a database whose pg_tviews offers no read contract confiture knows
+  (`CONFIG_014`), as `drift` already did.
 - ⚠️ **A schema model says what its reader read** (`SchemaModel.coverage`, on the
   wire and the seam as `Coverage`): each section read, and how deeply. A model
   read from DDL covers every section; one read from a database, the sections it

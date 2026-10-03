@@ -317,7 +317,7 @@ LINT_RULES: tuple[LintRule, ...] = (
     LintRule(
         code="tenant_005",
         family="tenant",
-        title="A tenant table's primary key and unique keys lead with the discriminator",
+        title="A tenant table's primary key and unique keys keep tenants apart",
         severity="warning",
         default_on=False,
         enabled_by="tenancy",

@@ -297,7 +297,6 @@ def read(
     routines: bool = False,
     views: bool = False,
     triggers: bool = False,
-    tviews: bool = False,
 ) -> SchemaModel:
     """The schema the database holds in *schemas*, in the model DDL is read into.
 
@@ -310,10 +309,12 @@ def read(
     view's a deparse per view — for the callers that compare them. An
     extension's own routines and views are left out, as its tables are.
 
-    *tviews* reads each pg_tviews TVIEW (#504) as one object, and leaves its
-    parts — the ``tv_*`` table and the backing ``v_*`` view — out of the tables
-    and views: they are the TVIEW's. The triggers pg_tviews puts on a base
-    table run its own functions and are never read as a user's.
+    A pg_tviews TVIEW (#504) is always read as one object, whoever reads: its
+    parts — the ``tv_*`` table and the backing ``v_*`` view — are left out of the
+    tables and views, because they are the TVIEW's, and the triggers pg_tviews
+    puts on a base table run its own functions and are never read as a user's.
+    A database whose pg_tviews offers no read contract confiture knows is
+    refused (``CONFIG_014``) rather than read as parts.
     """
     wanted = list(schemas)
     enum_types = {
@@ -339,7 +340,7 @@ def read(
             if not row.extension_owned:
                 routine = routine_of(row)
                 routine_models[routine_ref(routine)].append(routine)
-    registered = _tviews(conn, wanted) if tviews else []
+    registered = _tviews(conn, wanted)
     parts = {oid for _tview, oid in registered}
     view_models = (
         {
@@ -365,14 +366,13 @@ def read(
         tviews=tview_models,
         coverage=Coverage.of(
             {
-                **dict.fromkeys(("tables", "enum_types", "sequences"), "definition"),
+                **dict.fromkeys(("tables", "enum_types", "sequences", "tviews"), "definition"),
                 **{
                     section: "definition"
                     for section, read in (
                         ("routines", routines),
                         ("views", views),
                         ("triggers", triggers),
-                        ("tviews", tviews),
                     )
                     if read
                 },
