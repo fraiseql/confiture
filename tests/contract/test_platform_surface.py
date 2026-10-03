@@ -192,6 +192,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("generated", "str | None"),
         ("generated_kind", "GeneratedKind | None"),
         ("primary_key", "bool"),
+        ("file", "str | None"),
     ),
     "Constraint": (
         ("kind", "ConstraintKind"),

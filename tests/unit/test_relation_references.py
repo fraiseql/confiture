@@ -15,7 +15,7 @@ import pytest
 from pglast import ast
 
 from confiture.core.differ_sql import DifferSQLGenerator
-from confiture.core.linting.inventory import build_inventory
+from confiture.core.schema_read import read_text
 from confiture.platform import (
     ObjectRef,
     RelationName,
@@ -101,11 +101,11 @@ def test_a_generated_foreign_key_references_the_dotted_table() -> None:
 
 
 def test_a_partition_and_an_inheriting_child_hold_their_parents_as_parts() -> None:
-    inventory = build_inventory(
+    inventory = read_text(
         'CREATE SCHEMA app;\nCREATE TABLE app."p.q" (id int, at date) PARTITION BY RANGE (at);\n'
         "CREATE TABLE app.part PARTITION OF app.\"p.q\" FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');\n"
         'CREATE TABLE app."r.s" (id int);\nCREATE TABLE app.child (x int) INHERITS (app."r.s");\n'
-    )
+    ).inventory
     by_name = {t.name: t for t in inventory.tables}
 
     assert by_name["part"].parent == RelationName("app", "p.q")

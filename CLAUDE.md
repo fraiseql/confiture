@@ -209,16 +209,21 @@ fails on a `glob`/`rglob` of `.sql`, an `iterdir()` that keeps `.sql` files, or 
 `module:receiver`, names the directories that are flat listings read by name
 (migrations, schema snapshots, `.verify.sql` sidecars), not trees.
 
-**One schema read** — `core/schema_read.py`: a tree is read once, as the files it is
-made of (`Segment`), joined one way (`joined`), `COPY … FROM stdin` data blanked, parsed
-once, into a `SchemaRead` carrying the statements, the inventory, `ddl_objects`'
-declared objects, the warnings, the names that need quotes, and two models — `model`,
-what the tree *writes*, and `catalogued`, what PostgreSQL *holds* once it is applied
-(a partition with its parent's columns). A reader comparing with a database reads
-`catalogued`; a reader generating DDL reads `model`. `drift`, `squash`, `migrate diff`,
-`platform.parse_schema`/`diff` and the signature checkers all read through it, and a
-statement PostgreSQL rejects is `DIFFER_400` (`SCHEMA_202` from drift) naming the file
-and the line in it (`SchemaRead.where`).
+**One schema read** — `core/schema_read.py`: a tree is read as the files it is made of
+(`Segment`), **each parsed once, on its own** (`sql_lexer.parse_file` → `ParsedFile`,
+`COPY … FROM stdin` data blanked, never stripped), into a `SchemaRead` carrying the
+parsed files, the inventory, `ddl_objects`' declared objects, the warnings, the names
+that need quotes, and two models — `model`, what the tree *writes*, and `catalogued`,
+what PostgreSQL *holds* once it is applied (a partition with its parent's columns). A
+reader comparing with a database reads `catalogued`; a reader generating DDL reads
+`model`. Every object, column and index is placed **in the file that wrote it, at the
+line in that file** — never at a line of the files joined together — and an `offset`
+is the tree's (`ParsedFile.base` plus the offset in the file), so "declared before"
+holds across files. A position is not what a column is (`compare=False`). `drift`,
+`squash`, `migrate diff`, `platform.parse_schema`/`diff`, the signature checkers and
+`confiture lint` read through it; a file PostgreSQL rejects is `DIFFER_400`
+(`SCHEMA_202` from drift, `UNPARSEABLE` from lint) naming that file and line, and
+costs that file alone.
 
 **One DDL reader: `core/ddl_walk.py`**, shared by every walker of a DDL tree.
 - *ALTER folding.* `column_edit`, `adds_primary_key` and `object_edits` decide what an

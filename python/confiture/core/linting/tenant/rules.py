@@ -9,7 +9,6 @@ inventory and the files themselves.
 
 from __future__ import annotations
 
-from bisect import bisect_right
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -102,28 +101,4 @@ def scopes(
         sources: ``(file label, text)`` per schema file — the text the tables
             were read from, so a directive and its statement share a line.
     """
-    return scope.classify(tables, tenancy, declarations(sources), _locator(sources))
-
-
-def _locator(
-    sources: Sources,
-) -> Callable[[int], tuple[str | None, int]]:
-    """``(file, line)`` of a line of *sources* concatenated, each ended by a newline.
-
-    The inventory reads the files as one text laid out that way
-    (``SchemaLinter._assemble_parse_text``), so a statement's line in it is a
-    line in one file.
-    """
-    starts: list[int] = []
-    first = 1
-    for _, text in sources:
-        starts.append(first)
-        first += text.count("\n") + (1 if text and not text.endswith("\n") else 0)
-
-    def locate(line: int) -> tuple[str | None, int]:
-        at = bisect_right(starts, line) - 1
-        if at < 0:
-            return None, line
-        return sources[at][0], line - starts[at] + 1
-
-    return locate
+    return scope.classify(tables, tenancy, declarations(sources))

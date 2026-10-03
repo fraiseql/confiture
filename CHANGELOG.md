@@ -29,11 +29,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every such tree (`VALID_006`). It now reads the tree as PostgreSQL holds it, the
   way `drift` does.
 
+- **A lint finding names the file that wrote what it is about.** A column an
+  `ALTER TABLE … ADD COLUMN` in a later file adds was reported at its table's file
+  and at a line of the build joined together — a line that file may not even have.
+  Each schema file is now parsed once, on its own, and every object, column and
+  index is placed in its own file at its own line. The TVIEW rules (`tview_001`,
+  `tview_002`) now name the file at all.
+
 ### Changed
 
+- ⚠️ **The schema model's wire gains `Column.file`** (`schema-model.schema.json`,
+  `confiture schema dump-model`, `platform.SchemaModel.to_json()`): the file that
+  wrote the column, relative to the project. `Column.line` is now the line in that
+  file, not a line of the build joined together. Neither takes part in model
+  equality: two trees declaring one schema from different files are one schema.
+  The model goldens are re-recorded; nothing but positions moved.
 - A `SCHEMA_202` from `drift --schema`, and a `DIFFER_400` from `migrate diff --to
-  <directory>`, name the file and the line in it (`context.file`, `context.line`),
-  not a line of the files joined together.
+  <directory>` or `platform.parse_schema(env=…)`, name the file and the line in it
+  (`context.file`, `context.line`), not a line of the files joined together.
 - `SchemaDiffer.parse_schema`/`compare` raise `SchemaError` (`DIFFER_400`, with
   the file and line) where they raised pglast's `ParseError`.
 

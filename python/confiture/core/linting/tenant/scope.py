@@ -25,7 +25,7 @@ duplicate.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING
@@ -102,8 +102,6 @@ class TenantScopes:
     tenancy: TenancyConfig
     tables: Mapping[tuple[str, str], TableScope]
     declarations: Declarations
-    #: ``(file, line)`` of a line of the text the inventory read.
-    locate: Callable[[int], tuple[str | None, int]] = lambda line: (None, line)
     #: Each partition, keyed like :attr:`tables`: judged through its parent.
     partitions: Mapping[tuple[str, str], SchemaObject] = field(default_factory=dict)
 
@@ -214,7 +212,6 @@ def classify(
     tables: Iterable[SchemaObject],
     tenancy: TenancyConfig,
     declarations: Declarations,
-    locate: Callable[[int], tuple[str | None, int]] = lambda line: (None, line),
 ) -> TenantScopes:
     """Every table's scope — temporary tables left out, partitions kept aside.
 
@@ -222,7 +219,6 @@ def classify(
         tables: The tables the tree declares, ``ALTER``s folded in.
         tenancy: ``db/project.yaml``'s ``tenancy`` block.
         declarations: The ``tenant-global`` directives, by where they stand.
-        locate: ``(file, line)`` of a line of the text *tables* were read from.
     """
     discriminator = identifier_identity(tenancy.discriminator)
     scopes: dict[tuple[str, str], TableScope] = {}
@@ -243,7 +239,7 @@ def classify(
     root = root_identity(tenancy)
     if root is not None and root in scopes:
         scopes[root] = replace(scopes[root], key=tenant_id_column(scopes[root].table, scopes))
-    return TenantScopes(tenancy, scopes, declarations, locate, partitions)
+    return TenantScopes(tenancy, scopes, declarations, partitions)
 
 
 def _root_references(
@@ -294,8 +290,17 @@ def tenant_id_column(
     return primary[0] if len(primary) == 1 else None
 
 
-def finding(table: SchemaObject, message: str, fix: str, line: int | None = None) -> TenancyFinding:
-    """A finding on *table*, at *line* or where its name is written."""
+def finding(
+    table: SchemaObject,
+    message: str,
+    fix: str,
+    line: int | None = None,
+    *,
+    column: SchemaColumn | None = None,
+) -> TenancyFinding:
+    """A finding on *table*: where *column* is written, at *line*, or where its name is."""
+    if column is not None:
+        return TenancyFinding(table.qualified, column.file or table.file, column.line, message, fix)
     return TenancyFinding(table.qualified, table.file, line or table.line, message, fix)
 
 
@@ -344,14 +349,14 @@ def _column_findings(
             f"{name}.{tenancy.discriminator} is nullable; it must be NOT NULL: a "
             "tenant-scoped row always has a tenant",
             f"make {tenancy.discriminator} NOT NULL",
-            line=column.line,
+            column=column,
         )
     elif root and not any(_root_references(entry.table, column.folded, written_identity(root))):
         yield finding(
             entry.table,
             f"{name}.{tenancy.discriminator} does not reference {root}, the table of tenants",
             f"add FOREIGN KEY ({tenancy.discriminator}) REFERENCES {root}",
-            line=column.line,
+            column=column,
         )
 
 

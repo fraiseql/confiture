@@ -153,8 +153,11 @@ class Column:
     """A column, whole.
 
     ``name`` keeps the author's case with quoting stripped, and ``folded`` is the
-    parser's spelling; ``line`` is where the name is written, which is what a
-    finding points at. ``not_null`` is what PostgreSQL will record: ``NOT NULL``,
+    parser's spelling; ``file`` and ``line`` are where the name is written — the
+    file that wrote the column, which an ``ALTER … ADD COLUMN`` makes another
+    than its table's, and the line in it — which is what a finding points at.
+    Where a column is written is not what it is: two trees declaring one column
+    from different files declare one column, so neither takes part in equality. ``not_null`` is what PostgreSQL will record: ``NOT NULL``,
     a primary key — on the column or at table level — and an identity column all
     set it. ``default`` is the default expression's text, ``identity`` the kind
     of ``GENERATED … AS IDENTITY``, ``generated`` the expression of a
@@ -163,7 +166,7 @@ class Column:
 
     name: str
     folded: str
-    line: int
+    line: int = field(compare=False)
     type_text: str | None = None
     type_key: str | None = None
     raw_sql_type: str | None = None
@@ -173,6 +176,7 @@ class Column:
     generated: str | None = None
     generated_kind: GeneratedKind | None = None
     primary_key: bool = False
+    file: str | None = field(default=None, compare=False)
 
 
 #: ``serial`` and its siblings are not types: PostgreSQL stores an integer, NOT NULL,

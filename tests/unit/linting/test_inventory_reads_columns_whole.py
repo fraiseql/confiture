@@ -9,8 +9,8 @@ reported a database applied verbatim from its own DDL as drifted.
 
 from __future__ import annotations
 
-from confiture.core.linting.inventory import build_inventory
 from confiture.core.schema_model import Column, Constraint, RelationName
+from confiture.core.schema_read import read_text
 from confiture.core.type_lattice import canonical_type
 
 DDL = """\
@@ -26,7 +26,7 @@ CREATE TABLE a.t (
 
 
 def _table():
-    (table,) = build_inventory(DDL).tables
+    (table,) = read_text(DDL).inventory.tables
     return table
 
 
@@ -71,7 +71,9 @@ def test_an_identity_column_is_not_null() -> None:
 
 
 def test_a_primary_key_marks_its_columns_wherever_it_is_declared() -> None:
-    (table,) = build_inventory("CREATE TABLE t (id INT, CONSTRAINT pk PRIMARY KEY (id));").tables
+    (table,) = read_text(
+        "CREATE TABLE t (id INT, CONSTRAINT pk PRIMARY KEY (id));"
+    ).inventory.tables
     (column,) = table.columns
     assert column.primary_key
     assert column.not_null
@@ -84,19 +86,19 @@ def test_a_column_keeps_the_line_a_finding_prints() -> None:
 
 
 def test_alter_table_add_constraint_reaches_the_table() -> None:
-    (table,) = build_inventory(
+    (table,) = read_text(
         "CREATE TABLE t (id INT, pid INT);\n"
         "ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p (id);\n"
         "ALTER TABLE t ADD PRIMARY KEY (id);\n"
-    ).tables
+    ).inventory.tables
     assert [c.kind for c in table.constraints] == ["foreign_key", "primary_key"]
     assert next(c for c in table.columns if c.folded == "id").not_null
 
 
 def test_an_added_column_brings_its_own_clauses() -> None:
-    (table,) = build_inventory(
+    (table,) = read_text(
         "CREATE TABLE t (id INT);\nALTER TABLE t ADD COLUMN pid INT NOT NULL REFERENCES p;\n"
-    ).tables
+    ).inventory.tables
     assert table.constraints == [
         Constraint(kind="foreign_key", columns=("pid",), ref_table=RelationName(None, "p"))
     ]
@@ -104,5 +106,5 @@ def test_an_added_column_brings_its_own_clauses() -> None:
 
 
 def test_a_quoted_default_keeps_its_escaping() -> None:
-    (table,) = build_inventory("CREATE TABLE t (c TEXT DEFAULT 'it''s');").tables
+    (table,) = read_text("CREATE TABLE t (c TEXT DEFAULT 'it''s');").inventory.tables
     assert table.columns[0].default == "'it''s'"
