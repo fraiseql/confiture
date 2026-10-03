@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Keep the Rust port's boundary tables in ``docs/architecture/rust-port-boundary.md`` measured.
+"""Keep the Rust port's boundary tables in ``docs/architecture/rust-port-boundary.md`` true.
 
 Every module under ``python/confiture/core/`` is placed by the most specific row of
 :data:`ROWS` that covers it — a module, or a package and everything under it — in
-one of three tables, with the review's bucket for it. Line counts are measured
-here, over the files ``git`` tracks (``gen_tree``'s own walker), never quoted:
-the review's ~20K for the crate was measured before the duplicate readers went.
+one of three tables, with the review's bucket for it. The page records placements
+only, so it changes when a module is added or moves, never when one grows: line
+counts in a committed page made every two changes to ``core/`` conflict. They are
+measured on demand, over the files ``git`` tracks (``gen_tree``'s own walker).
 
     python scripts/gen_port_boundary.py --check   # exit 1 when the tables are stale
     python scripts/gen_port_boundary.py --write   # regenerate them
+    python scripts/gen_port_boundary.py --sizes   # print what each table holds today
 
 ``tests/unit/docs/test_port_boundary_lists_every_module.py`` holds the rows to the tree.
 """
@@ -187,33 +189,36 @@ def _lines(module: str) -> int:
     return len((REPO / CORE / module).read_text(encoding="utf-8").splitlines())
 
 
+def _rows(table: str) -> list[str]:
+    return sorted(row for row, (where, _) in ROWS.items() if where == table)
+
+
 def render() -> str:
-    """The generated block, markers included."""
-    modules = core_modules()
-    counted: dict[str, int] = {}
-    for module in modules:
-        row = row_for(module)
-        if row is not None:
-            counted[row] = counted.get(row, 0) + _lines(module)
-    total = sum(counted.values())
+    """The generated block, markers included: each table's rows and buckets."""
     lines = [BEGIN, ""]
     for table in TABLES:
-        rows = sorted(row for row, (where, _) in ROWS.items() if where == table)
-        size = sum(counted.get(row, 0) for row in rows)
-        lines += [
-            f"### {table}",
-            "",
-            f"{size:,} lines, {size * 100 // total}% of `core/`.",
-            "",
-            "| Module | Lines | Bucket |",
-            "|---|---:|---|",
-        ]
-        for row in rows:
+        lines += [f"### {table}", "", "| Module | Bucket |", "|---|---|"]
+        for row in _rows(table):
             name = f"`{row}/`" if not row.endswith(".py") else f"`{row}`"
-            lines.append(f"| {name} | {counted.get(row, 0):,} | {ROWS[row][1]} |")
+            lines.append(f"| {name} | {ROWS[row][1]} |")
         lines.append("")
     lines.append(END)
     return "\n".join(lines)
+
+
+def sizes() -> str:
+    """What each table holds today, in lines: measured, never committed."""
+    counted: dict[str, int] = {}
+    for module in core_modules():
+        row = row_for(module)
+        if row is not None:
+            counted[row] = counted.get(row, 0) + _lines(module)
+    total = sum(counted.values()) or 1
+    return "\n".join(
+        f"{table}: {size:,} lines, {size * 100 // total}% of core/"
+        for table in TABLES
+        for size in [sum(counted.get(row, 0) for row in _rows(table))]
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -221,7 +226,11 @@ def main(argv: list[str] | None = None) -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--write", action="store_true")
+    mode.add_argument("--sizes", action="store_true")
     args = parser.parse_args(argv)
+    if args.sizes:
+        print(sizes())
+        return 0
     text = DOC.read_text(encoding="utf-8")
     if BEGIN not in text or END not in text:
         print("rust-port-boundary.md has no generated block")

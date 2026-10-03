@@ -1,4 +1,4 @@
-"""``tenant_005``: a tenant table's keys lead with the discriminator.
+"""``tenant_005``: a tenant table's keys cannot let one tenant's row collide with another's.
 
 ``UNIQUE (email)`` on a tenant table lets one tenant's row block another's insert,
 and the error tells the second tenant the value exists elsewhere. The primary key,
@@ -32,10 +32,13 @@ def _table(keys: str) -> str:
         (", PRIMARY KEY (tenant_id, id)", False),
         (", PRIMARY KEY (tenant_id, id), UNIQUE (email)", True),
         (", PRIMARY KEY (tenant_id, id), UNIQUE (tenant_id, email)", False),
-        (", PRIMARY KEY (tenant_id, id), UNIQUE (email, tenant_id)", True),
+        # A key that contains the discriminator cannot collide across tenants:
+        # column order matters to an index's use, not to uniqueness (#559).
+        (", PRIMARY KEY (tenant_id, id), UNIQUE (email, tenant_id)", False),
+        (", PRIMARY KEY (id, tenant_id)", False),
     ],
 )
-def test_a_key_leads_with_the_discriminator(tmp_path: Path, keys: str, reported: bool) -> None:
+def test_a_key_contains_the_discriminator(tmp_path: Path, keys: str, reported: bool) -> None:
     found, _ = _keys(tmp_path, _table(keys))
 
     assert bool(found) is reported
@@ -178,3 +181,51 @@ def test_tenant_005_is_on_when_the_project_declares_tenancy() -> None:
     assert "tenant_005" not in resolve_selection(
         None, ["tenant_005"], declared=frozenset({"tenancy"})
     )
+
+
+@pytest.mark.parametrize(
+    ("column", "reported"),
+    [
+        ("pk_order bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY", False),
+        ("pk_order bigserial PRIMARY KEY", False),
+        ("id uuid NOT NULL DEFAULT gen_random_uuid() UNIQUE", False),
+        ("id uuid NOT NULL DEFAULT uuidv7() PRIMARY KEY", False),
+        ("id uuid NOT NULL UNIQUE", True),
+        ("code text NOT NULL DEFAULT 'x' UNIQUE", True),
+    ],
+)
+def test_a_key_whose_one_column_generates_its_value_cannot_collide(
+    tmp_path: Path, column: str, reported: bool
+) -> None:
+    """#559's other half: an identity or a generated uuid is unique whoever writes the row."""
+    found, _ = _keys(tmp_path, f"CREATE TABLE app.tb_order ({column}, {SCOPED});\n")
+
+    assert bool(found) is reported
+
+
+def test_a_two_column_key_with_one_generated_column_is_judged_by_containment(
+    tmp_path: Path,
+) -> None:
+    found, _ = _keys(
+        tmp_path,
+        "CREATE TABLE app.tb_order (id uuid DEFAULT gen_random_uuid(), code text, "
+        f"{SCOPED}, UNIQUE (id, code));\n",
+    )
+
+    assert len(found) == 1
+
+
+def test_a_unique_index_that_contains_the_discriminator_is_not_reported(tmp_path: Path) -> None:
+    found, _ = _keys(
+        tmp_path,
+        _table(", PRIMARY KEY (tenant_id, id)")
+        + "CREATE UNIQUE INDEX ux_user_email ON app.tb_user (email, tenant_id);\n",
+    )
+
+    assert found == []
+
+
+def test_the_message_speaks_of_containing_the_discriminator(tmp_path: Path) -> None:
+    (finding,), _ = _keys(tmp_path, _table(", PRIMARY KEY (tenant_id, id), UNIQUE (email)"))
+
+    assert "does not contain tenant_id" in finding.message

@@ -193,19 +193,38 @@ def _leading(entry: TableScope, keys: tuple[str, ...]) -> tuple[str, ...]:
     return (key, *(k for k in keys if k != key))
 
 
+def _cannot_collide(entry: TableScope, keys: tuple[str, ...]) -> bool:
+    """Whether a key on *entry* keeps each tenant's rows apart, whatever is written.
+
+    It does when it **contains** the discriminator — uniqueness is set-wise, and
+    the order of its columns is an index's concern, not a tenant's (#559) — or
+    when its one column is a value no other row has whoever writes the row: an
+    identity, a sequence, a generated uuid (``ValueSource``).
+    """
+    if entry.key in keys:
+        return True
+    if len(keys) != 1:
+        return False
+    column = next((c for c in entry.table.columns if c.folded == keys[0]), None)
+    return column is not None and column.value_source.unique_without_author_input
+
+
 def _constraint_findings(entry: TableScope) -> Iterator[TenancyFinding]:
     for constraint in entry.table.constraints:
         if constraint.kind not in ("primary_key", "unique") or not constraint.columns:
             continue
-        if constraint.columns[0] == entry.key:
+        if _cannot_collide(entry, constraint.columns):
             continue
         kind = "PRIMARY KEY" if constraint.kind == "primary_key" else "UNIQUE"
         yield finding(
             entry.table,
-            f"{entry.table.qualified}'s {kind} ({_key_text(entry, constraint.columns)}) does "
-            f"not lead with {entry.key}: one tenant's row can collide with another's",
+            f"{entry.table.qualified}'s {kind} ({_key_text(entry, constraint.columns)}) is a "
+            f"natural key that does not contain {entry.key}: one tenant's row can collide "
+            "with another's",
             f"{kind} ({_key_text(entry, _leading(entry, constraint.columns))})",
-            next((c.line for c in entry.table.columns if c.folded == constraint.columns[0]), None),
+            column=next(
+                (c for c in entry.table.columns if c.folded == constraint.columns[0]), None
+            ),
         )
 
 
@@ -217,10 +236,10 @@ def _index_finding(
     reason = scopes.declarations.get(site)
     name = index.name or f"the unique index on ({_key_text(entry, index.columns)})"
     directive = f"-- confiture:{GLOBAL_DIRECTIVE}"
-    if index.columns[:1] == (entry.key,):
+    if _cannot_collide(entry, index.columns):
         if not declared:
             return None
-        message = f"`{directive}` on {name} is stale: it already leads with {entry.key}"
+        message = f"`{directive}` on {name} is stale: it already keeps tenants apart"
         fix = "drop the directive"
     elif declared and reason:
         return None
@@ -229,11 +248,11 @@ def _index_finding(
         fix = f"write why: `{directive} <reason>`"
     else:
         message = (
-            f"{name} on {entry.table.qualified} does not lead with {entry.key}: one "
+            f"{name} on {entry.table.qualified} does not contain {entry.key}: one "
             "tenant's row can collide with another's"
         )
         fix = (
-            f"lead with it: ({_key_text(entry, _leading(entry, index.columns))}); or, for a "
+            f"add it: ({_key_text(entry, _leading(entry, index.columns))}); or, for a "
             f"uniqueness that is platform-wide on purpose, write `{directive} <reason>` "
             "above the CREATE UNIQUE INDEX"
         )
@@ -251,7 +270,7 @@ def _index_findings(scopes: TenantScopes, entry: TableScope) -> Iterator[Tenancy
 
 
 def unique_key_findings(scopes: TenantScopes) -> Iterator[TenancyFinding]:
-    """``tenant_005``: every key of a tenant table that does not lead with the discriminator."""
+    """``tenant_005``: every key of a tenant table that can let one tenant's row collide with another's."""
     for entry in scopes:
         if entry.scope is Scope.TENANT and entry.key is not None:
             yield from _constraint_findings(entry)

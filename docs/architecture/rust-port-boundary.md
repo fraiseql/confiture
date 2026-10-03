@@ -75,146 +75,142 @@ The bucket is one of the architecture review's four: DDL transform, database
 orchestration, Python-bound, neutral. The review measured their shares (29%, 46%, 4%,
 21%) but assigned no module to any of them. Each placement below is this page's, one
 decision per row. The review's ~20K lines for the crate were measured before the
-duplicate readers were deleted. The count below is what the port translates.
+duplicate readers were deleted; `python scripts/gen_port_boundary.py --sizes` prints
+what each table holds today. The page records placements only, so it changes when a
+module moves, not when one grows.
 
 <!-- BEGIN GENERATED: port-boundary -->
 
 ### The crate
 
-27,251 lines, 34% of `core/`.
-
-| Module | Lines | Bucket |
-|---|---:|---|
-| `_pglast_enums.py` | 152 | DDL transform |
-| `change_order.py` | 184 | DDL transform |
-| `change_set/` | 1,305 | DDL transform |
-| `cor_extractor.py` | 135 | DDL transform |
-| `data_assertions.py` | 568 | DDL transform |
-| `ddl_clauses.py` | 152 | DDL transform |
-| `ddl_objects.py` | 775 | DDL transform |
-| `ddl_walk.py` | 1,798 | DDL transform |
-| `destructive.py` | 181 | DDL transform |
-| `differ.py` | 735 | DDL transform |
-| `differ_sql.py` | 706 | DDL transform |
-| `expand_contract.py` | 273 | DDL transform |
-| `fk_extractor.py` | 296 | DDL transform |
-| `function_body_checker.py` | 208 | DDL transform |
-| `function_body_normalizer.py` | 69 | DDL transform |
-| `function_signature_checker.py` | 188 | DDL transform |
-| `idempotency/` | 2,708 | DDL transform |
-| `introspection/dependency_graph.py` | 202 | DDL transform |
-| `linting/` | 9,279 | DDL transform |
-| `lock_profile.py` | 491 | DDL transform |
-| `migration_analyzer.py` | 81 | DDL transform |
-| `migration_grant_extractor.py` | 526 | DDL transform |
-| `model_facts.py` | 214 | DDL transform |
-| `parser_info.py` | 116 | DDL transform |
-| `path_globs.py` | 158 | DDL transform |
-| `plpgsql_fragments.py` | 374 | DDL transform |
-| `plpgsql_parse.py` | 514 | DDL transform |
-| `replica/` | 737 | DDL transform |
-| `risk_tier.py` | 76 | DDL transform |
-| `schema_change.py` | 904 | DDL transform |
-| `schema_identity.py` | 94 | DDL transform |
-| `schema_model.py` | 1,052 | DDL transform |
-| `schema_read.py` | 292 | DDL transform |
-| `sql_lexer.py` | 729 | DDL transform |
-| `strategy.py` | 68 | DDL transform |
-| `tree_prefix.py` | 230 | DDL transform |
-| `tview_preflight.py` | 170 | DDL transform |
-| `type_lattice.py` | 511 | DDL transform |
+| Module | Bucket |
+|---|---|
+| `_pglast_enums.py` | DDL transform |
+| `change_order.py` | DDL transform |
+| `change_set/` | DDL transform |
+| `cor_extractor.py` | DDL transform |
+| `data_assertions.py` | DDL transform |
+| `ddl_clauses.py` | DDL transform |
+| `ddl_objects.py` | DDL transform |
+| `ddl_walk.py` | DDL transform |
+| `destructive.py` | DDL transform |
+| `differ.py` | DDL transform |
+| `differ_sql.py` | DDL transform |
+| `expand_contract.py` | DDL transform |
+| `fk_extractor.py` | DDL transform |
+| `function_body_checker.py` | DDL transform |
+| `function_body_normalizer.py` | DDL transform |
+| `function_signature_checker.py` | DDL transform |
+| `idempotency/` | DDL transform |
+| `introspection/dependency_graph.py` | DDL transform |
+| `linting/` | DDL transform |
+| `lock_profile.py` | DDL transform |
+| `migration_analyzer.py` | DDL transform |
+| `migration_grant_extractor.py` | DDL transform |
+| `model_facts.py` | DDL transform |
+| `parser_info.py` | DDL transform |
+| `path_globs.py` | DDL transform |
+| `plpgsql_fragments.py` | DDL transform |
+| `plpgsql_parse.py` | DDL transform |
+| `replica/` | DDL transform |
+| `risk_tier.py` | DDL transform |
+| `schema_change.py` | DDL transform |
+| `schema_identity.py` | DDL transform |
+| `schema_model.py` | DDL transform |
+| `schema_read.py` | DDL transform |
+| `sql_lexer.py` | DDL transform |
+| `strategy.py` | DDL transform |
+| `tree_prefix.py` | DDL transform |
+| `tview_preflight.py` | DDL transform |
+| `type_lattice.py` | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 
-43,563 lines, 55% of `core/`.
-
-| Module | Lines | Bucket |
-|---|---:|---|
-| `__init__.py` | 124 | neutral |
-| `_migrator/` | 5,167 | database orchestration |
-| `anonymization/` | 4,437 | database orchestration |
-| `backfill.py` | 124 | database orchestration |
-| `baseline_detector.py` | 248 | database orchestration |
-| `bootstrap.py` | 411 | database orchestration |
-| `builder.py` | 1,018 | database orchestration |
-| `checksum.py` | 432 | database orchestration |
-| `connection.py` | 283 | database orchestration |
-| `cte_debugger.py` | 198 | database orchestration |
-| `dependent_objects.py` | 162 | database orchestration |
-| `desired_state.py` | 76 | database orchestration |
-| `drift.py` | 1,552 | database orchestration |
-| `dry_run.py` | 239 | database orchestration |
-| `dry_run_summary.py` | 156 | neutral |
-| `error_context.py` | 286 | neutral |
-| `error_handler.py` | 284 | neutral |
-| `expected_db.py` | 227 | database orchestration |
-| `function_body_drift.py` | 211 | database orchestration |
-| `function_signature_drift.py` | 374 | database orchestration |
-| `git.py` | 521 | neutral |
-| `git_accompaniment.py` | 348 | neutral |
-| `git_schema.py` | 258 | neutral |
-| `grant_accompaniment.py` | 380 | database orchestration |
-| `introspection/` | 302 | database orchestration |
-| `introspection/type_mapping.py` | 112 | neutral |
-| `large_tables.py` | 929 | database orchestration |
-| `ledger.py` | 513 | database orchestration |
-| `linting/baseline.py` | 153 | neutral |
-| `linting/bodies.py` | 467 | database orchestration |
-| `linting/libraries/security_definer.py` | 406 | database orchestration |
-| `linting/schema_linter.py` | 1,202 | database orchestration |
-| `linting/selection.py` | 390 | database orchestration |
-| `linting/unresolved.py` | 379 | database orchestration |
-| `live_catalog.py` | 1,174 | database orchestration |
-| `locking.py` | 625 | database orchestration |
-| `migration_generator.py` | 581 | database orchestration |
-| `migration_verifier.py` | 229 | database orchestration |
-| `migrator.py` | 211 | database orchestration |
-| `ownership_fixer.py` | 243 | database orchestration |
-| `pgtap_generator.py` | 63 | neutral |
-| `preconditions.py` | 657 | database orchestration |
-| `preflight.py` | 187 | database orchestration |
-| `progress.py` | 206 | neutral |
-| `psql_applier.py` | 274 | database orchestration |
-| `restorer.py` | 856 | database orchestration |
-| `scaffold/` | 296 | neutral |
-| `schema_analyzer.py` | 685 | database orchestration |
-| `schema_artifact.py` | 214 | database orchestration |
-| `schema_exporter.py` | 198 | neutral |
-| `schema_facts.py` | 162 | database orchestration |
-| `schema_snapshot.py` | 104 | database orchestration |
-| `schema_sources.py` | 175 | database orchestration |
-| `schema_to_schema.py` | 634 | database orchestration |
-| `seed/` | 6,258 | database orchestration |
-| `sql_path.py` | 135 | database orchestration |
-| `sql_utils.py` | 86 | neutral |
-| `squash.py` | 403 | database orchestration |
-| `ssh_tunnel.py` | 138 | database orchestration |
-| `step_runner.py` | 298 | database orchestration |
-| `stub_generator.py` | 137 | neutral |
-| `syncer.py` | 654 | database orchestration |
-| `temp_database.py` | 293 | database orchestration |
-| `test_db.py` | 1,017 | database orchestration |
-| `tree_allocator.py` | 226 | database orchestration |
-| `tree_renumber.py` | 680 | database orchestration |
-| `unified_linter.py` | 186 | database orchestration |
-| `validation/` | 2,187 | database orchestration |
-| `view_body_drift.py` | 198 | database orchestration |
-| `view_manager.py` | 524 | database orchestration |
+| Module | Bucket |
+|---|---|
+| `__init__.py` | neutral |
+| `_migrator/` | database orchestration |
+| `anonymization/` | database orchestration |
+| `backfill.py` | database orchestration |
+| `baseline_detector.py` | database orchestration |
+| `bootstrap.py` | database orchestration |
+| `builder.py` | database orchestration |
+| `checksum.py` | database orchestration |
+| `connection.py` | database orchestration |
+| `cte_debugger.py` | database orchestration |
+| `dependent_objects.py` | database orchestration |
+| `desired_state.py` | database orchestration |
+| `drift.py` | database orchestration |
+| `dry_run.py` | database orchestration |
+| `dry_run_summary.py` | neutral |
+| `error_context.py` | neutral |
+| `error_handler.py` | neutral |
+| `expected_db.py` | database orchestration |
+| `function_body_drift.py` | database orchestration |
+| `function_signature_drift.py` | database orchestration |
+| `git.py` | neutral |
+| `git_accompaniment.py` | neutral |
+| `git_schema.py` | neutral |
+| `grant_accompaniment.py` | database orchestration |
+| `introspection/` | database orchestration |
+| `introspection/type_mapping.py` | neutral |
+| `large_tables.py` | database orchestration |
+| `ledger.py` | database orchestration |
+| `linting/baseline.py` | neutral |
+| `linting/bodies.py` | database orchestration |
+| `linting/libraries/security_definer.py` | database orchestration |
+| `linting/schema_linter.py` | database orchestration |
+| `linting/selection.py` | database orchestration |
+| `linting/unresolved.py` | database orchestration |
+| `live_catalog.py` | database orchestration |
+| `locking.py` | database orchestration |
+| `migration_generator.py` | database orchestration |
+| `migration_verifier.py` | database orchestration |
+| `migrator.py` | database orchestration |
+| `ownership_fixer.py` | database orchestration |
+| `pgtap_generator.py` | neutral |
+| `preconditions.py` | database orchestration |
+| `preflight.py` | database orchestration |
+| `progress.py` | neutral |
+| `psql_applier.py` | database orchestration |
+| `restorer.py` | database orchestration |
+| `scaffold/` | neutral |
+| `schema_analyzer.py` | database orchestration |
+| `schema_artifact.py` | database orchestration |
+| `schema_exporter.py` | neutral |
+| `schema_facts.py` | database orchestration |
+| `schema_snapshot.py` | database orchestration |
+| `schema_sources.py` | database orchestration |
+| `schema_to_schema.py` | database orchestration |
+| `seed/` | database orchestration |
+| `sql_path.py` | database orchestration |
+| `sql_utils.py` | neutral |
+| `squash.py` | database orchestration |
+| `ssh_tunnel.py` | database orchestration |
+| `step_runner.py` | database orchestration |
+| `stub_generator.py` | neutral |
+| `syncer.py` | database orchestration |
+| `temp_database.py` | database orchestration |
+| `test_db.py` | database orchestration |
+| `tree_allocator.py` | database orchestration |
+| `tree_renumber.py` | database orchestration |
+| `unified_linter.py` | database orchestration |
+| `validation/` | database orchestration |
+| `view_body_drift.py` | database orchestration |
+| `view_manager.py` | database orchestration |
 
 ### What does not port
 
-7,122 lines, 9% of `core/`.
-
-| Module | Lines | Bucket |
-|---|---:|---|
-| `_migrator/loader.py` | 133 | Python-bound |
-| `anonymization/plugins/` | 302 | Python-bound |
-| `hooks/` | 3,274 | Python-bound |
-| `idempotency/python_migration_extractor.py` | 294 | Python-bound |
-| `idempotency/static_eval/` | 1,898 | Python-bound |
-| `import_checker.py` | 493 | Python-bound |
-| `mcp_http.py` | 191 | Python-bound |
-| `mcp_server.py` | 435 | Python-bound |
-| `migration_reads.py` | 102 | Python-bound |
+| Module | Bucket |
+|---|---|
+| `_migrator/loader.py` | Python-bound |
+| `anonymization/plugins/` | Python-bound |
+| `hooks/` | Python-bound |
+| `idempotency/python_migration_extractor.py` | Python-bound |
+| `idempotency/static_eval/` | Python-bound |
+| `import_checker.py` | Python-bound |
+| `mcp_http.py` | Python-bound |
+| `mcp_server.py` | Python-bound |
+| `migration_reads.py` | Python-bound |
 
 <!-- END GENERATED: port-boundary -->
