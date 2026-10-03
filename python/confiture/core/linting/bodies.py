@@ -32,6 +32,7 @@ import psycopg.sql
 from confiture.core.linting import references
 from confiture.core.linting.rule_registry import BODY_CLASS_CODES
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.sql_lexer import ParsedFile
 
 #: A body that will raise on its first call.
 RULE_ID = "body_001"
@@ -304,10 +305,11 @@ def _install(connection: Any) -> psycopg.sql.Identifier:
     return psycopg.sql.Identifier(schema, "plpgsql_check_function_tb")
 
 
-def locations(sources: Iterable[tuple[str | None, str]]) -> dict[tuple[str, str, int], Location]:
+def locations(files: Iterable[ParsedFile]) -> dict[tuple[str, str, int], Location]:
     """Where each routine is written, keyed the way a diagnosis is keyed.
 
-    ``sources`` is ``(project-relative file label, text)`` per DDL file. The key
+    *files* are the DDL files, each parsed once and labelled relative to the
+    project. The key
     is ``(schema, name, input-argument count)``: PostgreSQL spells an argument's
     type its own way (``character varying`` for a ``varchar`` in the DDL), so
     the count is what the two sides can agree on without normalising type names.
@@ -321,10 +323,10 @@ def locations(sources: Iterable[tuple[str | None, str]]) -> dict[tuple[str, str,
     found: dict[tuple[str, str, int], Location] = {}
     ambiguous: set[tuple[str, str, int]] = set()
     unqualified: list[tuple[tuple[str, str, int], Location]] = []
-    for label, text in sources:
-        for placed in references.body_locations(text):
+    for parsed in files:
+        for placed in references.body_locations(parsed):
             obj = placed.obj
-            here = Location(file=label, line=obj.statement_line, body_line=placed.first_line)
+            here = Location(file=parsed.label, line=obj.statement_line, body_line=placed.first_line)
             key = (obj.folded_schema or "", obj.folded_name, _arity(obj.signature))
             if obj.folded_schema is None:
                 unqualified.append((key, here))

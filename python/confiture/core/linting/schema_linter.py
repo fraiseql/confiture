@@ -355,7 +355,6 @@ class SchemaLinter:
         self._schema_files: list[Path] = []
         self._file_objects: list[SchemaObject] = []
         self._file_schemas: list[SchemaObject] = []
-        self._source_cache: list[tuple[str | None, str]] | None = None
         self._written_cache: list[tuple[str | None, str]] | None = None
 
     def lint(self, schema: str | None = None) -> LintReport:
@@ -372,7 +371,6 @@ class SchemaLinter:
         if not self.config.enabled:
             return report
 
-        self._source_cache = None
         self._written_cache = None
         # Use provided schema or load from files
         if schema is not None:
@@ -715,7 +713,7 @@ class SchemaLinter:
         # Reason: import cycle (unresolved imports LintViolation from this module at module level)
         from confiture.core.linting.unresolved import forward_references
 
-        scans = [(label, read_references(text)) for label, text in self._sources()]
+        scans = [(parsed.label, read_references(parsed)) for parsed in self._files]
         if self.config.check_forward_references:
             for violation in forward_references(
                 scans,
@@ -815,8 +813,8 @@ class SchemaLinter:
             self._skip_body_rules(report, bodies.BUILD_FAILED + _first_line(exc))
             return
         wanted = set(self._selected_body_rules())
-        where = bodies.locations(self._sources())
-        temp = references.temp_relations(self._schema_sql or "")
+        where = bodies.locations(self._files)
+        temp = references.temp_relations(self._files)
         for violation in bodies.findings(diagnoses, where, temp=temp):
             if violation.rule_id in wanted:
                 report.add_violation(violation)
@@ -893,29 +891,6 @@ class SchemaLinter:
         ) as connection:
             return probe(connection, candidates, search_path)
 
-    def _sources(self) -> list[tuple[str | None, str]]:
-        """``(project-relative label, text)`` per schema file, or the one string linted.
-
-        Every rule that reads the files *as files* — rather than the build they
-        concatenate into — needs the same pair, and a whole-string lint
-        (``lint(schema=...)``) has no file to name, so its label is ``None``.
-
-        The text is **blanked**: a ``COPY … FROM stdin`` block is psql client
-        protocol and pglast rejects the text it sits in, so one unblanked seed
-        file would empty the inventory (#274). Blanking keeps every offset and every
-        line number, so a finding still points at the line its author wrote —
-        which deleting the block would not (:func:`sql_lexer.blank_copy_blocks`).
-
-        Read once per lint and held: six rules want it, and a schema tree is
-        thousands of files. ``lint()`` clears it, so a reused linter still sees
-        what is on disk now.
-        """
-        if self._source_cache is None:
-            self._source_cache = [
-                (label, blank_copy_blocks(text)) for label, text in self._written_sources()
-            ]
-        return self._source_cache
-
     @staticmethod
     def _report_rejected_files(report: LintReport, rejected: list[Rejected]) -> None:
         """One ``UNPARSEABLE`` finding per file pglast refused, naming that file.
@@ -983,9 +958,9 @@ class SchemaLinter:
         that, not a walk of its own.
         """
         return frozenset(
-            (label, directive.statement_line)
-            for label, text in self._sources()
-            for directive in sql_lexer.directives(text)
+            (parsed.label, directive.statement_line)
+            for parsed in self._files
+            for directive in sql_lexer.directives(parsed.text)
             if directive.name == name and directive.statement_line is not None
         )
 
@@ -1053,8 +1028,9 @@ class SchemaLinter:
     def _written_sources(self) -> list[tuple[str | None, str]]:
         """``(label, text)`` per file as written — ``COPY`` rows kept — read once per lint.
 
-        :meth:`_sources` is these, blanked; a rule that reads the data itself
-        (``sec_003``) takes them as they are. One trip to disk serves both.
+        Each is parsed once into ``_files`` (``COPY`` data blanked); a rule that
+        reads the data itself (``sec_003``) takes them as they are. One trip to
+        disk serves both.
         """
         if self._written_cache is None:
             self._written_cache = (
@@ -1086,7 +1062,7 @@ class SchemaLinter:
             )
             return
         rule = tenant_rules.RULES[code]
-        tree = tenant_rules.tree(self._inventory, tenancy, self._sources())
+        tree = tenant_rules.tree(self._inventory, tenancy, self._files)
         unjudged: list[str] = []
         for finding in rule.findings(tree):
             if not finding.judged:

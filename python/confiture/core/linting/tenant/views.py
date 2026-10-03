@@ -28,9 +28,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
-import pglast
-import pglast.parser
-
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.linting.inventory import object_from_statement
 from confiture.core.linting.references import RELATION, ROUTINE, read_references
@@ -51,6 +48,7 @@ from confiture.core.linting.tenant.trace import (
     source_of,
 )
 from confiture.core.schema_identity import identifier_identity
+from confiture.core.sql_lexer import ParsedFile
 
 if TYPE_CHECKING:
     from confiture.core.linting.inventory import Inventory, SchemaObject
@@ -74,17 +72,11 @@ class ViewDefinition:
     aliases: tuple[str, ...] = ()
 
 
-def view_definitions(label: str | None, text: str) -> list[ViewDefinition]:
-    """Every view and materialized view *text* creates, located in file *label*.
-
-    A text pglast rejects yields none: lint reports it once, as ``UNPARSEABLE``.
-    """
-    try:
-        raws = list(pglast.parse_sql(text) or [])
-    except pglast.parser.ParseError:
-        return []
+def view_definitions(parsed: ParsedFile) -> list[ViewDefinition]:
+    """Every view and materialized view a file creates, placed in that file."""
     found: list[ViewDefinition] = []
-    for raw in raws:
+    text = parsed.text
+    for raw in parsed.statements:
         stmt: Any = raw.stmt
         kind = type(stmt).__name__
         if kind == "ViewStmt":
@@ -95,7 +87,7 @@ def view_definitions(label: str | None, text: str) -> list[ViewDefinition]:
             continue
         obj = object_from_statement(text, raw)
         if obj is not None:
-            obj.file = label
+            obj.file = parsed.label
             found.append(ViewDefinition(obj, stmt.query, tuple(a.sval for a in aliases or ())))
     return found
 
@@ -335,16 +327,16 @@ def _spelled(schema: str | None, name: str) -> str:
 def view_findings(
     scopes: TenantScopes,
     inventory: Inventory,
-    sources: Sequence[tuple[str | None, str]],
+    files: Sequence[ParsedFile],
 ) -> Iterator[TenancyFinding]:
     """Every view that reads tenant data without publishing the discriminator.
 
     Args:
         scopes: Every table's scope, as the family decided it.
         inventory: The tables and views the tree declares, ``ALTER``s folded in.
-        sources: ``(file label, text)`` per schema file: each view's definition and
+        files: The schema files, each parsed once: each view's definition and
             what each routine and view body references are read from them.
     """
-    views = [v for label, text in sources for v in view_definitions(label, text)]
-    scans = [read_references(text) for _label, text in sources]
+    views = [v for parsed in files for v in view_definitions(parsed)]
+    scans = [read_references(parsed) for parsed in files]
     yield from ViewScopes(scopes, inventory, views, scans).findings()

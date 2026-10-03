@@ -35,6 +35,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Each schema file is now parsed once, on its own, and every object, column and
   index is placed in its own file at its own line. The TVIEW rules (`tview_001`,
   `tview_002`) now name the file at all.
+- **The lint rules read the files the lint parsed, once.** Each rule that re-parsed
+  a file's text on its own — `build_003`/`build_004`, the `body` family's locations
+  and `TEMP`-table reading, `tenant_001`/`tenant_003` — reads the statements the
+  lint parsed instead, so none can again answer "nothing found" for a file it
+  failed to read. `func_001` and `sec_002` blank `COPY … FROM stdin` data: a schema
+  file that seeds inline is read, not reported `UNPARSEABLE`. The `body` family's
+  `TEMP`-table reading read the unblanked build, and read nothing at all from a
+  build carrying a `COPY` seed.
 
 ### Changed
 

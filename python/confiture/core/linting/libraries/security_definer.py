@@ -49,6 +49,7 @@ from confiture.core.idempotency._ast_visitor import _first_keyword_pos
 from confiture.core.linting.inventory import type_text
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
+from confiture.core.sql_lexer import parse_file
 
 _DEFAULT_SCHEMA = "public"
 _SYSTEM_SCHEMAS: frozenset[str] = frozenset({"pg_catalog", "information_schema"})
@@ -262,7 +263,7 @@ class Sec002SecurityDefinerSearchPath:
 
     def _extract_violations(self, sql: str, file_path: Path) -> list[LintViolation]:
 
-        tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
+        tree = parse_file(sql).statements  # ParseError propagates: check() reports the file
 
         allow_lines = _collect_allow_unpinned_lines(sql)
         violations: list[LintViolation] = []

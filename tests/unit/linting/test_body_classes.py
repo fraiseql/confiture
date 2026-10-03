@@ -18,6 +18,7 @@ from confiture.core.linting.baseline import Baseline
 from confiture.core.linting.gate import Threshold
 from confiture.core.linting.rule_registry import LINT_RULES
 from confiture.core.linting.selection import linter_config
+from confiture.core.sql_lexer import parse_file
 
 
 def _diagnosis(sqlstate: str, message: str, name: str = "fn") -> bodies.Diagnosis:
@@ -122,4 +123,4 @@ def test_a_body_names_the_relations_it_creates_temp() -> None:
     $$;
     """
 
-    assert references.temp_relations(sql) == frozenset({"tmp_orders", "tmp_lines"})
+    assert references.temp_relations([parse_file(sql)]) == frozenset({"tmp_orders", "tmp_lines"})
