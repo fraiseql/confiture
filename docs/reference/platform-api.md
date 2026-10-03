@@ -177,6 +177,7 @@ it is made.
 | `views` | `Mapping[ObjectRef, View]` | empty |
 | `triggers` | `Mapping[ObjectRef, Trigger]` | empty |
 | `tviews` | `Mapping[ObjectRef, TView]` | empty |
+| `other_objects` | `Mapping[ObjectRef, OtherObject]` | empty |
 | `coverage` | `Coverage` | empty |
 
 #### `SchemaModel.all_routines`
@@ -267,6 +268,30 @@ def shared(self, other: Coverage, section: str) -> CoverageDepth | None
 ```
 
 How deeply both read *section*: the shallower of the two, or `None`.
+
+### `OtherObject`
+
+```python
+class OtherObject
+```
+
+An object the model holds by identity and definition only.
+
+A schema, an extension, a domain, a composite or range type, a policy, a
+rule, an event trigger, extended statistics, a foreign table, a foreign-data
+wrapper, a server, a publication, a conversion, an operator class or family,
+an access method: the kinds no typed section holds. `kind`, `schema` and
+`name` are its identity as `ObjectRef` keys it (schema folded and
+defaulted, a policy or rule named `table.name`); `definition` is what
+decides whether it changed, `None` from a reader that read only that it
+exists (`Coverage` says which).
+
+| Field | Type | Default |
+|---|---|---|
+| `kind` | `str` | required |
+| `schema` | `str` | required |
+| `name` | `str` | required |
+| `definition` | `str \| None` | `None` |
 
 ### `ObjectRef`
 

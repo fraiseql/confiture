@@ -1,6 +1,7 @@
 {
   "coverage": {
     "enum_types": "definition",
+    "other_objects": "definition",
     "routines": "definition",
     "sequences": "definition",
     "tables": "definition",
@@ -9,6 +10,32 @@
     "views": "definition"
   },
   "enum_types": [],
+  "other_objects": [
+    {
+      "definition": "CREATE EXTENSION btree_gist",
+      "kind": "extension",
+      "name": "btree_gist",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE EXTENSION pg_trgm",
+      "kind": "extension",
+      "name": "pg_trgm",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE EXTENSION pgcrypto",
+      "kind": "extension",
+      "name": "pgcrypto",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE EXTENSION \"uuid-ossp\"",
+      "kind": "extension",
+      "name": "uuid-ossp",
+      "schema": "public"
+    }
+  ],
   "routines": [
     {
       "body": "\nBEGIN\n    IF EXISTS (\n        SELECT 1 FROM tasks\n        WHERE project_id = OLD.id\n        AND status NOT IN ('done', 'cancelled')\n    ) THEN\n        RAISE EXCEPTION 'Cannot delete project with active tasks. Complete or cancel tasks first.';\n    END IF;\n    RETURN OLD;\nEND;\n",

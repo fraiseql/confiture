@@ -1,6 +1,7 @@
 {
   "coverage": {
     "enum_types": "definition",
+    "other_objects": "definition",
     "routines": "definition",
     "sequences": "definition",
     "tables": "definition",
@@ -9,6 +10,7 @@
     "views": "definition"
   },
   "enum_types": [],
+  "other_objects": [],
   "routines": [
     {
       "body": "\nBEGIN\n    NEW.updated_at = NOW();\n    RETURN NEW;\nEND;\n",

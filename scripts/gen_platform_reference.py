@@ -40,6 +40,7 @@ SECTIONS: list[tuple[str, list[str]]] = [
         [
             "SchemaModel",
             "Coverage",
+            "OtherObject",
             "ObjectRef",
             "RelationName",
             "Table",

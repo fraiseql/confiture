@@ -1,6 +1,7 @@
 {
   "coverage": {
     "enum_types": "definition",
+    "other_objects": "definition",
     "routines": "definition",
     "sequences": "definition",
     "tables": "definition",
@@ -9,6 +10,32 @@
     "views": "definition"
   },
   "enum_types": [],
+  "other_objects": [
+    {
+      "definition": "CREATE STATISTICS app.st_order_line_tenant_order(dependencies) ON tenant_id, fk_order FROM app.tb_order_line",
+      "kind": "statistics",
+      "name": "st_order_line_tenant_order",
+      "schema": "app"
+    },
+    {
+      "definition": "CREATE SCHEMA app",
+      "kind": "schema",
+      "name": "app",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE SCHEMA catalog",
+      "kind": "schema",
+      "name": "catalog",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE SCHEMA management",
+      "kind": "schema",
+      "name": "management",
+      "schema": "public"
+    }
+  ],
   "routines": [
     {
       "body": "\nDECLARE\n    v_id uuid := gen_random_uuid();\nBEGIN\n    INSERT INTO app.tb_order (tenant_id, id, fk_provider, reference)\n    VALUES (p_tenant_id, v_id, p_provider, p_reference);\n    RETURN v_id;\nEND;\n",

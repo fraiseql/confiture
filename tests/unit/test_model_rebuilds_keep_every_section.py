@@ -15,6 +15,7 @@ import pytest
 from confiture.core.drift import _in_schema
 from confiture.core.schema_model import (
     EnumType,
+    OtherObject,
     Routine,
     SchemaModel,
     Sequence,
@@ -23,6 +24,7 @@ from confiture.core.schema_model import (
     TView,
     View,
     normalise_for_parity,
+    other_ref,
     ref_for,
     routine_ref,
     trigger_ref,
@@ -34,6 +36,7 @@ ROUTINE = Routine(name="f", schema="app", kind="function", signature="", signatu
 VIEW = View(name="v", schema="app")
 TRIGGER = Trigger(name="trg", table="t", schema="app")
 TVIEW = TView(name="tv_x", schema="app")
+OTHER = OtherObject(kind="domain", schema="app", name="positive")
 
 FULL = SchemaModel(
     tables={ref_for("table", "app", "t"): Table(name="t", schema="app")},
@@ -43,6 +46,7 @@ FULL = SchemaModel(
     views={view_ref(VIEW): VIEW},
     triggers={trigger_ref(TRIGGER): TRIGGER},
     tviews={tview_ref(TVIEW): TVIEW},
+    other_objects={other_ref(OTHER): OTHER},
 )
 
 

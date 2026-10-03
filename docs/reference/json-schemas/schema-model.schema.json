@@ -13,6 +13,7 @@
     "views",
     "triggers",
     "tviews",
+    "other_objects",
     "coverage"
   ],
   "properties": {
@@ -58,6 +59,13 @@
         "$ref": "#/$defs/TView"
       }
     },
+    "other_objects": {
+      "type": "array",
+      "description": "Every object of the kinds no typed section holds (a schema, an extension, a domain, a composite or range type, a policy, a rule, …), by identity and definition; `definition` is null from a reader that read only that the object exists.",
+      "items": {
+        "$ref": "#/$defs/OtherObject"
+      }
+    },
     "coverage": {
       "type": "object",
       "description": "What the reader read: each section of the model it covers, and how deeply (`existence` or `definition`). A section absent here was not read, so its silence is not absence. A tree covers every section; a live read, the sections it was asked for. Not part of what the schema is.",
@@ -100,6 +108,12 @@
           ]
         },
         "tviews": {
+          "enum": [
+            "existence",
+            "definition"
+          ]
+        },
+        "other_objects": {
           "enum": [
             "existence",
             "definition"
@@ -704,6 +718,34 @@
         "fillfactor": {
           "type": [
             "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "OtherObject": {
+      "type": "object",
+      "description": "An object the model holds by identity and definition only. `schema` is folded and defaulted; a policy or rule is named `table.name`.",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "schema",
+        "name",
+        "definition"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "definition": {
+          "type": [
+            "string",
             "null"
           ]
         }

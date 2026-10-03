@@ -470,6 +470,7 @@ def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
         tviews={
             ref_for("tview", t.schema or default_schema, t.name): t for t in model.tviews.values()
         },
+        other_objects=model.other_objects,
     )
 
 

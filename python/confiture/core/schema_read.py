@@ -49,7 +49,15 @@ from confiture.core.linting.inventory import (
 )
 from confiture.core.linting.quoted_names import QuotedName, quoted_names, quoted_trigger_names
 from confiture.core.parser_info import parse_error_line
-from confiture.core.schema_model import Coverage, SchemaModel, qualified_name, trigger_ref
+from confiture.core.schema_model import (
+    TYPED_KINDS,
+    Coverage,
+    ObjectRef,
+    OtherObject,
+    SchemaModel,
+    qualified_name,
+    trigger_ref,
+)
 from confiture.core.sql_lexer import ParsedFile, blank_copy_blocks, parse_file
 from confiture.exceptions import SchemaError
 from confiture.models.warnings import BuildWarning
@@ -168,8 +176,19 @@ class SchemaRead:
         triggers = declared_triggers(self.declared.objects)
         # A tree says what it declares in every section: silence is absence.
         return replace(
-            model, triggers={trigger_ref(t): t for t in triggers}, coverage=Coverage.every()
+            model,
+            triggers={trigger_ref(t): t for t in triggers},
+            other_objects=self._other_objects(),
+            coverage=Coverage.every(),
         )
+
+    def _other_objects(self) -> dict[ObjectRef, OtherObject]:
+        """The objects of every kind no typed section holds, each by identity and definition."""
+        return {
+            ref: OtherObject(ref.kind, ref.schema, ref.name, found[-1].definition)
+            for ref, found in self.declared.objects.items()
+            if ref.kind not in TYPED_KINDS
+        }
 
 
 def read_segments(segments: Iterable[Segment]) -> SchemaRead:
