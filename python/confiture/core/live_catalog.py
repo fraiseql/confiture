@@ -49,6 +49,7 @@ import pglast
 from pglast.stream import RawStream
 from psycopg import sql
 
+from confiture.core.ddl_objects import DDLObject, object_of, tview_object
 from confiture.core.ddl_walk import (
     default_kind,
     read_constraint,
@@ -226,15 +227,21 @@ ORDER BY a.attrelid, a.attnum
 #: The referenced relation's schema and name ride along with a foreign key's
 #: definition: ``pg_get_constraintdef`` qualifies it only when ``search_path`` would
 #: not find it, so its spelling says where the *session* looks, not where the table is.
+#: A constraint PostgreSQL clones onto each partition of a partitioned table
+#: (``conparentid``), or a child holds only by inheritance (``conislocal`` false),
+#: is the parent's, which the tree declares once, on the parent.
 _CONSTRAINTS = """
 SELECT k.conrelid, k.conname, pg_get_constraintdef(k.oid), rn.nspname, rc.relname
 FROM pg_constraint k
 LEFT JOIN pg_class rc ON rc.oid = k.confrelid
 LEFT JOIN pg_namespace rn ON rn.oid = rc.relnamespace
 WHERE k.conrelid = ANY(%s) AND k.contype IN ('p', 'u', 'c', 'f', 'x')
+  AND k.conparentid = 0 AND k.conislocal
 ORDER BY k.conrelid, k.conname
 """
 
+#: An index attached to a partitioned table's index (``pg_inherits``) is that
+#: index's, as a cloned constraint is: the tree declares it once, on the parent.
 _INDEXES = """
 SELECT
     i.indrelid,
@@ -247,6 +254,7 @@ SELECT
 FROM pg_index i
 JOIN pg_class ic ON ic.oid = i.indexrelid
 WHERE i.indrelid = ANY(%s)
+  AND NOT EXISTS (SELECT 1 FROM pg_inherits h WHERE h.inhrelid = i.indexrelid)
 ORDER BY i.indrelid, ic.relname
 """
 
@@ -763,8 +771,7 @@ ORDER BY n.nspname, c.relname
 # A trigger that runs a pg_tviews function is the TVIEW's refresh machinery,
 # created by the extension on each base table (#504), never the tree's. Only
 # pg_tviews': a user may declare a trigger on another extension's function.
-_TRIGGERS = """
-SELECT n.nspname, c.relname, t.tgname
+_TRIGGERS_WHERE = """
 FROM pg_trigger t
 JOIN pg_class c ON c.oid = t.tgrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -777,6 +784,8 @@ WHERE NOT t.tgisinternal
   )
 ORDER BY n.nspname, c.relname, t.tgname
 """
+_TRIGGERS = "SELECT n.nspname, c.relname, t.tgname" + _TRIGGERS_WHERE
+_TRIGGER_DEFINITIONS = "SELECT pg_get_triggerdef(t.oid)" + _TRIGGERS_WHERE
 
 #: The release a database runs: ``extversion`` is pg_tviews' own version from
 #: 0.1.0-beta.20 on (every earlier beta said ``0.1.0``).
@@ -1173,3 +1182,60 @@ def existing_names(
         frozenset(name for kind, name in rows if kind == "relation"),
         frozenset(name for kind, name in rows if kind == "routine"),
     )
+
+
+#: Each routine ``read`` models, as PostgreSQL writes the statement that creates it.
+#: An aggregate has none (``pg_get_functiondef`` refuses one): it is compared by
+#: its signature, and a change to it is not one this reader can write.
+_ROUTINE_DEFINITIONS = f"""
+SELECT pg_get_functiondef(p.oid)
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = ANY(%s)
+  AND p.prokind IN ('f', 'p', 'w')
+  AND {_NOT_EXTENSION_OWNED.format(catalog="pg_proc", oid="p.oid")}
+ORDER BY n.nspname, p.proname, p.oid
+"""
+
+
+def _view_statement(view: View) -> str:
+    keyword = "MATERIALIZED VIEW" if view.materialized else "VIEW"
+    name = f"{quote_identifier(view.schema or DEFAULT_SCHEMA)}.{quote_identifier(view.name)}"
+    return f"CREATE {keyword} {name} AS {view.definition}"
+
+
+def _other_statement(obj: OtherObject) -> str | None:
+    if obj.kind == "schema":
+        return f"CREATE SCHEMA {quote_identifier(obj.name)}"
+    if obj.kind == "extension":
+        return f"CREATE EXTENSION {quote_identifier(obj.name)}"
+    return None
+
+
+def catalogued_objects(
+    conn: psycopg.Connection, model: SchemaModel, schemas: Sequence[str]
+) -> dict[ObjectRef, list[DDLObject]]:
+    """The objects *model* holds that a statement creates, each as PostgreSQL writes it.
+
+    *model* is :func:`read`'s, of *schemas*. A routine is ``pg_get_functiondef``'s,
+    a trigger ``pg_get_triggerdef``'s, a view its ``pg_get_viewdef`` behind the
+    ``CREATE`` that names it, a TVIEW the call pg_tviews creates one with, a
+    schema or an extension its name — read through ``ddl_objects.object_of``, as a
+    tree's statements are, so a change can carry the statement that undoes it.
+    Every other object kind the model holds by existence alone, and has no entry.
+    """
+    wanted = list(schemas)
+    texts = [row[0] for row in conn.execute(_ROUTINE_DEFINITIONS, (wanted,)).fetchall()]
+    texts += [row[0] for row in conn.execute(_TRIGGER_DEFINITIONS, (wanted,)).fetchall()]
+    texts += [_view_statement(view) for view in model.views.values() if view.definition]
+    texts += [text for obj in model.other_objects.values() if (text := _other_statement(obj))]
+    found: dict[ObjectRef, list[DDLObject]] = defaultdict(list)
+    for text in texts:
+        raw = pglast.parse_sql(text)[0]
+        obj = object_of(text, raw)
+        if obj is not None:
+            found[obj.ref].append(obj)
+    for ref, tview in model.tviews.items():
+        found[ref].append(tview_object(ref, tview))
+    held = {*model.routines, *model.views, *model.triggers, *model.tviews, *model.other_objects}
+    return {ref: objs for ref, objs in found.items() if ref in held}

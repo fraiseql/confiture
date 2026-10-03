@@ -16,6 +16,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`migrate diff --from db` reads the database as `drift` does: through its catalog, not
+  `pg_dump`** (#562). It compared `pg_dump`'s text as if an author had written it, so a
+  database built from a tree was never "no change" from it: every unnamed foreign key or
+  UNIQUE was a drop and an add, every primary key's index a `DROP INDEX`, every analysed
+  default or CHECK a change, and a pg_tviews TVIEW the tree did not declare was a `DROP
+  TABLE tv_x`, a `DROP VIEW v_x` and a `DROP TRIGGER` on every base table. The database is
+  now read through `live_catalog` in the schemas the tree names and compared through the
+  parity rules: each example project and `db/schema`, built and diffed against its own tree,
+  is no change (a test holds it, on stock PostgreSQL and on pg_tviews). A TVIEW is one
+  object, dropped with `tviews.pg_tviews_drop`. Confiture's own tables and the default schema
+  are not the project's. A routine changed in the tree is a `REPLACE`, judged by its body,
+  language, volatility and security rather than by `pg_get_functiondef`'s spelling.
+- **`platform.diff` takes a database on either side** — a URL (`postgresql://…`) or a
+  `Connection` (`platform.DiffSide`) — with the same reading.
+- **The live reader leaves out what a partition or an inheritance child holds only because
+  its parent does**: a constraint PostgreSQL clones onto each partition (`conparentid`) or a
+  child inherits (`conislocal` false), and an index attached to its parent's. The tree
+  declares each once, on the parent; read on every child, each was a constraint or an index
+  the tree "dropped".
+- **The tree as PostgreSQL holds it (`SchemaRead.catalogued`) names the key a foreign key
+  references**: `REFERENCES parent` with no column list is `parent`'s primary key, as the
+  catalog writes it.
+
 - **`tree_003` counts a numbered directory in its directory's sequence** (#556): a
   directory between two files fills its value, and a level of directories alone
   (`01_x/`, `02_y/`, `05_z/`) is checked. The step is read from the directory: a
@@ -108,6 +131,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   build carrying a `COPY` seed.
 
 ### Changed
+
+- **`DIFFER_404`, a diff warning (exit 0)**: an object a database holds that confiture reads
+  only by existence (a domain, a policy, a rule, …) and the other side does not hold. The
+  diff carries no statement for it, and says so rather than leaving it out silently. The
+  exit-code payload (`confiture --exit-codes-json`) gains the code.
+- **The parity rule `generated_names` covers an index** PostgreSQL names (`child_pid_idx`), as it
+  covered a constraint.
+- `ledger.bookkeeping_tables()` is the one list of confiture's own tables (drift, squash and the
+  database side of a diff read it); `steps_table` moves to `core/ledger.py`.
 
 - ⚠️ **The schema model says who wrote it: `SchemaModel.source`** (`author` for a
   tree, `catalog` for a database read through `live_catalog`; on the wire as

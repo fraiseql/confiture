@@ -7,30 +7,47 @@ order-aware — a later ``ALTER`` or ``DROP`` folds into what an earlier file
 created (#301) — so a directory read here and the same directory built are one
 schema.
 
-A comparison of two sources is ``SchemaDiffer.compare_reads``', over their reads:
-views, routines and triggers are compared as the whole statements that create
-them, which the model does not hold, so two models could not be compared for
-them at all.
+A comparison of two sources is ``SchemaDiffer.compare_sides``', over each side's
+model and the statements that create its views, routines and triggers — a tree's
+as written, a database's as PostgreSQL writes them (``live_catalog.catalogued_objects``).
+Which rules the comparison applies follows from where each side came from.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
-from confiture.core.differ import SchemaDiffer
+from confiture.core.differ import SchemaDiffer, Side
+from confiture.core.ledger import bookkeeping_tables
 from confiture.core.linting.inventory import label_for
-from confiture.core.live_catalog import read, user_schemas
+from confiture.core.live_catalog import catalogued_objects, read, user_schemas
 from confiture.core.schema_change import SchemaDiff
-from confiture.core.schema_model import SchemaModel
+from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_model import SchemaModel, ref_for
 from confiture.core.schema_read import SchemaRead, Segment, read_segments
 from confiture.exceptions import SchemaError
 
 #: DDL text (a ``str``), one file or directory (a ``Path``), or several in order —
 #: each a ``Path`` or a ``str`` spelling one.
 SchemaSource = str | Path | Sequence[Path | str]
+
+#: What :func:`diff` compares: a schema source, or a database — a URL
+#: (``postgresql://…``) or a :class:`Connection`.
+DiffSide = SchemaSource | Connection
+
+#: The schemes a database URL starts with, which no DDL text does.
+_URL_SCHEMES = ("postgresql://", "postgres://")
+
+
+def _is_database(side: object) -> bool:
+    if isinstance(side, str):
+        return side.startswith(_URL_SCHEMES)
+    return isinstance(side, Connection)
 
 
 def _files(path: Path) -> list[Path]:
@@ -140,22 +157,111 @@ def introspect(database: str | Connection, *, schemas: Sequence[str] | None = No
         return read(conn, schemas=wanted, routines=True, views=True, triggers=True)
 
 
+def database_side(
+    database: str | Connection,
+    *,
+    against: SchemaModel | None = None,
+    tracking_table: str | None = None,
+) -> Side:
+    """The side of a comparison *database* is: its model and the statements PostgreSQL writes.
+
+    Every section is read — tables, types, sequences, routines, views, triggers,
+    TVIEWs and the other kinds, these by existence. Compared *against* a tree, the
+    database is read in the schemas the tree names (:func:`declared_schemas`), and
+    confiture's own tables (``ledger.bookkeeping_tables``, *tracking_table*'s
+    ledger among them) are left out unless the tree declares them; with no tree,
+    every user schema is read. The default schema, which a tree puts objects in
+    without creating, is the tree's whether or not it writes ``CREATE SCHEMA``.
+    The model says it is the catalog's (``source``), so a comparison with a tree
+    applies the parity rules.
+
+    Raises:
+        ConfigurationError: ``CONFIG_006`` when the URL does not connect;
+            ``CONFIG_014`` when its pg_tviews offers no read contract confiture knows.
+        TypeError: a *database* that is neither a URL nor a :class:`Connection`.
+    """
+    with connection_for(database) as conn:
+        wanted = user_schemas(conn) if against is None else declared_schemas(against)
+        model = read(
+            conn, schemas=wanted, routines=True, views=True, triggers=True, other_objects=True
+        )
+        model = _the_projects(model, against, tracking_table)
+        return Side(model, catalogued_objects(conn, model, wanted))
+
+
+def _the_projects(
+    model: SchemaModel, against: SchemaModel | None, tracking_table: str | None
+) -> SchemaModel:
+    """*model* without what a database holds for confiture or for every tree.
+
+    Confiture's own tables, and the default schema — which a tree puts objects in
+    without creating it — are not the project's unless *against* declares them.
+    """
+    if against is None:
+        return model
+    own = bookkeeping_tables(tracking_table)
+    default = ref_for("schema", None, DEFAULT_SCHEMA)
+    return replace(
+        model,
+        tables={
+            ref: table
+            for ref, table in model.tables.items()
+            if table.name not in own or ref in against.tables
+        },
+        other_objects={
+            ref: obj
+            for ref, obj in model.other_objects.items()
+            if ref != default or ref in against.other_objects
+        },
+    )
+
+
+def declared_schemas(model: SchemaModel) -> list[str]:
+    """Every schema *model* puts an object in or creates, and the default schema.
+
+    What a database is read in when it is compared with a tree: a schema the
+    tree never names is not the project's, and every object in it would read
+    as one the tree drops.
+    """
+    placed = {
+        ref.schema
+        for section in (
+            model.tables,
+            model.enum_types,
+            model.sequences,
+            model.routines,
+            model.views,
+            model.triggers,
+            model.tviews,
+            model.other_objects,
+        )
+        for ref in section
+    }
+    created = {ref.name for ref in model.other_objects if ref.kind == "schema"}
+    return sorted(placed | created | {DEFAULT_SCHEMA})
+
+
 def diff(
-    old: SchemaSource | None,
-    new: SchemaSource | None,
+    old: DiffSide | None,
+    new: DiffSide | None,
     *,
     env: str | None = None,
     project_dir: Path | None = None,
 ) -> SchemaDiff:
     """What changed from the schema *old* declares to the one *new* declares.
 
-    Each side is anything :func:`parse_schema` takes: a source, or — given as
-    ``None`` — *env*'s build from *project_dir*, so ``diff(snapshot, None,
-    env="local")`` is what changed from a snapshot to the current tree.
+    Each side is anything :func:`parse_schema` takes, or a database — a URL
+    (``postgresql://…``) or a :class:`Connection` — read through ``live_catalog``.
+    Given as ``None``, a side is *env*'s build from *project_dir*, so ``diff(url,
+    None, env="local")`` is what a migration from that database to the current
+    tree must do. A database compared with a tree is read in the schemas the tree
+    names, and compared through every parity rule: a database built from a tree
+    has no change from it.
 
     Every kind ``migrate diff`` reports, views, routines and triggers included, and
     the warnings it reports beside them — two definitions of one object, resolved
-    the way the build resolves them (``DIFFER_402``).
+    the way the build resolves them (``DIFFER_402``), and an object a database
+    holds that the diff cannot write (``DIFFER_404``).
 
     Raises:
         ValueError: unless exactly one side is ``None`` when *env* is given, and
@@ -165,11 +271,23 @@ def diff(
         SchemaError: ``DIFFER_400`` when PostgreSQL's parser rejects either side,
             ``SCHEMA_201`` for a path that does not exist, ``SCHEMA_001`` for a
             file that cannot be read as UTF-8 text.
+        ConfigurationError: ``CONFIG_006`` when a database URL does not connect.
     """
     if env is not None and (old is None) == (new is None):
         raise ValueError("Give exactly one side as None with an environment: the side it builds.")
-    old_read, new_read = (
-        read_schema(side, env=env if side is None else None, project_dir=project_dir)
-        for side in (old, new)
+    sides = (old, new)
+    trees = {
+        index: read_schema(side, env=env if side is None else None, project_dir=project_dir)
+        for index, side in enumerate(sides)
+        if not _is_database(side)
+    }
+    # A database is read against the tree it is compared with; two databases, whole.
+    against = next((tree.model for tree in trees.values()), None)
+    held = any(_is_database(side) for side in sides)
+    old_side, new_side = (
+        Side.of(trees[index], held=held)
+        if index in trees
+        else database_side(cast("str | Connection", side), against=against)
+        for index, side in enumerate(sides)
     )
-    return SchemaDiffer().compare_reads(old_read, new_read)
+    return SchemaDiffer().compare_sides(old_side, new_side)

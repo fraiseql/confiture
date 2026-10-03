@@ -70,8 +70,8 @@ error.
 
 ```python
 def diff(
-    old: SchemaSource | None,
-    new: SchemaSource | None,
+    old: DiffSide | None,
+    new: DiffSide | None,
     *,
     env: str | None = None,
     project_dir: Path | None = None,
@@ -80,24 +80,36 @@ def diff(
 
 What changed from the schema *old* declares to the one *new* declares.
 
-Each side is anything `parse_schema` takes: a source, or — given as
-`None` — *env*'s build from *project_dir*, so `diff(snapshot, None,
-env="local")` is what changed from a snapshot to the current tree.
+Each side is anything `parse_schema` takes, or a database — a URL
+(`postgresql://…`) or a `Connection` — read through `live_catalog`.
+Given as `None`, a side is *env*'s build from *project_dir*, so `diff(url,
+None, env="local")` is what a migration from that database to the current
+tree must do. A database compared with a tree is read in the schemas the tree
+names, and compared through every parity rule: a database built from a tree
+has no change from it.
 
 Every kind `migrate diff` reports, views, routines and triggers included, and
 the warnings it reports beside them — two definitions of one object, resolved
-the way the build resolves them (`DIFFER_402`).
+the way the build resolves them (`DIFFER_402`), and an object a database
+holds that the diff cannot write (`DIFFER_404`).
 
 **Raises**
 
 - `ValueError`: unless exactly one side is `None` when *env* is given, and neither is when it is not.
 - `DifferError`: `DIFFER_403` when either side names an object that needs quotes, which confiture does not support.
 - `SchemaError`: `DIFFER_400` when PostgreSQL's parser rejects either side, `SCHEMA_201` for a path that does not exist, `SCHEMA_001` for a file that cannot be read as UTF-8 text.
+- `ConfigurationError`: `CONFIG_006` when a database URL does not connect.
 
 ### `SchemaSource`
 
 ```python
 SchemaSource = str | Path | Sequence[Path | str]
+```
+
+### `DiffSide`
+
+```python
+DiffSide = str | Path | Sequence[Path | str] | Connection
 ```
 
 ### `Connection`

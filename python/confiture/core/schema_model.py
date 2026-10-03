@@ -864,6 +864,40 @@ def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
     )
 
 
+def _primary_key(table: Table) -> tuple[str, ...]:
+    declared = table.constraints_of("primary_key")
+    if declared:
+        return declared[0].columns
+    return tuple(column.folded for column in table.columns if column.primary_key)
+
+
+def with_referenced_keys(model: SchemaModel) -> SchemaModel:
+    """*model* with each foreign key naming the columns it references, as PostgreSQL holds it.
+
+    ``REFERENCES parent`` with no column list references ``parent``'s primary
+    key, and the catalog names those columns: the key is the same key written
+    either way. A target the model does not hold, or one with no primary key,
+    leaves the key as written.
+    """
+    keys = {table.relation.identity: _primary_key(table) for table in model.tables.values()}
+
+    def resolved(constraint: Constraint) -> Constraint:
+        if constraint.kind != "foreign_key" or constraint.ref_columns:
+            return constraint
+        if constraint.ref_table is None:
+            return constraint
+        key = keys.get(constraint.ref_table.identity, ())
+        return replace(constraint, ref_columns=key) if key else constraint
+
+    return replace(
+        model,
+        tables={
+            ref: replace(table, constraints=tuple(map(resolved, table.constraints)))
+            for ref, table in model.tables.items()
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Parity: a database built from a tree reads back as the tree
 # ---------------------------------------------------------------------------
@@ -874,8 +908,8 @@ def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
 #: which fails the day PostgreSQL stops making it — so none can outlive its cause.
 PARITY_NORMALISATIONS: dict[str, str] = {
     "generated_names": (
-        "an unnamed constraint is given a name at apply time (child_pid_fkey); a name "
-        "of PostgreSQL's own shape is no name, on either side"
+        "an unnamed constraint or index is given a name at apply time (child_pid_fkey, "
+        "child_pid_idx); a name of PostgreSQL's own shape is no name, on either side"
     ),
     "analysed_expressions": (
         "a default, a CHECK, a generation expression, an index's expression key and a "
@@ -953,6 +987,10 @@ def _generated_name(table: str, name: str) -> bool:
     return bool(re.fullmatch(rf"{re.escape(table)}(_.+)?_(pkey|key|fkey|check|excl)\d*", name))
 
 
+def _generated_index_name(table: str, name: str | None) -> bool:
+    return name is not None and bool(re.fullmatch(rf"{re.escape(table)}_.+_idx\d*", name))
+
+
 def _expression(text: str | None, rules: frozenset[str]) -> str | None:
     if text is None or "analysed_expressions" not in rules:
         return text
@@ -1005,8 +1043,10 @@ def parity_indexes(
 
 def _parity_index(index: Index, rules: frozenset[str]) -> Index:
     expressions = "analysed_expressions" in rules
+    generated = "generated_names" in rules and _generated_index_name(index.table.name, index.name)
     return replace(
         index,
+        name=None if generated else index.name,
         table=_parity_relation(index.table, rules),
         columns=tuple(
             key if not expressions or _COLUMN_KEY.fullmatch(key) else _EXPRESSION
@@ -1032,14 +1072,16 @@ def _parity_table(table: Table, rules: frozenset[str]) -> Table:
     )
 
 
-def _parity_routine(routine: Routine, rules: frozenset[str]) -> Routine:
+def parity_routine(routine: Routine, rules: frozenset[str] = ALL_PARITY_RULES) -> Routine:
+    """*routine* as *rules* compare it: identity by ``signature_key``, never its spelling."""
     routine = replace(routine, schema=_fold_schema(routine.schema, rules))
     if "routine_spellings" not in rules:
         return routine
     return replace(routine, signature="", returns=None)
 
 
-def _parity_view(view: View, rules: frozenset[str]) -> View:
+def parity_view(view: View, rules: frozenset[str] = ALL_PARITY_RULES) -> View:
+    """*view* as *rules* compare it: that its query exists, and its own indexes."""
     definition = view.definition
     if definition is not None and "view_definitions" in rules:
         definition = _EXPRESSION
@@ -1056,7 +1098,8 @@ def _parity_view(view: View, rules: frozenset[str]) -> View:
 _TVIEW_DEFAULT_FILLFACTOR = 85
 
 
-def _parity_tview(tview: TView, rules: frozenset[str]) -> TView:
+def parity_tview(tview: TView, rules: frozenset[str] = ALL_PARITY_RULES) -> TView:
+    """*tview* as *rules* compare it: an option pg_tviews chose by default is no pin."""
     tview = replace(tview, schema=_fold_schema(tview.schema, rules))
     if "tview_defaults" not in rules:
         return tview
@@ -1097,14 +1140,14 @@ def normalise_for_parity(
         },
         sequences={ref: _parity_sequence(s, rules) for ref, s in model.sequences.items()},
         routines={
-            ref: tuple(_parity_routine(r, rules) for r in found)
+            ref: tuple(parity_routine(r, rules) for r in found)
             for ref, found in model.routines.items()
         },
-        views={ref: _parity_view(v, rules) for ref, v in model.views.items()},
+        views={ref: parity_view(v, rules) for ref, v in model.views.items()},
         triggers={
             ref: replace(t, schema=_fold_schema(t.schema, rules))
             for ref, t in model.triggers.items()
         },
-        tviews={ref: _parity_tview(t, rules) for ref, t in model.tviews.items()},
+        tviews={ref: parity_tview(t, rules) for ref, t in model.tviews.items()},
         other_objects=model.other_objects,
     )

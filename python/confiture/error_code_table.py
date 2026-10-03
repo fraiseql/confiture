@@ -226,6 +226,18 @@ ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
             "`confiture lint` reports it as build_001 with every file and line"
         ),
     },
+    {
+        "code": "DIFFER_404",
+        "message_template": (
+            "{kind} '{identity}' is only in the {side} schema, a database that says it "
+            "exists and not how it is made: the diff carries no statement for it"
+        ),
+        "severity": "warning",
+        "exit_code": 0,
+        "resolution_hint": (
+            "Write the statement by hand, or declare the object in the tree so the two sides agree"
+        ),
+    },
     # ========== ROLLBACK (600-699): Rollback errors → exit code 8 ==========
     {
         "code": "ROLLBACK_600",

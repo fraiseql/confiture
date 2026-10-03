@@ -34,7 +34,10 @@ WIDTH = 88
 
 #: The reference's sections, in reading order; every exported name is in one.
 SECTIONS: list[tuple[str, list[str]]] = [
-    ("Reading a schema", ["parse_schema", "introspect", "diff", "SchemaSource", "Connection"]),
+    (
+        "Reading a schema",
+        ["parse_schema", "introspect", "diff", "SchemaSource", "DiffSide", "Connection"],
+    ),
     (
         "The model",
         [

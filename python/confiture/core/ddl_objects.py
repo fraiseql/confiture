@@ -422,7 +422,7 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
         return None
     if ref.kind == "tview":
         obj = object_from_statement(sql, raw)
-        return _tview_object(ref, obj.tview if obj is not None and obj.tview else TView(ref.name))
+        return tview_object(ref, obj.tview if obj is not None and obj.tview else TView(ref.name))
     return DDLObject(
         ref=ref,
         definition=_canonical_definition(stmt),
@@ -435,13 +435,13 @@ def object_of(sql: str, raw: Any) -> DDLObject | None:
 def tview_objects_of(sql: str, raw: Any) -> list[DDLObject]:
     """Each TVIEW a ``SELECT`` creates through pg_tviews' functions, in call order."""
     return [
-        _tview_object(_ref_of(obj), obj.tview)
+        tview_object(_ref_of(obj), obj.tview)
         for obj in tviews_from_calls(sql, raw)
         if obj.tview is not None
     ]
 
 
-def _tview_object(ref: ObjectRef, tview: TView) -> DDLObject:
+def tview_object(ref: ObjectRef, tview: TView) -> DDLObject:
     """A TVIEW, one object whether the tree wrote a ``CREATE TABLE … AS`` or a call.
 
     Its definition is the call a migration writes, so moving a TVIEW from one
@@ -483,7 +483,7 @@ def _repinned(obj: DDLObject, pinned: TViewOptions) -> DDLObject:
         logged=options.get("logged"),
         fillfactor=options.get("fillfactor"),
     )
-    return _tview_object(obj.ref, tview)
+    return tview_object(obj.ref, tview)
 
 
 def output_columns(obj: DDLObject) -> tuple[str, ...] | None:

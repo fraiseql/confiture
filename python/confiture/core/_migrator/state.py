@@ -13,8 +13,8 @@ import psycopg
 from psycopg import sql as pgsql
 
 from confiture.core.hooks.context import ExecutionContext, HookContext
-from confiture.core.ledger import LIVE_ROWS, ledger_exists
-from confiture.core.step_runner import CheckpointStore, steps_table
+from confiture.core.ledger import LIVE_ROWS, ledger_exists, steps_table
+from confiture.core.step_runner import CheckpointStore
 from confiture.exceptions import ConfiturError, MigrationError
 
 if TYPE_CHECKING:

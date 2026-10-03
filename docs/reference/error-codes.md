@@ -62,6 +62,7 @@ resolution hint surfaced in the envelope.
 | `DIFFER_401` | 5 | error | Destructive change forbidden by policy | Re-run with --allow-destructive, or set migration.destructive to gated or allow |
 | `DIFFER_402` | 0 | warning | {kind} '{identity}' is defined {count} times in one schema tree: {outcome}; the comparison used the {used} definition | Keep one definition, or make the later file an explicit ALTER; `confiture lint` reports it as build_001 with every file and line |
 | `DIFFER_403` | 5 | error | A schema being compared names an object that needs quotes | Rename it so it needs no quotes; `confiture lint` lists every such name (naming_003, naming_004) |
+| `DIFFER_404` | 0 | warning | {kind} '{identity}' is only in the {side} schema, a database that says it exists and not how it is made: the diff carries no statement for it | Write the statement by hand, or declare the object in the tree so the two sides agree |
 | `GEN_001` | 3 | error | External generator error | Check the external generator command and its output |
 | `GIT_001` | 7 | error | Git operation error | Check git repository status |
 | `GIT_002` | 7 | error | Not a git repository | Initialize a git repository or use a valid repository path |

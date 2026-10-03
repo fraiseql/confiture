@@ -12,6 +12,7 @@ import typer
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.migrate_formatter import format_migrate_diff_result
 from confiture.cli.helpers import (
+    _get_tracking_table,
     console,
     is_json,
 )
@@ -20,9 +21,11 @@ from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
 from confiture.core.desired_state import DesiredStateSource, load_desired_state
 from confiture.core.destructive import data_loss_reason, resolve_policy
-from confiture.core.differ import SchemaDiffer
+from confiture.core.differ import SchemaDiffer, Side
 from confiture.core.migration_generator import MigrationGenerator
-from confiture.core.temp_database import clean_pg_dump_output, pg_dump_schema
+from confiture.core.schema_model import SchemaModel
+from confiture.core.schema_read import read_segments
+from confiture.core.schema_sources import database_side
 from confiture.error_codes import FAILURE
 from confiture.exceptions import DifferError, ValidationError
 from confiture.models.results import MigrateDiffChange, MigrateDiffResult
@@ -112,13 +115,12 @@ def migrate_diff(
             json_mode=is_json(format_type),
             report=report_file,
         )
-        old_sql = _read_current(current, config)
-        new_sql = desired.read()
-
-        # Compare schemas
-        differ = SchemaDiffer()
+        desired_read = read_segments(desired.segments())
         try:
-            diff = differ.compare(old_sql, new_sql)
+            current_side = _current_side(current, config, desired_read.model)
+            diff = SchemaDiffer().compare_sides(
+                current_side, Side.of(desired_read, held=current_side.model.source == "catalog")
+            )
         except DifferError as exc:  # a name that needs quotes (DIFFER_403) carries its own code
             fail(exc, json_mode=is_json(format_type), output_file=report_file)
 
@@ -255,13 +257,21 @@ def _resolve_sides(
     return str(old_schema), load_desired_state(str(new_schema))
 
 
-def _read_current(spec: str, config: Path) -> str:
-    """The current schema's DDL: ``db`` dumps the configured database, else a file/dir/stdin."""
+def _current_side(spec: str, config: Path, desired: SchemaModel) -> Side:
+    """The current schema: ``db`` is the configured database, read live; else a file/dir/stdin.
+
+    The database is read through ``live_catalog`` in the schemas the desired tree
+    names, and compared with that tree through the parity rules: a database built
+    from the tree is no change from it.
+    """
     if spec == "db":
-        return clean_pg_dump_output(
-            pg_dump_schema(_core_connection.dsn_from_config(_core_connection.load_config(config)))
+        config_data = _core_connection.load_config(config)
+        return database_side(
+            _core_connection.dsn_from_config(config_data),
+            against=desired,
+            tracking_table=_get_tracking_table(config_data),
         )
-    return load_desired_state(spec).read()
+    return Side.of(read_segments(load_desired_state(spec).segments()))
 
 
 def _destructive_policy(

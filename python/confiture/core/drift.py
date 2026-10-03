@@ -22,7 +22,7 @@ from confiture.core.ddl_clauses import constraint_body
 from confiture.core.ddl_walk import canonical_default
 from confiture.core.desired_state import load_desired_state
 from confiture.core.differ import refuse_quoted_names
-from confiture.core.locking import LOCK_HOLDER_TABLE
+from confiture.core.ledger import bookkeeping_tables
 from confiture.core.schema_analyzer import SchemaAnalyzer
 from confiture.core.schema_model import (
     Column,
@@ -684,13 +684,7 @@ class SchemaDriftDetector:
     """
 
     # Confiture's own bookkeeping: never drift, whatever the schema declares
-    SYSTEM_TABLES: ClassVar[set[str]] = {
-        "tb_confiture",
-        "tb_confiture_steps",
-        LOCK_HOLDER_TABLE,
-        "confiture_version",
-        "confiture_audit_log",
-    }
+    SYSTEM_TABLES: ClassVar[frozenset[str]] = bookkeeping_tables()
 
     def __init__(
         self,

@@ -27,19 +27,13 @@ from confiture.core._migrator.events import UpObserver, emit
 from confiture.core.backfill import BackfillExecutor, BackfillSettings
 from confiture.core.checksum import compute_checksum
 from confiture.core.expand_contract import BackfillSpec, StagedPlan, plannable
-from confiture.core.ledger import LedgerRow, record_migration, table_identifier
+from confiture.core.ledger import LedgerRow, record_migration, steps_table, table_identifier
 from confiture.core.schema_facts import server_major
 from confiture.exceptions import ConfiturError, MigrationError, ValidationError
 
-STEPS_SUFFIX = "_steps"
 DONE, RUNNING, FAILED = "done", "running", "failed"
 
 Backfiller = Callable[[Any, BackfillSpec, "StepRecord | None", Callable[[int, int], None]], int]
-
-
-def steps_table(tracking_table: str) -> str:
-    """The checkpoint table beside ``tracking_table`` (``tb_confiture`` → ``tb_confiture_steps``)."""
-    return f"{tracking_table}{STEPS_SUFFIX}"
 
 
 @dataclass(frozen=True)

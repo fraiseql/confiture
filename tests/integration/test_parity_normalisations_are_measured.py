@@ -10,7 +10,9 @@ or adding a cast, the test fails and the normalisation goes.
 
 Measured on PostgreSQL 15 (CI) and 18.4 (local), 2026-09-21:
 
-1. an unnamed constraint gets a generated name (``child_pid_fkey``);
+1. an unnamed constraint or index gets a generated name (``child_pid_fkey``,
+   ``child_pid_idx``), and a foreign key names the key it references, which the
+   tree's ``catalogued`` reading resolves;
 2. a stored default is PostgreSQL's analysed expression (``'x'::text``), not the
    text the author wrote;
 3. a stored CHECK is analysed too: ``IN (…)`` is written back as ``= ANY (ARRAY[…])``;
@@ -69,6 +71,36 @@ def test_an_unnamed_constraint_is_given_a_name(conn: psycopg.Connection) -> None
     parsed = read_text(ddl).model.tables
     (fk,) = next(t for t in parsed.values() if t.name == "child").constraints
     assert (fk.name, live) == ("", "child_pid_fkey")
+
+
+def test_an_unnamed_index_is_given_a_name(conn: psycopg.Connection) -> None:
+    ddl = "CREATE TABLE child (pid INT, s TEXT); CREATE INDEX ON child (pid) WHERE s = 'x';"
+    conn.execute(ddl)
+    live = _one(
+        conn, "SELECT indexrelid::regclass::text FROM pg_index WHERE indrelid = 'child'::regclass"
+    )
+    (index,) = next(iter(read_text(ddl).model.tables.values())).indexes
+    assert (index.name, live) == (None, "child_pid_idx")
+
+
+def test_a_foreign_key_names_the_key_it_references(conn: psycopg.Connection) -> None:
+    ddl = (
+        "CREATE TABLE parent (id INT PRIMARY KEY); CREATE TABLE child (pid INT REFERENCES parent);"
+    )
+    conn.execute(ddl)
+    live = _one(
+        conn,
+        "SELECT pg_get_constraintdef(oid) FROM pg_constraint"
+        " WHERE conrelid = 'child'::regclass AND contype = 'f'",
+    )
+    read = read_text(ddl)
+    written = next(t for t in read.model.tables.values() if t.name == "child").constraints[0]
+    held = next(t for t in read.catalogued.tables.values() if t.name == "child").constraints[0]
+    assert (written.ref_columns, held.ref_columns, live) == (
+        (),
+        ("id",),
+        "FOREIGN KEY (pid) REFERENCES parent(id)",
+    )
 
 
 def test_a_default_is_stored_analysed(conn: psycopg.Connection) -> None:

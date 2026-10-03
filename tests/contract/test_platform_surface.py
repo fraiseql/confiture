@@ -83,7 +83,15 @@ CHANGES = (
     "tier_of",
 )
 #: Reading a schema, from DDL or from a database.
-READING = ("SchemaSource", "Connection", "parse_schema", "introspect", "diff", "SchemaError")
+READING = (
+    "SchemaSource",
+    "DiffSide",
+    "Connection",
+    "parse_schema",
+    "introspect",
+    "diff",
+    "SchemaError",
+)
 
 #: Ordering tables by their foreign keys.
 ORDERING = ("dependency_order", "DependencyCycleError")
@@ -132,7 +140,7 @@ SIGNATURES: dict[str, str] = {
         "(database: 'str | Connection', *, schemas: 'Sequence[str] | None' = None) -> 'SchemaModel'"
     ),
     "diff": (
-        "(old: 'SchemaSource | None', new: 'SchemaSource | None', *, env: 'str | None' = None, "
+        "(old: 'DiffSide | None', new: 'DiffSide | None', *, env: 'str | None' = None, "
         "project_dir: 'Path | None' = None) -> 'SchemaDiff'"
     ),
     "dependency_order": (

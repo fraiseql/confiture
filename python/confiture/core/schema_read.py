@@ -57,6 +57,7 @@ from confiture.core.schema_model import (
     SchemaModel,
     qualified_name,
     trigger_ref,
+    with_referenced_keys,
 )
 from confiture.core.sql_lexer import ParsedFile, blank_copy_blocks, parse_file
 from confiture.exceptions import SchemaError
@@ -137,8 +138,14 @@ class SchemaRead:
 
     @cached_property
     def catalogued(self) -> SchemaModel:
-        """The schema PostgreSQL holds once the tree is applied: children hold their parents' columns."""
-        return self._with_triggers(schema_model(inherit_columns(self.inventory)))
+        """The schema PostgreSQL holds once the tree is applied.
+
+        Children hold their parents' columns, and a foreign key written with no
+        column list names its target's primary key.
+        """
+        return with_referenced_keys(
+            self._with_triggers(schema_model(inherit_columns(self.inventory)))
+        )
 
     @cached_property
     def warnings(self) -> list[BuildWarning]:
