@@ -69,3 +69,26 @@ def quote_identifier(name: str) -> str:
     if _BARE.fullmatch(name) and name not in _needs_quotes():
         return name
     return '"' + name.replace('"', '""') + '"'
+
+
+#: One word of a name: an upper-case run before a capitalised word (``HTTP`` in
+#: ``HTTPServer``), a capitalised or lower-case word, an upper-case run, or digits.
+_WORD = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+")
+
+
+def identifier_words(name: str) -> tuple[str, ...]:
+    """The words of *name* as written, casefolded: ``stripeApiKey`` → ``stripe api key``.
+
+    Split at every character that is not a letter or a digit (``_``, ``-``, ``.``),
+    between letters and digits, and at a camelCase boundary — the one tokeniser
+    every rule that matches a name *by meaning* uses, so ``tokenizer`` is never a
+    ``token`` and ``smtp_passwd`` always holds a ``passwd``.
+    """
+    return tuple(word.casefold() for word in _WORD.findall(name))
+
+
+def contains_words(name: str, words: tuple[str, ...]) -> bool:
+    """Whether *words* appear in *name*'s words, whole and in order, side by side."""
+    found = identifier_words(name)
+    width = len(words)
+    return width > 0 and any(found[i : i + width] == words for i in range(len(found) - width + 1))

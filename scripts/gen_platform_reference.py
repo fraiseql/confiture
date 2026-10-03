@@ -60,6 +60,7 @@ SECTIONS: list[tuple[str, list[str]]] = [
             "writable_columns",
             "column_facts",
             "naming_hints",
+            "ValueSource",
             "ColumnFacts",
             "ColumnReference",
             "TableHints",

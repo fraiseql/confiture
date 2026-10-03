@@ -85,6 +85,7 @@ from confiture.core.schema_model import (
     Table,
     Trigger,
     TView,
+    ValueSource,
     View,
 )
 from confiture.core.schema_sources import SchemaSource, diff, introspect, parse_schema
@@ -163,6 +164,7 @@ __all__ = [
     "Trigger",
     "UniqueConstraintAdded",
     "UniqueConstraintDropped",
+    "ValueSource",
     "View",
     "ViolationSeverity",
     "apply_seeds",

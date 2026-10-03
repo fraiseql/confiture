@@ -38,6 +38,7 @@ from confiture.core.schema_model import (
     TVIEWS_SCHEMA,
     Column,
     Constraint,
+    DefaultKind,
     Deferral,
     GeneratedKind,
     IdentityKind,
@@ -1126,12 +1127,15 @@ class ColumnFact:
     identity: IdentityKind | None = None
     generated: str | None = None
     generated_kind: GeneratedKind | None = None
+    default_kind: DefaultKind | None = None
 
     def merged(self, other: ColumnFact) -> ColumnFact:
         """This fact with *other*'s clauses applied after it, as the grammar reads them."""
+        later = other.default is not None
         return ColumnFact(
             not_null=self.not_null or other.not_null,
-            default=other.default if other.default is not None else self.default,
+            default=other.default if later else self.default,
+            default_kind=other.default_kind if later else self.default_kind,
             identity=other.identity or self.identity,
             generated=other.generated if other.generated is not None else self.generated,
             generated_kind=other.generated_kind or self.generated_kind,
@@ -1163,6 +1167,44 @@ _GENERATED_ALWAYS = "a"
 #: ``Constraint.generated_kind`` for ``VIRTUAL``. pglast 8 only: PostgreSQL 18
 #: added virtual generated columns, and before it every one is stored.
 _GENERATED_VIRTUAL = "v"
+
+
+#: Functions that return a value no other call returns: a default calling one
+#: makes every row's value its own (``ValueSource.GENERATOR``). Keyed by name; a
+#: qualifier other than ``pg_catalog`` or ``public`` names someone else's function.
+VALUE_GENERATORS = frozenset(
+    {
+        "gen_random_uuid",
+        "uuidv4",
+        "uuidv7",
+        "uuid_generate_v1",
+        "uuid_generate_v4",
+        "uuid_generate_v7",
+    }
+)
+_GENERATOR_SCHEMAS = frozenset({None, "pg_catalog", "public"})
+
+
+def default_kind(raw_expr: Any) -> DefaultKind | None:
+    """What a default expression is, read from its tree (``None`` for none, or ``NULL``).
+
+    A cast is looked through: ``'{}'::jsonb`` is a constant, ``nextval('s')::bigint``
+    a sequence.
+    """
+    node = raw_expr
+    while type(node).__name__ == "TypeCast":
+        node = node.arg
+    kind = type(node).__name__
+    if kind == "A_Const":
+        return None if getattr(node, "isnull", False) else "constant"
+    if kind == "FuncCall":
+        names = [n.sval for n in node.funcname]
+        schema, name = (names[-2] if len(names) > 1 else None), names[-1]
+        if name == "nextval" and schema in _GENERATOR_SCHEMAS:
+            return "sequence"
+        if name in VALUE_GENERATORS and schema in _GENERATOR_SCHEMAS and not node.args:
+            return "generator"
+    return None if node is None else "expression"
 
 
 def render_default(raw_expr: Any) -> str | None:
@@ -1305,7 +1347,9 @@ def _read_not_null(_node: Any, _column: str | None) -> ColumnFact:
 
 
 def _read_default(node: Any, _column: str | None) -> ColumnFact:
-    return ColumnFact(default=render_default(node.raw_expr))
+    return ColumnFact(
+        default=render_default(node.raw_expr), default_kind=default_kind(node.raw_expr)
+    )
 
 
 def _read_identity(node: Any, _column: str | None) -> ColumnFact:
@@ -1449,9 +1493,11 @@ def read_column_constraints(coldef: Any) -> tuple[ColumnFact, tuple[Constraint, 
     read too.
     """
     column = coldef.colname
+    raw_default = getattr(coldef, "raw_default", None)
     fact = ColumnFact(
         not_null=bool(getattr(coldef, "is_not_null", False)),
-        default=render_default(getattr(coldef, "raw_default", None)),
+        default=render_default(raw_default),
+        default_kind=default_kind(raw_default),
     )
     constraints: list[Constraint] = []
     for node in getattr(coldef, "constraints", None) or ():

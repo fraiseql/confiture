@@ -7,6 +7,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "id",
           "generated": null,
@@ -22,6 +23,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "actor_email",
           "generated": null,
@@ -37,6 +39,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "action",
           "generated": null,
@@ -52,6 +55,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "detail",
           "generated": null,
@@ -67,6 +71,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/tables.sql",
           "folded": "occurred_at",
           "generated": null,
@@ -108,6 +113,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "id",
           "generated": null,
@@ -123,6 +129,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "email",
           "generated": null,
@@ -138,6 +145,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "full_name",
           "generated": null,
@@ -153,6 +161,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "phone",
           "generated": null,
@@ -168,6 +177,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "ssn",
           "generated": null,
@@ -183,6 +193,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "bank_account_number",
           "generated": null,
@@ -198,6 +209,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "department",
           "generated": null,
@@ -213,6 +225,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/tables.sql",
           "folded": "hired_at",
           "generated": null,
@@ -254,6 +267,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "id",
           "generated": null,
@@ -269,6 +283,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "order_id",
           "generated": null,
@@ -284,6 +299,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "product_id",
           "generated": null,
@@ -299,6 +315,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "quantity",
           "generated": null,
@@ -418,6 +435,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "id",
           "generated": null,
@@ -433,6 +451,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "user_id",
           "generated": null,
@@ -448,6 +467,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "billing_email",
           "generated": null,
@@ -463,6 +483,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "customer_notes",
           "generated": null,
@@ -478,6 +499,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "total_cents",
           "generated": null,
@@ -493,6 +515,7 @@
         },
         {
           "default": "'paid'",
+          "default_kind": "constant",
           "file": "db/schema/10_tables/tables.sql",
           "folded": "status",
           "generated": null,
@@ -508,6 +531,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/tables.sql",
           "folded": "placed_at",
           "generated": null,
@@ -605,6 +629,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "id",
           "generated": null,
@@ -620,6 +645,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "order_id",
           "generated": null,
@@ -635,6 +661,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "cardholder_name",
           "generated": null,
@@ -650,6 +677,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "card_last4",
           "generated": null,
@@ -665,6 +693,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "stripe_customer_id",
           "generated": null,
@@ -680,6 +709,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "billing_zip",
           "generated": null,
@@ -695,6 +725,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "amount_cents",
           "generated": null,
@@ -792,6 +823,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "id",
           "generated": null,
@@ -807,6 +839,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "sku",
           "generated": null,
@@ -822,6 +855,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "name",
           "generated": null,
@@ -837,6 +871,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "price_cents",
           "generated": null,
@@ -910,6 +945,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "id",
           "generated": null,
@@ -925,6 +961,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "user_id",
           "generated": null,
@@ -940,6 +977,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "customer_email",
           "generated": null,
@@ -955,6 +993,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "subject",
           "generated": null,
@@ -970,6 +1009,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "body",
           "generated": null,
@@ -985,6 +1025,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/tables.sql",
           "folded": "opened_at",
           "generated": null,
@@ -1067,6 +1108,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "id",
           "generated": null,
@@ -1082,6 +1124,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "user_id",
           "generated": null,
@@ -1097,6 +1140,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "ip_address",
           "generated": null,
@@ -1112,6 +1156,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "user_agent",
           "generated": null,
@@ -1127,6 +1172,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/tables.sql",
           "folded": "started_at",
           "generated": null,
@@ -1209,6 +1255,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "id",
           "generated": null,
@@ -1224,6 +1271,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "email",
           "generated": null,
@@ -1239,6 +1287,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "full_name",
           "generated": null,
@@ -1254,6 +1303,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "phone",
           "generated": null,
@@ -1269,6 +1319,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/tables.sql",
           "folded": "ssn",
           "generated": null,
@@ -1284,6 +1335,7 @@
         },
         {
           "default": "'US'",
+          "default_kind": "constant",
           "file": "db/schema/10_tables/tables.sql",
           "folded": "country_code",
           "generated": null,
@@ -1299,6 +1351,7 @@
         },
         {
           "default": "true",
+          "default_kind": "constant",
           "file": "db/schema/10_tables/tables.sql",
           "folded": "is_active",
           "generated": null,
@@ -1314,6 +1367,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/tables.sql",
           "folded": "created_at",
           "generated": null,

@@ -75,6 +75,10 @@ ALLOWED: dict[str, str] = {
         "the backup hook rotates the dumps it wrote, by suffix and age; a backup is "
         "not DDL a command reads"
     ),
+    "core/tree_allocator.py:directory": (
+        "allocation numbers one directory's own children; a subdirectory is numbered on its "
+        "own, so the files beside each other are the ones whose numbers are read"
+    ),
     "core/tree_renumber.py:directory": (
         "compaction renumbers one directory's numbered children, files and subdirectories "
         "together; what lies below a subdirectory moves with it and keeps its own numbering"

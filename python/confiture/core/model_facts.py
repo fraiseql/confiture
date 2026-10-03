@@ -22,7 +22,6 @@ from confiture.core import sql_lexer
 from confiture.core.ddl_walk import expression_columns
 from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity
 from confiture.core.schema_model import (
-    SERIAL_TYPES,
     Column,
     ColumnFacts,
     ColumnReference,
@@ -105,13 +104,6 @@ def table_ref(model: SchemaModel, table: ObjectRef | RelationName | str) -> Obje
     return found
 
 
-def _filled_by_postgresql(column: Column) -> bool:
-    """An identity, a generated column or a ``serial`` — however the reader spelled it."""
-    serial = (column.raw_sql_type or "").upper() in SERIAL_TYPES
-    sequenced = (column.default or "").startswith("nextval(")
-    return bool(column.identity or column.generated or serial or sequenced)
-
-
 def writable_columns(model: SchemaModel, table: ObjectRef | str) -> list[Column]:
     """*table*'s columns a writer supplies, in declaration order.
 
@@ -125,7 +117,7 @@ def writable_columns(model: SchemaModel, table: ObjectRef | str) -> list[Column]
             ``KeyError``.
     """
     columns = model.tables[table_ref(model, table)].columns
-    return [column for column in columns if not _filled_by_postgresql(column)]
+    return [column for column in columns if not column.value_source.filled_by_postgresql]
 
 
 def _column(table: Table, column: str) -> Column:

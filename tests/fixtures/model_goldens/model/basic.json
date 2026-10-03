@@ -7,6 +7,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/30_comments.sql",
           "folded": "id",
           "generated": null,
@@ -22,6 +23,7 @@
         },
         {
           "default": "uuid_generate_v4()",
+          "default_kind": "generator",
           "file": "db/schema/10_tables/30_comments.sql",
           "folded": "pk_comment",
           "generated": null,
@@ -37,6 +39,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/30_comments.sql",
           "folded": "post_id",
           "generated": null,
@@ -52,6 +55,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/30_comments.sql",
           "folded": "user_id",
           "generated": null,
@@ -67,6 +71,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/30_comments.sql",
           "folded": "content",
           "generated": null,
@@ -82,6 +87,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/30_comments.sql",
           "folded": "created_at",
           "generated": null,
@@ -97,6 +103,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/30_comments.sql",
           "folded": "updated_at",
           "generated": null,
@@ -274,6 +281,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/20_posts.sql",
           "folded": "id",
           "generated": null,
@@ -289,6 +297,7 @@
         },
         {
           "default": "uuid_generate_v4()",
+          "default_kind": "generator",
           "file": "db/schema/10_tables/20_posts.sql",
           "folded": "pk_post",
           "generated": null,
@@ -304,6 +313,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/20_posts.sql",
           "folded": "slug",
           "generated": null,
@@ -319,6 +329,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/20_posts.sql",
           "folded": "user_id",
           "generated": null,
@@ -334,6 +345,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/20_posts.sql",
           "folded": "title",
           "generated": null,
@@ -349,6 +361,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/20_posts.sql",
           "folded": "content",
           "generated": null,
@@ -364,6 +377,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/20_posts.sql",
           "folded": "published_at",
           "generated": null,
@@ -379,6 +393,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/20_posts.sql",
           "folded": "created_at",
           "generated": null,
@@ -394,6 +409,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/20_posts.sql",
           "folded": "updated_at",
           "generated": null,
@@ -586,6 +602,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/10_users.sql",
           "folded": "id",
           "generated": null,
@@ -601,6 +618,7 @@
         },
         {
           "default": "uuid_generate_v4()",
+          "default_kind": "generator",
           "file": "db/schema/10_tables/10_users.sql",
           "folded": "pk_user",
           "generated": null,
@@ -616,6 +634,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/10_users.sql",
           "folded": "slug",
           "generated": null,
@@ -631,6 +650,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/10_users.sql",
           "folded": "username",
           "generated": null,
@@ -646,6 +666,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/10_users.sql",
           "folded": "email",
           "generated": null,
@@ -661,6 +682,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/10_users.sql",
           "folded": "bio",
           "generated": null,
@@ -676,6 +698,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/10_users.sql",
           "folded": "created_at",
           "generated": null,
@@ -691,6 +714,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/10_users.sql",
           "folded": "updated_at",
           "generated": null,

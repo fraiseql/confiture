@@ -48,7 +48,7 @@ from confiture.core.schema_change import (
     UniqueConstraintAdded,
     UniqueConstraintDropped,
 )
-from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_words
 from confiture.core.schema_model import (
     Column,
     EnumType,
@@ -709,8 +709,8 @@ class SchemaDiffer:
         if name1 == name2:
             return 1.0
 
-        name1_parts = name1.split("_")
-        name2_parts = name2.split("_")
+        name1_parts = list(identifier_words(name1))
+        name2_parts = list(identifier_words(name2))
 
         if len(name1_parts) > 1 or len(name2_parts) > 1:
             if name1_parts[-1] == name2_parts[-1]:

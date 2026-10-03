@@ -34,6 +34,7 @@ from confiture.core.ddl_walk import (
     ObjectEdit,
     added_constraint,
     column_edit,
+    default_kind,
     object_edits,
     object_kinds,
     read_column_constraints,
@@ -426,6 +427,7 @@ def _column(sql: str, node: Any) -> tuple[SchemaColumn, tuple[Constraint, ...]]:
         raw_sql_type=written_type(type_node),
         not_null=fact.not_null,
         default=fact.default,
+        default_kind=fact.default_kind,
         identity=fact.identity,
         generated=fact.generated,
         generated_kind=fact.generated_kind,
@@ -833,11 +835,16 @@ def _drop_not_null(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -
 
 
 def _set_default(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
-    _edited(table, edit.column, default=render_default(edit.default))
+    _edited(
+        table,
+        edit.column,
+        default=render_default(edit.default),
+        default_kind=default_kind(edit.default),
+    )
 
 
 def _drop_default(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
-    _edited(table, edit.column, default=None)
+    _edited(table, edit.column, default=None, default_kind=None)
 
 
 #: ``ColumnEdit.kind`` -> how the inventory applies it to its own model. The

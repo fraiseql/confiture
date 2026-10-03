@@ -21,6 +21,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/06-prep-seed-validation/db/schema/catalog/tb_manufacturer.sql",
           "folded": "id",
           "generated": null,
@@ -36,6 +37,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/06-prep-seed-validation/db/schema/catalog/tb_manufacturer.sql",
           "folded": "pk_manufacturer",
           "generated": null,
@@ -51,6 +53,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/06-prep-seed-validation/db/schema/catalog/tb_manufacturer.sql",
           "folded": "name",
           "generated": null,
@@ -66,6 +69,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/06-prep-seed-validation/db/schema/catalog/tb_manufacturer.sql",
           "folded": "country_code",
           "generated": null,
@@ -161,6 +165,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/06-prep-seed-validation/db/schema/prep_seed/tb_manufacturer.sql",
           "folded": "id",
           "generated": null,
@@ -176,6 +181,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/06-prep-seed-validation/db/schema/prep_seed/tb_manufacturer.sql",
           "folded": "name",
           "generated": null,
@@ -191,6 +197,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/06-prep-seed-validation/db/schema/prep_seed/tb_manufacturer.sql",
           "folded": "country_code",
           "generated": null,

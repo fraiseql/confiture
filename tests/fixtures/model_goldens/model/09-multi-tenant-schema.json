@@ -34,6 +34,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/10_tb_custom_unit.sql",
           "folded": "tenant_id",
           "generated": null,
@@ -49,6 +50,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/10_tb_custom_unit.sql",
           "folded": "id",
           "generated": null,
@@ -64,6 +66,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/10_tb_custom_unit.sql",
           "folded": "code",
           "generated": null,
@@ -79,6 +82,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/10_tb_custom_unit.sql",
           "folded": "label",
           "generated": null,
@@ -161,6 +165,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "tenant_id",
           "generated": null,
@@ -176,6 +181,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "id",
           "generated": null,
@@ -191,6 +197,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "fk_provider",
           "generated": null,
@@ -206,6 +213,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "reference",
           "generated": null,
@@ -221,6 +229,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "created_at",
           "generated": null,
@@ -346,6 +355,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "tenant_id",
           "generated": null,
@@ -361,6 +371,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "id",
           "generated": null,
@@ -376,6 +387,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "fk_order",
           "generated": null,
@@ -391,6 +403,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "fk_product",
           "generated": null,
@@ -406,6 +419,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/30_tb_order.sql",
           "folded": "quantity",
           "generated": null,
@@ -531,6 +545,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/20_tb_provider.sql",
           "folded": "tenant_id",
           "generated": null,
@@ -546,6 +561,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/20_tb_provider.sql",
           "folded": "id",
           "generated": null,
@@ -561,6 +577,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/20_tb_provider.sql",
           "folded": "fk_company",
           "generated": null,
@@ -576,6 +593,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/30_app/20_tb_provider.sql",
           "folded": "terms",
           "generated": null,
@@ -680,6 +698,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/20_catalog/10_tb_company.sql",
           "folded": "id",
           "generated": null,
@@ -695,6 +714,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/20_catalog/10_tb_company.sql",
           "folded": "legal_name",
           "generated": null,
@@ -710,6 +730,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/20_catalog/10_tb_company.sql",
           "folded": "vat_id",
           "generated": null,
@@ -768,6 +789,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/20_catalog/20_tb_product.sql",
           "folded": "id",
           "generated": null,
@@ -783,6 +805,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/20_catalog/20_tb_product.sql",
           "folded": "sku",
           "generated": null,
@@ -798,6 +821,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/20_catalog/20_tb_product.sql",
           "folded": "name",
           "generated": null,
@@ -856,6 +880,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/20_catalog/30_tb_unit.sql",
           "folded": "id",
           "generated": null,
@@ -871,6 +896,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/20_catalog/30_tb_unit.sql",
           "folded": "code",
           "generated": null,
@@ -886,6 +912,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/20_catalog/30_tb_unit.sql",
           "folded": "label",
           "generated": null,
@@ -944,6 +971,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_management/10_tb_organization.sql",
           "folded": "id",
           "generated": null,
@@ -959,6 +987,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_management/10_tb_organization.sql",
           "folded": "name",
           "generated": null,

@@ -325,6 +325,27 @@ one wire: sorted, byte-stable, published as `schema-model.schema.json`, and the 
 goldens in `tests/fixtures/model_goldens/model/` are those bytes
 (`tests/unit/test_port_parity_corpus.py`).
 
+**One answer to where a value comes from** — `Column.value_source` (`ValueSource`:
+identity, generated, sequence, value generator, expression, constant, none), derived from
+the column's own fields and `Column.default_kind`, which each reader classifies from the
+default's parse tree while it holds it (`ddl_walk.default_kind`). `writable_columns`
+reads `filled_by_postgresql`, a rule asking whether a key can collide reads
+`unique_without_author_input`; the two are kept apart (a `gen_random_uuid()` default is
+writable). `tests/unit/test_one_value_source.py` fails on `SERIAL_TYPES` or a
+`nextval(` string anywhere else.
+
+**One tokeniser for a name's words** — `schema_identity.identifier_words`
+(`stripeApiKey` → `stripe api key`) and `contains_words` (whole words, in order). A rule
+matching a name by meaning reads it; `tests/unit/test_one_name_tokeniser.py` fails on a
+`.split("_")` elsewhere unless the module writes a name or reads a fixed format.
+
+**One numbering** — `core/tree_prefix.py` parses a prefix (`prefix_text`, `prefix_value`,
+`bare_prefix`), decides how siblings are numbered (`numbering`: hex when any prefix
+carries a hex letter, the modal width), and writes them (`format_prefix`, and
+`prefixes`, the one sequence the allocator and `renumber` draw from, which skips a hex
+value that would read as a word: `ab9` → `ac0`). `tests/unit/test_one_numbering.py`
+fails on a tree tool that parses or formats a prefix itself.
+
 **One live reader** — `core/live_catalog.py` is the only module that reads schema facts
 from `pg_catalog`, `information_schema` or the catalog views, into the same model
 (`read`, plus routines, views and triggers). `tests/unit/test_one_live_reader.py` fails

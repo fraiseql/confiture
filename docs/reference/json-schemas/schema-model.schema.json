@@ -96,7 +96,8 @@
         "generated",
         "generated_kind",
         "primary_key",
-        "file"
+        "file",
+        "default_kind"
       ],
       "properties": {
         "name": {
@@ -164,6 +165,16 @@
             "null"
           ],
           "description": "The file that wrote the column — another than its table's when an `ALTER TABLE … ADD COLUMN` in a later file added it — named relative to the project; null for DDL handed in as text. Where a column is written is not what it is: two models differing only here are one schema."
+        },
+        "default_kind": {
+          "enum": [
+            "sequence",
+            "generator",
+            "constant",
+            "expression",
+            null
+          ],
+          "description": "What `default` is, read from its parse tree: a `nextval(…)`, a call to a value generator (`gen_random_uuid()`, `uuidv7()`, …), a constant, or another expression; null for no default. With `identity`, `generated` and a `serial` `raw_sql_type`, it decides `Column.value_source`."
         }
       }
     },

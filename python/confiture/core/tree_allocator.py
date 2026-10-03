@@ -26,11 +26,12 @@ Example::
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from confiture.core.tree_prefix import has_hex_letter, prefix_text
+from confiture.core.tree_prefix import numbering, prefix_value, prefixes
 
 
 class PrefixScheme(Enum):
@@ -63,26 +64,6 @@ class PrefixConfig:
 # Rejects path separators (``/``, ``\``) and ``..`` sequences that would let a
 # verb escape the target directory via ``Path.mkdir(parents=True)``.
 _SAFE_VERB_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-]*$")
-
-
-def _parse_prefix(filename: str, base: int = 10) -> int | None:
-    """Parse the numeric prefix from *filename*, or return *None*.
-
-    Args:
-        filename: Bare filename (not a full path), e.g. ``"00042_create.sql"``.
-        base: Numeric base — ``10`` for decimal, ``16`` for hex.
-
-    Returns:
-        Integer value of the prefix, or *None* if the filename does not
-        start with a recognisable prefix in the requested base.
-    """
-    raw = prefix_text(filename)
-    if raw is None or (base != 16 and not raw.isdigit()):
-        return None
-    try:
-        return int(raw, base)
-    except ValueError:
-        return None
 
 
 class TreeAllocator:
@@ -146,10 +127,9 @@ class TreeAllocator:
         if verb is not None:
             self._validate_verb(verb)
 
-        config = self._explicit_config or self._detect_config(resolved)
-        existing = self._collect_prefixes(resolved, config.scheme)
-        next_value = (max(existing) + config.step) if existing else config.start
-        prefix_str = self._format_prefix(next_value, config)
+        config = self._explicit_config or self.detect_config(resolved)
+        existing = self.collect_prefixes(resolved, config.scheme)
+        _, prefix_str = next(self.prefixes(config, after=max(existing, default=None)))
         stem = f"{prefix_str}_{verb}" if verb else prefix_str
         output_path = resolved / f"{stem}.sql"
 
@@ -194,7 +174,7 @@ class TreeAllocator:
                 "(letters, digits, underscore, hyphen, dot; no path separators)"
             )
 
-    def _detect_config(self, directory: Path) -> PrefixConfig:
+    def detect_config(self, directory: Path) -> PrefixConfig:
         """Auto-detect :class:`PrefixConfig` from files in *directory*.
 
         Examines each ``.sql`` filename, collects widths and whether any
@@ -206,28 +186,15 @@ class TreeAllocator:
         Falls back to :class:`PrefixConfig` defaults when the directory
         is empty or contains no recognisable prefixed files.
         """
-        widths: list[int] = []
-        hex_scheme = False
-
-        for child in directory.iterdir():
-            if child.suffix != ".sql":
-                continue
-            raw = prefix_text(child.name)
-            if raw is None:
-                continue
-            widths.append(len(raw))
-            if has_hex_letter(raw):
-                hex_scheme = True
-
-        if not widths:
+        found = numbering(child.name for child in directory.iterdir() if child.suffix == ".sql")
+        if found is None:
             return PrefixConfig()
+        hexadecimal, width = found
+        return PrefixConfig(
+            scheme=PrefixScheme.HEX if hexadecimal else PrefixScheme.DECIMAL, width=width
+        )
 
-        scheme = PrefixScheme.HEX if hex_scheme else PrefixScheme.DECIMAL
-        # Modal width — most common length among existing prefixes.
-        width = max(set(widths), key=widths.count)
-        return PrefixConfig(scheme=scheme, width=width)
-
-    def _collect_prefixes(self, directory: Path, scheme: PrefixScheme) -> list[int]:
+    def collect_prefixes(self, directory: Path, scheme: PrefixScheme) -> list[int]:
         """Return all existing numeric prefix values in *directory*.
 
         Only ``.sql`` files whose names begin with a recognisable prefix
@@ -240,27 +207,20 @@ class TreeAllocator:
         Returns:
             List of integer prefix values (may be empty, may be unsorted).
         """
-        base = 16 if scheme == PrefixScheme.HEX else 10
-        result: list[int] = []
-        for child in directory.iterdir():
-            if child.suffix != ".sql":
-                continue
-            value = _parse_prefix(child.name, base)
-            if value is not None:
-                result.append(value)
-        return result
+        hex_group = scheme == PrefixScheme.HEX
+        values = (
+            prefix_value(child.name, hex_group=hex_group)
+            for child in directory.iterdir()
+            if child.suffix == ".sql"
+        )
+        return [value for value in values if value is not None]
 
     @staticmethod
-    def _format_prefix(value: int, config: PrefixConfig) -> str:
-        """Format *value* as a zero-padded prefix string.
-
-        Args:
-            value: Integer to format.
-            config: Provides ``scheme`` (decimal/hex) and ``width``.
-
-        Returns:
-            Zero-padded string, e.g. ``"00042"`` or ``"0001a"``.
-        """
-        if config.scheme == PrefixScheme.HEX:
-            return format(value, f"0{config.width}x")
-        return format(value, f"0{config.width}d")
+    def prefixes(config: PrefixConfig, *, after: int | None = None) -> Iterator[tuple[int, str]]:
+        """The prefixes *config* numbers with: from ``start``, or the step after *after*."""
+        return prefixes(
+            config.start if after is None else after + config.step,
+            step=config.step,
+            width=config.width,
+            hexadecimal=config.scheme == PrefixScheme.HEX,
+        )
