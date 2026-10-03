@@ -31,6 +31,7 @@ MODEL_GOLDENS = REPO_ROOT / "tests" / "fixtures" / "model_goldens" / "model"
 
 #: The model and the change union.
 MODEL = (
+    "Coverage",
     "SchemaModel",
     "ObjectRef",
     "RelationName",
@@ -274,7 +275,9 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("views", "Mapping[ObjectRef, View]"),
         ("triggers", "Mapping[ObjectRef, Trigger]"),
         ("tviews", "Mapping[ObjectRef, TView]"),
+        ("coverage", "Coverage"),
     ),
+    "Coverage": (("sections", "tuple[tuple[str, CoverageDepth], ...]"),),
     "SchemaDiff": (("changes", "list[SchemaChange]"), ("warnings", "list[BuildWarning]")),
     "ColumnReference": (("table", "ObjectRef"), ("column", "str | None")),
     "ColumnFacts": (

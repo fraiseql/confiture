@@ -102,6 +102,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answer `writable_columns`, parity and drift now read. `filled_by_postgresql` and
   `unique_without_author_input` are kept apart: a `gen_random_uuid()` default is
   writable, and unique either way.
+- ⚠️ **A schema model says what its reader read** (`SchemaModel.coverage`, on the
+  wire and the seam as `Coverage`): each section read, and how deeply. A model
+  read from DDL covers every section; one read from a database, the sections it
+  was asked for; one written before this release, the structural ones.
+  `SchemaDriftDetector.compare_schemas` drops its `objects=` flag: it compares
+  views, routines, triggers and TVIEWs in the sections both models cover, so a
+  snapshot dumped with its views compares them, and one dumped without never
+  calls them missing.
 - A `SCHEMA_202` from `drift --schema`, and a `DIFFER_400` from `migrate diff --to
   <directory>` or `platform.parse_schema(env=…)`, name the file and the line in it
   (`context.file`, `context.line`), not a line of the files joined together.

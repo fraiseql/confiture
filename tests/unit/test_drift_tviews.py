@@ -11,7 +11,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from confiture.core.drift import DriftType, SchemaDriftDetector, parse_expected_schema
-from confiture.core.schema_model import SchemaModel, Table, TView, ref_for, tview_ref
+from confiture.core.schema_model import Coverage, SchemaModel, Table, TView, ref_for, tview_ref
 
 DECLARED = """
 CREATE TABLE tb_post (pk_post bigint PRIMARY KEY);
@@ -23,14 +23,16 @@ POST = Table(name="tb_post", schema="public")
 
 def live(*tviews: TView) -> SchemaModel:
     expected_table = parse_expected_schema(DECLARED).model.tables
-    return SchemaModel(tables=expected_table, tviews={tview_ref(t): t for t in tviews})
+    return SchemaModel(
+        tables=expected_table, tviews={tview_ref(t): t for t in tviews}, coverage=Coverage.every()
+    )
 
 
 def compare(live_model: SchemaModel):
     conn = MagicMock()
     conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("db",)
     expected = parse_expected_schema(DECLARED).model
-    return SchemaDriftDetector(conn).compare_schemas(expected, live_model, objects=True).drift_items
+    return SchemaDriftDetector(conn).compare_schemas(expected, live_model).drift_items
 
 
 def keys(items) -> list[tuple[str, str, str]]:
@@ -75,7 +77,7 @@ def compare_pinned(ddl: str, live_model: SchemaModel):
     conn = MagicMock()
     conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("db",)
     expected = parse_expected_schema(ddl).model
-    return SchemaDriftDetector(conn).compare_schemas(expected, live_model, objects=True).drift_items
+    return SchemaDriftDetector(conn).compare_schemas(expected, live_model).drift_items
 
 
 def test_a_pinned_option_the_database_does_not_hold_is_a_warning() -> None:

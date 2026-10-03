@@ -385,7 +385,7 @@ def _snapshot(
             triggers=True,
         )
         report = SchemaDriftDetector(conn, ignore_tables=[table]).compare_schemas(
-            expected_schema(read_text(build_sql)).model, replayed, objects=True
+            expected_schema(read_text(build_sql)).model, replayed
         )
     if report.drift_items:
         listed = "\n  ".join(item.message for item in report.drift_items)

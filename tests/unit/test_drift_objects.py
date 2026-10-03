@@ -8,7 +8,7 @@ design.
 
 Both sides are the schema model — the expected one read from the DDL (a trigger
 through `ddl_objects`, which #288 built), the live one from `live_catalog` — and
-the comparison is `compare_schemas`', asked with `objects=True`: there is no
+the comparison is `compare_schemas`', in each section both models cover: there is no
 second function, and no second model of a live object.
 
 Two rules decide what is reported, and both exist to keep a pristine database
@@ -36,6 +36,7 @@ import pytest
 
 from confiture.core.drift import SchemaDriftDetector, parse_expected_schema
 from confiture.core.schema_model import (
+    Coverage,
     Routine,
     SchemaModel,
     Trigger,
@@ -71,6 +72,7 @@ def live(*objects: View | Routine | Trigger) -> SchemaModel:
         views={view_ref(o): o for o in objects if isinstance(o, View)},
         routines={ref: tuple(found) for ref, found in routines.items()},
         triggers={trigger_ref(o): o for o in objects if isinstance(o, Trigger)},
+        coverage=Coverage.every(),
     )
 
 
@@ -99,11 +101,11 @@ def everything() -> tuple[View | Routine | Trigger, ...]:
     )
 
 
-def compare_objects(expected_model: SchemaModel, live_model: SchemaModel, *, objects: bool = True):
+def compare_objects(expected_model: SchemaModel, live_model: SchemaModel):
     conn = MagicMock()
     conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("db",)
     detector = SchemaDriftDetector(conn)
-    return detector.compare_schemas(expected_model, live_model, objects=objects).drift_items
+    return detector.compare_schemas(expected_model, live_model).drift_items
 
 
 def keys(items) -> list[tuple[str, str, str]]:
@@ -122,9 +124,7 @@ def test_a_database_holding_everything_reports_nothing() -> None:
 def test_the_objects_compared_are_counted() -> None:
     conn = MagicMock()
     conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("db",)
-    report = SchemaDriftDetector(conn).compare_schemas(
-        expected(), live(*everything()), objects=True
-    )
+    report = SchemaDriftDetector(conn).compare_schemas(expected(), live(*everything()))
     assert report.objects_checked == 6
 
 
@@ -186,4 +186,4 @@ def test_an_extra_object_in_a_schema_the_tree_does_not_declare_is_silent() -> No
 
 def test_a_kind_the_catalog_did_not_read_is_never_missing() -> None:
     """Silence from a kind nobody asked about is not evidence of absence."""
-    assert compare_objects(expected(), SchemaModel(), objects=False) == []
+    assert compare_objects(expected(), SchemaModel()) == []

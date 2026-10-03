@@ -36,7 +36,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import asdict, dataclass, field, fields, replace
+from dataclasses import asdict, dataclass, field, replace
 from enum import StrEnum
 from typing import Any, Literal, TypeVar
 
@@ -566,6 +566,53 @@ class _ReadOnly(Mapping[_K, _V]):
         return repr(self._data)
 
 
+#: How deeply a reader read a section: that each object exists, or what it is.
+CoverageDepth = Literal["existence", "definition"]
+
+#: The model's sections, in the order its wire writes them.
+SECTIONS = ("tables", "enum_types", "sequences", "routines", "views", "triggers", "tviews")
+
+#: What every reader reads: the sections a table-level comparison needs.
+_STRUCTURAL = ("tables", "enum_types", "sequences")
+
+
+@dataclass(frozen=True)
+class Coverage:
+    """What a reader read: each section of the model, and how deeply.
+
+    A model says what a schema holds only for the sections it covers. Silence in
+    a section nobody read is not absence: a database read without its views has
+    no views in its model, and a comparison must not call every declared view
+    missing. A tree covers every section it can declare; a live read, the
+    sections it was asked for.
+    """
+
+    sections: tuple[tuple[str, CoverageDepth], ...] = tuple(
+        (section, "definition") for section in _STRUCTURAL
+    )
+
+    @classmethod
+    def of(cls, sections: Mapping[str, CoverageDepth]) -> Coverage:
+        """The coverage of *sections*, in the model's own order."""
+        return cls(tuple((s, sections[s]) for s in SECTIONS if s in sections))
+
+    @classmethod
+    def every(cls) -> Coverage:
+        """Every section, whole: what reading DDL gives."""
+        return cls.of(dict.fromkeys(SECTIONS, "definition"))
+
+    def depth(self, section: str) -> CoverageDepth | None:
+        """How deeply *section* was read, or ``None`` when it was not."""
+        return dict(self.sections).get(section)
+
+    def shared(self, other: Coverage, section: str) -> CoverageDepth | None:
+        """How deeply both read *section*: the shallower of the two, or ``None``."""
+        mine, theirs = self.depth(section), other.depth(section)
+        if mine is None or theirs is None:
+            return None
+        return "definition" if mine == theirs == "definition" else "existence"
+
+
 @dataclass(frozen=True)
 class SchemaModel:
     """Everything one schema declares, each object under its :class:`ObjectRef`.
@@ -584,12 +631,15 @@ class SchemaModel:
     views: Mapping[ObjectRef, View] = field(default_factory=dict)
     triggers: Mapping[ObjectRef, Trigger] = field(default_factory=dict)
     tviews: Mapping[ObjectRef, TView] = field(default_factory=dict)
+    #: What the reader read (:class:`Coverage`). Not what the schema is, so not
+    #: part of equality: a tree and the database built from it are one schema.
+    coverage: Coverage = field(default_factory=Coverage, compare=False)
 
     def __post_init__(self) -> None:
-        for mapping in fields(self):
-            value = getattr(self, mapping.name)
+        for name in SECTIONS:
+            value = getattr(self, name)
             if not isinstance(value, _ReadOnly):
-                object.__setattr__(self, mapping.name, _ReadOnly(value))
+                object.__setattr__(self, name, _ReadOnly(value))
 
     def all_routines(self) -> list[Routine]:
         """Every routine, overloads included, in identity order."""
@@ -609,6 +659,7 @@ class SchemaModel:
             "views": section(self.views),
             "triggers": section(self.triggers),
             "tviews": section(self.tviews),
+            "coverage": dict(self.coverage.sections),
         }
 
     def to_json(self) -> str:
@@ -740,6 +791,9 @@ def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
         triggers=_keyed(data["triggers"], lambda d: Trigger(**d), trigger_ref),
         # A wire written before TVIEWs were modelled has none (#504).
         tviews=_keyed(data.get("tviews", []), lambda d: TView(**d), tview_ref),
+        # A wire written before coverage was recorded claims only the structural
+        # sections, which every reader has always read.
+        coverage=Coverage.of(data["coverage"]) if "coverage" in data else Coverage(),
     )
 
 
@@ -922,6 +976,7 @@ def normalise_for_parity(model: SchemaModel) -> SchemaModel:
     is a difference between the tree and the database, or a bug in a reader.
     """
     return SchemaModel(
+        coverage=model.coverage,
         tables={ref: _parity_table(t) for ref, t in model.tables.items()},
         enum_types={
             ref: replace(e, schema=(e.schema or DEFAULT_SCHEMA).lower())

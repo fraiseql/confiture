@@ -25,7 +25,7 @@ from test_diff_goldens import goldens
 
 from confiture.core.live_catalog import read
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.schema_model import SchemaModel, normalise_for_parity
+from confiture.core.schema_model import SECTIONS, SchemaModel, normalise_for_parity
 from confiture.core.schema_read import read_text
 
 TREES = {tree.name: tree for tree in goldens.TREES}
@@ -58,10 +58,14 @@ def _parity_of(sql: str, make_database: Callable[[str], str]) -> tuple[dict, dic
     with psycopg.connect(make_database("confiture_parity"), autocommit=True) as conn:
         conn.execute(sql)
         live = read(conn, schemas=_schemas(parsed), routines=True, views=True, triggers=True)
-    return (
-        normalise_for_parity(parsed).to_dict(),
-        normalise_for_parity(live).to_dict(),
-    )
+    # Compared in the sections both readers read: coverage is what each read,
+    # not what the schema is.
+    shared = {s for s in SECTIONS if parsed.coverage.shared(live.coverage, s)}
+
+    def within(model: SchemaModel) -> dict:
+        return {k: v for k, v in normalise_for_parity(model).to_dict().items() if k in shared}
+
+    return within(parsed), within(live)
 
 
 def _explain(parsed: dict, live: dict) -> str:
