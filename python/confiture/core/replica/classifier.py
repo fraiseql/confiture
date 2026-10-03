@@ -12,7 +12,6 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-import pglast
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
@@ -39,6 +38,7 @@ from confiture.core.ddl_walk import (
     type_name as _type_name,
 )
 from confiture.core.schema_model import Constraint
+from confiture.core.sql_lexer import parse_file
 from confiture.core.type_lattice import canonical_type
 
 # Resolved BY NAME, never by literal ordinal (#192): PG18 renumbered
@@ -314,7 +314,7 @@ class OperationClassifier:
     def _classify_ast(self, sql: str) -> list[DdlOperation]:
 
         ops: list[DdlOperation] = []
-        for raw in pglast.parse_sql(sql):
+        for raw in parse_file(sql).statements:
             node = raw.stmt
             name = type(node).__name__
             if name == "AlterTableStmt":

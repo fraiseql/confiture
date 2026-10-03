@@ -22,10 +22,10 @@ from pathlib import Path
 
 import pglast.parser
 from pglast import ast as pglast_ast
-from pglast import parse_sql
 
 from confiture.core.idempotency.python_migration_extractor import extract_sql_from_python_migration
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.sql_lexer import parse_file
 from confiture.models.preflight import CorTarget
 
 
@@ -65,7 +65,7 @@ def find_cor_targets(
     where the syntax appears in source SQL.
     """
     try:
-        parsed = parse_sql(sql)
+        parsed = parse_file(sql).statements
     except pglast.parser.ParseError:  # pragma: no cover - pglast raises on bad SQL
         return []
 

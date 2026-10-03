@@ -29,7 +29,6 @@ from confiture.core.type_lattice import (
 
 if TYPE_CHECKING:
     pass
-import pglast
 
 from confiture.core.change_set.models import (
     ChangeEntry,
@@ -39,6 +38,7 @@ from confiture.core.change_set.models import (
     tier_for_create_index,
 )
 from confiture.core.change_set.naming import _command_prefix, _Context, _ident
+from confiture.core.sql_lexer import parse_file
 
 # Resolved BY NAME, never by literal ordinal (#192).
 _AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
@@ -92,7 +92,7 @@ _AST_SKIP: Final = frozenset(
 def _ast_entries(sql: str, ctx: _Context) -> list[ChangeEntry]:
 
     entries: list[ChangeEntry] = []
-    for raw in pglast.parse_sql(sql):
+    for raw in parse_file(sql).statements:
         entries.extend(_ast_statement(raw, sql, ctx))
     return entries
 

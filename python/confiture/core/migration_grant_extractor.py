@@ -25,7 +25,7 @@ import pglast.parser
 from pglast.enums.parsenodes import GrantTargetType, ObjectType, RoleSpecType
 
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.sql_lexer import strip_comments
+from confiture.core.sql_lexer import parse_file, strip_comments
 
 # Every privilege a table can hold.  ``GRANT ALL`` expands to this set.
 # Order matters only for deterministic test output; storage uses frozenset.
@@ -275,7 +275,7 @@ class MigrationGrantExtractor:
     def _creates_pglast(self, sql: str) -> list[tuple[str, str]]:
 
         out: list[tuple[str, str]] = []
-        for raw in pglast.parse_sql(sql):
+        for raw in parse_file(sql).statements:
             stmt = raw.stmt
             kind = type(stmt).__name__
             if kind == "CreateStmt":
@@ -308,7 +308,7 @@ class MigrationGrantExtractor:
     def _drops_pglast(self, sql: str) -> list[tuple[str, str]]:
 
         out: list[tuple[str, str]] = []
-        for raw in pglast.parse_sql(sql):
+        for raw in parse_file(sql).statements:
             stmt = raw.stmt
             if type(stmt).__name__ != "DropStmt":
                 continue
@@ -326,7 +326,7 @@ class MigrationGrantExtractor:
     def _grants_pglast(self, sql: str) -> list[tuple[str, str, str, frozenset[str]]]:
 
         out: list[tuple[str, str, str, frozenset[str]]] = []
-        for raw in pglast.parse_sql(sql):
+        for raw in parse_file(sql).statements:
             stmt = raw.stmt
             if type(stmt).__name__ != "GrantStmt":
                 continue
@@ -378,7 +378,7 @@ class MigrationGrantExtractor:
             ObjectType.OBJECT_SCHEMA: "SCHEMA",
         }
 
-        for raw in pglast.parse_sql(sql):
+        for raw in parse_file(sql).statements:
             stmt = raw.stmt
             kind = type(stmt).__name__
 

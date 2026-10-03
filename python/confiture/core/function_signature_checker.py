@@ -24,6 +24,7 @@ from confiture.core.function_signature_drift import (
     printed_signature,
 )
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.sql_lexer import parse_file
 from confiture.core.type_lattice import signature_from_type_names, signatures_match
 from confiture.exceptions import GitError
 
@@ -169,7 +170,7 @@ def _drops(sql: str, routine: Routine) -> bool:
     migration's own checks report it.
     """
     try:
-        statements = pglast.parse_sql(sql) or ()
+        statements = parse_file(sql).statements
     except pglast.parser.ParseError:
         return False
     schema = routine.schema or DEFAULT_SCHEMA

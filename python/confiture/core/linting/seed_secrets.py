@@ -34,7 +34,7 @@ import pglast.parser
 from pglast import ast
 
 from confiture.core.parser_info import ascii_shadow
-from confiture.core.sql_lexer import blank_copy_blocks, skip_leading_comments
+from confiture.core.sql_lexer import parse_file, skip_leading_comments
 
 if TYPE_CHECKING:
     from confiture.core.seed.validation.prep_seed.seed_rows import SeedWrite
@@ -191,9 +191,9 @@ def _write_findings(
 
 def _role_findings(sql: str) -> Iterator[SecretFinding]:
     """``CREATE``/``ALTER ROLE … PASSWORD '<literal>'`` — the shadow keeps offsets honest."""
-    shadow = ascii_shadow(blank_copy_blocks(sql))
+    shadow = ascii_shadow(sql)
     try:
-        raws = pglast.parser.parse_sql(shadow)
+        raws = parse_file(shadow).statements
     except pglast.parser.ParseError:
         return
     for raw in raws or ():

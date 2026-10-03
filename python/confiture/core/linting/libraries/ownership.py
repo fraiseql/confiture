@@ -39,6 +39,7 @@ from confiture.core.idempotency._ast_visitor import _first_keyword_pos
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
 from confiture.core.schema_identity import identifier_identity
+from confiture.core.sql_lexer import parse_file
 
 # Default schema for unqualified identifiers in PostgreSQL.
 _DEFAULT_SCHEMA = "public"
@@ -253,7 +254,7 @@ class Own001OwnershipCoverage:
 
         creates: list[_CreateRecord] = []
         alters: list[_AlterOwnerRecord] = []
-        tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
+        tree = parse_file(sql).statements  # ParseError propagates: check() reports the file
 
         for raw in tree or []:
             stmt = raw.stmt
@@ -437,7 +438,7 @@ class Own002BareAlterOwner:
 
         creates: list[_CreateRecord] = []
         alters: list[tuple[_AlterOwnerRecord, bool]] = []
-        tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
+        tree = parse_file(sql).statements  # ParseError propagates: check() reports the file
 
         for raw in tree or []:
             stmt = raw.stmt

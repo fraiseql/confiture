@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,998 lines, 34% of `core/`.
+26,950 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -89,7 +89,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `change_order.py` | 184 | DDL transform |
 | `change_set/` | 1,305 | DDL transform |
 | `cor_extractor.py` | 135 | DDL transform |
-| `data_assertions.py` | 562 | DDL transform |
+| `data_assertions.py` | 568 | DDL transform |
 | `ddl_clauses.py` | 152 | DDL transform |
 | `ddl_objects.py` | 775 | DDL transform |
 | `ddl_walk.py` | 1,752 | DDL transform |
@@ -100,12 +100,12 @@ duplicate readers were deleted. The count below is what the port translates.
 | `fk_extractor.py` | 296 | DDL transform |
 | `function_body_checker.py` | 208 | DDL transform |
 | `function_body_normalizer.py` | 69 | DDL transform |
-| `function_signature_checker.py` | 187 | DDL transform |
-| `idempotency/` | 2,712 | DDL transform |
+| `function_signature_checker.py` | 188 | DDL transform |
+| `idempotency/` | 2,708 | DDL transform |
 | `introspection/dependency_graph.py` | 202 | DDL transform |
-| `linting/` | 9,270 | DDL transform |
+| `linting/` | 9,271 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
-| `migration_analyzer.py` | 137 | DDL transform |
+| `migration_analyzer.py` | 81 | DDL transform |
 | `migration_grant_extractor.py` | 526 | DDL transform |
 | `model_facts.py` | 222 | DDL transform |
 | `parser_info.py` | 116 | DDL transform |
@@ -118,7 +118,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_identity.py` | 71 | DDL transform |
 | `schema_model.py` | 892 | DDL transform |
 | `schema_read.py` | 270 | DDL transform |
-| `sql_lexer.py` | 725 | DDL transform |
+| `sql_lexer.py` | 729 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |
 | `tview_preflight.py` | 170 | DDL transform |

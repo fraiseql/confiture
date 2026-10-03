@@ -35,6 +35,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Each schema file is now parsed once, on its own, and every object, column and
   index is placed in its own file at its own line. The TVIEW rules (`tview_001`,
   `tview_002`) now name the file at all.
+- **A migration that loads data with `COPY … FROM stdin` is analysed like any
+  other.** Every migration analyser parsed the migration itself, and PostgreSQL's
+  parser refuses a `COPY` block's first data row: `migrate preflight` reported the
+  migration `PFLIGHT_UNPARSEABLE` (so never `window_safe`), `migrate validate
+  --idempotent` `IDEM_UNPARSEABLE`, and the grant, replica, `CREATE OR REPLACE` and
+  non-transactional readers and `migrate up`'s pg_tviews gate read none of it. All
+  now read through `sql_lexer.parse_file`, which blanks the rows first. One guard
+  fails on any other way into the parser, another on a parse failure answered with
+  nothing.
 - **The lint rules read the files the lint parsed, once.** Each rule that re-parsed
   a file's text on its own — `build_003`/`build_004`, the `body` family's locations
   and `TEMP`-table reading, `tenant_001`/`tenant_003` — reads the statements the
