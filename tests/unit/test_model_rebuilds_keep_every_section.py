@@ -47,6 +47,8 @@ FULL = SchemaModel(
     triggers={trigger_ref(TRIGGER): TRIGGER},
     tviews={tview_ref(TVIEW): TVIEW},
     other_objects={other_ref(OTHER): OTHER},
+    # Not the default, so a rebuild that forgets it is seen to.
+    source="catalog",
 )
 
 
@@ -63,3 +65,4 @@ def test_a_rebuild_keeps_every_section(rebuild) -> None:
     rebuilt = rebuild(FULL)
     empty = [f.name for f in dataclasses.fields(SchemaModel) if not getattr(rebuilt, f.name)]
     assert empty == []
+    assert rebuilt.source == FULL.source

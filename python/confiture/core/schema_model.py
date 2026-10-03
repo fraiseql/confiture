@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from enum import StrEnum
 from typing import Any, Literal, TypeVar
@@ -613,6 +613,12 @@ def other_ref(obj: OtherObject) -> ObjectRef:
 #: How deeply a reader read a section: that each object exists, or what it is.
 CoverageDepth = Literal["existence", "definition"]
 
+#: Who wrote what a model says: an author's DDL, or PostgreSQL's catalog. A tree's
+#: model is the author's whichever of its two readings it is (``SchemaRead.model``
+#: or ``.catalogued``): the spelling is still the author's. A database's is the
+#: catalog's. A comparison's rules follow from the two sides' (``differ.policy_between``).
+Provenance = Literal["author", "catalog"]
+
 #: The model's sections, in the order its wire writes them.
 SECTIONS = (
     "tables",
@@ -688,6 +694,8 @@ class SchemaModel:
     #: What the reader read (:class:`Coverage`). Not what the schema is, so not
     #: part of equality: a tree and the database built from it are one schema.
     coverage: Coverage = field(default_factory=Coverage, compare=False)
+    #: Who wrote it (:data:`Provenance`). Like coverage, not what the schema is.
+    source: Provenance = field(default="author", compare=False)
 
     def __post_init__(self) -> None:
         for name in SECTIONS:
@@ -715,6 +723,7 @@ class SchemaModel:
             "tviews": section(self.tviews),
             "other_objects": section(self.other_objects),
             "coverage": dict(self.coverage.sections),
+            "source": self.source,
         }
 
     def to_json(self) -> str:
@@ -850,6 +859,8 @@ def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
         # A wire written before coverage was recorded claims only the structural
         # sections, which every reader has always read.
         coverage=Coverage.of(data["coverage"]) if "coverage" in data else Coverage(),
+        # A wire written before provenance was recorded does not say: read as an author's.
+        source=data.get("source", "author"),
     )
 
 
@@ -925,77 +936,118 @@ _COLUMN_KEY = re.compile(r"[A-Za-z_][A-Za-z0-9_$]*")
 _DEFAULT_MAX = frozenset({2**15 - 1, 2**31 - 1, 2**63 - 1})
 
 
-def _parity_relation(relation: RelationName) -> RelationName:
+#: Every normalisation: what a comparison between a tree and a database applies.
+ALL_PARITY_RULES = frozenset(PARITY_NORMALISATIONS)
+
+
+def _fold_schema(schema: str | None, rules: frozenset[str]) -> str | None:
+    return (schema or DEFAULT_SCHEMA).lower() if "schema_spelling" in rules else schema
+
+
+def _parity_relation(relation: RelationName, rules: frozenset[str]) -> RelationName:
     """*relation* by its identity: the catalog always names the schema a tree may omit."""
-    return RelationName(*relation.identity)
+    return RelationName(*relation.identity) if "schema_spelling" in rules else relation
 
 
 def _generated_name(table: str, name: str) -> bool:
     return bool(re.fullmatch(rf"{re.escape(table)}(_.+)?_(pkey|key|fkey|check|excl)\d*", name))
 
 
-def _parity_column(column: Column) -> Column:
-    serial = column.value_source is ValueSource.SEQUENCE
+def _expression(text: str | None, rules: frozenset[str]) -> str | None:
+    if text is None or "analysed_expressions" not in rules:
+        return text
+    return _EXPRESSION
+
+
+def parity_column(column: Column, rules: frozenset[str] = ALL_PARITY_RULES) -> Column:
+    """*column* as *rules* compare it: spelling, ``serial`` and analysed expressions folded."""
+    if "serial" in rules and column.value_source is ValueSource.SEQUENCE:
+        # `type_key` already says `serial` is `integer`; only the spelling differs.
+        column = replace(column, raw_sql_type=None, not_null=True, default=None, default_kind=None)
+    if "spellings" in rules:
+        column = replace(column, name=column.folded, line=0, type_text=None)
     return replace(
         column,
-        name=column.folded,
-        line=0,
-        type_text=None,
-        # `type_key` already says `serial` is `integer`; only the spelling differs.
-        raw_sql_type=None if serial else column.raw_sql_type,
-        not_null=column.not_null or serial,
-        default=None if serial or column.default is None else _EXPRESSION,
-        default_kind=None if serial else column.default_kind,
-        generated=None if column.generated is None else _EXPRESSION,
+        default=_expression(column.default, rules),
+        generated=_expression(column.generated, rules),
     )
 
 
-def _parity_constraint(table: str, constraint: Constraint) -> Constraint:
+def parity_constraint(
+    table: str, constraint: Constraint, rules: frozenset[str] = ALL_PARITY_RULES
+) -> Constraint:
+    """*constraint* of *table* as *rules* compare it: a generated name is no name."""
+    generated = "generated_names" in rules and _generated_name(table, constraint.name)
     return replace(
         constraint,
-        name="" if _generated_name(table, constraint.name) else constraint.name,
-        expression=None if constraint.expression is None else _EXPRESSION,
-        ref_table=None if constraint.ref_table is None else _parity_relation(constraint.ref_table),
+        name="" if generated else constraint.name,
+        expression=_expression(constraint.expression, rules),
+        ref_table=(
+            None if constraint.ref_table is None else _parity_relation(constraint.ref_table, rules)
+        ),
     )
 
 
-def _parity_table(table: Table) -> Table:
-    constraints = [_parity_constraint(table.name, c) for c in table.constraints]
-    indexes = [_parity_index(ix) for ix in table.indexes if not ix.backs_constraint]
-    return replace(
-        table,
-        schema=(table.schema or DEFAULT_SCHEMA).lower(),
-        columns=tuple(_parity_column(c) for c in table.columns),
-        constraints=tuple(sorted(constraints, key=repr)),
-        indexes=tuple(sorted(indexes, key=repr)),
-    )
+def parity_indexes(
+    indexes: Iterable[Index], rules: frozenset[str] = ALL_PARITY_RULES
+) -> list[tuple[Index, Index]]:
+    """Each of *indexes* that *rules* compare, paired with how they compare it.
+
+    An index backing a constraint is the constraint's, which the DDL declares
+    instead (``backing_indexes``): it is not compared at all.
+    """
+    return [
+        (index, _parity_index(index, rules))
+        for index in indexes
+        if not ("backing_indexes" in rules and index.backs_constraint)
+    ]
 
 
-def _parity_index(index: Index) -> Index:
+def _parity_index(index: Index, rules: frozenset[str]) -> Index:
+    expressions = "analysed_expressions" in rules
     return replace(
         index,
-        table=_parity_relation(index.table),
-        columns=tuple(key if _COLUMN_KEY.fullmatch(key) else _EXPRESSION for key in index.columns),
-        where=None if index.where is None else _EXPRESSION,
+        table=_parity_relation(index.table, rules),
+        columns=tuple(
+            key if not expressions or _COLUMN_KEY.fullmatch(key) else _EXPRESSION
+            for key in index.columns
+        ),
+        where=_expression(index.where, rules),
     )
 
 
-def _parity_routine(routine: Routine) -> Routine:
+def _in_order(objects: list[_T], rules: frozenset[str]) -> tuple[_T, ...]:
+    return tuple(sorted(objects, key=repr) if "declaration_order" in rules else objects)
+
+
+def _parity_table(table: Table, rules: frozenset[str]) -> Table:
     return replace(
-        routine,
-        schema=(routine.schema or DEFAULT_SCHEMA).lower(),
-        signature="",
-        returns=None,
+        table,
+        schema=_fold_schema(table.schema, rules),
+        columns=tuple(parity_column(c, rules) for c in table.columns),
+        constraints=_in_order(
+            [parity_constraint(table.name, c, rules) for c in table.constraints], rules
+        ),
+        indexes=_in_order([seen for _, seen in parity_indexes(table.indexes, rules)], rules),
     )
 
 
-def _parity_view(view: View) -> View:
-    indexes = [_parity_index(ix) for ix in view.indexes if not ix.backs_constraint]
+def _parity_routine(routine: Routine, rules: frozenset[str]) -> Routine:
+    routine = replace(routine, schema=_fold_schema(routine.schema, rules))
+    if "routine_spellings" not in rules:
+        return routine
+    return replace(routine, signature="", returns=None)
+
+
+def _parity_view(view: View, rules: frozenset[str]) -> View:
+    definition = view.definition
+    if definition is not None and "view_definitions" in rules:
+        definition = _EXPRESSION
     return replace(
         view,
-        schema=(view.schema or DEFAULT_SCHEMA).lower(),
-        definition=None if view.definition is None else _EXPRESSION,
-        indexes=tuple(sorted(indexes, key=repr)),
+        schema=_fold_schema(view.schema, rules),
+        definition=definition,
+        indexes=_in_order([seen for _, seen in parity_indexes(view.indexes, rules)], rules),
     )
 
 
@@ -1004,49 +1056,55 @@ def _parity_view(view: View) -> View:
 _TVIEW_DEFAULT_FILLFACTOR = 85
 
 
-def _parity_tview(tview: TView) -> TView:
+def _parity_tview(tview: TView, rules: frozenset[str]) -> TView:
+    tview = replace(tview, schema=_fold_schema(tview.schema, rules))
+    if "tview_defaults" not in rules:
+        return tview
     return replace(
         tview,
-        schema=(tview.schema or DEFAULT_SCHEMA).lower(),
         logged=True if tview.logged else None,
         fillfactor=None if tview.fillfactor == _TVIEW_DEFAULT_FILLFACTOR else tview.fillfactor,
     )
 
 
-def _parity_sequence(sequence: Sequence) -> Sequence:
+def _parity_sequence(sequence: Sequence, rules: frozenset[str]) -> Sequence:
+    sequence = replace(sequence, schema=_fold_schema(sequence.schema, rules))
     unbounded = sequence.min_value in (None, 1) and (
         sequence.max_value is None or sequence.max_value in _DEFAULT_MAX
     )
-    return replace(
-        sequence,
-        schema=(sequence.schema or DEFAULT_SCHEMA).lower(),
-        min_value=None if unbounded else sequence.min_value,
-        max_value=None if unbounded else sequence.max_value,
-    )
+    if "sequence_bounds" not in rules or not unbounded:
+        return sequence
+    return replace(sequence, min_value=None, max_value=None)
 
 
-def normalise_for_parity(model: SchemaModel) -> SchemaModel:
-    """*model* with every rewrite in :data:`PARITY_NORMALISATIONS` applied.
+def normalise_for_parity(
+    model: SchemaModel, rules: frozenset[str] = ALL_PARITY_RULES
+) -> SchemaModel:
+    """*model* with the rewrites in *rules* — every one of :data:`PARITY_NORMALISATIONS` by default.
 
     Applied to both sides of a parse/live comparison; what still differs after it
-    is a difference between the tree and the database, or a bug in a reader.
+    is a difference between the tree and the database, or a bug in a reader. The
+    differ applies the same rules, object by object, when it compares a tree with
+    a database (``differ.CATALOGUED``).
     """
     return SchemaModel(
         coverage=model.coverage,
-        tables={ref: _parity_table(t) for ref, t in model.tables.items()},
+        source=model.source,
+        tables={ref: _parity_table(t, rules) for ref, t in model.tables.items()},
         enum_types={
-            ref: replace(e, schema=(e.schema or DEFAULT_SCHEMA).lower())
+            ref: replace(e, schema=_fold_schema(e.schema, rules))
             for ref, e in model.enum_types.items()
         },
-        sequences={ref: _parity_sequence(s) for ref, s in model.sequences.items()},
+        sequences={ref: _parity_sequence(s, rules) for ref, s in model.sequences.items()},
         routines={
-            ref: tuple(_parity_routine(r) for r in found) for ref, found in model.routines.items()
+            ref: tuple(_parity_routine(r, rules) for r in found)
+            for ref, found in model.routines.items()
         },
-        views={ref: _parity_view(v) for ref, v in model.views.items()},
+        views={ref: _parity_view(v, rules) for ref, v in model.views.items()},
         triggers={
-            ref: replace(t, schema=(t.schema or DEFAULT_SCHEMA).lower())
+            ref: replace(t, schema=_fold_schema(t.schema, rules))
             for ref, t in model.triggers.items()
         },
-        tviews={ref: _parity_tview(t) for ref, t in model.tviews.items()},
+        tviews={ref: _parity_tview(t, rules) for ref, t in model.tviews.items()},
         other_objects=model.other_objects,
     )

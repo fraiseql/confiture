@@ -179,6 +179,7 @@ it is made.
 | `tviews` | `Mapping[ObjectRef, TView]` | empty |
 | `other_objects` | `Mapping[ObjectRef, OtherObject]` | empty |
 | `coverage` | `Coverage` | empty |
+| `source` | `Provenance` | `'author'` |
 
 #### `SchemaModel.all_routines`
 

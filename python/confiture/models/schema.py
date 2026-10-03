@@ -23,7 +23,7 @@ _MOVED: dict[str, str] = {
     "CheckConstraint": 'confiture.core.schema_model.Constraint (kind="check")',
     "UniqueConstraint": 'confiture.core.schema_model.Constraint (kind="unique")',
     "ColumnType": "confiture.core.schema_model.Column.type_key (a canonical type name)",
-    "ParsedSchema": "confiture.core.differ.ParsedSchema",
+    "ParsedSchema": "confiture.core.differ.Side, whose model is the schema_model.SchemaModel",
     "qualified_name": "confiture.core.schema_model.qualified_name",
     "SchemaChange": (
         "confiture.core.schema_change.SchemaChange, a union of one variant per kind "

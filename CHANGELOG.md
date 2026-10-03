@@ -31,7 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer decided.
 - **`tree_001` compares a prefix's number**, not its spelling: `0001_a.sql` and
   `001_b.sql` both number 1.
-||||||| merged common ancestors
 - **`tenant_005` reports only a key that can let one tenant's row collide with
   another's** (#559). It judged a key's *position*: `PRIMARY KEY (reading_date,
   tenant_id, sensor_id)` was reported though it cannot collide across tenants, and
@@ -46,7 +45,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `'test_password'` and `'test'` are placeholders. A column naming two kinds is one
   `sec_001` finding; personal data (`credit card`, `ssn`, `iban`) is named as such,
   with a fix that fits it.
-||||||| 3c325381
 - **A routine that selects `INTO` several variables, one of them of an extension or
   domain type, is read** (#558). `confiture lint` reported it under `build_003 ran on
   less than the whole schema: could not read N routine bodies`. The PL/pgSQL compiler
@@ -111,6 +109,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ⚠️ **The schema model says who wrote it: `SchemaModel.source`** (`author` for a
+  tree, `catalog` for a database read through `live_catalog`; on the wire as
+  `"source"`). The differ compares two sides under the policy their sources call
+  for: two trees as written, renames detected (`AUTHOR`, unchanged); a tree and a
+  database through every `PARITY_NORMALISATIONS` rule, with nothing renamed by
+  similarity (`CATALOGUED`); two databases exactly (`EXACT`). The parity rules are
+  now code the comparison runs (`schema_model.parity_column`, `parity_constraint`,
+  `parity_indexes`), not only what a test normalises with. `differ.ParsedSchema` is
+  retired for `differ.Side`, whose truth is the model. The model goldens gain the
+  key; `migrate diff`'s goldens are byte-identical.
 - ⚠️ **The schema model's wire gains `Column.file`** (`schema-model.schema.json`,
   `confiture schema dump-model`, `platform.SchemaModel.to_json()`): the file that
   wrote the column, relative to the project. `Column.line` is now the line in that

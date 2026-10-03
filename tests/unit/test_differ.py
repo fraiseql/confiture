@@ -1,6 +1,6 @@
 """Unit tests for SchemaDiffer (Milestone 1.9-1.10)."""
 
-from confiture.core.differ import ParsedSchema, SchemaDiffer
+from confiture.core.differ import SchemaDiffer, Side
 from confiture.core.schema_model import RelationName
 
 
@@ -347,7 +347,7 @@ class TestSchemaDiffAlgorithm:
 
 
 class TestParseSchema:
-    """parse_schema returns ParsedSchema with enums/sequences."""
+    """parse_schema returns the Side the text is, with enums/sequences."""
 
     def test_parse_sql_returns_list_of_tables(self):
         differ = SchemaDiffer()
@@ -357,7 +357,7 @@ class TestParseSchema:
     def test_parse_schema_returns_parsed_schema(self):
         differ = SchemaDiffer()
         result = differ.parse_schema("CREATE TABLE users (id INT);")
-        assert isinstance(result, ParsedSchema)
+        assert isinstance(result, Side)
         assert len(result.tables) == 1
 
     def test_parse_schema_extracts_enum(self):
