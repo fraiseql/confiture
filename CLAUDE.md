@@ -166,7 +166,11 @@ and which ones to blank is the compiler's answer — each blank is tested by put
 back — never a model of PL/pgSQL's grammar. Its serialiser writes a trigger's implicit
 `TG_*` datums as `{}}`, so the stray brace is deleted at the position
 `json.JSONDecodeError.pos` names, only when the characters there are that defect; a
-serialisation that decodes is returned byte for byte. Do not call
+serialisation that decodes is returned byte for byte. A body blanking cannot fix — on pglast 8 a type the stub does not know is a
+`record`, which a multi-target `INTO` refuses (#558) — may have a declared variable's
+type **substituted** with `text` (`Compiled.substituted`); the declaration sections say
+where a type is written, the compiler which substitutions are needed, one at a time,
+and `record` is never one. A substitution keeps every newline. Do not call
 `pglast.parse_plpgsql` directly; do not replace the oracle with a grammar; do not
 repair the JSON with a global replace.
 

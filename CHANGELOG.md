@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer decided.
 - **`tree_001` compares a prefix's number**, not its spelling: `0001_a.sql` and
   `001_b.sql` both number 1.
+||||||| 3c325381
+- **A routine that selects `INTO` several variables, one of them of an extension or
+  domain type, is read** (#558). `confiture lint` reported it under `build_003 ran on
+  less than the whole schema: could not read N routine bodies`. The PL/pgSQL compiler
+  confiture reads bodies with has no catalogue: on pglast 8 it takes any type it does
+  not know (`ltree`, `citext`, `s.my_domain`) for a record, which a multi-target
+  `INTO` refuses. Such a variable's declared type is now read as `text`, only where
+  the compiler needs it to be; `record` itself never is, as PostgreSQL refuses that
+  body too.
 
 - **`drift --schema` reads a `confiture build` bundle that seeds with `COPY … FROM
   stdin`** (#561). drift handed the bundle to the parser whole, which refused the
