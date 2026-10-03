@@ -566,11 +566,64 @@ class _ReadOnly(Mapping[_K, _V]):
         return repr(self._data)
 
 
+@dataclass(frozen=True)
+class OtherObject:
+    """An object the model holds by identity and definition only.
+
+    A schema, an extension, a domain, a composite or range type, a policy, a
+    rule, an event trigger, extended statistics, a foreign table, a foreign-data
+    wrapper, a server, a publication, a conversion, an operator class or family,
+    an access method: the kinds no typed section holds. ``kind``, ``schema`` and
+    ``name`` are its identity as ``ObjectRef`` keys it (schema folded and
+    defaulted, a policy or rule named ``table.name``); ``definition`` is what
+    decides whether it changed, ``None`` from a reader that read only that it
+    exists (``Coverage`` says which).
+    """
+
+    kind: str
+    schema: str
+    name: str
+    definition: str | None = None
+
+
+#: The object kinds a typed section holds; every other tracked kind is an
+#: :class:`OtherObject`.
+TYPED_KINDS = frozenset(
+    {
+        "table",
+        "sequence",
+        "function",
+        "procedure",
+        "aggregate",
+        "view",
+        "matview",
+        "trigger",
+        "tview",
+    }
+)
+
+
+def other_ref(obj: OtherObject) -> ObjectRef:
+    """The bucket of an object the model holds by identity and definition."""
+    return ObjectRef(
+        kind=obj.kind, schema=obj.schema, name=obj.name, signature=None, display=obj.name
+    )
+
+
 #: How deeply a reader read a section: that each object exists, or what it is.
 CoverageDepth = Literal["existence", "definition"]
 
 #: The model's sections, in the order its wire writes them.
-SECTIONS = ("tables", "enum_types", "sequences", "routines", "views", "triggers", "tviews")
+SECTIONS = (
+    "tables",
+    "enum_types",
+    "sequences",
+    "routines",
+    "views",
+    "triggers",
+    "tviews",
+    "other_objects",
+)
 
 #: What every reader reads: the sections a table-level comparison needs.
 _STRUCTURAL = ("tables", "enum_types", "sequences")
@@ -631,6 +684,7 @@ class SchemaModel:
     views: Mapping[ObjectRef, View] = field(default_factory=dict)
     triggers: Mapping[ObjectRef, Trigger] = field(default_factory=dict)
     tviews: Mapping[ObjectRef, TView] = field(default_factory=dict)
+    other_objects: Mapping[ObjectRef, OtherObject] = field(default_factory=dict)
     #: What the reader read (:class:`Coverage`). Not what the schema is, so not
     #: part of equality: a tree and the database built from it are one schema.
     coverage: Coverage = field(default_factory=Coverage, compare=False)
@@ -659,6 +713,7 @@ class SchemaModel:
             "views": section(self.views),
             "triggers": section(self.triggers),
             "tviews": section(self.tviews),
+            "other_objects": section(self.other_objects),
             "coverage": dict(self.coverage.sections),
         }
 
@@ -791,6 +846,7 @@ def _model_from_dict(data: dict[str, Any]) -> SchemaModel:
         triggers=_keyed(data["triggers"], lambda d: Trigger(**d), trigger_ref),
         # A wire written before TVIEWs were modelled has none (#504).
         tviews=_keyed(data.get("tviews", []), lambda d: TView(**d), tview_ref),
+        other_objects=_keyed(data.get("other_objects", []), lambda d: OtherObject(**d), other_ref),
         # A wire written before coverage was recorded claims only the structural
         # sections, which every reader has always read.
         coverage=Coverage.of(data["coverage"]) if "coverage" in data else Coverage(),
@@ -992,4 +1048,5 @@ def normalise_for_parity(model: SchemaModel) -> SchemaModel:
             for ref, t in model.triggers.items()
         },
         tviews={ref: _parity_tview(t) for ref, t in model.tviews.items()},
+        other_objects=model.other_objects,
     )

@@ -1,6 +1,7 @@
 {
   "coverage": {
     "enum_types": "definition",
+    "other_objects": "definition",
     "routines": "definition",
     "sequences": "definition",
     "tables": "definition",
@@ -17,6 +18,20 @@
         "active",
         "retired"
       ]
+    }
+  ],
+  "other_objects": [
+    {
+      "definition": "CREATE SCHEMA catalog",
+      "kind": "schema",
+      "name": "catalog",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE SCHEMA prep_seed",
+      "kind": "schema",
+      "name": "prep_seed",
+      "schema": "public"
     }
   ],
   "routines": [

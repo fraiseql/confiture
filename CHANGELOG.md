@@ -84,6 +84,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answer `writable_columns`, parity and drift now read. `filled_by_postgresql` and
   `unique_without_author_input` are kept apart: a `gen_random_uuid()` default is
   writable, and unique either way.
+- ⚠️ **The schema model holds every object the tree tracks** — `SchemaModel.other_objects`
+  (`OtherObject`, on the wire and the seam): schemas, extensions, domains, composite
+  and range types, policies, rules, event triggers, extended statistics, foreign
+  tables, foreign-data wrappers, servers, publications, conversions, operator
+  classes and families, access methods — by identity and definition from a tree,
+  and by identity from a database (`live_catalog.read(other_objects=True)`, at
+  `existence` depth, leaving out what an extension or `initdb` created).
 - ⚠️ **`platform.introspect` folds TVIEWs** (no `tv_*` table, no backing view),
   and refuses a database whose pg_tviews offers no read contract confiture knows
   (`CONFIG_014`), as `drift` already did.

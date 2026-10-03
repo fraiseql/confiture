@@ -1,6 +1,7 @@
 {
   "coverage": {
     "enum_types": "definition",
+    "other_objects": "definition",
     "routines": "definition",
     "sequences": "definition",
     "tables": "definition",
@@ -9,6 +10,32 @@
     "views": "definition"
   },
   "enum_types": [],
+  "other_objects": [
+    {
+      "definition": "CREATE EXTENSION btree_gist",
+      "kind": "extension",
+      "name": "btree_gist",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE EXTENSION pg_trgm",
+      "kind": "extension",
+      "name": "pg_trgm",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE EXTENSION unaccent",
+      "kind": "extension",
+      "name": "unaccent",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE EXTENSION \"uuid-ossp\"",
+      "kind": "extension",
+      "name": "uuid-ossp",
+      "schema": "public"
+    }
+  ],
   "routines": [
     {
       "body": "\nBEGIN\n    NEW.updated_at = NOW();\n    RETURN NEW;\nEND;\n",

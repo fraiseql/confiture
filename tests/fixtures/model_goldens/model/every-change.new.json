@@ -1,6 +1,7 @@
 {
   "coverage": {
     "enum_types": "definition",
+    "other_objects": "definition",
     "routines": "definition",
     "sequences": "definition",
     "tables": "definition",
@@ -25,6 +26,14 @@
         "x",
         "y"
       ]
+    }
+  ],
+  "other_objects": [
+    {
+      "definition": "CREATE SCHEMA ren",
+      "kind": "schema",
+      "name": "ren",
+      "schema": "public"
     }
   ],
   "routines": [],

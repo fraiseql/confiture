@@ -58,7 +58,7 @@ from confiture.core.ddl_walk import (
     written_type,
 )
 from confiture.core.ddl_walk import type_name as ddl_type_name
-from confiture.core.schema_identity import quote_identifier
+from confiture.core.schema_identity import DEFAULT_SCHEMA, quote_identifier
 from confiture.core.schema_model import (
     TVIEWS_SCHEMA,
     Column,
@@ -69,6 +69,7 @@ from confiture.core.schema_model import (
     IdentityKind,
     Index,
     ObjectRef,
+    OtherObject,
     RelationName,
     Routine,
     RoutineKind,
@@ -78,6 +79,7 @@ from confiture.core.schema_model import (
     TView,
     View,
     Volatility,
+    other_ref,
     ref_for,
     routine_ref,
     trigger_ref,
@@ -101,6 +103,93 @@ _EXTENSION_OWNED = """
 
 #: Not an object an extension created.
 _NOT_EXTENSION_OWNED = "NOT " + _EXTENSION_OWNED
+
+#: The first object id ``initdb`` does not hand out (PostgreSQL's
+#: ``FirstNormalObjectId``): an object below it — ``plpgsql``, ``pg_catalog``'s
+#: own — came with the cluster, and no tree declares it.
+_FIRST_USER_OID = 16384
+
+
+def _created(catalog: str, oid: str) -> str:
+    """Neither an extension's object nor one ``initdb`` made: one the database's users created."""
+    owned = _EXTENSION_OWNED.format(catalog=catalog, oid=oid)
+    return f"{oid} >= {_FIRST_USER_OID} AND NOT {owned}"
+
+
+#: Every object of the kinds no typed section holds, by the identity ``ddl_objects``
+#: gives it: ``(kind, schema, name)`` — ``schema`` ``NULL`` for a kind that lives in
+#: no schema, a policy or rule named ``table.name``. Existence only: the definition
+#: each would need is a deparse per kind.
+_OTHER_OBJECTS = f"""
+SELECT 'schema', NULL, n.nspname FROM pg_namespace n
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_namespace", "n.oid")}
+UNION ALL
+SELECT 'extension', NULL, e.extname FROM pg_extension e
+WHERE {_created("pg_extension", "e.oid")}
+UNION ALL
+SELECT 'domain', n.nspname, t.typname FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+WHERE t.typtype = 'd' AND n.nspname = ANY(%(schemas)s) AND {_created("pg_type", "t.oid")}
+UNION ALL
+SELECT 'type', n.nspname, t.typname FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+WHERE (t.typtype = 'r'
+       OR (t.typtype = 'c' AND EXISTS (
+           SELECT 1 FROM pg_class c WHERE c.oid = t.typrelid AND c.relkind = 'c')))
+  AND n.nspname = ANY(%(schemas)s) AND {_created("pg_type", "t.oid")}
+UNION ALL
+SELECT 'policy', n.nspname, c.relname || '.' || p.polname
+FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_policy", "p.oid")}
+UNION ALL
+SELECT 'rule', n.nspname, c.relname || '.' || r.rulename
+FROM pg_rewrite r JOIN pg_class c ON c.oid = r.ev_class JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE r.rulename <> '_RETURN' AND n.nspname = ANY(%(schemas)s) AND {_created("pg_rewrite", "r.oid")}
+UNION ALL
+SELECT 'event_trigger', NULL, e.evtname FROM pg_event_trigger e
+WHERE {_created("pg_event_trigger", "e.oid")}
+UNION ALL
+SELECT 'statistics', n.nspname, s.stxname
+FROM pg_statistic_ext s JOIN pg_namespace n ON n.oid = s.stxnamespace
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_statistic_ext", "s.oid")}
+UNION ALL
+SELECT 'foreign_table', n.nspname, c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind = 'f' AND n.nspname = ANY(%(schemas)s) AND {_created("pg_class", "c.oid")}
+UNION ALL
+SELECT 'foreign_data_wrapper', NULL, w.fdwname FROM pg_foreign_data_wrapper w
+WHERE {_created("pg_foreign_data_wrapper", "w.oid")}
+UNION ALL
+SELECT 'server', NULL, s.srvname FROM pg_foreign_server s
+WHERE {_created("pg_foreign_server", "s.oid")}
+UNION ALL
+SELECT 'publication', NULL, p.pubname FROM pg_publication p
+WHERE {_created("pg_publication", "p.oid")}
+UNION ALL
+SELECT 'conversion', n.nspname, c.conname
+FROM pg_conversion c JOIN pg_namespace n ON n.oid = c.connamespace
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_conversion", "c.oid")}
+UNION ALL
+SELECT 'operator_class', n.nspname, o.opcname
+FROM pg_opclass o JOIN pg_namespace n ON n.oid = o.opcnamespace
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_opclass", "o.oid")}
+UNION ALL
+SELECT 'operator_family', n.nspname, o.opfname
+FROM pg_opfamily o JOIN pg_namespace n ON n.oid = o.opfnamespace
+WHERE n.nspname = ANY(%(schemas)s) AND {_created("pg_opfamily", "o.oid")}
+UNION ALL
+SELECT 'access_method', NULL, a.amname FROM pg_am a
+WHERE {_created("pg_am", "a.oid")}
+"""
+
+
+def _other_objects(
+    conn: psycopg.Connection, schemas: Sequence[str]
+) -> dict[ObjectRef, OtherObject]:
+    """Every object of the kinds no typed section holds, by identity (existence depth)."""
+    found = (
+        OtherObject(kind, (schema or DEFAULT_SCHEMA).lower(), name.lower())
+        for kind, schema, name in conn.execute(_OTHER_OBJECTS, {"schemas": list(schemas)})
+    )
+    return {other_ref(obj): obj for obj in found}
+
 
 #: The ``relkind`` letters of a table, partitioned or not.
 TABLE_KINDS = ("r", "p")
@@ -297,6 +386,7 @@ def read(
     routines: bool = False,
     views: bool = False,
     triggers: bool = False,
+    other_objects: bool = False,
 ) -> SchemaModel:
     """The schema the database holds in *schemas*, in the model DDL is read into.
 
@@ -304,6 +394,10 @@ def read(
     table by default, which is what a tree declares with ``CREATE TABLE``. A
     caller that has always meant something else by "a table" says so —
     ``introspect`` reads ``('r',)``, the plugin's snapshot :data:`TABLE_LIKE`.
+
+    *other_objects* reads every object of the kinds no typed section holds — a
+    schema, an extension, a domain, a policy, … — that they exist, not what they
+    are (``Coverage`` says ``existence``).
 
     *routines*, *views* and *triggers* read those too — each a query, and a
     view's a deparse per view — for the callers that compare them. An
@@ -364,6 +458,7 @@ def read(
         views=view_models,
         triggers=({trigger_ref(t): t for t in _triggers(conn, wanted)} if triggers else {}),
         tviews=tview_models,
+        other_objects=_other_objects(conn, wanted) if other_objects else {},
         coverage=Coverage.of(
             {
                 **dict.fromkeys(("tables", "enum_types", "sequences", "tviews"), "definition"),
@@ -376,6 +471,7 @@ def read(
                     )
                     if read
                 },
+                **({"other_objects": "existence"} if other_objects else {}),
             }
         ),
     )

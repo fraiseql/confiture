@@ -1,6 +1,7 @@
 {
   "coverage": {
     "enum_types": "definition",
+    "other_objects": "definition",
     "routines": "definition",
     "sequences": "definition",
     "tables": "definition",
@@ -9,6 +10,14 @@
     "views": "definition"
   },
   "enum_types": [],
+  "other_objects": [
+    {
+      "definition": "CREATE EXTENSION \"uuid-ossp\"",
+      "kind": "extension",
+      "name": "uuid-ossp",
+      "schema": "public"
+    }
+  ],
   "routines": [],
   "sequences": [],
   "tables": [

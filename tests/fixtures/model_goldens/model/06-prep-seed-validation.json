@@ -1,6 +1,7 @@
 {
   "coverage": {
     "enum_types": "definition",
+    "other_objects": "definition",
     "routines": "definition",
     "sequences": "definition",
     "tables": "definition",
@@ -9,6 +10,20 @@
     "views": "definition"
   },
   "enum_types": [],
+  "other_objects": [
+    {
+      "definition": "CREATE SCHEMA catalog",
+      "kind": "schema",
+      "name": "catalog",
+      "schema": "public"
+    },
+    {
+      "definition": "CREATE SCHEMA prep_seed",
+      "kind": "schema",
+      "name": "prep_seed",
+      "schema": "public"
+    }
+  ],
   "routines": [
     {
       "body": "\nBEGIN\n    -- Insert from prep_seed to catalog\n    -- Note: GENERATED ALWAYS AS IDENTITY handles pk_manufacturer\n    INSERT INTO catalog.tb_manufacturer (id, name, country_code)\n    SELECT\n        prep.id,\n        prep.name,\n        prep.country_code\n    FROM prep_seed.tb_manufacturer prep\n    ON CONFLICT (id) DO NOTHING;  -- Handle duplicates gracefully\n\n    -- Clear prep_seed table after resolution\n    TRUNCATE TABLE prep_seed.tb_manufacturer;\nEND;\n",
