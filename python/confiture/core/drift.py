@@ -1097,8 +1097,6 @@ class SchemaDriftDetector:
             routines=objects,
             views=objects,
             triggers=objects,
-            # Always: a TVIEW read as a table would be `extra_table` (#504).
-            tviews=True,
         )
 
     def compare_with_expected(self, expected: SchemaModel) -> DriftReport:

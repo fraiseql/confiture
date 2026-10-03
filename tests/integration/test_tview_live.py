@@ -64,7 +64,7 @@ def test_a_database_without_pg_tviews_has_none(fresh_database: str) -> None:
 
 def test_the_model_holds_the_tview_and_not_its_parts(tview_database: str) -> None:
     with psycopg.connect(tview_database) as conn:
-        model = live_catalog.read(conn, schemas=["public"], views=True, triggers=True, tviews=True)
+        model = live_catalog.read(conn, schemas=["public"], views=True, triggers=True)
 
     assert list(model.tviews) == [ref_for("tview", "public", "tv_post")]
     assert isinstance(model.tviews[ref_for("tview", "public", "tv_post")], TView)
@@ -99,7 +99,7 @@ def test_a_view_that_took_a_stale_backing_views_name_is_the_trees(tview_database
             pytest.skip("this pg_tviews' registry has no `view` column (fraiseql/pg_tviews#153)")
         conn.execute("DROP VIEW v_post")
         conn.execute("CREATE VIEW v_post AS SELECT 1 AS mine")
-        model = live_catalog.read(conn, schemas=["public"], views=True, tviews=True)
+        model = live_catalog.read(conn, schemas=["public"], views=True)
 
     assert list(model.tviews) == [ref_for("tview", "public", "tv_post")]
     assert ref_for("view", "public", "v_post") in model.views
@@ -122,7 +122,7 @@ def test_the_parse_side_and_the_live_side_hold_one_tview(tview_database: str) ->
     from confiture.core.schema_model import normalise_for_parity
 
     with psycopg.connect(tview_database) as conn:
-        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+        live = live_catalog.read(conn, schemas=["public"])
 
     assert normalise_for_parity(live).tviews == normalise_for_parity(read_text(TREE).model).tviews
 
@@ -171,7 +171,7 @@ def test_the_parse_side_and_the_live_side_hold_one_pinned_tview(pinned_database:
     from confiture.core.schema_model import normalise_for_parity
 
     with psycopg.connect(pinned_database) as conn:
-        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+        live = live_catalog.read(conn, schemas=["public"])
 
     assert normalise_for_parity(live).tviews == normalise_for_parity(read_text(PINNED).model).tviews
 
@@ -221,7 +221,7 @@ def test_a_tree_that_calls_pg_tviews_is_the_database_it_builds(
             pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
         create_supported_pg_tviews(conn)
         conn.execute(CALLED)
-        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+        live = live_catalog.read(conn, schemas=["public"])
 
     (found,) = live.tviews.values()
     assert (found.logged, found.fillfactor) == (True, 70)
@@ -240,7 +240,7 @@ def test_set_logged_in_the_tree_is_what_the_database_holds(tview_database: str) 
 
     with psycopg.connect(tview_database, autocommit=True) as conn:
         conn.execute("ALTER TABLE tv_post SET LOGGED")
-        live = live_catalog.read(conn, schemas=["public"], tviews=True)
+        live = live_catalog.read(conn, schemas=["public"])
 
     assert normalise_for_parity(live).tviews == normalise_for_parity(read_text(LOGGED).model).tviews
     assert _drift(tview_database, LOGGED) == []
@@ -259,7 +259,7 @@ def test_set_fillfactor_in_the_tree_is_what_the_database_holds(tview_database: s
     for tree, statement in ((FILLED, "SET (fillfactor = 70)"), (RESET, "RESET (fillfactor)")):
         with psycopg.connect(tview_database, autocommit=True) as conn:
             conn.execute(f"ALTER TABLE tv_post {statement}")
-            live = live_catalog.read(conn, schemas=["public"], tviews=True)
+            live = live_catalog.read(conn, schemas=["public"])
 
         assert (
             normalise_for_parity(live).tviews == normalise_for_parity(read_text(tree).model).tviews
@@ -304,7 +304,7 @@ def test_a_pg_tviews_offering_another_contract_is_refused(
     with psycopg.connect(tview_database) as conn:
         for read in (
             lambda: live_catalog.tviews(conn, ["public"]),
-            lambda: live_catalog.read(conn, schemas=["public"], tviews=True),
+            lambda: live_catalog.read(conn, schemas=["public"]),
             lambda: collect_schema_facts(conn),
         ):
             with pytest.raises(ConfigurationError) as refused:
@@ -319,4 +319,48 @@ def test_a_database_without_pg_tviews_is_never_refused(
     monkeypatch.setattr(live_catalog, "CONTRACT_VERSION", 99)
 
     with psycopg.connect(fresh_database) as conn:
-        assert live_catalog.read(conn, schemas=["public"], tviews=True).tviews == {}
+        assert live_catalog.read(conn, schemas=["public"]).tviews == {}
+
+
+def test_every_reader_of_a_database_holds_a_tview_as_one_object(tview_database: str) -> None:
+    """``introspect`` (the seam) and a bare live read fold a TVIEW as drift does.
+
+    Read as parts, ``tv_post`` is a table and ``v_post`` a view: a tool reading
+    the seam, a snapshot, or ``squash``'s check would each see objects the tree
+    never declared.
+    """
+    from confiture.platform import introspect
+
+    for model in (
+        introspect(tview_database, schemas=["public"]),
+        live_catalog.read(psycopg.connect(tview_database), schemas=["public"], views=True),
+    ):
+        assert list(model.tviews) == [ref_for("tview", "public", "tv_post")]
+        assert ref_for("table", "public", "tv_post") not in model.tables
+        assert not any(ref.name == "v_post" for ref in model.views)
+
+
+def test_squash_from_build_accepts_a_tree_with_a_tview(
+    tmp_path, test_db_url: str, fresh_database_factory: Callable[[str], str]
+) -> None:
+    """``squash --from-build`` compares the tree with a replay: a TVIEW is one object on both."""
+    from confiture.core.squash import plan_squash
+
+    with psycopg.connect(fresh_database_factory("confiture_tv_probe"), autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+    migrations = tmp_path / "migrations"
+    migrations.mkdir()
+    (migrations / "20260101000000_extension.up.sql").write_text("CREATE EXTENSION pg_tviews;\n")
+    (migrations / "20260101000000_extension.down.sql").write_text("DROP EXTENSION pg_tviews;\n")
+    (migrations / "20260102000000_tree.up.sql").write_text(TREE)
+    (migrations / "20260102000000_tree.down.sql").write_text(
+        "DROP TABLE tv_post; DROP TABLE tb_post; DROP TABLE tb_user;\n"
+    )
+
+    plan = plan_squash(migrations, "20260102000000", server_url=test_db_url, build_sql=TREE)
+
+    assert plan.source == "build"

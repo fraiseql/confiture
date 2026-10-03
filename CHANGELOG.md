@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`tree_002` sees a hex prefix that starts with a letter** (`a001.sql` is
   numbered, with no verb): it decided "numbered" by the first character being a
   decimal digit.
+- **Every reader of a database holds a pg_tviews TVIEW as one object.** Only
+  `drift` asked the live reader to fold a TVIEW; `platform.introspect`, `squash`'s
+  `--from-build` check, the schema snapshotter and the dry-run analyser read its
+  `tv_*` table and backing `v_*` view as a table and a view the tree never
+  declared — so `squash --from-build` refused every tree with a TVIEW
+  (`VALID_006`). `live_catalog.read` loses its `tviews=` switch: it always folds.
 - **The lint rules read the files the lint parsed, once.** Each rule that re-parsed
   a file's text on its own — `build_003`/`build_004`, the `body` family's locations
   and `TEMP`-table reading, `tenant_001`/`tenant_003` — reads the statements the
@@ -78,6 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   answer `writable_columns`, parity and drift now read. `filled_by_postgresql` and
   `unique_without_author_input` are kept apart: a `gen_random_uuid()` default is
   writable, and unique either way.
+- ⚠️ **`platform.introspect` folds TVIEWs** (no `tv_*` table, no backing view),
+  and refuses a database whose pg_tviews offers no read contract confiture knows
+  (`CONFIG_014`), as `drift` already did.
 - ⚠️ **A schema model says what its reader read** (`SchemaModel.coverage`, on the
   wire and the seam as `Coverage`): each section read, and how deeply. A model
   read from DDL covers every section; one read from a database, the sections it
