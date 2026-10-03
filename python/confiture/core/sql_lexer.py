@@ -8,6 +8,8 @@ read one way — PostgreSQL's:
   which tokenises anything (invalid SQL included) exactly as PostgreSQL would.
 - :func:`strip_comments` — comment tokens blanked from the scanner's positions;
   literals, quoted identifiers and dollar-quoted bodies are untouched.
+- :func:`parse_file` — one file of a tree, ``COPY`` data blanked and parsed once:
+  the :class:`ParsedFile` every reader of a tree walks.
 - :func:`parse` — ``parse_sql`` with each statement's location and line.
 - :func:`statement_type` — the verb of a statement (``CREATE``, ``SELECT``, …).
 - :func:`tokens` — the scanner's tokens with absolute offsets, minus the data
@@ -126,6 +128,53 @@ class ParsedStatement:
     location: int
     length: int
     line: int
+
+
+@dataclass(frozen=True)
+class ParsedFile:
+    """One file of a tree, parsed once: what every reader of the tree walks.
+
+    Attributes:
+        label: How a finding names the file — relative to the project where there
+            is one — or ``None`` for DDL handed in as text.
+        text: The file's text with every ``COPY … FROM stdin`` block blanked: the
+            text the statements' locations index into, every line where the
+            author wrote it.
+        statements: The statements pglast returned for :attr:`text`.
+        base: Where :attr:`text` starts among the files read with it. An object's
+            place in the tree is ``base`` plus its offset in its own file, so
+            "written before" is one comparison across files.
+    """
+
+    label: str | None
+    text: str
+    statements: tuple[Any, ...]
+    base: int = 0
+
+
+@dataclass(frozen=True)
+class Rejected:
+    """A file PostgreSQL's parser refused, with what is needed to report it.
+
+    A label alone says only that something in the file did not parse. The
+    notice names a line, and the line comes from the error and the text it
+    indexes; carrying both here spares parsing the file a second time.
+    """
+
+    label: str | None
+    text: str
+    error: BaseException
+
+
+def parse_file(text: str, label: str | None = None, base: int = 0) -> ParsedFile:
+    """Parse one file of a tree: its ``COPY`` data blanked, never stripped, then parsed once.
+
+    Raises:
+        pglast.parser.ParseError: PostgreSQL's parser rejects the file; its
+            position is into *text*, which blanking leaves where it was.
+    """
+    blanked = blank_copy_blocks(text)
+    return ParsedFile(label, blanked, tuple(pglast.parser.parse_sql(blanked) or ()), base)
 
 
 def split_statements(sql: str) -> list[str]:

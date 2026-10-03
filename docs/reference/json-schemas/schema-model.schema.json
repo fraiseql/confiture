@@ -95,7 +95,8 @@
         "identity",
         "generated",
         "generated_kind",
-        "primary_key"
+        "primary_key",
+        "file"
       ],
       "properties": {
         "name": {
@@ -156,6 +157,13 @@
         },
         "primary_key": {
           "type": "boolean"
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The file that wrote the column — another than its table's when an `ALTER TABLE … ADD COLUMN` in a later file added it — named relative to the project; null for DDL handed in as text. Where a column is written is not what it is: two models differing only here are one schema."
         }
       }
     },

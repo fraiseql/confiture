@@ -26,7 +26,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, TypeVar
 
-import pglast
 from pglast.stream import RawStream
 
 from confiture.core._pglast_enums import member as _pg_member
@@ -76,6 +75,7 @@ from confiture.core.schema_model import (
     view_ref,
 )
 from confiture.core.schema_model import Sequence as SequenceModel
+from confiture.core.sql_lexer import ParsedFile
 from confiture.core.type_lattice import (
     canonical_type,
     signature_from_type_names,
@@ -178,10 +178,9 @@ class SchemaObject:
     constraints: list[Constraint] = field(default_factory=list)
     #: A table's indexes, folded on from their own ``CREATE INDEX`` statements.
     indexes: list[Index] = field(default_factory=list)
-    #: The line each of those statements begins on, in the text this inventory
-    #: read — where a finding about an index points, and where a directive above
-    #: it stands.
-    index_lines: dict[Index, int] = field(default_factory=dict)
+    #: The file and line each of those statements begins on — where a finding
+    #: about an index points, and where a directive above it stands.
+    index_sites: dict[Index, tuple[str | None, int]] = field(default_factory=dict)
     #: An enum's labels in declaration order; ``None`` for every other kind,
     #: a composite type included.
     enum_values: tuple[str, ...] | None = None
@@ -458,7 +457,7 @@ def _mark_primary_key(table: SchemaObject, constraint: Constraint) -> None:
     ]
 
 
-def _append_column(sql: str, table: SchemaObject, node: Any) -> None:
+def _append_column(sql: str, table: SchemaObject, node: Any, *, file: str | None = None) -> None:
     """Add the column *node* declares, unless the table already holds one of that name.
 
     A second ``ADD COLUMN a`` is what a database built from the tree never holds:
@@ -468,7 +467,7 @@ def _append_column(sql: str, table: SchemaObject, node: Any) -> None:
     column, constraints = _column(sql, node)
     if any(existing.folded == column.folded for existing in table.columns):
         return
-    table.columns.append(column)
+    table.columns.append(replace(column, file=file))
     _add_constraints(table, constraints)
 
 
@@ -793,15 +792,15 @@ def _schema_declaration(sql: str, raw: Any) -> SchemaObject | None:
     return declared
 
 
-def _added(sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
-    _append_column(sql, table, edit.coldef)
+def _added(parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
+    _append_column(parsed.text, table, edit.coldef, file=parsed.label)
 
 
-def _dropped(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+def _dropped(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
     table.columns = [column for column in table.columns if column.folded != edit.column]
 
 
-def _retyped(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+def _retyped(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
     """The type as the ``ALTER`` wrote it, on the column the ``CREATE`` declared.
 
     A retype never invents a column: naming one the tree has not created is an
@@ -825,26 +824,26 @@ def _edited(table: SchemaObject, column_name: str | None, **changes: Any) -> Non
     ]
 
 
-def _set_not_null(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+def _set_not_null(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
     _edited(table, edit.column, not_null=True)
 
 
-def _drop_not_null(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+def _drop_not_null(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
     _edited(table, edit.column, not_null=False)
 
 
-def _set_default(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+def _set_default(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
     _edited(table, edit.column, default=render_default(edit.default))
 
 
-def _drop_default(_sql: str, table: SchemaObject, edit: ColumnEdit) -> None:
+def _drop_default(_parsed: ParsedFile, table: SchemaObject, edit: ColumnEdit) -> None:
     _edited(table, edit.column, default=None)
 
 
 #: ``ColumnEdit.kind`` -> how the inventory applies it to its own model. The
 #: decision itself is ``ddl_walk.column_edit``, shared with the differ, which
 #: applies the same edits to a model that shares none of these types (#301).
-_COLUMN_APPLIERS: dict[str, Callable[[str, SchemaObject, ColumnEdit], None]] = {
+_COLUMN_APPLIERS: dict[str, Callable[[ParsedFile, SchemaObject, ColumnEdit], None]] = {
     "add": _added,
     "drop": _dropped,
     "retype": _retyped,
@@ -855,7 +854,7 @@ _COLUMN_APPLIERS: dict[str, Callable[[str, SchemaObject, ColumnEdit], None]] = {
 }
 
 
-def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
+def _apply_alter(parsed: ParsedFile, stmt: Any, inventory: Inventory) -> None:
     """Fold one ``ALTER TABLE`` into the table the tree already created.
 
     An ``ALTER`` naming a table this tree never creates has nothing to fold into
@@ -883,7 +882,7 @@ def _apply_alter(sql: str, stmt: Any, inventory: Inventory) -> None:
         edit = column_edit(cmd)
         apply = _COLUMN_APPLIERS.get(edit.kind) if edit is not None else None
         if apply is not None and edit is not None:
-            apply(sql, table, edit)
+            apply(parsed, table, edit)
 
 
 def _held_table(
@@ -916,7 +915,9 @@ def _apply_like(stmt: Any, table: SchemaObject | None, inventory: Inventory) -> 
             continue
         source = _held_table(inventory, like.source, before=table.offset)
         copied = source.columns if source is not None else []
-        columns.extend(replace(like.copy(column), line=table.line) for column in copied)
+        columns.extend(
+            replace(like.copy(column), line=table.line, file=table.file) for column in copied
+        )
     kept: dict[str, SchemaColumn] = {}
     for column in (*columns, *own.values()):
         kept.setdefault(column.folded, column)
@@ -989,7 +990,7 @@ def _targets(inventory: Inventory, edit: ObjectEdit, offset: int) -> list[Schema
 _INDEXED_KINDS = ("table", "matview", "tview")
 
 
-def _apply_index(sql: str, raw: Any, inventory: Inventory) -> None:
+def _apply_index(parsed: ParsedFile, raw: Any, inventory: Inventory) -> None:
     """Fold a ``CREATE INDEX`` onto the table — or materialized view — the tree declared."""
     relation = raw.stmt.relation
     found = inventory.find_all(_INDEXED_KINDS, relation.schemaname, relation.relname)
@@ -998,7 +999,10 @@ def _apply_index(sql: str, raw: Any, inventory: Inventory) -> None:
     target = found[0]
     index = read_index(raw.stmt, table=RelationName(target.schema, target.name))
     target.indexes.append(index)
-    target.index_lines[index] = _line_of(sql, _statement_offset(sql, raw))
+    target.index_sites[index] = (
+        parsed.label,
+        _line_of(parsed.text, _statement_offset(parsed.text, raw)),
+    )
 
 
 def _drop_index(inventory: Inventory, edit: ObjectEdit) -> None:
@@ -1074,40 +1078,80 @@ def _apply_comment(stmt: Any, inventory: Inventory) -> None:
         obj.comment = getattr(stmt, "comment", None)
 
 
-def build_inventory(sql: str, raws: Sequence[Any] | None = None) -> Inventory:
-    """Parse ``sql`` and collect its objects. Raises ``pglast.parser.ParseError``.
+def build_inventory(files: Sequence[ParsedFile]) -> Inventory:
+    """Collect the objects a tree declares, from each of its files parsed once.
 
-    *raws* are ``sql``'s statements when the caller has parsed it already — the
-    differ parses once and hands the same statements to ``ddl_objects``.
+    Every object and column is placed where it is written: in the file whose
+    statement wrote it (:attr:`ParsedFile.label`), at the line in that file. A
+    column an ``ALTER … ADD COLUMN`` in a later file adds is that file's, not its
+    table's. Offsets are the tree's (``base`` plus the offset in the file), so a
+    fold that asks what was declared *before* a statement asks it across files.
     """
     inventory = Inventory()
-    raws = list(pglast.parse_sql(sql) or []) if raws is None else list(raws)
     created: dict[int, SchemaObject] = {}
-    for raw in raws:
-        obj = object_from_statement(sql, raw) or _schema_declaration(sql, raw)
-        if obj is not None:
-            (inventory.schemas if obj.kind == "schema" else inventory.objects).append(obj)
-            created[id(raw)] = obj
-        inventory.objects.extend(tviews_from_calls(sql, raw))
-    for raw in raws:
-        stmt = raw.stmt
-        kind = type(stmt).__name__
-        if kind == "AlterTableStmt":
-            _apply_alter(sql, stmt, inventory)
-        elif kind == "CreateStmt":
-            _apply_like(stmt, created.get(id(raw)), inventory)
-        elif kind == "IndexStmt":
-            _apply_index(sql, raw, inventory)
-        elif kind == "CommentStmt":
-            _apply_comment(stmt, inventory)
-        else:
-            # A drop, a rename or a schema move: not `ALTER TABLE` at all, yet
-            # each changes what the tree declares (#301).
-            edits = object_edits(stmt)
-            offset = _statement_offset(sql, raw) if edits else 0
-            for edit in edits:
-                _apply_object_edit(inventory, edit, offset)
+    for parsed in files:
+        for raw in parsed.statements:
+            obj = object_from_statement(parsed.text, raw) or _schema_declaration(parsed.text, raw)
+            if obj is not None:
+                _place(obj, parsed)
+                (inventory.schemas if obj.kind == "schema" else inventory.objects).append(obj)
+                created[id(raw)] = obj
+            for tview in tviews_from_calls(parsed.text, raw):
+                _place(tview, parsed)
+                inventory.objects.append(tview)
+    for parsed in files:
+        for raw in parsed.statements:
+            _fold(parsed, raw, created, inventory)
     return inventory
+
+
+def _place(obj: SchemaObject, parsed: ParsedFile) -> None:
+    """Put an object its file's statement created where the tree has it: that file, in order."""
+    obj.offset += parsed.base
+    obj.file = parsed.label
+    obj.columns = [replace(column, file=parsed.label) for column in obj.columns]
+
+
+def _fold(
+    parsed: ParsedFile, raw: Any, created: dict[int, SchemaObject], inventory: Inventory
+) -> None:
+    """Fold one statement's edit into what the tree has declared."""
+    stmt = raw.stmt
+    kind = type(stmt).__name__
+    if kind == "AlterTableStmt":
+        _apply_alter(parsed, stmt, inventory)
+    elif kind == "CreateStmt":
+        _apply_like(stmt, created.get(id(raw)), inventory)
+    elif kind == "IndexStmt":
+        _apply_index(parsed, raw, inventory)
+    elif kind == "CommentStmt":
+        _apply_comment(stmt, inventory)
+    else:
+        # A drop, a rename or a schema move: not `ALTER TABLE` at all, yet
+        # each changes what the tree declares (#301).
+        edits = object_edits(stmt)
+        offset = parsed.base + _statement_offset(parsed.text, raw) if edits else 0
+        for edit in edits:
+            _apply_object_edit(inventory, edit, offset)
+
+
+def files_alone(files: Sequence[ParsedFile]) -> tuple[list[SchemaObject], list[SchemaObject]]:
+    """Each file's objects and ``CREATE SCHEMA`` declarations, folded within that file alone.
+
+    What a statement wrote before another file edited it — the question
+    ``build_001`` (two definitions of one object), ``qual_001`` (a ``CREATE`` that
+    names no schema) and ``build_003``/``build_004`` (what a body names, and
+    whether it was created first) ask. Read from the statements already parsed:
+    nothing is parsed again.
+    """
+    objects: list[SchemaObject] = []
+    schemas: list[SchemaObject] = []
+    for parsed in files:
+        # Alone, a file starts at its own first character: an offset is the file's.
+        alone = build_inventory([replace(parsed, base=0)])
+        objects.extend(alone.objects)
+        schemas.extend(alone.schemas)
+    return objects, schemas
 
 
 def inherit_columns(inventory: Inventory) -> Inventory:
@@ -1154,8 +1198,8 @@ def inherit_columns(inventory: Inventory) -> Inventory:
 def _inherited(child: SchemaObject, column: SchemaColumn) -> SchemaColumn:
     """*column* of a parent, as *child* holds it; written where the child's name is."""
     if child.is_partition:
-        return replace(column, line=child.line)
-    return replace(column, line=child.line, primary_key=False, identity=None)
+        return replace(column, line=child.line, file=child.file)
+    return replace(column, line=child.line, file=child.file, primary_key=False, identity=None)
 
 
 def _merged(child: SchemaObject, inherited: dict[str, SchemaColumn]) -> list[SchemaColumn]:
@@ -1402,53 +1446,3 @@ def distinct(objects: Iterable[SchemaObject]) -> list[SchemaObject]:
     for it a second definition really is a second thing to answer for.
     """
     return [group[0] for group in group_definitions(objects)]
-
-
-def _statement_key(obj: SchemaObject) -> tuple[str, str | None, str, Signature | None]:
-    """What makes two inventory entries the same ``CREATE`` statement.
-
-    Not :func:`object_key`: its caller walks two parses of the *same* text, so
-    the exact signature is available on both sides and the wildcard that keeps
-    ``object_key`` a bucket would only make this laxer. What it wants is the
-    opposite — to stop at the first pair that disagrees.
-    """
-    return (obj.kind, obj.folded_schema, obj.folded_name, obj.signature_key)
-
-
-def attribute_files(inventory: Inventory, located: Sequence[SchemaObject]) -> None:
-    """Tell a whole-build inventory which file each of its objects came from.
-
-    :func:`build_inventory` reads the concatenated build as one string, so a
-    ``COMMENT ON`` in one file resolves against a ``CREATE`` in another — and
-    no object knows its file, only its line in a generated artefact nobody
-    edits. ``duplicates.inventory_files`` knows every file and nothing about
-    the others. Both walk the same statements in the same order, so this copies
-    the file and the in-file line across, and stops at the first pair that
-    disagrees rather than guessing: a finding with no location is honest, a
-    finding pointing at the wrong file is not.
-
-    The columns are matched **by name**, not by position. The two inventories
-    walk the same statements but do not hold the same columns: an
-    ``ALTER TABLE … DROP COLUMN`` in a *second* file is folded into the
-    whole-build table and not into that file's own, so the whole-build table is
-    a column shorter and a positional copy hands every column after the dropped
-    one its predecessor's line. A column the creating file has not got — one an
-    ``ALTER`` elsewhere added — keeps the line it already has, which is a line
-    in a generated artefact and the most this can honestly say about it.
-    """
-    for obj, source in zip(inventory.objects, located, strict=False):
-        if _statement_key(obj) != _statement_key(source):
-            return
-        source_lines = {column.folded: column.line for column in source.columns}
-        # A column `LIKE` copied is written where the table's name is, and moves
-        # with it: the file alone cannot copy it when the source is in another.
-        moved = {obj.line: source.line}
-        obj.file = source.file
-        obj.line = source.line
-        obj.statement_line = source.statement_line
-        obj.columns = [
-            replace(column, line=source_lines.get(column.folded, moved.get(column.line)))
-            if column.folded in source_lines or column.line in moved
-            else column
-            for column in obj.columns
-        ]

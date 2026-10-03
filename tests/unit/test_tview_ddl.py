@@ -13,6 +13,7 @@ from pglast.stream import RawStream
 
 from confiture.core.schema_model import TView, ref_for
 from confiture.core.schema_read import read_text
+from confiture.core.sql_lexer import parse_file
 
 SELECT = "SELECT p.pk_post, p.id FROM tb_post p"
 TABLES = "CREATE TABLE tb_post (pk_post bigint PRIMARY KEY, id uuid);\n"
@@ -61,7 +62,7 @@ def test_a_changed_tview_is_an_object_that_changed() -> None:
 
     def tracked(select: str) -> dict:
         sql = f"{TABLES}CREATE TABLE tv_post AS {select};\n"
-        return objects_in(sql, list(pglast.parse_sql(sql)))
+        return objects_in([parse_file(sql)])
 
     before, after = tracked(SELECT), tracked("SELECT p.pk_post FROM tb_post p")
     ref = ref_for("tview", None, "tv_post")
@@ -166,7 +167,7 @@ def test_a_call_naming_no_constant_declares_nothing() -> None:
 def _tracked(sql: str) -> dict:
     from confiture.core.ddl_objects import objects_in
 
-    return objects_in(sql, list(pglast.parse_sql(sql)))
+    return objects_in([parse_file(sql)])
 
 
 def test_a_tview_written_as_a_call_is_the_object_its_ctas_is() -> None:
@@ -222,11 +223,10 @@ def test_set_logged_pins_the_tview_logged(tree: str, logged: bool | None) -> Non
 )
 def test_the_lint_and_the_model_agree_on_whether_a_tview_is_logged(tree: str) -> None:
     """``tview_002`` fires exactly when the model does not pin the TVIEW logged."""
-    from confiture.core.linting.inventory import build_inventory
     from confiture.core.linting.tview_rules import tview_findings
 
     flagged = any(
-        f[0] == "tview_002" for f in tview_findings(build_inventory(tree), has_replicas=True)
+        f[0] == "tview_002" for f in tview_findings(read_text(tree).inventory, has_replicas=True)
     )
     (tview,) = read_text(tree).model.tviews.values()
 

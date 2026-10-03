@@ -46,13 +46,12 @@ def _recorder():
     return module
 
 
-TREES = _recorder().TREES
+_RECORDER = _recorder()
+TREES = _RECORDER.TREES
 
 
 def _model(tree) -> SchemaModel:
-    if tree.env is not None:
-        return parse_schema(env=tree.env, project_dir=REPO / tree.project_dir)
-    return parse_schema("\n".join([tree.preamble, *((REPO / f).read_text() for f in tree.files)]))
+    return _RECORDER.model_of(tree)
 
 
 def test_every_recorded_tree_is_in_the_corpus() -> None:

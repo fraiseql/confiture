@@ -5,11 +5,10 @@ Every reader of a schema tree — ``drift``, ``migrate diff``, the seam's
 through :func:`read_segments`, so a tree is parsed once and every reader agrees on
 what it declares:
 
-- the text is the files **joined one way** (each ending in a newline, nothing
-  between), so a line of the joined text is a line of one file (:meth:`SchemaRead.where`);
-- ``COPY … FROM stdin`` data is **blanked, never stripped**, before the parser sees
-  it (``sql_lexer.blank_copy_blocks``): a build bundle that seeds inline reads, and
-  every offset still points into the text the author wrote (#561);
+- each file is **parsed once, on its own** (``sql_lexer.parse_file``), its
+  ``COPY … FROM stdin`` data blanked, never stripped: a build bundle that seeds
+  inline reads (#561), and every object and column is placed in the file that
+  wrote it, at the line in that file;
 - a rejected statement is ``DIFFER_400`` naming the file and the line in it.
 
 A tree has two models, deliberately. :attr:`SchemaRead.model` is what the tree
@@ -23,7 +22,7 @@ reader compares with a live database.
 from __future__ import annotations
 
 import bisect
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from functools import cached_property
 from pathlib import Path
@@ -51,17 +50,29 @@ from confiture.core.linting.inventory import (
 from confiture.core.linting.quoted_names import QuotedName, quoted_names, quoted_trigger_names
 from confiture.core.parser_info import parse_error_line
 from confiture.core.schema_model import SchemaModel, qualified_name, trigger_ref
-from confiture.core.sql_lexer import blank_copy_blocks
+from confiture.core.sql_lexer import ParsedFile, blank_copy_blocks, parse_file
 from confiture.exceptions import SchemaError
 from confiture.models.warnings import BuildWarning
 
 
 @dataclass(frozen=True)
 class Segment:
-    """One piece of a tree's DDL: the file it is (``None`` for text handed in), and its text."""
+    """One piece of a tree's DDL: the file it is (``None`` for text handed in), and its text.
+
+    ``label`` is how a finding names the file — relative to the project where there
+    is one; the file's own spelling when it is not given.
+    """
 
     file: Path | None
     text: str
+    label: str | None = None
+
+    @property
+    def name(self) -> str | None:
+        """How a finding names this piece: its label, its file, or nothing for text."""
+        if self.label is not None:
+            return self.label
+        return None if self.file is None else str(self.file)
 
     @property
     def piece(self) -> str:
@@ -74,16 +85,6 @@ def joined(segments: Iterable[Segment]) -> str:
     return "".join(segment.piece for segment in segments)
 
 
-def where(segments: Sequence[Segment], line: int) -> tuple[Path | None, int]:
-    """The file, and the line in it, that line *line* of :func:`joined` text is."""
-    for segment in segments:
-        lines = segment.piece.count("\n")
-        if line <= lines:
-            return segment.file, line
-        line -= lines
-    return None, line
-
-
 @dataclass(frozen=True)
 class Definition:
     """One ``CREATE`` statement the model holds, and where it is written.
@@ -91,15 +92,17 @@ class Definition:
     Attributes:
         obj: The lint inventory's entry for it — the object as written.
         statement: The statement as pglast returned it; its locations index
-            into :attr:`SchemaRead.text`.
+            into :attr:`source`'s text.
         file: The file it is written in, or ``None`` for DDL handed in as text.
         line: The line of that file its ``CREATE`` begins on.
+        source: The file as it was parsed.
     """
 
     obj: SchemaObject
     statement: Any
     file: Path | None
     line: int
+    source: ParsedFile
 
 
 @dataclass(frozen=True)
@@ -108,17 +111,14 @@ class SchemaRead:
 
     Attributes:
         segments: The files read, in read order.
-        text: :func:`joined` text with every ``COPY … FROM stdin`` block blanked —
-            the text :attr:`statements`' locations index into.
-        statements: The statements pglast returned, once.
-        inventory: The lint inventory of :attr:`text`.
+        files: Each of them as ``sql_lexer.parse_file`` parsed it, in the same order.
+        inventory: The lint inventory of the tree.
         declared: ``ddl_objects``' account of the objects compared by definition
             (views, routines, triggers, …) and of the definitions it folded.
     """
 
     segments: tuple[Segment, ...]
-    text: str
-    statements: tuple[Any, ...]
+    files: tuple[ParsedFile, ...]
     inventory: Inventory
     declared: Declared
 
@@ -147,24 +147,22 @@ class SchemaRead:
     def definitions(self) -> tuple[Definition, ...]:
         """The statement, file and line of each object the model holds, in source order.
 
-        An inventory entry knows where its statement's first token is (``offset``),
-        and the statements are in source order, so the one it came from is the last
-        that starts at or before it.
+        An inventory entry knows where its statement's first token is in the tree
+        (``offset``), and each file where it starts (``base``), so the file is the
+        last that starts at or before it, and the statement the last in that file.
         """
-        starts = [raw.stmt_location or 0 for raw in self.statements]
+        bases = [parsed.base for parsed in self.files]
+        starts = [[raw.stmt_location or 0 for raw in parsed.statements] for parsed in self.files]
         found: list[Definition] = []
         for obj in sorted(
             (kept(group) for group in group_definitions(self.inventory.objects)),
             key=lambda o: o.offset,
         ):
-            raw = self.statements[bisect.bisect_right(starts, obj.offset) - 1]
-            file, line = self.where(obj.statement_line)
-            found.append(Definition(obj, raw, file, line))
+            at = bisect.bisect_right(bases, obj.offset) - 1
+            source = self.files[at]
+            raw = source.statements[bisect.bisect_right(starts[at], obj.offset - source.base) - 1]
+            found.append(Definition(obj, raw, self.segments[at].file, obj.statement_line, source))
         return tuple(found)
-
-    def where(self, line: int) -> tuple[Path | None, int]:
-        """The file, and the line in it, that line *line* of :attr:`text` is."""
-        return where(self.segments, line)
 
     def _with_triggers(self, model: SchemaModel) -> SchemaModel:
         triggers = declared_triggers(self.declared.objects)
@@ -172,33 +170,38 @@ class SchemaRead:
 
 
 def read_segments(segments: Iterable[Segment]) -> SchemaRead:
-    """Read a tree, given as the files it is made of, once.
+    """Read a tree, given as the files it is made of: each file parsed once, on its own.
 
     Raises:
         SchemaError: ``DIFFER_400`` when PostgreSQL's parser rejects a statement,
-            naming the file and line in the message and in ``context``.
+            naming the file and the line in it, in the message and in ``context``.
     """
     pieces = tuple(segments)
-    text = blank_copy_blocks(joined(pieces))
+    files: list[ParsedFile] = []
+    base = 0
+    for segment in pieces:
+        files.append(_parsed(segment, base))
+        base += len(segment.text) + 1
+    return SchemaRead(
+        segments=pieces,
+        files=tuple(files),
+        inventory=build_inventory(files),
+        declared=declared_objects(files),
+    )
+
+
+def _parsed(segment: Segment, base: int) -> ParsedFile:
     try:
-        statements = tuple(pglast.parser.parse_sql(text) or ())
-        inventory = build_inventory(text, statements)
+        return parse_file(segment.text, segment.name, base)
     except pglast.parser.ParseError as exc:
-        file, line = where(pieces, parse_error_line(text, exc))
-        at = f"{file}:{line}" if file is not None else f"line {line}"
+        line = parse_error_line(blank_copy_blocks(segment.text), exc)
+        at = f"{segment.file}:{line}" if segment.file is not None else f"line {line}"
         raise SchemaError(
             f"Cannot parse the schema ({at}): {exc}",
             error_code="DIFFER_400",
-            context={"file": str(file) if file is not None else None, "line": line},
+            context={"file": None if segment.file is None else str(segment.file), "line": line},
             resolution_hint="Fix the SQL syntax in the schema; PostgreSQL rejects it as written.",
         ) from exc
-    return SchemaRead(
-        segments=pieces,
-        text=text,
-        statements=statements,
-        inventory=inventory,
-        declared=declared_objects(text, list(statements)),
-    )
 
 
 def read_text(text: str, file: Path | None = None) -> SchemaRead:

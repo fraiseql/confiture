@@ -21,10 +21,11 @@ from pathlib import Path
 from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
 from confiture.core.differ import SchemaDiffer
+from confiture.core.linting.inventory import label_for
 from confiture.core.live_catalog import read, user_schemas
 from confiture.core.schema_change import SchemaDiff
 from confiture.core.schema_model import SchemaModel
-from confiture.core.schema_read import SchemaRead, Segment, joined, read_segments
+from confiture.core.schema_read import SchemaRead, Segment, read_segments
 from confiture.exceptions import SchemaError
 
 #: DDL text (a ``str``), one file or directory (a ``Path``), or several in order —
@@ -57,42 +58,23 @@ def _segments(
 ) -> list[Segment]:
     """*source*'s DDL file by file, in the order it is read — the file each came from kept.
 
-    *env* is the project's build: what ``confiture build --schema-only`` writes, as
-    one piece — the model's positions are lines of that text.
+    *env* is the project's build: the schema files ``confiture build --schema-only``
+    selects, in build order, each named relative to the project, so a position is
+    a line of a file the author edits and a statement PostgreSQL rejects is named
+    by its file.
     """
     if (source is None) == (env is None):
         raise ValueError("Give exactly one of a schema source or an environment.")
     if env is not None:
-        return [
-            Segment(None, SchemaBuilder(env=env, project_dir=project_dir).build(schema_only=True))
-        ]
+        builder = SchemaBuilder(env=env, project_dir=project_dir)
+        files, _seeds = builder.categorize_sql_files()
+        root = project_dir or Path.cwd()
+        return [Segment(file, _read(file), label_for(file, root)) for file in files]
     if isinstance(source, str):
         return [Segment(None, source)]
     assert source is not None
     paths = [source] if isinstance(source, Path) else [Path(path) for path in source]
     return [Segment(file, _read(file)) for path in paths for file in _files(path)]
-
-
-def schema_text(
-    source: SchemaSource | None = None,
-    *,
-    env: str | None = None,
-    project_dir: Path | None = None,
-) -> str:
-    """The DDL *source* holds, or that ``confiture build --env <env> --schema-only`` writes.
-
-    A ``str`` is DDL text. A ``Path`` is a file, or a directory read the way a bare
-    ``include_dirs`` entry is — every ``.sql`` under it, sorted by path. A sequence
-    of paths is read in its order, a ``str`` in it being the path it spells. *env*
-    reads the project's build instead: the files it selects, seed files left out,
-    in build order.
-
-    Raises:
-        ValueError: unless exactly one of *source* and *env* is given.
-        SchemaError: ``SCHEMA_201`` for a path that does not exist, ``SCHEMA_001``
-            for a file that cannot be read as UTF-8 text.
-    """
-    return joined(_segments(source, env=env, project_dir=project_dir))
 
 
 def read_schema(

@@ -24,9 +24,9 @@ from confiture.core.linting.duplicates import (
     find_duplicates,
     inventory_files,
 )
-from confiture.core.linting.inventory import build_inventory
 from confiture.core.linting.rule_registry import LINT_RULES, resolve_selection
 from confiture.core.linting.schema_linter import LintConfig, SchemaLinter
+from confiture.core.schema_read import read_text
 
 BODY = "RETURNS int LANGUAGE sql AS $$ select 1 $$;"
 
@@ -154,7 +154,7 @@ class TestKeys:
 
     def test_a_single_string_inventory_has_no_file(self) -> None:
         sql = f"CREATE OR REPLACE FUNCTION f() {BODY}\nCREATE OR REPLACE FUNCTION f() {BODY}\n"
-        (dup,) = find_duplicates(build_inventory(sql).objects)
+        (dup,) = find_duplicates(read_text(sql).inventory.objects)
         assert [d.file for d in dup.definitions] == [None, None]
         assert dup.to_dict()["definitions"][1]["offset"] == sql.index("CREATE", 1)
 

@@ -28,12 +28,13 @@ import pglast
 
 from confiture.core.linting.inventory import (
     SchemaObject,
-    build_inventory,
+    files_alone,
     group_definitions,
     label_for,
     object_key,
 )
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.sql_lexer import ParsedFile, Rejected, blank_copy_blocks, parse_file
 
 
 @dataclass(frozen=True)
@@ -78,20 +79,6 @@ def inventory_files(
     return inventory_texts((_label(path, root), path.read_text(encoding="utf-8")) for path in files)
 
 
-@dataclass(frozen=True)
-class Rejected:
-    """A file pglast refused, with what is needed to report it.
-
-    A label alone says only that something in the file did not parse. The
-    notice names a line, and the line comes from the error and the text it
-    indexes; carrying both here spares parsing the file a second time.
-    """
-
-    label: str
-    text: str
-    error: BaseException
-
-
 def inventory_texts(
     sources: Iterable[tuple[str | None, str]],
 ) -> tuple[list[SchemaObject], list[SchemaObject], list[Rejected]]:
@@ -99,26 +86,20 @@ def inventory_texts(
 
     Returns the objects, the ``CREATE SCHEMA`` declarations and the files
     pglast rejected, each in file order — a file that cannot be parsed is
-    reported, never silently skipped.
-
-    Callers that need the file text for something else too pass it in rather
-    than making this open the file again: a lint that wants a location for
-    every finding wants the same text several rules over.
+    reported, never silently skipped. Each file is parsed once, its ``COPY``
+    data blanked (``sql_lexer.parse_file``): a seed file is read, not rejected.
     """
-    objects: list[SchemaObject] = []
-    schemas: list[SchemaObject] = []
+    files: list[ParsedFile] = []
     unparseable: list[Rejected] = []
+    base = 0
     for label, text in sources:
         try:
-            inventory = build_inventory(text)
+            files.append(parse_file(text, label, base))
         except pglast.parser.ParseError as exc:
             if label is not None:
-                unparseable.append(Rejected(label=label, text=text, error=exc))
-            continue
-        for obj in (*inventory.objects, *inventory.schemas):
-            obj.file = label
-        objects.extend(inventory.objects)
-        schemas.extend(inventory.schemas)
+                unparseable.append(Rejected(label=label, text=blank_copy_blocks(text), error=exc))
+        base += len(text) + 1
+    objects, schemas = files_alone(files)
     return objects, schemas, unparseable
 
 

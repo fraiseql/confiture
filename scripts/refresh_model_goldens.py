@@ -50,6 +50,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -228,22 +229,27 @@ def diff_goldens() -> dict[str, str]:
 
 
 def model_goldens() -> dict[str, str]:
-    """Every model golden: the model each tree builds, as ``SchemaModel.to_json()`` writes it.
+    """Every model golden: the model each tree declares, as ``SchemaModel.to_json()`` writes it.
 
     The bytes are the parity corpus a second reader is checked against
     (``tests/unit/test_port_parity_corpus.py``), so they are the canonical wire —
-    sorted keys — read through ``parse_schema``, the one entry point.
+    sorted keys — read through the one read: a project's tree as
+    ``parse_schema(env=…)`` reads it, a list of files as the files they are. A
+    column's ``file`` is named relative to its project, or to the repository.
     """
-    from confiture.core.schema_sources import parse_schema
+    return {f"model/{tree.name}.json": model_of(tree).to_json() + "\n" for tree in TREES}
 
-    with tempfile.TemporaryDirectory(prefix="confiture-goldens-") as tmp:
-        root = Path(tmp)
-        with ThreadPoolExecutor() as pool:
-            paths = list(pool.map(lambda tree: build(tree, root / f"{tree.name}.sql"), TREES))
-        return {
-            f"model/{tree.name}.json": parse_schema(path).to_json() + "\n"
-            for tree, path in zip(TREES, paths, strict=True)
-        }
+
+def model_of(tree: Tree) -> Any:
+    """The model *tree* declares, each file named the way a finding names it."""
+    from confiture.core.schema_read import Segment, read_segments
+    from confiture.core.schema_sources import read_schema
+
+    if tree.env is not None:
+        return read_schema(env=tree.env, project_dir=REPO_ROOT / tree.project_dir).model
+    preamble = [Segment(None, tree.preamble)] if tree.preamble else []
+    files = [Segment(REPO_ROOT / f, (REPO_ROOT / f).read_text(), f) for f in tree.files]
+    return read_segments([*preamble, *files]).model
 
 
 @contextmanager

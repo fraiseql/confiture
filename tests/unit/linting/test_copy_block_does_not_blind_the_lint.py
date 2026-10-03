@@ -133,8 +133,9 @@ class TestTheParseTextIsNotTheBuild:
         linter = SchemaLinter(env="with_seed")
         linter.lint()
 
-        assert "0b6f1c2e-1111-4a4a-8888-000000000001" not in linter._parse_sql
-        assert "CREATE TABLE app.tb_widget" in linter._parse_sql
+        parsed = "".join(parsed.text for parsed in linter._files)
+        assert "0b6f1c2e-1111-4a4a-8888-000000000001" not in parsed
+        assert "CREATE TABLE app.tb_widget" in parsed
 
 
 _INLINE = """CREATE SCHEMA app;

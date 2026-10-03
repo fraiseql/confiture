@@ -90,11 +90,17 @@ def _parts(table: SchemaObject) -> Iterator[QuotedName]:
     within = _join(_quoted(table.folded_schema), quote_identifier(table.folded_name))
     for column in table.columns:
         if needs_quotes(column.folded):
-            yield _named("column", within, column.folded, table.file, column.line or table.line)
+            yield _named(
+                "column",
+                within,
+                column.folded,
+                column.file or table.file,
+                column.line or table.line,
+            )
     for index in table.indexes:
         if index.name and needs_quotes(index.name):
-            line = table.index_lines.get(index, table.line)
-            yield _named("index", _quoted(table.folded_schema), index.name, table.file, line)
+            file, line = table.index_sites.get(index, (table.file, table.line))
+            yield _named("index", _quoted(table.folded_schema), index.name, file, line)
     for constraint in table.constraints:
         if constraint.name and needs_quotes(constraint.name):
             yield _named("constraint", within, constraint.name, table.file, table.line)

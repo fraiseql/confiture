@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 _REWRITTEN = frozenset({"data", "updated_at"})
 
 #: ``(code, rule name, severity, object, message, fix, line)``.
-Finding = tuple[str, str, str, str, str, str | None, int]
+Finding = tuple[str, str, str, str, str, str | None, str | None, int]
 
 
 def tview_findings(inventory: Inventory, *, has_replicas: bool = False) -> Iterator[Finding]:
@@ -54,7 +54,7 @@ def _hot_blockers(tview: SchemaObject) -> Iterator[Finding]:
                 f"TVIEW {tview.qualified}: index {index.name or '(unnamed)'} covers "
                 f"{', '.join(covered)}, which every refresh rewrites: no update is HOT",
                 None,
-                tview.index_lines.get(index, tview.line),
+                *tview.index_sites.get(index, (tview.file, tview.line)),
             )
 
 
@@ -68,6 +68,7 @@ def _unlogged(tview: SchemaObject) -> Iterator[Finding]:
             f"TVIEW {tview.qualified} is UNLOGGED (pg_tviews' default): a hot standby cannot "
             "read it and a promoted one holds it empty (fraiseql/pg_tviews#75)",
             f"ALTER TABLE {tview.qualified} SET LOGGED;",
+            tview.file,
             tview.line,
         )
 

@@ -25,6 +25,7 @@ not what the object is.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -55,6 +56,7 @@ from confiture.core.linting.inventory import (
 
 # Defined with the rest of the model; re-exported for the callers that name it here.
 from confiture.core.schema_model import TVIEWS_SCHEMA, ObjectRef, Trigger, TView
+from confiture.core.sql_lexer import ParsedFile
 
 #: Which parse nodes this module turns into objects, and why each one that
 #: creates something is absent. A node that is neither tracked nor named here
@@ -645,12 +647,12 @@ def _apply_drop(objects: dict[ObjectRef, list[DDLObject]], edit: ObjectEdit) -> 
             del objects[ref]
 
 
-def objects_in(sql: str, raws: list[Any]) -> dict[ObjectRef, list[DDLObject]]:
-    """Every tracked object an already-parsed schema still declares, bucketed by reference.
+def objects_in(files: Sequence[ParsedFile]) -> dict[ObjectRef, list[DDLObject]]:
+    """Every tracked object an already-parsed tree still declares, bucketed by reference.
 
-    *raws* are the statements :func:`pglast.parse_sql` returned for *sql*; the
+    *files* are the tree's files as ``sql_lexer.parse_file`` parsed them; the
     caller passes its own parse rather than this module taking a second one, so
-    a schema is read once however many walkers ask about it.
+    a tree is read once however many walkers ask about it.
 
     The value is a **list** because :class:`ObjectRef` is a bucket: two routines
     whose argument types differ only in the schema they name — ``app.f(app.t)``
@@ -673,7 +675,7 @@ def objects_in(sql: str, raws: list[Any]) -> dict[ObjectRef, list[DDLObject]]:
     keeps (``duplicates.wins``, as the schema model decides), never each of them.
     :func:`declared_objects` also says which were collapsed.
     """
-    return declared_objects(sql, raws).objects
+    return declared_objects(files).objects
 
 
 @dataclass(frozen=True)
@@ -705,12 +707,12 @@ def _flags(stmt: Any) -> CreateFlags:
     )
 
 
-def declared_objects(sql: str, raws: list[Any]) -> Declared:
+def declared_objects(files: Sequence[ParsedFile]) -> Declared:
     """:func:`objects_in`, with the objects it had to fold into one reported beside it."""
     objects: dict[ObjectRef, list[DDLObject]] = {}
     # Keyed by identity: two definitions written alike are equal, and are still two.
     flags: dict[int, CreateFlags] = {}
-    for raw in raws:
+    for sql, raw in ((parsed.text, raw) for parsed in files for raw in parsed.statements):
         # A drop first: `SELECT pg_tviews_drop('tv_x'), pg_tviews_create_or_replace('tv_x', …)`
         # drops and creates, as `DROP …; CREATE …` does, and no other statement does both.
         for edit in object_edits(raw.stmt):

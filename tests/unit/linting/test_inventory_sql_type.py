@@ -20,11 +20,11 @@ from __future__ import annotations
 
 import pytest
 
-from confiture.core.linting.inventory import build_inventory
+from confiture.core.schema_read import read_text
 
 
 def type_of(ddl: str) -> str | None:
-    table = build_inventory(f"CREATE TABLE t ({ddl});").find(None, "t")
+    table = read_text(f"CREATE TABLE t ({ddl});").inventory.find(None, "t")
     assert table is not None
     return table.columns[0].type_text
 
@@ -59,8 +59,8 @@ def test_the_type_a_column_will_have(written: str, expected: str) -> None:
 
 def test_a_retyping_alter_renders_the_same_way() -> None:
     """The fold reads `_sql_type` too, so both paths spell a type once."""
-    table = build_inventory(
+    table = read_text(
         "CREATE TABLE t (a int); ALTER TABLE t ALTER COLUMN a TYPE INTEGER[][];"
-    ).find(None, "t")
+    ).inventory.find(None, "t")
     assert table is not None
     assert table.columns[0].type_text == "integer[]"

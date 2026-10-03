@@ -14,7 +14,7 @@ already folded an unquoted name and kept a quoted one's case, so
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from psycopg import sql
 
@@ -44,9 +44,8 @@ class Resolver:
         name: Its name as PostgreSQL holds it.
         file: The file it is written in; empty for DDL handed in as text.
         line: The line of that file its ``CREATE`` begins on.
-        body: Its body, read by :func:`~confiture.core.linting.references.read_body`.
-            The body's lines count the schema's joined text; :meth:`where`
-            places one on :attr:`file`.
+        body: Its body, read by :func:`~confiture.core.linting.references.read_body`
+            from the file it is written in, so a body line is a line of :attr:`file`.
     """
 
     schema: str | None
@@ -54,7 +53,6 @@ class Resolver:
     file: str
     line: int
     body: references.RoutineBody
-    _shift: int = field(default=0, repr=False)
 
     @property
     def table(self) -> str:
@@ -77,7 +75,7 @@ class Resolver:
         """
         if line is None or not self.body.exact:
             return self.file, self.line
-        return self.file, line - self._shift
+        return self.file, line
 
 
 @dataclass(frozen=True)
@@ -131,8 +129,7 @@ def read_resolution(
                 name=obj.folded_name,
                 file="" if definition.file is None else str(definition.file),
                 line=definition.line,
-                body=references.read_body(read.text, definition.statement, obj),
-                _shift=obj.statement_line - definition.line,
+                body=references.read_body(definition.source.text, definition.statement, obj),
             )
         )
     finals = final_tables.decide(
