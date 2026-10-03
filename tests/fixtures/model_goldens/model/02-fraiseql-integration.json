@@ -1,4 +1,13 @@
 {
+  "coverage": {
+    "enum_types": "definition",
+    "routines": "definition",
+    "sequences": "definition",
+    "tables": "definition",
+    "triggers": "definition",
+    "tviews": "definition",
+    "views": "definition"
+  },
   "enum_types": [],
   "routines": [
     {

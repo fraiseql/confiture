@@ -15,6 +15,7 @@ the database is reported under the name the database gives it.
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -28,7 +29,7 @@ from confiture.core.drift import (
     SchemaDriftDetector,
     parse_expected_schema,
 )
-from confiture.core.schema_model import Constraint, RelationName, SchemaModel
+from confiture.core.schema_model import Constraint, Coverage, RelationName, SchemaModel
 from confiture.exceptions import DifferError
 from tests.unit._schema_models import column, index, model, table
 
@@ -36,7 +37,9 @@ from tests.unit._schema_models import column, index, model, table
 def _compare(expected: SchemaModel, actual: SchemaModel, *, objects: bool = False) -> DriftReport:
     conn = MagicMock()
     conn.cursor.return_value.__enter__.return_value.fetchone.return_value = ("db",)
-    return SchemaDriftDetector(conn).compare_schemas(expected, actual, objects=objects)
+    # A live read of the objects covers every section; a read of the tables only, those.
+    read = replace(actual, coverage=Coverage.every()) if objects else actual
+    return SchemaDriftDetector(conn).compare_schemas(expected, read)
 
 
 def _subjects(report: DriftReport) -> dict[DriftType, DriftSubject | None]:

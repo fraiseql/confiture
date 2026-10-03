@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-27,275 lines, 35% of `core/`.
+27,333 lines, 35% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -116,8 +116,8 @@ duplicate readers were deleted. The count below is what the port translates.
 | `risk_tier.py` | 76 | DDL transform |
 | `schema_change.py` | 904 | DDL transform |
 | `schema_identity.py` | 94 | DDL transform |
-| `schema_model.py` | 940 | DDL transform |
-| `schema_read.py` | 270 | DDL transform |
+| `schema_model.py` | 995 | DDL transform |
+| `schema_read.py` | 273 | DDL transform |
 | `sql_lexer.py` | 729 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 354 | DDL transform |
@@ -126,7 +126,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-43,444 lines, 55% of `core/`.
+43,472 lines, 55% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -142,7 +142,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `cte_debugger.py` | 198 | database orchestration |
 | `dependent_objects.py` | 162 | database orchestration |
 | `desired_state.py` | 76 | database orchestration |
-| `drift.py` | 1,541 | database orchestration |
+| `drift.py` | 1,553 | database orchestration |
 | `dry_run.py` | 239 | database orchestration |
 | `dry_run_summary.py` | 156 | neutral |
 | `error_context.py` | 286 | neutral |
@@ -164,7 +164,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `linting/schema_linter.py` | 1,202 | database orchestration |
 | `linting/selection.py` | 390 | database orchestration |
 | `linting/unresolved.py` | 379 | database orchestration |
-| `live_catalog.py` | 1,062 | database orchestration |
+| `live_catalog.py` | 1,078 | database orchestration |
 | `locking.py` | 625 | database orchestration |
 | `migration_generator.py` | 581 | database orchestration |
 | `migration_verifier.py` | 229 | database orchestration |

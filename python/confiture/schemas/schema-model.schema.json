@@ -12,7 +12,8 @@
     "routines",
     "views",
     "triggers",
-    "tviews"
+    "tviews",
+    "coverage"
   ],
   "properties": {
     "tables": {
@@ -55,6 +56,55 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/TView"
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "description": "What the reader read: each section of the model it covers, and how deeply (`existence` or `definition`). A section absent here was not read, so its silence is not absence. A tree covers every section; a live read, the sections it was asked for. Not part of what the schema is.",
+      "additionalProperties": false,
+      "properties": {
+        "tables": {
+          "enum": [
+            "existence",
+            "definition"
+          ]
+        },
+        "enum_types": {
+          "enum": [
+            "existence",
+            "definition"
+          ]
+        },
+        "sequences": {
+          "enum": [
+            "existence",
+            "definition"
+          ]
+        },
+        "routines": {
+          "enum": [
+            "existence",
+            "definition"
+          ]
+        },
+        "views": {
+          "enum": [
+            "existence",
+            "definition"
+          ]
+        },
+        "triggers": {
+          "enum": [
+            "existence",
+            "definition"
+          ]
+        },
+        "tviews": {
+          "enum": [
+            "existence",
+            "definition"
+          ]
+        }
       }
     }
   },
