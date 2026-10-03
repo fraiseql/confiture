@@ -34,7 +34,7 @@ Adopt a rule on a schema that already trips it with a
 | `tenant_002` | tenant | warning | with `tenancy:` | A table carries the tenant discriminator NOT NULL, or is declared global |
 | `tenant_003` | tenant | warning | with `tenancy:` | A view reading tenant data publishes the discriminator as a plain column, or is declared global |
 | `tenant_004` | tenant | warning | with `tenancy:` | A foreign key between tenant tables carries the discriminator on both sides |
-| `tenant_005` | tenant | warning | with `tenancy:` | A tenant table's primary key and unique keys lead with the discriminator |
+| `tenant_005` | tenant | warning | with `tenancy:` | A tenant table's primary key and unique keys keep tenants apart |
 | `tview_001` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT |
 | `tview_002` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
@@ -670,18 +670,26 @@ the rule reads the **source tree**, every file under the environment's
 
 It reports, at `warning` and on by default:
 
-- a literal written into a column `sec_001` names for a secret (`password`,
-  `token`, `secret`, `api_key`, `credit_card`, `ssn`) — by `INSERT … VALUES`, every
-  row of it, or by `COPY … FROM stdin`, every row decoded;
-- a literal in a column named for a key (`signing_key`) when it looks like one:
-  16 characters or more, high-entropy, not a UUID — so `sort_key = 'by_name'` is
-  not reported;
+- a literal written into a column `sec_001` names for a credential — a name
+  holding the word `password`, `passwd`, `pwd`, `passphrase`, `credential(s)`,
+  `api key`/`apikey`, `secret` or `token` — or for personal data — `credit card`,
+  `card number`, `ssn`, `iban`, said as such in the finding — by `INSERT … VALUES`,
+  every row of it, or by `COPY … FROM stdin`, every row decoded. A name is matched
+  by its **words** (`schema_identity.identifier_words`: `_`, `-`, digits and
+  camelCase split it), so `smtp_passwd` and `stripeApiKey` are read and `tokenizer`
+  and `lessons` are not;
+- a literal in a column whose name holds the word `key` (`signing_key`) when it
+  looks like one: 16 characters or more, high-entropy, not a UUID — so
+  `sort_key = 'by_name'` is not reported;
 - `CREATE ROLE` / `ALTER ROLE … PASSWORD '<literal>'`.
 
 It does not report a password hash (bcrypt, argon2, `SCRAM-SHA-256$…`, `md5…`,
 crypt, PBKDF2, LDAP `{SSHA}`) — the point is plaintext — nor an obvious
 placeholder: an empty string, one repeated character (`xxxx`, `****`), a template
-(`<redacted>`, `{{ DB_PASSWORD }}`, `${PASSWORD}`), or `changeme` and its kin. A
+(`<redacted>`, `{{ DB_PASSWORD }}`, `${PASSWORD}`), or a value one of whose words
+says so — `placeholder`, `changeme`, `example`, `dummy`, `fake`, `redacted`,
+`sample`, `todo`, `test`, `xxx`, `not a secret` — so `PLACEHOLDER-not-a-real-credential`
+and `test_password` are not reported and `contest-winner` is. A
 comment is not a statement, so a documented example is never read.
 
 **A finding never repeats the secret.** It gives the kind and the length, and names
@@ -847,7 +855,7 @@ FOREIGN KEY (tenant_id, fk_order) REFERENCES app.tb_order (tenant_id, id)
 
 The hint writes the composite form, and names the `PRIMARY KEY (tenant_id, id)` or
 `UNIQUE (tenant_id, id)` the target then needs when it has neither — a primary key
-that leads with the discriminator (`tenant_005`) *is* that target. A foreign key
+that contains the discriminator (`tenant_005`) *is* that target. A foreign key
 that names no columns references the target's primary key and is judged as such.
 Foreign keys added by a later `ALTER TABLE … ADD CONSTRAINT` count. The root's
 tenant id plays the discriminator's part: the discriminator referencing it is clean,
@@ -892,16 +900,21 @@ Neither is an exception to declare, so there is no directive for it; a schema
 moving to this design records today's findings in a `--baseline`, and only a new
 one fails.
 
-## `tenant_005` — a tenant table's keys lead with the discriminator
+## `tenant_005` — a tenant table's keys keep tenants apart
 
 On when `db/project.yaml` declares `tenancy:`. On every tenant table (the root is
-not one), the primary key, each `UNIQUE` constraint and each unique index must have
-the discriminator as their **first** key. `UNIQUE (email)` lets one tenant's row
-block another tenant's insert, and the violation tells the second tenant the value
-exists elsewhere; `UNIQUE (email, tenant_id)` still does not lead with it and is
-reported too. A unique index on an expression, or a partial one, is judged by its
-first key the same way. Non-unique indexes are not judged: a cross-tenant sweep by
-`created_at`, or a lookup by `id` alone, legitimately wants one.
+not one), the primary key, each `UNIQUE` constraint and each unique index must
+**contain** the discriminator, or be a single column whose value no other row has
+whoever writes the row — an identity, a sequence (`serial`, `nextval(…)`) or a
+generated uuid (`gen_random_uuid()`, `uuidv7()`, …). `UNIQUE (email)` lets one
+tenant's row block another tenant's insert, and the violation tells the second
+tenant the value exists elsewhere; `UNIQUE (email, tenant_id)` cannot collide and
+is not reported: column order decides what an index serves, not what is unique, so
+leading with the discriminator is index advice, not isolation (the
+[guide](../guides/multi-tenant-schemas.md#tenant_005--keys-keep-tenants-apart) gives
+it). A unique index on an expression, or a partial one, is judged the same way.
+Non-unique indexes are not judged: a cross-tenant sweep by `created_at`, or a
+lookup by `id` alone, legitimately wants one.
 
 A uniqueness that is platform-wide on purpose is written as its own
 `CREATE UNIQUE INDEX`, under the directive, so the exception is visible in review:
@@ -912,7 +925,7 @@ CREATE UNIQUE INDEX ux_user_email ON app.tb_user (lower(email));
 ```
 
 The directive is honest or it is a finding: without a reason, and on a unique
-index that already leads with the discriminator (stale). An inline `UNIQUE` in
+index that already keeps tenants apart (stale). An inline `UNIQUE` in
 `CREATE TABLE` cannot carry it. An index finding points at its `CREATE UNIQUE
 INDEX`, in whichever file it is written.
 

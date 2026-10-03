@@ -34,25 +34,42 @@ import pglast.parser
 from pglast import ast
 
 from confiture.core.parser_info import ascii_shadow
+from confiture.core.schema_identity import contains_words
 from confiture.core.sql_lexer import parse_file, skip_leading_comments
 
 if TYPE_CHECKING:
     from confiture.core.seed.validation.prep_seed.seed_rows import SeedWrite
 
-#: Column names that say "secret", and what each says — ``sec_001`` flags the
-#: column, ``sec_003`` a literal written into it. One table for both rules.
-SECRET_COLUMN_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"password", "password"),
-    (r"token", "token"),
-    (r"secret", "secret"),
-    (r"api_key", "API key"),
-    (r"credit_card", "credit card"),
-    (r"ssn", "social security number"),
+#: The words of a column name that say it holds a credential, and what the
+#: finding calls it — ``sec_001`` flags the column, ``sec_003`` a literal written
+#: into it. One table for both rules, matched by whole words
+#: (``schema_identity.contains_words``), so ``smtp_passwd`` holds a password and
+#: ``tokenizer`` no token. The first entry that matches names the kind.
+CREDENTIAL_NAMES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("password",), "password"),
+    (("passwd",), "password"),
+    (("pwd",), "password"),
+    (("passphrase",), "password"),
+    (("credential",), "credential"),
+    (("credentials",), "credential"),
+    (("api", "key"), "API key"),
+    (("apikey",), "API key"),
+    (("secret",), "secret"),
+    (("token",), "token"),
+)
+
+#: The words of a column name that say it holds personal data: not a credential,
+#: and a leak all the same when a seed commits a real one.
+PERSONAL_NAMES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("credit", "card"), "credit card"),
+    (("card", "number"), "card number"),
+    (("ssn",), "social security number"),
+    (("iban",), "IBAN"),
 )
 
 #: A column named for a key — ``signing_key``, but also ``sort_key`` — holds a
 #: secret only when its value looks like one.
-_KEY_COLUMN = re.compile(r"key", re.IGNORECASE)
+_KEY_WORD = ("key",)
 _KEY_MIN_LENGTH = 16
 _KEY_MIN_ENTROPY = 3.5  # bits per character
 
@@ -86,8 +103,22 @@ _HASH_PREFIXES = (
 _MD5_HASH_LENGTH = len("md5") + 32
 #: How a template marks a value it stands in for: ``<…>``, ``{{ … }}``, ``${…}``, ``%(…)s``.
 _TEMPLATE_BRACKETS = (("<", ">"), ("{{", "}}"), ("${", "}"), ("%(", ")s"))
-_PLACEHOLDER_WORDS = frozenset(
-    {"changeme", "change_me", "change-me", "placeholder", "redacted", "example", "dummy", "todo"}
+#: The words that say a value stands in for one: ``'PLACEHOLDER-not-a-real-credential'``,
+#: ``'test_password'``, ``'my-example-secret'``. Matched as whole words, so
+#: ``'contest-winner'`` holds no ``test``.
+_PLACEHOLDER_WORDS: tuple[tuple[str, ...], ...] = (
+    ("placeholder",),
+    ("changeme",),
+    ("change", "me"),
+    ("example",),
+    ("dummy",),
+    ("fake",),
+    ("redacted",),
+    ("sample",),
+    ("todo",),
+    ("test",),
+    ("xxx",),
+    ("not", "a", "secret"),
 )
 _UUID = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 
@@ -100,14 +131,28 @@ class SecretFinding:
     subject: str
     kind: str
     length: int
+    #: Personal data rather than a credential (``PERSONAL_NAMES``).
+    personal: bool = False
+
+
+def secret_kinds(column: str) -> tuple[str, ...]:
+    """Every kind of sensitive value *column*'s name says it holds, credentials first."""
+    found: list[str] = []
+    for words, kind in (*CREDENTIAL_NAMES, *PERSONAL_NAMES):
+        if contains_words(column, words) and kind not in found:
+            found.append(kind)
+    return tuple(found)
 
 
 def secret_kind(column: str) -> str | None:
-    """What *column*'s name says it holds, when it names a secret; ``None`` otherwise."""
-    for pattern, kind in SECRET_COLUMN_PATTERNS:
-        if re.search(pattern, column, re.IGNORECASE):
-            return kind
-    return None
+    """What *column*'s name says it holds, when it names a sensitive value; ``None`` otherwise."""
+    kinds = secret_kinds(column)
+    return kinds[0] if kinds else None
+
+
+def is_personal(kind: str) -> bool:
+    """Whether *kind* is personal data rather than a credential."""
+    return kind in {kind for _words, kind in PERSONAL_NAMES}
 
 
 def is_placeholder(value: str) -> bool:
@@ -116,7 +161,7 @@ def is_placeholder(value: str) -> bool:
     if not text or len(set(text)) == 1:
         return True
     templated = any(text.startswith(o) and text.endswith(c) for o, c in _TEMPLATE_BRACKETS)
-    return templated or text.lower() in _PLACEHOLDER_WORDS
+    return templated or any(contains_words(text, words) for words in _PLACEHOLDER_WORDS)
 
 
 def is_hash(value: str) -> bool:
@@ -157,7 +202,7 @@ def _row_label(columns: tuple[str, ...], values: tuple[Any, ...], secret: int, n
     for index, (column, value) in enumerate(zip(columns, values, strict=False)):
         if index == secret or not isinstance(value, str) or not value:
             continue
-        if secret_kind(column) or _KEY_COLUMN.search(column) or looks_like_a_key(value):
+        if secret_kind(column) or contains_words(column, _KEY_WORD) or looks_like_a_key(value):
             continue
         return f"{column}={value}"
     return f"row {number}"
@@ -171,7 +216,7 @@ def _write_findings(
         return
     for index, column in enumerate(columns):
         kind = secret_kind(column)
-        keyed = kind is None and bool(_KEY_COLUMN.search(column))
+        keyed = kind is None and contains_words(column, _KEY_WORD)
         if kind is None and not keyed:
             continue
         for row in write.rows:
@@ -186,6 +231,7 @@ def _write_findings(
                 subject=f"{write.qualified}.{column}[{label}]",
                 kind=kind or "key",
                 length=len(value),
+                personal=kind is not None and is_personal(kind),
             )
 
 

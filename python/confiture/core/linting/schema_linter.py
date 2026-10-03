@@ -36,7 +36,7 @@ from confiture.core.linting.inventory import (
 )
 from confiture.core.linting.quoted_names import needs_quotes, quoted_names
 from confiture.core.linting.rule_registry import LINT_RULES, UNPARSEABLE_RULE_ID
-from confiture.core.linting.seed_secrets import SECRET_COLUMN_PATTERNS
+from confiture.core.linting.seed_secrets import secret_kinds
 from confiture.core.linting.tenant import rules as tenant_rules
 from confiture.core.linting.tview_rules import tview_findings
 from confiture.core.schema_identity import DEFAULT_SCHEMA
@@ -968,24 +968,24 @@ class SchemaLinter:
         """Columns whose names suggest sensitive data, read from the inventory."""
         for table in self._inventory.tables:
             for column in table.columns:
-                for pattern, description in SECRET_COLUMN_PATTERNS:
-                    if not re.search(pattern, column.name, re.IGNORECASE):
-                        continue
-                    report.add_violation(
-                        LintViolation(
-                            rule_id="sec_001",
-                            rule_name="Sensitive Data Column",
-                            severity=RuleSeverity.WARNING,
-                            object_type="column",
-                            object_name=column.name,
-                            message=(
-                                f"Column '{column.name}' appears to store {description} - "
-                                "ensure proper encryption and access controls"
-                            ),
-                            file_path=column.file or table.file,
-                            line_number=column.line,
-                        )
+                kinds = secret_kinds(column.name)
+                if not kinds:
+                    continue
+                report.add_violation(
+                    LintViolation(
+                        rule_id="sec_001",
+                        rule_name="Sensitive Data Column",
+                        severity=RuleSeverity.WARNING,
+                        object_type="column",
+                        object_name=column.name,
+                        message=(
+                            f"Column '{column.name}' appears to store {' and '.join(kinds)} - "
+                            "ensure proper encryption and access controls"
+                        ),
+                        file_path=column.file or table.file,
+                        line_number=column.line,
                     )
+                )
 
     def _check_seed_secrets(self, report: LintReport) -> None:
         """``sec_003``: a credential written as a literal — a seed row, a role password.
@@ -1017,8 +1017,11 @@ class SchemaLinter:
                             "the value is in git history and in every database it seeds"
                         ),
                         suggested_fix=(
-                            "Store a hash, or load the value from the environment when "
-                            "the seed is applied"
+                            "Seed a fictitious value: personal data in a seed is shared "
+                            "with everyone who can read the repository"
+                            if finding.personal
+                            else "Store a hash, or load the value from the environment "
+                            "when the seed is applied"
                         ),
                         file_path=label,
                         line_number=finding.line,

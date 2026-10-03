@@ -144,7 +144,7 @@ A project declares itself tenant-scoped in `db/project.yaml`'s `tenancy:` block,
 and from then on every `confiture lint` runs five rules with no `--select`: an
 `INSERT` supplies the discriminator (`tenant_001`), every table carries it or is
 declared global (`tenant_002`), every view publishes it (`tenant_003`), no foreign
-key crosses tenants (`tenant_004`), and every unique key leads with it
+key crosses tenants (`tenant_004`), and every unique key contains it
 (`tenant_005`). Without the block the family is off, and selecting it reports it
 *skipped*. The [multi-tenant schemas guide](multi-tenant-schemas.md) explains the
 design and how to move an existing schema to it.
