@@ -49,7 +49,7 @@ from confiture.core.linting.inventory import (
 )
 from confiture.core.linting.quoted_names import QuotedName, quoted_names, quoted_trigger_names
 from confiture.core.parser_info import parse_error_line
-from confiture.core.schema_model import SchemaModel, qualified_name, trigger_ref
+from confiture.core.schema_model import Coverage, SchemaModel, qualified_name, trigger_ref
 from confiture.core.sql_lexer import ParsedFile, blank_copy_blocks, parse_file
 from confiture.exceptions import SchemaError
 from confiture.models.warnings import BuildWarning
@@ -166,7 +166,10 @@ class SchemaRead:
 
     def _with_triggers(self, model: SchemaModel) -> SchemaModel:
         triggers = declared_triggers(self.declared.objects)
-        return replace(model, triggers={trigger_ref(t): t for t in triggers})
+        # A tree says what it declares in every section: silence is absence.
+        return replace(
+            model, triggers={trigger_ref(t): t for t in triggers}, coverage=Coverage.every()
+        )
 
 
 def read_segments(segments: Iterable[Segment]) -> SchemaRead:

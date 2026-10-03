@@ -254,7 +254,8 @@ class _Object:
     subject: DriftSubject
 
 
-def _objects(model: SchemaModel) -> list[_Object]:
+def _objects(model: SchemaModel, sections: frozenset[str]) -> list[_Object]:
+    """The objects *model* holds in *sections*: views, routines, triggers and TVIEWs."""
     found = [
         _Object(
             ref,
@@ -264,6 +265,7 @@ def _objects(model: SchemaModel) -> list[_Object]:
             DriftSubject(ref.schema, view.name),
         )
         for ref, view in model.views.items()
+        if "views" in sections
     ]
     found += [
         _Object(
@@ -283,6 +285,7 @@ def _objects(model: SchemaModel) -> list[_Object]:
             ),
         )
         for ref, overloads in model.routines.items()
+        if "routines" in sections
         for routine in overloads
     ]
     found += [
@@ -294,6 +297,7 @@ def _objects(model: SchemaModel) -> list[_Object]:
             DriftSubject(ref.schema, trigger.table, trigger.name),
         )
         for ref, trigger in model.triggers.items()
+        if "triggers" in sections
     ]
     found += [
         _Object(
@@ -304,6 +308,7 @@ def _objects(model: SchemaModel) -> list[_Object]:
             DriftSubject(ref.schema, tview.name),
         )
         for ref, tview in model.tviews.items()
+        if "tviews" in sections
     ]
     return found
 
@@ -312,7 +317,9 @@ def _order(obj: _Object) -> str:
     return str((obj.ref.kind, obj.ref.schema, obj.ref.name.lower(), obj.ref.signature))
 
 
-def _compare_objects(expected: SchemaModel, actual: SchemaModel) -> list[DriftItem]:
+def _compare_objects(
+    expected: SchemaModel, actual: SchemaModel, sections: frozenset[str]
+) -> list[DriftItem]:
     """Views, matviews, triggers, routines and TVIEWs: what the tree declares against what exists.
 
     Paired by :class:`ObjectRef` and, inside a routine's bucket, by
@@ -327,9 +334,9 @@ def _compare_objects(expected: SchemaModel, actual: SchemaModel) -> list[DriftIt
     indistinguishable from an empty expected set, and a live database
     legitimately carries objects no DDL tree declares.
     """
-    declared = _objects(expected)
+    declared = _objects(expected, sections)
     unclaimed: dict[ObjectRef, list[_Object]] = defaultdict(list)
-    for obj in _objects(actual):
+    for obj in _objects(actual, sections):
         unclaimed[obj.ref].append(obj)
 
     missing: list[_Object] = []
@@ -440,6 +447,7 @@ def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
         return replace(obj, schema=obj.schema or default_schema)
 
     return SchemaModel(
+        coverage=model.coverage,
         routines={
             routine_ref(placed(overloads[0])): overloads for overloads in model.routines.values()
         },
@@ -717,8 +725,6 @@ class SchemaDriftDetector:
         self,
         expected: SchemaModel,
         actual: SchemaModel,
-        *,
-        objects: bool = False,
     ) -> DriftReport:
         """Compare two schema models: the expected one from DDL, the actual one live.
 
@@ -729,9 +735,6 @@ class SchemaDriftDetector:
         Args:
             expected: Expected schema state
             actual: Actual (live) schema state
-            objects: Also compare the views, matviews, triggers and routines both
-                models hold (#303). Off unless *actual* read them: silence from a
-                kind nobody asked the catalogue about is not evidence of absence.
 
         Returns:
             DriftReport with differences
@@ -787,13 +790,22 @@ class SchemaDriftDetector:
             self._compare_constraints(table, expected_tables[table], actual_tables[table], report)
 
         # Compare object existence: a view, matview, trigger or routine the tree
-        # declares and the database has not got is drift, not exit 0 (#303).
-        if objects:
-            report.drift_items.extend(_compare_objects(expected, actual))
+        # declares and the database has not got is drift, not exit 0 (#303) — in
+        # each section both sides read. Silence from a section nobody asked the
+        # catalogue about is not evidence of absence.
+        sections = frozenset(
+            section
+            for section in ("views", "routines", "triggers", "tviews")
+            if expected.coverage.shared(actual.coverage, section)
+        )
+        report.drift_items.extend(_compare_objects(expected, actual, sections))
+        if "tviews" in sections:
             report.drift_items.extend(_compare_tview_options(expected, actual))
-            report.objects_checked = (
-                len(expected.views) + len(expected.routines) + len(expected.triggers)
-            )
+        report.objects_checked = sum(
+            len(getattr(expected, section))
+            for section in ("views", "routines", "triggers")
+            if section in sections
+        )
 
         report.detection_time_ms = int((time.perf_counter() - start_time) * 1000)
         return report
@@ -1125,7 +1137,7 @@ class SchemaDriftDetector:
             _read_expected(lambda: read_segments(source.segments())), default_schema
         )
         actual = self.get_live_schema(expected.schemas, objects=True)
-        report = self.compare_schemas(expected.model, actual, objects=True)
+        report = self.compare_schemas(expected.model, actual)
         report.expected_schema_source = f"file:{schema_file_path}"
         return report
 

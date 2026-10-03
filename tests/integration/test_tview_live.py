@@ -81,7 +81,7 @@ def _drift(url: str, ddl: str) -> list[tuple[str, str, str]]:
     with psycopg.connect(url) as conn:
         detector = SchemaDriftDetector(conn)
         actual = detector.get_live_schema(expected.schemas, objects=True)
-        report = detector.compare_schemas(expected.model, actual, objects=True)
+        report = detector.compare_schemas(expected.model, actual)
     return sorted((i.drift_type.value, i.severity.value, i.object_name) for i in report.drift_items)
 
 
