@@ -16,6 +16,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`tenant_005` reports only a key that can let one tenant's row collide with
+  another's** (#559). It judged a key's *position*: `PRIMARY KEY (reading_date,
+  tenant_id, sensor_id)` was reported though it cannot collide across tenants, and
+  so was every identity or `gen_random_uuid()` key. A key now passes when it
+  **contains** the discriminator, or is one column whose value no other row has
+  whoever writes it (`ValueSource.unique_without_author_input`): constraints and
+  unique indexes alike. Leading with the discriminator is index advice, which the
+  guide gives. Baselined `tenant_005` findings for such keys disappear.
+- **`sec_001`/`sec_003` read a column name and a placeholder by their words**
+  (#560). `smtp_passwd`, `db_credential` and `stripeApiKey` are credentials;
+  `tokenizer` and `lessons` are not; `'PLACEHOLDER-not-a-real-credential'`,
+  `'test_password'` and `'test'` are placeholders. A column naming two kinds is one
+  `sec_001` finding; personal data (`credit card`, `ssn`, `iban`) is named as such,
+  with a fix that fits it.
+||||||| 3c325381
 - **A routine that selects `INTO` several variables, one of them of an extension or
   domain type, is read** (#558). `confiture lint` reported it under `build_003 ran on
   less than the whole schema: could not read N routine bodies`. The PL/pgSQL compiler
