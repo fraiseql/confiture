@@ -385,6 +385,9 @@ jobs:
           tests/unit/test_live_catalog_reads_text_like_ddl.py \
           tests/unit/test_routine_identity.py \
           tests/unit/test_copy_blocks_everywhere.py \
+          tests/unit/test_schema_read.py \
+          tests/unit/linting/test_columns_are_where_written.py \
+          tests/unit/linting/test_a_finding_names_the_file_that_wrote_it.py \
           tests/unit/test_drift_expected_parser.py \
           tests/unit/test_differ_copy_stdin.py \
           tests/unit/test_wide_signatures.py \
