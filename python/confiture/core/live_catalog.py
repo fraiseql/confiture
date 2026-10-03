@@ -459,6 +459,7 @@ def read(
         triggers=({trigger_ref(t): t for t in _triggers(conn, wanted)} if triggers else {}),
         tviews=tview_models,
         other_objects=_other_objects(conn, wanted) if other_objects else {},
+        source="catalog",
         coverage=Coverage.of(
             {
                 **dict.fromkeys(("tables", "enum_types", "sequences", "tviews"), "definition"),

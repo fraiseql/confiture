@@ -14,7 +14,8 @@
     "triggers",
     "tviews",
     "other_objects",
-    "coverage"
+    "coverage",
+    "source"
   ],
   "properties": {
     "tables": {
@@ -120,6 +121,13 @@
           ]
         }
       }
+    },
+    "source": {
+      "enum": [
+        "author",
+        "catalog"
+      ],
+      "description": "Who wrote what the model says: an author's DDL (`author`) or PostgreSQL's catalog (`catalog`). A comparison of two models follows from the two sides' sources: two trees are compared as written, a tree and a database through the parity rules, two catalogs exactly. Not part of what the schema is."
     }
   },
   "$defs": {

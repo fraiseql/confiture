@@ -448,6 +448,7 @@ def _in_schema(model: SchemaModel, default_schema: str) -> SchemaModel:
 
     return SchemaModel(
         coverage=model.coverage,
+        source=model.source,
         routines={
             routine_ref(placed(overloads[0])): overloads for overloads in model.routines.values()
         },

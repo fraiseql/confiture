@@ -278,6 +278,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("tviews", "Mapping[ObjectRef, TView]"),
         ("other_objects", "Mapping[ObjectRef, OtherObject]"),
         ("coverage", "Coverage"),
+        ("source", "Provenance"),
     ),
     "OtherObject": (
         ("kind", "str"),
