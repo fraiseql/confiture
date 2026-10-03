@@ -25,7 +25,6 @@ from confiture.core.differ import refuse_quoted_names
 from confiture.core.locking import LOCK_HOLDER_TABLE
 from confiture.core.schema_analyzer import SchemaAnalyzer
 from confiture.core.schema_model import (
-    SERIAL_TYPES,
     Column,
     Constraint,
     Index,
@@ -35,6 +34,7 @@ from confiture.core.schema_model import (
     SchemaModel,
     Signature,
     Table,
+    ValueSource,
     ref_for,
     routine_ref,
     trigger_ref,
@@ -546,9 +546,11 @@ def _comparable_defaults(exp: Column, act: Column) -> tuple[str | None, str | No
     PostgreSQL stores a default analysed (``'x'`` as ``'x'::text``). An identity or a
     generated column has no default, and a ``serial``'s ``nextval`` is its own.
     """
-    if exp.identity or act.identity or exp.generated or act.generated:
+    computed = {ValueSource.IDENTITY, ValueSource.GENERATED}
+    if exp.value_source in computed or act.value_source in computed:
         return None, None
-    if (exp.raw_sql_type or "").upper() in SERIAL_TYPES:
+    # A `serial` writes no default: the `nextval` the catalog holds is its own.
+    if exp.value_source is ValueSource.SEQUENCE and exp.default is None:
         return None, None
     column_type = act.type_text or exp.type_text
     try:

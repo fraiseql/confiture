@@ -37,6 +37,7 @@ import json
 import re
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import asdict, dataclass, field, fields, replace
+from enum import StrEnum
 from typing import Any, Literal, TypeVar
 
 from confiture.core.schema_identity import DEFAULT_SCHEMA
@@ -53,6 +54,40 @@ Deferral = Literal["immediate", "deferred"]
 #: How a generated column holds its value. ``virtual`` arrived with PostgreSQL 18,
 #: where it is also what ``GENERATED ALWAYS AS (…)`` with neither keyword means.
 GeneratedKind = Literal["stored", "virtual"]
+
+#: What a column's default is, as the reader that held its parse tree classified it:
+#: a ``nextval(…)``, a call to a value generator (``gen_random_uuid()``, ``uuidv7()``,
+#: …), a constant, or any other expression.
+DefaultKind = Literal["sequence", "generator", "constant", "expression"]
+
+
+class ValueSource(StrEnum):
+    """Where a column's value comes from when a row is written.
+
+    One answer for every reader that asks — a seed writer (which columns it
+    supplies), parity (what a ``serial`` is in the catalog), drift (whose default
+    is its own) and the tenant rules (which keys cannot collide) — derived from
+    the column's own fields, never from its default's text.
+    """
+
+    IDENTITY = "identity"
+    GENERATED = "generated"
+    SEQUENCE = "sequence"
+    GENERATOR = "generator"
+    EXPRESSION = "expression"
+    CONSTANT = "constant"
+    NONE = "none"
+
+    @property
+    def filled_by_postgresql(self) -> bool:
+        """PostgreSQL writes the value; a writer does not supply it (``writable_columns``)."""
+        return self in (ValueSource.IDENTITY, ValueSource.GENERATED, ValueSource.SEQUENCE)
+
+    @property
+    def unique_without_author_input(self) -> bool:
+        """Every row gets a value no other row has, whatever the writer does."""
+        return self in (ValueSource.IDENTITY, ValueSource.SEQUENCE, ValueSource.GENERATOR)
+
 
 #: What ``CREATE FUNCTION``, ``CREATE PROCEDURE`` and ``CREATE AGGREGATE`` define.
 RoutineKind = Literal["function", "procedure", "aggregate"]
@@ -177,6 +212,20 @@ class Column:
     generated_kind: GeneratedKind | None = None
     primary_key: bool = False
     file: str | None = field(default=None, compare=False)
+    #: What :attr:`default` is, read from its parse tree by the reader that held it.
+    #: Derived from the default, so it takes no part in equality.
+    default_kind: DefaultKind | None = field(default=None, compare=False)
+
+    @property
+    def value_source(self) -> ValueSource:
+        """Where this column's value comes from (:class:`ValueSource`)."""
+        if self.identity:
+            return ValueSource.IDENTITY
+        if self.generated is not None:
+            return ValueSource.GENERATED
+        if (self.raw_sql_type or "").upper() in SERIAL_TYPES:
+            return ValueSource.SEQUENCE
+        return ValueSource(self.default_kind) if self.default_kind else ValueSource.NONE
 
 
 #: ``serial`` and its siblings are not types: PostgreSQL stores an integer, NOT NULL,
@@ -776,9 +825,7 @@ def _generated_name(table: str, name: str) -> bool:
 
 
 def _parity_column(column: Column) -> Column:
-    serial = (column.raw_sql_type or "").upper() in SERIAL_TYPES or (
-        column.default or ""
-    ).startswith("nextval(")
+    serial = column.value_source is ValueSource.SEQUENCE
     return replace(
         column,
         name=column.folded,

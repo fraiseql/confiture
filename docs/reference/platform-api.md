@@ -343,6 +343,7 @@ of `GENERATED … AS IDENTITY`, `generated` the expression of a
 | `generated_kind` | `GeneratedKind \| None` | `None` |
 | `primary_key` | `bool` | `False` |
 | `file` | `str \| None` | `None` |
+| `default_kind` | `DefaultKind \| None` | `None` |
 
 ### `Constraint`
 
@@ -623,6 +624,17 @@ column named `pk_*`, and a column named `id`. Heuristic signals, not facts
 **Raises**
 
 - `NotInModelError`: when *model* holds no such table — a `SchemaError` and a `KeyError`.
+
+### `ValueSource`
+
+Where a column's value comes from when a row is written.
+
+One answer for every reader that asks — a seed writer (which columns it
+supplies), parity (what a `serial` is in the catalog), drift (whose default
+is its own) and the tenant rules (which keys cannot collide) — derived from
+the column's own fields, never from its default's text.
+
+Members: `identity`, `generated`, `sequence`, `generator`, `expression`, `constant`, `none`.
 
 ### `ColumnFacts`
 

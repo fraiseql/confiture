@@ -7,6 +7,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables.sql",
           "folded": "id",
           "generated": null,
@@ -22,6 +23,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables.sql",
           "folded": "user_id",
           "generated": null,
@@ -37,6 +39,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables.sql",
           "folded": "title",
           "generated": null,
@@ -52,6 +55,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables.sql",
           "folded": "content",
           "generated": null,
@@ -67,6 +71,7 @@
         },
         {
           "default": "CURRENT_TIMESTAMP",
+          "default_kind": "expression",
           "file": "db/schema/10_tables.sql",
           "folded": "created_at",
           "generated": null,
@@ -130,6 +135,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables.sql",
           "folded": "id",
           "generated": null,
@@ -145,6 +151,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables.sql",
           "folded": "username",
           "generated": null,
@@ -160,6 +167,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables.sql",
           "folded": "email",
           "generated": null,
@@ -175,6 +183,7 @@
         },
         {
           "default": "CURRENT_TIMESTAMP",
+          "default_kind": "expression",
           "file": "db/schema/10_tables.sql",
           "folded": "created_at",
           "generated": null,

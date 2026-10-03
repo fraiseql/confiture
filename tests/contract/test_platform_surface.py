@@ -91,6 +91,7 @@ WRITER = (
     "writable_columns",
     "column_facts",
     "naming_hints",
+    "ValueSource",
     "ColumnFacts",
     "ColumnReference",
     "TableHints",
@@ -193,6 +194,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("generated_kind", "GeneratedKind | None"),
         ("primary_key", "bool"),
         ("file", "str | None"),
+        ("default_kind", "DefaultKind | None"),
     ),
     "Constraint": (
         ("kind", "ConstraintKind"),

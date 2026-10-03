@@ -50,6 +50,7 @@ from pglast.stream import RawStream
 from psycopg import sql
 
 from confiture.core.ddl_walk import (
+    default_kind,
     read_constraint,
     read_index,
     render_default,
@@ -207,6 +208,7 @@ def _type_nodes(types: list[str]) -> list[Any]:
 def _column(row: tuple[Any, ...], type_node: Any) -> Column:
     _relid, name, spelled, not_null, stored, identity, generated = row
     generated_kind = _GENERATED.get(generated or "")
+    expression = _expression(stored) if stored and not generated_kind else None
     return Column(
         name=name,
         folded=name,
@@ -215,7 +217,8 @@ def _column(row: tuple[Any, ...], type_node: Any) -> Column:
         type_key=canonical_type(ddl_type_name(type_node)),
         raw_sql_type=written_type(type_node),
         not_null=bool(not_null),
-        default=render_default(_expression(stored)) if stored and not generated_kind else None,
+        default=render_default(expression) if expression is not None else None,
+        default_kind=default_kind(expression) if expression is not None else None,
         identity=_IDENTITY.get(identity or ""),
         generated=RawStream()(_expression(stored)) if stored and generated_kind else None,
         generated_kind=generated_kind,

@@ -47,6 +47,7 @@
       "columns": [
         {
           "default": "uuid_generate_v4()",
+          "default_kind": "generator",
           "file": "db/schema/10_tables/02_projects.sql",
           "folded": "id",
           "generated": null,
@@ -62,6 +63,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/02_projects.sql",
           "folded": "owner_id",
           "generated": null,
@@ -77,6 +79,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/02_projects.sql",
           "folded": "name",
           "generated": null,
@@ -92,6 +95,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/02_projects.sql",
           "folded": "description",
           "generated": null,
@@ -107,6 +111,7 @@
         },
         {
           "default": "'active'",
+          "default_kind": "constant",
           "file": "db/schema/10_tables/02_projects.sql",
           "folded": "status",
           "generated": null,
@@ -122,6 +127,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/02_projects.sql",
           "folded": "created_at",
           "generated": null,
@@ -137,6 +143,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/02_projects.sql",
           "folded": "updated_at",
           "generated": null,
@@ -325,6 +332,7 @@
       "columns": [
         {
           "default": "uuid_generate_v4()",
+          "default_kind": "generator",
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "id",
           "generated": null,
@@ -340,6 +348,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "project_id",
           "generated": null,
@@ -355,6 +364,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "assigned_to",
           "generated": null,
@@ -370,6 +380,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "title",
           "generated": null,
@@ -385,6 +396,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "description",
           "generated": null,
@@ -400,6 +412,7 @@
         },
         {
           "default": "'medium'",
+          "default_kind": "constant",
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "priority",
           "generated": null,
@@ -415,6 +428,7 @@
         },
         {
           "default": "'todo'",
+          "default_kind": "constant",
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "status",
           "generated": null,
@@ -430,6 +444,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "due_date",
           "generated": null,
@@ -445,6 +460,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "completed_at",
           "generated": null,
@@ -460,6 +476,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "created_at",
           "generated": null,
@@ -475,6 +492,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/03_tasks.sql",
           "folded": "updated_at",
           "generated": null,
@@ -751,6 +769,7 @@
       "columns": [
         {
           "default": "uuid_generate_v4()",
+          "default_kind": "generator",
           "file": "db/schema/10_tables/01_users.sql",
           "folded": "id",
           "generated": null,
@@ -766,6 +785,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/01_users.sql",
           "folded": "email",
           "generated": null,
@@ -781,6 +801,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/01_users.sql",
           "folded": "display_name",
           "generated": null,
@@ -796,6 +817,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/01_users.sql",
           "folded": "bio",
           "generated": null,
@@ -811,6 +833,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "db/schema/10_tables/01_users.sql",
           "folded": "avatar_url",
           "generated": null,
@@ -826,6 +849,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/01_users.sql",
           "folded": "created_at",
           "generated": null,
@@ -841,6 +865,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "db/schema/10_tables/01_users.sql",
           "folded": "updated_at",
           "generated": null,

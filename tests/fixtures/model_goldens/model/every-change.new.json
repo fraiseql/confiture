@@ -34,6 +34,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "id",
           "generated": null,
@@ -49,6 +50,7 @@
         },
         {
           "default": "now()",
+          "default_kind": "expression",
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "at",
           "generated": null,
@@ -90,6 +92,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "id",
           "generated": null,
@@ -131,6 +134,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "id",
           "generated": null,
@@ -146,6 +150,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "display_name",
           "generated": null,
@@ -187,6 +192,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "id",
           "generated": null,
@@ -202,6 +208,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "created_at",
           "generated": null,
@@ -217,6 +224,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "size",
           "generated": null,
@@ -232,6 +240,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "note",
           "generated": null,
@@ -247,6 +256,7 @@
         },
         {
           "default": "'open'",
+          "default_kind": "constant",
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "status",
           "generated": null,
@@ -262,6 +272,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "pid",
           "generated": null,
@@ -277,6 +288,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "code",
           "generated": null,
@@ -292,6 +304,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "qty",
           "generated": null,
@@ -307,6 +320,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "span",
           "generated": null,
@@ -443,6 +457,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "tests/fixtures/every_change/new.sql",
           "folded": "id",
           "generated": null,

@@ -44,6 +44,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/20_catalog/20_tb_product.sql",
           "folded": "id",
           "generated": null,
@@ -59,6 +60,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/20_catalog/20_tb_product.sql",
           "folded": "pk_product",
           "generated": null,
@@ -74,6 +76,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/20_catalog/20_tb_product.sql",
           "folded": "fk_vendor",
           "generated": null,
@@ -89,6 +92,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/20_catalog/20_tb_product.sql",
           "folded": "name",
           "generated": null,
@@ -104,6 +108,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/20_catalog/20_tb_product.sql",
           "folded": "price",
           "generated": null,
@@ -119,6 +124,7 @@
         },
         {
           "default": "'draft'",
+          "default_kind": "constant",
           "file": "examples/08-generated-seeds/db/schema/20_catalog/20_tb_product.sql",
           "folded": "status",
           "generated": null,
@@ -214,6 +220,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/20_catalog/10_tb_vendor.sql",
           "folded": "id",
           "generated": null,
@@ -229,6 +236,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/20_catalog/10_tb_vendor.sql",
           "folded": "pk_vendor",
           "generated": null,
@@ -244,6 +252,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/20_catalog/10_tb_vendor.sql",
           "folded": "name",
           "generated": null,
@@ -259,6 +268,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/20_catalog/10_tb_vendor.sql",
           "folded": "country_code",
           "generated": null,
@@ -317,6 +327,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/10_prep_seed/20_tb_product.sql",
           "folded": "id",
           "generated": null,
@@ -332,6 +343,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/10_prep_seed/20_tb_product.sql",
           "folded": "fk_vendor_id",
           "generated": null,
@@ -347,6 +359,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/10_prep_seed/20_tb_product.sql",
           "folded": "name",
           "generated": null,
@@ -362,6 +375,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/10_prep_seed/20_tb_product.sql",
           "folded": "price",
           "generated": null,
@@ -377,6 +391,7 @@
         },
         {
           "default": "'draft'",
+          "default_kind": "constant",
           "file": "examples/08-generated-seeds/db/schema/10_prep_seed/20_tb_product.sql",
           "folded": "status",
           "generated": null,
@@ -455,6 +470,7 @@
       "columns": [
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/10_prep_seed/10_tb_vendor.sql",
           "folded": "id",
           "generated": null,
@@ -470,6 +486,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/10_prep_seed/10_tb_vendor.sql",
           "folded": "name",
           "generated": null,
@@ -485,6 +502,7 @@
         },
         {
           "default": null,
+          "default_kind": null,
           "file": "examples/08-generated-seeds/db/schema/10_prep_seed/10_tb_vendor.sql",
           "folded": "country_code",
           "generated": null,
