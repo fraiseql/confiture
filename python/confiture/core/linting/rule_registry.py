@@ -396,7 +396,7 @@ LINT_RULES: tuple[LintRule, ...] = (
     LintRule(
         code="tree_003",
         family="tree",
-        title="Prefixes within one directory are contiguous",
+        title="A directory's numbering keeps its own step",
         severity="warning",
         default_on=False,
     ),

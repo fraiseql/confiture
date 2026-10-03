@@ -43,7 +43,7 @@ Adopt a rule on a schema that already trips it with a
 | `own_002` | own | error | off | No bare ALTER … OWNER TO on an object the migration did not create (guarded: warning) |
 | `tree_001` | tree | error | on | No two files in one directory share a numeric prefix |
 | `tree_002` | tree | warning | off | A numbered file carries a verb after its prefix |
-| `tree_003` | tree | warning | off | Prefixes within one directory are contiguous |
+| `tree_003` | tree | warning | off | A directory's numbering keeps its own step |
 | `tree_004` | tree | warning | off | Every file in the overrides mirror has a counterpart in the tree |
 | `tree_005` | tree | warning | off | No two sibling entries share a numeric prefix |
 | `tree_006` | tree | warning | off | An entry's prefix extends its parent's |
@@ -584,9 +584,9 @@ line of its own.
 
 | Code | Reports |
 |------|---------|
-| `tree_001` | two **files** in one directory share a numeric prefix |
+| `tree_001` | two **files** in one directory share a prefix's number (`0001_a`, `001_b`) |
 | `tree_002` | a numbered file carries no verb after its prefix (`00001.sql`) |
-| `tree_003` | prefixes within one directory are not contiguous |
+| `tree_003` | a directory's numbering — files and subdirectories alike — skips a value at its step |
 | `tree_004` | a file in the overrides mirror has no counterpart in the tree |
 | `tree_005` | two sibling **entries** share a prefix, at least one a directory |
 | `tree_006` | an entry's prefix does not extend its parent's |
@@ -600,6 +600,18 @@ The files the environment builds, resolved through the same `SchemaBuilder`
 per-directory `exclude` glob contributes no entry, so a numbering that decides
 nothing is judged by nothing. `tree_004` is the exception: its subject is the
 overrides mirror, which the build never reads, and it needs `--overrides-dir`.
+
+### `tree_003` — a gap in a directory's numbering
+
+A numbered subdirectory takes its value in the sequence as a file does, because the
+build orders them together: `01_a.sql`, `02_helpers/`, `03_b.sql` has no gap, and a
+level holding only directories (`01_x/`, `02_y/`, `05_z/`) is checked too. A file
+and a directory sharing a value are one value here — their collision is
+`tree_005`'s. The **step** is read from the directory itself: when every value is a
+multiple of ten (`10_tables/`, `20_views/` — room left on purpose) it counts in
+tens, and `40_functions/` after `20_views/` is a gap; otherwise the step is one, as
+`confiture generate alloc` numbers files. The finding names the entries on either
+side of the gap, so a reader does not look for a missing *file* beside a directory.
 
 ### `tree_005` — a collision, and the order it produces
 

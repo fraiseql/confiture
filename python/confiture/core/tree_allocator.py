@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from confiture.core.tree_prefix import numbering, prefix_value, prefixes
+from confiture.core.tree_prefix import disk_entries, numbering, prefix_value, prefixes
 
 
 class PrefixScheme(Enum):
@@ -186,7 +186,7 @@ class TreeAllocator:
         Falls back to :class:`PrefixConfig` defaults when the directory
         is empty or contains no recognisable prefixed files.
         """
-        found = numbering(child.name for child in directory.iterdir() if child.suffix == ".sql")
+        found = numbering(entry.path.name for entry in disk_entries(directory))
         if found is None:
             return PrefixConfig()
         hexadecimal, width = found
@@ -209,9 +209,7 @@ class TreeAllocator:
         """
         hex_group = scheme == PrefixScheme.HEX
         values = (
-            prefix_value(child.name, hex_group=hex_group)
-            for child in directory.iterdir()
-            if child.suffix == ".sql"
+            prefix_value(entry.path.name, hex_group=hex_group) for entry in disk_entries(directory)
         )
         return [value for value in values if value is not None]
 

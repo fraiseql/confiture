@@ -16,6 +16,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`tree_003` counts a numbered directory in its directory's sequence** (#556): a
+  directory between two files fills its value, and a level of directories alone
+  (`01_x/`, `02_y/`, `05_z/`) is checked. The step is read from the directory: a
+  numbering in tens (`10_tables/`, `20_views/`) leaves room, it lacks nothing.
+  Baselined `tree_003` findings that existed only because of a directory
+  disappear; a gap at a directory-only level may appear.
+- **`renumber --compact` never reorders the build.** It numbered a directory's
+  children in *name* order, so `9_y`, `10_x`, `12_z` became `03_y`, `01_x`, `02_z`
+  — `y` moved from first to last — and its own reorder check, comparing paths
+  sorted by name, did not notice. Both now use the build's order.
+- **`generate alloc` counts a directory's number as taken**: beside `02_helpers/`
+  it allocated `02_next.sql`, a collision (`tree_005`) and an order the prefix no
+  longer decided.
+- **`tree_001` compares a prefix's number**, not its spelling: `0001_a.sql` and
+  `001_b.sql` both number 1.
+
 - **`drift --schema` reads a `confiture build` bundle that seeds with `COPY … FROM
   stdin`** (#561). drift handed the bundle to the parser whole, which refused the
   first data row (`SCHEMA_202`). A tree is now read once, by one reader
