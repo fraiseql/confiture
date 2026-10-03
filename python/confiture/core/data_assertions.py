@@ -54,7 +54,13 @@ from confiture.core.ddl_walk import walk_nodes
 from confiture.core.plpgsql_fragments import Fragment, Mode, fragments, nodes
 from confiture.core.plpgsql_parse import parse_body
 from confiture.core.schema_model import RelationName
-from confiture.core.sql_lexer import blank_copy_blocks, split_statements, statement_type, tokens
+from confiture.core.sql_lexer import (
+    blank_copy_blocks,
+    parse_file,
+    split_statements,
+    statement_type,
+    tokens,
+)
 
 #: Relation schemas whose contents exist on a schema-only database.
 _SCHEMA_ONLY_SAFE = frozenset({"pg_catalog", "information_schema"})
@@ -245,7 +251,7 @@ def _derivations(sql: str) -> Derivations:
     """
     # Reason: a file the parser rejects contributes no derivations; each statement still scans
     try:
-        statements = pglast.parser.parse_sql(sql)
+        statements = parse_file(sql).statements
     except pglast.parser.ParseError:
         return {}
 

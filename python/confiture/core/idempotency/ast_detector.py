@@ -36,8 +36,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import pglast
-
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.idempotency._ast_visitor import (
     _extract_snippet_from_stmt,
@@ -472,12 +470,11 @@ def _detect_via_ast(sql: str) -> list[PatternMatch]:
     """Detect non-idempotent SQL patterns using pglast's AST.
 
     Raises:
-        pglast.parser.ParseError: when the SQL is not valid PostgreSQL.
-            The dispatcher in :mod:`patterns` catches this and falls
-            through to the regex backend.
+        pglast.parser.ParseError: when the SQL is not valid PostgreSQL; the
+            validator records the file as unparseable (``IDEM_UNPARSEABLE``).
     """
 
-    statements = _iter_statements(sql, pglast)
+    statements = _iter_statements(sql)
     drops = _collect_pair_drops(statements)
     matches: list[PatternMatch] = []
     for ctx in statements:

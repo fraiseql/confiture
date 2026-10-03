@@ -19,7 +19,7 @@ from confiture.core import live_catalog
 from confiture.core.ddl_walk import declared_constraints
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import Column, Constraint, SchemaModel, Table, ref_for
-from confiture.core.sql_lexer import split_statements, statement_type
+from confiture.core.sql_lexer import parse_file, split_statements, statement_type
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def _foreign_keys(sql: str) -> list[Constraint]:
     """The foreign keys *sql* declares, read by the one reader; none when it does not parse."""
     try:
-        raws = pglast.parse_sql(sql)
+        raws = parse_file(sql).statements
     except pglast.parser.ParseError:
         return []
     return [

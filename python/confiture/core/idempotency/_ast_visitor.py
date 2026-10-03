@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from confiture.core.sql_lexer import parse_file
 from confiture.core.sql_lexer import skip_leading_comments as _first_keyword_pos
 
 _SNIPPET_MAX_LENGTH = 80
@@ -64,15 +65,13 @@ class _StatementContext:
     stmt_len: int
 
 
-def _iter_statements(sql: str, pglast: Any) -> list[_StatementContext]:
-    """Parse ``sql`` with pglast and yield one context per top-level statement.
+def _iter_statements(sql: str) -> list[_StatementContext]:
+    """Parse ``sql`` once (``sql_lexer.parse_file``) and yield one context per statement.
 
-    Raises whatever ``pglast.parse_sql`` raises on parse failure — the
-    dispatcher is responsible for catching ``pglast.parser.ParseError``
-    and falling through to the regex backend.
+    Raises ``pglast.parser.ParseError`` on parse failure; the dispatcher reports it.
     """
-    tree = pglast.parse_sql(sql)
-    if tree is None:
+    tree = parse_file(sql).statements
+    if not tree:
         return []
     contexts: list[_StatementContext] = []
     contexts.extend(

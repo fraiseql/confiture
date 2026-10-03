@@ -138,7 +138,14 @@ unclassified change-set entry, `DIFFER_400`. `core/parser_info.py` names the par
 
 **One lexer** — `core/sql_lexer.py` is the only module that tokenises SQL text
 (`split_statements`, `strip_comments`, `tokens`, `code_text`, `directives`,
-`blank_copy_blocks`, `copy_blocks`, `transaction_statements`). A regex elsewhere whose
+`blank_copy_blocks`, `copy_blocks`, `transaction_statements`), and `parse_file` is **the one way into the parser** for any
+text a file holds: it blanks `COPY … FROM stdin` data, then parses once.
+`tests/unit/test_one_parse_entry.py` fails on a `pglast` parser call elsewhere; its
+allow-list names what each remaining caller parses that can never hold a `COPY` block
+(one expression, one generated statement, one PL/pgSQL fragment, a catalog
+definition). `tests/unit/test_no_silent_parse_failure.py` fails on an
+`except ParseError` that answers with nothing (`[]`, `None`, `False`, `continue`); its
+allow-list says who reports the failure instead. A regex elsewhere whose
 pattern carries a lexical marker (`--`, `/*`, a dollar quote, a `'…'` shape, `stdin`,
 `\.`) fails `tests/unit/test_one_sql_lexer.py`; a regex matching a statement's shape
 counts against the shrink-only `sql_keyword_regex` budget. Read a `-- confiture:<name>`

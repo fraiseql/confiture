@@ -222,8 +222,12 @@ def strip_comments(sql: str, *, replace_with: str = "") -> str:
 
 
 def parse(sql: str) -> list[ParsedStatement]:
-    """Every top-level statement with its source location. Raises ``pglast.parser.ParseError``."""
-    tree = pglast.parse_sql(sql)
+    """Every top-level statement with its source location, ``COPY`` data blanked first.
+
+    Raises:
+        pglast.parser.ParseError: PostgreSQL's parser rejects *sql*.
+    """
+    tree = parse_file(sql).statements
     out: list[ParsedStatement] = []
     # Statements come in source order: count the newlines since the last one, not
     # from the top each time, or a file of many statements is quadratic.

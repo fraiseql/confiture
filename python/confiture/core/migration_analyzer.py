@@ -1,22 +1,18 @@
 """Analyze migration SQL for non-transactional statements.
 
-Uses pglast (PostgreSQL's C parser) when available, falls back to regex.
-Non-transactional statements cannot run inside BEGIN/COMMIT and require
+Read with PostgreSQL's own parser (``sql_lexer.parse_file``). Non-transactional statements cannot run inside BEGIN/COMMIT and require
 special handling during deployment (e.g. no atomic rollback).
 """
 
 from __future__ import annotations
 
-import re
-from typing import Any, ClassVar
+from typing import ClassVar
 
-import pglast
+from confiture.core.sql_lexer import parse_file
 
 
 class MigrationAnalyzer:
     """Analyzes migration SQL for non-transactional statements.
-
-    Uses pglast (PostgreSQL's C parser) when available, falls back to regex.
 
     Example::
 
@@ -34,69 +30,17 @@ class MigrationAnalyzer:
         }
     )
 
-    _NON_TXN_PATTERNS: ClassVar[list[tuple[re.Pattern[str], str]]] = [
-        (
-            re.compile(
-                r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)",
-                re.IGNORECASE,
-            ),
-            "CREATE INDEX CONCURRENTLY: {0}",
-        ),
-        (
-            re.compile(
-                r"DROP\s+INDEX\s+CONCURRENTLY",
-                re.IGNORECASE,
-            ),
-            "DROP INDEX CONCURRENTLY",
-        ),
-        (
-            re.compile(
-                r"ALTER\s+TYPE\s+([\w.]+)\s+ADD\s+VALUE",
-                re.IGNORECASE,
-            ),
-            "ALTER TYPE {0} ADD VALUE",
-        ),
-        (
-            re.compile(
-                r"REINDEX\s+.*CONCURRENTLY",
-                re.IGNORECASE,
-            ),
-            "REINDEX CONCURRENTLY",
-        ),
-        (
-            re.compile(
-                r"((?:CREATE|DROP)\s+DATABASE)",
-                re.IGNORECASE,
-            ),
-            "{0}",
-        ),
-        (
-            re.compile(
-                r"\bVACUUM\b",
-                re.IGNORECASE,
-            ),
-            "VACUUM",
-        ),
-        (
-            re.compile(
-                r"\bCLUSTER\b(?!\s+BY)",
-                re.IGNORECASE,
-            ),
-            "CLUSTER",
-        ),
-    ]
-
     def analyze(self, sql: str) -> list[str]:
         """Return list of non-transactional statement descriptions.
 
         Returns empty list if all statements are transactional.
         """
-        return self._analyze_pglast(sql, pglast)
+        return self._analyze_pglast(sql)
 
-    def _analyze_pglast(self, sql: str, pglast: Any) -> list[str]:
+    def _analyze_pglast(self, sql: str) -> list[str]:
         """AST-based detection using PostgreSQL's own parser."""
         results: list[str] = []
-        tree = pglast.parse_sql(sql)
+        tree = parse_file(sql).statements
 
         for stmt_wrapper in tree:
             stmt = stmt_wrapper.stmt
