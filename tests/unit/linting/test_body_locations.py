@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from confiture.core.linting import bodies
 from confiture.core.linting.schema_linter import RuleSeverity
+from confiture.core.sql_lexer import parse_file
 
 WIDGET = """CREATE SCHEMA IF NOT EXISTS app;
 CREATE TABLE app.tb_widget (pk_widget BIGINT PRIMARY KEY, name TEXT NOT NULL);
@@ -53,7 +54,7 @@ def _diagnosis(**overrides) -> bodies.Diagnosis:
 
 class TestTheKey:
     def test_a_routine_is_found_by_schema_name_and_argument_count(self) -> None:
-        where = bodies.locations([("db/schema/010.sql", WIDGET)])
+        where = bodies.locations([parse_file(WIDGET, "db/schema/010.sql")])
 
         assert bodies.locate(where, _diagnosis()) is not None
 
@@ -63,7 +64,7 @@ class TestTheKey:
             "CREATE FUNCTION app.fn_f(a VARCHAR(50), b NUMERIC(10,2)) RETURNS void "
             "LANGUAGE plpgsql AS $$ BEGIN END $$;\n"
         )
-        where = bodies.locations([("db/schema/010.sql", sql)])
+        where = bodies.locations([parse_file(sql, "db/schema/010.sql")])
 
         found = bodies.locate(where, _diagnosis(name="fn_f", arity=2, identity="app.fn_f(...)"))
 
@@ -75,14 +76,14 @@ class TestTheKey:
             "CREATE PROCEDURE app.pr_p(IN a bigint, OUT b int) "
             "LANGUAGE plpgsql AS $$ BEGIN END $$;\n"
         )
-        where = bodies.locations([("db/schema/010.sql", sql)])
+        where = bodies.locations([parse_file(sql, "db/schema/010.sql")])
 
         assert bodies.locate(where, _diagnosis(name="pr_p", arity=1, kind="procedure")) is not None
 
     def test_a_routine_created_without_a_schema_still_matches(self) -> None:
         """Which schema an unqualified ``CREATE`` lands in is the build's answer, not the file's."""
         sql = "CREATE FUNCTION fn_f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN END $$;\n"
-        where = bodies.locations([("db/schema/010.sql", sql)])
+        where = bodies.locations([parse_file(sql, "db/schema/010.sql")])
 
         assert bodies.locate(where, _diagnosis(schema="public", name="fn_f", arity=0)) is not None
 
@@ -92,7 +93,7 @@ class TestTheKey:
             "CREATE FUNCTION app.fn_f(a int) RETURNS void LANGUAGE plpgsql AS $$ BEGIN END $$;\n"
             "CREATE FUNCTION app.fn_f(a text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN END $$;\n"
         )
-        where = bodies.locations([("db/schema/010.sql", sql)])
+        where = bodies.locations([parse_file(sql, "db/schema/010.sql")])
 
         assert bodies.locate(where, _diagnosis(name="fn_f", arity=1)) is None
 
@@ -101,7 +102,7 @@ class TestTheKey:
             "CREATE FUNCTION app.fn_f() RETURNS void LANGUAGE plpgsql AS $$ BEGIN END $$;\n"
             "CREATE FUNCTION app.fn_f(a int) RETURNS void LANGUAGE plpgsql AS $$ BEGIN END $$;\n"
         )
-        where = bodies.locations([("db/schema/010.sql", sql)])
+        where = bodies.locations([parse_file(sql, "db/schema/010.sql")])
 
         found = bodies.locate(where, _diagnosis(name="fn_f", arity=1))
 
@@ -111,13 +112,13 @@ class TestTheKey:
 class TestTheLine:
     def test_a_body_line_is_placed_on_the_file(self) -> None:
         """The body starts on file line 4, so its line 5 is file line 8."""
-        where = bodies.locations([("db/schema/010.sql", WIDGET)])
+        where = bodies.locations([parse_file(WIDGET, "db/schema/010.sql")])
 
         assert bodies.locate(where, _diagnosis()).at(5) == 8
 
     def test_a_diagnosis_about_the_whole_routine_gets_the_create_s_line(self) -> None:
         """ "control reached end of function without RETURN" carries no line of its own."""
-        where = bodies.locations([("db/schema/010.sql", WIDGET)])
+        where = bodies.locations([parse_file(WIDGET, "db/schema/010.sql")])
 
         assert bodies.locate(where, _diagnosis()).at(None) == 3
 
@@ -129,7 +130,7 @@ class TestTheLine:
 
 class TestTheFinding:
     def test_a_real_sqlstate_is_body_001_at_warning(self) -> None:
-        where = bodies.locations([("db/schema/010.sql", WIDGET)])
+        where = bodies.locations([parse_file(WIDGET, "db/schema/010.sql")])
 
         found = bodies.findings([_diagnosis()], where)
 
@@ -137,7 +138,7 @@ class TestTheFinding:
 
     def test_sqlstate_00000_is_body_002_at_info(self) -> None:
         """The analyser's own opinion about a body that works, not a body that fails."""
-        where = bodies.locations([("db/schema/010.sql", WIDGET)])
+        where = bodies.locations([parse_file(WIDGET, "db/schema/010.sql")])
 
         found = bodies.findings(
             [_diagnosis(sqlstate="00000", message='unused variable "v_pk"', hint=None)], where

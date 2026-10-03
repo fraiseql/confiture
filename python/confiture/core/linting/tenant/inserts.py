@@ -45,6 +45,7 @@ from confiture.core.linting.tenant.scope import (
 from confiture.core.linting.tenant.trace import Unread, outputs
 from confiture.core.linting.tenant.views import ViewScopes, view_definitions
 from confiture.core.schema_identity import quote_identifier
+from confiture.core.sql_lexer import ParsedFile
 
 if TYPE_CHECKING:
     from confiture.core.linting.inventory import Inventory, SchemaObject
@@ -64,7 +65,7 @@ class _Tree:
 
     scopes: TenantScopes
     inventory: Inventory
-    sources: Sequence[tuple[str | None, str]]
+    files: Sequence[ParsedFile]
 
     @cached_property
     def relations(self) -> ViewScopes:
@@ -73,7 +74,7 @@ class _Tree:
         Built on the first ``INSERT`` with no column list into a tenant table: most
         trees have none, and reading every view definition is not free.
         """
-        views = [v for label, text in self.sources for v in view_definitions(label, text)]
+        views = [v for parsed in self.files for v in view_definitions(parsed)]
         return ViewScopes(self.scopes, self.inventory, views, ())
 
     def target(self, relation: Any) -> TableScope | None:
@@ -245,19 +246,18 @@ def _body_findings(body: RoutineBody, tree: _Tree) -> Iterator[TenancyFinding]:
 def insert_findings(
     scopes: TenantScopes,
     inventory: Inventory,
-    sources: Sequence[tuple[str | None, str]],
+    files: Sequence[ParsedFile],
 ) -> Iterator[TenancyFinding]:
     """``tenant_001``: every routine ``INSERT`` into a tenant table that leaves the discriminator out.
 
     Args:
         scopes: Every table's scope, as the family decided it.
         inventory: The tables and views the tree declares, ``ALTER``s folded in.
-        sources: ``(file label, text)`` per schema file; each routine is read from its file.
+        files: The schema files, each parsed once; each routine is read from its file.
     """
-    tree = _Tree(scopes, inventory, sources)
+    tree = _Tree(scopes, inventory, files)
     found: list[TenancyFinding] = []
-    for label, text in sources:
-        for body in routine_bodies(text):
-            body.obj.file = label
+    for parsed in files:
+        for body in routine_bodies(parsed):
             found.extend(_body_findings(body, tree))
     yield from sorted(found, key=lambda f: (f.file or "", f.line))

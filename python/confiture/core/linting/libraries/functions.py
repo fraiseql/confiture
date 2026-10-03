@@ -61,6 +61,7 @@ from confiture.core.linting.inventory import (
 )
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.linting.unparseable import unparseable_notice
+from confiture.core.sql_lexer import parse_file
 
 # Default schema for unqualified callable names.
 _DEFAULT_SCHEMA = "public"
@@ -243,7 +244,7 @@ class Func001FunctionUniqueness:
         unparseable SQL separately).
         """
 
-        tree = pglast.parse_sql(sql)  # ParseError propagates: check() reports the file
+        tree = parse_file(sql).statements  # ParseError propagates: check() reports the file
 
         skip_lines = self._collect_allow_duplicate_lines(sql)
         definitions: list[_CallableDefinition] = []

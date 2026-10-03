@@ -52,7 +52,7 @@ with its line rather than letting the rest of the body pass for the whole.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -64,6 +64,7 @@ from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import routine_body, walk_nodes
 from confiture.core.fk_extractor import movable_keys
 from confiture.core.linting.inventory import SchemaObject, object_from_statement, split_names
+from confiture.core.sql_lexer import ParsedFile
 
 #: A relation: a table, view, materialized view or sequence a statement reads
 #: or writes. ``RangeVar`` is how every one of them appears.
@@ -147,20 +148,17 @@ class BodyLocation:
     first_line: int | None
 
 
-def body_locations(sql: str) -> list[BodyLocation]:
-    """Every routine ``sql`` creates, with the file line its body starts on.
+def body_locations(parsed: ParsedFile) -> list[BodyLocation]:
+    """Every routine a file creates, with the file line its body starts on.
 
     The same walk :func:`referenced_objects` makes, stopping at the question
     "where is this body written" — which is what a diagnosis counted from the
     body's first line needs in order to name a file line.
     """
-    try:
-        raws = list(pglast.parse_sql(sql) or [])
-    except pglast.parser.ParseError:
-        return []
+    sql = parsed.text
     constants = _string_constants(sql)
     found: list[BodyLocation] = []
-    for raw in raws:
+    for raw in parsed.statements:
         obj = object_from_statement(sql, raw)
         if obj is not None and obj.kind in _ROUTINE_KINDS:
             found.append(BodyLocation(obj, _body_line(sql, raw.stmt, constants)))
@@ -211,25 +209,21 @@ class ReferenceScan:
     body_checks: list[tuple[int, bool]] = field(default_factory=list)
 
 
-def read_references(sql: str) -> ReferenceScan:
-    """Every object the routine and view bodies in ``sql`` name, and what went unread.
+def read_references(parsed: ParsedFile) -> ReferenceScan:
+    """Every object the routine and view bodies in a file name, and what went unread.
 
-    A text pglast rejects yields nothing: the linter already reports a parse
-    failure once, as its ``UNPARSEABLE`` notice, and a second report of the
-    same fact from every rule would be noise. A single *body* it will not
-    return is different — the rest of the text read fine — so that routine is
-    named rather than dropped.
+    A file the parser rejects never reaches here — the linter reports it once,
+    as its ``UNPARSEABLE`` notice, and reads no statement of it. A single *body*
+    the PL/pgSQL compiler will not return is different — the rest of the file
+    read fine — so that routine is named rather than dropped.
     """
-    try:
-        raws = list(pglast.parse_sql(sql) or [])
-    except pglast.parser.ParseError:
-        return ReferenceScan()
+    sql = parsed.text
     # Scanned once for the whole text: a body's first line is a lexical
     # question, and asking it per routine would make the cost quadratic.
     constants = _string_constants(sql)
     scan = ReferenceScan()
     lines = _StatementLines(sql)
-    for raw in raws:
+    for raw in parsed.statements:
         _read_clauses(raw, lines, scan)
         obj = object_from_statement(sql, raw)
         reader = None if obj is None else _READERS.get(obj.kind)
@@ -246,38 +240,32 @@ def read_references(sql: str) -> ReferenceScan:
     return scan
 
 
-def routine_bodies(sql: str) -> Iterator[RoutineBody]:
-    """Every function and procedure body in ``sql``, each read by :func:`read_body`.
+def routine_bodies(parsed: ParsedFile) -> Iterator[RoutineBody]:
+    """Every function and procedure body in a file, each read by :func:`read_body`.
 
     For a rule that asks its own question of the statements a body holds rather
-    than of the objects they name. A text pglast rejects yields none, as in
-    :func:`read_references`: the linter reports it once, as ``UNPARSEABLE``.
+    than of the objects they name. Each routine is placed in the file.
     """
-    try:
-        raws = list(pglast.parse_sql(sql) or [])
-    except pglast.parser.ParseError:
-        return
+    sql = parsed.text
     constants = _string_constants(sql)
-    for raw in raws:
+    for raw in parsed.statements:
         obj = object_from_statement(sql, raw)
         if obj is not None and obj.kind in _ROUTINE_KINDS:
+            obj.file = parsed.label
             yield read_body(sql, raw, obj, constants)
 
 
-def temp_relations(sql: str) -> frozenset[str]:
-    """The bare names of the relations a PL/pgSQL body in ``sql`` creates ``TEMP``.
+def temp_relations(files: Iterable[ParsedFile]) -> frozenset[str]:
+    """The bare names of the relations a PL/pgSQL body in *files* creates ``TEMP``.
 
     They exist only while that body runs, so an analyser that resolves a body
     against the built schema reports each one missing — the ``temp_table``
     artefact ``body_003`` names (#354). Read from the same fragments
-    :func:`read_references` walks; a body that will not parse contributes nothing.
+    :func:`read_references` walks; a body the compiler will not return
+    contributes nothing here, and :func:`read_references` names it as unread.
     """
-    try:
-        raws = list(pglast.parse_sql(sql) or [])
-    except pglast.parser.ParseError:
-        return frozenset()
     found: set[str] = set()
-    for raw in raws:
+    for sql, raw in ((parsed.text, raw) for parsed in files for raw in parsed.statements):
         obj = object_from_statement(sql, raw)
         if obj is None or obj.kind not in _ROUTINE_KINDS:
             continue
@@ -315,9 +303,9 @@ def _created_temp(statements: tuple[Any, ...]) -> set[str]:
     return created
 
 
-def referenced_objects(sql: str) -> list[Reference]:
-    """Every object the routine and view bodies in ``sql`` name, in source order."""
-    return read_references(sql).references
+def referenced_objects(parsed: ParsedFile) -> list[Reference]:
+    """Every object the routine and view bodies in a file name, in source order."""
+    return read_references(parsed).references
 
 
 def _string_constants(sql: str) -> list[tuple[int, int]]:

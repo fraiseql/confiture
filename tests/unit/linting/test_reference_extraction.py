@@ -17,7 +17,11 @@ cannot be resolved statically, an ``EXECUTE`` of a built string above all, is
 
 from __future__ import annotations
 
+import pglast.parser
+import pytest
+
 from confiture.core.linting.references import Reference, read_references, referenced_objects
+from confiture.core.sql_lexer import parse_file
 
 ISSUE_246 = """CREATE OR REPLACE FUNCTION app.fn_report()
 RETURNS VOID LANGUAGE plpgsql AS $$
@@ -38,14 +42,14 @@ def _names(refs: list[Reference]) -> set[tuple[str | None, str]]:
 
 def test_the_issue_reproduction_yields_both_names() -> None:
     """#246's own example: one relation and one routine, neither created anywhere."""
-    refs = referenced_objects(ISSUE_246)
+    refs = referenced_objects(parse_file(ISSUE_246))
 
     assert _names(refs) == {("app", "tv_summary"), ("app", "fn_refresh_summary")}
 
 
 def test_a_relation_and_a_routine_are_told_apart() -> None:
     """A ``FROM`` names a relation and a call names a routine; the tiers differ."""
-    refs = {(r.schema, r.name): r.kind for r in referenced_objects(ISSUE_246)}
+    refs = {(r.schema, r.name): r.kind for r in referenced_objects(parse_file(ISSUE_246))}
 
     assert refs == {("app", "tv_summary"): "relation", ("app", "fn_refresh_summary"): "routine"}
 
@@ -56,14 +60,14 @@ def test_lines_are_lines_in_the_text_handed_in() -> None:
     Body line 1 is the remainder of the ``$$`` line, so ``FOR`` is body line 5
     and file line 6, and ``PERFORM`` body line 6 and file line 7.
     """
-    lines = {r.name: r.line for r in referenced_objects(ISSUE_246)}
+    lines = {r.name: r.line for r in referenced_objects(parse_file(ISSUE_246))}
 
     assert lines == {"tv_summary": 6, "fn_refresh_summary": 7}
 
 
 def test_a_located_body_gives_exact_lines() -> None:
     """The conversion succeeded, so the finding may point at the statement."""
-    assert all(r.line_is_exact for r in referenced_objects(ISSUE_246))
+    assert all(r.line_is_exact for r in referenced_objects(parse_file(ISSUE_246)))
 
 
 def test_a_body_whose_start_cannot_be_found_says_its_lines_are_not_exact() -> None:
@@ -80,14 +84,14 @@ def test_a_body_whose_start_cannot_be_found_says_its_lines_are_not_exact() -> No
         "END;\n"
     )
 
-    refs = referenced_objects(sql)
+    refs = referenced_objects(parse_file(sql))
 
     assert [(r.name, r.line, r.line_is_exact) for r in refs] == [("tb_missing", 3, True)]
 
 
 def test_every_reference_names_the_object_that_makes_it() -> None:
     """A finding is per referencing object: the routine is what the reader opens."""
-    referrers = {r.referrer for r in referenced_objects(ISSUE_246)}
+    referrers = {r.referrer for r in referenced_objects(parse_file(ISSUE_246))}
 
     assert referrers == {"app.fn_report()"}
 
@@ -99,7 +103,7 @@ def test_a_language_sql_body_parses_directly() -> None:
 $$;
 """
 
-    assert _names(referenced_objects(sql)) == {("app", "tb_missing")}
+    assert _names(referenced_objects(parse_file(sql))) == {("app", "tb_missing")}
 
 
 def test_an_unqualified_name_comes_back_and_is_the_rule_s_to_decline() -> None:
@@ -113,14 +117,14 @@ def test_an_unqualified_name_comes_back_and_is_the_rule_s_to_decline() -> None:
 $$;
 """
 
-    assert (None, "count") in _names(referenced_objects(sql))
+    assert (None, "count") in _names(referenced_objects(parse_file(sql)))
 
 
 def test_a_view_definition_is_a_body_too() -> None:
     """``CREATE VIEW`` names its relations in the statement itself."""
     sql = "CREATE VIEW app.v_report AS SELECT id FROM app.tb_missing;\n"
 
-    refs = referenced_objects(sql)
+    refs = referenced_objects(parse_file(sql))
 
     assert _names(refs) == {("app", "tb_missing")}
     assert {r.referrer for r in refs} == {"app.v_report"}
@@ -129,7 +133,7 @@ def test_a_view_definition_is_a_body_too() -> None:
 def test_a_materialized_view_definition_is_read_the_same_way() -> None:
     sql = "CREATE MATERIALIZED VIEW app.mv_report AS SELECT id FROM app.tb_missing;\n"
 
-    assert _names(referenced_objects(sql)) == {("app", "tb_missing")}
+    assert _names(referenced_objects(parse_file(sql))) == {("app", "tb_missing")}
 
 
 def test_an_execute_of_a_built_string_is_declared_unresolvable() -> None:
@@ -146,7 +150,7 @@ END;
 $$;
 """
 
-    refs = referenced_objects(sql)
+    refs = referenced_objects(parse_file(sql))
 
     assert [r.dynamic for r in refs] == [True]
     assert refs[0].line == 3
@@ -161,7 +165,7 @@ END;
 $$;
 """
 
-    refs = referenced_objects(sql)
+    refs = referenced_objects(parse_file(sql))
 
     assert ("app", "other") not in _names(refs)
     assert all(r.dynamic for r in refs)
@@ -174,7 +178,7 @@ WITH recent AS (SELECT id FROM app.tb_missing)
 SELECT id FROM recent;
 """
 
-    assert _names(referenced_objects(sql)) == {("app", "tb_missing")}
+    assert _names(referenced_objects(parse_file(sql))) == {("app", "tb_missing")}
 
 
 def test_dml_inside_a_body_references_its_target() -> None:
@@ -187,24 +191,25 @@ END;
 $$;
 """
 
-    assert _names(referenced_objects(sql)) == {("app", "tb_log"), ("app", "tb_state")}
+    assert _names(referenced_objects(parse_file(sql))) == {("app", "tb_log"), ("app", "tb_state")}
 
 
 def test_a_statement_that_creates_nothing_with_a_body_yields_nothing() -> None:
     """A plain ``CREATE TABLE`` has no body to read."""
-    assert referenced_objects("CREATE TABLE app.tb_t (id int PRIMARY KEY);\n") == []
+    assert referenced_objects(parse_file("CREATE TABLE app.tb_t (id int PRIMARY KEY);\n")) == []
 
 
 def test_a_c_language_routine_has_no_sql_body() -> None:
     """``AS 'module', 'symbol'`` names a shared object, not SQL to parse."""
     sql = "CREATE FUNCTION app.fn_c() RETURNS int LANGUAGE c AS 'mylib', 'fn_c';\n"
 
-    assert referenced_objects(sql) == []
+    assert referenced_objects(parse_file(sql)) == []
 
 
-def test_unparseable_sql_yields_nothing_rather_than_raising() -> None:
-    """The linter reports a parse failure once, as ``UNPARSEABLE``; this is not its job."""
-    assert referenced_objects("CREATE FUNCTION (((;") == []
+def test_a_file_the_parser_rejects_never_reaches_the_reader() -> None:
+    """The linter reports such a file once, as ``UNPARSEABLE``, and reads none of it."""
+    with pytest.raises(pglast.parser.ParseError):
+        parse_file("CREATE FUNCTION (((;")
 
 
 ISSUE_363 = """CREATE FUNCTION app.fn_assign(p int) RETURNS int LANGUAGE plpgsql AS $$
@@ -220,7 +225,7 @@ $$;
 
 def test_a_call_made_by_assignment_is_a_reference() -> None:
     """#363: neither ``v := f()`` nor ``SELECT v := f()`` is SQL, so both were dropped."""
-    refs = {(r.schema, r.name): r.line for r in referenced_objects(ISSUE_363)}
+    refs = {(r.schema, r.name): r.line for r in referenced_objects(parse_file(ISSUE_363))}
 
     assert refs == {("core", "x"): 4, (None, "f"): 5}
 
@@ -237,7 +242,7 @@ END;
 $$;
 """
 
-    refs = referenced_objects(sql)
+    refs = referenced_objects(parse_file(sql))
 
     assert [r.dynamic for r in refs] == [True, False]
     assert ("app", "fn_inside") in _names(refs)
@@ -251,7 +256,7 @@ def test_a_fragment_that_cannot_be_read_is_named_with_its_line(monkeypatch) -> N
     del slots[("PLpgSQL_stmt_assign", "expr")]
     monkeypatch.setattr(plpgsql_fragments, "SLOTS", slots)
 
-    scan = read_references(ISSUE_363)
+    scan = read_references(parse_file(ISSUE_363))
 
     assert [(r.referrer, r.line) for r in scan.unread_fragments] == [
         ("app.fn_assign(integer)", 4),
@@ -275,7 +280,7 @@ $$;
 
 
 def test_a_record_initialiser_is_read_with_its_file_line() -> None:
-    refs = referenced_objects(ISSUE_455)
+    refs = referenced_objects(parse_file(ISSUE_455))
 
     assert [(r.schema, r.name, r.line) for r in refs] == [
         ("app", "fn_first", 3),

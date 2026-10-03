@@ -429,3 +429,16 @@ class TestABareTypeMatchesAnySchema:
         assert "010_a.sql" in violations[0].message
         assert "020_b.sql" in violations[0].message
         assert "030_c.sql" not in violations[0].message
+
+
+def test_a_file_that_seeds_with_copy_is_read_not_rejected(tmp_path: Path) -> None:
+    """A ``COPY … FROM stdin`` block is psql client protocol: blanked, the file is read."""
+    function = (
+        "CREATE FUNCTION app.fn_x(a integer) RETURNS integer LANGUAGE sql AS $$ SELECT a $$;\n"
+    )
+    _write(tmp_path, "01_a.sql", function + "COPY app.t (id) FROM stdin;\n1\tnot; sql\n\\.\n")
+    _write(tmp_path, "02_b.sql", function)
+
+    found = Func001FunctionUniqueness(coverage=_make_coverage()).check([tmp_path])
+
+    assert [v.rule_id for v in found] == ["func_001"]
