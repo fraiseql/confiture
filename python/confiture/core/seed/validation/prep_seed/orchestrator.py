@@ -19,7 +19,8 @@ from confiture.core.builder import files_under
 from confiture.core.connection import Connection, create_connection, require_mode
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import SchemaModel, Table
-from confiture.core.schema_sources import SchemaRead, read_schema
+from confiture.core.schema_read import SchemaRead
+from confiture.core.schema_sources import read_schema
 from confiture.core.seed.validation.prep_seed.final_tables import FinalTables
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,

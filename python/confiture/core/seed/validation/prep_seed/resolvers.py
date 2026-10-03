@@ -20,7 +20,7 @@ from psycopg import sql
 
 from confiture.core.introspection.dependency_graph import dependency_order
 from confiture.core.linting import references
-from confiture.core.schema_sources import SchemaRead
+from confiture.core.schema_read import SchemaRead
 from confiture.core.seed.validation.prep_seed import final_tables
 from confiture.core.seed.validation.prep_seed.final_tables import FinalTables
 from confiture.exceptions import SchemaError

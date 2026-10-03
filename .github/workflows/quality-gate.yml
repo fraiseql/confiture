@@ -384,6 +384,9 @@ jobs:
           tests/unit/linting/test_inventory_builds_the_model.py \
           tests/unit/test_live_catalog_reads_text_like_ddl.py \
           tests/unit/test_routine_identity.py \
+          tests/unit/test_copy_blocks_everywhere.py \
+          tests/unit/test_drift_expected_parser.py \
+          tests/unit/test_differ_copy_stdin.py \
           tests/unit/test_wide_signatures.py \
           tests/unit/test_function_signature_checker.py \
           tests/unit/test_function_body_checker.py \

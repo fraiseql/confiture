@@ -72,7 +72,6 @@ from confiture.core.schema_model import (
     View,
     ref_for,
     routine_ref,
-    trigger_ref,
     tview_ref,
     view_ref,
 )
@@ -1290,26 +1289,6 @@ def schema_model(inventory: Inventory) -> SchemaModel:
         views=views,
         tviews=tviews,
     )
-
-
-def build_model(sql: str) -> SchemaModel:
-    """Parse ``sql`` into the schema model. Raises ``pglast.parser.ParseError``.
-
-    Triggers are ``ddl_objects``' answer — the one list of what a statement
-    defines, the kinds this inventory does not model among them — read from the
-    same parse.
-    """
-    raws = list(pglast.parse_sql(sql) or [])
-    return with_triggers(schema_model(build_inventory(sql, raws)), sql, raws)
-
-
-def with_triggers(model: SchemaModel, sql: str, raws: Sequence[Any]) -> SchemaModel:
-    """*model* with the triggers *sql* declares, read from its statements *raws*."""
-    # Reason: import cycle (ddl_objects reads object identity from this module)
-    from confiture.core.ddl_objects import declared_triggers, objects_in
-
-    triggers = declared_triggers(objects_in(sql, list(raws)))
-    return replace(model, triggers={trigger_ref(t): t for t in triggers})
 
 
 def label_for(path: Path, root: Path | None) -> str:

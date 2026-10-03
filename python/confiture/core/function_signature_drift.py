@@ -30,12 +30,11 @@ from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any
 
-import pglast
 from pglast.stream import maybe_double_quote_name
 
-from confiture.core import ddl_objects, live_catalog
-from confiture.core.linting.inventory import build_model
+from confiture.core import live_catalog
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_read import read_text
 from confiture.core.type_lattice import catalog_spelling, signatures_match
 
 if TYPE_CHECKING:
@@ -59,11 +58,11 @@ def declared_routines(sql: str) -> list[Routine]:
     redefined with ``CREATE OR REPLACE`` is its last definition.
 
     Raises:
-        pglast.parser.ParseError: pglast rejects *sql*.
+        SchemaError: ``DIFFER_400`` when PostgreSQL's parser rejects *sql*.
     """
     return [
         routine
-        for found in build_model(sql).routines.values()
+        for found in read_text(sql).model.routines.values()
         for routine in found
         if routine.kind in _SIGNATURE_KINDS
     ]
@@ -113,10 +112,10 @@ def replacing_definitions(sql: str) -> Definitions:
     place, and a ``CREATE FUNCTION`` as written fails on a routine that exists.
 
     Raises:
-        pglast.parser.ParseError: pglast rejects *sql*.
+        SchemaError: ``DIFFER_400`` when PostgreSQL's parser rejects *sql*.
     """
     found: Definitions = defaultdict(list)
-    for ref, objects in ddl_objects.objects_in(sql, pglast.parse_sql(sql) or []).items():
+    for ref, objects in read_text(sql).declared.objects.items():
         if ref.kind in _SIGNATURE_KINDS:
             found[f"{ref.schema}.{ref.name}"].extend(
                 (obj.signature, obj.create_sql) for obj in objects

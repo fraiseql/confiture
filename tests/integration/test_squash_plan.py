@@ -162,3 +162,24 @@ def test_from_build_refuses_a_tree_that_is_not_the_state_at_the_cut(
 
     assert refused.value.error_code == "VALID_006"
     assert "posts" in str(refused.value)
+
+
+def test_from_build_reads_a_partition_as_postgresql_holds_it(
+    tmp_path: Path, test_db_url: str
+) -> None:
+    # A partition holds its parent's columns in the catalog, and nowhere in the
+    # tree: the drift check must read the tree as PostgreSQL holds it, the way
+    # `drift` does, or it refuses a tree that is the state at the cut.
+    directory = tmp_path / "migrations"
+    directory.mkdir()
+    tree = (
+        "CREATE TABLE events (id bigint NOT NULL, at date NOT NULL) PARTITION BY RANGE (at);\n"
+        "CREATE TABLE events_2026 PARTITION OF events\n"
+        "    FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');\n"
+    )
+    (directory / "20260101000000_events.up.sql").write_text(tree)
+    (directory / "20260101000000_events.down.sql").write_text("DROP TABLE events;\n")
+
+    plan = plan_squash(directory, "20260101000000", server_url=test_db_url, build_sql=tree)
+
+    assert plan.source == "build"

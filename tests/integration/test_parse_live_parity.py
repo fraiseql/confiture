@@ -23,10 +23,10 @@ import psycopg
 import pytest
 from test_diff_goldens import goldens
 
-from confiture.core.linting.inventory import build_model
 from confiture.core.live_catalog import read
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import SchemaModel, normalise_for_parity
+from confiture.core.schema_read import read_text
 
 TREES = {tree.name: tree for tree in goldens.TREES}
 
@@ -54,7 +54,7 @@ def _parity(
 
 
 def _parity_of(sql: str, make_database: Callable[[str], str]) -> tuple[dict, dict]:
-    parsed = build_model(sql)
+    parsed = read_text(sql).model
     with psycopg.connect(make_database("confiture_parity"), autocommit=True) as conn:
         conn.execute(sql)
         live = read(conn, schemas=_schemas(parsed), routines=True, views=True, triggers=True)

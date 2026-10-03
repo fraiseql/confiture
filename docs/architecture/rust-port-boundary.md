@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-26,827 lines, 34% of `core/`.
+26,999 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -94,16 +94,16 @@ duplicate readers were deleted. The count below is what the port translates.
 | `ddl_objects.py` | 773 | DDL transform |
 | `ddl_walk.py` | 1,752 | DDL transform |
 | `destructive.py` | 181 | DDL transform |
-| `differ.py` | 807 | DDL transform |
+| `differ.py` | 735 | DDL transform |
 | `differ_sql.py` | 706 | DDL transform |
 | `expand_contract.py` | 273 | DDL transform |
 | `fk_extractor.py` | 296 | DDL transform |
-| `function_body_checker.py` | 210 | DDL transform |
+| `function_body_checker.py` | 208 | DDL transform |
 | `function_body_normalizer.py` | 69 | DDL transform |
 | `function_signature_checker.py` | 187 | DDL transform |
 | `idempotency/` | 2,712 | DDL transform |
 | `introspection/dependency_graph.py` | 202 | DDL transform |
-| `linting/` | 9,350 | DDL transform |
+| `linting/` | 9,329 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 137 | DDL transform |
 | `migration_grant_extractor.py` | 526 | DDL transform |
@@ -117,6 +117,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_change.py` | 904 | DDL transform |
 | `schema_identity.py` | 71 | DDL transform |
 | `schema_model.py` | 888 | DDL transform |
+| `schema_read.py` | 267 | DDL transform |
 | `sql_lexer.py` | 676 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
 | `tree_prefix.py` | 180 | DDL transform |
@@ -125,7 +126,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### Python I/O glue behind the same JSON contract
 
-43,675 lines, 56% of `core/`.
+43,563 lines, 56% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -140,15 +141,15 @@ duplicate readers were deleted. The count below is what the port translates.
 | `connection.py` | 283 | database orchestration |
 | `cte_debugger.py` | 198 | database orchestration |
 | `dependent_objects.py` | 162 | database orchestration |
-| `desired_state.py` | 73 | database orchestration |
-| `drift.py` | 1,529 | database orchestration |
+| `desired_state.py` | 76 | database orchestration |
+| `drift.py` | 1,539 | database orchestration |
 | `dry_run.py` | 239 | database orchestration |
 | `dry_run_summary.py` | 156 | neutral |
 | `error_context.py` | 286 | neutral |
 | `error_handler.py` | 284 | neutral |
 | `expected_db.py` | 227 | database orchestration |
 | `function_body_drift.py` | 211 | database orchestration |
-| `function_signature_drift.py` | 375 | database orchestration |
+| `function_signature_drift.py` | 374 | database orchestration |
 | `git.py` | 521 | neutral |
 | `git_accompaniment.py` | 348 | neutral |
 | `git_schema.py` | 258 | neutral |
@@ -181,9 +182,9 @@ duplicate readers were deleted. The count below is what the port translates.
 | `schema_exporter.py` | 198 | neutral |
 | `schema_facts.py` | 162 | database orchestration |
 | `schema_snapshot.py` | 104 | database orchestration |
-| `schema_sources.py` | 318 | database orchestration |
+| `schema_sources.py` | 193 | database orchestration |
 | `schema_to_schema.py` | 634 | database orchestration |
-| `seed/` | 6,260 | database orchestration |
+| `seed/` | 6,261 | database orchestration |
 | `sql_path.py` | 135 | database orchestration |
 | `sql_utils.py` | 86 | neutral |
 | `squash.py` | 403 | database orchestration |

@@ -11,8 +11,8 @@ import pglast
 import pytest
 from pglast.stream import RawStream
 
-from confiture.core.linting.inventory import build_model
 from confiture.core.schema_model import TView, ref_for
+from confiture.core.schema_read import read_text
 
 SELECT = "SELECT p.pk_post, p.id FROM tb_post p"
 TABLES = "CREATE TABLE tb_post (pk_post bigint PRIMARY KEY, id uuid);\n"
@@ -26,7 +26,7 @@ def _rendered(select: str) -> str:
     ("target", "schema"), [("tv_post", None), ("app.tv_post", "app")], ids=["bare", "qualified"]
 )
 def test_a_create_table_as_into_tv_is_a_tview(target: str, schema: str | None) -> None:
-    model = build_model(f"{TABLES}CREATE TABLE {target} AS {SELECT};\n")
+    model = read_text(f"{TABLES}CREATE TABLE {target} AS {SELECT};\n").model
 
     assert model.tviews == {
         ref_for("tview", schema, "tv_post"): TView(
@@ -37,20 +37,20 @@ def test_a_create_table_as_into_tv_is_a_tview(target: str, schema: str | None) -
 
 
 def test_a_create_table_as_into_another_name_is_no_tview() -> None:
-    model = build_model(f"{TABLES}CREATE TABLE post_copy AS {SELECT};\n")
+    model = read_text(f"{TABLES}CREATE TABLE post_copy AS {SELECT};\n").model
 
     assert model.tviews == {}
 
 
 def test_a_materialized_view_is_still_a_view() -> None:
-    model = build_model(f"{TABLES}CREATE MATERIALIZED VIEW tv_post AS {SELECT};\n")
+    model = read_text(f"{TABLES}CREATE MATERIALIZED VIEW tv_post AS {SELECT};\n").model
 
     assert model.tviews == {}
     assert ref_for("matview", None, "tv_post") in model.views
 
 
 def test_drop_table_drops_the_tview() -> None:
-    model = build_model(f"{TABLES}CREATE TABLE tv_post AS {SELECT};\nDROP TABLE tv_post;\n")
+    model = read_text(f"{TABLES}CREATE TABLE tv_post AS {SELECT};\nDROP TABLE tv_post;\n").model
 
     assert model.tviews == {}
 
@@ -76,7 +76,7 @@ def test_a_table_named_tv_with_columns_is_a_table() -> None:
     and no pg_tviews. Read by the prefix, each would be a TVIEW the database lacks —
     ten critical ``missing_tview`` on a clean deploy.
     """
-    model = build_model("CREATE TABLE public.tv_order (id bigint PRIMARY KEY, data jsonb);\n")
+    model = read_text("CREATE TABLE public.tv_order (id bigint PRIMARY KEY, data jsonb);\n").model
 
     assert model.tviews == {}
     assert ref_for("table", "public", "tv_order") in model.tables
@@ -84,9 +84,9 @@ def test_a_table_named_tv_with_columns_is_a_table() -> None:
 
 def test_a_tview_carries_the_storage_its_statement_pins() -> None:
     """``UNLOGGED`` and ``WITH (fillfactor = n)`` are pg_tviews' ``logged`` and ``fillfactor``."""
-    model = build_model(
+    model = read_text(
         f"{TABLES}CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70) AS {SELECT};\n"
-    )
+    ).model
 
     (tview,) = model.tviews.values()
     assert (tview.logged, tview.fillfactor) == (False, 70)
@@ -94,7 +94,7 @@ def test_a_tview_carries_the_storage_its_statement_pins() -> None:
 
 def test_a_tview_that_pins_nothing_carries_no_storage() -> None:
     """An unpinned key is pg_tviews' to choose, and the tree's to leave alone."""
-    (tview,) = build_model(f"{TABLES}CREATE TABLE tv_post AS {SELECT};\n").tviews.values()
+    (tview,) = read_text(f"{TABLES}CREATE TABLE tv_post AS {SELECT};\n").model.tviews.values()
 
     assert (tview.logged, tview.fillfactor) == (None, None)
 
@@ -115,7 +115,7 @@ CALL = f"{TABLES}SELECT tviews.pg_tviews_create_or_replace('tv_post', $q${SELECT
 )
 def test_a_pg_tviews_call_declares_the_tview_its_ctas_would(call: str) -> None:
     """``pg_tviews_create_or_replace()`` is how a generated migration writes a TVIEW (#504)."""
-    assert build_model(f"{TABLES}{call};\n").tviews == build_model(CTAS).tviews
+    assert read_text(f"{TABLES}{call};\n").model.tviews == read_text(CTAS).model.tviews
 
 
 @pytest.mark.parametrize(
@@ -130,21 +130,21 @@ def test_a_call_pins_the_options_it_passes(options: str) -> None:
     call = f"SELECT tviews.pg_tviews_create_or_replace('tv_post', $q${SELECT}$q$, {options});\n"
     pinned = f"{TABLES}CREATE UNLOGGED TABLE tv_post WITH (fillfactor = 70) AS {SELECT};\n"
 
-    assert build_model(f"{TABLES}{call}").tviews == build_model(pinned).tviews
+    assert read_text(f"{TABLES}{call}").model.tviews == read_text(pinned).model.tviews
 
 
 def test_a_call_names_its_schema() -> None:
     call = f"SELECT tviews.pg_tviews_create_or_replace('app.tv_post', $q${SELECT}$q$);\n"
 
-    assert list(build_model(f"{TABLES}{call}").tviews) == [ref_for("tview", "app", "tv_post")]
+    assert list(read_text(f"{TABLES}{call}").model.tviews) == [ref_for("tview", "app", "tv_post")]
 
 
 @pytest.mark.parametrize("created", [CTAS, CALL], ids=["ctas", "call"])
 def test_pg_tviews_drop_in_the_tree_drops_the_tview(created: str) -> None:
     assert (
-        build_model(
+        read_text(
             f"{created}SELECT tviews.pg_tviews_drop('tv_post', if_exists => true);\n"
-        ).tviews
+        ).model.tviews
         == {}
     )
 
@@ -153,14 +153,14 @@ def test_a_drop_before_the_create_keeps_the_tview() -> None:
     """``drop; create`` is the everyday idiom, and the fold is order-aware."""
     tree = f"{TABLES}SELECT tviews.pg_tviews_drop('tv_post', true);\n{CALL.removeprefix(TABLES)}"
 
-    assert list(build_model(tree).tviews) == [ref_for("tview", None, "tv_post")]
+    assert list(read_text(tree).model.tviews) == [ref_for("tview", None, "tv_post")]
 
 
 def test_a_call_naming_no_constant_declares_nothing() -> None:
     """A name this reader cannot read is no TVIEW it can name."""
     tree = f"{TABLES}SELECT tviews.pg_tviews_create_or_replace(d.name, d.query) FROM defs d;\n"
 
-    assert build_model(tree).tviews == {}
+    assert read_text(tree).model.tviews == {}
 
 
 def _tracked(sql: str) -> dict:
@@ -204,7 +204,7 @@ def test_moving_a_tview_from_ctas_to_a_call_changes_nothing() -> None:
 )
 def test_set_logged_pins_the_tview_logged(tree: str, logged: bool | None) -> None:
     """``ALTER TABLE … SET LOGGED`` is how pg_tviews' docs say to keep a TVIEW on a standby."""
-    (tview,) = build_model(tree).tviews.values()
+    (tview,) = read_text(tree).model.tviews.values()
 
     assert tview.logged is logged
 
@@ -228,7 +228,7 @@ def test_the_lint_and_the_model_agree_on_whether_a_tview_is_logged(tree: str) ->
     flagged = any(
         f[0] == "tview_002" for f in tview_findings(build_inventory(tree), has_replicas=True)
     )
-    (tview,) = build_model(tree).tviews.values()
+    (tview,) = read_text(tree).model.tviews.values()
 
     assert flagged is (tview.logged is not True)
 
@@ -275,15 +275,15 @@ def test_set_logged_reaches_a_tview_the_tree_defines_twice() -> None:
 )
 def test_set_fillfactor_pins_the_tview_fillfactor(tree: str, fillfactor: int | None) -> None:
     """``SET (fillfactor = n)`` pins n; ``RESET`` pins PostgreSQL's 100, as the registry reads it."""
-    (tview,) = build_model(tree).tviews.values()
+    (tview,) = read_text(tree).model.tviews.values()
 
     assert tview.fillfactor == fillfactor
 
 
 def test_set_logged_and_fillfactor_in_one_alter_pin_both() -> None:
-    (tview,) = build_model(
+    (tview,) = read_text(
         f"{CTAS}ALTER TABLE tv_post SET LOGGED, SET (fillfactor = 70);\n"
-    ).tviews.values()
+    ).model.tviews.values()
 
     assert (tview.logged, tview.fillfactor) == (True, 70)
 

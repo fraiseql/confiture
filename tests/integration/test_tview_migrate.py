@@ -19,8 +19,8 @@ from confiture.core import live_catalog
 from confiture.core.change_order import apply_order
 from confiture.core.differ import SchemaDiffer
 from confiture.core.differ_sql import DifferSQLGenerator
-from confiture.core.linting.inventory import build_model
 from confiture.core.schema_facts import collect_schema_facts
+from confiture.core.schema_read import read_text
 from confiture.core.tview_preflight import live_issues
 
 pytestmark = pytest.mark.integration
@@ -77,7 +77,7 @@ def _registered(url: str) -> dict[str, str | None]:
 
 
 def _declared(tree: str) -> dict[str, str | None]:
-    return {t.name: t.definition for t in build_model(tree).tviews.values()}
+    return {t.name: t.definition for t in read_text(tree).model.tviews.values()}
 
 
 def test_an_added_tview_is_registered_and_its_down_removes_it(tview_database: str) -> None:

@@ -16,7 +16,7 @@ Each tree is built the way its example builds it (``confiture build --env …
 - ``drift/<tree>.json`` — ``confiture drift --format json`` against a database
   built from the tree (needs PostgreSQL);
 - ``model/<tree>.json`` — the schema model the tree declares
-  (``inventory.build_model``), the one representation every comparison reads;
+  (``schema_read.read_text(…).model``), the one representation every comparison reads;
 - ``routines/<scenario>.<command>.json`` — what the routine and view checks
   (``migrate validate --check-signatures`` / ``--check-body`` /
   ``--check-body-views`` / ``--check-body-replay`` / ``--require-migration-bodies``

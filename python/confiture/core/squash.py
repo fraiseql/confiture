@@ -43,11 +43,11 @@ from confiture.core._migrator.discovery import (
 )
 from confiture.core._migrator.squashed import DIRECTIVE, archived_digest
 from confiture.core.checksum import compute_checksum
-from confiture.core.drift import SchemaDriftDetector
+from confiture.core.drift import SchemaDriftDetector, expected_schema
 from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.ledger import LIVE_ROWS, ledger_exists, table_identifier
-from confiture.core.linting.inventory import build_model
 from confiture.core.migrator import replay_migrations
+from confiture.core.schema_read import read_text
 from confiture.core.sql_lexer import name_parts
 from confiture.core.step_runner import DONE, CheckpointStore, steps_table
 from confiture.core.temp_database import clean_pg_dump_output, pg_dump_schema
@@ -385,7 +385,7 @@ def _snapshot(
             triggers=True,
         )
         report = SchemaDriftDetector(conn, ignore_tables=[table]).compare_schemas(
-            build_model(build_sql), replayed, objects=True
+            expected_schema(read_text(build_sql)).model, replayed, objects=True
         )
     if report.drift_items:
         listed = "\n  ".join(item.message for item in report.drift_items)

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from confiture.core.linting.inventory import build_model
 from confiture.core.schema_model import EnumType, Index, RelationName, Sequence, ref_for
+from confiture.core.schema_read import read_text
 
 DDL = """\
 CREATE TABLE a.t (n INT, m TEXT);
@@ -26,7 +26,7 @@ CREATE SEQUENCE plain;
 
 
 def _model():
-    return build_model(DDL)
+    return read_text(DDL).model
 
 
 def test_every_index_reaches_its_table() -> None:
@@ -95,12 +95,12 @@ def test_a_sequence_keeps_its_options() -> None:
 
 
 def test_a_dropped_index_leaves_its_table() -> None:
-    model = build_model("CREATE TABLE t (n INT);\nCREATE INDEX ix ON t (n);\nDROP INDEX ix;\n")
+    model = read_text("CREATE TABLE t (n INT);\nCREATE INDEX ix ON t (n);\nDROP INDEX ix;\n").model
     assert model.tables[ref_for("table", None, "t")].indexes == ()
 
 
 def test_an_unqualified_relation_and_its_public_spelling_are_one() -> None:
-    model = build_model("CREATE TABLE t (n INT);")
+    model = read_text("CREATE TABLE t (n INT);").model
     assert ref_for("table", "public", "t") in model.tables
 
 
@@ -120,5 +120,5 @@ def test_an_unwritten_start_is_where_postgresql_starts(ddl: str, start: int) -> 
     The reader said 1 for every sequence, so a generated migration created a
     descending one whose start lay beyond its MAXVALUE, and PostgreSQL refused it.
     """
-    model = build_model(ddl)
+    model = read_text(ddl).model
     assert model.sequences[ref_for("sequence", None, "s")].start == start

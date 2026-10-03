@@ -20,16 +20,16 @@ from __future__ import annotations
 import pytest
 
 from confiture.core.linting.inventory import (
-    build_model,
     signature_from_type_names,
     signatures_match,
 )
 from confiture.core.live_catalog import RoutineRow, routine_of
 from confiture.core.schema_model import Routine, View
+from confiture.core.schema_read import read_text
 
 
 def _routine(sql: str) -> Routine:
-    (routines,) = build_model(sql).routines.values()
+    (routines,) = read_text(sql).model.routines.values()
     (routine,) = routines
     return routine
 
@@ -99,7 +99,7 @@ class TestTheModelHoldsRoutines:
     """
 
     def test_a_function_is_read_whole(self) -> None:
-        model = build_model(self.SQL)
+        model = read_text(self.SQL).model
         f = next(r for rs in model.routines.values() for r in rs if r.name == "f")
         assert (f.schema, f.kind, f.language, f.volatility) == (
             "app",
@@ -113,7 +113,7 @@ class TestTheModelHoldsRoutines:
         assert f.signature_key == ((None, "bigint"), (None, "text"))
 
     def test_a_procedure_defaults_to_volatile_and_invoker(self) -> None:
-        model = build_model(self.SQL)
+        model = read_text(self.SQL).model
         p = next(r for rs in model.routines.values() for r in rs if r.name == "p")
         assert (p.kind, p.volatility, p.security_definer, p.returns) == (
             "procedure",
@@ -134,7 +134,7 @@ class TestTheModelHoldsRoutines:
             "CREATE FUNCTION f(a int8) RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;"
             "DROP FUNCTION f(bigint);"
         )
-        assert build_model(sql).routines == {}
+        assert read_text(sql).model.routines == {}
 
 
 class TestTheModelHoldsViews:
@@ -146,7 +146,7 @@ class TestTheModelHoldsViews:
     """
 
     def _views(self) -> dict[str, View]:
-        return {v.name: v for v in build_model(self.SQL).views.values()}
+        return {v.name: v for v in read_text(self.SQL).model.views.values()}
 
     def test_a_view_and_a_matview(self) -> None:
         views = self._views()
