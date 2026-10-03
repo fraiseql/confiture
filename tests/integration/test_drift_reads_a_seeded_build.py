@@ -48,7 +48,7 @@ def _project(root: Path, seed: str) -> SchemaBuilder:
     environments.mkdir(parents=True)
     (environments / "local.yaml").write_text(
         f"name: local\ninclude_dirs:\n  - {schema_dir}\n  - {seeds_dir}\n"
-        "database_url: postgresql://localhost/unused\n"
+        "database_url: postgresql://localhost/nonexistent\n"
     )
     return SchemaBuilder(env="local", project_dir=root)
 
