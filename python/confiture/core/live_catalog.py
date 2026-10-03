@@ -63,6 +63,7 @@ from confiture.core.schema_model import (
     TVIEWS_SCHEMA,
     Column,
     Constraint,
+    Coverage,
     EnumType,
     GeneratedKind,
     IdentityKind,
@@ -362,6 +363,21 @@ def read(
         views=view_models,
         triggers=({trigger_ref(t): t for t in _triggers(conn, wanted)} if triggers else {}),
         tviews=tview_models,
+        coverage=Coverage.of(
+            {
+                **dict.fromkeys(("tables", "enum_types", "sequences"), "definition"),
+                **{
+                    section: "definition"
+                    for section, read in (
+                        ("routines", routines),
+                        ("views", views),
+                        ("triggers", triggers),
+                        ("tviews", tviews),
+                    )
+                    if read
+                },
+            }
+        ),
     )
 
 

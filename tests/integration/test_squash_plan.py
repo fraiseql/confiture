@@ -91,7 +91,7 @@ def test_the_baseline_plus_the_rest_builds_the_same_schema(
 
     with psycopg.connect(from_baseline) as conn:
         report = SchemaDriftDetector(conn).compare_schemas(
-            _model(from_history), _model(from_baseline), objects=True
+            _model(from_history), _model(from_baseline)
         )
     assert report.drift_items == []
 

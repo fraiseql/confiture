@@ -177,6 +177,7 @@ it is made.
 | `views` | `Mapping[ObjectRef, View]` | empty |
 | `triggers` | `Mapping[ObjectRef, Trigger]` | empty |
 | `tviews` | `Mapping[ObjectRef, TView]` | empty |
+| `coverage` | `Coverage` | empty |
 
 #### `SchemaModel.all_routines`
 
@@ -216,6 +217,56 @@ The model `to_json` wrote *text* from.
 Each object's reference is derived from the object, as every reader derives
 it — a table's from its schema and name, a routine's from its signature — so
 the wire carries no key a reader could disagree with.
+
+### `Coverage`
+
+```python
+class Coverage
+```
+
+What a reader read: each section of the model, and how deeply.
+
+A model says what a schema holds only for the sections it covers. Silence in
+a section nobody read is not absence: a database read without its views has
+no views in its model, and a comparison must not call every declared view
+missing. A tree covers every section it can declare; a live read, the
+sections it was asked for.
+
+| Field | Type | Default |
+|---|---|---|
+| `sections` | `tuple[tuple[str, CoverageDepth], ...]` | `(('tables', 'definition'), ('enum_types', 'definition'), ('sequences', 'definition'))` |
+
+#### `Coverage.of`
+
+```python
+def of(sections: Mapping[str, CoverageDepth]) -> Coverage
+```
+
+The coverage of *sections*, in the model's own order.
+
+#### `Coverage.every`
+
+```python
+def every() -> Coverage
+```
+
+Every section, whole: what reading DDL gives.
+
+#### `Coverage.depth`
+
+```python
+def depth(self, section: str) -> CoverageDepth | None
+```
+
+How deeply *section* was read, or `None` when it was not.
+
+#### `Coverage.shared`
+
+```python
+def shared(self, other: Coverage, section: str) -> CoverageDepth | None
+```
+
+How deeply both read *section*: the shallower of the two, or `None`.
 
 ### `ObjectRef`
 
