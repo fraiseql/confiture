@@ -15,8 +15,14 @@ confiture migrate up
 ```
 
 - `--from` is the current state: a schema file, a directory of `.sql` files, `-` for stdin, or
-  `db` — the database of `--config` (default `db/environments/local.yaml`), read with
-  `pg_dump --schema-only`.
+  `db` — the database of `--config` (default `db/environments/local.yaml`), read from its
+  catalog the way `confiture drift` reads it, in the schemas the desired tree names. A database
+  built from a tree is no change from that tree: what PostgreSQL rewrites on the way in — a name
+  it gives an unnamed constraint or index, the index behind a primary key, an analysed default or
+  CHECK, a `serial` — is compared as the same thing, and a pg_tviews TVIEW is one object, dropped
+  with `tviews.pg_tviews_drop`. Confiture's own tables (`tb_confiture`, …) are not the project's.
+  An object the database holds that confiture reads only by existence (a domain, a policy, …) and
+  the tree does not declare is a `DIFFER_404` warning: the diff cannot write its statement.
 - `--to` is the desired state: a schema file, a directory of `.sql` files (read in name order), or
   `-` for stdin, so `fraiseql compile … --emit-ddl - | confiture migrate diff --from db --to -` is
   one pipeline when the emitter writes to stdout.

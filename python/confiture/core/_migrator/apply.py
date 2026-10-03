@@ -39,9 +39,9 @@ from confiture.core.dry_run import DryRunExecutor, DryRunResult
 from confiture.core.expand_contract import StagedPlan
 from confiture.core.hooks import HookError
 from confiture.core.hooks.phases import HookPhase
-from confiture.core.ledger import LedgerRow, record_migration
+from confiture.core.ledger import LedgerRow, record_migration, steps_table
 from confiture.core.preconditions import PreconditionValidationError, PreconditionValidator
-from confiture.core.step_runner import CheckpointStore, RunOptions, run, steps_table
+from confiture.core.step_runner import CheckpointStore, RunOptions, run
 from confiture.exceptions import MigrationError
 from confiture.models.migration import Migration
 

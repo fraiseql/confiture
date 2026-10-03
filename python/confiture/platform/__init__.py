@@ -90,7 +90,7 @@ from confiture.core.schema_model import (
     ValueSource,
     View,
 )
-from confiture.core.schema_sources import SchemaSource, diff, introspect, parse_schema
+from confiture.core.schema_sources import DiffSide, SchemaSource, diff, introspect, parse_schema
 from confiture.core.seed.applier import ApplyResult, apply_seeds
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
@@ -125,6 +125,7 @@ __all__ = [
     "Coverage",
     "DDLObject",
     "DependencyCycleError",
+    "DiffSide",
     "EnumType",
     "EnumTypeAdded",
     "EnumTypeDropped",

@@ -16,6 +16,7 @@
       "meaning": "Success (including success-with-signal: already applied, nothing pending, advisories)",
       "symbolic_codes": [
         "DIFFER_402",
+        "DIFFER_404",
         "MIGR_101",
         "SCHEMA_206",
         "SEED_002",

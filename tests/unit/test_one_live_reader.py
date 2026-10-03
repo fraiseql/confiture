@@ -154,3 +154,44 @@ def test_the_allow_list_is_current() -> None:
 
 def test_every_allowed_module_states_its_question() -> None:
     assert all(reason.strip() for reason in ALLOWED.values())
+
+
+#: Module -> why it calls ``pg_dump``: never to read a schema, which is ``live_catalog``'s.
+#: ``migrate diff --from db`` read ``pg_dump`` text as if an author had written it,
+#: and reported every rewrite PostgreSQL makes as a change (#562).
+DUMPERS: dict[str, str] = {
+    "core/squash.py": (
+        "the squashed baseline is a replayable artifact: the DDL migrations 1..N built, "
+        "written to a file and applied later, never compared"
+    ),
+    "core/schema_snapshot.py": (
+        "a schema-history snapshot is written as pg_dump text; `baseline_detector` still "
+        "matches a live database against those files, a second comparison that ends "
+        "when snapshots are written as the model's wire"
+    ),
+}
+
+
+def _dumpers() -> set[str]:
+    found: set[str] = set()
+    for path in sorted(PACKAGE.rglob("*.py")):
+        if path.name == "temp_database.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        if any(
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name | ast.Attribute)
+            and (node.func.id if isinstance(node.func, ast.Name) else node.func.attr)
+            == "pg_dump_schema"
+            for node in ast.walk(tree)
+        ):
+            found.add(path.relative_to(PACKAGE).as_posix())
+    return found
+
+
+def test_no_schema_is_read_from_a_dump() -> None:
+    assert sorted(_dumpers() - set(DUMPERS)) == []
+
+
+def test_the_dump_allow_list_is_current() -> None:
+    assert sorted(set(DUMPERS) - _dumpers()) == []

@@ -41,7 +41,44 @@ from typing import Any
 import psycopg
 from psycopg import sql as pgsql
 
+from confiture.core.locking import LOCK_HOLDER_TABLE
+from confiture.core.sql_lexer import name_parts
 from confiture.exceptions import SQLError
+
+#: The ledger's name when ``tracking_table`` names none.
+DEFAULT_TRACKING_TABLE = "tb_confiture"
+
+#: What the checkpoint table beside a ledger is named after it.
+STEPS_SUFFIX = "_steps"
+
+
+def steps_table(tracking_table: str) -> str:
+    """The checkpoint table beside ``tracking_table`` (``tb_confiture`` → ``tb_confiture_steps``)."""
+    return f"{tracking_table}{STEPS_SUFFIX}"
+
+
+def bookkeeping_tables(tracking_table: str | None = None) -> frozenset[str]:
+    """The bare names of confiture's own tables: never part of a project's schema.
+
+    The ledger and its checkpoint table — *tracking_table*'s, and the default's
+    either way — the lock holder, and the tables of earlier releases. A table of
+    these names in any schema is confiture's, as ``pg_dump --exclude-table``
+    matches a bare name in every schema.
+    """
+    ledgers = {DEFAULT_TRACKING_TABLE}
+    if tracking_table is not None:
+        parts = name_parts(tracking_table)
+        ledgers.add(parts[-1] if parts else tracking_table)
+    return frozenset(
+        {
+            *ledgers,
+            *(steps_table(ledger) for ledger in ledgers),
+            LOCK_HOLDER_TABLE,
+            "confiture_version",
+            "confiture_audit_log",
+        }
+    )
+
 
 _QUALIFIED_SQL = """
     SELECT EXISTS (

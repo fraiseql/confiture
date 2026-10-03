@@ -14,6 +14,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from confiture.core.ddl_objects import DDLObject, pair_definitions
+from confiture.core.linting.inventory import signatures_match
 from confiture.core.linting.quoted_names import QuotedName
 from confiture.core.schema_change import (
     CheckConstraintAdded,
@@ -54,12 +55,16 @@ from confiture.core.schema_model import (
     ObjectRef,
     Provenance,
     RelationName,
+    Routine,
     SchemaModel,
     Sequence,
     Table,
     parity_column,
     parity_constraint,
     parity_indexes,
+    parity_routine,
+    parity_tview,
+    parity_view,
 )
 from confiture.core.schema_read import SchemaRead, read_text
 from confiture.core.sql_utils import comment_text
@@ -130,9 +135,15 @@ class Side:
     quoted: list[QuotedName] = field(default_factory=list)
 
     @classmethod
-    def of(cls, read: SchemaRead) -> Side:
-        """The side a tree is: what it writes, its objects, and what its read had to say."""
-        return cls(read.model, read.declared.objects, read.warnings, read.quoted)
+    def of(cls, read: SchemaRead, *, held: bool = False) -> Side:
+        """The side a tree is: what it writes, its objects, and what its read had to say.
+
+        *held* reads the tree as PostgreSQL holds it once applied
+        (``SchemaRead.catalogued``: a partition with its parent's columns), the
+        side a database is compared with.
+        """
+        model = read.catalogued if held else read.model
+        return cls(model, read.declared.objects, read.warnings, read.quoted)
 
     @property
     def tables(self) -> list[Table]:
@@ -254,6 +265,75 @@ def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
     return (ref.kind, ref.schema, ref.name, str(ref.signature))
 
 
+#: The section of the model each object kind is held in; every other kind is an
+#: ``OtherObject``.
+_SECTIONS: dict[str, str] = {
+    "function": "routines",
+    "procedure": "routines",
+    "aggregate": "routines",
+    "view": "views",
+    "matview": "views",
+    "trigger": "triggers",
+    "tview": "tviews",
+}
+
+
+def _section(kind: str) -> str:
+    return _SECTIONS.get(kind, "other_objects")
+
+
+def _held(model: SchemaModel) -> set[ObjectRef]:
+    """Every object *model* holds that is compared by definition, by its bucket."""
+    return {*model.routines, *model.views, *model.triggers, *model.tviews, *model.other_objects}
+
+
+def _routine(model: SchemaModel, ref: ObjectRef, obj: DDLObject) -> Routine | None:
+    return next(
+        (
+            r
+            for r in model.routines.get(ref, ())
+            if signatures_match(obj.signature, r.signature_key)
+        ),
+        None,
+    )
+
+
+def _redefined(
+    ref: ObjectRef,
+    before: DDLObject,
+    after: DDLObject,
+    old: SchemaModel,
+    new: SchemaModel,
+    policy: ComparisonPolicy,
+) -> bool:
+    """Whether one object, paired on both sides, is defined differently.
+
+    Two sides in one spelling compare the statements that create it. A tree and
+    a database do not: PostgreSQL writes a routine's types, a view's query and a
+    TVIEW's options its own way, so each side's model of the object is compared
+    through the policy's rules — a routine by its body, language, volatility and
+    security, never its spelling; a view by what the rules leave of it; a TVIEW by
+    the options it pins. A kind the model holds by existence alone is the same
+    object whenever both sides hold it.
+    """
+    if not policy.rules:
+        return before.definition != after.definition
+    rules = policy.rules
+    section = _section(ref.kind)
+    if section == "routines":
+        old_routine, new_routine = _routine(old, ref, before), _routine(new, ref, after)
+        if old_routine is None or new_routine is None:
+            return False
+        return parity_routine(old_routine, rules) != parity_routine(new_routine, rules)
+    if section == "views":
+        return parity_view(old.views[ref], rules) != parity_view(new.views[ref], rules)
+    if section == "tviews":
+        return parity_tview(old.tviews[ref], rules) != parity_tview(new.tviews[ref], rules)
+    if section == "other_objects" and old.coverage.shared(new.coverage, section) == "definition":
+        return before.definition != after.definition
+    return False
+
+
 class SchemaDiffer:
     """Compares two schemas and says what changed.
 
@@ -326,8 +406,9 @@ class SchemaDiffer:
         changes.extend(self._compare_enum_types(old.enum_types, new.enum_types))
         changes.extend(self._compare_sequences(old.sequences, new.sequences))
         # Objects compared by definition: views, routines and the rest (#288).
-        changes.extend(self._compare_objects(old.objects, new.objects))
-        return SchemaDiff(changes=changes, warnings=_merged_warnings(old, new))
+        objects, unwritable = self._compare_objects(old, new, policy)
+        changes.extend(objects)
+        return SchemaDiff(changes=changes, warnings=[*_merged_warnings(old, new), *unwritable])
 
     # ------------------------------------------------------------------
     # Table comparison
@@ -421,34 +502,58 @@ class SchemaDiffer:
     # Objects compared by definition (#288)
     # ------------------------------------------------------------------
 
-    @staticmethod
     def _compare_objects(
-        old_objects: Mapping[ObjectRef, list[DDLObject]],
-        new_objects: Mapping[ObjectRef, list[DDLObject]],
-    ) -> list[SchemaChange]:
-        """Added, dropped and redefined objects, in a stable order.
+        self, old: Side, new: Side, policy: ComparisonPolicy
+    ) -> tuple[list[SchemaChange], list[BuildWarning]]:
+        """Added, dropped and redefined objects, in a stable order — and what cannot be written.
 
-        An object present on both sides whose canonical definition differs is a
-        ``REPLACE``: for a view or a routine that is the entire change a
-        migration has to carry, and it is invisible to a structural comparison
-        because nothing about the object's shape moved.
+        An object present on both sides whose definition differs is a ``REPLACE``:
+        for a view or a routine that is the entire change a migration has to
+        carry, and it is invisible to a structural comparison because nothing
+        about the object's shape moved. Whether it differs is *policy*'s
+        question (:func:`_redefined`).
 
         The keys are buckets, not identities, so each one's definitions are
-        paired by ``pair_definitions`` rather than assumed to be one apiece.
+        paired by ``pair_definitions`` rather than assumed to be one apiece. A
+        kind either side did not read (``Coverage``) is not compared: its
+        silence is not absence. An object a side's model holds with no statement
+        (a database reads some kinds by existence alone) is the same object as
+        the other side's, and when the other side has none, a ``DIFFER_404``
+        warning rather than a change no statement can carry.
         """
         changes: list[SchemaChange] = []
-        for ref in sorted(old_objects.keys() | new_objects.keys(), key=_object_sort_key):
-            pairs, dropped, added = pair_definitions(
-                old_objects.get(ref, []), new_objects.get(ref, [])
-            )
+        unwritable: list[BuildWarning] = []
+        old_held, new_held = _held(old.model), _held(new.model)
+        refs = old.objects.keys() | new.objects.keys() | old_held | new_held
+        for ref in sorted(refs, key=_object_sort_key):
+            if not old.model.coverage.shared(new.model.coverage, _section(ref.kind)):
+                continue
+            before, after = old.objects.get(ref, []), new.objects.get(ref, [])
+            unstated = [
+                side
+                for side, held, objs in (("old", old_held, before), ("new", new_held, after))
+                if ref in held and not objs
+            ]
+            if unstated:
+                if not (ref in old_held and ref in new_held):
+                    unwritable.append(
+                        BuildWarning.of(
+                            "DIFFER_404",
+                            kind=ref.kind.replace("_", " ").capitalize(),
+                            identity=ref.display,
+                            side=unstated[0],
+                        )
+                    )
+                continue
+            pairs, dropped, added = pair_definitions(before, after)
             changes.extend(ObjectAdded(ref, obj) for obj in added)
             changes.extend(ObjectDropped(ref, obj) for obj in dropped)
             changes.extend(
-                ObjectReplaced(ref, before, after)
-                for before, after in pairs
-                if before.definition != after.definition
+                ObjectReplaced(ref, b, a)
+                for b, a in pairs
+                if _redefined(ref, b, a, old.model, new.model, policy)
             )
-        return changes
+        return changes, unwritable
 
     # ------------------------------------------------------------------
     # Table column comparison
