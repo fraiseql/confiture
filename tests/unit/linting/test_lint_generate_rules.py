@@ -52,7 +52,7 @@ class TestTree001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "00001_create.sql", "00002_update.sql", "00003_delete.sql")
 
-        violations = Tree001PrefixUnique().check(_files(schema))
+        violations = Tree001PrefixUnique().check(_files(schema), [schema])
 
         assert violations == []
 
@@ -60,7 +60,7 @@ class TestTree001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "00001_create.sql", "00001_update.sql")
 
-        violations = Tree001PrefixUnique().check(_files(schema))
+        violations = Tree001PrefixUnique().check(_files(schema), [schema])
 
         assert len(violations) == 1
         assert all(v.rule_id == "tree_001" for v in violations)
@@ -69,7 +69,7 @@ class TestTree001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "00001_create.sql", "00001_update.sql")
 
-        violations = Tree001PrefixUnique().check(_files(schema))
+        violations = Tree001PrefixUnique().check(_files(schema), [schema])
 
         assert violations[0].severity == RuleSeverity.ERROR
 
@@ -77,7 +77,7 @@ class TestTree001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00001_b.sql", "00001_c.sql")
 
-        violations = Tree001PrefixUnique().check(_files(schema))
+        violations = Tree001PrefixUnique().check(_files(schema), [schema])
 
         assert len(violations) == 2
 
@@ -87,7 +87,7 @@ class TestTree001PrefixUnique:
         _touch(schema, "00001_root.sql")
         _touch(sub, "00001_create.sql", "00001_update.sql")
 
-        violations = Tree001PrefixUnique().check(_files(schema))
+        violations = Tree001PrefixUnique().check(_files(schema), [schema])
 
         # Collision is in the subdirectory
         assert len(violations) == 1
@@ -97,7 +97,7 @@ class TestTree001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "create.sql", "update.sql", "README.md")
 
-        violations = Tree001PrefixUnique().check(_files(schema))
+        violations = Tree001PrefixUnique().check(_files(schema), [schema])
 
         assert violations == []
 
@@ -106,7 +106,7 @@ class TestTree001PrefixUnique:
         _touch(schema / "catalog", "00001_create.sql")
         _touch(schema / "public", "00001_create.sql")
 
-        violations = Tree001PrefixUnique().check(_files(schema))
+        violations = Tree001PrefixUnique().check(_files(schema), [schema])
 
         # Same prefix is fine if they're in different directories
         assert violations == []
@@ -115,7 +115,7 @@ class TestTree001PrefixUnique:
         schema = tmp_path / "schema"
         _touch(schema, "0001a_create.sql", "0001a_update.sql")
 
-        violations = Tree001PrefixUnique().check(_files(schema))
+        violations = Tree001PrefixUnique().check(_files(schema), [schema])
 
         assert len(violations) == 1
 
@@ -198,7 +198,7 @@ class TestTree003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00002_b.sql", "00003_c.sql")
 
-        violations = Tree003GapPolicy().check(_files(schema))
+        violations = Tree003GapPolicy().check(_files(schema), [schema])
 
         assert violations == []
 
@@ -206,7 +206,7 @@ class TestTree003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00003_c.sql")
 
-        violations = Tree003GapPolicy().check(_files(schema))
+        violations = Tree003GapPolicy().check(_files(schema), [schema])
 
         assert len(violations) == 1
         assert violations[0].rule_id == "tree_003"
@@ -215,7 +215,7 @@ class TestTree003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00005_e.sql")
 
-        violations = Tree003GapPolicy().check(_files(schema))
+        violations = Tree003GapPolicy().check(_files(schema), [schema])
 
         assert violations[0].severity == RuleSeverity.WARNING
 
@@ -223,7 +223,7 @@ class TestTree003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "00001_only.sql")
 
-        violations = Tree003GapPolicy().check(_files(schema))
+        violations = Tree003GapPolicy().check(_files(schema), [schema])
 
         assert violations == []
 
@@ -231,7 +231,7 @@ class TestTree003GapPolicy:
         schema = tmp_path / "schema"
         schema.mkdir()
 
-        violations = Tree003GapPolicy().check(_files(schema))
+        violations = Tree003GapPolicy().check(_files(schema), [schema])
 
         assert violations == []
 
@@ -239,7 +239,7 @@ class TestTree003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "00001_a.sql", "00003_c.sql", "00007_g.sql")
 
-        violations = Tree003GapPolicy().check(_files(schema))
+        violations = Tree003GapPolicy().check(_files(schema), [schema])
 
         assert len(violations) == 2
 
@@ -250,7 +250,7 @@ class TestTree003GapPolicy:
         # Sub: has gap
         _touch(schema / "functions", "00001_x.sql", "00003_z.sql")
 
-        violations = Tree003GapPolicy().check(_files(schema))
+        violations = Tree003GapPolicy().check(_files(schema), [schema])
 
         assert len(violations) == 1
         assert "functions" in (violations[0].file_path or "")
@@ -259,7 +259,7 @@ class TestTree003GapPolicy:
         schema = tmp_path / "schema"
         _touch(schema, "alpha.sql", "beta.sql")
 
-        violations = Tree003GapPolicy().check(_files(schema))
+        violations = Tree003GapPolicy().check(_files(schema), [schema])
 
         assert violations == []
 

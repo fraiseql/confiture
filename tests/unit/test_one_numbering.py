@@ -88,3 +88,31 @@ def test_the_allocator_never_writes_a_prefix_that_reads_as_a_word(tmp_path: Path
 
     assert prefix_value(allocated.name) is not None
     assert allocated.name == "ac0_next.sql"
+
+
+def test_the_allocator_counts_a_directory_s_number_as_taken(tmp_path: Path) -> None:
+    """``02_helpers/`` holds 02 in the build's order: the next file is 03, not a collision."""
+    from confiture.core.tree_allocator import TreeAllocator
+
+    (tmp_path / "01_a.sql").touch()
+    (tmp_path / "02_helpers").mkdir()
+    (tmp_path / "02_helpers" / "01_inner.sql").touch()
+
+    allocated = TreeAllocator(schema_dir=tmp_path).alloc(tmp_path, "next")
+
+    assert allocated.name == "03_next.sql"
+
+
+def test_compaction_numbers_in_build_order_not_name_order(tmp_path: Path) -> None:
+    """``9_y`` builds before ``10_x``; a name sort puts ``10_x`` first and reorders the build."""
+    from confiture.core.tree_renumber import TreeRenumber
+
+    for name in ("9_y.sql", "10_x.sql", "12_z.sql"):
+        (tmp_path / name).write_text("SELECT 1;\n")
+    plans = TreeRenumber(tmp_path).build_compact_plans(tmp_path)
+
+    assert [(p.old_path.name, p.new_path.name) for p in plans] == [
+        ("9_y.sql", "01_y.sql"),
+        ("10_x.sql", "02_x.sql"),
+        ("12_z.sql", "03_z.sql"),
+    ]

@@ -166,15 +166,22 @@ def test_compact_without_gaps_is_a_no_op(tmp_path: Path) -> None:
     assert _renumber(root).build_compact_plans(root / "db/schema/t") == []
 
 
-def test_compact_that_would_reorder_the_build_is_refused(tmp_path: Path) -> None:
-    """``05_c`` → ``02_c`` would sort before the unnumbered sibling ``02x/``."""
+def test_compact_keeps_the_build_s_order_beside_an_unnumbered_sibling(tmp_path: Path) -> None:
+    """``05_c`` → ``02_c`` beside the unnumbered ``02x/``: the build reads numbered entries
+    first, by number, so the order is kept — a sort by name would have said otherwise."""
+    from confiture.core.builder import files_under
+    from confiture.core.tree_prefix import order
+
     root = _project(tmp_path, "t/01_a.sql", "t/02x/y.sql", "t/05_c.sql")
+    schema = root / "db/schema"
+    before = [p.name for p in order(files_under(schema))]
 
-    with pytest.raises(ValidationError) as refused:
-        _renumber(root).build_compact_plans(root / "db/schema/t")
+    renumber = _renumber(root)
+    renumber.execute(renumber.build_compact_plans(schema / "t"))
 
-    assert refused.value.error_code == "VALID_005"
-    assert _tree(root) == ["t/01_a.sql", "t/02x/y.sql", "t/05_c.sql"]
+    assert [p.name for p in order(files_under(schema))] == [
+        name.replace("05_c", "02_c") for name in before
+    ]
 
 
 def test_compact_does_not_move_a_pinned_file(tmp_path: Path) -> None:

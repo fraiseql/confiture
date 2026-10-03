@@ -44,7 +44,9 @@ none of it goes near ``core.sql_lexer``.
 
 Usage (via SchemaLinter)::
 
-    from pathlib import Path
+    import math
+from itertools import pairwise
+from pathlib import Path
     from confiture.core.linting.schema_linter import SchemaLinter
 
     report = SchemaLinter().lint_tree(
@@ -58,21 +60,26 @@ Usage (one rule directly)::
 
     from confiture.core.linting.libraries.generate import Tree001PrefixUnique
 
-    violations = Tree001PrefixUnique().check(files_under(Path("db/schema")))
+    schema = Path("db/schema")
+    violations = Tree001PrefixUnique().check(files_under(schema), [schema])
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Collection, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 from confiture.config.environment import DEFAULT_STATUS_WORDS
 from confiture.core.builder import files_under
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.schema_identity import identifier_words
-from confiture.core.tree_prefix import bare_prefix, is_hex_group, prefix_value
+from confiture.core.tree_prefix import (
+    NumberedEntry,
+    bare_prefix,
+    build_entries,
+    sequence,
+)
 from confiture.core.tree_prefix import prefix_text as _raw_prefix
 
 #: Every code this module emits, in registry order.
@@ -86,58 +93,6 @@ TREE_RULE_CODES: tuple[str, ...] = (
     "tree_007",
     "tree_008",
 )
-
-
-@dataclass(frozen=True)
-class _Entry:
-    """One thing the build reads, or a directory on the way to one.
-
-    Attributes:
-        path: Where the entry is.
-        is_dir: Whether it is a directory. A finding about a file points at its
-            first line; a directory has none.
-        order: The position of the first file the build reads at or under this
-            entry, so a collision can report the order it produces — which is
-            the thing only confiture knows, because it computes it.
-    """
-
-    path: Path
-    is_dir: bool
-    order: int
-
-    @property
-    def label(self) -> str:
-        """The entry's name, with a trailing slash when it is a directory."""
-        return f"{self.path.name}/" if self.is_dir else self.path.name
-
-
-def _entries_by_parent(files: Sequence[Path], roots: Sequence[Path]) -> dict[Path, list[_Entry]]:
-    """Every entry the build reads, grouped by the directory it sits in.
-
-    Derived from the file list rather than walked, so a directory the
-    environment's ``exclude_dirs`` or per-directory ``exclude`` globs keep out
-    of the build contributes no entry and is judged by nothing.
-    Groups are in build order, and so is *files*.
-
-    Args:
-        files: The SQL files the build reads, in the order it reads them.
-        roots: The include directories they were found under. An entry above a
-            root is not part of the tree and is never judged.
-    """
-    deepest_first = sorted(roots, key=lambda root: len(root.parts), reverse=True)
-    entries: dict[Path, _Entry] = {}
-    children: dict[Path, list[Path]] = defaultdict(list)
-    for index, sql_file in enumerate(files):
-        root = next((r for r in deepest_first if sql_file.is_relative_to(r)), None)
-        if root is None:
-            continue
-        relative = sql_file.relative_to(root).parts
-        for depth in range(1, len(relative) + 1):
-            path = root.joinpath(*relative[:depth])
-            if path not in entries:
-                entries[path] = _Entry(path=path, is_dir=depth < len(relative), order=index)
-                children[path.parent].append(path)
-    return {parent: [entries[child] for child in kids] for parent, kids in children.items()}
 
 
 #: A collision needs two entries, and a gap needs two numbers, to exist at all.
@@ -169,15 +124,6 @@ def _enforced_prefix(directory: Path) -> str | None:
     return own
 
 
-def _by_directory(files: Sequence[Path]) -> dict[Path, list[Path]]:
-    """Group SQL files by the directory they sit in, each group name-sorted."""
-    grouped: dict[Path, list[Path]] = defaultdict(list)
-    for sql_file in files:
-        if sql_file.suffix == ".sql":
-            grouped[sql_file.parent].append(sql_file)
-    return {directory: sorted(group, key=lambda f: f.name) for directory, group in grouped.items()}
-
-
 class Tree001PrefixUnique:
     """``tree_001`` — no two files in the same directory share a numeric prefix.
 
@@ -186,45 +132,42 @@ class Tree001PrefixUnique:
     longer decides.
     """
 
-    def check(self, files: Sequence[Path]) -> list[LintViolation]:
-        """Run the check and return all violations found.
+    def check(self, files: Sequence[Path], roots: Sequence[Path]) -> list[LintViolation]:
+        """Every file beyond the first whose prefix *value* a sibling file already takes.
+
+        ``0001_a.sql`` and ``001_b.sql`` both number 1: the build reads them in an
+        order the prefix no longer decides. A directory sharing a file's value is
+        ``tree_005``'s finding.
 
         Args:
-            files: The SQL files the build reads.
+            files: The SQL files the build reads, in build order.
+            roots: The include directories they were found under.
 
         Returns:
             List of :class:`~confiture.core.linting.schema_linter.LintViolation`.
         """
         violations: list[LintViolation] = []
-
-        for directory, group in _by_directory(files).items():
-            prefix_to_files: dict[str, list[Path]] = defaultdict(list)
-            for sql_file in group:
-                raw = _raw_prefix(sql_file.name)
-                if raw is not None:
-                    prefix_to_files[raw].append(sql_file)
-
-            for raw_prefix, sharing in prefix_to_files.items():
-                if len(sharing) <= 1:
+        for directory, entries in build_entries(files, roots).items():
+            for _value, taking in sequence(e for e in entries if not e.is_dir).taken:
+                if len(taking) <= 1:
                     continue
-                # First file is the "winner"; every subsequent file is a duplicate.
+                prefix = _raw_prefix(taking[0].path.name)
                 violations.extend(
                     LintViolation(
                         rule_id="tree_001",
                         rule_name="Prefix Uniqueness",
                         severity=RuleSeverity.ERROR,
                         object_type="file",
-                        object_name=dup.name,
+                        object_name=dup.path.name,
                         message=(
-                            f"Prefix '{raw_prefix}' is shared by multiple files "
+                            f"Prefix '{prefix}' is shared by multiple files "
                             f"in {directory.name}/: "
-                            f"{', '.join(f.name for f in sharing)}"
+                            f"{', '.join(e.path.name for e in taking)}"
                         ),
-                        file_path=str(dup),
+                        file_path=str(dup.path),
                     )
-                    for dup in sharing[1:]
+                    for dup in taking[1:]
                 )
-
         return violations
 
 
@@ -267,39 +210,30 @@ class Tree002VerbSuffix:
 
 
 class Tree003GapPolicy:
-    """``tree_003`` — consecutive prefix values within a directory are contiguous.
+    """``tree_003`` — a directory's numbering keeps its own step.
 
-    Detects gaps in prefix sequences (step > 1 between adjacent values) and
-    emits one WARNING per gap found.  A single-file or empty directory is
-    always valid.
-
-    This rule assumes a step of 1 between consecutive allocations, which is
-    the default for :class:`~confiture.core.tree_allocator.TreeAllocator`.
+    Files and subdirectories alike take a value (#556). The step is read out of
+    the directory, never assumed (``tree_prefix.step``): 10 where every value is
+    a multiple of ten — directories numbered ``10_tables``, ``20_views`` to leave
+    room — and 1 otherwise, as ``TreeAllocator`` numbers files. A difference wider
+    than the step is a gap. One WARNING per gap.
     """
 
-    def check(self, files: Sequence[Path]) -> list[LintViolation]:
-        """Run the check and return all violations found.
+    def check(self, files: Sequence[Path], roots: Sequence[Path]) -> list[LintViolation]:
+        """Every gap in a directory's numbering, files and subdirectories alike (#556).
 
         Args:
-            files: The SQL files the build reads.
+            files: The SQL files the build reads, in build order.
+            roots: The include directories they were found under.
 
         Returns:
             List of :class:`~confiture.core.linting.schema_linter.LintViolation`.
         """
         violations: list[LintViolation] = []
-
-        for directory, group in _by_directory(files).items():
-            # One numbering per directory, as TreeAllocator allocates it: a
-            # decimal tree read in base 16 turns 0009 → 0010 into a gap of six.
-            hex_group = is_hex_group(f.name for f in group)
-            values = sorted(
-                value
-                for value in (prefix_value(f.name, hex_group=hex_group) for f in group)
-                if value is not None
-            )
-            if len(values) < _A_PAIR:
-                continue
-
+        for directory, entries in build_entries(files, roots).items():
+            numbering = sequence(entries)
+            every = numbering.step
+            at_step = "" if every == 1 else f" at its step of {every}"
             violations.extend(
                 LintViolation(
                     rule_id="tree_003",
@@ -308,16 +242,14 @@ class Tree003GapPolicy:
                     object_type="directory",
                     object_name=directory.name,
                     message=(
-                        f"Gap in prefix sequence in {directory.name}/: "
-                        f"{values[i - 1]} → {values[i]} "
-                        f"(missing {values[i] - values[i - 1] - 1} value(s))"
+                        f"Gap in prefix sequence in {directory.name}/: {before} → {after} "
+                        f"(missing {(after - before) // every - 1} value(s){at_step}), "
+                        f"between {low[0].label} and {high[0].label}"
                     ),
                     file_path=str(directory),
                 )
-                for i in range(1, len(values))
-                if values[i] - values[i - 1] > 1
+                for (before, low), (after, high) in numbering.gaps()
             )
-
         return violations
 
 
@@ -394,8 +326,8 @@ class Tree005SiblingPrefix:
         """
         violations: list[LintViolation] = []
 
-        for parent, entries in _entries_by_parent(files, roots).items():
-            groups: dict[str, list[_Entry]] = defaultdict(list)
+        for parent, entries in build_entries(files, roots).items():
+            groups: dict[str, list[NumberedEntry]] = defaultdict(list)
             for entry in entries:
                 raw = _raw_prefix(entry.path.name)
                 if raw is not None:
@@ -453,7 +385,7 @@ class Tree006ParentPrefix:
         """
         violations: list[LintViolation] = []
 
-        for parent, entries in _entries_by_parent(files, roots).items():
+        for parent, entries in build_entries(files, roots).items():
             expected = _enforced_prefix(parent)
             if expected is None:
                 continue
@@ -507,7 +439,7 @@ class Tree007Unnumbered:
         """
         violations: list[LintViolation] = []
 
-        for parent, entries in _entries_by_parent(files, roots).items():
+        for parent, entries in build_entries(files, roots).items():
             unnumbered = [e for e in entries if _raw_prefix(e.path.name) is None]
             if not unnumbered or len(unnumbered) == len(entries):
                 continue
@@ -562,7 +494,7 @@ class Tree008StatusWord:
         if not self._words:
             return violations
 
-        for entries in _entries_by_parent(files, roots).values():
+        for entries in build_entries(files, roots).values():
             for entry in entries:
                 stem = entry.path.name if entry.is_dir else entry.path.stem
                 found = [word for word in identifier_words(stem) if word in self._words]
@@ -619,11 +551,11 @@ def tree_violations(
     """
     violations: list[LintViolation] = []
     if "tree_001" in selected:
-        violations += Tree001PrefixUnique().check(files)
+        violations += Tree001PrefixUnique().check(files, schema_dirs)
     if "tree_002" in selected:
         violations += Tree002VerbSuffix().check(files)
     if "tree_003" in selected:
-        violations += Tree003GapPolicy().check(files)
+        violations += Tree003GapPolicy().check(files, schema_dirs)
     if "tree_004" in selected and overrides_dir is not None:
         violations += Tree004OrphanedOverride().check(schema_dirs, overrides_dir)
     if "tree_005" in selected:

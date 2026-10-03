@@ -72,7 +72,7 @@ from confiture.core.builder import files_under
 from confiture.core.idempotency.python_migration_extractor import is_migration_file
 from confiture.core.migration_reads import MigrationRead, reads
 from confiture.core.tree_allocator import PrefixConfig, PrefixScheme, TreeAllocator
-from confiture.core.tree_prefix import is_numbered, numbering, prefix_text
+from confiture.core.tree_prefix import disk_entries, numbering, order, prefix_text
 from confiture.exceptions import ValidationError
 
 
@@ -254,14 +254,9 @@ class TreeRenumber:
                 order ``confiture build`` reads the tree in.
         """
         directory = directory.resolve()
-        children = sorted(
-            (
-                child
-                for child in directory.iterdir()
-                if is_numbered(child.name) and (child.is_dir() or child.suffix == ".sql")
-            ),
-            key=lambda child: child.name,
-        )
+        # In build order: a name sort puts `10_x` before `9_y`, and compacting in
+        # that order would reorder the build it means to keep.
+        children = [entry.path for entry in disk_entries(directory)]
         if not children:
             return []
         raws = [prefix_text(child.name) or "" for child in children]
@@ -429,13 +424,24 @@ class TreeRenumber:
         return changes
 
     def _refuse_reordering(self, plans: list[RenumberPlan]) -> None:
-        """Refuse plans whose new names change the order the build reads the tree in."""
-        before = [path.resolve() for path in files_under(self.schema_dir)]
-        after = sorted(before, key=lambda path: _destination(path, plans))
-        if after != before:
-            moved = next(a for a, b in zip(after, before, strict=True) if a != b)
+        """Refuse plans whose new names change the order the build reads the tree in.
+
+        Compaction keeps each directory's numbers in their order and leaves its
+        unnumbered entries last, as the build reads them, so this holds by
+        construction; it is checked, against the build's own order, so a change
+        to either cannot make it false unnoticed (``VALID_005``).
+        """
+        # The build's order on both sides (`tree_prefix.order`), not a path sort:
+        # `9_y` builds before `10_x`, whatever their names sort as.
+        before = order(path.resolve() for path in files_under(self.schema_dir))
+        destination = {path: _destination(path, plans) for path in before}
+        after = order(destination.values())
+        if after != [destination[path] for path in before]:
+            moved = next(
+                a for a, b in zip(after, (destination[p] for p in before), strict=True) if a != b
+            )
             raise ValidationError(
-                f"compaction refused: {_destination(moved, plans)} would be built in a "
+                f"compaction refused: {moved} would be built in a "
                 "different position than it is now",
                 error_code="VALID_005",
                 resolution_hint=(
