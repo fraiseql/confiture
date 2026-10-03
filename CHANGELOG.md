@@ -44,6 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now read through `sql_lexer.parse_file`, which blanks the rows first. One guard
   fails on any other way into the parser, another on a parse failure answered with
   nothing.
+- **`generate`/`renumber` never write a prefix that reads as a word.** In a
+  directory numbered in hex, the number after `ab9` is `aba` — all letters,
+  which no reader takes for a number (as `add` in `add_column` must not be):
+  the allocator wrote `aba_next.sql`, a file every later allocation, gap check
+  and renumber then ignored. Such values are now skipped (`ab9` → `ac0`), by one
+  sequence (`tree_prefix.prefixes`) the allocator, `renumber --compact` and
+  `renumber --move` all draw from.
+- **`tree_002` sees a hex prefix that starts with a letter** (`a001.sql` is
+  numbered, with no verb): it decided "numbered" by the first character being a
+  decimal digit.
 - **The lint rules read the files the lint parsed, once.** Each rule that re-parsed
   a file's text on its own — `build_003`/`build_004`, the `body` family's locations
   and `TEMP`-table reading, `tenant_001`/`tenant_003` — reads the statements the
@@ -61,6 +71,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file, not a line of the build joined together. Neither takes part in model
   equality: two trees declaring one schema from different files are one schema.
   The model goldens are re-recorded; nothing but positions moved.
+- ⚠️ **The schema model's wire gains `Column.default_kind`** — what a default is,
+  read from its parse tree (`sequence`, `generator`, `constant`, `expression`) —
+  and the seam gains `ValueSource` and `Column.value_source`: where a column's
+  value comes from (identity, generated, sequence, value generator, …), the one
+  answer `writable_columns`, parity and drift now read. `filled_by_postgresql` and
+  `unique_without_author_input` are kept apart: a `gen_random_uuid()` default is
+  writable, and unique either way.
 - A `SCHEMA_202` from `drift --schema`, and a `DIFFER_400` from `migrate diff --to
   <directory>` or `platform.parse_schema(env=…)`, name the file and the line in it
   (`context.file`, `context.line`), not a line of the files joined together.

@@ -835,6 +835,7 @@ def _parity_column(column: Column) -> Column:
         raw_sql_type=None if serial else column.raw_sql_type,
         not_null=column.not_null or serial,
         default=None if serial or column.default is None else _EXPRESSION,
+        default_kind=None if serial else column.default_kind,
         generated=None if column.generated is None else _EXPRESSION,
     )
 

@@ -72,7 +72,7 @@ from confiture.core.builder import files_under
 from confiture.core.idempotency.python_migration_extractor import is_migration_file
 from confiture.core.migration_reads import MigrationRead, reads
 from confiture.core.tree_allocator import PrefixConfig, PrefixScheme, TreeAllocator
-from confiture.core.tree_prefix import is_hex_group, is_numbered, prefix_text
+from confiture.core.tree_prefix import is_numbered, numbering, prefix_text
 from confiture.exceptions import ValidationError
 
 
@@ -265,18 +265,17 @@ class TreeRenumber:
         if not children:
             return []
         raws = [prefix_text(child.name) or "" for child in children]
-        widths = [len(raw) for raw in raws]
+        hexadecimal, width = numbering(child.name for child in children) or (False, 1)
         config = PrefixConfig(
-            scheme=PrefixScheme.HEX
-            if is_hex_group(child.name for child in children)
-            else PrefixScheme.DECIMAL,
-            width=max(set(widths), key=widths.count),
+            scheme=PrefixScheme.HEX if hexadecimal else PrefixScheme.DECIMAL, width=width
         )
         plans: list[RenumberPlan] = []
-        for value, (child, raw) in enumerate(zip(children, raws, strict=True), start=config.start):
-            new_path = directory / (
-                TreeAllocator._format_prefix(value, config) + child.name[len(raw) :]
-            )
+        numbers = TreeAllocator.prefixes(config)
+        # `numbers` never ends: the children decide how many are drawn.
+        for (child, raw), (_, prefix) in zip(
+            zip(children, raws, strict=True), numbers, strict=False
+        ):
+            new_path = directory / (prefix + child.name[len(raw) :])
             if new_path.name == child.name:
                 continue
             stem = "" if child.is_dir() else _stem_from_path(child)
@@ -561,18 +560,16 @@ class TreeRenumber:
         # Detect or default prefix config from the target directory.
         allocator = TreeAllocator(self.schema_dir)
         if new_dir.exists():
-            config = allocator._detect_config(new_dir)
-            existing = allocator._collect_prefixes(new_dir, config.scheme)
+            config = allocator.detect_config(new_dir)
+            existing = allocator.collect_prefixes(new_dir, config.scheme)
         else:
             config = PrefixConfig()
             existing = []
-
-        next_val = (max(existing) + config.step) if existing else config.start
+        numbers = TreeAllocator.prefixes(config, after=max(existing, default=None))
 
         plans: list[RenumberPlan] = []
-        for sql_file in sql_files:
+        for sql_file, (_, prefix) in zip(sql_files, numbers, strict=False):
             stem = _stem_from_path(sql_file)
-            prefix = TreeAllocator._format_prefix(next_val, config)
             new_path = new_dir / f"{prefix}_{stem}.sql"
             plans.append(
                 RenumberPlan(
@@ -582,7 +579,6 @@ class TreeRenumber:
                     new_name=stem,
                 )
             )
-            next_val += config.step
 
         return plans
 

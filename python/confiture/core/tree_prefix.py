@@ -30,7 +30,7 @@ base 16 puts 100 before 154 when the author wrote 256 after 154.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 #: The run of hex digits before the first underscore.
@@ -85,6 +85,52 @@ def is_hex_group(names: Iterable[str]) -> bool:
     )
 
 
+def bare_prefix(stem: str) -> bool:
+    """Whether *stem* is a prefix and nothing else — ``0042``, ``00a1`` — with no verb after it."""
+    return prefix_text(f"{stem}_") == stem
+
+
+def format_prefix(value: int, *, width: int, hexadecimal: bool) -> str:
+    """*value* as a prefix: zero-padded to *width*, in base 16 or 10.
+
+    Example:
+        >>> format_prefix(26, width=4, hexadecimal=True)
+        '001a'
+        >>> format_prefix(26, width=4, hexadecimal=False)
+        '0026'
+    """
+    return format(value, f"0{width}{'x' if hexadecimal else 'd'}")
+
+
+def prefixes(
+    start: int, *, step: int = 1, width: int, hexadecimal: bool
+) -> Iterator[tuple[int, str]]:
+    """``(value, prefix)`` from *start* on, by *step* — each one a reader takes for a number.
+
+    A hex value written without a decimal digit (``aba``, ``fff``) reads as a word,
+    as ``add`` in ``add_column`` must: it is skipped, never written.
+    """
+    value = start
+    while True:
+        written = format_prefix(value, width=width, hexadecimal=hexadecimal)
+        if prefix_text(f"{written}_") == written:
+            yield value, written
+        value += step
+
+
+def numbering(names: Iterable[str]) -> tuple[bool, int] | None:
+    """How sibling *names* are numbered: ``(hexadecimal, width)``, or ``None`` when none is.
+
+    Hexadecimal when any prefix carries a hex letter (:func:`is_hex_group`); the
+    width is the one most of them are written at.
+    """
+    prefixes = [raw for raw in (prefix_text(name) for name in names) if raw is not None]
+    if not prefixes:
+        return None
+    widths = [len(raw) for raw in prefixes]
+    return any(has_hex_letter(raw) for raw in prefixes), max(set(widths), key=widths.count)
+
+
 def prefix_value(name: str, *, hex_group: bool | None = None) -> int | None:
     """The integer value of *name*'s prefix, or ``None`` when it carries none.
 
@@ -95,7 +141,8 @@ def prefix_value(name: str, *, hex_group: bool | None = None) -> int | None:
             this name alone, which is all a caller holding one name can do.
 
     Returns:
-        The prefix's value, or ``None``.
+        The prefix's value, or ``None`` — also for a hex prefix among siblings
+        numbered in decimal.
 
     Example:
         >>> prefix_value("000a_middle.sql")
@@ -108,7 +155,10 @@ def prefix_value(name: str, *, hex_group: bool | None = None) -> int | None:
     raw = prefix_text(name)
     if raw is None:
         return None
-    return int(raw, 16 if (has_hex_letter(raw) if hex_group is None else hex_group) else 10)
+    hexadecimal = has_hex_letter(raw) if hex_group is None else hex_group
+    if not hexadecimal and has_hex_letter(raw):
+        return None  # a decimal group cannot read a hex prefix: it is not one of its numbers
+    return int(raw, 16 if hexadecimal else 10)
 
 
 def _component_key(name: str, *, hex_group: bool) -> tuple[int, int, str]:

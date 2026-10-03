@@ -72,7 +72,7 @@ from confiture.config.environment import DEFAULT_STATUS_WORDS
 from confiture.core.builder import files_under
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 from confiture.core.schema_identity import identifier_words
-from confiture.core.tree_prefix import is_hex_group, prefix_value
+from confiture.core.tree_prefix import bare_prefix, is_hex_group, prefix_value
 from confiture.core.tree_prefix import prefix_text as _raw_prefix
 
 #: Every code this module emits, in registry order.
@@ -260,11 +260,9 @@ class Tree002VerbSuffix:
                 ),
                 file_path=str(sql_file),
             )
-            # Stem starts with a digit AND has no underscore → prefixed, no verb.
+            # The whole stem is a prefix: numbered, with no verb after it.
             for sql_file in files
-            if sql_file.suffix == ".sql"
-            and sql_file.stem[:1].isdigit()
-            and "_" not in sql_file.stem
+            if sql_file.suffix == ".sql" and bare_prefix(sql_file.stem)
         ]
 
 

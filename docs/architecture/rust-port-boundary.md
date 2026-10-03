@@ -81,7 +81,7 @@ duplicate readers were deleted. The count below is what the port translates.
 
 ### The crate
 
-27,042 lines, 34% of `core/`.
+27,117 lines, 34% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -103,7 +103,7 @@ duplicate readers were deleted. The count below is what the port translates.
 | `function_signature_checker.py` | 188 | DDL transform |
 | `idempotency/` | 2,708 | DDL transform |
 | `introspection/dependency_graph.py` | 202 | DDL transform |
-| `linting/` | 9,278 | DDL transform |
+| `linting/` | 9,279 | DDL transform |
 | `lock_profile.py` | 491 | DDL transform |
 | `migration_analyzer.py` | 81 | DDL transform |
 | `migration_grant_extractor.py` | 526 | DDL transform |
@@ -115,18 +115,18 @@ duplicate readers were deleted. The count below is what the port translates.
 | `replica/` | 737 | DDL transform |
 | `risk_tier.py` | 76 | DDL transform |
 | `schema_change.py` | 904 | DDL transform |
-| `schema_identity.py` | 71 | DDL transform |
-| `schema_model.py` | 939 | DDL transform |
+| `schema_identity.py` | 94 | DDL transform |
+| `schema_model.py` | 940 | DDL transform |
 | `schema_read.py` | 270 | DDL transform |
 | `sql_lexer.py` | 729 | DDL transform |
 | `strategy.py` | 68 | DDL transform |
-| `tree_prefix.py` | 180 | DDL transform |
+| `tree_prefix.py` | 230 | DDL transform |
 | `tview_preflight.py` | 170 | DDL transform |
 | `type_lattice.py` | 511 | DDL transform |
 
 ### Python I/O glue behind the same JSON contract
 
-43,484 lines, 56% of `core/`.
+43,440 lines, 55% of `core/`.
 
 | Module | Lines | Bucket |
 |---|---:|---|
@@ -194,8 +194,8 @@ duplicate readers were deleted. The count below is what the port translates.
 | `syncer.py` | 654 | database orchestration |
 | `temp_database.py` | 293 | database orchestration |
 | `test_db.py` | 1,017 | database orchestration |
-| `tree_allocator.py` | 266 | database orchestration |
-| `tree_renumber.py` | 684 | database orchestration |
+| `tree_allocator.py` | 226 | database orchestration |
+| `tree_renumber.py` | 680 | database orchestration |
 | `unified_linter.py` | 186 | database orchestration |
 | `validation/` | 2,187 | database orchestration |
 | `view_body_drift.py` | 198 | database orchestration |

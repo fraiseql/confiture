@@ -15,16 +15,20 @@ from confiture.core.tree_allocator import (
     PrefixConfig,
     PrefixScheme,
     TreeAllocator,
-    _parse_prefix,
 )
+from confiture.core.tree_prefix import format_prefix, prefix_value
 
 # ---------------------------------------------------------------------------
-# _parse_prefix — low-level helper
+# What the allocator reads a prefix as — ``tree_prefix.prefix_value``
 # ---------------------------------------------------------------------------
+
+
+def _parse_prefix(filename: str, base: int = 10) -> int | None:
+    return prefix_value(filename, hex_group=base == 16)
 
 
 class TestParsePrefix:
-    """Tests for the module-level _parse_prefix helper."""
+    """A prefix as the allocator reads it, in the base its directory is numbered in."""
 
     def test_decimal_standard(self) -> None:
         assert _parse_prefix("00042_create.sql") == 42
@@ -61,8 +65,11 @@ class TestParsePrefix:
         assert _parse_prefix("_create.sql") is None
 
     def test_hex_with_g_char_returns_none(self) -> None:
-        # 'g' is not valid hex — _parse_prefix falls back to None
+        # 'g' is not a hex digit: no prefix at all
         assert _parse_prefix("0001g_create.sql", base=16) is None
+
+    def test_a_hex_prefix_among_decimal_siblings_is_not_one_of_their_numbers(self) -> None:
+        assert _parse_prefix("0001a_create.sql") is None
 
 
 # ---------------------------------------------------------------------------
@@ -95,26 +102,26 @@ class TestPrefixConfig:
 
 
 # ---------------------------------------------------------------------------
-# TreeAllocator._detect_config — scheme and width auto-detection
+# TreeAllocator.detect_config — scheme and width auto-detection
 # ---------------------------------------------------------------------------
 
 
 class TestDetectConfig:
-    """Tests for TreeAllocator._detect_config."""
+    """Tests for TreeAllocator.detect_config."""
 
     def _make_allocator(self, schema_dir: Path) -> TreeAllocator:
         return TreeAllocator(schema_dir)
 
     def test_empty_dir_returns_defaults(self, tmp_path: Path) -> None:
         alloc = self._make_allocator(tmp_path)
-        cfg = alloc._detect_config(tmp_path)
+        cfg = alloc.detect_config(tmp_path)
         assert cfg == PrefixConfig()
 
     def test_decimal_files_detected(self, tmp_path: Path) -> None:
         (tmp_path / "00001_create.sql").touch()
         (tmp_path / "00002_update.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        cfg = alloc._detect_config(tmp_path)
+        cfg = alloc.detect_config(tmp_path)
         assert cfg.scheme == PrefixScheme.DECIMAL
         assert cfg.width == 5
 
@@ -122,7 +129,7 @@ class TestDetectConfig:
         (tmp_path / "0001a_create.sql").touch()
         (tmp_path / "0001b_update.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        cfg = alloc._detect_config(tmp_path)
+        cfg = alloc.detect_config(tmp_path)
         assert cfg.scheme == PrefixScheme.HEX
         assert cfg.width == 5
 
@@ -130,28 +137,28 @@ class TestDetectConfig:
         (tmp_path / "03321_create.sql").touch()
         (tmp_path / "03322_update.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        cfg = alloc._detect_config(tmp_path)
+        cfg = alloc.detect_config(tmp_path)
         assert cfg.width == 5
 
     def test_width_2_detected(self, tmp_path: Path) -> None:
         (tmp_path / "00_extensions.sql").touch()
         (tmp_path / "01_tables.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        cfg = alloc._detect_config(tmp_path)
+        cfg = alloc.detect_config(tmp_path)
         assert cfg.width == 2
 
     def test_non_sql_files_ignored(self, tmp_path: Path) -> None:
         (tmp_path / "README.md").touch()
         (tmp_path / "00001_create.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        cfg = alloc._detect_config(tmp_path)
+        cfg = alloc.detect_config(tmp_path)
         assert cfg.scheme == PrefixScheme.DECIMAL
 
     def test_files_without_prefix_ignored(self, tmp_path: Path) -> None:
         (tmp_path / "helpers.sql").touch()
         (tmp_path / "00001_create.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        cfg = alloc._detect_config(tmp_path)
+        cfg = alloc.detect_config(tmp_path)
         assert cfg.scheme == PrefixScheme.DECIMAL
 
     def test_mode_wins_for_width_tie(self, tmp_path: Path) -> None:
@@ -160,17 +167,17 @@ class TestDetectConfig:
         (tmp_path / "00002_update.sql").touch()
         (tmp_path / "003_delete.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        cfg = alloc._detect_config(tmp_path)
+        cfg = alloc.detect_config(tmp_path)
         assert cfg.width == 5
 
 
 # ---------------------------------------------------------------------------
-# TreeAllocator._collect_prefixes
+# TreeAllocator.collect_prefixes
 # ---------------------------------------------------------------------------
 
 
 class TestCollectPrefixes:
-    """Tests for TreeAllocator._collect_prefixes."""
+    """Tests for TreeAllocator.collect_prefixes."""
 
     def _make_allocator(self, schema_dir: Path) -> TreeAllocator:
         return TreeAllocator(schema_dir)
@@ -179,67 +186,67 @@ class TestCollectPrefixes:
         (tmp_path / "00001_create.sql").touch()
         (tmp_path / "00003_delete.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        result = sorted(alloc._collect_prefixes(tmp_path, PrefixScheme.DECIMAL))
+        result = sorted(alloc.collect_prefixes(tmp_path, PrefixScheme.DECIMAL))
         assert result == [1, 3]
 
     def test_collects_hex_prefixes(self, tmp_path: Path) -> None:
         (tmp_path / "0001a_create.sql").touch()
         (tmp_path / "0001b_delete.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        result = sorted(alloc._collect_prefixes(tmp_path, PrefixScheme.HEX))
+        result = sorted(alloc.collect_prefixes(tmp_path, PrefixScheme.HEX))
         assert result == [0x1A, 0x1B]
 
     def test_ignores_non_sql_files(self, tmp_path: Path) -> None:
         (tmp_path / "00001_create.sql").touch()
         (tmp_path / "00002_update.txt").touch()
         alloc = self._make_allocator(tmp_path)
-        result = alloc._collect_prefixes(tmp_path, PrefixScheme.DECIMAL)
+        result = alloc.collect_prefixes(tmp_path, PrefixScheme.DECIMAL)
         assert result == [1]
 
     def test_ignores_files_without_prefix(self, tmp_path: Path) -> None:
         (tmp_path / "helpers.sql").touch()
         (tmp_path / "00001_create.sql").touch()
         alloc = self._make_allocator(tmp_path)
-        result = alloc._collect_prefixes(tmp_path, PrefixScheme.DECIMAL)
+        result = alloc.collect_prefixes(tmp_path, PrefixScheme.DECIMAL)
         assert result == [1]
 
     def test_empty_dir_returns_empty_list(self, tmp_path: Path) -> None:
         alloc = self._make_allocator(tmp_path)
-        result = alloc._collect_prefixes(tmp_path, PrefixScheme.DECIMAL)
+        result = alloc.collect_prefixes(tmp_path, PrefixScheme.DECIMAL)
         assert result == []
 
 
 # ---------------------------------------------------------------------------
-# TreeAllocator._format_prefix
+# tree_prefix.format_prefix
 # ---------------------------------------------------------------------------
 
 
 class TestFormatPrefix:
-    """Tests for TreeAllocator._format_prefix."""
+    """Tests for tree_prefix.format_prefix, as an allocator config writes it."""
 
     def test_decimal_zero_padding(self) -> None:
         cfg = PrefixConfig(scheme=PrefixScheme.DECIMAL, width=5)
-        result = TreeAllocator._format_prefix(42, cfg)
+        result = format_prefix(42, width=cfg.width, hexadecimal=cfg.scheme is PrefixScheme.HEX)
         assert result == "00042"
 
     def test_decimal_max_fills_width(self) -> None:
         cfg = PrefixConfig(scheme=PrefixScheme.DECIMAL, width=5)
-        result = TreeAllocator._format_prefix(99999, cfg)
+        result = format_prefix(99999, width=cfg.width, hexadecimal=cfg.scheme is PrefixScheme.HEX)
         assert result == "99999"
 
     def test_hex_lowercase_output(self) -> None:
         cfg = PrefixConfig(scheme=PrefixScheme.HEX, width=5)
-        result = TreeAllocator._format_prefix(0x1A, cfg)
+        result = format_prefix(0x1A, width=cfg.width, hexadecimal=cfg.scheme is PrefixScheme.HEX)
         assert result == "0001a"
 
     def test_hex_zero_padding(self) -> None:
         cfg = PrefixConfig(scheme=PrefixScheme.HEX, width=4)
-        result = TreeAllocator._format_prefix(1, cfg)
+        result = format_prefix(1, width=cfg.width, hexadecimal=cfg.scheme is PrefixScheme.HEX)
         assert result == "0001"
 
     def test_width_2(self) -> None:
         cfg = PrefixConfig(scheme=PrefixScheme.DECIMAL, width=2)
-        result = TreeAllocator._format_prefix(3, cfg)
+        result = format_prefix(3, width=cfg.width, hexadecimal=cfg.scheme is PrefixScheme.HEX)
         assert result == "03"
 
 

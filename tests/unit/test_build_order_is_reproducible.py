@@ -195,7 +195,7 @@ def test_one_definition_of_a_numeric_prefix(tmp_path):
 
     assert builder._is_hex_prefix("000a_middle"), "builder does not see a lower-case hex prefix"
     assert prefix_value("000a_middle.sql") == 10
-    detected = TreeAllocator(schema_dir=schema)._detect_config(schema)
+    detected = TreeAllocator(schema_dir=schema).detect_config(schema)
     assert detected.scheme is PrefixScheme.HEX
 
     order = [f.stem for f in builder.find_sql_files()]
