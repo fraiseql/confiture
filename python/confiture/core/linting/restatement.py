@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import re
 
+from confiture.core.schema_identity import identifier_words
+
 #: Word characters, so punctuation and hyphens split rather than join:
 #: ``'Soft-deletes'`` is ``soft`` and ``deletes``, and only one of them is in
 #: ``delete_widget``.
@@ -99,7 +101,7 @@ def _stem(word: str) -> str:
 
 
 def _name_stems(name: str) -> set[str]:
-    return {_stem(part) for part in name.lower().split("_") if part}
+    return {_stem(part) for part in identifier_words(name)}
 
 
 def adds_nothing(comment: str, name: str) -> bool:

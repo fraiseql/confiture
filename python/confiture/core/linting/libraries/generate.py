@@ -71,6 +71,7 @@ from pathlib import Path
 from confiture.config.environment import DEFAULT_STATUS_WORDS
 from confiture.core.builder import files_under
 from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
+from confiture.core.schema_identity import identifier_words
 from confiture.core.tree_prefix import is_hex_group, prefix_value
 from confiture.core.tree_prefix import prefix_text as _raw_prefix
 
@@ -566,7 +567,7 @@ class Tree008StatusWord:
         for entries in _entries_by_parent(files, roots).values():
             for entry in entries:
                 stem = entry.path.name if entry.is_dir else entry.path.stem
-                found = [part for part in stem.split("_") if part.casefold() in self._words]
+                found = [word for word in identifier_words(stem) if word in self._words]
                 if not found:
                     continue
                 violations.append(
