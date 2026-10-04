@@ -30,6 +30,8 @@ jobs:
 
     services:
       postgres:
+        # PostgreSQL 16 only: the benchmarks compare runs over time, on the floor; catalog
+        # breadth (16 and 18) is the quality gate's job (#608).
         image: postgres:16
         env:
           POSTGRES_USER: confiture

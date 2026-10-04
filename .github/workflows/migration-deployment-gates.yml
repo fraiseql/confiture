@@ -123,6 +123,8 @@ jobs:
 
     services:
       postgres:
+        # PostgreSQL 16 only: a deployment path is proved on the floor; catalog breadth
+        # (16 and 18) is the quality gate's job (#608).
         image: postgres:16
         env:
           POSTGRES_USER: confiture
@@ -193,6 +195,8 @@ jobs:
 
     services:
       postgres:
+        # PostgreSQL 16 only: a deployment path is proved on the floor; catalog breadth
+        # (16 and 18) is the quality gate's job (#608).
         image: postgres:16
         env:
           POSTGRES_USER: confiture
@@ -262,6 +266,8 @@ jobs:
 
     services:
       postgres:
+        # PostgreSQL 16 only: a deployment path is proved on the floor; catalog breadth
+        # (16 and 18) is the quality gate's job (#608).
         image: postgres:16
         env:
           POSTGRES_USER: confiture

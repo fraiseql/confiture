@@ -14,6 +14,7 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path
+from typing import ClassVar
 from urllib.parse import urlparse
 
 import yaml
@@ -135,6 +136,30 @@ class TestQualityGate:
         assert "coverage combine" in gate
         matrix = _run_scripts(_steps("python-version-matrix.yml", "test-matrix"))
         assert "--cov" not in matrix and "coverage run" not in matrix
+
+    def test_coverage_is_judged_on_both_servers_combined(self) -> None:
+        """One floor check, over what the 16 and the 18 legs measured together.
+
+        A floor checked per leg would fail a file whose lines only one server reaches;
+        a floor checked on one leg would ignore the other. The legs upload their data,
+        one job combines it, and that job is the one the floors read.
+        """
+        test = _run_scripts(_steps("quality-gate.yml", "test"))
+        assert "coverage_floors.py" not in test and "coverage report" not in test
+        uploads = [
+            step
+            for step in _steps("quality-gate.yml", "test")
+            if step.get("uses", "").startswith("actions/upload-artifact")
+        ]
+        assert len(uploads) == 1, uploads
+        assert "${{ matrix.postgres }}" in uploads[0]["with"]["name"]
+        combined = _run_scripts(_steps("quality-gate.yml", "coverage"))
+        assert "coverage combine" in combined
+        assert "scripts/coverage_floors.py --check" in combined
+        data = yaml.safe_load((WORKFLOWS / "quality-gate.yml").read_text())
+        assert data["jobs"]["coverage"]["needs"] in ("test", ["test"])
+        assert "coverage" in data["jobs"]["quality-gate"]["needs"]
+        assert "needs.coverage.result" in _run_scripts(_steps("quality-gate.yml", "quality-gate"))
 
     def test_no_job_runs_a_suite_the_test_job_already_runs(self) -> None:
         data = yaml.safe_load((WORKFLOWS / "quality-gate.yml").read_text())
@@ -400,3 +425,86 @@ class TestReleaseWheels:
         script = _run_scripts(_steps("quality-gate.yml", "wheel-python-314"))
         assert "--only-binary fraiseql-confiture" in script and "--no-cache" in script
         assert SUPPORTED[-1] == "3.14"
+
+
+def _service_jobs() -> list[tuple[str, str, dict]]:
+    """Every job that starts a PostgreSQL service container, with its workflow."""
+    jobs = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        data = yaml.safe_load(path.read_text())
+        for name, job in data["jobs"].items():
+            if "postgres" in (job.get("services") or {}):
+                jobs.append((path.name, name, job))
+    return jobs
+
+
+class TestPostgresServers:
+    """CI tests the floor and the newest server: PostgreSQL 16 and 18 (#608).
+
+    PostgreSQL 18 changed what the catalog says (NOT NULL rows in ``pg_constraint``,
+    ``conenforced``, virtual generated columns). Every service container was
+    ``postgres:16``, so the one server a developer is likeliest to run locally was
+    tested nowhere a pull request waits for.
+    """
+
+    SERVERS: ClassVar[list[str]] = ["16", "18"]
+    BOTH: ClassVar[set[tuple[str, str]]] = {
+        ("quality-gate.yml", "test"),
+        ("quality-gate.yml", "plpgsql-check"),
+        ("examples.yml", "examples"),
+    }
+
+    @staticmethod
+    def _job(workflow: str, job: str) -> dict:
+        return yaml.safe_load((WORKFLOWS / workflow).read_text())["jobs"][job]
+
+    def test_the_gate_and_the_examples_run_on_both_servers(self) -> None:
+        for workflow, name in sorted(self.BOTH):
+            job = self._job(workflow, name)
+            assert job["strategy"]["matrix"]["postgres"] == self.SERVERS, (workflow, name)
+            assert job["strategy"].get("fail-fast") is False, (workflow, name)
+            assert "${{ matrix.postgres }}" in job["name"], (workflow, name)
+
+    def test_a_service_job_on_both_servers_takes_its_image_from_the_matrix(self) -> None:
+        both = [(w, n, j) for w, n, j in _service_jobs() if (w, n) in self.BOTH]
+        assert {(w, n) for w, n, _ in both} == {
+            ("quality-gate.yml", "test"),
+            ("examples.yml", "examples"),
+        }
+        for workflow, name, job in both:
+            image = job["services"]["postgres"]["image"]
+            assert image == "postgres:${{ matrix.postgres }}", (workflow, name, image)
+
+    def test_every_other_database_job_runs_the_floor(self) -> None:
+        """A release and a deployment path are proved on the oldest server confiture supports."""
+        offenders = [
+            f"{workflow}:{name}: {job['services']['postgres']['image']}"
+            for workflow, name, job in _service_jobs()
+            if (workflow, name) not in self.BOTH
+            and job["services"]["postgres"]["image"] != "postgres:16"
+        ]
+        assert offenders == []
+
+    def test_body_analysis_builds_its_server_from_the_matrix(self) -> None:
+        script = _run_scripts(_steps("quality-gate.yml", "plpgsql-check"))
+        assert "postgresql-${{ matrix.postgres }}-plpgsql-check" in script
+        assert "FROM postgres:${{ matrix.postgres }}@${{ matrix.digest }}" in script
+        include = self._job("quality-gate.yml", "plpgsql-check")["strategy"]["matrix"]["include"]
+        digests = {row["postgres"]: row["digest"] for row in include}
+        assert set(digests) == set(self.SERVERS)
+        assert all(re.fullmatch(r"sha256:[0-9a-f]{64}", d) for d in digests.values()), digests
+
+    def test_the_test_leg_dumps_with_a_client_as_new_as_its_server(self) -> None:
+        """pg_dump refuses a server newer than itself; the runner's stock client is 16."""
+        script = _run_scripts(_steps("quality-gate.yml", "test"))
+        assert "postgresql-client-${{ matrix.postgres }}" in script
+        assert "/usr/lib/postgresql/${{ matrix.postgres }}/bin" in script
+
+    def test_no_workflow_names_a_server_below_the_floor(self) -> None:
+        offenders = [
+            f"{path.relative_to(REPO_ROOT)}: {match.group(0)}"
+            for path in [*sorted(WORKFLOWS.glob("*.yml")), *_tracked("ci")]
+            for match in re.finditer(r"postgres(?:ql)?[-:](\d+)", path.read_text())
+            if int(match.group(1)) < 16
+        ]
+        assert offenders == []
