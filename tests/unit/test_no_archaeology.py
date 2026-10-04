@@ -1,7 +1,9 @@
 """No development archaeology in what ships: campaign references, TODO/FIXME/HACK.
 
-A repository should read as if written in one session. Under ``python/`` and ``tests/``
-nothing may name the plan that produced it: a numbered phase (hyphenated or not), a
+A repository should read as if written in one session. Under ``python/``, ``tests/`` and
+``scripts/`` nothing may name the plan that produced it — not in a line, not in a file's
+name: a numbered phase (hyphenated, spaced, or run into a name: ``TestPhase03``,
+``test_phase6_hooks.py``), a
 numbered cycle, an owner's decision by number or by its id (``D13``), a review finding id (``ARC-02``,
 ``LINT-07``, ``SEC-M1``), a plan step (``(P4)``), a path under the gitignored plan
 directory, or "this campaign". Nor may it carry a ``TODO`` / ``FIXME`` / ``HACK``
@@ -30,6 +32,8 @@ THIS_FILE = Path(__file__).relative_to(REPO_ROOT).as_posix()
 
 # Built from pieces so this file does not match its own pattern.
 _PHASE = "Phase" + r"[ -][0-9]"
+#: A numbered phase run into an identifier or a file name.
+_NAMED_PHASE = "Phase" + r"_?[0-9]"
 _BRACKET_PHASE = r"\[" + "Phase" + r" [0-9]"
 _CYCLE = r"\b" + "Cycle" + r" [0-9]"
 _DECISION = r"\b[Oo]wner " + "decision"
@@ -68,6 +72,7 @@ CODE_PATTERN = re.compile(
     "|".join(
         (
             _anycase(rf"\b{_PHASE}"),
+            _anycase(_NAMED_PHASE),
             _anycase(_CYCLE),
             *_CAMPAIGN_SHAPES,
             _MARKERS,
@@ -115,9 +120,22 @@ def _hits(files: list[Path], pattern: re.Pattern[str]) -> list[str]:
     return found
 
 
+#: Where the code-level rule applies: what ships, what tests it, what generates it.
+CODE_PATHS = ("python", "tests", "scripts")
+
+
 def test_code_and_tests_carry_no_archaeology() -> None:
-    hits = _hits(_tracked("python", "tests"), CODE_PATTERN)
+    hits = _hits(_tracked(*CODE_PATHS), CODE_PATTERN)
     assert hits == [], "development archaeology in code or tests:\n" + "\n".join(hits)
+
+
+def test_no_file_is_named_after_the_plan() -> None:
+    named = [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in _tracked(*CODE_PATHS)
+        if path.relative_to(REPO_ROOT).as_posix() != THIS_FILE and CODE_PATTERN.search(path.name)
+    ]
+    assert named == []
 
 
 def test_docs_do_not_reference_the_remediation_phases() -> None:
@@ -145,6 +163,8 @@ CAUGHT = (
     "the one parser (" + "D13" + ")",
     "(#246, " + "D4" + ")",
     "D" + "7a: a qualified json",
+    "class Test" + "Phase03CLIIntegration:",
+    "test_" + "phase6_hooks.py",
 )
 
 #: The domain word, which stays.
@@ -157,6 +177,8 @@ NOT_CAUGHT = (
     "CONFIG_011 names the installed pglast",
     "the byte 0xD1 in a hex dump",
     "a 2D grid of cells",
+    "RestoreResult.phases_completed",
+    "phase_value = PhaseConfig()",
 )
 
 

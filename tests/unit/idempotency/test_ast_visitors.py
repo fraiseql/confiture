@@ -1,22 +1,13 @@
-"""AST-backend-specific tests.
+"""What the idempotency detector gets right because it reads the parse tree.
 
-The shared :mod:`test_patterns` parity sweep covers cases that *should*
-behave identically across backends. This file holds tests for behaviors
-that are only correct on the AST backend — specifically the bugs and
-limitations issue #122 closes.
-
-and is skipped under the regex backend; the regex-only counterparts
-(in :class:`test_patterns.TestPhase03KnownLimitations`) document the
-opposite outcome.
+The bugs and limitations issue #122 closed: shapes a text match misread, each
+pinned here against the one parser.
 """
 
 from __future__ import annotations
 
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import detect_non_idempotent_patterns
-
-# These tests assert behavior that requires the AST backend; they skip
-# under the regex run instead of running with backwards assertions.
 
 
 class TestIssue122Bug1:

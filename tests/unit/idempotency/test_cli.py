@@ -850,8 +850,8 @@ class TestIdempotencyFixPythonMigrations:
         assert "20260601000003_py_one.py" in result.stdout
 
 
-class TestPhase03CLIIntegration:
-    """Cycles 10 + 11: new patterns reach the CLI both via .sql and via .py."""
+class TestPatternsReachTheCLI:
+    """The detector's patterns reach the CLI both via .sql and via .py."""
 
     def test_all_new_patterns_via_sql(self, tmp_path: Path) -> None:
         migrations_dir = tmp_path / "db" / "migrations"
@@ -917,8 +917,8 @@ class TestPhase03CLIIntegration:
         assert "20260601100000_add_check.py" in result.stdout
 
 
-class TestPhase04SeverityCLI:
-    """Cycles 7-10: --strict-cor + info-severity rendering through the CLI."""
+class TestSeverityThroughTheCLI:
+    """--strict-cor and info-severity rendering through the CLI."""
 
     def test_json_violation_carries_severity_and_blocking_key(self, tmp_path: Path) -> None:
         migrations_dir = tmp_path / "db" / "migrations"

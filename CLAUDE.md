@@ -382,6 +382,21 @@ on the same object. A fact no statement changes (column order) is an **observati
 (`schema_change.OBSERVATIONS`): no SQL, no tier, emitted only where a database is a side.
 Drift kinds and severities are a fraisier contract: tell fraisier before moving one.
 
+Each policy states its **fidelity** (`as_written`, `structural`, `materialised`): how
+closely an expression is compared. With a scratch server (`scratch_url` in the
+environment, `--scratch-url` on `drift` and `migrate diff`), `schema_sources.materialised_side`
+builds the tree into a throwaway database (`ExpectedSchemaDB`) and reads it back, and
+`MATERIALISED` compares PostgreSQL's reading with PostgreSQL's reading — every parity
+rule but `analysed_expressions` and `view_definitions`, so a CHECK, an index predicate
+and a view's query compare as stored. A payload carries `"fidelity"` only when it is
+`materialised`; `docs/reference/comparison-fidelity.md` says what each tier compares.
+Every other comparator is a rendering of the engine too: the body checks hand it sides
+whose statements carry one slot (`differ.slot_side`; `function_body_drift.changed_bodies`),
+the signature checks ask `function_signature_drift.unpaired_routines`, and the baseline
+detector compares a database with each schema-history snapshot (model wire,
+`<version>_<name>.json`) through `database_side`. `tests/unit/test_bodies_render_the_engine.py`
+and `tests/unit/test_routines_are_paired_once.py` fail on a comparator of its own.
+
 **One expression comparison** — `ddl_walk.same_value(old, new, slot=…, types=…, constants=…)`
 decides whether two expressions are one value. A tree and a database compare a default as
 a parse tree whose constants the database's server spells (`ConstantSpellings`, read by
