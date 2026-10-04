@@ -7,10 +7,10 @@ class keeps thin delegating methods, which are its public surface and its patch 
 from __future__ import annotations
 
 import logging
+from string.templatelib import Template
 from typing import TYPE_CHECKING, Any
 
 import psycopg
-from psycopg import sql as pgsql
 
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.ledger import LIVE_ROWS, ledger_exists, steps_table
@@ -24,6 +24,14 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
+
+#: The ledger's indexes: the suffix each one's name ends in, and its key.
+_LEDGER_INDEXES: tuple[tuple[str, Template], ...] = (
+    ("pk_confiture", t"pk_confiture"),
+    ("slug", t"slug"),
+    ("version", t"version"),
+    ("applied_at", t"applied_at DESC"),
+)
 
 
 def _qualified_table(migrator: EngineHost) -> str:
@@ -54,9 +62,9 @@ def initialize(migrator: EngineHost) -> None:
     try:
         if not ledger_exists(migrator.connection, _qualified_table(migrator)):
             # Create new table with Trinity pattern
-            migrator._execute_sql(
-                pgsql.SQL("""
-                CREATE TABLE IF NOT EXISTS {} (
+            ledger = migrator._table_ident
+            migrator._execute_sql(t"""
+                CREATE TABLE IF NOT EXISTS {ledger:i} (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     pk_confiture BIGINT GENERATED ALWAYS AS IDENTITY UNIQUE,
                     slug TEXT NOT NULL UNIQUE,
@@ -68,49 +76,26 @@ def initialize(migrator: EngineHost) -> None:
                     applied_by TEXT,
                     archived_into VARCHAR(255)
                 )
-                """).format(migrator._table_ident)
-            )
+                """)
 
             # Create indexes — index names use the validated _table_base
-            migrator._execute_sql(
-                pgsql.SQL("CREATE INDEX IF NOT EXISTS {} ON {}(pk_confiture)").format(
-                    pgsql.Identifier(f"idx_{migrator._table_base}_pk_confiture"),
-                    migrator._table_ident,
+            for suffix, key in _LEDGER_INDEXES:
+                index = f"idx_{migrator._table_base}_{suffix}"
+                migrator._execute_sql(
+                    t"CREATE INDEX IF NOT EXISTS {index:i} ON {ledger:i}({key:q})"
                 )
-            )
-            migrator._execute_sql(
-                pgsql.SQL("CREATE INDEX IF NOT EXISTS {} ON {}(slug)").format(
-                    pgsql.Identifier(f"idx_{migrator._table_base}_slug"),
-                    migrator._table_ident,
-                )
-            )
-            migrator._execute_sql(
-                pgsql.SQL("CREATE INDEX IF NOT EXISTS {} ON {}(version)").format(
-                    pgsql.Identifier(f"idx_{migrator._table_base}_version"),
-                    migrator._table_ident,
-                )
-            )
-            migrator._execute_sql(
-                pgsql.SQL("CREATE INDEX IF NOT EXISTS {} ON {}(applied_at DESC)").format(
-                    pgsql.Identifier(f"idx_{migrator._table_base}_applied_at"),
-                    migrator._table_ident,
-                )
-            )
         else:
             # Issue #137 — a ledger created before 0.17.0 has no `applied_by`
             # column; IF NOT EXISTS adds it, and the rows already there keep
             # `applied_by IS NULL` ("applied before 0.17.0; role unknown") as
             # a documented invariant.
             migrator._execute_sql(
-                pgsql.SQL("ALTER TABLE {} ADD COLUMN IF NOT EXISTS applied_by TEXT").format(
-                    migrator._table_ident
-                )
+                t"ALTER TABLE {migrator._table_ident:i} ADD COLUMN IF NOT EXISTS applied_by TEXT"
             )
             # Issue #539 — rows `migrate squash` archived into a baseline.
             migrator._execute_sql(
-                pgsql.SQL(
-                    "ALTER TABLE {} ADD COLUMN IF NOT EXISTS archived_into VARCHAR(255)"
-                ).format(migrator._table_ident)
+                t"ALTER TABLE {migrator._table_ident:i} "
+                t"ADD COLUMN IF NOT EXISTS archived_into VARCHAR(255)"
             )
 
         migrator.connection.commit()
@@ -127,10 +112,7 @@ def initialize(migrator: EngineHost) -> None:
 def is_applied(migrator: EngineHost, version: str) -> bool:
     """Check if migration *version* has been applied."""
     with migrator.connection.cursor() as cursor:
-        cursor.execute(
-            pgsql.SQL("SELECT COUNT(*) FROM {} WHERE version = %s").format(migrator._table_ident),
-            (version,),
-        )
+        cursor.execute(t"SELECT COUNT(*) FROM {migrator._table_ident:i} WHERE version = {version}")
         result = cursor.fetchone()
         if result is None:
             return False
@@ -142,9 +124,8 @@ def get_applied_versions(migrator: EngineHost) -> list[str]:
     """Return all applied migration versions, ordered by applied_at ascending."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(
-            pgsql.SQL("SELECT version FROM {} AS ledger WHERE {} ORDER BY applied_at ASC").format(
-                migrator._table_ident, LIVE_ROWS
-            )
+            t"SELECT version FROM {migrator._table_ident:i} AS ledger "
+            t"WHERE {LIVE_ROWS:q} ORDER BY applied_at ASC"
         )
         return [row[0] for row in cursor.fetchall()]
 
@@ -153,10 +134,8 @@ def get_applied_migrations_with_timestamps(migrator: EngineHost) -> list[dict[st
     """Return applied migrations with version, name, and applied_at timestamp."""
     with migrator.connection.cursor() as cursor:
         cursor.execute(
-            pgsql.SQL(
-                "SELECT version, name, applied_at FROM {} AS ledger WHERE {} "
-                "ORDER BY applied_at ASC"
-            ).format(migrator._table_ident, LIVE_ROWS)
+            t"SELECT version, name, applied_at FROM {migrator._table_ident:i} AS ledger "
+            t"WHERE {LIVE_ROWS:q} ORDER BY applied_at ASC"
         )
         return [
             {
@@ -176,10 +155,8 @@ def get_current_revision_row(migrator: EngineHost) -> dict[str, Any] | None:
     """
     with migrator.connection.cursor() as cursor:
         cursor.execute(
-            pgsql.SQL(
-                "SELECT version, name, applied_at, checksum FROM {} AS ledger WHERE {} "
-                "ORDER BY applied_at DESC LIMIT 1"
-            ).format(migrator._table_ident, LIVE_ROWS)
+            t"SELECT version, name, applied_at, checksum FROM {migrator._table_ident:i} "
+            t"AS ledger WHERE {LIVE_ROWS:q} ORDER BY applied_at DESC LIMIT 1"
         )
         row = cursor.fetchone()
     if row is None:

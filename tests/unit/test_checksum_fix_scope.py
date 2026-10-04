@@ -24,11 +24,13 @@ calls any more.
 from __future__ import annotations
 
 from pathlib import Path
+from string.templatelib import Template
 from unittest.mock import MagicMock
 
 import pytest
 
 from confiture.core.checksum import ChecksumMismatch, MigrationChecksumVerifier
+from confiture.sql_text import rendered
 
 
 def _mismatch(version: str, name: str, actual: str) -> ChecksumMismatch:
@@ -51,10 +53,17 @@ def conn() -> MagicMock:
     return c
 
 
+def _bound(statement: Template) -> list[object]:
+    """The values *statement* sends as parameters: its bare interpolations."""
+    return [i.value for i in statement.interpolations if not i.format_spec]
+
+
 def _updated_versions(conn: MagicMock) -> list[str]:
     """The version bound to each UPDATE, in order."""
     return [
-        call[0][1][1] for call in conn._cursor.execute.call_args_list if "UPDATE" in str(call[0][0])
+        _bound(call[0][0])[1]
+        for call in conn._cursor.execute.call_args_list
+        if "UPDATE" in rendered(call[0][0])
     ]
 
 
@@ -78,7 +87,7 @@ class TestScope:
 
         verifier.update_checksums_for([_mismatch("002", "add_email", "deadbeef")])
 
-        assert conn._cursor.execute.call_args[0][1][0] == "deadbeef"
+        assert _bound(conn._cursor.execute.call_args[0][0])[0] == "deadbeef"
 
     def test_no_mismatches_touches_nothing(self, conn: MagicMock) -> None:
         verifier = MigrationChecksumVerifier(conn)

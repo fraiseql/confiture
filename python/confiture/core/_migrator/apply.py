@@ -29,7 +29,6 @@ from typing import Any, ClassVar
 
 import psycopg
 import psycopg.pq
-from psycopg import sql as pgsql
 
 from confiture.core._migrator._constants import _VIEW_COLUMN_RENAME_RE
 from confiture.core._migrator.loader import load_migration_class
@@ -59,19 +58,19 @@ _DEPENDENT_VIEWS_HINT = (
 
 def create_savepoint(connection: Any, name: str) -> None:
     with connection.cursor() as cursor:
-        cursor.execute(pgsql.SQL("SAVEPOINT {}").format(pgsql.Identifier(name)))
+        cursor.execute(t"SAVEPOINT {name:i}")
 
 
 def release_savepoint(connection: Any, name: str) -> None:
     with connection.cursor() as cursor:
-        cursor.execute(pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(name)))
+        cursor.execute(t"RELEASE SAVEPOINT {name:i}")
 
 
 def rollback_to_savepoint(connection: Any, name: str, *, commit: bool = True) -> None:
     """Undo to *name*; with ``commit``, end the transaction too (a full rollback if that fails)."""
     try:
         with connection.cursor() as cursor:
-            cursor.execute(pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(name)))
+            cursor.execute(t"ROLLBACK TO SAVEPOINT {name:i}")
         if commit:
             connection.commit()
     except psycopg.Error:

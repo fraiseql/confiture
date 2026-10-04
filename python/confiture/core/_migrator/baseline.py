@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import psycopg
-from psycopg import sql as pgsql
 
 from confiture.core import live_catalog
 from confiture.core._migrator.discovery import parse_migration_filename
@@ -105,10 +104,8 @@ def _read_source_tracking_table(
     try:
         with psycopg.connect(source_dsn) as src_conn, src_conn.cursor() as cursor:
             cursor.execute(
-                pgsql.SQL(
-                    "SELECT version, name, applied_at, execution_time_ms, "
-                    "checksum FROM {} ORDER BY version ASC"
-                ).format(src_ident)
+                t"SELECT version, name, applied_at, execution_time_ms, "
+                t"checksum FROM {src_ident:i} ORDER BY version ASC"
             )
             rows = cursor.fetchall()
             columns = [desc[0] for desc in (cursor.description or [])]
@@ -147,7 +144,7 @@ def clear_tracking_table(migrator: EngineHost) -> int:
     Returns the number of rows deleted.
     """
     with migrator.connection.cursor() as cursor:
-        cursor.execute(pgsql.SQL("DELETE FROM {}").format(migrator._table_ident))
+        cursor.execute(t"DELETE FROM {migrator._table_ident:i}")
         deleted = cursor.rowcount
     return deleted
 
@@ -257,7 +254,7 @@ def drop_user_schemas(migrator: EngineHost, schemas: list[str]) -> list[str]:
         with migrator.connection.cursor() as cursor:
             for schema in schemas:
                 logger.info("Dropping schema %s", schema)
-                cursor.execute(pgsql.SQL("DROP SCHEMA {} CASCADE").format(pgsql.Identifier(schema)))
+                cursor.execute(t"DROP SCHEMA {schema:i} CASCADE")
             # Always recreate public
             cursor.execute("CREATE SCHEMA public")
         return list(schemas)
@@ -310,7 +307,7 @@ def backup_tracking_table(migrator: EngineHost) -> list[dict[str, Any]]:
         return []
 
     with migrator.connection.cursor() as cursor:
-        cursor.execute(pgsql.SQL("SELECT * FROM {}").format(migrator._table_ident))
+        cursor.execute(t"SELECT * FROM {migrator._table_ident:i}")
         columns = [desc[0] for desc in (cursor.description or [])]
         return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from string.templatelib import Template
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol
 
 if TYPE_CHECKING:
@@ -82,9 +83,7 @@ class EngineHost(Protocol):
     @property
     def _table_ident(self) -> pgsql.Identifier: ...
 
-    def _execute_sql(
-        self, query: str | pgsql.Composable, params: tuple[str, ...] | None = None
-    ) -> None: ...
+    def _execute_sql(self, query: str | Template) -> None: ...
 
     def _is_applied(self, version: str) -> bool: ...
 

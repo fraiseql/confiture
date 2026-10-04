@@ -27,15 +27,26 @@ PACKAGE = REPO_ROOT / "python" / "confiture"
 
 #: The modules whose executed SQL is templates, relative to ``python/confiture``.
 CONVERTED: tuple[str, ...] = (
+    "core/_migrator/apply.py",
+    "core/_migrator/baseline.py",
+    "core/_migrator/engine.py",
+    "core/_migrator/ports.py",
+    "core/_migrator/replay.py",
+    "core/_migrator/rollback.py",
+    "core/_migrator/squashed.py",
+    "core/_migrator/state.py",
     "core/backfill.py",
+    "core/checksum.py",
     "core/dry_run.py",
     "core/large_tables.py",
+    "core/ledger.py",
     "core/locking.py",
     "core/schema_to_schema.py",
     "core/seed/executor.py",
     "core/seed/validation/prep_seed/level_4_runtime.py",
     "core/seed/validation/prep_seed/level_5_execution.py",
     "core/seed/validation/prep_seed/resolvers.py",
+    "core/squash.py",
     "core/step_runner.py",
     "core/syncer.py",
     "testing/fixtures/data_validator.py",
@@ -44,7 +55,13 @@ CONVERTED: tuple[str, ...] = (
 )
 
 #: A call this guard would refuse, kept for a reason: ``(module, line text)`` → why.
-ALLOWED: dict[tuple[str, str], str] = {}
+ALLOWED: dict[tuple[str, str], str] = {
+    ("core/ledger.py", "return pgsql.Identifier(*parts)"): (
+        "the tracking table, bare or schema-qualified, is one value every ledger "
+        "statement interpolates as {table:i}; psycopg renders a qualified name "
+        "under :i only from an Identifier, a str there being one identifier"
+    ),
+}
 
 BUILDERS = frozenset({"SQL", "Identifier", "Literal", "Placeholder", "Composed"})
 EXECUTORS = frozenset({"execute", "executemany", "copy"})

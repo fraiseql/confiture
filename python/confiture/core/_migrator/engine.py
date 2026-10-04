@@ -108,30 +108,22 @@ class MigrationEngine:
         """Return a properly quoted SQL identifier for the tracking table."""
         return table_identifier(self.migration_table)
 
-    def _execute_sql(
-        self,
-        query: str | pgsql.Composable | Template,
-        params: tuple[str, ...] | None = None,
-    ) -> None:
+    def _execute_sql(self, query: str | Template) -> None:
         """Execute SQL with detailed error reporting.
 
         Args:
-            sql: SQL statement to execute
-            params: Optional query parameters
+            query: The statement; a template carries its own values.
 
         Raises:
             SQLError: If SQL execution fails with detailed context
         """
         try:
             with self.connection.cursor() as cursor:
-                if params:
-                    cursor.execute(query, params)
-                else:
-                    cursor.execute(query)
+                cursor.execute(query)
         except psycopg.Error as e:
             raise SQLError(
                 rendered(query, self.connection),
-                params,
+                None,
                 e,
                 resolution_hint="Check the SQL syntax and ensure the target database objects exist",
             ) from e

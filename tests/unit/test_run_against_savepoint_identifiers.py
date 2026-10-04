@@ -1,4 +1,4 @@
-"""``run_against`` names its savepoints through ``sql.Identifier``.
+"""``run_against`` names its savepoints as identifiers, ``{name:i}`` in a template.
 
 A per-migration savepoint was ``f"SAVEPOINT sp_{migration.version}"``; a
 version is whatever the migration class declares.
@@ -7,12 +7,12 @@ version is whatever the migration class declares.
 from __future__ import annotations
 
 from pathlib import Path
+from string.templatelib import Template
 from typing import Any
 from unittest.mock import MagicMock
 
-from psycopg import sql as pgsql
-
 from confiture.core._migrator.session import MigratorSession
+from confiture.sql_text import rendered
 from tests.unit._doubles import injected_loader
 
 
@@ -40,7 +40,7 @@ class _Migration:
 
 
 def _text(sql: Any) -> str:
-    return sql.as_string() if isinstance(sql, pgsql.Composable) else str(sql)
+    return rendered(sql)
 
 
 def test_savepoint_statements_are_composed() -> None:
@@ -55,7 +55,7 @@ def test_savepoint_statements_are_composed() -> None:
     savepoints = [s for s in statements if "SAVEPOINT" in _text(s)]
     assert savepoints, [_text(s) for s in statements]
     for statement in savepoints:
-        assert isinstance(statement, pgsql.Composable), _text(statement)
+        assert isinstance(statement, Template), _text(statement)
     rendered = [" ".join(_text(s).split()) for s in savepoints]
     assert 'SAVEPOINT "sp_20260101120000"' in rendered
     assert 'RELEASE SAVEPOINT "sp_20260101120000"' in rendered
