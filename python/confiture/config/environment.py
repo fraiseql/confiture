@@ -796,20 +796,24 @@ class OwnershipExpectation(BaseModel):
 
 
 class DriftConfig(BaseModel):
-    """``drift:`` — how ``confiture drift`` and ``migrate validate --check-live-drift`` judge column order (#226).
+    """``drift:`` — how ``confiture drift`` and ``migrate validate --check-live-drift`` judge column order (#226) and stray objects.
 
     ``ignore_column_order`` turns the ``column_order_mismatch`` item off;
     ``column_order_severity`` is ``warning`` (default, never fails a run on its
     own) or ``critical`` (fails like a missing column). ``--ignore-column-order``
-    on either command wins over the file.
+    on either command wins over the file. ``extra_objects`` decides which stray
+    schemas, extensions, domains, policies, … an ``extra_object`` reports;
+    ``--extra-objects`` wins over the file.
 
     Attributes:
         ignore_column_order: Never report ``column_order_mismatch`` (default: false).
         column_order_severity: Severity of a ``column_order_mismatch`` item: ``warning`` (default) or ``critical`` (fails the run).
+        extra_objects: ``declared`` (default): an ``extra_object`` (info) only of a kind the DDL declares, in a schema it declares. ``all``: one of any kind, a policy or rule nobody declared included, graded ``warning`` so a deploy gate can escalate it. The default schema is never reported unless the DDL creates it.
     """
 
     ignore_column_order: bool = False
     column_order_severity: Literal["warning", "critical"] = "warning"
+    extra_objects: Literal["declared", "all"] = "declared"
 
 
 def _read_config_yaml(config_path: Path, *, allow_empty: bool = False) -> dict[str, Any]:

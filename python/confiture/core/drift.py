@@ -12,7 +12,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
 
 import psycopg
 
@@ -85,6 +85,7 @@ from confiture.core.schema_sources import materialised_side
 from confiture.core.server_constants import server_constants
 from confiture.core.type_lattice import signatures_match
 from confiture.exceptions import ConfigurationError, SchemaError
+from confiture.exceptions import ValidationError as InvalidOption
 
 if TYPE_CHECKING:
     from confiture.config.environment import AclExpectation, AclGrant, OwnershipExpectation
@@ -529,6 +530,10 @@ def _constraint_label(constraint: Constraint) -> str:
 # Drift is the one comparison, said as findings
 # ---------------------------------------------------------------------------
 
+#: Which stray objects of the kinds no other drift type names are reported
+#: (``drift.extra_objects``): those of a kind the DDL declares, or all of them.
+ExtraObjects = Literal["declared", "all"]
+
 #: How drift compares: the tree is an author's and the database PostgreSQL's,
 #: whatever each model says (a test may build both from DDL).
 _POLICY = replace(CATALOGUED, author="new")
@@ -636,6 +641,9 @@ class _Findings:
     expected: SchemaModel
     actual: SchemaModel
     column_order_severity: DriftSeverity
+    #: Which stray objects of the kinds no other type names are reported:
+    #: ``declared`` kinds only (info), or ``all`` of them (warning).
+    extra_objects: ExtraObjects = "declared"
 
     def render(
         self, changes: list[SchemaChange], report: DriftReport, *, column_order: bool
@@ -898,10 +906,15 @@ class _Findings:
         ]
         kinds = {obj.ref.kind for obj in declared}
         schemas = {obj.ref.schema for obj in declared}
+        every = self.extra_objects == "all"
         extra = [
             _object_for(live, c.ref, c.obj.signature)
             for c in changes
-            if isinstance(c, ObjectDropped) and c.ref.kind in kinds and c.ref.schema in schemas
+            if isinstance(c, ObjectDropped)
+            and (
+                (c.ref.kind in kinds and c.ref.schema in schemas)
+                or (every and c.ref.kind in OTHER_OBJECT_KINDS)
+            )
         ]
         for obj in sorted(missing, key=_order):
             report.drift_items.append(
@@ -919,7 +932,12 @@ class _Findings:
             report.drift_items.append(
                 DriftItem(
                     drift_type=_OBJECT_DRIFT_TYPES[obj.ref.kind][1],
-                    severity=DriftSeverity.INFO,
+                    # Asked for every stray object, for a gate to escalate: a warning.
+                    severity=(
+                        DriftSeverity.WARNING
+                        if every and obj.ref.kind in OTHER_OBJECT_KINDS
+                        else DriftSeverity.INFO
+                    ),
                     object_name=obj.catalogued,
                     subject=obj.subject,
                     expected=None,
@@ -1013,6 +1031,24 @@ def _tview_options(ref: ObjectRef, expected: SchemaModel, actual: SchemaModel) -
     return items
 
 
+def extra_objects_of(flag: str | None, configured: ExtraObjects) -> ExtraObjects:
+    """``--extra-objects`` when given, else the config's ``drift.extra_objects``.
+
+    Raises:
+        ValidationError: ``VALID_001`` for a flag that is neither ``declared`` nor ``all``.
+    """
+    if flag is None:
+        return configured
+    if flag == "all":
+        return "all"
+    if flag == "declared":
+        return "declared"
+    raise InvalidOption(
+        f"Invalid --extra-objects {flag!r}: use 'declared' or 'all'.",
+        resolution_hint="--extra-objects all reports every stray object, as a warning.",
+    )
+
+
 def drift_config_from(config_data: Any) -> "DriftConfig":
     """The ``drift:`` block of a loaded config as a :class:`DriftConfig` (#226).
 
@@ -1035,7 +1071,10 @@ def drift_config_from(config_data: Any) -> "DriftConfig":
         raise ConfigurationError(
             f"Invalid 'drift' configuration: {exc.errors()[0].get('msg', exc)}",
             error_code="CONFIG_001",
-            resolution_hint="Allowed keys: ignore_column_order (bool), column_order_severity (warning|critical).",
+            resolution_hint=(
+                "Allowed keys: ignore_column_order (bool), column_order_severity "
+                "(warning|critical), extra_objects (declared|all)."
+            ),
         ) from exc
 
 
@@ -1069,6 +1108,7 @@ class SchemaDriftDetector:
         ignore_column_order: bool = False,
         column_order_severity: str = "warning",
         scratch_url: str | None = None,
+        extra_objects: ExtraObjects = "declared",
     ):
         """Initialize drift detector.
 
@@ -1081,9 +1121,13 @@ class SchemaDriftDetector:
             scratch_url: A writable server to build a schema file into and read it
                 back from, so its expressions compare as PostgreSQL stores them
                 (``materialised``); ``None`` compares them structurally.
+            extra_objects: ``declared`` reports a stray schema, extension, policy, …
+                (``extra_object``, info) only of a kind the DDL declares; ``all``
+                reports one of any kind, as a warning.
         """
         self.connection = connection
         self.scratch_url = scratch_url
+        self.extra_objects: ExtraObjects = extra_objects
         self.ignore_column_order = ignore_column_order
         self.column_order_severity = (
             DriftSeverity.CRITICAL if column_order_severity == "critical" else DriftSeverity.WARNING
@@ -1135,7 +1179,7 @@ class SchemaDriftDetector:
         )
         expected, actual = self._kept(expected), self._kept(actual)
         diff = SchemaDiffer().compare_sides(stated_side(actual), stated_side(expected), policy)
-        _Findings(expected, actual, self.column_order_severity).render(
+        _Findings(expected, actual, self.column_order_severity, self.extra_objects).render(
             diff.changes, report, column_order=not self.ignore_column_order
         )
         report.detection_time_ms = int((time.perf_counter() - start_time) * 1000)

@@ -24,6 +24,7 @@ from confiture.core.drift import (
     OwnershipDriftDetector,
     SchemaDriftDetector,
     drift_config_from,
+    extra_objects_of,
 )
 from confiture.core.validation.config_loaders import (
     load_acl_expectations,
@@ -45,6 +46,7 @@ class _DriftRequest:
     warn_only: bool
     fail_on_warning: bool
     scratch_url: str | None = None
+    extra_objects: str | None = None
 
 
 def _run_drift(
@@ -91,6 +93,7 @@ def _run_drift(
                 ignore_column_order=request.ignore_column_order or drift_cfg.ignore_column_order,
                 column_order_severity=drift_cfg.column_order_severity,
                 scratch_url=scratch_url_from_config(config_data, request.scratch_url),
+                extra_objects=extra_objects_of(request.extra_objects, drift_cfg.extra_objects),
             ).compare_with_schema_file(str(request.schema), default_schema=request.default_schema)
         if request.check_acls:
             drift_report = _merge(drift_report, AclDriftDetector(conn).check(expectations))
@@ -176,6 +179,15 @@ def drift(
         help="Demote MISSING_GRANT items from critical to warning (progressive rollout)",
     ),
     scratch_url: str | None = scratch_url_option(),
+    extra_objects: str | None = typer.Option(
+        None,
+        "--extra-objects",
+        help=(
+            "Which stray schemas, extensions, domains, policies, … to report as extra_object: "
+            "'declared' (default) only of a kind the DDL declares, as info; 'all' of every "
+            "kind, as a warning. Also drift.extra_objects in the config"
+        ),
+    ),
     format_output: str = format_option("table", "json"),
     fail_on_warning: bool = typer.Option(
         False,
@@ -237,6 +249,7 @@ def drift(
         warn_only=warn_only,
         fail_on_warning=fail_on_warning,
         scratch_url=scratch_url,
+        extra_objects=extra_objects,
     )
     try:
         _run_drift(config, request, format_output=format_output, json_mode=json_mode)

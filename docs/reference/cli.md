@@ -1778,6 +1778,7 @@ confiture migrate validate [OPTIONS]
 | `--dry-run` | - | Flag | off | Preview changes without renaming (default: off) |
 | `--check-live-drift` | - | Flag | off | Compare the live database schema against the DDL files and report each difference by kind: missing_table / extra_table, missing_column / extra_column, type_mismatch, nullable_mismatch, default_mismatch, column_order_mismatch, missing_index / extra_index, missing_constraint / extra_constraint, constraint_mismatch, missing_view / extra_view, missing_matview / extra_matview, missing_trigger / extra_trigger, missing_routine / extra_routine, missing_tview / extra_tview / tview_option_mismatch (pg_tviews), missing_object / extra_object (an extension, schema, domain, policy, … — subject.kind says which). Sequences are not compared; grants and ownership are separate checks (--check-acls, --check-ownership-coverage). Requires --config and a database connection. |
 | `--ignore-column-order` | - | Flag | off | With --check-live-drift: do not report column_order_mismatch (#226) |
+| `--extra-objects` | - | str | - | With --check-live-drift: 'all' reports every stray schema, extension, policy, … as a warning extra_object; 'declared' (default) only those of a kind the DDL declares, as info. Also drift.extra_objects in the config |
 | `--check-signatures` | - | Flag | off | Compare function signatures in --schema against the live DB. Detects stale overloads created by CREATE OR REPLACE with changed param types. Companion to --require-migration (static pre-commit check, no DB needed). Requires --config (or --env) and --schema. |
 | `--check-imports` | - | Flag | off | Import-check pending Python migration modules. Level 1: catches syntax errors and missing imports. Level 2: verifies version, name, up(), down() are defined. No database connection required. |
 | `--check-body` | - | Flag | off | Compare function bodies (prosrc) between source SQL and the live database. Requires --check-signatures. Opt-in because body comparison is heavier than signature-only comparison. |
@@ -2538,6 +2539,7 @@ confiture migrate validate [OPTIONS]
 | `--dry-run` | - | Flag | off | Preview changes without renaming (default: off) |
 | `--check-live-drift` | - | Flag | off | Compare the live database schema against the DDL files and report each difference by kind: missing_table / extra_table, missing_column / extra_column, type_mismatch, nullable_mismatch, default_mismatch, column_order_mismatch, missing_index / extra_index, missing_constraint / extra_constraint, constraint_mismatch, missing_view / extra_view, missing_matview / extra_matview, missing_trigger / extra_trigger, missing_routine / extra_routine, missing_tview / extra_tview / tview_option_mismatch (pg_tviews), missing_object / extra_object (an extension, schema, domain, policy, … — subject.kind says which). Sequences are not compared; grants and ownership are separate checks (--check-acls, --check-ownership-coverage). Requires --config and a database connection. |
 | `--ignore-column-order` | - | Flag | off | With --check-live-drift: do not report column_order_mismatch (#226) |
+| `--extra-objects` | - | str | - | With --check-live-drift: 'all' reports every stray schema, extension, policy, … as a warning extra_object; 'declared' (default) only those of a kind the DDL declares, as info. Also drift.extra_objects in the config |
 | `--check-signatures` | - | Flag | off | Compare function signatures in --schema against the live DB. Detects stale overloads created by CREATE OR REPLACE with changed param types. Companion to --require-migration (static pre-commit check, no DB needed). Requires --config (or --env) and --schema. |
 | `--check-imports` | - | Flag | off | Import-check pending Python migration modules. Level 1: catches syntax errors and missing imports. Level 2: verifies version, name, up(), down() are defined. No database connection required. |
 | `--check-body` | - | Flag | off | Compare function bodies (prosrc) between source SQL and the live database. Requires --check-signatures. Opt-in because body comparison is heavier than signature-only comparison. |
@@ -3176,6 +3178,10 @@ server, a publication, a conversion, an operator class or family, an access meth
 published enum lists them) and `subject.schema` null for one that lives in no schema. They are
 compared by existence: a redefined domain or policy is not drift. The default schema itself
 (`public`) is never reported unless the DDL creates it.
+`--extra-objects all` (or `drift.extra_objects: all` in the environment) reports an
+`extra_object` of every one of those kinds, declared or not, as a **warning**, so a deploy gate
+can escalate it: the policy nobody declared on a table with row-level security is the case it
+is for. The default is `declared`.
 
 An object the live database carries and the DDL does not declare is reported at `info`, and only for a
 kind the DDL declares at least one of, in a schema it declares: "this project does not manage views
@@ -3260,6 +3266,7 @@ confiture drift [OPTIONS]
 | `--check-ownership` | - | Flag | off | Also compare live `pg_class.relowner` against the `ownership:` block |
 | `--warn-only` | - | Flag | off | Demote MISSING_GRANT items from critical to warning (progressive rollout) |
 | `--scratch-url` | - | str | - | Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, index expressions and predicates and view bodies compare as PostgreSQL stores them (default: the environment's scratch_url; without one, they compare structurally) |
+| `--extra-objects` | - | str | - | Which stray schemas, extensions, domains, policies, … to report as extra_object: 'declared' (default) only of a kind the DDL declares, as info; 'all' of every kind, as a warning. Also drift.extra_objects in the config |
 | `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
 | `--fail-on-warning` | - | Flag | off | Exit with code 1 on warnings as well as critical drift (default: off) |
 

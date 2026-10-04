@@ -170,3 +170,78 @@ def test_every_kind_the_model_holds_is_published() -> None:
     published = load_schema("_common.schema.json")["$defs"]["DriftItem"]["properties"]
     kinds = published["subject"]["properties"]["kind"]["enum"]
     assert set(kinds) == set(OTHER_OBJECT_KINDS)
+
+
+# ---------------------------------------------------------------------------
+# `drift.extra_objects: all` — every stray object, for a deploy gate
+# ---------------------------------------------------------------------------
+
+
+def _all(url: str, tree: Path) -> list[tuple[str, str, str | None, str | None]]:
+    with psycopg.connect(url) as conn:
+        report = SchemaDriftDetector(conn, extra_objects="all").compare_with_schema_file(str(tree))
+    return sorted(
+        (
+            i.drift_type.value,
+            i.severity.value,
+            i.subject.kind if i.subject else None,
+            i.subject.name if i.subject else None,
+        )
+        for i in report.drift_items
+    )
+
+
+def test_under_all_a_kind_the_tree_never_declares_is_a_warning(
+    tree: Path, fresh_database_factory: Callable[[str], str]
+) -> None:
+    """The row-level-security case: a rule (or policy) nobody declared appears on a host."""
+    url = _built(
+        fresh_database_factory,
+        "CREATE RULE no_delete AS ON DELETE TO app.tb_doc DO INSTEAD NOTHING",
+    )
+    assert _items(url, tree) == []
+    assert _all(url, tree) == [("extra_object", "warning", "rule", "tb_doc.no_delete")]
+
+
+def test_under_all_every_extra_object_is_a_warning(
+    tree: Path, fresh_database_factory: Callable[[str], str]
+) -> None:
+    url = _built(fresh_database_factory, "CREATE POLICY stray ON app.tb_doc USING (true)")
+    assert _all(url, tree) == [("extra_object", "warning", "policy", "tb_doc.stray")]
+
+
+def test_under_all_the_default_schema_is_still_not_extra(
+    tree: Path, fresh_database_factory: Callable[[str], str]
+) -> None:
+    url = _built(fresh_database_factory, "DROP SCHEMA public CASCADE", "CREATE SCHEMA public")
+    assert _all(url, tree) == []
+
+
+def test_under_all_a_missing_object_is_what_it_was(
+    tree: Path, fresh_database_factory: Callable[[str], str]
+) -> None:
+    url = _built(fresh_database_factory, "DROP POLICY own_docs ON app.tb_doc")
+    assert _all(url, tree) == [("missing_object", "critical", "policy", "tb_doc.own_docs")]
+
+
+@pytest.mark.parametrize("how", ["flag", "config"])
+def test_the_environment_or_the_flag_turns_it_on(
+    how: str, tmp_path: Path, tree: Path, fresh_database_factory: Callable[[str], str]
+) -> None:
+    url = _built(
+        fresh_database_factory,
+        "CREATE RULE no_delete AS ON DELETE TO app.tb_doc DO INSTEAD NOTHING",
+    )
+    config = tmp_path / "local.yaml"
+    setting = "drift:\n  extra_objects: all\n" if how == "config" else ""
+    config.write_text(f"name: test\ndatabase_url: {url}\n{setting}")
+    flag = ["--extra-objects", "all"] if how == "flag" else []
+
+    result = runner.invoke(
+        app, ["drift", "--config", str(config), "--schema", str(tree), "--format", "json", *flag]
+    )
+    payload = json.loads(result.stdout)
+    _validator().validate(payload)
+    assert [(i["type"], i["severity"]) for i in payload["drift_items"]] == [
+        ("extra_object", "warning")
+    ]
