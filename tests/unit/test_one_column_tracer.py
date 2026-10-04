@@ -29,8 +29,9 @@ ALLOWED: dict[str, str] = {
         "the *names* a view outputs, so a generated migration knows whether "
         "CREATE OR REPLACE VIEW can keep them — never where a column comes from"
     ),
-    "core.ddl_walk:canonical_default": (
-        "a default read back as `SELECT <expr>`: the one expression, not a view's output"
+    "core.ddl_walk:_comparable": (
+        "an expression read as `SELECT <expr>` to compare its value: the one expression, "
+        "not a view's output"
     ),
     "core.ddl_walk:expression_columns": (
         "the columns a CHECK's or a default's expression names, read as `SELECT <expr>`"

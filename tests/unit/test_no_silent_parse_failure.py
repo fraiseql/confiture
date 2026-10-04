@@ -36,6 +36,11 @@ ALLOWED: dict[str, str] = {
         "a migration the parser rejects is preflight's PFLIGHT_UNPARSEABLE; each statement "
         "still scans for assertions"
     ),
+    "python/confiture/core/ddl_walk.py:typed_constants": (
+        "a default is text the parser already read inside its statement, or pg_get_expr's; "
+        "one it cannot read again has no constant to spell, and same_value compares it as "
+        "written"
+    ),
     "python/confiture/core/fk_extractor.py:_parse": (
         "a span that is not one statement keeps its key where it is written: the answer"
     ),

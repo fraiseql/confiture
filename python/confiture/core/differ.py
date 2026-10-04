@@ -14,10 +14,8 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
-import pglast
-
 from confiture.core.ddl_objects import DDLObject, pair_definitions
-from confiture.core.ddl_walk import canonical_default
+from confiture.core.ddl_walk import AS_WRITTEN, ConstantSpellings, same_value
 from confiture.core.linting.inventory import signatures_match
 from confiture.core.linting.quoted_names import QuotedName
 from confiture.core.schema_change import (
@@ -108,12 +106,16 @@ class ComparisonPolicy:
             unnamed constraints and indexes are paired by what they say, whatever
             name PostgreSQL gave each — a name of PostgreSQL's own shape is not the
             only one it leaves: a renamed table keeps ``old_name_pkey``.
+        constants: How the database side's server spells the tree's constants
+            (:func:`~confiture.core.server_constants.server_constants`), which a
+            comparison under ``analysed_expressions`` reads both sides' through.
     """
 
     name: Literal["author", "catalogued", "exact"]
     renames: bool
     rules: frozenset[str]
     author: Literal["old", "new"] | None = None
+    constants: ConstantSpellings = field(default=AS_WRITTEN, compare=False)
 
 
 #: Two trees: today's differ, renames detected, everything as written.
@@ -149,6 +151,7 @@ class Side:
     objects: Mapping[ObjectRef, list[DDLObject]] = field(default_factory=dict)
     warnings: list[BuildWarning] = field(default_factory=list)
     quoted: list[QuotedName] = field(default_factory=list)
+    constants: ConstantSpellings = AS_WRITTEN
 
     @classmethod
     def of(cls, read: SchemaRead, *, held: bool = False) -> Side:
@@ -341,21 +344,25 @@ def _referenced(relation: RelationName | None) -> tuple[str, str] | None:
     return None if relation is None else relation.identity
 
 
-def _default(column: Column, seen: Column, policy: ComparisonPolicy) -> str | None:
-    """*column*'s default as *policy* compares it.
+def _same_default(old: Column, new: Column, policy: ComparisonPolicy) -> bool:
+    """Whether *old* and *new* hold one default, as *policy* compares them.
 
-    PostgreSQL stores a default analysed (``'x'`` as ``'x'::text``), so under the
-    ``analysed_expressions`` rule the default is compared as a parse tree
-    (``ddl_walk.canonical_default``) — the value, not its spelling. A default the
-    rules already set aside (a ``serial``'s own ``nextval``) stays set aside, and
-    one the parser rejects is compared as written.
+    PostgreSQL stores a default analysed (``'x'`` as ``'x'::text``) and spells its
+    constants its own way, so under the ``analysed_expressions`` rule a default is
+    compared as a value (``ddl_walk.same_value``), its constants spelled by the
+    database's server. A default the rules already set aside (a ``serial``'s own
+    ``nextval``) stays set aside.
     """
-    if "analysed_expressions" not in policy.rules or seen.default is None:
-        return seen.default
-    try:
-        return canonical_default(column.default, column.type_text or column.type_key)
-    except pglast.parser.ParseError:
-        return column.default
+    old_seen = parity_column(old, policy.rules).default
+    new_seen = parity_column(new, policy.rules).default
+    analysed = "analysed_expressions" in policy.rules
+    return same_value(
+        old.default if analysed and old_seen is not None else old_seen,
+        new.default if analysed and new_seen is not None else new_seen,
+        slot="default",
+        types=(old.type_text or old.type_key, new.type_text or new.type_key),
+        constants=policy.constants if analysed else None,
+    )
 
 
 def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
@@ -518,6 +525,8 @@ class SchemaDiffer:
             policy = policy_between(old.model.source, new.model.source)
         if policy.rules and old.model.source != new.model.source:
             policy = replace(policy, author="old" if old.model.source == "author" else "new")
+        if policy.rules:
+            policy = replace(policy, constants=policy.constants | old.constants | new.constants)
 
         changes = self._compare_tables(old.tables, new.tables, policy)
         changes.extend(self._compare_enum_types(old.enum_types, new.enum_types))
@@ -777,7 +786,7 @@ class SchemaDiffer:
                 ColumnNullabilityChanged(table, old_col.folded, nullable=not new_col.not_null)
             )
 
-        if _default(old_col, old_seen, policy) != _default(new_col, new_seen, policy):
+        if not _same_default(old_col, new_col, policy):
             changes.append(
                 ColumnDefaultChanged(table, old_col.folded, old_col.default, new_col.default)
             )

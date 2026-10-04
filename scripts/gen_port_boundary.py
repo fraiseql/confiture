@@ -126,6 +126,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "schema_snapshot.py": (GLUE, ORCHESTRATION),
     "schema_sources.py": (GLUE, ORCHESTRATION),
     "schema_to_schema.py": (GLUE, ORCHESTRATION),
+    "server_constants.py": (GLUE, ORCHESTRATION),
     "seed": (GLUE, ORCHESTRATION),
     "sql_path.py": (GLUE, ORCHESTRATION),
     "ssh_tunnel.py": (GLUE, ORCHESTRATION),

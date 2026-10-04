@@ -32,6 +32,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A default is compared as the value PostgreSQL stored, not as its spelling (#564).**
+  PostgreSQL stores a constant in its type's output spelling — a `jsonb` object with its
+  keys sorted and duplicates collapsed, `'2024-1-1'` as `2024-01-01`, `'t'` as `true`,
+  `'1 day 2 hours'` as `1 day 02:00:00`, an upper-case `uuid` in lower case, `inet`
+  without `/32` — and the parse-tree comparison held a constant as opaque text, so
+  `confiture drift` reported `default_mismatch` and `migrate diff --from db` generated an
+  `ALTER … SET DEFAULT` for a database built from the very same file. The database's own
+  server now spells the tree's typed constants (`core/server_constants.py`: two read-only
+  statements, the types named the way the tree places them and validated with
+  `to_regtype`, a literal composed as a parameter), in its own session, so a `timestamptz`
+  without an offset is read in the target's `TimeZone` — as it was when the default was
+  stored. A value the server refuses (an enum label it does not hold yet) is left as
+  written, its own difference. One comparison decides, `ddl_walk.same_value`, replacing
+  `canonical_default`: a quoted number is a number only where its type is one, so
+  `'123'::text` and `123` stay two values across a type change. Measured on 20 re-spelled
+  shapes, each beside a control holding another value; a guard fails on a module that
+  compares an expression field with `==`.
+
 - **`migrate diff` sees every difference `drift` sees.** The two compared one database
   and disagreed: the diff compared no primary key, no foreign key's actions or target under
   one name, no UNIQUE's columns under one name, kept one of several unnamed CHECKs against a

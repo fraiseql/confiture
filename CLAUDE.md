@@ -382,6 +382,15 @@ on the same object. A fact no statement changes (column order) is an **observati
 (`schema_change.OBSERVATIONS`): no SQL, no tier, emitted only where a database is a side.
 Drift kinds and severities are a fraisier contract: tell fraisier before moving one.
 
+**One expression comparison** — `ddl_walk.same_value(old, new, slot=…, types=…, constants=…)`
+decides whether two expressions are one value. A tree and a database compare a default as
+a parse tree whose constants the database's server spells (`ConstantSpellings`, read by
+`core/server_constants.py` and carried on the database's `Side`), each typed by its cast or
+by the column; two trees or two databases compare as written.
+`tests/unit/test_one_expression_comparison.py` fails on a module comparing an expression
+field (`default`, `expression`, `where`, …) with `==`/`!=`, and on an expression field the
+engine names that its table does not answer for.
+
 **The seam** — `confiture.platform` re-exports what a tool builds on: `parse_schema`,
 `introspect`, `diff`, `dependency_order`, `writable_columns`, `column_facts`,
 `naming_hints`, `write_copy_seed`, `write_insert_seed`, `apply_seeds`, `validate_seeds`,
@@ -606,6 +615,7 @@ confiture/
 │   │   ├── schema_snapshot.py    # Schema history snapshot writer
 │   │   ├── schema_sources.py     # Where a schema is read from: DDL text, files, a project's build, or a l…
 │   │   ├── schema_to_schema.py   # Schema-to-Schema Migration using Foreign Data Wrapper (FDW)
+│   │   ├── server_constants.py   # How a server spells a tree's constants, so a default is compared as a v…
 │   │   ├── sql_lexer.py          # The one SQL lexer: libpg_query's scanner and parser, nothing hand-writt…
 │   │   ├── sql_path.py           # Where does a SQL-file path written in a migration point? One answer
 │   │   ├── sql_utils.py          # Shared SQL utility functions

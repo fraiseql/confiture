@@ -1752,47 +1752,196 @@ def written_type(type_node: Any) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Whether two default expressions are one default
+# Whether two expressions are one value
 # ---------------------------------------------------------------------------
 
 
-class _LiteralCasts(Visitor):
-    """Replace every cast of a literal with the literal.
+@dataclass(frozen=True)
+class ConstantSpellings:
+    """How one server spells constants: ``(as written, type) -> its output text``.
+
+    PostgreSQL stores a constant in its type's output spelling — a ``jsonb``
+    object with its keys sorted, ``'2024-1-1'`` as ``2024-01-01``, ``'t'`` as
+    ``true`` — and a parse tree holds a constant as opaque text, so two spellings
+    of one value are two strings until the server that stored one spells the
+    other. ``server_constants`` asks it; a constant it was not asked about, or
+    could not spell, is spelled as written. The type is :func:`constant_type`'s.
+    """
+
+    spelled: dict[tuple[str, str], str] = field(default_factory=dict)
+
+    def spell(self, literal: str, type_: str) -> str:
+        """*literal* of *type_* as the server spells it, or as written."""
+        return self.spelled.get((literal, type_), literal)
+
+    def __or__(self, other: ConstantSpellings) -> ConstantSpellings:
+        return ConstantSpellings({**self.spelled, **other.spelled})
+
+
+#: No server: every constant compared as written.
+AS_WRITTEN = ConstantSpellings()
+
+#: The expression slots a comparison holds: a column's default.
+Slot = Literal["default"]
+
+#: The types whose constant is a number, printed unquoted.
+_NUMBER_TYPES = frozenset({"smallint", "integer", "bigint", "numeric", "real", "double precision"})
+
+
+#: A boolean as PostgreSQL itself writes one: its output function's ``t``/``f``,
+#: and the deparser's ``true``/``false``.
+_BOOLEAN_SPELLINGS = {"t": True, "true": True, "f": False, "false": False}
+
+
+def constant_type(written: str | None) -> str | None:
+    """The type a constant of *written* is spelled in: canonical, its typmod dropped.
+
+    A typmod does not change a constant's spelling — PostgreSQL stores ``1.5`` in
+    a ``numeric(10,2)`` column's default as ``1.5`` — and an array keeps its
+    dimensions, since ``'{1, 2}'`` is spelled by ``integer[]``, not ``integer``.
+    """
+    canonical = canonical_type(written)
+    parsed = parse_type(canonical)
+    if parsed is None:
+        return canonical
+    return parsed.name + "[]" * parsed.dimensions
+
+
+def _literal(node: Any) -> str | None:
+    """The text of the constant *node* holds; ``None`` for ``NULL`` or a bit string."""
+    value = getattr(node, "val", None)
+    if isinstance(value, _pg_ast.String):
+        return value.sval
+    if isinstance(value, _pg_ast.Integer):
+        return str(value.ival)
+    if isinstance(value, _pg_ast.Float):
+        return value.fval
+    if isinstance(value, _pg_ast.Boolean):
+        return "true" if value.boolval else "false"
+    return None
+
+
+def _typed(literal: str, type_: str, constants: ConstantSpellings) -> Any:
+    """The constant *literal* of *type_*, as *constants* spell it and its type reads it.
+
+    A number type's constant is a number and a boolean's is ``true``/``false``,
+    whichever way it was written; every other type's is a string. Only the type
+    makes ``'123'`` a number: in a ``text`` column it is text.
+    """
+    spelled = constants.spell(literal, type_)
+    if type_ in _NUMBER_TYPES and re.fullmatch(r"-?\d+(\.\d+)?", spelled):
+        return _pg_ast.A_Const(isnull=False, val=_pg_ast.Float(fval=spelled))
+    if type_ == "boolean" and spelled in _BOOLEAN_SPELLINGS:
+        return _pg_ast.A_Const(
+            isnull=False, val=_pg_ast.Boolean(boolval=_BOOLEAN_SPELLINGS[spelled])
+        )
+    return _pg_ast.A_Const(isnull=False, val=_pg_ast.String(sval=spelled))
+
+
+class _TypedConstants(Visitor):
+    """Replace every cast of a constant with the constant, spelled in the cast's type.
 
     PostgreSQL casts a literal wherever its type is not yet known — ``'x'`` in a
     ``text`` default is stored ``'x'::text``, and ``lower('ABC')`` is stored
     ``lower('ABC'::text)`` — so the cast is what the analyser added, not what the
-    author wrote.
+    author wrote; what it says is the constant's type.
     """
+
+    def __init__(self, constants: ConstantSpellings) -> None:
+        self.constants = constants
+        self.seen: set[tuple[str, str]] = set()
 
     def visit_TypeCast(self, _ancestors: Any, node: Any) -> Any:
-        return node.arg if isinstance(node.arg, _pg_ast.A_Const) else None
+        if not isinstance(node.arg, _pg_ast.A_Const):
+            return None
+        literal, type_ = _literal(node.arg), constant_type(type_name(node.typeName))
+        if literal is None or type_ is None:
+            return node.arg
+        self.seen.add((literal, type_))
+        return _typed(literal, type_, self.constants)
 
 
-#: A number written as a string literal: ``'-7'::integer`` is how PostgreSQL
-#: stores ``-7``.
-_QUOTED_NUMBER = re.compile(r"'(-?\d+(?:\.\d+)?)'")
+def _same_type(cast: Any, own: str | None) -> bool:
+    return own is not None and constant_type(type_name(cast.typeName)) == own
 
 
-def canonical_default(text: str | None, column_type: str | None) -> str | None:
-    """A default expression as a comparable string, the same from DDL and from ``pg_get_expr``.
+def _comparable(
+    text: str, column_type: str | None, constants: ConstantSpellings
+) -> tuple[str | None, set[tuple[str, str]]]:
+    """*text* as a comparable string, and the typed constants it holds.
 
-    Read as a parse tree, never as text: every cast of a literal is dropped, and so is
-    an outer cast to the column's own type; a quoted number is the number; ``NULL`` is
-    no default, because PostgreSQL stores none. Over 23 defaults on PostgreSQL
-    18.4, comparing text agrees on 10 and this agrees on all 23.
+    Read as a parse tree, never as text: every cast of a constant becomes the
+    constant spelled in its type, an outer cast to the column's own type goes, a
+    constant left at the top takes the column's type, and ``NULL`` is no default,
+    because PostgreSQL stores none.
+    """
+    select: Any = pglast.parse_sql(f"SELECT {text}")[0].stmt
+    own = constant_type(column_type)
+    node = select.targetList[0].val
+    while isinstance(node, _pg_ast.TypeCast) and _same_type(node, own):
+        node = node.arg
+    select.targetList[0].val = node
+    typed = _TypedConstants(constants)
+    typed(select)
+    node = select.targetList[0].val
+    if isinstance(node, _pg_ast.A_Const) and getattr(node, "isnull", False):
+        return None, typed.seen
+    literal = _literal(node) if isinstance(node, _pg_ast.A_Const) else None
+    if literal is not None and own is not None:
+        typed.seen.add((literal, own))
+        node = _typed(literal, own, constants)
+    return RawStream()(node), typed.seen
+
+
+def typed_constants(text: str | None, column_type: str | None) -> set[tuple[str, str]]:
+    """Each constant in *text* whose type is known, as ``(as written, type)``.
+
+    A cast's constant is of the cast's type, and a constant at the top of a
+    column's default of the column's. These are what ``server_constants`` asks a
+    server to spell; text the parser rejects holds none it can name.
     """
     if text is None:
-        return None
-    select: Any = pglast.parse_sql(f"SELECT {text}")[0].stmt
-    _LiteralCasts()(select)
-    node = select.targetList[0].val
-    own = parse_type(canonical_type(column_type)) if column_type else None
-    while isinstance(node, _pg_ast.TypeCast) and own is not None:
-        cast = parse_type(canonical_type(type_name(node.typeName)))
-        if cast is None or (cast.name, cast.dimensions) != (own.name, own.dimensions):
-            break
-        node = node.arg
-    if isinstance(node, _pg_ast.A_Const) and getattr(node, "isnull", False):
-        return None
-    return _QUOTED_NUMBER.sub(r"\1", RawStream()(node))
+        return set()
+    try:
+        return _comparable(text, column_type, AS_WRITTEN)[1]
+    except pglast.parser.ParseError:
+        return set()
+
+
+def same_value(
+    old: str | None,
+    new: str | None,
+    *,
+    slot: Slot,
+    types: tuple[str | None, str | None],
+    constants: ConstantSpellings | None = AS_WRITTEN,
+) -> bool:
+    """Whether two expressions in one *slot* are one value: the one comparison of two.
+
+    With no *constants* both sides are one writer's spelling — two trees, or two
+    databases — and are compared as written. Otherwise each side is read as a
+    parse tree in its own column's type (*types*), its constants spelled by
+    *constants*, so ``'x'`` and ``'x'::text`` are one value, ``'123'::text`` and
+    ``123`` are one only while both columns are text, and ``'{"b": 1, "a":
+    2}'::jsonb`` is the object PostgreSQL stored once the server spells it. Over
+    24 defaults on PostgreSQL 18.4, comparing text agrees on 10 and this on all
+    24, and on 20 more whose constants PostgreSQL re-spells once the server spells
+    them; a side the parser rejects is compared as written.
+    """
+    del slot  # a default is the one slot compared by value so far
+    if constants is None:
+        return old == new
+    return _comparable_or_text(old, types[0], constants) == _comparable_or_text(
+        new, types[1], constants
+    )
+
+
+def _comparable_or_text(
+    text: str | None, column_type: str | None, constants: ConstantSpellings
+) -> tuple[str, str | None]:
+    if text is None:
+        return ("value", None)
+    try:
+        return ("value", _comparable(text, column_type, constants)[0])
+    except pglast.parser.ParseError:
+        return ("text", text)
