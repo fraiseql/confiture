@@ -9,8 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from psycopg import sql as pgsql
-
 if TYPE_CHECKING:
     from confiture.core._migrator.ports import SessionHost
 
@@ -43,7 +41,7 @@ def run_against(
 
     # Outer SAVEPOINT: ROLLBACK TO here at the end undoes all migration DDL.
     # No initialize() call — tracking table never needed (we skip apply()).
-    session._conn.execute(pgsql.SQL("SAVEPOINT {}").format(pgsql.Identifier(outer_sp)))
+    session._conn.execute(t"SAVEPOINT {outer_sp:i}")
     try:
         for migration_file in pending_files:
             migration_class = session.migration_loader(migration_file)
@@ -102,14 +100,12 @@ def run_against(
 
             # Transactional migration: per-migration SAVEPOINT.
             per_sp = f"sp_{migration.version}"
-            session._conn.execute(pgsql.SQL("SAVEPOINT {}").format(pgsql.Identifier(per_sp)))
+            session._conn.execute(t"SAVEPOINT {per_sp:i}")
             try:
                 start = _time.time()
                 migration.up()  # Direct call — no commit, no tracking
                 elapsed = int((_time.time() - start) * 1000)
-                session._conn.execute(
-                    pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(per_sp))
-                )
+                session._conn.execute(t"RELEASE SAVEPOINT {per_sp:i}")
                 results.append(
                     PreflightAgainstMigration(
                         version=migration.version,
@@ -120,12 +116,8 @@ def run_against(
                 )
             except Exception as exc:  # Reason: replaying user migration code under a savepoint: any failure is the verdict for that version
                 # ROLLBACK TO resets to before per_sp without destroying outer_sp.
-                session._conn.execute(
-                    pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(per_sp))
-                )
-                session._conn.execute(
-                    pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(per_sp))
-                )
+                session._conn.execute(t"ROLLBACK TO SAVEPOINT {per_sp:i}")
+                session._conn.execute(t"RELEASE SAVEPOINT {per_sp:i}")
                 results.append(
                     PreflightAgainstMigration(
                         version=migration.version,
@@ -138,12 +130,8 @@ def run_against(
         # Roll back all migration DDL — only meaningful when outer_sp is still
         # active (i.e. no non-transactional migration triggered a commit).
         if outer_sp_active:
-            session._conn.execute(
-                pgsql.SQL("ROLLBACK TO SAVEPOINT {}").format(pgsql.Identifier(outer_sp))
-            )
-            session._conn.execute(
-                pgsql.SQL("RELEASE SAVEPOINT {}").format(pgsql.Identifier(outer_sp))
-            )
+            session._conn.execute(t"ROLLBACK TO SAVEPOINT {outer_sp:i}")
+            session._conn.execute(t"RELEASE SAVEPOINT {outer_sp:i}")
 
     return PreflightAgainstResult(
         migrations=results,

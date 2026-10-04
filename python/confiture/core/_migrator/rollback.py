@@ -10,8 +10,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from psycopg import sql as pgsql
-
 from confiture.exceptions import MigrationError
 
 if TYPE_CHECKING:
@@ -63,8 +61,7 @@ def _rollback_transactional(migrator: EngineHost, migration: Migration) -> None:
         migration.down()
 
         migrator._execute_sql(
-            pgsql.SQL("DELETE FROM {} WHERE version = %s").format(migrator._table_ident),
-            (migration.version,),
+            t"DELETE FROM {migrator._table_ident:i} WHERE version = {migration.version}"
         )
 
         migrator.connection.commit()
@@ -101,8 +98,7 @@ def _rollback_non_transactional(migrator: EngineHost, migration: Migration) -> N
         migration.down()
 
         migrator._execute_sql(
-            pgsql.SQL("DELETE FROM {} WHERE version = %s").format(migrator._table_ident),
-            (migration.version,),
+            t"DELETE FROM {migrator._table_ident:i} WHERE version = {migration.version}"
         )
 
         logger.info(

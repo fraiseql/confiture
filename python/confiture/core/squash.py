@@ -32,7 +32,6 @@ from functools import partial
 from pathlib import Path
 
 import psycopg
-from psycopg import sql as pgsql
 
 from confiture.config.environment import Environment
 from confiture.config.project import SquashConfig, load_project_config
@@ -238,9 +237,8 @@ def _ledger_problems(
         return [f"has no ledger ({table}): every squashed migration is pending"]
     rows = dict(
         conn.execute(
-            pgsql.SQL("SELECT version, applied_at FROM {} AS ledger WHERE {}").format(
-                table_identifier(table), LIVE_ROWS
-            )
+            t"SELECT version, applied_at FROM {table_identifier(table):i} AS ledger "
+            t"WHERE {LIVE_ROWS:q}"
         ).fetchall()
     )
     problems: list[str] = []

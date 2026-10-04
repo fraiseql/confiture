@@ -7,14 +7,13 @@ import pytest
 
 from confiture.core._migrator.session import MigratorSession
 from confiture.exceptions import ConfigurationError
+from confiture.sql_text import rendered
 from tests.unit._doubles import injected_loader
 
 
 def _sql_text(statement: object) -> str:
-    """Rendered SQL for a plain string or a ``psycopg.sql`` composable."""
-    from psycopg import sql as pgsql
-
-    return statement.as_string() if isinstance(statement, pgsql.Composable) else str(statement)
+    """Rendered SQL for a plain string or a template."""
+    return rendered(statement)
 
 
 def _make_session(conn=None):

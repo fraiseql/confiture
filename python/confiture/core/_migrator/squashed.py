@@ -24,8 +24,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from psycopg import sql as pgsql
-
 from confiture.core.checksum import compute_checksum
 from confiture.core.ledger import LIVE_ROWS, LedgerRow, record_migration
 from confiture.core.sql_lexer import directives
@@ -115,9 +113,7 @@ def record_squashed(
 def _live_rows(migrator: EngineHost) -> list[tuple[str, str | None]]:
     with migrator.connection.cursor() as cursor:
         cursor.execute(
-            pgsql.SQL("SELECT version, checksum FROM {} AS ledger WHERE {}").format(
-                migrator._table_ident, LIVE_ROWS
-            )
+            t"SELECT version, checksum FROM {migrator._table_ident:i} AS ledger WHERE {LIVE_ROWS:q}"
         )
         return [(row[0], row[1]) for row in cursor.fetchall()]
 
@@ -130,10 +126,8 @@ def _record(
     with conn.transaction():
         with conn.cursor() as cursor:
             cursor.execute(
-                pgsql.SQL("UPDATE {} SET archived_into = %s WHERE version = ANY(%s)").format(
-                    migrator._table_ident
-                ),
-                (baseline.version, versions),
+                t"UPDATE {migrator._table_ident:i} SET archived_into = {baseline.version} "
+                t"WHERE version = ANY({versions})"
             )
         record_migration(
             conn,

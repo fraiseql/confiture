@@ -7,20 +7,21 @@ injection vector:
 1. ``_get_tracking_table`` rejects anything that is not a plain, optionally
    schema-qualified identifier — the same rule ``Migrator.__init__`` applies —
    and it does so before any connection is opened.
-2. Every query built from the name goes through ``psycopg.sql.Identifier``, so
+2. Every query built from the name is a template naming it ``{table:i}``, so
    the driver quotes it; no call site hand-quotes with an f-string.
 """
 
 from __future__ import annotations
 
+from string.templatelib import Template
 from typing import Any
 from unittest.mock import patch
 
 import pytest
-from psycopg import sql
 
 from confiture.cli.helpers import _get_tracking_table, _query_applied_versions
 from confiture.exceptions import ConfigurationError
+from confiture.sql_text import rendered
 
 _INJECTION = 'tb"; DROP SCHEMA public CASCADE; --'
 
@@ -115,25 +116,25 @@ class TestQueryAppliedVersionsUsesIdentifier:
             result = _query_applied_versions(config)
         return result, cursor, conn
 
-    def test_qualified_name_executes_a_composed_identifier(self) -> None:
+    def test_qualified_name_executes_a_quoted_identifier(self) -> None:
         result, cursor, conn = self._run("audit.tb_track")
 
         assert result == {"001", "002"}
         assert conn.closed is True
         assert len(cursor.executed) == 1
         query = cursor.executed[0]
-        assert isinstance(query, sql.Composed), (
-            f"expected psycopg.sql.Composed, got {type(query).__name__}: {query!r}"
+        assert isinstance(query, Template), (
+            f"expected a template, got {type(query).__name__}: {query!r}"
         )
-        assert query.as_string() == 'SELECT version FROM "audit"."tb_track"'
+        assert rendered(query) == 'SELECT version FROM "audit"."tb_track"'
 
     def test_bare_name_resolves_through_search_path_not_hardcoded_public(self) -> None:
         """A bare name is left to ``search_path``, as every other reader does (#188)."""
         _, cursor, _ = self._run("tb_track")
 
         query = cursor.executed[0]
-        assert isinstance(query, sql.Composed)
-        assert query.as_string() == 'SELECT version FROM "tb_track"'
+        assert isinstance(query, Template)
+        assert rendered(query) == 'SELECT version FROM "tb_track"'
 
     def test_no_string_query_is_ever_executed(self) -> None:
         _, cursor, _ = self._run("public.tb_confiture")

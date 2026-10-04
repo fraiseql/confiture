@@ -13,6 +13,7 @@ from confiture.core.checksum import (
     compute_checksum,
     compute_checksum_from_content,
 )
+from confiture.sql_text import rendered
 
 
 class TestComputeChecksum:
@@ -486,12 +487,12 @@ class TestMigrationChecksumVerifier:
         verifier = MigrationChecksumVerifier(mock_conn)
         verifier.update_checksum("001", "new_checksum")
 
-        # Check UPDATE was executed. The query is now a psycopg Composed (the
-        # tracking table is a quoted identifier, #152), so match on its repr.
+        # The UPDATE is a template carrying its own values (the tracking table
+        # is a quoted identifier, #152).
         mock_cursor.execute.assert_called()
-        call_args = mock_cursor.execute.call_args
-        assert "UPDATE" in str(call_args[0][0])
-        assert "new_checksum" in call_args[0][1]
+        statement = mock_cursor.execute.call_args[0][0]
+        assert "UPDATE" in rendered(statement)
+        assert "new_checksum" in [i.value for i in statement.interpolations]
         mock_conn.commit.assert_called()
 
     def test_uses_configured_tracking_table(self):
@@ -510,7 +511,7 @@ class TestMigrationChecksumVerifier:
         verifier = MigrationChecksumVerifier(mock_conn, migration_table="myschema.tb_custom")
         verifier._get_stored_checksums()
 
-        sql_str = str(mock_cursor.execute.call_args[0][0])
+        sql_str = rendered(mock_cursor.execute.call_args[0][0])
         assert "tb_custom" in sql_str
         assert "myschema" in sql_str
         assert "tb_confiture" not in sql_str
