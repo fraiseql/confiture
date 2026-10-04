@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import socket
+import time
 
 import psycopg
 import pytest
@@ -33,6 +34,22 @@ def _clean(conn: psycopg.Connection) -> None:
     with conn.cursor() as cur:
         cur.execute(f"DELETE FROM {LOCK_HOLDER_TABLE} WHERE lock_id = %s", (_LOCK_ID,))
     conn.commit()
+
+
+def _wait_until_gone(conn: psycopg.Connection, pid: int) -> None:
+    """Until the server has ended backend *pid*, which holds its advisory locks until then.
+
+    ``close()`` returns once the client has hung up, not once the backend has exited;
+    on a busy server (the suite under ``-n``) the lock can outlive the call by a moment.
+    """
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        found = conn.execute("SELECT 1 FROM pg_stat_activity WHERE pid = %s", (pid,)).fetchone()
+        conn.commit()
+        if found is None:
+            return
+        time.sleep(0.01)
+    pytest.fail(f"backend {pid} still running 10s after its connection closed")
 
 
 @pytest.fixture
@@ -116,7 +133,9 @@ def test_crash_safety_stale_row_recognized(test_db_url, conns) -> None:
     crasher = _connect(test_db_url)
     crasher_lock = MigrationLock(crasher, LockConfig(lock_id=_LOCK_ID, command="x"))
     crasher_lock._acquire_lock()
+    pid = crasher.info.backend_pid
     crasher.close()
+    _wait_until_gone(reader_conn, pid)
 
     reader = MigrationLock(reader_conn, LockConfig(lock_id=_LOCK_ID))
     holder = reader.read_lock_holder()

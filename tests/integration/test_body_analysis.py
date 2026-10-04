@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import psycopg
 import pytest
+from psycopg.conninfo import conninfo_to_dict
 from tests._helpers import plpgsql_check_url
 
 from confiture.core.linting import bodies
+from confiture.core.temp_database import TempDatabase
 
 #: The issue's own reproduction: a ``UUID`` variable fed from a ``BIGINT``
 #: column. PostgreSQL stores this body without resolving a thing, so it deploys
@@ -126,12 +128,25 @@ class TestTheSeam:
         """One query over every routine must survive the one kind that needs a relation."""
         assert bodies.diagnose(check_server, WITH_TRIGGER) == []
 
-    def test_the_scratch_database_is_gone_afterwards(self, check_server: str) -> None:
-        before = _databases(check_server)
+    def test_the_scratch_database_is_gone_afterwards(
+        self, check_server: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The database this call created, by name: under ``-n``, other workers create
+        and drop their own on the same server, so the server's list is not this call's."""
+        created: list[str] = []
+        enter = TempDatabase.__enter__
+
+        def recording(database: TempDatabase) -> str:
+            url = enter(database)
+            created.append(conninfo_to_dict(url)["dbname"])
+            return url
+
+        monkeypatch.setattr(TempDatabase, "__enter__", recording)
 
         bodies.diagnose(check_server, REPRODUCTION)
 
-        assert _databases(check_server) == before
+        assert len(created) == 1
+        assert created[0] not in _databases(check_server)
 
 
 class TestTheSearchPathTheApplicationUses:
