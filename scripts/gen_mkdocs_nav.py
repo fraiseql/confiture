@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep the ``nav:`` of ``mkdocs.yml`` equal to the docs tree (Phase 10, ARC-03).
+"""Keep the ``nav:`` of ``mkdocs.yml`` equal to the docs tree.
 
 Every page under ``docs/`` is listed once, titled by its first ``# `` heading,
 in a fixed section order; nothing is listed that does not exist. The rest of

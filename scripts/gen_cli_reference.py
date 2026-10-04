@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep ``docs/reference/cli.md`` in step with the CLI the package registers (Phase 10, ARC-03).
+"""Keep ``docs/reference/cli.md`` in step with the CLI the package registers.
 
 Every leaf command gets one generated block — usage line, arguments table,
 options table — between named markers, rendered from the live Typer app so it

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep ``docs/reference/configuration.md`` in step with the configuration models (Phase 10, ARC-03).
+"""Keep ``docs/reference/configuration.md`` in step with the configuration models.
 
 Renders, from the Pydantic models under ``confiture.config.environment``, one
 table per model (field, type, default, description) and one complete YAML

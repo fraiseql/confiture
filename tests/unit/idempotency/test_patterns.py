@@ -469,17 +469,6 @@ class TestOwnerToDetection:
         }
 
 
-class TestRegexBackendLimitations:
-    """Document quoted-identifier and multi-clause limitations of the regex detector.
-
-    Both tests assert behavior specific to the regex backend (still the
-    slim-install fallback, so the limitations are still real on that
-    path). The AST backend has its own coverage for these cases in
-    ``test_ast_visitors.py`` asserting the opposite outcome — both
-    files exist deliberately, one per backend.
-    """
-
-
 class TestPatternSeverityPlumbing:
     def test_create_or_replace_view_finding_has_info_severity(self):
         sql = "CREATE OR REPLACE VIEW v_users AS SELECT id FROM users;"
