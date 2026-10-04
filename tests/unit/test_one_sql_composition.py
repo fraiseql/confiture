@@ -27,12 +27,15 @@ PACKAGE = REPO_ROOT / "python" / "confiture"
 
 #: The modules whose executed SQL is templates, relative to ``python/confiture``.
 CONVERTED: tuple[str, ...] = (
+    "core/backfill.py",
     "core/dry_run.py",
+    "core/large_tables.py",
     "core/locking.py",
     "core/seed/executor.py",
     "core/seed/validation/prep_seed/level_4_runtime.py",
     "core/seed/validation/prep_seed/level_5_execution.py",
     "core/seed/validation/prep_seed/resolvers.py",
+    "core/step_runner.py",
     "testing/fixtures/data_validator.py",
     "testing/fixtures/migration_runner.py",
     "testing/sandbox.py",

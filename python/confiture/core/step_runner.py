@@ -72,34 +72,29 @@ class CheckpointStore:
         """Create the table when it is missing. Idempotent; commits."""
         with self.connection.cursor() as cur:
             cur.execute(
-                pgsql.SQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS {} (
-                        migration VARCHAR(255) NOT NULL,
-                        plan_index INTEGER NOT NULL DEFAULT 0,
-                        stage TEXT NOT NULL,
-                        state TEXT NOT NULL,
-                        batch_cursor BIGINT,
-                        rows_done BIGINT NOT NULL DEFAULT 0,
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        PRIMARY KEY (migration, plan_index, stage)
-                    )
-                    """
-                ).format(self._ident)
+                t"""
+                CREATE TABLE IF NOT EXISTS {self._ident:i} (
+                    migration VARCHAR(255) NOT NULL,
+                    plan_index INTEGER NOT NULL DEFAULT 0,
+                    stage TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    batch_cursor BIGINT,
+                    rows_done BIGINT NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    PRIMARY KEY (migration, plan_index, stage)
+                )
+                """
             )
         self.connection.commit()
 
     def records(self, migration: str | None = None) -> list[StepRecord]:
         """Every checkpoint row, oldest first; ``migration`` narrows to one version."""
-        query = pgsql.SQL(
-            "SELECT migration, plan_index, stage, state, batch_cursor, rows_done, updated_at "
-            "FROM {} {} ORDER BY migration, plan_index, updated_at"
-        ).format(
-            self._ident,
-            pgsql.SQL("WHERE migration = %s") if migration is not None else pgsql.SQL(""),
-        )
+        narrowed = t"WHERE migration = {migration}" if migration is not None else t""
         with self.connection.cursor() as cur:
-            cur.execute(query, (migration,) if migration is not None else ())
+            cur.execute(
+                t"SELECT migration, plan_index, stage, state, batch_cursor, rows_done, updated_at "
+                t"FROM {self._ident:i} {narrowed:q} ORDER BY migration, plan_index, updated_at"
+            )
             return [StepRecord(*row) for row in cur.fetchall()]
 
     def get(self, migration: str, plan_index: int, stage: str) -> StepRecord | None:
@@ -111,20 +106,15 @@ class CheckpointStore:
     def _upsert(self, migration: str, plan_index: int, stage: str, state: str, **cols: Any) -> None:
         names = ["migration", "plan_index", "stage", "state", *cols]
         values = [migration, plan_index, stage, state, *cols.values()]
-        updates = pgsql.SQL(", ").join(
-            pgsql.SQL("{0} = EXCLUDED.{0}").format(pgsql.Identifier(n)) for n in ["state", *cols]
-        )
-        query = pgsql.SQL(
-            "INSERT INTO {} ({}) VALUES ({}) "
-            "ON CONFLICT (migration, plan_index, stage) DO UPDATE SET {}, updated_at = NOW()"
-        ).format(
-            self._ident,
-            pgsql.SQL(", ").join(map(pgsql.Identifier, names)),
-            pgsql.SQL(", ").join(pgsql.Placeholder() * len(values)),
-            updates,
-        )
+        columns = pgsql.SQL(", ").join(t"{n:i}" for n in names)
+        row = pgsql.SQL(", ").join(t"{v}" for v in values)
+        updates = pgsql.SQL(", ").join(t"{n:i} = EXCLUDED.{n:i}" for n in ["state", *cols])
         with self.connection.cursor() as cur:
-            cur.execute(query, values)
+            cur.execute(
+                t"INSERT INTO {self._ident:i} ({columns:q}) VALUES ({row:q}) "
+                t"ON CONFLICT (migration, plan_index, stage) DO UPDATE SET {updates:q}, "
+                t"updated_at = NOW()"
+            )
         self.connection.commit()
 
     def start(self, migration: str, plan_index: int, stage: str) -> None:

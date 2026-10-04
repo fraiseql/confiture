@@ -10,6 +10,7 @@ import re
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from string.templatelib import Template
 from typing import Any
 
 import psycopg
@@ -18,6 +19,7 @@ from psycopg import sql as pgsql
 from confiture.core import live_catalog
 from confiture.core.ledger import split_qualified_table
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.sql_text import rendered
 
 logger = logging.getLogger(__name__)
 
@@ -93,18 +95,18 @@ def large_tables(
 _SIMPLE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
 
-def _relation(name: str) -> pgsql.Identifier:
+def _relation(name: str) -> Template:
     """A table or index name, optionally ``schema.``-qualified, as an identifier."""
     schema, bare = split_qualified_table(name)
-    return pgsql.Identifier(schema, bare) if schema else pgsql.Identifier(bare)
+    return t"{schema:i}.{bare:i}" if schema else t"{bare:i}"
 
 
-def _column_or_expression(text: str) -> pgsql.Composable:
+def _column_or_expression(text: str) -> Template:
     """A bare column name is quoted; anything else (``lower(email)``) is an expression."""
-    return pgsql.Identifier(text) if _SIMPLE_IDENT.match(text) else pgsql.SQL(text)
+    return t"{text:i}" if _SIMPLE_IDENT.match(text) else Template(text)
 
 
-def _columns(names: list[str]) -> pgsql.Composed:
+def _columns(names: list[str]) -> Template:
     return pgsql.SQL(", ").join(_column_or_expression(n) for n in names)
 
 
@@ -240,18 +242,12 @@ class BatchedMigration:
 
         with self.connection.cursor() as cur:
             # Add column without default first (instant in PG 11+)
-            rel, col = _relation(table), pgsql.Identifier(column)
-            cur.execute(
-                pgsql.SQL("ALTER TABLE {t} ADD COLUMN IF NOT EXISTS {c} {type}").format(
-                    t=rel, c=col, type=pgsql.SQL(column_type)
-                )
-            )
+            rel, kind, value = _relation(table), Template(column_type), Template(default)
+            cur.execute(t"ALTER TABLE {rel:q} ADD COLUMN IF NOT EXISTS {column:i} {kind:q}")
             self.connection.commit()
 
             # Get total rows needing update
-            cur.execute(
-                pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {c} IS NULL").format(t=rel, c=col)
-            )
+            cur.execute(t"SELECT COUNT(*) FROM {rel:q} WHERE {column:i} IS NULL")
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -274,15 +270,9 @@ class BatchedMigration:
                     try:
                         # Update batch using ctid for efficiency
                         cur.execute(
-                            pgsql.SQL(
-                                "UPDATE {t} SET {c} = {d} WHERE ctid IN ("
-                                "SELECT ctid FROM {t} WHERE {c} IS NULL LIMIT {n})"
-                            ).format(
-                                t=rel,
-                                c=col,
-                                d=pgsql.SQL(default),
-                                n=pgsql.Literal(self.config.batch_size),
-                            )
+                            t"UPDATE {rel:q} SET {column:i} = {value:q} WHERE ctid IN ("
+                            t"SELECT ctid FROM {rel:q} WHERE {column:i} IS NULL "
+                            t"LIMIT {self.config.batch_size:l})"
                         )
                         rows_affected = cur.rowcount
                         self.connection.commit()
@@ -319,11 +309,7 @@ class BatchedMigration:
                     time.sleep(self.config.sleep_between_batches)
 
             # Set default for future inserts
-            cur.execute(
-                pgsql.SQL("ALTER TABLE {t} ALTER COLUMN {c} SET DEFAULT {d}").format(
-                    t=rel, c=col, d=pgsql.SQL(default)
-                )
-            )
+            cur.execute(t"ALTER TABLE {rel:q} ALTER COLUMN {column:i} SET DEFAULT {value:q}")
             self.connection.commit()
 
             progress.elapsed_seconds = time.perf_counter() - start_time
@@ -367,20 +353,17 @@ class BatchedMigration:
         start_time = time.perf_counter()
 
         with self.connection.cursor() as cur:
-            rel = _relation(table)
-            cur.execute(
-                pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {w}").format(
-                    t=rel, w=pgsql.SQL(where_clause)
-                )
-            )
+            rel, where = _relation(table), Template(where_clause)
+            cur.execute(t"SELECT COUNT(*) FROM {rel:q} WHERE {where:q}")
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
                 return BatchProgress(total_rows=0)
 
+            relation = rendered(rel)
             cur.execute(
-                "SELECT pg_relation_size(%s::regclass) / current_setting('block_size')::int",
-                (rel.as_string(),),
+                t"SELECT pg_relation_size({relation}::regclass) "
+                t"/ current_setting('block_size')::int"
             )
             blocks = max(1, int(cur.fetchone()[0]))
             # Tuples this backfill writes carry a newer xmin than this
@@ -409,20 +392,11 @@ class BatchedMigration:
 
             for block in range(first_block, blocks, blocks_per_batch):
                 batch_num += 1
+                lower, upper = f"({block},0)", f"({block + blocks_per_batch},0)"
                 cur.execute(
-                    pgsql.SQL(
-                        "UPDATE {table} SET {column} = {expression} "
-                        "WHERE ctid >= {lower}::tid AND ctid < {upper}::tid "
-                        "AND xmin::text::bigint < {start_xid} AND ({where})"
-                    ).format(
-                        table=rel,
-                        column=pgsql.Identifier(column),
-                        expression=pgsql.SQL(expression),
-                        lower=pgsql.Literal(f"({block},0)"),
-                        upper=pgsql.Literal(f"({block + blocks_per_batch},0)"),
-                        start_xid=pgsql.Literal(start_xid),
-                        where=pgsql.SQL(where_clause),
-                    )
+                    t"UPDATE {rel:q} SET {column:i} = {Template(expression):q} "
+                    t"WHERE ctid >= {lower:l}::tid AND ctid < {upper:l}::tid "
+                    t"AND xmin::text::bigint < {start_xid:l} AND ({where:q})"
                 )
                 rows_affected = cur.rowcount
                 self.connection.commit()
@@ -468,12 +442,8 @@ class BatchedMigration:
         start_time = time.perf_counter()
 
         with self.connection.cursor() as cur:
-            rel = _relation(table)
-            cur.execute(
-                pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {w}").format(
-                    t=rel, w=pgsql.SQL(where_clause)
-                )
-            )
+            rel, where = _relation(table), Template(where_clause)
+            cur.execute(t"SELECT COUNT(*) FROM {rel:q} WHERE {where:q}")
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -493,11 +463,8 @@ class BatchedMigration:
                 batch_num += 1
 
                 cur.execute(
-                    pgsql.SQL(
-                        "DELETE FROM {t} WHERE ctid IN (SELECT ctid FROM {t} WHERE {w} LIMIT {n})"
-                    ).format(
-                        t=rel, w=pgsql.SQL(where_clause), n=pgsql.Literal(self.config.batch_size)
-                    )
+                    t"DELETE FROM {rel:q} WHERE ctid IN ("
+                    t"SELECT ctid FROM {rel:q} WHERE {where:q} LIMIT {self.config.batch_size:l})"
                 )
 
                 rows_deleted = cur.rowcount
@@ -555,8 +522,8 @@ class BatchedMigration:
         with self.connection.cursor() as cur:
             # Get total rows
             src, tgt = _relation(source_table), _relation(target_table)
-            where = pgsql.SQL(where_clause)
-            cur.execute(pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {w}").format(t=src, w=where))
+            where = Template(where_clause)
+            cur.execute(t"SELECT COUNT(*) FROM {src:q} WHERE {where:q}")
             total_rows = cur.fetchone()[0]
 
             if total_rows == 0:
@@ -575,13 +542,12 @@ class BatchedMigration:
             # Build select expressions
             transform = transform or {}
             select_list = pgsql.SQL(", ").join(
-                pgsql.SQL(transform[col]) if col in transform else pgsql.Identifier(col)
-                for col in columns
+                Template(transform[col]) if col in transform else t"{col:i}" for col in columns
             )
-            column_list = pgsql.SQL(", ").join(pgsql.Identifier(col) for col in columns)
+            column_list = pgsql.SQL(", ").join(t"{col:i}" for col in columns)
 
             # Track last ID for pagination
-            cur.execute(pgsql.SQL("SELECT MIN(ctid) FROM {t} WHERE {w}").format(t=src, w=where))
+            cur.execute(t"SELECT MIN(ctid) FROM {src:q} WHERE {where:q}")
             result = cur.fetchone()
             if result[0] is None:
                 return BatchProgress(total_rows=0)
@@ -596,10 +562,8 @@ class BatchedMigration:
 
             # Use a tracking column for batching
             cur.execute(
-                pgsql.SQL(
-                    "CREATE TEMP TABLE _batch_tracker AS "
-                    "SELECT ctid AS row_ctid, ROW_NUMBER() OVER () AS rn FROM {t} WHERE {w}"
-                ).format(t=src, w=where)
+                t"CREATE TEMP TABLE _batch_tracker AS "
+                t"SELECT ctid AS row_ctid, ROW_NUMBER() OVER () AS rn FROM {src:q} WHERE {where:q}"
             )
             self.connection.commit()
 
@@ -608,19 +572,11 @@ class BatchedMigration:
                     batch_num += 1
                     offset = processed
 
+                    upto = offset + self.config.batch_size
                     cur.execute(
-                        pgsql.SQL(
-                            "INSERT INTO {tgt} ({cols}) SELECT {exprs} FROM {src} s "
-                            "WHERE s.ctid IN (SELECT row_ctid FROM _batch_tracker "
-                            "WHERE rn > {lo} AND rn <= {hi})"
-                        ).format(
-                            tgt=tgt,
-                            cols=column_list,
-                            exprs=select_list,
-                            src=src,
-                            lo=pgsql.Literal(offset),
-                            hi=pgsql.Literal(offset + self.config.batch_size),
-                        )
+                        t"INSERT INTO {tgt:q} ({column_list:q}) SELECT {select_list:q} "
+                        t"FROM {src:q} s WHERE s.ctid IN (SELECT row_ctid FROM _batch_tracker "
+                        t"WHERE rn > {offset:l} AND rn <= {upto:l})"
                     )
 
                     rows_inserted = cur.rowcount
@@ -711,21 +667,13 @@ class OnlineIndexBuilder:
 
         try:
             with self.connection.cursor() as cur:
-                statement = pgsql.SQL(
-                    "CREATE {unique}INDEX CONCURRENTLY IF NOT EXISTS {name} ON {table} "
-                    "USING {method} ({columns}){include}{where}"
-                ).format(
-                    unique=pgsql.SQL("UNIQUE " if unique else ""),
-                    name=pgsql.Identifier(index_name),
-                    table=_relation(table),
-                    method=pgsql.Identifier(method),
-                    columns=_columns(columns),
-                    include=(
-                        pgsql.SQL(" INCLUDE (") + _columns(include) + pgsql.SQL(")")
-                        if include
-                        else pgsql.SQL("")
-                    ),
-                    where=pgsql.SQL(" WHERE " + where) if where else pgsql.SQL(""),
+                kind = t"UNIQUE " if unique else t""
+                covering = t" INCLUDE ({_columns(include):q})" if include else t""
+                partial = t" WHERE {Template(where):q}" if where else t""
+                statement = (
+                    t"CREATE {kind:q}INDEX CONCURRENTLY IF NOT EXISTS {index_name:i} "
+                    t"ON {_relation(table):q} USING {method:i} ({_columns(columns):q})"
+                    t"{covering:q}{partial:q}"
                 )
                 logger.info(f"Creating index: {index_name}")
                 cur.execute(statement)
@@ -747,9 +695,7 @@ class OnlineIndexBuilder:
         try:
             with self.connection.cursor() as cur:
                 logger.info(f"Dropping index: {index_name}")
-                cur.execute(
-                    pgsql.SQL("DROP INDEX CONCURRENTLY IF EXISTS {}").format(_relation(index_name))
-                )
+                cur.execute(t"DROP INDEX CONCURRENTLY IF EXISTS {_relation(index_name):q}")
                 logger.info(f"Index dropped: {index_name}")
         finally:
             self.connection.autocommit = old_autocommit
@@ -766,9 +712,7 @@ class OnlineIndexBuilder:
         try:
             with self.connection.cursor() as cur:
                 logger.info(f"Reindexing: {index_name}")
-                cur.execute(
-                    pgsql.SQL("REINDEX INDEX CONCURRENTLY {}").format(_relation(index_name))
-                )
+                cur.execute(t"REINDEX INDEX CONCURRENTLY {_relation(index_name):q}")
                 logger.info(f"Reindex complete: {index_name}")
         finally:
             self.connection.autocommit = old_autocommit
@@ -865,9 +809,7 @@ class TableSizeEstimator:
         """
         with self.connection.cursor() as cur:
             cur.execute(
-                pgsql.SQL("SELECT COUNT(*) FROM {t} WHERE {w}").format(
-                    t=_relation(table), w=pgsql.SQL(where_clause)
-                )
+                t"SELECT COUNT(*) FROM {_relation(table):q} WHERE {Template(where_clause):q}"
             )
             return cur.fetchone()[0]
 
