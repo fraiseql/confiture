@@ -24,18 +24,14 @@ Example:
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
+import psycopg
 from psycopg import sql as pgsql
 
 from confiture.core import live_catalog
 from confiture.core.schema_model import RelationName
 from confiture.core.type_lattice import canonical_type, parse_type
 from confiture.exceptions import PreconditionError, PreconditionValidationError
-
-if TYPE_CHECKING:
-    import psycopg
-
 
 # PreconditionError and PreconditionValidationError live in confiture.exceptions
 # ; re-exported here

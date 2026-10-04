@@ -14,14 +14,11 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+import psycopg
 from psycopg import sql as pgsql
 
 from confiture.core.ledger import LIVE_ROWS, table_identifier
-
-if TYPE_CHECKING:
-    import psycopg
 
 logger = logging.getLogger(__name__)
 

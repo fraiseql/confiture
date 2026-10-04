@@ -12,10 +12,13 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
+from pathlib import Path
+from typing import Any, ClassVar, Literal, get_args
 
 import psycopg
+from pydantic import ValidationError
 
+from confiture.config.environment import AclExpectation, AclGrant, DriftConfig, OwnershipExpectation
 from confiture.core import live_catalog
 from confiture.core.ddl_clauses import constraint_body
 from confiture.core.desired_state import load_desired_state
@@ -86,16 +89,6 @@ from confiture.core.server_constants import server_constants
 from confiture.core.type_lattice import signatures_match
 from confiture.exceptions import ConfigurationError, SchemaError
 from confiture.exceptions import ValidationError as InvalidOption
-
-if TYPE_CHECKING:
-    from confiture.config.environment import AclExpectation, AclGrant, OwnershipExpectation
-
-
-from pathlib import Path
-
-from pydantic import ValidationError
-
-from confiture.config.environment import DriftConfig
 
 logger = logging.getLogger(__name__)
 

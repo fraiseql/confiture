@@ -3,16 +3,14 @@
 import inspect
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
 import psycopg
 
+from confiture.core.hooks import Hook
+from confiture.core.preconditions import Precondition
 from confiture.core.sql_lexer import split_statements
 from confiture.core.sql_path import find_project_root, resolve_sql_file
-
-if TYPE_CHECKING:
-    from confiture.core.hooks import Hook
-    from confiture.core.preconditions import Precondition
 from confiture.exceptions import SQLError
 
 
