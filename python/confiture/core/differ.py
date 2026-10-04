@@ -98,7 +98,7 @@ class ComparisonPolicy:
     compared exactly.
 
     Attributes:
-        name: Which of the three it is.
+        name: Which of the four it is.
         renames: Whether a vanished and an appeared table or column are paired
             by similarity as one renamed.
         rules: The parity normalisations applied to both sides before an object
@@ -112,17 +112,48 @@ class ComparisonPolicy:
             comparison under ``analysed_expressions`` reads both sides' through.
     """
 
-    name: Literal["author", "catalogued", "exact"]
+    name: Literal["author", "catalogued", "materialised", "exact"]
     renames: bool
     rules: frozenset[str]
     author: Literal["old", "new"] | None = None
     constants: ConstantSpellings = field(default=AS_WRITTEN, compare=False)
+
+    @property
+    def fidelity(self) -> Fidelity:
+        """How closely an expression is compared under this policy (:data:`Fidelity`)."""
+        return _FIDELITY[self.name]
+
+
+#: How closely a comparison reads an expression — a default, a CHECK, an index key or
+#: predicate, a view's query. ``as_written``: two trees, each as its author wrote it.
+#: ``structural``: a tree and a database; a default compares as a value, its constants
+#: spelled by the database's server, and every other expression only as existing.
+#: ``materialised``: both sides as PostgreSQL stores them — the tree built into a
+#: scratch database and read back — so every expression compares exactly.
+Fidelity = Literal["as_written", "structural", "materialised"]
+
+_FIDELITY: dict[str, Fidelity] = {
+    "author": "as_written",
+    "catalogued": "structural",
+    "materialised": "materialised",
+    "exact": "materialised",
+}
 
 
 #: Two trees: today's differ, renames detected, everything as written.
 AUTHOR = ComparisonPolicy("author", renames=True, rules=frozenset())
 #: A tree and a database, either way round: every parity rule, no fuzzy renames.
 CATALOGUED = ComparisonPolicy("catalogued", renames=False, rules=ALL_PARITY_RULES)
+#: A database and a tree built into a scratch database and read back
+#: (``schema_sources.materialised_side``): both PostgreSQL's spelling, so what it
+#: analyses — an expression, a view's query — is compared as stored. What the tree
+#: decides and the catalog cannot say is still a rule: the names PostgreSQL gave
+#: what the tree left unnamed, and a TVIEW option the tree does not pin.
+MATERIALISED = ComparisonPolicy(
+    "materialised",
+    renames=False,
+    rules=ALL_PARITY_RULES - {"analysed_expressions", "view_definitions"},
+)
 #: Two databases: both in PostgreSQL's spelling, nothing to normalise.
 EXACT = ComparisonPolicy("exact", renames=False, rules=frozenset())
 
@@ -330,6 +361,15 @@ def _built_otherwise(old: Index, new: Index) -> bool:
     A side that does not say how an index is built says nothing about it.
     """
     return None not in (old.method, new.method) and old.method != new.method
+
+
+def _rebuilt(old: Index, new: Index) -> bool:
+    """Whether one index under one name indexes something else, or is built otherwise.
+
+    Its keys, uniqueness and predicate, each as the policy's rules leave it: under
+    the structural tier an expression key or a predicate is only *one exists*.
+    """
+    return _built_otherwise(old, new) or _fields_differ(("columns", "unique", "where"))(old, new)
 
 
 def _names(indexes: Iterable[Index]) -> frozenset[str]:
@@ -760,7 +800,8 @@ class SchemaDiffer:
         # Observed only where a database is a side: two trees that list a table's
         # columns in another order have not changed it, and no statement reorders one.
         old_order, new_order = tuple(old_col_map), tuple(new_col_map)
-        if policy.rules and set(old_order) == set(new_order) and old_order != new_order:
+        observed = policy.fidelity != "as_written"
+        if observed and set(old_order) == set(new_order) and old_order != new_order:
             changes.append(ColumnOrderChanged(table, old_order, new_order))
 
         return changes
@@ -832,7 +873,7 @@ class SchemaDiffer:
             # The access method is part of what an index *is*: a btree and a hash
             # index on one column are two indexes.
             identity=("columns", "unique", "method"),
-            differs=_built_otherwise,
+            differs=_rebuilt,
         )
 
     @staticmethod

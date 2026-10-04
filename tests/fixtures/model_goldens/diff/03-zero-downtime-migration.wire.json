@@ -8,8 +8,8 @@
       "tables_renamed": 0,
       "columns_added": 1,
       "columns_dropped": 0,
-      "indexes_added": 2,
-      "indexes_dropped": 0,
+      "indexes_added": 3,
+      "indexes_dropped": 1,
       "foreign_keys_added": 0,
       "foreign_keys_dropped": 0,
       "constraints_added": 0,
@@ -59,6 +59,35 @@
         "details": {
           "name": "idx_users_last_name",
           "columns": [
+            "last_name"
+          ],
+          "unique": false
+        }
+      },
+      {
+        "type": "DROP_INDEX",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "idx_users_full_name",
+          "columns": [
+            "full_name"
+          ],
+          "unique": false
+        }
+      },
+      {
+        "type": "ADD_INDEX",
+        "table": "users",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "name": "idx_users_full_name",
+          "columns": [
+            "first_name",
             "last_name"
           ],
           "unique": false

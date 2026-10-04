@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import psycopg
 
-from confiture.core.connection import create_connection, load_config
+from confiture.core.connection import create_connection, load_config, scratch_url_from_config
 from confiture.core.drift import SchemaDriftDetector, drift_config_from
 from confiture.exceptions import ConfigurationError, ConfiturError
 
@@ -82,11 +82,13 @@ def check_live_drift(
 
 
 def _detector(conn, config_path: Path, ignore_column_order: bool) -> SchemaDriftDetector:
-    """A detector honouring the config's ``drift:`` block and the CLI flag (#226)."""
+    """A detector honouring the config's ``drift:`` block, its ``scratch_url`` and the CLI flag (#226)."""
 
-    cfg = drift_config_from(load_config(config_path))
+    config_data = load_config(config_path)
+    cfg = drift_config_from(config_data)
     return SchemaDriftDetector(
         conn,
         ignore_column_order=ignore_column_order or cfg.ignore_column_order,
         column_order_severity=cfg.column_order_severity,
+        scratch_url=scratch_url_from_config(config_data),
     )

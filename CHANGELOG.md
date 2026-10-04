@@ -14,6 +14,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A materialised tier for `drift` and `migrate diff --from db`.** A CHECK, an index
+  expression, a partial index's predicate and a view's query are stored analysed, so
+  compared with a database a tree's could only be said to *exist*: a changed CHECK was no
+  change, and two unnamed CHECKs were paired by position. Name a writable scratch server —
+  `scratch_url` in the environment, or `--scratch-url` on `confiture drift` and `migrate
+  diff` — and confiture builds the tree there (`ExpectedSchemaDB`, dropped on the way out),
+  reads it back through `live_catalog`, and compares PostgreSQL's reading with
+  PostgreSQL's reading (`differ.MATERIALISED`): every expression compares as stored, a
+  spelling is not a change, an unnamed CHECK pairs by what it says. `migrate validate
+  --check-live-drift` reads the key too. Without a scratch server nothing changes. A tree
+  the scratch server cannot build is an error, never a quiet fall back.
+- **`fidelity` in the drift and `migrate diff` payloads**: `"materialised"` when a scratch
+  server read the tree back, absent at the command's default tier (`structural`, or
+  `as_written` for two trees), so every existing payload and golden is byte-identical.
+  `drift.schema.json` and `migrate-diff.schema.json` list it as optional.
+  `docs/reference/comparison-fidelity.md` says what each tier compares.
+
 ### Changed
 
 - **The body checks are the one comparison, restricted to one slot.** `migrate validate
@@ -38,7 +57,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `column_order_mismatch`, and `migrate diff --from db` — with no SQL and no risk tier,
   since PostgreSQL cannot reorder columns. Two trees in another column order are no change.
 
+- **`DIFFER_404`, a diff warning (exit 0)**: an object a database holds that confiture reads
+  only by existence (a domain, a policy, a rule, …) and the other side does not hold. The
+  diff carries no statement for it, and says so rather than leaving it out silently. The
+  exit-code payload (`confiture --exit-codes-json`) gains the code.
+- **The parity rule `generated_names` covers an index** PostgreSQL names (`child_pid_idx`), as it
+  covered a constraint.
+- `ledger.bookkeeping_tables()` is the one list of confiture's own tables (drift, squash and the
+  database side of a diff read it); `steps_table` moves to `core/ledger.py`.
+
+- ⚠️ **The schema model says who wrote it: `SchemaModel.source`** (`author` for a
+  tree, `catalog` for a database read through `live_catalog`; on the wire as
+  `"source"`). The differ compares two sides under the policy their sources call
+  for: two trees as written, renames detected (`AUTHOR`, unchanged); a tree and a
+  database through every `PARITY_NORMALISATIONS` rule, with nothing renamed by
+  similarity (`CATALOGUED`); two databases exactly (`EXACT`). The parity rules are
+  now code the comparison runs (`schema_model.parity_column`, `parity_constraint`,
+  `parity_indexes`), not only what a test normalises with. `differ.ParsedSchema` is
+  retired for `differ.Side`, whose truth is the model. The model goldens gain the
+  key; `migrate diff`'s goldens are byte-identical.
+- ⚠️ **The schema model's wire gains `Column.file`** (`schema-model.schema.json`,
+  `confiture schema dump-model`, `platform.SchemaModel.to_json()`): the file that
+  wrote the column, relative to the project. `Column.line` is now the line in that
+  file, not a line of the build joined together. Neither takes part in model
+  equality: two trees declaring one schema from different files are one schema.
+  The model goldens are re-recorded; nothing but positions moved.
+- ⚠️ **The schema model's wire gains `Column.default_kind`** — what a default is,
+  read from its parse tree (`sequence`, `generator`, `constant`, `expression`) —
+  and the seam gains `ValueSource` and `Column.value_source`: where a column's
+  value comes from (identity, generated, sequence, value generator, …), the one
+  answer `writable_columns`, parity and drift now read. `filled_by_postgresql` and
+  `unique_without_author_input` are kept apart: a `gen_random_uuid()` default is
+  writable, and unique either way.
+- ⚠️ **The schema model holds every object the tree tracks** — `SchemaModel.other_objects`
+  (`OtherObject`, on the wire and the seam): schemas, extensions, domains, composite
+  and range types, policies, rules, event triggers, extended statistics, foreign
+  tables, foreign-data wrappers, servers, publications, conversions, operator
+  classes and families, access methods — by identity and definition from a tree,
+  and by identity from a database (`live_catalog.read(other_objects=True)`, at
+  `existence` depth, leaving out what an extension or `initdb` created).
+- ⚠️ **`platform.introspect` folds TVIEWs** (no `tv_*` table, no backing view),
+  and refuses a database whose pg_tviews offers no read contract confiture knows
+  (`CONFIG_014`), as `drift` already did.
+- ⚠️ **A schema model says what its reader read** (`SchemaModel.coverage`, on the
+  wire and the seam as `Coverage`): each section read, and how deeply. A model
+  read from DDL covers every section; one read from a database, the sections it
+  was asked for; one written before this release, the structural ones.
+  `SchemaDriftDetector.compare_schemas` drops its `objects=` flag: it compares
+  views, routines, triggers and TVIEWs in the sections both models cover, so a
+  snapshot dumped with its views compares them, and one dumped without never
+  calls them missing.
+- A `SCHEMA_202` from `drift --schema`, and a `DIFFER_400` from `migrate diff --to
+  <directory>` or `platform.parse_schema(env=…)`, name the file and the line in it
+  (`context.file`, `context.line`), not a line of the files joined together.
+- `SchemaDiffer.parse_schema`/`compare` raise `SchemaError` (`DIFFER_400`, with
+  the file and line) where they raised pglast's `ParseError`.
+
 ### Fixed
+
+- **A named index that indexes something else is a change.** `migrate diff` and `drift`
+  paired two indexes of one name and compared only their access method, so an index
+  redefined on other columns, unique where it was not, or with another predicate was no
+  change: example 03's own scenario changes `idx_users_full_name` from `(full_name)` to
+  `(first_name, last_name)`, and its generated migration left the old index in place. Now
+  it is dropped and created again (`missing_index` + `extra_index` in drift), and the
+  example's diff golden records the rebuild.
+- **A generated migration detaches a table's indexes and constraints before its columns
+  change, and attaches them after.** Each table's edits ran columns first, then each index
+  or constraint's add and drop; the down file undoes the up in reverse, so it recreated the
+  old index on a column it had not renamed back yet (example 03's down failed with
+  `column "full_name" does not exist`). `change_order.apply_order` now orders each table's
+  edits drops, columns, adds — the tables in the differ's order — so both files apply.
 
 - **A default is compared as the value PostgreSQL stored, not as its spelling (#564).**
   PostgreSQL stores a constant in its type's output spelling — a `jsonb` object with its
@@ -195,64 +284,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file that seeds inline is read, not reported `UNPARSEABLE`. The `body` family's
   `TEMP`-table reading read the unblanked build, and read nothing at all from a
   build carrying a `COPY` seed.
-
-### Changed
-
-- **`DIFFER_404`, a diff warning (exit 0)**: an object a database holds that confiture reads
-  only by existence (a domain, a policy, a rule, …) and the other side does not hold. The
-  diff carries no statement for it, and says so rather than leaving it out silently. The
-  exit-code payload (`confiture --exit-codes-json`) gains the code.
-- **The parity rule `generated_names` covers an index** PostgreSQL names (`child_pid_idx`), as it
-  covered a constraint.
-- `ledger.bookkeeping_tables()` is the one list of confiture's own tables (drift, squash and the
-  database side of a diff read it); `steps_table` moves to `core/ledger.py`.
-
-- ⚠️ **The schema model says who wrote it: `SchemaModel.source`** (`author` for a
-  tree, `catalog` for a database read through `live_catalog`; on the wire as
-  `"source"`). The differ compares two sides under the policy their sources call
-  for: two trees as written, renames detected (`AUTHOR`, unchanged); a tree and a
-  database through every `PARITY_NORMALISATIONS` rule, with nothing renamed by
-  similarity (`CATALOGUED`); two databases exactly (`EXACT`). The parity rules are
-  now code the comparison runs (`schema_model.parity_column`, `parity_constraint`,
-  `parity_indexes`), not only what a test normalises with. `differ.ParsedSchema` is
-  retired for `differ.Side`, whose truth is the model. The model goldens gain the
-  key; `migrate diff`'s goldens are byte-identical.
-- ⚠️ **The schema model's wire gains `Column.file`** (`schema-model.schema.json`,
-  `confiture schema dump-model`, `platform.SchemaModel.to_json()`): the file that
-  wrote the column, relative to the project. `Column.line` is now the line in that
-  file, not a line of the build joined together. Neither takes part in model
-  equality: two trees declaring one schema from different files are one schema.
-  The model goldens are re-recorded; nothing but positions moved.
-- ⚠️ **The schema model's wire gains `Column.default_kind`** — what a default is,
-  read from its parse tree (`sequence`, `generator`, `constant`, `expression`) —
-  and the seam gains `ValueSource` and `Column.value_source`: where a column's
-  value comes from (identity, generated, sequence, value generator, …), the one
-  answer `writable_columns`, parity and drift now read. `filled_by_postgresql` and
-  `unique_without_author_input` are kept apart: a `gen_random_uuid()` default is
-  writable, and unique either way.
-- ⚠️ **The schema model holds every object the tree tracks** — `SchemaModel.other_objects`
-  (`OtherObject`, on the wire and the seam): schemas, extensions, domains, composite
-  and range types, policies, rules, event triggers, extended statistics, foreign
-  tables, foreign-data wrappers, servers, publications, conversions, operator
-  classes and families, access methods — by identity and definition from a tree,
-  and by identity from a database (`live_catalog.read(other_objects=True)`, at
-  `existence` depth, leaving out what an extension or `initdb` created).
-- ⚠️ **`platform.introspect` folds TVIEWs** (no `tv_*` table, no backing view),
-  and refuses a database whose pg_tviews offers no read contract confiture knows
-  (`CONFIG_014`), as `drift` already did.
-- ⚠️ **A schema model says what its reader read** (`SchemaModel.coverage`, on the
-  wire and the seam as `Coverage`): each section read, and how deeply. A model
-  read from DDL covers every section; one read from a database, the sections it
-  was asked for; one written before this release, the structural ones.
-  `SchemaDriftDetector.compare_schemas` drops its `objects=` flag: it compares
-  views, routines, triggers and TVIEWs in the sections both models cover, so a
-  snapshot dumped with its views compares them, and one dumped without never
-  calls them missing.
-- A `SCHEMA_202` from `drift --schema`, and a `DIFFER_400` from `migrate diff --to
-  <directory>` or `platform.parse_schema(env=…)`, name the file and the line in it
-  (`context.file`, `context.line`), not a line of the files joined together.
-- `SchemaDiffer.parse_schema`/`compare` raise `SchemaError` (`DIFFER_400`, with
-  the file and line) where they raised pglast's `ParseError`.
 
 ## [1.29.0] - 2026-10-01
 

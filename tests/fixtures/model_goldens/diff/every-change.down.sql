@@ -9,33 +9,17 @@ CREATE OR REPLACE VIEW v_things AS SELECT id FROM things;
 -- confiture:tier destructive
 DROP VIEW IF EXISTS v_added;
 
--- confiture:tier lock_risky
-ALTER TABLE things ADD CONSTRAINT things_old_ex EXCLUDE USING gist (span WITH &&);
-
 -- confiture:tier destructive
 ALTER TABLE things DROP CONSTRAINT IF EXISTS things_new_ex;
-
--- confiture:tier lock_risky
-ALTER TABLE things ADD CONSTRAINT things_old_uq UNIQUE (code);
 
 -- confiture:tier destructive
 ALTER TABLE things DROP CONSTRAINT IF EXISTS things_new_uq;
 
--- confiture:tier lock_risky
-ALTER TABLE things ADD CONSTRAINT things_old_ck CHECK (qty > 0);
-
 -- confiture:tier destructive
 ALTER TABLE things DROP CONSTRAINT IF EXISTS things_new_ck;
 
--- confiture:tier reversible
-ALTER TABLE things ADD CONSTRAINT things_old_fk FOREIGN KEY (pid) REFERENCES parent (id) NOT VALID;
-ALTER TABLE things VALIDATE CONSTRAINT things_old_fk;
-
 -- confiture:tier destructive
 ALTER TABLE things DROP CONSTRAINT IF EXISTS things_new_fk;
-
--- confiture:tier additive
-CREATE INDEX CONCURRENTLY IF NOT EXISTS things_old_ix ON things (code);
 
 -- confiture:tier destructive
 DROP INDEX CONCURRENTLY IF EXISTS things_new_ix;
@@ -53,6 +37,22 @@ ALTER TABLE things DROP COLUMN created_at;
 
 -- confiture:tier additive
 ALTER TABLE things ADD COLUMN legacy_flag BOOLEAN;
+
+-- confiture:tier lock_risky
+ALTER TABLE things ADD CONSTRAINT things_old_ex EXCLUDE USING gist (span WITH &&);
+
+-- confiture:tier lock_risky
+ALTER TABLE things ADD CONSTRAINT things_old_uq UNIQUE (code);
+
+-- confiture:tier lock_risky
+ALTER TABLE things ADD CONSTRAINT things_old_ck CHECK (qty > 0);
+
+-- confiture:tier reversible
+ALTER TABLE things ADD CONSTRAINT things_old_fk FOREIGN KEY (pid) REFERENCES parent (id) NOT VALID;
+ALTER TABLE things VALIDATE CONSTRAINT things_old_fk;
+
+-- confiture:tier additive
+CREATE INDEX CONCURRENTLY IF NOT EXISTS things_old_ix ON things (code);
 
 -- confiture:tier destructive
 ALTER TABLE rekeyed DROP CONSTRAINT IF EXISTS rekeyed_pk;
