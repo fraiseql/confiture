@@ -66,6 +66,10 @@ _SNAPSHOT = (
 
 #: ``module:Class`` -> the different question that class answers.
 ALLOWED: dict[str, str] = {
+    "cli/markup.py:Table": (
+        "rows printed to a terminal, not a database table: the Rich table the CLI "
+        "prints through, whose cells are templates so a value in one is data"
+    ),
     "core/live_catalog.py:RoutineRow": (
         "a pg_proc row with what the introspector's FunctionInfo needs and the model "
         "does not hold — every argument's name and mode, the cost, the comment, the oid"
