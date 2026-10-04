@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from rich.console import Console
 
 from confiture.cli.formatters.seed_formatter import format_apply_result
+from confiture.cli.markup import Printer
 from confiture.core.seed.applier import ApplyResult
 
 
@@ -25,7 +26,7 @@ class TestSeedApplyFormatter:
             failed_files=[],
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_apply_result(result, "json", None, console)
@@ -43,7 +44,7 @@ class TestSeedApplyFormatter:
                 failed_files=["05_data.sql"],
             )
 
-            console = Console()
+            console = Printer(Console())
             format_apply_result(result, "json", output_file, console)
 
             assert output_file.exists()
@@ -66,7 +67,7 @@ class TestSeedApplyFormatter:
                 failed_files=[],
             )
 
-            console = Console()
+            console = Printer(Console())
             format_apply_result(result, "csv", output_file, console)
 
             assert output_file.exists()
@@ -86,7 +87,7 @@ class TestSeedApplyFormatter:
             failed_files=[],
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_apply_result(result, "text", None, console)
@@ -102,7 +103,7 @@ class TestSeedApplyFormatter:
             failed_files=["03_users.sql"],
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_apply_result(result, "text", None, console)
@@ -120,7 +121,7 @@ class TestSeedApplyFormatter:
                 failed_files=["01_tables.sql", "02_data.sql"],
             )
 
-            console = Console()
+            console = Printer(Console())
             format_apply_result(result, "json", output_file, console)
 
             data = json.loads(output_file.read_text())
@@ -137,7 +138,7 @@ class TestSeedApplyFormatter:
             failed_files=[],
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_apply_result(result, "text", None, console)

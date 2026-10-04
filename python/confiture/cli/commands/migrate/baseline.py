@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from string.templatelib import Template
 from typing import Annotated, Any
 
 import typer
@@ -17,7 +19,6 @@ from confiture.cli.helpers import (
     open_connection,
     redact_url,
 )
-from confiture.cli.markup import markup, verbatim
 from confiture.cli.options import config_option, format_option, migrations_dir_option
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
@@ -80,12 +81,12 @@ def _print_from_db(report: dict[str, Any]) -> None:
     dry_run = report["dry_run"]
     if report["through"] is not None:
         console.print(
-            "[yellow]⚠️  --through with --from-db caps the copy at "
-            f"version {verbatim(repr(report['through']))}; source rows above the cap will be "
-            "skipped.[/yellow]"
+            t"[yellow]⚠️  --through with --from-db caps the copy at "
+            t"version {repr(report['through'])}; source rows above the cap will be "
+            t"skipped.[/yellow]"
         )
     for warning in report["warnings"]:
-        console.print(f"[yellow]⚠️  {verbatim(warning)}[/yellow]")
+        console.print(t"[yellow]⚠️  {warning}[/yellow]")
     if dry_run:
         console.print("\n[yellow]🔍 DRY RUN - no changes will be made[/yellow]")
 
@@ -94,23 +95,21 @@ def _print_from_db(report: dict[str, Any]) -> None:
     if not copied and not skipped:
         console.print("\n[yellow]No rows to copy.[/yellow]")
     else:
-        console.print(f"\n[cyan]📋 Baseline from {verbatim(report['source'])}[/cyan]\n")
+        console.print(t"\n[cyan]📋 Baseline from {report['source']}[/cyan]\n")
         for row in copied:
             marker = "would copy" if dry_run else "copied"
-            console.print(
-                f"  [green]✅ {verbatim(row['version'])} {verbatim(row['name'])} ({verbatim(marker)})[/green]"
-            )
+            console.print(t"  [green]✅ {row['version']} {row['name']} ({marker})[/green]")
         for version in skipped:
-            console.print(f"  [dim]⏭️  {verbatim(version)} (already applied on target)[/dim]")
+            console.print(t"  [dim]⏭️  {version} (already applied on target)[/dim]")
 
     if dry_run:
         console.print(
-            f"\n[cyan]📊 Would copy {len(copied)} row(s); {len(skipped)} already applied.[/cyan]"
+            t"\n[cyan]📊 Would copy {len(copied)} row(s); {len(skipped)} already applied.[/cyan]"
         )
         console.print("[yellow]Run without --dry-run to apply changes.[/yellow]")
     else:
         console.print(
-            f"\n[green]✅ Copied {len(copied)} row(s); {len(skipped)} already applied.[/green]"
+            t"\n[green]✅ Copied {len(copied)} row(s); {len(skipped)} already applied.[/green]"
         )
 
 
@@ -293,9 +292,9 @@ def _migrations_through(all_migrations: list[Path], through: str, *, json_mode: 
     if not json_mode:
         console.print("[yellow]Available versions:[/yellow]")
         for mf in all_migrations[:10]:
-            console.print(f"  • {verbatim(parse_migration_filename(mf.name)[0])}")
+            console.print(t"  • {parse_migration_filename(mf.name)[0]}")
         if len(all_migrations) > 10:
-            console.print(f"  ... and {verbatim(len(all_migrations) - 10)} more")
+            console.print(t"  ... and {len(all_migrations) - 10} more")
     fail(
         MigrationError(
             f"Migration version '{through}' not found",
@@ -306,10 +305,10 @@ def _migrations_through(all_migrations: list[Path], through: str, *, json_mode: 
     )
 
 
-_MARKS = {
-    "already_applied": "[dim]⏭️  {version} {name} (already applied)[/dim]",
-    "would_mark": "[cyan]📝 {version} {name} (would mark as applied)[/cyan]",
-    "marked": "[green]✅ {version} {name} (marked as applied)[/green]",
+_MARKS: dict[str, Callable[[object, object], Template]] = {
+    "already_applied": lambda version, name: t"[dim]⏭️  {version} {name} (already applied)[/dim]",
+    "would_mark": lambda version, name: t"[cyan]📝 {version} {name} (would mark as applied)[/cyan]",
+    "marked": lambda version, name: t"[green]✅ {version} {name} (marked as applied)[/green]",
 }
 
 
@@ -317,33 +316,24 @@ def _print_marked(report: dict[str, Any]) -> None:
     if not report["migrations"]:
         console.print("[yellow]No migrations found.[/yellow]")
         return
-    console.print(
-        f"\n[cyan]📋 Baseline: marking migrations through {verbatim(report['through'])}[/cyan]\n"
-    )
+    console.print(t"\n[cyan]📋 Baseline: marking migrations through {report['through']}[/cyan]\n")
     if report["dry_run"]:
         console.print("[yellow]🔍 DRY RUN - no changes will be made[/yellow]\n")
     for migration in report["migrations"]:
-        template = _MARKS[migration["status"]]
-        console.print(
-            "  "
-            + markup(
-                template.format(
-                    version=verbatim(migration["version"]), name=verbatim(migration["name"])
-                )
-            )
-        )
+        mark = _MARKS[migration["status"]](migration["version"], migration["name"])
+        console.print(t"  {mark}")
 
     console.print()
     marked, skipped = report["marked_count"], report["skipped_count"]
     if report["dry_run"]:
         console.print(
-            f"[cyan]📊 Would mark {verbatim(marked)} migration(s), skip {verbatim(skipped)} already applied[/cyan]"
+            t"[cyan]📊 Would mark {marked} migration(s), skip {skipped} already applied[/cyan]"
         )
         console.print("\n[yellow]Run without --dry-run to apply changes[/yellow]")
     else:
         console.print(
-            f"[green]✅ Marked {verbatim(marked)} migration(s) as applied, "
-            f"skipped {verbatim(skipped)} already applied[/green]"
+            t"[green]✅ Marked {marked} migration(s) as applied, "
+            t"skipped {skipped} already applied[/green]"
         )
 
 
@@ -357,9 +347,9 @@ def _refuse_duplicate_baseline(migrations_dir: Path, *, json_mode: bool) -> None
         console.print("[red]❌ Duplicate migration versions detected — refusing to proceed[/red]")
         console.print("[red]Multiple migration files share the same version number:[/red]\n")
         for version, files in sorted(duplicates.items()):
-            console.print(f"  Version {verbatim(version)}:")
+            console.print(t"  Version {version}:")
             for f in files:
-                console.print(f"    • {verbatim(f.name)}")
+                console.print(t"    • {f.name}")
         console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
         console.print("[yellow]   Run 'confiture migrate validate' to see all duplicates.[/yellow]")
     fail(

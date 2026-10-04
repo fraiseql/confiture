@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from rich.console import Console
 
 from confiture.cli.formatters.build_formatter import format_build_result
+from confiture.cli.markup import Printer
 from confiture.models.results import BuildResult, BuildWarning
 
 
@@ -27,7 +28,7 @@ class TestBuildFormatter:
             execution_time_ms=150,
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_build_result(result, "json", None, console)
@@ -49,7 +50,7 @@ class TestBuildFormatter:
                 seed_files_applied=3,
             )
 
-            console = Console()
+            console = Printer(Console())
             format_build_result(result, "json", output_file, console)
 
             assert output_file.exists()
@@ -74,7 +75,7 @@ class TestBuildFormatter:
                 hash="abc123",
             )
 
-            console = Console()
+            console = Printer(Console())
             format_build_result(result, "csv", output_file, console)
 
             assert output_file.exists()
@@ -96,7 +97,7 @@ class TestBuildFormatter:
             output_path="/tmp/schema.sql",
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_build_result(result, "text", None, console)
@@ -116,7 +117,7 @@ class TestBuildFormatter:
                 error="Connection failed",
             )
 
-            console = Console()
+            console = Printer(Console())
             format_build_result(result, "json", output_file, console)
 
             assert output_file.exists()
@@ -140,7 +141,7 @@ class TestBuildFormatter:
                 ],
             )
 
-            console = Console()
+            console = Printer(Console())
             format_build_result(result, "json", output_file, console)
 
             data = json.loads(output_file.read_text())

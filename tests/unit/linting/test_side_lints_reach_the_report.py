@@ -123,7 +123,7 @@ class TestTheTable:
     ) -> None:
         # The table is as wide as the console, which read its width once, when it was
         # made: a `COLUMNS` set for this run alone comes too late (#589).
-        monkeypatch.setattr(helpers.console, "width", 200)
+        monkeypatch.setattr(helpers.console.rich, "width", 200)
         result = runner.invoke(app, ["lint", "--check-security-definer", "--fail-on", "never"])
 
         assert "db/schema/010_widget.sql:3" in result.output

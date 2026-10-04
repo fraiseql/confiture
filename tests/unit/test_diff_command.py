@@ -6,6 +6,7 @@ import tempfile
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.cli.markup import Printer
 from confiture.core.schema_change import (
     ColumnAdded,
     ColumnRenamed,
@@ -275,7 +276,7 @@ class TestDiffTextRenameOutput:
         )
         result_obj = DiffResult.from_schema_diff(diff)
         buf = io.StringIO()
-        con = Console(file=buf, highlight=False, markup=False)
+        con = Printer(Console(file=buf, highlight=False, markup=False))
         # Must not raise
         print_diff_text(result_obj, con)
         output = buf.getvalue()

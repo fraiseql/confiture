@@ -9,7 +9,6 @@ import typer
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _get_tracking_table, console, emit, is_json
-from confiture.cli.markup import verbatim
 from confiture.cli.options import config_option, format_option, migrations_dir_option
 from confiture.config.environment import Environment
 from confiture.core import connection as _core_connection
@@ -159,16 +158,16 @@ def _print_squash(
     dry = result is None
     for check in checked:
         state = "skipped (squash.skip_environments)" if check.skipped else "ready"
-        console.print(f"[dim]environment {verbatim(check.name)}: {verbatim(state)}[/dim]")
+        console.print(t"[dim]environment {check.name}: {state}[/dim]")
     verb = "Would squash" if dry else "Squashed"
     console.print(
-        f"[cyan]📚 {verbatim(verb)} {len(plan.versions)} migration(s) through {verbatim(plan.through)} "
-        f"into {verbatim(migrations_dir / plan.baseline_name)} "
-        f"(from the {verbatim(plan.source)})[/cyan]"
+        t"[cyan]📚 {verb} {len(plan.versions)} migration(s) through {plan.through} "
+        t"into {migrations_dir / plan.baseline_name} "
+        t"(from the {plan.source})[/cyan]"
     )
     fate = ("would be " if dry else "") + ("deleted" if delete else "moved to archive/")
     for path in plan.archived:
-        console.print(f"  [dim]{verbatim(path.name)}: {verbatim(fate)}[/dim]")
+        console.print(t"  [dim]{path.name}: {fate}[/dim]")
     if dry:
         console.print("[yellow]Dry run: nothing was written.[/yellow]")
     else:
@@ -220,4 +219,4 @@ def migrate_squash_ledger(
         console.print("[green]✅ No squashed baseline to record[/green]")
     for version in recorded:
         verb = "Would record" if dry_run else "Recorded"
-        console.print(f"[green]📚 {verbatim(verb)} {verbatim(version)} without running it[/green]")
+        console.print(t"[green]📚 {verb} {version} without running it[/green]")

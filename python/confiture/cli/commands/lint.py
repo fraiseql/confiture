@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
@@ -17,7 +16,7 @@ from confiture.cli.helpers import (
     is_json,
 )
 from confiture.cli.lint_formatter import format_lint_report, save_report
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import Table, markup
 from confiture.cli.options import (
     ProjectDirOpt,
     env_option,
@@ -290,7 +289,7 @@ def lint(
         )
         if format_type == "table":
             # The banner is for humans; in json/csv mode stdout is the payload alone.
-            console.print(f"[cyan]🔍 Linting schema for environment: {verbatim(env)}[/cyan]")
+            console.print(t"[cyan]🔍 Linting schema for environment: {env}[/cyan]")
         linter = SchemaLinter(env=env, project_dir=project_dir, config=config)
         linter_report = linter.lint()
         # LintConfig's switches are coarser than the rule codes — `check_naming`
@@ -324,7 +323,7 @@ def lint(
             formatted = format_lint_report(report, format_type="csv", console=console)
             if output:
                 save_report(report, output)
-                console.print(f"[green]✅ Report saved to: {verbatim(output.absolute())}[/green]")
+                console.print(t"[green]✅ Report saved to: {output.absolute()}[/green]")
             else:
                 # print(), not console.print(): Rich wraps long lines at the
                 # terminal width, which breaks a CSV row.
@@ -408,8 +407,8 @@ def _resolve_threshold(
         return threshold_from_aliases(fail_on_error=fail_on_error, fail_on_warning=fail_on_warning)
     if given_aliases:
         error_console.print(
-            f"[red]❌ Error: --fail-on and {verbatim(', '.join(given_aliases))} both set the gate; "
-            "pass one[/red]"
+            t"[red]❌ Error: --fail-on and {', '.join(given_aliases)} both set the gate; "
+            t"pass one[/red]"
         )
         raise typer.Exit(USAGE)
     return parse_threshold(fail_on)
@@ -425,8 +424,7 @@ def _refuse_incomplete(report: LintReport, *, require_complete: bool) -> None:
         return
     for rule in incomplete:
         error_console.print(
-            f"[red]❌ --require-complete: {verbatim(rule['code'])} {verbatim(rule['state'])}"
-            f" — {verbatim(rule['reason'])}[/red]"
+            t"[red]❌ --require-complete: {rule['code']} {rule['state']} — {rule['reason']}[/red]"
         )
     raise typer.Exit(NOT_RUN)
 
@@ -442,7 +440,7 @@ def _print_gate_notice(gate: Gate, format_type: str) -> None:
     if format_type != "table" or gate.reachable or gate.reason is None:
         return
     style = "dim" if gate.threshold is Threshold.NEVER else "yellow"
-    console.print(f"\n[{style}]{verbatim(gate.reason)}[/{style}]")
+    console.print(t"\n[{markup(style)}]{gate.reason}[/{markup(style)}]")
 
 
 def _print_baseline_note(diff: Any, format_type: str, *, wrote: bool) -> None:
@@ -450,13 +448,11 @@ def _print_baseline_note(diff: Any, format_type: str, *, wrote: bool) -> None:
     if format_type != "table":
         return
     if wrote:
-        console.print(
-            f"[green]✅ Baseline written: {verbatim(diff.known)} finding(s) recorded[/green]"
-        )
+        console.print(t"[green]✅ Baseline written: {diff.known} finding(s) recorded[/green]")
     elif diff.new or diff.fixed:
         console.print(
-            f"[cyan]Baseline: {verbatim(diff.known)} known, {len(diff.new)} new, "
-            f"{len(diff.fixed)} fixed{verbatim(' (file tightened)' if diff.fixed else '')}[/cyan]"
+            t"[cyan]Baseline: {diff.known} known, {len(diff.new)} new, "
+            t"{len(diff.fixed)} fixed{' (file tightened)' if diff.fixed else ''}[/cyan]"
         )
 
 
@@ -487,16 +483,16 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
     table.add_column("Default")
     table.add_column("Description")
     for rule in LINT_RULES:
+        default = (
+            "on" if rule.default_on else f"with {rule.enabled_by}:" if rule.enabled_by else "opt-in"
+        )
+        needs = f" (needs {rule.requires_config})" if rule.requires_config else ""
         table.add_row(
-            rule.code,
-            rule.family,
-            rule.severity,
-            "on"
-            if rule.default_on
-            else f"with {rule.enabled_by}:"
-            if rule.enabled_by
-            else "opt-in",
-            rule.title + (f" (needs {rule.requires_config})" if rule.requires_config else ""),
+            t"{rule.code}",
+            t"{rule.family}",
+            t"{rule.severity}",
+            t"{default}",
+            t"{rule.title}{needs}",
         )
     console.print(table)
     console.print(
@@ -506,4 +502,4 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
     aliases = ", ".join(
         f"{old.upper()} → {new}" for old, new in sorted(LEGACY_CODE_ALIASES.items())
     )
-    console.print(f"[dim]Deprecated selectors, accepted for one minor: {verbatim(aliases)}.[/dim]")
+    console.print(t"[dim]Deprecated selectors, accepted for one minor: {aliases}.[/dim]")

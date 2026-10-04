@@ -24,7 +24,6 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     config_option,
     database_url_option,
@@ -136,9 +135,9 @@ def migrate_verify(
                 emit(empty.to_dict(), output_file, console)
             else:
                 console.print(
-                    f"[yellow]⏭️  Skipped: no migration ledger found (`{verbatim(tracking_table)}` "
-                    "is not present in this database) — 0 migrations recorded, so "
-                    "nothing was verified.[/yellow]"
+                    t"[yellow]⏭️  Skipped: no migration ledger found (`{tracking_table}` "
+                    t"is not present in this database) — 0 migrations recorded, so "
+                    t"nothing was verified.[/yellow]"
                 )
                 console.print(
                     "[dim]   Exit 0 comes from --allow-uninitialized, not from a "

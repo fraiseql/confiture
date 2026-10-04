@@ -10,6 +10,7 @@ from confiture.cli.formatters.migrate_formatter import (
     format_migrate_diff_result,
     format_migrate_validate_result,
 )
+from confiture.cli.markup import Printer
 from confiture.models.results import (
     MigrateDiffChange,
     MigrateDiffResult,
@@ -36,7 +37,7 @@ class TestMigrateDiffFormatter:
                 migration_file="003_add_email.py",
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_diff_result(result, "json", output_file, console)
 
             assert output_file.exists()
@@ -62,7 +63,7 @@ class TestMigrateDiffFormatter:
                 changes=changes,
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_diff_result(result, "csv", output_file, console)
 
             assert output_file.exists()
@@ -79,7 +80,7 @@ class TestMigrateDiffFormatter:
             has_changes=False,
         )
 
-        console = Console()
+        console = Printer(Console())
         # Should not raise
         format_migrate_diff_result(result, "text", None, console)
         output = capsys.readouterr().out
@@ -98,7 +99,7 @@ class TestMigrateDiffFormatter:
             migration_file="004_add_orders.py",
         )
 
-        console = Console()
+        console = Printer(Console())
         # Should not raise
         format_migrate_diff_result(result, "text", None, console)
         output = capsys.readouterr().out
@@ -120,7 +121,7 @@ class TestMigrateValidateFormatter:
                 fixed_files=[],
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_validate_result(result, "json", output_file, console)
 
             assert output_file.exists()
@@ -140,7 +141,7 @@ class TestMigrateValidateFormatter:
                 fixed_files=["001_renamed.py"],
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_validate_result(result, "csv", output_file, console)
 
             assert output_file.exists()
@@ -158,7 +159,7 @@ class TestMigrateValidateFormatter:
             fixed_files=[],
         )
 
-        console = Console()
+        console = Printer(Console())
         # Should not raise
         format_migrate_validate_result(result, "text", None, console)
         output = capsys.readouterr().out
@@ -174,7 +175,7 @@ class TestMigrateValidateFormatter:
             error="Validation failed",
         )
 
-        console = Console()
+        console = Printer(Console())
         # Should not raise
         format_migrate_validate_result(result, "text", None, console)
         output = capsys.readouterr().out

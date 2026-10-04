@@ -1114,22 +1114,19 @@ command that does not exist.
 
 ### Printing to the console
 
-Rich reads `[...]` in a printed string as markup, so a value interpolated into
-`console.print(f"…")` is written `{verbatim(value)}` (or `{verbatim(value, ".2f")}`),
-and markup confiture builds itself `{markup(value)}` — both from `cli/markup.py`.
-`tests/unit/test_cli_prints_data_verbatim.py` fails on any other interpolation in
-an f-string passed to a `print`/`log`/`status`/`rule`/`input`/`add_row` method under `cli/`,
-whatever the console is named; a style-tag position, `len(…)` and a numeric format
-spec need neither. A table cell that is data is `verbatim_text(value)`, never a bare
-`str`. Both escape a control character, so a name holding an ESC commands nothing.
-
-The replacement is being rolled out: `cli/markup.py`'s `Printer` prints a `t"…"`
-template, a literal or a Rich renderable — never a computed `str` (ty's
-`invalid-argument-type` is on for the modules that print through it) — and
-`render(t)` writes each interpolation exactly as `verbatim` does unless it is a
-`Markup` (`markup(…)`). Its `Table` takes template cells; `printer.rich` is handed
-to a Rich object that draws (`Progress(console=out.rich)`), never printed through.
-`tests/unit/test_console_prints_templates.py` guards the converted modules.
+confiture prints through `cli/markup.py`'s `Printer` (`helpers.console`,
+`helpers.error_console`): it takes a `t"…"` template, a literal or a Rich
+renderable, never a computed `str` — ty's `invalid-argument-type` is an error under
+`cli/`, so `out.print(name)` does not type-check. A template's literal text is
+confiture's markup; `render(t)` writes each interpolation as data (credentials
+masked, control characters escaped, brackets escaped) unless it is a `Markup`
+confiture built (`markup(…)`) or a nested template. Text that is data whole is a
+`rich.text.Text`. A table is `markup.Table`, whose cells are templates;
+`printer.rich` is handed to a Rich object that draws (`Progress(console=out.rich)`),
+never printed through. `tests/unit/test_console_prints_templates.py` fails on a
+Rich `Console`/`Table` built elsewhere, `.rich` printed through, an f-string
+printed, or `verbatim(` outside `markup.py`; `core/` cannot import `cli/`, so its
+two printing modules are listed there with that reason.
 
 ### Adding a `confiture lint` rule
 

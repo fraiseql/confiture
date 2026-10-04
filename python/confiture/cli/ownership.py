@@ -12,7 +12,6 @@ from confiture.cli.helpers import (
     emit,
     is_json,
 )
-from confiture.cli.markup import verbatim
 from confiture.core import connection as _core_connection
 from confiture.core.ownership_fixer import OwnershipFixer
 from confiture.core.validation.config_loaders import load_ownership_expectation
@@ -62,17 +61,17 @@ def _render_ownership_fix_text(
         return
 
     label = "Would insert" if dry_run else "Inserted"
-    console.print(f"[green]{verbatim(label)} `ALTER … OWNER TO` in:[/green]")
+    console.print(t"[green]{label} `ALTER … OWNER TO` in:[/green]")
     for preview in previews:
-        console.print(f"  [green]✓[/green] {verbatim(preview.file.name)}")
+        console.print(t"  [green]✓[/green] {preview.file.name}")
 
     if refused:
         console.print(
-            f"\n[red]Refused {len(refused)} file(s) "
-            f"(already applied — pass --force to rewrite anyway):[/red]"
+            t"\n[red]Refused {len(refused)} file(s) "
+            t"(already applied — pass --force to rewrite anyway):[/red]"
         )
         for file_path, reason in refused:
-            console.print(f"  [red]✗[/red] {verbatim(file_path.name)}: {verbatim(reason)}")
+            console.print(t"  [red]✗[/red] {file_path.name}: {reason}")
         if not force:
             refuse()
 

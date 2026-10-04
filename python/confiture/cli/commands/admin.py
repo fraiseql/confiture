@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import typer
-from rich.markup import escape
 
 from confiture.cli.dsn import DATABASE_URL_OPTION_HELP, resolve_database_url
 from confiture.cli.error_json import cli_boundary, fail
@@ -18,7 +17,7 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import markup
 from confiture.cli.options import (
     config_option,
     database_url_option,
@@ -169,7 +168,7 @@ def _print_install_outcome(outcome: dict[str, Any]) -> None:
         console.print("  Schema: [bold]confiture[/bold]")
         console.print("  Functions:")
         for function in outcome["functions"]:
-            console.print(f"    • {verbatim(function)}")
+            console.print(t"    • {function}")
 
 
 @cli_boundary
@@ -255,26 +254,26 @@ def _profile_summary(path: Path, profile: Any) -> dict[str, Any]:
 def _print_profile(profile: Any) -> None:
     """The profile in text mode; every value from the file is escaped, never markup."""
     console.print("[green]✅ Valid profile![/green]")
-    console.print(f"   Name: {escape(str(profile.name))}")
-    console.print(f"   Version: {escape(str(profile.version))}")
+    console.print(t"   Name: {str(profile.name)}")
+    console.print(t"   Version: {str(profile.version)}")
     if profile.global_seed:
-        console.print(f"   Global Seed: {verbatim(profile.global_seed)}")
+        console.print(t"   Global Seed: {profile.global_seed}")
 
-    console.print(f"\n[cyan]Strategies ({len(profile.strategies)})[/cyan]:")
+    console.print(t"\n[cyan]Strategies ({len(profile.strategies)})[/cyan]:")
     for strategy_name, strategy_def in profile.strategies.items():
         line = f"   • {strategy_name}: {strategy_def.type}"
         if strategy_def.seed_env_var:
             line += f" [env: {strategy_def.seed_env_var}]"
-        console.print(escape(line))
+        console.print(t"{line}")
 
-    console.print(f"\n[cyan]Tables ({len(profile.tables)})[/cyan]:")
+    console.print(t"\n[cyan]Tables ({len(profile.tables)})[/cyan]:")
     for table_name, table_def in profile.tables.items():
-        console.print(escape(f"   • {table_name}: {len(table_def.rules)} rules"))
+        console.print(t"   • {table_name}: {len(table_def.rules)} rules")
         for rule in table_def.rules:
             line = f"      - {rule.column} → {rule.strategy}"
             if rule.seed:
                 line += f" [seed: {rule.seed}]"
-            console.print(escape(line))
+            console.print(t"{line}")
 
     console.print("[green]\n✅ Profile validation passed![/green]")
 
@@ -304,7 +303,7 @@ def validate_profile(
         from confiture.core.anonymization.profile import AnonymizationProfile
 
         if not json_mode:
-            console.print(f"[cyan]📋 Validating profile: {escape(str(path))}[/cyan]")
+            console.print(t"[cyan]📋 Validating profile: {str(path)}[/cyan]")
         profile = AnonymizationProfile.load(path)
     except IsADirectoryError:
         fail(
@@ -383,9 +382,9 @@ def _report_absent_ledger(
         return
 
     console.print(
-        f"[yellow]⏭️  Skipped: no migration ledger found (`{verbatim(tracking_table)}` is "
-        f"not present in this database){verbatim(note)} — 0 migrations recorded, so "
-        "nothing was verified.[/yellow]"
+        t"[yellow]⏭️  Skipped: no migration ledger found (`{tracking_table}` is "
+        t"not present in this database){note} — 0 migrations recorded, so "
+        t"nothing was verified.[/yellow]"
     )
     console.print(
         "[dim]   Exit 0 comes from --allow-uninitialized, not from a comparison. "
@@ -401,19 +400,19 @@ def _print_mismatches(mismatches: list, *, fixed: int | None) -> None:
     number of rows re-stamped — which equals ``len(mismatches)``, because
     ``--fix`` re-stamps what this run reported and nothing else (#311).
     """
-    console.print(f"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
+    console.print(t"[red]❌ Found {len(mismatches)} checksum mismatch(es):[/red]\n")
     for m in mismatches:
-        console.print(f"  [yellow]{verbatim(m.version)}_{verbatim(m.name)}[/yellow]")
-        console.print(f"    File: {verbatim(m.file_path)}")
+        console.print(t"  [yellow]{m.version}_{m.name}[/yellow]")
+        console.print(t"    File: {m.file_path}")
         expected_preview = m.expected[:16] if m.expected else "(none)"
-        console.print(f"    Expected: {verbatim(expected_preview)}...")
-        console.print(f"    Actual:   {verbatim(m.actual[:16])}...")
+        console.print(t"    Expected: {expected_preview}...")
+        console.print(t"    Actual:   {m.actual[:16]}...")
         console.print()
     if fixed is None:
         console.print("[yellow]💡 Tip: Use --fix to update stored checksums (dangerous)[/yellow]")
         return
     console.print("[yellow]⚠️  Updating stored checksums...[/yellow]")
-    console.print(f"[green]✅ Updated {verbatim(fixed)} checksum(s)[/green]")
+    console.print(t"[green]✅ Updated {fixed} checksum(s)[/green]")
 
 
 @cli_boundary
@@ -515,9 +514,7 @@ def verify_checksums(
             else:
                 _read = notable_resolution(tracking_table, ledger.resolved_name)
                 _suffix = f" (read `{_read}`)" if _read else ""
-                console.print(
-                    f"[green]✅ All migration checksums verified!{verbatim(_suffix)}[/green]"
-                )
+                console.print(t"[green]✅ All migration checksums verified!{_suffix}[/green]")
             return
 
         updated: int | None = None
@@ -616,21 +613,21 @@ def validate_config(
 
     if report.valid and not report.issues:
         console.print(
-            f"[green]✅ Configuration valid[/green] "
-            f"({verbatim(report.config_source)}, {verbatim(report.migration_count)} migration(s))"
+            t"[green]✅ Configuration valid[/green] "
+            t"({report.config_source}, {report.migration_count} migration(s))"
         )
         if exit_code:
             raise typer.Exit(exit_code)
         return
 
-    error_console.print(f"[red]❌ Configuration issues ({verbatim(report.config_source)}):[/red]")
+    error_console.print(t"[red]❌ Configuration issues ({report.config_source}):[/red]")
     for issue in report.issues:
         color = "red" if issue.severity in ("error", "critical") else "yellow"
         error_console.print(
-            f"  [{color}]{verbatim(issue.severity.upper())}[/{color}] {verbatim(issue.code)}: {verbatim(issue.message)}"
+            t"  [{markup(color)}]{issue.severity.upper()}[/{markup(color)}] {issue.code}: {issue.message}"
         )
         if issue.actionable:
-            error_console.print(f"    [dim]💡 {verbatim(issue.actionable)}[/dim]")
+            error_console.print(t"    [dim]💡 {issue.actionable}[/dim]")
     if exit_code:
         raise typer.Exit(exit_code)
 
@@ -763,14 +760,14 @@ def restore(
     )
 
     console.print(
-        f"[bold]Restoring[/bold] [cyan]{verbatim(backup_file.name)}[/cyan] → [cyan]{verbatim(database)}[/cyan]"
+        t"[bold]Restoring[/bold] [cyan]{backup_file.name}[/cyan] → [cyan]{database}[/cyan]"
     )
 
     def on_stderr_line(line: str) -> None:
         if "pg_restore: error:" in line:
-            console.print(f"  [red]{verbatim(line)}[/red]")
+            console.print(t"  [red]{line}[/red]")
         elif "pg_restore: warning:" in line:
-            console.print(f"  [yellow]{verbatim(line)}[/yellow]")
+            console.print(t"  [yellow]{line}[/yellow]")
 
     try:
         result = DatabaseRestorer().restore(options, on_stderr_line=on_stderr_line)
@@ -778,27 +775,25 @@ def restore(
         fail(e, json_mode=False)
 
     if result.warnings:
-        console.print(f"[yellow]⚠ {len(result.warnings)} warning(s) during restore[/yellow]")
+        console.print(t"[yellow]⚠ {len(result.warnings)} warning(s) during restore[/yellow]")
 
     if result.success:
-        console.print(f"[green]✓ Restore complete[/green] ({len(result.phases_completed)} phases)")
+        console.print(t"[green]✓ Restore complete[/green] ({len(result.phases_completed)} phases)")
         if result.matviews_deferred:
             if result.matviews_refreshed:
                 console.print(
-                    f"  Materialized views: {verbatim(result.matviews_refreshed)} refreshed after ANALYZE"
+                    t"  Materialized views: {result.matviews_refreshed} refreshed after ANALYZE"
                 )
             else:
                 console.print(
-                    f"  Materialized views: {verbatim(result.matviews_deferred)} left WITH NO DATA "
-                    "(not refreshed) — refresh them after ANALYZE on your own schedule"
+                    t"  Materialized views: {result.matviews_deferred} left WITH NO DATA "
+                    t"(not refreshed) — refresh them after ANALYZE on your own schedule"
                 )
         if result.table_count is not None:
-            console.print(
-                f"  Tables verified: {verbatim(result.table_count)} (≥ {verbatim(min_tables)} required)"
-            )
+            console.print(t"  Tables verified: {result.table_count} (≥ {min_tables} required)")
     else:
         for err in result.errors:
-            console.print(f"[red]{verbatim(err)}[/red]")
+            console.print(t"[red]{err}[/red]")
         fail(
             RestoreError("Restore failed; see the errors above."),
             json_mode=False,

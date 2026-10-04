@@ -10,7 +10,6 @@ import typer
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.migrate_formatter import format_rebuild_result
 from confiture.cli.helpers import console, is_json
-from confiture.cli.markup import verbatim
 from confiture.cli.options import config_option, format_option, migrations_dir_option
 from confiture.core import migrator as _core_migrator
 from confiture.core.ledger import write_backup
@@ -59,9 +58,9 @@ def _rebuild_preconditions(
     duplicates = find_duplicates(migrations_dir)
     if duplicates:
         for version, files in sorted(duplicates.items()):
-            console.print(f"  Version {verbatim(version)}:")
+            console.print(t"  Version {version}:")
             for f in files:
-                console.print(f"    • {verbatim(f.name)}")
+                console.print(t"    • {f.name}")
         fail(
             MigrationError(
                 "Duplicate migration versions detected — refusing to proceed.",
@@ -75,7 +74,7 @@ def _write_tracking_backup(rows: Any, tracking_table: str, format_output: str) -
     """Dump the ledger rows next to the cwd, named after the table they came from (#190)."""
     backup_path = write_backup(rows, tracking_table)
     if format_output == "text":
-        console.print(f"[cyan]📦 Tracking table backed up to {verbatim(backup_path)}[/cyan]\n")
+        console.print(t"[cyan]📦 Tracking table backed up to {backup_path}[/cyan]\n")
 
 
 @cli_boundary
@@ -168,7 +167,7 @@ def migrate_rebuild(
                 result.verified = not status.has_pending
                 if status.has_pending and format_output == "text":
                     console.print(
-                        f"[yellow]⚠️  Verification: {len(status.pending)} pending migration(s) found[/yellow]"
+                        t"[yellow]⚠️  Verification: {len(status.pending)} pending migration(s) found[/yellow]"
                     )
 
             # Output result

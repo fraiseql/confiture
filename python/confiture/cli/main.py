@@ -49,7 +49,6 @@ from confiture.cli.commands.migrate.verify import migrate_verify
 from confiture.cli.commands.schema import schema_app
 from confiture.cli.generate import generate_app
 from confiture.cli.helpers import console
-from confiture.cli.markup import verbatim
 from confiture.cli.plugins import load_plugins
 from confiture.cli.schema_to_schema import schema_to_schema_app
 from confiture.cli.seed import seed_app
@@ -126,10 +125,10 @@ app.add_typer(schema_app, name="schema")
 def version_callback(value: bool) -> None:
     """Print version and exit."""
     if value:
-        console.print(f"confiture version {verbatim(__version__)}")
-        console.print(parser_line())
+        console.print(t"confiture version {__version__}")
+        console.print(t"{parser_line()}")
         native = importlib.util.find_spec("confiture._core") is not None
-        console.print(f"native extension: {verbatim('yes' if native else 'no')}")
+        console.print(t"native extension: {'yes' if native else 'no'}")
         raise typer.Exit()
 
 
@@ -137,7 +136,7 @@ def exit_codes_callback(value: bool) -> None:
     """Print the canonical exit-code reference and exit."""
     if value:
         console.print("confiture exit-code convention (#146):\n")
-        console.print(render_exit_codes_doc())
+        console.print(t"{render_exit_codes_doc()}")
         raise typer.Exit()
 
 

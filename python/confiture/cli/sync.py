@@ -36,7 +36,6 @@ import yaml
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import console, emit, error_console, is_json
-from confiture.cli.markup import verbatim
 from confiture.cli.options import format_option
 from confiture.config.environment import DatabaseConfig, Environment
 from confiture.core.syncer import AnonymizationRule, ProductionSyncer, SyncConfig, TableSelection
@@ -187,7 +186,7 @@ def sync(
     else:
         warnings.append(_PLAINTEXT_WARNING)
         if not json_mode:
-            error_console.print(f"[yellow]⚠️  {verbatim(_PLAINTEXT_WARNING)}[/yellow]")
+            error_console.print(t"[yellow]⚠️  {_PLAINTEXT_WARNING}[/yellow]")
 
     config = SyncConfig(
         tables=TableSelection(include=_split_csv(tables), exclude=_split_csv(exclude)),
@@ -212,8 +211,6 @@ def sync(
         )
     else:
         for table, rows in results.items():
-            console.print(f"  • {verbatim(table)}: [green]{verbatim(rows)}[/green] rows")
+            console.print(t"  • {table}: [green]{rows}[/green] rows")
         mode = "anonymized" if anonymize else "verbatim"
-        console.print(
-            f"[green]✅ Synced {len(results)} table(s), {verbatim(total)} rows ({verbatim(mode)})[/green]"
-        )
+        console.print(t"[green]✅ Synced {len(results)} table(s), {total} rows ({mode})[/green]")

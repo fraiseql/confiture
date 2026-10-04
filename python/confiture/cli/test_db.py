@@ -15,7 +15,6 @@ import typer
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import console, emit, is_json, redact_url
-from confiture.cli.markup import verbatim
 from confiture.cli.options import database_url_option, env_option, format_option
 from confiture.config.environment import Environment
 from confiture.core.builder import SchemaBuilder
@@ -93,22 +92,20 @@ def _prepare_location_dir(location: str, uid: int, gid: int) -> bool:
 def _print_ram_setup_text(result: RamSetupResult, guided_command: str | None) -> None:
     if result.action_required:
         console.print(
-            f"[yellow]⚠ Action required:[/yellow] confiture cannot prepare the LOCATION "
-            f"directory {verbatim(repr(result.location))} (insufficient OS privileges)."
+            t"[yellow]⚠ Action required:[/yellow] confiture cannot prepare the LOCATION "
+            t"directory {repr(result.location)} (insufficient OS privileges)."
         )
         console.print(
             "Run this once as a privileged user, then re-run `confiture test-db ram-setup`:"
         )
-        console.print(f"  [bold]{verbatim(guided_command)}[/bold]")
+        console.print(t"  [bold]{guided_command}[/bold]")
         return
     verb = "Reset" if result.recreated else "Created"
-    console.print(
-        f"[green]✅ {verbatim(verb)} tablespace '{verbatim(result.tablespace)}' at {verbatim(result.location)}[/green]"
-    )
+    console.print(t"[green]✅ {verb} tablespace '{result.tablespace}' at {result.location}[/green]")
     if result.dropped_databases:
         names = ", ".join(result.dropped_databases)
         console.print(
-            f"  Dropped {len(result.dropped_databases)} database(s) in the tablespace: {verbatim(names)}"
+            t"  Dropped {len(result.dropped_databases)} database(s) in the tablespace: {names}"
         )
 
 
@@ -163,9 +160,7 @@ def provision_template(
     if is_json(format_type):
         emit(status.to_dict(), None, console)
     else:
-        console.print(
-            f"[green]✅ Template '{verbatim(template)}' provisioned ({verbatim(status.state.value)})[/green]"
-        )
+        console.print(t"[green]✅ Template '{template}' provisioned ({status.state.value})[/green]")
 
 
 @test_db_app.command("clone")
@@ -209,7 +204,7 @@ def clone(
         payload["target_url"] = redact_url(payload["target_url"])  # no DSN creds in logs
         emit(payload, None, console)
     else:
-        console.print(f"[green]✅ Cloned '{verbatim(template)}' → '{verbatim(target)}'[/green]")
+        console.print(t"[green]✅ Cloned '{template}' → '{target}'[/green]")
 
 
 @test_db_app.command("ram-setup")
@@ -281,9 +276,9 @@ def drop(
     if is_json(format_type):
         emit({"target": target, "dropped": dropped}, None, console)
     elif dropped:
-        console.print(f"[green]✅ Dropped '{verbatim(target)}'[/green]")
+        console.print(t"[green]✅ Dropped '{target}'[/green]")
     else:
-        console.print(f"[yellow]ℹ '{verbatim(target)}' did not exist[/yellow]")
+        console.print(t"[yellow]ℹ '{target}' did not exist[/yellow]")
 
 
 @test_db_app.command("status")
@@ -305,9 +300,7 @@ def status(
     if is_json(format_type):
         emit(result.to_dict(), None, console)
     else:
-        console.print(
-            f"Template '{verbatim(template)}': [bold]{verbatim(result.state.value)}[/bold]"
-        )
+        console.print(t"Template '{template}': [bold]{result.state.value}[/bold]")
 
     if result.state is not TemplateState.CURRENT:
         raise typer.Exit(FINDINGS)
@@ -328,9 +321,7 @@ def list_databases(
         emit({"databases": [d.to_dict() for d in databases]}, None, console)
     elif databases:
         for db in databases:
-            console.print(
-                f"  {verbatim(db.kind, '9')} {verbatim(db.name)}  ({verbatim(db.detail)})"
-            )
+            console.print(t"  {db.kind:9} {db.name}  ({db.detail})")
     else:
         console.print("[yellow]ℹ No confiture-managed databases found[/yellow]")
 
@@ -350,4 +341,4 @@ def prune(
     if is_json(format_type):
         emit({"template": template, "dropped": dropped}, None, console)
     else:
-        console.print(f"[green]✅ Pruned {len(dropped)} clone(s) of '{verbatim(template)}'[/green]")
+        console.print(t"[green]✅ Pruned {len(dropped)} clone(s) of '{template}'[/green]")

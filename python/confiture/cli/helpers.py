@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from rich.console import Console
 
 try:
     # typer vendors click from 0.2x on; `click.get_current_context()` is then a
@@ -16,7 +15,7 @@ try:
 except ImportError:
     from click import get_current_context as _current_context
 
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import Printer
 from confiture.core.connection import DatabaseError, create_connection
 from confiture.core.connection import open_connection as _core_open_connection
 from confiture.core.ledger import recorded_versions, validate_table_name
@@ -39,8 +38,8 @@ _VALID_ENV_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$")
 # Create Rich consoles for stdout and stderr. Use stderr=True (not
 # file=sys.stderr) so the stream is resolved dynamically at write time — this
 # keeps it correct under pytest's capsys, which swaps sys.stderr per test.
-console = Console()
-error_console = Console(stderr=True)
+console = Printer.stdout()
+error_console = Printer.stderr()
 
 _MACHINE_OUTPUT_FORMATS = frozenset({"json", "csv", "yaml"})
 
@@ -65,7 +64,7 @@ def _emit_hint(
     *,
     hints_list: list[str],
     format_: str,
-    error_console: Console | None = None,
+    error_console: Printer | None = None,
 ) -> None:
     """Emit an advisory "looks unusual" hint via the right channel.
 
@@ -87,7 +86,7 @@ def _emit_hint(
         hints_list.append(hint)
         return
     target = error_console or globals()["error_console"]
-    target.print(f"[dim]Hint: {verbatim(hint)}[/dim]")
+    target.print(t"[dim]Hint: {hint}[/dim]")
 
 
 # Common command names for "Did you mean?" suggestions
@@ -174,19 +173,19 @@ def _convert_linter_report(
     )
 
 
-def _output_yaml(data: dict[str, Any], output_file: Path | None, console: Console) -> None:
+def _output_yaml(data: dict[str, Any], output_file: Path | None, console: Printer) -> None:
     """Output YAML data to file or console.
 
     Args:
         data: Data to serialise as YAML.
         output_file: Optional file to write to; if None, writes to stdout.
-        console: Console used for status messages (stderr).
+        console: Printer used for status messages (stderr).
     """
 
     yaml_str = yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
     if output_file:
         output_file.write_text(yaml_str)
-        console.print(f"[green]✅ Output written to {verbatim(output_file)}[/green]")
+        console.print(t"[green]✅ Output written to {output_file}[/green]")
     else:
         print(yaml_str, end="")
 
@@ -290,7 +289,7 @@ def _command_path() -> str | None:
     return " ".join(reversed(names)) or None
 
 
-def emit(data: dict[str, Any], output_file: Path | None = None, out: Console | None = None) -> None:
+def emit(data: dict[str, Any], output_file: Path | None = None, out: Printer | None = None) -> None:
     """The one writer of a command's machine output: its payload, in the envelope.
 
     The envelope is three keys: ``ok`` — ``true`` when the command produced its
@@ -315,7 +314,7 @@ def emit(data: dict[str, Any], output_file: Path | None = None, out: Console | N
     if output_file:
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.write_text(text)
-        (out or console).print(f"[green]✅ Output written to {verbatim(output_file)}[/green]")
+        (out or console).print(t"[green]✅ Output written to {output_file}[/green]")
     else:
         print(text)
 
@@ -344,21 +343,21 @@ def _find_orphaned_sql_files(migrations_dir: Path) -> list[Path]:
 
 
 def _print_duplicate_versions_warning(
-    duplicate_versions: dict[str, list[Path]], console: Console
+    duplicate_versions: dict[str, list[Path]], console: Printer
 ) -> None:
     """Print a warning about duplicate migration versions.
 
     Args:
         duplicate_versions: Dict mapping version to list of conflicting files
-        console: Console for output
+        console: Printer for output
     """
     console.print("\n[yellow]⚠️  WARNING: Duplicate migration versions detected[/yellow]")
     console.print("[yellow]Multiple migration files share the same version number:[/yellow]")
 
     for version, files in sorted(duplicate_versions.items()):
-        console.print(f"\n  Version {verbatim(version)}:")
+        console.print(t"\n  Version {version}:")
         for f in files:
-            console.print(f"    • {verbatim(f.name)}")
+            console.print(t"    • {f.name}")
 
     console.print("\n[yellow]💡 Rename files to use unique version prefixes.[/yellow]")
     console.print(
@@ -366,12 +365,12 @@ def _print_duplicate_versions_warning(
     )
 
 
-def _print_orphaned_files_warning(orphaned_files: list[Path], console: Console) -> None:
+def _print_orphaned_files_warning(orphaned_files: list[Path], console: Printer) -> None:
     """Print a warning about orphaned migration files.
 
     Args:
         orphaned_files: List of orphaned migration file paths
-        console: Console for output
+        console: Printer for output
     """
     console.print("\n[yellow]⚠️  WARNING: Orphaned migration files detected[/yellow]")
     console.print("[yellow]These SQL files exist but won't be applied by Confiture:[/yellow]")
@@ -379,7 +378,7 @@ def _print_orphaned_files_warning(orphaned_files: list[Path], console: Console) 
     for orphaned_file in orphaned_files:
         # Suggest the rename
         suggested_name = f"{orphaned_file.stem}.up.sql"
-        console.print(f"  • {verbatim(orphaned_file.name)} → rename to: {verbatim(suggested_name)}")
+        console.print(t"  • {orphaned_file.name} → rename to: {suggested_name}")
 
     console.print(
         "\n[yellow]Confiture only recognizes migration files with these patterns:[/yellow]"

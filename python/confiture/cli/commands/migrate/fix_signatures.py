@@ -16,7 +16,6 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     CONFITURE_YAML,
     CheckSignatureSchemasOpt,
@@ -267,7 +266,7 @@ def _ssh_override(config_data: Any, ssh_via: str | None, format_output: str) -> 
             )
 
     if format_output == "text":
-        console.print(f"[dim]  (connecting via SSH tunnel to {verbatim(ssh_via)})[/dim]")
+        console.print(t"[dim]  (connecting via SSH tunnel to {ssh_via})[/dim]")
     return _SshOverride(config_data, SshTunnelConfig(host=ssh_host, user=ssh_user))
 
 
@@ -285,7 +284,7 @@ def _render_clean(
             console,
         )
     else:
-        console.print(f"[green]✅ {verbatim(message)}[/green]")
+        console.print(t"[green]✅ {message}[/green]")
 
 
 def _render_unfixable(
@@ -313,7 +312,7 @@ def _render_unfixable(
             console,
         )
     else:
-        error_console.print(f"[red]❌ {verbatim(message)}[/red]")
+        error_console.print(t"[red]❌ {message}[/red]")
 
 
 def _plan_signature_fixes(
@@ -361,7 +360,7 @@ def _plan_signature_fixes(
             "(skipped — would leave function undefined):[/yellow]"
         )
         for sig in missing_source:
-            console.print(f"[yellow]    {verbatim(sig)}[/yellow]")
+            console.print(t"[yellow]    {sig}[/yellow]")
     return fix_blocks, missing_source
 
 
@@ -433,14 +432,14 @@ def _render_fix_dry_run(
         return
     if fix_blocks:
         console.print(
-            f"[bold]Plan: {len(fix_blocks)} fix(es) (pass --mode apply to execute):[/bold]"
+            t"[bold]Plan: {len(fix_blocks)} fix(es) (pass --mode apply to execute):[/bold]"
         )
         console.print()
         console.print(combined_sql)
     if body_fix_blocks:
         console.print(
-            f"[bold]Plan: {len(body_fix_blocks)} body drift fix(es)"
-            " (pass --mode apply to execute):[/bold]"
+            t"[bold]Plan: {len(body_fix_blocks)} body drift fix(es)"
+            t" (pass --mode apply to execute):[/bold]"
         )
         for block in body_fix_blocks:
             console.print()
@@ -516,13 +515,13 @@ def _render_fix_applied(
         )
         return
     if fix_blocks:
-        console.print(f"[green]✅ Applied {len(fix_blocks)} signature fix(es):[/green]")
+        console.print(t"[green]✅ Applied {len(fix_blocks)} signature fix(es):[/green]")
         for sig in applied:
-            console.print(f"[green]    {verbatim(sig)}[/green]")
+            console.print(t"[green]    {sig}[/green]")
     if body_fix_blocks:
-        console.print(f"[green]✅ Applied {len(body_fix_blocks)} body drift fix(es):[/green]")
+        console.print(t"[green]✅ Applied {len(body_fix_blocks)} body drift fix(es):[/green]")
         for sig in body_applied:
-            console.print(f"[green]    {verbatim(sig)}[/green]")
+            console.print(t"[green]    {sig}[/green]")
     if has_residual:
         console.print(
             "[yellow]⚠ Residual drift detected after apply — "

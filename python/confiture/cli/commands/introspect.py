@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
-from rich.console import Console as _Console
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import (
@@ -14,6 +13,7 @@ from confiture.cli.helpers import (
     emit,
     is_json,
 )
+from confiture.cli.markup import Printer
 from confiture.cli.options import (
     format_option,
     output_option,
@@ -73,7 +73,7 @@ def introspect(
     """
 
     # Status/error messages go to stderr so stdout stays pipe-friendly.
-    _console = _Console(stderr=True)
+    _console = Printer.stderr()
 
     # introspect emits json or yaml; the unified error envelope is JSON, so we
     # route failures through fail() in JSON mode only when the requested format

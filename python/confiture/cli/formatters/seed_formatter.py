@@ -5,10 +5,8 @@ Handles text, JSON, and CSV formatting for seed application results.
 
 from pathlib import Path
 
-from rich.console import Console
-
 from confiture.cli.formatters.common import handle_output
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import Printer
 from confiture.core.seed.applier import ApplyResult
 
 
@@ -16,7 +14,7 @@ def format_apply_result(
     result: ApplyResult,
     format_type: str,
     output_path: Path | None,
-    console: Console,
+    console: Printer,
 ) -> None:
     """Format seed apply result in requested format.
 
@@ -43,7 +41,7 @@ def format_apply_result(
         handle_output(format_type, result.to_dict(), csv_data, output_path, console)
 
 
-def format_text(result: ApplyResult, console: Console) -> None:
+def format_text(result: ApplyResult, console: Printer) -> None:
     """Format seed apply result as rich text for console output.
 
     Args:
@@ -51,12 +49,12 @@ def format_text(result: ApplyResult, console: Console) -> None:
         console: Rich console for output
     """
     console.print("\n" + "=" * 50)
-    console.print(f"Applied {verbatim(result.succeeded)}/{verbatim(result.total)} seed files")
+    console.print(t"Applied {result.succeeded}/{result.total} seed files")
 
     if result.failed > 0:
-        console.print(f"[yellow]⚠️  {verbatim(result.failed)} files failed[/yellow]")
+        console.print(t"[yellow]⚠️  {result.failed} files failed[/yellow]")
         for failed_file in result.failed_files:
-            console.print(f"  - {verbatim(failed_file)}")
+            console.print(t"  - {failed_file}")
     elif result.total > 0:
         console.print("[green]✅ All seed files applied successfully[/green]")
     else:

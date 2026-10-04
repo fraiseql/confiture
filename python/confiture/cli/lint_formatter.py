@@ -7,20 +7,18 @@ output formats (table, JSON, CSV) for the lint CLI command.
 import csv
 import io
 from pathlib import Path
-from typing import Literal
+from typing import Literal, LiteralString
 
-from rich.console import Console
-from rich.table import Table
 from rich.text import Text
 
-from confiture.cli.markup import verbatim, verbatim_text
+from confiture.cli.markup import Printer, Table, verbatim_text
 from confiture.models.lint import LintReport, LintSeverity, Violation
 
 
 def format_lint_report(
     report: LintReport,
     format_type: Literal["table", "csv"] = "table",
-    console: Console | None = None,
+    console: Printer | None = None,
 ) -> str:
     """Format a LintReport as a table (printed) or as CSV (returned).
 
@@ -30,7 +28,7 @@ def format_lint_report(
     Args:
         report: LintReport to format
         format_type: Output format (table or csv)
-        console: Rich Console instance for table rendering
+        console: Rich Printer instance for table rendering
 
     Returns:
         The CSV text, or ``""`` for a table (already printed)
@@ -39,12 +37,12 @@ def format_lint_report(
         return format_csv(report)
     else:  # table
         if console is None:
-            console = Console()
+            console = Printer.stdout()
         format_table(report, console)
         return ""
 
 
-def _severity_string(severity: LintSeverity) -> str:
+def _severity_string(severity: LintSeverity) -> LiteralString:
     """Format severity level with color.
 
     Args:
@@ -74,18 +72,18 @@ def _location_cell(violation: Violation) -> Text:
     return Text.assemble(location, "\n", (verbatim_text(where).plain, "dim"))
 
 
-def format_table(report: LintReport, console: Console) -> None:
+def format_table(report: LintReport, console: Printer) -> None:
     """Display LintReport as a rich table.
 
     Args:
         report: LintReport to display
-        console: Rich Console instance for rendering
+        console: Rich Printer instance for rendering
     """
     # Summary section
-    console.print(f"\n[bold]Schema Linting Results[/bold] - {verbatim(report.schema_name)}")
-    console.print(f"Tables: {verbatim(report.tables_checked)} checked")
-    console.print(f"Columns: {verbatim(report.columns_checked)} checked")
-    console.print(f"Time: {verbatim(report.execution_time_ms)}ms\n")
+    console.print(t"\n[bold]Schema Linting Results[/bold] - {report.schema_name}")
+    console.print(t"Tables: {report.tables_checked} checked")
+    console.print(t"Columns: {report.columns_checked} checked")
+    console.print(t"Time: {report.execution_time_ms}ms\n")
 
     _print_statuses(report, console)
     _print_documentation(report, console)
@@ -113,8 +111,8 @@ def format_table(report: LintReport, console: Console) -> None:
     ):
         table.add_row(
             _severity_string(violation.severity),
-            violation.rule_id,
-            violation.rule_name,
+            t"{violation.rule_id}",
+            t"{violation.rule_name}",
             _location_cell(violation),
             # Text, not str: a message can quote what an author wrote — doc_005
             # quotes the COMMENT it is about — and Rich reads `[a]` in a cell as
@@ -126,16 +124,16 @@ def format_table(report: LintReport, console: Console) -> None:
 
     # Summary counts
     console.print("\n[bold]Summary:[/bold]")
-    console.print(f"  {verbatim(report.errors_count)} errors")
-    console.print(f"  {verbatim(report.warnings_count)} warnings")
-    console.print(f"  {verbatim(report.info_count)} info")
+    console.print(t"  {report.errors_count} errors")
+    console.print(t"  {report.warnings_count} warnings")
+    console.print(t"  {report.info_count} info")
 
     # Suggested fixes (if any)
     fixes = [v for v in report.violations if v.suggested_fix]
     if fixes:
         console.print("\n[bold]Suggested Fixes:[/bold]")
         for violation in fixes:
-            console.print(f"  {verbatim(violation.location)}: {verbatim(violation.suggested_fix)}")
+            console.print(t"  {violation.location}: {violation.suggested_fix}")
 
 
 #: How each status reads on the summary: "<code> <verb>: <reason>". The verb is
@@ -148,7 +146,7 @@ _STATE_VERB = {
 }
 
 
-def _print_statuses(report: LintReport, console: Console) -> None:
+def _print_statuses(report: LintReport, console: Printer) -> None:
     """Say which rules did not run, and which ran short of a tier.
 
     Printed above the findings, because it changes how the findings should be
@@ -159,10 +157,10 @@ def _print_statuses(report: LintReport, console: Console) -> None:
     """
     for status in (*report.skipped, *report.degraded):
         verb = _STATE_VERB.get(status["state"], status["state"])
-        console.print(f"{status['code']} {verb}: {status['reason']}\n", markup=False)
+        console.print(Text(f"{status['code']} {verb}: {status['reason']}\n"))
 
 
-def _print_documentation(report: LintReport, console: Console) -> None:
+def _print_documentation(report: LintReport, console: Printer) -> None:
     """The `doc` family's distribution, in one line, above the findings.
 
     Printed before the early return for a clean report, because the failure
@@ -181,7 +179,7 @@ def _print_documentation(report: LintReport, console: Console) -> None:
         line += (
             f", median comment {lengths['p50']} chars (p10 {lengths['p10']}, p90 {lengths['p90']})"
         )
-    console.print(f"[dim]{verbatim(line)}[/dim]\n")
+    console.print(t"[dim]{line}[/dim]\n")
 
 
 def format_csv(report: LintReport) -> str:

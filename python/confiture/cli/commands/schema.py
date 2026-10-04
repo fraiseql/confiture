@@ -107,4 +107,4 @@ def dump_model(
     if format_type == "json":
         emit({"model": json.loads(model.to_json())}, output_file, console)
         return
-    console.print(", ".join(_summary(model)))
+    console.print(t"{', '.join(_summary(model))}")

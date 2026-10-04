@@ -13,23 +13,20 @@ The process still exits with the #146 exit code (``ConfiturError.exit_code``).
 from __future__ import annotations
 
 import copy
+import functools
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import Any, NoReturn
 
 import typer
 
+from confiture.cli.markup import Printer
+from confiture.core.error_handler import print_error_to_console
+from confiture.core.locking import LockAcquisitionError
 from confiture.core.parser_info import parser_stamp
 from confiture.exceptions import ConfiturError
 from confiture.url_redaction import redact_credentials_in
-
-if TYPE_CHECKING:
-    from rich.console import Console
-import functools
-
-from confiture.core.error_handler import print_error_to_console
-from confiture.core.locking import LockAcquisitionError
 
 # Envelope `code` used when a non-ConfiturError escapes translation. It is not a
 # registry code (those are domain failures); it signals "unexpected internal
@@ -179,8 +176,8 @@ def fail(
     *,
     json_mode: bool,
     output_file: Path | None = None,
-    console: Console | None = None,
-    error_console: Console | None = None,
+    console: Printer | None = None,
+    error_console: Printer | None = None,
 ) -> NoReturn:
     """Single error boundary: emit the failure, then exit with the #146 code.
 
@@ -204,7 +201,7 @@ def fail(
     if json_mode:
         emit(emit_error_json(err), output_file, console or default_console)
     else:
-        print_error_to_console(err, error_console or default_error_console)
+        print_error_to_console(err, (error_console or default_error_console).rich)
 
     raise typer.Exit(err.exit_code)
 

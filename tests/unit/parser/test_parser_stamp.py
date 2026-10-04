@@ -22,6 +22,7 @@ from typer.testing import CliRunner
 from confiture.cli.error_json import fail
 from confiture.cli.helpers import emit
 from confiture.cli.main import app
+from confiture.cli.markup import Printer
 from confiture.exceptions import ConfigurationError
 
 runner = CliRunner()
@@ -50,7 +51,7 @@ def test_version_has_a_second_line_naming_the_parser() -> None:
 
 
 def test_emit_stamps_the_parser(capsys: pytest.CaptureFixture[str]) -> None:
-    emit({"ok": True}, None, Console())
+    emit({"ok": True}, None, Printer(Console()))
     data = json.loads(capsys.readouterr().out)
     assert data["parser"] == _expected_stamp()
     assert data["ok"] is True
@@ -58,7 +59,7 @@ def test_emit_stamps_the_parser(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_emit_stamps_the_parser_into_a_file(tmp_path: Path) -> None:
     target = tmp_path / "out.json"
-    emit({"ok": True}, target, Console(file=(tmp_path / "log").open("w")))
+    emit({"ok": True}, target, Printer(Console(file=(tmp_path / "log").open("w"))))
     assert json.loads(target.read_text())["parser"] == _expected_stamp()
 
 

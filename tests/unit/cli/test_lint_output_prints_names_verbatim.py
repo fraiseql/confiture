@@ -12,6 +12,7 @@ import io
 from rich.console import Console
 
 from confiture.cli.lint_formatter import format_table
+from confiture.cli.markup import Printer
 from confiture.models.lint import LintReport, LintSeverity, Violation
 
 _LINK = '"[bold red]PWN[/bold red] [link=https://evil.example]click[/link]"'
@@ -40,7 +41,7 @@ def _printed(location: str, *, file: str | None = "db/schema/t.sql") -> str:
         execution_time_ms=1,
     )
     out = io.StringIO()
-    console = Console(file=out, force_terminal=True, color_system="truecolor", width=400)
+    console = Printer(Console(file=out, force_terminal=True, color_system="truecolor", width=400))
     format_table(report, console)
     return out.getvalue()
 
