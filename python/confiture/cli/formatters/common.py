@@ -15,6 +15,20 @@ from confiture.cli.helpers import emit
 from confiture.cli.markup import verbatim
 
 
+def csv_text(headers: list[str], rows: list[list[Any]]) -> str:
+    """The CSV of *headers* and *rows*: the one place confiture writes the format.
+
+    Args:
+        headers: Column headers for CSV
+        rows: List of rows (each row is a list of values)
+    """
+    csv_output = StringIO()
+    writer = csv.writer(csv_output)
+    writer.writerow(headers)
+    writer.writerows(rows)
+    return csv_output.getvalue()
+
+
 def save_csv(headers: list[str], rows: list[list[Any]], output_path: Path) -> None:
     """Save data as CSV file with proper escaping.
 
@@ -23,26 +37,21 @@ def save_csv(headers: list[str], rows: list[list[Any]], output_path: Path) -> No
         rows: List of rows (each row is a list of values)
         output_path: Path to write CSV file to
     """
-    csv_output = StringIO()
-    writer = csv.writer(csv_output)
-    writer.writerow(headers)
-    writer.writerows(rows)
-    output_path.write_text(csv_output.getvalue())
+    output_path.write_bytes(csv_text(headers, rows).encode())
 
 
-def print_csv(headers: list[str], rows: list[list[Any]], console: Console) -> None:
-    """Print CSV to console.
+def print_csv(headers: list[str], rows: list[list[Any]]) -> None:
+    """Print CSV to stdout, as written.
+
+    The builtin ``print``, never a Rich console: Rich reads ``[legacy]`` as a
+    markup tag and wraps a row longer than the terminal, and a CSV's bytes do
+    not depend on where they are written (#602).
 
     Args:
         headers: Column headers for CSV
         rows: List of rows (each row is a list of values)
-        console: Rich console for output
     """
-    csv_output = StringIO()
-    writer = csv.writer(csv_output)
-    writer.writerow(headers)
-    writer.writerows(rows)
-    console.print(csv_output.getvalue())
+    print(csv_text(headers, rows), end="")
 
 
 def display_drift_report(report: Any, console: Console) -> None:
@@ -158,4 +167,4 @@ def handle_output(
                 f"[green]✓ CSV report saved to {verbatim(output_path.absolute())}[/green]"
             )
         else:
-            print_csv(headers, rows, console)
+            print_csv(headers, rows)

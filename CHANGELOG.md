@@ -173,6 +173,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`--format csv` on stdout is the CSV, byte for byte (#602).** It was printed through a
+  Rich console, which read `[legacy]` in a value as a markup tag and dropped it, and wrapped
+  a row longer than the console onto a second line when stdout was a pipe. `migrate status`,
+  `build`, `migrate` and `seed` reports (and `seed validate`'s prep-seed CSV, a third copy of
+  the writer) now print one `csv_text` with `print()`, the same text `--output` saves.
+
 - **Python 3.14 is supported, from a wheel (#586, #587).** 1.29.0 published a cp314 wheel
   for Windows only, and its sdist could not build on 3.14 either: pyo3 0.23 refuses the
   interpreter. pyo3 is now 0.29, and the release builds a cp314 wheel for Linux and macOS

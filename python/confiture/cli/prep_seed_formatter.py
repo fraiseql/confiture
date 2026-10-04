@@ -6,14 +6,13 @@ severity-based grouping.
 
 from __future__ import annotations
 
-import csv
-from io import StringIO
 from pathlib import Path
 
 from rich.console import Console
 from rich.console import Console as _Console
 from rich.table import Table
 
+from confiture.cli.formatters.common import print_csv, save_csv
 from confiture.cli.helpers import emit
 from confiture.cli.markup import verbatim
 from confiture.core.seed.validation.prep_seed.models import (
@@ -148,43 +147,23 @@ def output_csv(
         output: Optional file path to write CSV
         console: Rich console for output
     """
-    # Create CSV content
-    csv_output = StringIO()
-    writer = csv.writer(csv_output)
-
-    # Write header
-    writer.writerow(
+    headers = ["File", "Line", "Severity", "Pattern", "Message", "Fix Available", "Suggestion"]
+    rows = [
         [
-            "File",
-            "Line",
-            "Severity",
-            "Pattern",
-            "Message",
-            "Fix Available",
-            "Suggestion",
+            violation.file_path,
+            violation.line_number,
+            violation.severity.name,
+            violation.pattern.name,
+            violation.message,
+            "Yes" if violation.fix_available else "No",
+            violation.suggestion or "",
         ]
-    )
-
-    # Write violations
-    for violation in sorted(
-        report.violations, key=lambda v: (v.severity.name, v.file_path, v.line_number)
-    ):
-        writer.writerow(
-            [
-                violation.file_path,
-                violation.line_number,
-                violation.severity.name,
-                violation.pattern.name,
-                violation.message,
-                "Yes" if violation.fix_available else "No",
-                violation.suggestion or "",
-            ]
+        for violation in sorted(
+            report.violations, key=lambda v: (v.severity.name, v.file_path, v.line_number)
         )
-
-    csv_content = csv_output.getvalue()
-
+    ]
     if output:
-        output.write_text(csv_content)
+        save_csv(headers, rows, output)
         console.print(f"[green]✓ Report saved to {verbatim(output)}[/green]")
     else:
-        console.print(csv_content)
+        print_csv(headers, rows)

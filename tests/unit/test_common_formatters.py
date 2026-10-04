@@ -132,12 +132,10 @@ class TestPrintCsv:
 
     def test_print_csv_valid_data(self, capsys):
         """Test print_csv with valid CSV data."""
-        console = Console()
         headers = ["name", "value"]
         rows = [["foo", 1]]
 
-        # Should not raise
-        print_csv(headers, rows, console)
+        print_csv(headers, rows)
         output = capsys.readouterr().out
         assert "name,value" in output
         assert "foo,1" in output
