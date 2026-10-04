@@ -35,7 +35,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           POSTGRES_USER: confiture
           POSTGRES_PASSWORD: confiture

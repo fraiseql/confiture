@@ -22,7 +22,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           # uv sync builds the native extension; the parity tests must run it, not skip it
           CONFITURE_REQUIRE_NATIVE: "1"
@@ -160,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           POSTGRES_USER: confiture
           POSTGRES_PASSWORD: confiture
@@ -336,7 +336,7 @@ jobs:
     runs-on: ubuntu-latest
     # No `services:` block: a service takes a pre-built image, and there is no
     # published PostgreSQL image carrying plpgsql_check. The extension ships
-    # with no distribution — not the stock `postgres:15` this repository uses
+    # with no distribution — not the stock `postgres:16` this repository uses
     # everywhere else, not `postgres:16-alpine` in docker-compose.yml, not a
     # local install — which is why `body_001` skips on every other leg and this
     # one exists. The base is pinned by digest so the leg is a function of the
@@ -347,18 +347,18 @@ jobs:
     - name: Build a PostgreSQL carrying plpgsql_check
       run: |
         cat > /tmp/Dockerfile.plpgsql-check <<'DOCKERFILE'
-        FROM postgres:15@sha256:9b1d34adbce1dd07ee6e94b4a2cf698884b89bd44a6c9c12f5da8f3acbfe4957
+        FROM postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
         RUN apt-get update \
-         && apt-get install -y --no-install-recommends postgresql-15-plpgsql-check \
+         && apt-get install -y --no-install-recommends postgresql-16-plpgsql-check \
          && rm -rf /var/lib/apt/lists/*
         DOCKERFILE
-        docker build -f /tmp/Dockerfile.plpgsql-check -t confiture-plpgsql-check:15 /tmp
+        docker build -f /tmp/Dockerfile.plpgsql-check -t confiture-plpgsql-check:16 /tmp
 
     - name: Start it
       run: |
         docker run -d --name plpgsql-check-db \
           -e POSTGRES_USER=confiture -e POSTGRES_PASSWORD=confiture \
-          -e POSTGRES_DB=confiture_test -p 5432:5432 confiture-plpgsql-check:15
+          -e POSTGRES_DB=confiture_test -p 5432:5432 confiture-plpgsql-check:16
         for _ in $(seq 1 60); do
           docker exec plpgsql-check-db pg_isready -U confiture && break
           sleep 1

@@ -28,7 +28,7 @@ from dagger import dag
 PY_VERSION = "3.11"
 UV_IMAGE = f"ghcr.io/astral-sh/uv:python{PY_VERSION}-bookworm-slim"
 RUST_IMAGE = "rust:1-bookworm"
-POSTGRES_IMAGE = "postgres:15"
+POSTGRES_IMAGE = "postgres:16"
 
 # Pinned tool versions — must match the pins in quality-gate.yml (and uv.lock)
 # so this local gate reproduces CI exactly rather than chasing whatever Astral
