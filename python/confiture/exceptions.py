@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from confiture.error_codes import ERROR_CODE_REGISTRY, FAILURE
 from confiture.models.error import ErrorSeverity
+from confiture.sql_text import rendered
 
 if TYPE_CHECKING:
     from confiture.core.preconditions import Precondition
@@ -467,10 +468,8 @@ class SQLError(ConfiturError):
         # Create detailed error message
         message_parts = ["SQL execution failed"]
 
-        # Normalise sql to a plain string — callers may pass
-        # psycopg.sql.Composable objects (Composed, SQL, Identifier …).
-        as_string = getattr(sql, "as_string", None)
-        sql_str: str = as_string(None) if callable(as_string) else str(sql)
+        # A template or a psycopg composition renders as the SQL it sends.
+        sql_str = rendered(sql)
 
         # Add SQL snippet (first 100 chars)
         sql_preview = sql_str.strip()[:100]

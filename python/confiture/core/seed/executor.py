@@ -132,7 +132,7 @@ class SeedExecutor:
             name: Name of savepoint to create
         """
         with self.connection.cursor() as cursor:
-            cursor.execute(f"SAVEPOINT {name}")
+            cursor.execute(t"SAVEPOINT {name:i}")
 
     def _release_savepoint(self, name: str) -> None:
         """Release a savepoint (commit nested transaction).
@@ -141,7 +141,7 @@ class SeedExecutor:
             name: Name of savepoint to release
         """
         with self.connection.cursor() as cursor:
-            cursor.execute(f"RELEASE SAVEPOINT {name}")
+            cursor.execute(t"RELEASE SAVEPOINT {name:i}")
 
     def _rollback_to_savepoint(self, name: str) -> None:
         """Undo this file's statements and nothing before them.
@@ -155,7 +155,7 @@ class SeedExecutor:
         """
         try:
             with self.connection.cursor() as cursor:
-                cursor.execute(f"ROLLBACK TO SAVEPOINT {name}")
+                cursor.execute(t"ROLLBACK TO SAVEPOINT {name:i}")
         except psycopg.Error:
             # Savepoint rollback failed, do full rollback
             self.connection.rollback()

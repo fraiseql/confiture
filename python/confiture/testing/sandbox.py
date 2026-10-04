@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import psycopg
-from psycopg import sql as pgsql
 
 from confiture.core import live_catalog
 from confiture.exceptions import PreStateSimulationError
@@ -136,7 +135,7 @@ class MigrationSandbox:
             assert self._external_connection is not None
             self.connection = self._external_connection
             with self.connection.cursor() as cursor:
-                cursor.execute(f"SAVEPOINT {self._savepoint_name}")
+                cursor.execute(t"SAVEPOINT {self._savepoint_name:i}")
 
         self._active = True
         return self
@@ -167,8 +166,8 @@ class MigrationSandbox:
             else:
                 # Rollback to savepoint
                 with self.connection.cursor() as cursor:
-                    cursor.execute(f"ROLLBACK TO SAVEPOINT {self._savepoint_name}")
-                    cursor.execute(f"RELEASE SAVEPOINT {self._savepoint_name}")
+                    cursor.execute(t"ROLLBACK TO SAVEPOINT {self._savepoint_name:i}")
+                    cursor.execute(t"RELEASE SAVEPOINT {self._savepoint_name:i}")
         finally:
             self._active = False
 
@@ -468,8 +467,6 @@ class MigrationSandbox:
             >>> assert sandbox.get_row_count("users") == 10
         """
         with self.connection.cursor() as cursor:
-            cursor.execute(
-                pgsql.SQL("SELECT COUNT(*) FROM {}").format(pgsql.Identifier(schema, table))
-            )
+            cursor.execute(t"SELECT COUNT(*) FROM {schema:i}.{table:i}")
             result = cursor.fetchone()
             return result[0] if result else 0

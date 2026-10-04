@@ -348,12 +348,11 @@ root = ["python"]
 respect-type-ignore-comments = true
 
 [tool.ty.rules]
-# psycopg3 uses strict type requirements (LiteralString for SQL queries).
-# This library is designed to execute dynamic SQL from:
-# - Migration files (trusted developer content)
-# - Schema building (concatenated SQL files)
-# - SAVEPOINT/ROLLBACK commands (safe, controlled strings)
-# These are safe operations that can't be made type-safe without major refactoring.
+# Off, measured 2026-10-05 with Python 3.14 and psycopg 3.3 (which types a
+# Template): 118 findings. About 40 are psycopg's execute() refusing a `str` —
+# a migration's own text and the files a build reads are executed as read, and
+# that text is no LiteralString; the rest are not psycopg's (e.g. 43 in
+# schema_model's readers of the model's JSON, whose dict values are `Any`).
 invalid-argument-type = "ignore"
 
 # Strategy configs use dynamic attribute access that the type checker can't verify.
@@ -361,10 +360,9 @@ invalid-argument-type = "ignore"
 # but the type system only sees the base class type in generic code.
 possibly-missing-attribute = "ignore"
 
-# psycopg 3.3+ types execute() to accept only LiteralString/SQL/Composed (an
-# anti-SQL-injection guardrail). Confiture builds dynamic SQL from double-quoted,
-# validated identifiers (each call site carries `# nosec B608`), so the runtime
-# string never matches the overload. (Was `invalid-argument-type` under older ty.)
+# Off, measured with the rule above: 13 findings, every one psycopg's execute()
+# given a `str` (a migration's text, a file read), which matches no overload of
+# LiteralString / SQL / Composed / Template.
 no-matching-overload = "ignore"
 
 [[tool.ty.overrides]]

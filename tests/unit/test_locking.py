@@ -13,6 +13,7 @@ from confiture.core.locking import (
     LockMode,
     MigrationLock,
 )
+from confiture.sql_text import rendered
 
 
 class TestLockConfig:
@@ -381,7 +382,6 @@ class TestMigrationLock:
             pass
 
         # Check that SET LOCAL statement_timeout was called with correct value
-        calls = [str(call) for call in mock_cursor.execute.call_args_list]
-        timeout_call_found = any("5000ms" in call for call in calls)
+        calls = [rendered(c.args[0]) for c in mock_cursor.execute.call_args_list]
 
-        assert timeout_call_found, "statement_timeout should be set to 5000ms"
+        assert "SET LOCAL statement_timeout = 5000" in calls

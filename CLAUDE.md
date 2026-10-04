@@ -524,6 +524,7 @@ confiture/
 │   ├── error_code_table.py       # The error-code catalog as data: one mapping per code, no logic
 │   ├── error_codes.py            # Error code registry and definitions for structured error handling
 │   ├── exceptions.py             # Confiture exception hierarchy
+│   ├── sql_text.py               # The text of a statement confiture executes, for a message, a log line o…
 │   ├── url_redaction.py          # DSN credential helpers (core-side, import-safe)
 │   ├── cli/
 │   │   ├── __init__.py

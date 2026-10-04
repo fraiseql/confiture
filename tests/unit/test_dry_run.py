@@ -1,9 +1,11 @@
 """Unit tests for migration dry-run mode."""
 
-from unittest.mock import MagicMock, Mock, call
+from unittest.mock import MagicMock, Mock
 
 import psycopg
 import pytest
+
+from confiture.sql_text import rendered
 
 
 class TestDryRunMode:
@@ -254,14 +256,13 @@ class TestSavepointDryRunExecutor:
         result = executor.run(migration_name="test_migration", statements=statements)
 
         # Verify SAVEPOINT operations were called
-        expected_calls = [
-            call("SAVEPOINT confiture_dry_run"),
-            call("CREATE TABLE dry_run_test (id SERIAL PRIMARY KEY, name TEXT)"),
-            call("INSERT INTO dry_run_test (name) VALUES ('test1'), ('test2')"),
-            call("ROLLBACK TO SAVEPOINT confiture_dry_run"),
-            call("RELEASE SAVEPOINT confiture_dry_run"),
+        assert [rendered(c.args[0]) for c in mock_conn.execute.call_args_list] == [
+            'SAVEPOINT "confiture_dry_run"',
+            "CREATE TABLE dry_run_test (id SERIAL PRIMARY KEY, name TEXT)",
+            "INSERT INTO dry_run_test (name) VALUES ('test1'), ('test2')",
+            'ROLLBACK TO SAVEPOINT "confiture_dry_run"',
+            'RELEASE SAVEPOINT "confiture_dry_run"',
         ]
-        mock_conn.execute.assert_has_calls(expected_calls)
 
         # Verify result
         assert result.migration_name == "test_migration"
@@ -333,10 +334,10 @@ class TestSavepointDryRunExecutor:
         assert second_stmt.error == 'syntax error at or near "INVALID"'
 
         # Verify SAVEPOINT operations were still called (rollback happened)
-        calls = mock_conn.execute.call_args_list
-        assert any("SAVEPOINT confiture_dry_run" in str(call) for call in calls)
-        assert any("ROLLBACK TO SAVEPOINT confiture_dry_run" in str(call) for call in calls)
-        assert any("RELEASE SAVEPOINT confiture_dry_run" in str(call) for call in calls)
+        calls = [rendered(c.args[0]) for c in mock_conn.execute.call_args_list]
+        assert 'SAVEPOINT "confiture_dry_run"' in calls
+        assert 'ROLLBACK TO SAVEPOINT "confiture_dry_run"' in calls
+        assert 'RELEASE SAVEPOINT "confiture_dry_run"' in calls
 
     def test_migrator_dry_run_uses_savepoint_executor_for_sql_migrations(self):
         """Migrator.dry_run() should use SAVEPOINT executor for SQL migrations."""
@@ -383,8 +384,8 @@ class TestSavepointDryRunExecutor:
         assert "INSERT INTO test VALUES (1)" in result.statements[1].sql
 
         # Verify SAVEPOINT calls were made
-        calls = mock_conn.execute.call_args_list
-        assert any("SAVEPOINT confiture_dry_run" in str(call) for call in calls)
+        calls = [rendered(c.args[0]) for c in mock_conn.execute.call_args_list]
+        assert 'SAVEPOINT "confiture_dry_run"' in calls
 
     def test_cli_display_formats_dry_run_result_with_statements(self):
         """CLI display should format DryRunResult with per-statement details."""

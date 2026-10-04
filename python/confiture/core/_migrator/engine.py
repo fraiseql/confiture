@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from string.templatelib import Template
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -44,6 +45,7 @@ from confiture.core.ledger import (
 )
 from confiture.exceptions import SQLError
 from confiture.models.migration import Migration
+from confiture.sql_text import rendered
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +110,7 @@ class MigrationEngine:
 
     def _execute_sql(
         self,
-        query: str | pgsql.Composable,
+        query: str | pgsql.Composable | Template,
         params: tuple[str, ...] | None = None,
     ) -> None:
         """Execute SQL with detailed error reporting.
@@ -127,15 +129,8 @@ class MigrationEngine:
                 else:
                     cursor.execute(query)
         except psycopg.Error as e:
-            if isinstance(query, pgsql.Composable):
-                try:
-                    sql_text = query.as_string(self.connection)
-                except Exception:  # Reason: psycopg's as_string needs a live connection for some adapters; fall back to the unbound rendering
-                    sql_text = query.as_string(None)
-            else:
-                sql_text = str(query)
             raise SQLError(
-                sql_text,
+                rendered(query, self.connection),
                 params,
                 e,
                 resolution_hint="Check the SQL syntax and ensure the target database objects exist",
