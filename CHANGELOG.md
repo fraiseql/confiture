@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`drift.extra_objects: all` (`--extra-objects all` on `drift` and `migrate validate
+  --check-live-drift`) reports every stray object.** By default an `extra_object` is reported
+  only for a kind the DDL declares, so a policy nobody declared on a table with row-level
+  security went unreported on a tree that declares no policy. Under `all`, every stray object
+  of the 16 kinds is an `extra_object`, graded `warning` so a deploy gate (fraisier's
+  `escalate`) can fail on it. The default schema is still never reported unless the DDL
+  creates it; `declared` stays the default.
+
 - **Drift reports the objects the model holds by existence: `missing_object` (critical) and
   `extra_object` (info).** A schema, an extension, a domain, a composite or range type, a
   policy, a rule, an event trigger, extended statistics, a foreign table, a foreign-data

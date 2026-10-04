@@ -3,6 +3,7 @@
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
@@ -425,6 +426,29 @@ class TestMigrateValidateCheckLiveDrift:
 
         assert result.exit_code == 0
         mock_detector_class.assert_called_once_with(
-            mock_conn, ignore_column_order=False, column_order_severity="warning", scratch_url=None
+            mock_conn,
+            ignore_column_order=False,
+            column_order_severity="warning",
+            scratch_url=None,
+            extra_objects="declared",
         )
         mock_detector.compare_with_schema_file.assert_called_once_with(str(schema_file))
+
+
+class TestExtraObjects:
+    """`--extra-objects` takes `declared` or `all`, and wins over `drift.extra_objects`."""
+
+    def test_the_flag_wins_over_the_config(self) -> None:
+        from confiture.core.drift import extra_objects_of
+
+        assert extra_objects_of(None, "all") == "all"
+        assert extra_objects_of("declared", "all") == "declared"
+        assert extra_objects_of("all", "declared") == "all"
+
+    def test_another_value_is_refused(self) -> None:
+        from confiture.core.drift import extra_objects_of
+        from confiture.exceptions import ValidationError
+
+        with pytest.raises(ValidationError) as caught:
+            extra_objects_of("everything", "declared")
+        assert caught.value.error_code == "VALID_001"

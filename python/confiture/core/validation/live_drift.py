@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import psycopg
 
 from confiture.core.connection import create_connection, load_config, scratch_url_from_config
-from confiture.core.drift import SchemaDriftDetector, drift_config_from
+from confiture.core.drift import SchemaDriftDetector, drift_config_from, extra_objects_of
 from confiture.exceptions import ConfigurationError, ConfiturError
 
 if TYPE_CHECKING:
@@ -29,6 +29,7 @@ def check_live_drift(
     ctx: ValidationContext | None = None,
     *,
     ignore_column_order: bool = False,
+    extra_objects: str | None = None,
 ):
     """Compare the live schema against *schema_file*.
 
@@ -61,9 +62,9 @@ def check_live_drift(
             raise ConfigurationError(
                 f"Database connection failed: {exc}", error_code="CONFIG_006"
             ) from exc
-        return _detector(shared, config_path, ignore_column_order).compare_with_schema_file(
-            str(schema_file)
-        )
+        return _detector(
+            shared, config_path, ignore_column_order, extra_objects
+        ).compare_with_schema_file(str(schema_file))
 
     config_data = load_config(config_path)
     try:
@@ -74,15 +75,17 @@ def check_live_drift(
         ) from exc
 
     try:
-        return _detector(conn, config_path, ignore_column_order).compare_with_schema_file(
-            str(schema_file)
-        )
+        return _detector(
+            conn, config_path, ignore_column_order, extra_objects
+        ).compare_with_schema_file(str(schema_file))
     finally:
         conn.close()
 
 
-def _detector(conn, config_path: Path, ignore_column_order: bool) -> SchemaDriftDetector:
-    """A detector honouring the config's ``drift:`` block, its ``scratch_url`` and the CLI flag (#226)."""
+def _detector(
+    conn, config_path: Path, ignore_column_order: bool, extra_objects: str | None = None
+) -> SchemaDriftDetector:
+    """A detector honouring the config's ``drift:`` block, its ``scratch_url`` and the CLI flags (#226)."""
 
     config_data = load_config(config_path)
     cfg = drift_config_from(config_data)
@@ -91,4 +94,5 @@ def _detector(conn, config_path: Path, ignore_column_order: bool) -> SchemaDrift
         ignore_column_order=ignore_column_order or cfg.ignore_column_order,
         column_order_severity=cfg.column_order_severity,
         scratch_url=scratch_url_from_config(config_data),
+        extra_objects=extra_objects_of(extra_objects, cfg.extra_objects),
     )

@@ -714,6 +714,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 |---|---|---|---|
 | `ignore_column_order` | bool | `false` | Never report ``column_order_mismatch`` (default: false). |
 | `column_order_severity` | `warning` \| `critical` | `warning` | Severity of a ``column_order_mismatch`` item: ``warning`` (default) or ``critical`` (fails the run). |
+| `extra_objects` | `declared` \| `all` | `declared` | ``declared`` (default): an ``extra_object`` (info) only of a kind the DDL declares, in a schema it declares. ``all``: one of any kind, a policy or rule nobody declared included, graded ``warning`` so a deploy gate can escalate it. The default schema is never reported unless the DDL creates it. |
 
 #### `SshTunnelConfig`
 
@@ -897,6 +898,7 @@ seed:
 drift:
   ignore_column_order: false
   column_order_severity: warning
+  extra_objects: declared
 ssh_tunnel:
   host: null
   user: null

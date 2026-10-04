@@ -71,6 +71,7 @@ _FLAG_DEPENDENCIES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("--missing-is-drift", ("--check-signatures",)),
     ("--show-diff", ("--check-body", "--check-body-views", "--check-body-replay")),
     ("--fail-on-unanalyzable", ("--idempotent",)),
+    ("--extra-objects", ("--check-live-drift",)),
 )
 
 
@@ -115,6 +116,7 @@ class ValidateOptions:
     check_imports: bool = False
     check_live_drift: bool = False
     ignore_column_order: bool = False
+    extra_objects: str | None = None
     check_signatures: bool = False
     check_body_views: bool = False
     check_body_replay: bool = False
@@ -170,6 +172,8 @@ def validate_flag_dependencies(opts: ValidateOptions) -> None:
         "--show-diff": opts.show_diff,
         "--fail-on-unanalyzable": opts.fail_on_unanalyzable,
         "--idempotent": opts.idempotent,
+        "--extra-objects": opts.extra_objects is not None,
+        "--check-live-drift": opts.check_live_drift,
     }
     for modifier, required in _FLAG_DEPENDENCIES:
         if not on[modifier]:
@@ -455,7 +459,11 @@ DEFAULT_SIGNATURE_SCHEMAS = "public"
 def _run_live_drift(opts: ValidateOptions, ctx: ValidationContext) -> CheckOutcome:
 
     report = check_live_drift(
-        opts.config, opts.schema_file, ctx, ignore_column_order=opts.ignore_column_order
+        opts.config,
+        opts.schema_file,
+        ctx,
+        ignore_column_order=opts.ignore_column_order,
+        extra_objects=opts.extra_objects,
     )
     payload = render_live_drift(report, json_mode=opts.json_mode)
     return CheckOutcome("live_drift", passed=not report.has_critical_drift, payload=payload)

@@ -235,7 +235,7 @@
                 "operator_family",
                 "access_method"
               ],
-              "description": "Present only on missing_object and extra_object: which kind of object, of the kinds no other drift type names. An extra_object is reported only for a kind the expected DDL declares at least one of, in a schema it declares one in — a tree that declares no policy is silent about policies, so a stray policy on such a database is not reported. Compared by existence: a redefined domain or policy is not drift."
+              "description": "Present only on missing_object and extra_object: which kind of object, of the kinds no other drift type names. An extra_object is reported only for a kind the expected DDL declares at least one of, in a schema it declares one in — a tree that declares no policy is silent about policies, so a stray policy on such a database is not reported — unless `drift.extra_objects: all` (or `--extra-objects all`) is set, which reports an extra_object of every kind, graded warning. Compared by existence: a redefined domain or policy is not drift."
             }
           }
         }

@@ -206,6 +206,15 @@ IgnoreColumnOrderOpt = Annotated[
         help="With --check-live-drift: do not report column_order_mismatch (#226)",
     ),
 ]
+ExtraObjectsOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--extra-objects",
+        help="With --check-live-drift: 'all' reports every stray schema, extension, policy, … "
+        "as a warning extra_object; 'declared' (default) only those of a kind the DDL "
+        "declares, as info. Also drift.extra_objects in the config",
+    ),
+]
 CheckSignaturesOpt = Annotated[
     bool,
     typer.Option(
@@ -439,6 +448,7 @@ def migrate_validate(
     dry_run: DryRunOpt = False,
     check_live_drift: CheckLiveDriftOpt = False,
     ignore_column_order: IgnoreColumnOrderOpt = False,
+    extra_objects: ExtraObjectsOpt = None,
     check_signatures: CheckSignaturesOpt = False,
     check_imports: CheckImportsOpt = False,
     check_body: CheckBodyOpt = False,
@@ -580,6 +590,7 @@ def migrate_validate(
         check_imports=check_imports,
         check_live_drift=check_live_drift,
         ignore_column_order=ignore_column_order,
+        extra_objects=extra_objects,
         check_signatures=check_signatures,
         check_body_views=check_body_views,
         check_body_replay=check_body_replay,
