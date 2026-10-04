@@ -14,7 +14,6 @@ from confiture.cli.options import config_option, format_option
 from confiture.core import baseline_detector as _core_baseline_detector
 from confiture.core import connection as _core_connection
 from confiture.core import migrator as _core_migrator
-from confiture.core.migrator import parse_migration_filename
 from confiture.error_codes import FINDINGS
 from confiture.exceptions import ConfigurationError
 
@@ -32,9 +31,10 @@ def migrate_introspect(
     """Detect migration level by comparing live schema to history snapshots.
 
     PROCESS:
-      Introspects the live database schema using pg_catalog, normalises it,
-      and compares against stored schema history snapshots. Reports the
-      detected migration level without making any changes.
+      Reads the live database through its catalog and compares it with each
+      schema history snapshot, newest first, the way `migrate diff --from db`
+      compares a database with a tree. The first snapshot it has no change from
+      is its level; otherwise the closest is reported. Makes no changes.
 
     EXAMPLES:
       confiture migrate introspect
@@ -69,7 +69,9 @@ def migrate_introspect(
             if not snapshots_dir.exists():
                 console.print("  [yellow](directory not found — no snapshots available)[/yellow]")
             else:
-                snap_count = len(list(snapshots_dir.glob("*.sql")))
+                snap_count = len(
+                    _core_baseline_detector.BaselineDetector(snapshots_dir).snapshot_files()
+                )
                 console.print(f"  ({verbatim(snap_count)} snapshot(s) found)")
             console.print(
                 f"  {verbatim(_get_tracking_table(config_data))}: "
@@ -92,20 +94,17 @@ def migrate_introspect(
                 )
             raise typer.Exit(FINDINGS)
 
-        detector = _core_baseline_detector.BaselineDetector(snapshots_dir)
+        detector = _core_baseline_detector.BaselineDetector(
+            snapshots_dir, tracking_table=_get_tracking_table(config_data)
+        )
 
         if format_output == "text":
             console.print("\n  Comparing live schema against snapshots...")
 
-        live_sql = detector.introspect_live_schema(conn)
-        detected_version = detector.find_matching_snapshot(live_sql)
+        found = detector.find_matching_snapshot(conn)
 
-    if detected_version:
-        # Resolve name from snapshot filename
-        detected_name = ""
-        for snap_path in snapshots_dir.glob(f"{detected_version}_*.sql"):
-            detected_name = parse_migration_filename(snap_path.name)[1]
-            break
+    if found is not None:
+        detected_version, detected_name = found.version, found.name
 
         if format_output == "json":
             emit(

@@ -18,7 +18,6 @@ import psycopg
 
 from confiture.core import live_catalog
 from confiture.core.ddl_clauses import constraint_body
-from confiture.core.ddl_objects import DDLObject
 from confiture.core.desired_state import load_desired_state
 from confiture.core.differ import (
     CATALOGUED,
@@ -26,8 +25,8 @@ from confiture.core.differ import (
     ComparisonPolicy,
     Fidelity,
     SchemaDiffer,
-    Side,
     refuse_quoted_names,
+    stated_side,
 )
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.schema_analyzer import SchemaAnalyzer
@@ -585,22 +584,6 @@ _ON_TABLE = (
 )
 
 
-def _stated(model: SchemaModel) -> Side:
-    """*model* as a side of the comparison: each object it holds stands for its own statement.
-
-    Drift asks whether an object exists and, for a TVIEW, what it pins — what the
-    model says, under the catalogued policy, never a statement's text. So each
-    object is given a statement that carries nothing but its key: this side is
-    compared, never generated from.
-    """
-    objects: dict[ObjectRef, list[DDLObject]] = defaultdict(list)
-    for ref, overloads in model.routines.items():
-        objects[ref] += [DDLObject(ref, "", "", r.signature_key) for r in overloads]
-    for ref in (*model.views, *model.triggers, *model.tviews):
-        objects[ref].append(DDLObject(ref, "", ""))
-    return Side(model, objects)
-
-
 def _index_label(index: Index) -> str:
     return f"({', '.join(index.columns)})"
 
@@ -1121,7 +1104,7 @@ class SchemaDriftDetector:
             fidelity=policy.fidelity,
         )
         expected, actual = self._kept(expected), self._kept(actual)
-        diff = SchemaDiffer().compare_sides(_stated(actual), _stated(expected), policy)
+        diff = SchemaDiffer().compare_sides(stated_side(actual), stated_side(expected), policy)
         _Findings(expected, actual, self.column_order_severity).render(
             diff.changes, report, column_order=not self.ignore_column_order
         )

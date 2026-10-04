@@ -1,7 +1,7 @@
 """Temporary database lifecycle and pg_dump wrapper.
 
-Creates throwaway PostgreSQL databases for live schema snapshots.
-Used by ``SchemaSnapshotGenerator`` when ``--live-snapshot`` is active.
+Creates throwaway PostgreSQL databases — the scratch databases ``ExpectedSchemaDB``
+builds a tree into — and dumps one as DDL text for ``migrate squash``'s baseline.
 """
 
 from __future__ import annotations

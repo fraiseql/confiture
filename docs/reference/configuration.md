@@ -658,7 +658,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `migration_generators` | dict[str, [MigrationGeneratorConfig](#migrationgeneratorconfig)] | `{}` | Named external generator commands |
 | `snapshot_history` | bool | `true` | Write schema snapshot alongside each generated migration (default: True) |
 | `snapshots_dir` | str | `db/schema_history` | Directory for schema history snapshots (default: db/schema_history) |
-| `live_snapshot` | bool | `false` | Use live-snapshot mode (temp DB + pg_dump) by default (default: False) |
+| `live_snapshot` | bool | `false` | Snapshot the build read back from a temporary database by default (default: False) |
 | `tracking_table` | str | `tb_confiture` | Name of the confiture tracking table, optionally schema-qualified (e.g. ``public.tb_confiture``). Defaults to ``tb_confiture``. |
 | `rebuild_threshold` | int | `5` | Number of pending migrations above which ``migrate status --check-rebuild`` recommends a rebuild from DDL (default: 50). |
 | `grant_dir` | str | `db/7_grant` | Directory holding GRANT/REVOKE files that grant-accompaniment and the ACL lint read (default: ``db/grants``). |

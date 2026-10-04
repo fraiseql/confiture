@@ -164,11 +164,6 @@ DUMPERS: dict[str, str] = {
         "the squashed baseline is a replayable artifact: the DDL migrations 1..N built, "
         "written to a file and applied later, never compared"
     ),
-    "core/schema_snapshot.py": (
-        "a schema-history snapshot is written as pg_dump text; `baseline_detector` still "
-        "matches a live database against those files, a second comparison that ends "
-        "when snapshots are written as the model's wire"
-    ),
 }
 
 

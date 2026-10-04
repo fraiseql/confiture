@@ -22,6 +22,8 @@ from jsonschema import Draft202012Validator
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.core.baseline_detector import Snapshot
+from confiture.core.schema_model import SchemaModel
 
 runner = CliRunner()
 
@@ -93,8 +95,7 @@ def test_exact_match_matches_schema(
 
     migrator_cls.return_value.tracking_table_exists.return_value = False
     detector = detector_cls.return_value
-    detector.introspect_live_schema.return_value = "CREATE TABLE t (id INT);"
-    detector.find_matching_snapshot.return_value = "20260101000000"
+    detector.find_matching_snapshot.return_value = Snapshot("20260101000000", "init", SchemaModel())
 
     result = _invoke(cfg, snapshots)
 
@@ -102,6 +103,7 @@ def test_exact_match_matches_schema(
     _validator().validate(payload)
     assert payload["confidence"] == "exact"
     assert payload["detected_version"] == "20260101000000"
+    assert payload["detected_migration_name"] == "init"
 
 
 @patch("confiture.cli.helpers.create_connection")
@@ -116,7 +118,6 @@ def test_no_match_with_closest_matches_schema(
 
     migrator_cls.return_value.tracking_table_exists.return_value = True
     detector = detector_cls.return_value
-    detector.introspect_live_schema.return_value = "CREATE TABLE other (id INT);"
     detector.find_matching_snapshot.return_value = None
     detector.last_closest = ("20260101000000", 0.4213456)
 

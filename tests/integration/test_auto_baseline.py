@@ -142,32 +142,24 @@ class TestBaselineThrough:
             migrator.baseline_through("999", mig_dir)
 
 
-class TestBaselineDetectorLiveIntrospection:
-    """Integration tests for BaselineDetector.introspect_live_schema."""
-
-    def test_returns_sql_string(self, db_conn) -> None:
-        from confiture.core.baseline_detector import BaselineDetector
-
-        detector = BaselineDetector(Path("/tmp/snapshots"))
-        result = detector.introspect_live_schema(db_conn)
-        assert isinstance(result, str)
-
-    def test_result_is_normalisable(self, db_conn) -> None:
-        from confiture.core.baseline_detector import BaselineDetector
-
-        detector = BaselineDetector(Path("/tmp/snapshots"))
-        live_sql = detector.introspect_live_schema(db_conn)
-        normalised = detector.normalize_schema(live_sql)
-        assert isinstance(normalised, str)
-
-
 class TestAutoDetectBaselineCLI:
     """Integration test for migrate up --auto-detect-baseline CLI flag."""
 
-    def test_auto_detect_warns_when_no_snapshots_dir(
+    def test_auto_detect_proceeds_when_no_snapshot_matches(
         self, clean_db, tmp_path: Path, test_db_url: str
     ) -> None:
-        """When schema_history/ is absent, warns and proceeds without baselining."""
+        """No snapshot describes the database: says so and proceeds without baselining.
+
+        It once passed by reading the repository's own `db/schema_history`, which test
+        runs had filled; the history is the test's own now.
+        """
+        from confiture.core.schema_read import read_text
+
+        history = tmp_path / "db" / "schema_history"
+        history.mkdir(parents=True)
+        (history / "001_elsewhere.json").write_text(
+            read_text("CREATE TABLE tb_never_built (id bigint PRIMARY KEY);").catalogued.to_json()
+        )
         from typer.testing import CliRunner
 
         from confiture.cli.main import app
@@ -193,6 +185,8 @@ class TestAutoDetectBaselineCLI:
                 "--auto-detect-baseline",
                 "--migrations-dir",
                 str(mig_dir),
+                "--snapshots-dir",
+                str(tmp_path / "db" / "schema_history"),
                 "--config",
                 str(env_dir / "local.yaml"),
             ],
@@ -200,5 +194,6 @@ class TestAutoDetectBaselineCLI:
 
         # No matching snapshot: says so and proceeds with an empty baseline → exit 0.
         assert result.exit_code == 0, result.output
-        assert "auto-detect baseline" in result.output
-        assert "empty baseline" in result.output
+        said = " ".join(result.output.split())  # however the console wrapped it
+        assert "auto-detect baseline" in said
+        assert "empty baseline" in said

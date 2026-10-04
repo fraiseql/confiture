@@ -32,7 +32,15 @@ runner = CliRunner()
 def _generate(tmp_path: Path, *extra: str):
     return runner.invoke(
         app,
-        ["migrate", "generate", "add_widget", "--migrations-dir", str(tmp_path), *extra],
+        [
+            "migrate",
+            "generate",
+            "add_widget",
+            "--no-snapshot",
+            "--migrations-dir",
+            str(tmp_path),
+            *extra,
+        ],
     )
 
 
