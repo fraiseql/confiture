@@ -110,14 +110,12 @@ class TemplateStatus:
         }
 
 
-#: How ``CREATE DATABASE`` copies the template (PostgreSQL 15+): ``wal_log`` writes
+#: How ``CREATE DATABASE`` copies the template: ``wal_log`` writes
 #: it through WAL, block by block — PostgreSQL's default; ``file_copy`` copies the
 #: files and forces a checkpoint before and after — far faster for a large
 #: template, not crash-safe, and unsuited to a replicated cluster (#438).
 CloneStrategy = typing.Literal["wal_log", "file_copy"]
 _STRATEGY_SQL: dict[str, SQL] = {"wal_log": SQL("WAL_LOG"), "file_copy": SQL("FILE_COPY")}
-#: ``server_version_num`` of the first release with ``CREATE DATABASE … STRATEGY``.
-_STRATEGY_SINCE = 150000
 
 
 @dataclass
@@ -817,7 +815,7 @@ class TestDbProvisioner:
                 thrashing WAL/checkpoint on an ``fsync=on`` cluster. ``None`` (the
                 default) or < 1 → unbounded, behaviour byte-for-byte unchanged.
             strategy: ``"file_copy"`` or ``"wal_log"`` — ``CREATE DATABASE …
-                STRATEGY`` (PostgreSQL 15+). ``file_copy`` copies the template's files
+                STRATEGY``. ``file_copy`` copies the template's files
                 instead of writing them through WAL: on a large template and an
                 ``fsync=on`` cluster, seconds instead of tens of seconds (#438). It
                 forces a checkpoint before and after, is not crash-safe, and must not
@@ -830,8 +828,7 @@ class TestDbProvisioner:
             clone actually landed in (``None`` for on-disk, including a fallback).
 
         Raises:
-            ConfigurationError: On invalid identifiers, an unknown strategy, or a
-                strategy asked of a server older than PostgreSQL 15.
+            ConfigurationError: On invalid identifiers or an unknown strategy.
             SchemaError: If cloning fails after all retries.
         """
         _validate_identifier(template)
@@ -841,8 +838,6 @@ class TestDbProvisioner:
         strategy = validate_clone_strategy(strategy)
 
         self._require_template_exists(template)
-        if strategy is not None:
-            self._require_strategy_support()
 
         with self._clone_concurrency_slot(template, max_concurrency):
             try:
@@ -878,19 +873,6 @@ class TestDbProvisioner:
                     sync_commit_off=sync_commit_off,
                     strategy=strategy,
                 )
-
-    def _require_strategy_support(self) -> None:
-        """Refuse a clone strategy on a server whose ``CREATE DATABASE`` has none."""
-        with self._maintenance_conn() as conn:
-            row = conn.execute("SHOW server_version_num").fetchone()
-        version = int(row[0]) if row else 0
-        if version < _STRATEGY_SINCE:
-            raise ConfigurationError(
-                f"CREATE DATABASE … STRATEGY needs PostgreSQL 15 or later; this server "
-                f"is {version // 10000}.",
-                error_code="CONFIG_010",
-                resolution_hint="Drop the strategy: the server copies the template its only way.",
-            )
 
     def _clone_with_retries(
         self,

@@ -69,6 +69,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pruned once it writes `.sql.zst`; `pg_dump`'s error has its credentials masked. Restore
   with `zstd -dc <file> | psql <url>` (gzip: `gunzip -c`).
 
+- **No code is left for a server below PostgreSQL 16.** The floor is one constant,
+  `core/connection.MINIMUM_SERVER_MAJOR`, and `tests/unit/test_no_server_below_floor.py` fails
+  on a comparison of a server version with an older release or a `*_SINCE` threshold at or
+  below it. Gone: the plain `DROP DATABASE` fallback for servers before 13, the refusal of
+  `CREATE DATABASE … STRATEGY` before 15, the 9.x version arithmetic, and the PostgreSQL 11
+  and 12 thresholds in the lock profile and the change set, whose version-dependent rows now
+  read "a server was read" or "none was" (filesystem mode keeps its conservative reading).
+  Nothing changes on a supported server: the lock profile, the change set's tiers, the
+  online plan and the drop statement are pinned for 16, 17, 18 and no server
+  (`tests/unit/test_supported_server_answers.py`). Nothing new refuses an older server.
+  `lock_profile.FAST_DEFAULT_SINCE` and `NOT_NULL_FROM_CHECK_SINCE` are no longer exported.
+
 - ⚠️ **PostgreSQL 16 is the minimum.** Every CI leg runs PostgreSQL 16 (the pg_tviews leg,
   18); none ran 16 before — the main suite, the version matrix, the plpgsql_check image and
   the publish gate ran 15. The documents that named a minimum disagreed (12, 14, and "tested

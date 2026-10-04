@@ -91,22 +91,6 @@ class TestTempDatabase:
         assert "WITH (FORCE)" in str(drop_calls[0][0][0])
 
     @patch("confiture.core.temp_database.psycopg.connect")
-    def test_uses_terminate_backend_on_old_pg(self, mock_connect: MagicMock) -> None:
-        mock_conn = MagicMock()
-        mock_conn.closed = False
-        mock_conn.info.server_version = 120000
-        mock_connect.return_value = mock_conn
-
-        td = TempDatabase("postgresql://localhost/myapp")
-        td.__enter__()
-        td.__exit__(None, None, None)
-
-        execute_args = [str(c[0][0]) for c in mock_conn.execute.call_args_list]
-        assert any("pg_terminate_backend" in a for a in execute_args)
-        assert any("DROP DATABASE" in a for a in execute_args)
-        assert not any("WITH (FORCE)" in a for a in execute_args)
-
-    @patch("confiture.core.temp_database.psycopg.connect")
     def test_drops_database_even_on_schema_error(self, mock_connect: MagicMock) -> None:
         mock_conn = MagicMock()
         mock_conn.closed = False

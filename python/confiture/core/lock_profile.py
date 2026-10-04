@@ -14,8 +14,9 @@ Three properties are deliberate:
 * **Version-dependent rows are explicit.** Two rows changed with a PostgreSQL
   release — ``ADD COLUMN … DEFAULT`` stopped rewriting in PG 11, and PG 12 can
   prove ``SET NOT NULL`` from a valid ``CHECK`` instead of scanning. Each carries
-  :attr:`LockProfile.since_version`, and an unknown server version takes the
-  **worse** of the two readings rather than the newer one.
+  :attr:`LockProfile.since_version`. Every supported server (16+) is past both,
+  so a known server takes the newer reading, and an unknown one takes the
+  **worse** of the two rather than the newer one.
 * **Duration is a class, not a number.** ``metadata`` / ``seconds`` /
   ``minutes+``. A predicted duration in seconds is a promise the operator will
   hold confiture to and that no static analysis can keep.
@@ -55,8 +56,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 __all__ = [
-    "FAST_DEFAULT_SINCE",
-    "NOT_NULL_FROM_CHECK_SINCE",
     "Duration",
     "LockLevel",
     "LockProfile",
@@ -65,9 +64,11 @@ __all__ = [
     "worst_profile",
 ]
 
-# The PostgreSQL release each version-dependent row changed in.
-FAST_DEFAULT_SINCE = 11
-NOT_NULL_FROM_CHECK_SINCE = 12
+# The PostgreSQL release each version-dependent row's favourable reading starts
+# at, reported as ``since_version``. Every supported server is past both, so a row
+# reads two ways: a server was read, or none was (``server_version=None``).
+_FAST_DEFAULT_RELEASE = 11
+_NOT_NULL_FROM_CHECK_RELEASE = 12
 
 
 class LockLevel(Enum):
@@ -195,9 +196,10 @@ def profile_for_kind(
     :class:`~confiture.core.replica.classifier.DdlOperation`; both read this one
     table, so the two surfaces cannot disagree about what an operation costs.
 
-    ``server_version`` is the PostgreSQL **major** (``16``, not ``160004``). When
-    it is ``None`` — the filesystem-only default — every version-dependent row
-    answers with its pre-improvement reading. ``rewrites`` overrides the heap
+    ``server_version`` is the PostgreSQL **major** (``16``, not ``160004``). Every
+    supported server answers a version-dependent row with its favourable reading;
+    when it is ``None`` — the filesystem-only default — the row answers with its
+    pre-improvement reading. ``rewrites`` overrides the heap
     verdict for ``alter_column_type``, where only the type lattice knows.
     """
     if kind == "add_column":
@@ -404,18 +406,18 @@ def lock_profile(op: DdlOperation, *, server_version: int | None = None) -> Lock
 
 
 def _add_column(*, has_default: bool, nullable: bool, server_version: int | None) -> LockProfile:
-    """`ADD COLUMN` is metadata-only, except for a pre-PG-11 non-null default."""
+    """`ADD COLUMN` is metadata-only; a default is too, once a server says it can be."""
     del nullable  # named for the call sites; both NOT NULL forms cost the same
     if not has_default:
         return _METADATA_ALTER
-    if server_version is not None and server_version >= FAST_DEFAULT_SINCE:
+    if server_version is not None:
         return LockProfile(
             lock=LockLevel.ACCESS_EXCLUSIVE,
             rewrites_table=False,
             blocks_reads=True,
             blocks_writes=True,
             duration=Duration.METADATA,
-            since_version=FAST_DEFAULT_SINCE,
+            since_version=_FAST_DEFAULT_RELEASE,
             note="PostgreSQL 11+ stores the default in the catalog instead of rewriting",
         )
     return LockProfile(
@@ -424,57 +426,51 @@ def _add_column(*, has_default: bool, nullable: bool, server_version: int | None
         blocks_reads=True,
         blocks_writes=True,
         duration=Duration.MINUTES_PLUS,
-        since_version=FAST_DEFAULT_SINCE,
+        since_version=_FAST_DEFAULT_RELEASE,
         note=(
             "rewrites the whole table below PostgreSQL 11; the server version is "
             "unknown here, so the older reading stands"
-            if server_version is None
-            else "rewrites the whole table below PostgreSQL 11"
         ),
     )
 
 
 def _set_not_null(server_version: int | None, *, proven_by_check: bool = False) -> LockProfile:
-    """``SET NOT NULL``: a full scan, unless a validated CHECK already proves it (PostgreSQL ≥ 12).
+    """``SET NOT NULL``: a full scan, unless a validated CHECK already proves it.
 
     ``proven_by_check`` is the expand/contract runner's fact: it validated
     ``CHECK (col IS NOT NULL)`` first, so the server skips the scan.
     """
-    if (
-        proven_by_check
-        and server_version is not None
-        and server_version >= NOT_NULL_FROM_CHECK_SINCE
-    ):
+    if server_version is None:
+        return LockProfile(
+            lock=LockLevel.ACCESS_EXCLUSIVE,
+            rewrites_table=False,
+            blocks_reads=True,
+            blocks_writes=True,
+            duration=Duration.MINUTES_PLUS,
+            since_version=_NOT_NULL_FROM_CHECK_RELEASE,
+            note="scans every row to prove no NULL is present",
+        )
+    if proven_by_check:
         return LockProfile(
             lock=LockLevel.ACCESS_EXCLUSIVE,
             rewrites_table=False,
             blocks_reads=True,
             blocks_writes=True,
             duration=Duration.METADATA,
-            since_version=NOT_NULL_FROM_CHECK_SINCE,
+            since_version=_NOT_NULL_FROM_CHECK_RELEASE,
             note="a validated CHECK (col IS NOT NULL) proves it; no scan",
-        )
-    if server_version is not None and server_version >= NOT_NULL_FROM_CHECK_SINCE:
-        return LockProfile(
-            lock=LockLevel.ACCESS_EXCLUSIVE,
-            rewrites_table=False,
-            blocks_reads=True,
-            blocks_writes=True,
-            duration=Duration.SECONDS,
-            since_version=NOT_NULL_FROM_CHECK_SINCE,
-            note=(
-                "PostgreSQL 12+ skips the scan when a valid CHECK (col IS NOT NULL) "
-                "already exists; without one it still scans"
-            ),
         )
     return LockProfile(
         lock=LockLevel.ACCESS_EXCLUSIVE,
         rewrites_table=False,
         blocks_reads=True,
         blocks_writes=True,
-        duration=Duration.MINUTES_PLUS,
-        since_version=NOT_NULL_FROM_CHECK_SINCE,
-        note="scans every row to prove no NULL is present",
+        duration=Duration.SECONDS,
+        since_version=_NOT_NULL_FROM_CHECK_RELEASE,
+        note=(
+            "PostgreSQL 12+ skips the scan when a valid CHECK (col IS NOT NULL) "
+            "already exists; without one it still scans"
+        ),
     )
 
 

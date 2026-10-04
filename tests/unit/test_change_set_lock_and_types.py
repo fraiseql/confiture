@@ -111,9 +111,8 @@ def test_unmodelled_type_stays_unclassified_even_with_facts() -> None:
     ("server_version", "expected"),
     [
         (None, RiskTier.LOCK_RISKY),
-        (10, RiskTier.LOCK_RISKY),
-        (11, RiskTier.ADDITIVE),
         (16, RiskTier.ADDITIVE),
+        (18, RiskTier.ADDITIVE),
     ],
 )
 def test_add_column_default_refines_with_server_version(

@@ -19,17 +19,17 @@ CHANGE_TYPE = "ALTER TABLE orders ALTER COLUMN total TYPE bigint;"
 
 
 def _stages(sql: str) -> list[dict]:
-    plans = plan(sql, server_version=15)
+    plans = plan(sql, server_version=16)
     assert len(plans) == 1, plans
     return plans[0].to_dict()["stages"]
 
 
 def test_a_safe_migration_has_no_plan() -> None:
-    assert plan("CREATE TABLE t (id integer PRIMARY KEY);", server_version=15) == []
+    assert plan("CREATE TABLE t (id integer PRIMARY KEY);", server_version=16) == []
 
 
 def test_add_not_null_column_expands_backfills_then_proves_not_null() -> None:
-    plans = plan(ADD_NOT_NULL, server_version=15)
+    plans = plan(ADD_NOT_NULL, server_version=16)
     assert [p.pattern for p in plans] == ["add_not_null_column"]
     assert plans[0].to_dict() == {
         "pattern": "add_not_null_column",
@@ -122,17 +122,17 @@ def test_change_type_adds_dual_writes_backfills_swaps_then_drops() -> None:
 
 
 def test_the_plan_is_pure_and_stable() -> None:
-    assert plan(ADD_NOT_NULL, server_version=15) == plan(ADD_NOT_NULL, server_version=15)
+    assert plan(ADD_NOT_NULL, server_version=16) == plan(ADD_NOT_NULL, server_version=16)
     assert (
-        plan(ADD_NOT_NULL + ADD_CHECK, server_version=15)[1].pattern == "add_constraint_not_valid"
+        plan(ADD_NOT_NULL + ADD_CHECK, server_version=16)[1].pattern == "add_constraint_not_valid"
     )
 
 
 def test_a_file_runs_online_as_a_whole_or_not_at_all() -> None:
     """A migration that mixes a staged change with a plain statement applies the classic way."""
-    assert plannable(ADD_NOT_NULL + ADD_CHECK, server_version=15) is not None
+    assert plannable(ADD_NOT_NULL + ADD_CHECK, server_version=16) is not None
     assert (
-        plannable(ADD_NOT_NULL + "CREATE INDEX ix ON orders (status);", server_version=15) is None
+        plannable(ADD_NOT_NULL + "CREATE INDEX ix ON orders (status);", server_version=16) is None
     )
-    assert plannable("CREATE TABLE t (id integer);", server_version=15) is None
-    assert plannable("", server_version=15) is None
+    assert plannable("CREATE TABLE t (id integer);", server_version=16) is None
+    assert plannable("", server_version=16) is None

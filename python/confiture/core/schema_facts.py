@@ -93,9 +93,9 @@ def _server_version(conn: Any) -> int | None:
     """The server *major* version.
 
     Prefers the connection's own attribute (no round trip); falls back to
-    ``SHOW server_version_num``. psycopg reports ``160004`` for 16.4, and 90603
-    for the 9.x scheme — both floor-divide to the major by the same rule only
-    above 10, so the 9.x case is handled explicitly.
+    ``SHOW server_version_num``. Both are ``server_version_num``: ``160004`` for
+    16.4, whose major is the number divided by 10000. A number with no major in
+    it is not a version that was read.
     """
     raw = getattr(getattr(conn, "info", None), "server_version", None)
     if raw is None:
@@ -104,9 +104,7 @@ def _server_version(conn: Any) -> int | None:
         number = int(raw)
     except TypeError, ValueError:
         return None
-    if number <= 0:
-        return None
-    return number // 10000 if number >= 100000 else number // 10000 or number // 100 % 100
+    return number // 10000 if number >= 10000 else None
 
 
 def _column_types(conn: Any) -> dict[str, str]:

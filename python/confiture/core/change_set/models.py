@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 
 from confiture.core.lock_profile import (
-    FAST_DEFAULT_SINCE,
     LockProfile,
 )
 from confiture.core.risk_tier import RiskTier, worst_tier
@@ -218,13 +217,13 @@ def tier_for_add_column(
 
     With no ``server_version`` — the filesystem-only default — both NOT NULL
     forms take the more severe of the two readings available. When a database has
-    said it is PostgreSQL 11 or newer, the ``DEFAULT`` form is a catalog write
-    (#199) and drops to additive; the no-default form is a hard failure rather
+    said what it is, the ``DEFAULT`` form is a catalog write on every supported
+    server (#199) and drops to additive; the no-default form is a hard failure rather
     than a lock risk on every version, so it does not move.
     """
     if nullable:
         return RiskTier.ADDITIVE
-    if has_default and server_version is not None and server_version >= FAST_DEFAULT_SINCE:
+    if has_default and server_version is not None:
         return RiskTier.ADDITIVE
     return RiskTier.LOCK_RISKY
 
