@@ -8,10 +8,11 @@ DROP FUNCTION for the old signature. Both sides are the schema model's
   - declared: read from the project's DDL by the lint inventory (:func:`declared_routines`)
   - live: read from ``pg_proc`` by ``core/live_catalog`` (:func:`live_routines`)
 
-Two routines are one when their names match and their ``signature_key`` does,
-argument by argument (``type_lattice.signatures_match``) — one canonicaliser on
-both sides, so ``int8`` and ``bigint`` are one routine and ``text[]`` and
-``text`` are two. Functions present in the live DB but absent from source are
+Which routines the two sides share is the engine's answer
+(:func:`unpaired_routines`): two routines are one when their kind and name match and
+their ``signature_key`` does, argument by argument (``type_lattice.signatures_match``)
+— one canonicaliser on both sides, so ``int8`` and ``bigint`` are one routine and
+``text[]`` and ``text`` are two. Functions present in the live DB but absent from source are
 only flagged when the source defines *at least one* signature for that
 (schema, name) — this avoids false positives for built-ins, extensions, and
 unmanaged functions.
@@ -33,14 +34,18 @@ from typing import TYPE_CHECKING, Any
 from pglast.stream import maybe_double_quote_name
 
 from confiture.core import live_catalog
+from confiture.core.ddl_objects import DDLObject
+from confiture.core.differ import EXACT, SchemaDiffer, slot_side
+from confiture.core.schema_change import ObjectAdded, ObjectDropped
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_model import routine_ref
 from confiture.core.schema_read import read_text
 from confiture.core.type_lattice import catalog_spelling, signatures_match
 
 if TYPE_CHECKING:
     import psycopg
 
-    from confiture.core.schema_model import Routine, RoutineKind
+    from confiture.core.schema_model import ObjectRef, Routine, RoutineKind
 
 #: The routine kinds a signature comparison reads: what ``CREATE FUNCTION`` and
 #: ``CREATE PROCEDURE`` define, on both sides. An aggregate is created otherwise.
@@ -138,24 +143,41 @@ def definition_of(definitions: Definitions, routine: Routine) -> str | None:
     )
 
 
-def by_function(routines: Iterable[Routine]) -> dict[str, list[Routine]]:
-    """*routines* grouped by :func:`function_key`, each group in the order given."""
+def unpaired_routines(
+    old: Iterable[Routine], new: Iterable[Routine]
+) -> tuple[list[Routine], list[Routine]]:
+    """Each routine of *old* that *new* lacks, and each of *new* that *old* lacks.
+
+    The engine's answer (``SchemaDiffer.compare_sides``) over each routine's
+    signature alone: what it drops is *old*'s alone, what it adds *new*'s. Each list
+    keeps the order its side gave.
+    """
+    routines: dict[int, Routine] = {}
+
+    def statements(found: Iterable[Routine]) -> dict[ObjectRef, list[DDLObject]]:
+        by_ref: dict[ObjectRef, list[DDLObject]] = defaultdict(list)
+        for routine in found:
+            ref = routine_ref(routine)
+            statement = DDLObject(ref, "", "", routine.signature_key)
+            routines[id(statement)] = routine
+            by_ref[ref].append(statement)
+        return by_ref
+
+    old, new = list(old), list(new)
+    diff = SchemaDiffer().compare_sides(
+        slot_side("routines", statements(old)), slot_side("routines", statements(new)), EXACT
+    )
+    dropped = {id(routines[id(c.obj)]) for c in diff.changes if isinstance(c, ObjectDropped)}
+    added = {id(routines[id(c.obj)]) for c in diff.changes if isinstance(c, ObjectAdded)}
+    return [r for r in old if id(r) in dropped], [r for r in new if id(r) in added]
+
+
+def by_name(routines: Iterable[Routine]) -> dict[str, list[Routine]]:
+    """*routines* under :func:`function_key`, each name in the order it first appears."""
     grouped: dict[str, list[Routine]] = defaultdict(list)
     for routine in routines:
         grouped[function_key(routine)].append(routine)
     return grouped
-
-
-def matching(routine: Routine, candidates: Iterable[Routine]) -> Routine | None:
-    """The first of *candidates* that is *routine*, argument type by argument type."""
-    return next(
-        (
-            other
-            for other in candidates
-            if signatures_match(routine.signature_key, other.signature_key)
-        ),
-        None,
-    )
 
 
 @dataclasses.dataclass
@@ -337,37 +359,33 @@ class FunctionSignatureDriftDetector:
             FunctionSignatureDriftReport
         """
         t0 = time.monotonic()
-        declared_in_order = list(source)
-        source_by_fn = by_function(declared_in_order)
-        live_by_fn = by_function(live)
-
+        source = list(source)
+        declared = by_name(source)
+        missing, only_live = unpaired_routines(source, live)
+        order = {fn_key: at for at, fn_key in enumerate(declared)}
         stale_overloads = [
             StaleOverload(
                 schema=routine.schema or DEFAULT_SCHEMA,
                 name=routine.name,
                 stale_signature=printed_signature(routine),
-                source_signatures=sorted(printed_signature(r) for r in declared),
+                source_signatures=sorted(
+                    printed_signature(r) for r in declared[function_key(routine)]
+                ),
                 kind=routine.kind,
                 arguments=routine.signature,
             )
-            for fn_key, declared in source_by_fn.items()
             for routine in sorted(
-                (r for r in live_by_fn.get(fn_key, []) if matching(r, declared) is None),
-                key=printed_arguments,
+                (r for r in only_live if function_key(r) in declared),
+                key=lambda r: (order[function_key(r)], printed_arguments(r)),
             )
         ]
-
-        missing_from_db = [
-            printed_signature(routine)
-            for routine in declared_in_order
-            if matching(routine, live_by_fn.get(function_key(routine), [])) is None
-        ]
+        missing_from_db = [printed_signature(routine) for routine in missing]
 
         return FunctionSignatureDriftReport(
             stale_overloads=stale_overloads,
             missing_from_db=missing_from_db,
             schemas_checked=schemas_checked or [],
-            functions_checked=len(source_by_fn),
+            functions_checked=len(declared),
             has_drift=len(stale_overloads) > 0,
             detection_time_ms=(time.monotonic() - t0) * 1000,
             missing_is_drift=missing_is_drift,

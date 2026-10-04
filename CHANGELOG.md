@@ -42,6 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SchemaDiffer.compare_sides` answers: it pairs a routine's overloads by signature within
   its bucket and replaces one whose body differs. Payloads, hashes and goldens are unchanged;
   a guard fails on a body check that compares two values itself.
+- **The signature checks pair routines through the engine too.** `migrate validate
+  --check-signatures`, the accompaniment check for a changed parameter type and `migrate
+  fix-signatures` grouped routines by name and matched them argument by argument themselves.
+  They now render `function_signature_drift.unpaired_routines`, the engine's answer of which
+  routines one side holds and the other lacks. `by_function`, `matching` and `paired` are
+  gone, and a guard fails on their return. One reach change: a function and a procedure of
+  one name and signature are two routines, as PostgreSQL holds them.
 
 - **`confiture drift` is the one comparison, said as findings.** It compared a tree with a
   database itself, beside the differ, and the two disagreed; now it asks
