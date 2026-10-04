@@ -83,16 +83,10 @@ def test_rewrite_flags(op, rewrites: bool) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_add_column_default_rewrites_below_pg11() -> None:
-    op = AddColumn(table="t", column="c", nullable=False, has_default=True)
-    assert lock_profile(op, server_version=10).rewrites_table is True
-    assert lock_profile(op, server_version=10).duration is Duration.MINUTES_PLUS
-
-
-def test_add_column_default_does_not_rewrite_from_pg11() -> None:
+def test_add_column_default_does_not_rewrite_on_a_known_server() -> None:
     """PG 11's fast default turns the rewrite into a catalog write."""
     op = AddColumn(table="t", column="c", nullable=False, has_default=True)
-    profile = lock_profile(op, server_version=11)
+    profile = lock_profile(op, server_version=16)
     assert profile.rewrites_table is False
     assert profile.duration is Duration.METADATA
 
@@ -106,15 +100,15 @@ def test_unknown_version_answers_conservatively() -> None:
     assert unknown.since_version == 11
 
 
-def test_set_not_null_scans_below_pg12() -> None:
-    profile = lock_profile(SetNotNull(table="t", column="c"), server_version=11)
+def test_set_not_null_scans_when_the_server_is_unknown() -> None:
+    profile = lock_profile(SetNotNull(table="t", column="c"))
     assert profile.duration is Duration.MINUTES_PLUS
     assert profile.blocks_reads is True
 
 
-def test_set_not_null_can_skip_the_scan_from_pg12() -> None:
+def test_set_not_null_can_skip_the_scan_on_a_known_server() -> None:
     """PG 12 can prove NOT NULL from a valid CHECK instead of scanning."""
-    profile = lock_profile(SetNotNull(table="t", column="c"), server_version=12)
+    profile = lock_profile(SetNotNull(table="t", column="c"), server_version=16)
     assert profile.duration is Duration.SECONDS
     assert profile.note
 

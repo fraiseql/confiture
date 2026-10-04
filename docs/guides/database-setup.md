@@ -60,7 +60,7 @@ make clean-db
 
 ### Prerequisites
 
-- **PostgreSQL 12.0+** (recommended: 15+)
+- **PostgreSQL 16+**
 - **psql** command-line tool
 - **Linux/macOS** or **WSL2 on Windows**
 

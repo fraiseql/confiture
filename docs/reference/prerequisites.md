@@ -51,7 +51,6 @@ Confiture's distributed locking uses `pg_advisory_lock` (session-level) and `pg_
 |---|---|---|
 | `postgres_fdw` | Schema-to-schema migration (Medium 4) | `CREATE EXTENSION postgres_fdw;` as superuser |
 | `pg_stat_statements` | Performance tuning queries in `docs/operations/performance-tuning.md` | Configure in `postgresql.conf` |
-| `pgcrypto` | Some anonymization strategies use `gen_random_uuid()` from this extension on PG < 13 | `CREATE EXTENSION pgcrypto;` |
 
 Confiture itself does not require any extensions to be installed.
 

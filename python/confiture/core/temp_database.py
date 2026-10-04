@@ -76,29 +76,25 @@ def terminate_backends(conn: psycopg.Connection, db_name: str) -> None:
 def force_drop_database(conn: psycopg.Connection, db_name: str) -> None:
     """Drop *db_name* if it exists, terminating any remaining backends first.
 
-    Uses ``DROP DATABASE … WITH (FORCE)`` on PostgreSQL >= 13, falling back to an
-    explicit :func:`terminate_backends` + plain ``DROP DATABASE`` on older
-    versions. The database name is quoted via :class:`psycopg.sql.Identifier`
-    (never string-interpolated).
+    ``DROP DATABASE … WITH (FORCE)`` terminates them itself. The database name is
+    quoted via :class:`psycopg.sql.Identifier` (never string-interpolated).
 
     Args:
         conn: An autocommit maintenance connection.
         db_name: Database to drop.
     """
-    db_id = psycopg.sql.Identifier(db_name)
-    if conn.info.server_version >= 130000:
-        conn.execute(psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(db_id))
-    else:
-        terminate_backends(conn, db_name)
-        conn.execute(psycopg.sql.SQL("DROP DATABASE IF EXISTS {}").format(db_id))
+    conn.execute(
+        psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
+            psycopg.sql.Identifier(db_name)
+        )
+    )
 
 
 class TempDatabase:
     """Context manager that creates a throwaway PostgreSQL database.
 
     On enter, creates a uniquely-named database and returns a connection URL.
-    On exit, drops the database unconditionally (``WITH (FORCE)`` on PG >= 13,
-    ``pg_terminate_backend`` fallback on older versions).
+    On exit, drops the database unconditionally (``DROP DATABASE … WITH (FORCE)``).
 
     The context manager connects to the ``postgres`` maintenance database —
     never to the user's target database, which may not exist.
@@ -119,7 +115,6 @@ class TempDatabase:
         self._db_name = f"confiture_tmp_{uuid.uuid4().hex[:8]}"
         self._maintenance_url = _maintenance_url(server_url)
         self._maintenance_conn: psycopg.Connection | None = None
-        self._server_version: int = 0
 
     def __enter__(self) -> str:
         try:
@@ -131,8 +126,6 @@ class TempDatabase:
                     "Ensure the PostgreSQL server is running and the connection URL is correct."
                 ),
             ) from exc
-
-        self._server_version = self._maintenance_conn.info.server_version
 
         self._maintenance_conn.execute(
             psycopg.sql.SQL("CREATE DATABASE {}").format(psycopg.sql.Identifier(self._db_name))
@@ -155,20 +148,7 @@ class TempDatabase:
                 conn = psycopg.connect(self._maintenance_url, autocommit=True)
                 self._maintenance_conn = conn
 
-            db_id = psycopg.sql.Identifier(self._db_name)
-
-            if self._server_version >= 130000:
-                conn.execute(
-                    psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(db_id)
-                )
-            else:
-                conn.execute(
-                    "SELECT pg_terminate_backend(pid) "
-                    "FROM pg_stat_activity "
-                    "WHERE datname = %s AND pid <> pg_backend_pid()",
-                    (self._db_name,),
-                )
-                conn.execute(psycopg.sql.SQL("DROP DATABASE IF EXISTS {}").format(db_id))
+            force_drop_database(conn, self._db_name)
         except psycopg.Error:
             pass  # best-effort cleanup
         finally:

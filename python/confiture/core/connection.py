@@ -18,6 +18,12 @@ from confiture.exceptions import ConfigurationError
 #: this name rather than importing the driver.
 DatabaseError = psycopg.Error
 
+#: The oldest PostgreSQL major confiture supports. No code branches for a server
+#: below it: what a version-dependent answer distinguishes is a server that was
+#: read (every supported one answers alike) from none at all. Nothing refuses an
+#: older server at connect time; it is simply not a server confiture is written for.
+MINIMUM_SERVER_MAJOR = 16
+
 
 def connect_url(url: str, **kwargs: Any) -> psycopg.Connection:
     """A connection to *url* that the caller owns and closes.
