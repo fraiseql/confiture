@@ -11,6 +11,7 @@ from confiture.core.large_tables import (
     OnlineIndexBuilder,
     TableSizeEstimator,
 )
+from confiture.sql_text import rendered
 
 
 class TestBatchConfig:
@@ -338,8 +339,7 @@ class TestOnlineIndexBuilder:
 
         builder.create_index_concurrently(table="users", columns=["email"], where="active = true")
 
-        call_args = str(cursor.execute.call_args)
-        assert "WHERE active = true" in call_args
+        assert "WHERE active = true" in rendered(cursor.execute.call_args.args[0])
 
     def test_create_index_with_include(self, mock_connection):
         """Test creating covering index."""
@@ -358,8 +358,7 @@ class TestOnlineIndexBuilder:
 
         builder.create_index_concurrently(table="documents", columns=["content"], method="gin")
 
-        rendered = cursor.execute.call_args.args[0].as_string()
-        assert 'USING "gin"' in rendered
+        assert 'USING "gin"' in rendered(cursor.execute.call_args.args[0])
 
     def test_drop_index_concurrently(self, mock_connection):
         """Test dropping index concurrently."""

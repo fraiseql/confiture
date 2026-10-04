@@ -3,16 +3,16 @@
 Table, column and index names used to be f-string interpolated into every
 statement. ``expression``, ``where_clause``, ``default`` and ``column_type``
 stay raw SQL by documented contract — they are code the migration author
-writes — but a name is a name and goes through ``psycopg.sql.Identifier``.
+writes — but a name is a name and is a template's ``{name:i}``.
 """
 
 from __future__ import annotations
 
+from string.templatelib import Template
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from psycopg import sql as pgsql
 
 from confiture.core.large_tables import (
     BatchConfig,
@@ -20,6 +20,7 @@ from confiture.core.large_tables import (
     OnlineIndexBuilder,
     TableSizeEstimator,
 )
+from confiture.sql_text import rendered
 
 TABLE = 'ord"ers'  # a name that must be quoted to survive
 
@@ -54,7 +55,7 @@ class _RecordingCursor:
 
 
 def _text(sql: Any) -> str:
-    return sql.as_string() if isinstance(sql, pgsql.Composable) else str(sql)
+    return rendered(sql)
 
 
 def _conn() -> tuple[MagicMock, _RecordingCursor]:
@@ -71,7 +72,7 @@ def _assert_name_is_quoted(queries: list[Any]) -> None:
         text = _text(q)
         if "ord" not in text:
             continue
-        assert isinstance(q, pgsql.Composable), f"raw SQL string names the table: {text!r}"
+        assert isinstance(q, Template), f"raw SQL string names the table: {text!r}"
         assert '"ord""ers"' in text, text
         assert f" {TABLE} " not in text and f" {TABLE}\n" not in text
 
@@ -132,7 +133,7 @@ def test_index_builder_quotes_names(call: Any) -> None:
     call(OnlineIndexBuilder(conn))
     assert len(cur.queries) == 1
     q = cur.queries[0]
-    assert isinstance(q, pgsql.Composable), f"raw SQL string: {q!r}"
+    assert isinstance(q, Template), f"raw SQL string: {q!r}"
     text = _text(q)
     assert '"ord""ers"' in text  # the table, or the index named after it
 
