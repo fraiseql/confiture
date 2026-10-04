@@ -193,7 +193,7 @@ class DryRunExecutor:
         error: str | None = None
         success = True
 
-        self._conn.execute(f"SAVEPOINT {self.SAVEPOINT_NAME}")
+        self._conn.execute(t"SAVEPOINT {self.SAVEPOINT_NAME:i}")
         try:
             for sql in statements:
                 result = self._execute_one(sql)
@@ -203,8 +203,8 @@ class DryRunExecutor:
                     error = result.error
                     break  # stop on first failure
         finally:
-            self._conn.execute(f"ROLLBACK TO SAVEPOINT {self.SAVEPOINT_NAME}")
-            self._conn.execute(f"RELEASE SAVEPOINT {self.SAVEPOINT_NAME}")
+            self._conn.execute(t"ROLLBACK TO SAVEPOINT {self.SAVEPOINT_NAME:i}")
+            self._conn.execute(t"RELEASE SAVEPOINT {self.SAVEPOINT_NAME:i}")
 
         total_ms = (time.perf_counter() - start) * 1000
         return DryRunResult(
