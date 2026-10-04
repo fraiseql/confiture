@@ -58,6 +58,8 @@ from confiture.core.schema_change import (
     ObjectAdded,
     ObjectDropped,
     ObjectReplaced,
+    PrimaryKeyAdded,
+    PrimaryKeyDropped,
     SchemaChange,
     SequenceAdded,
     SequenceDropped,
@@ -133,7 +135,12 @@ def _table_object_tier(change: TableObjectChange) -> RiskTier | None:
         case ForeignKeyAdded(_, constraint):
             # Added NOT VALID and validated separately — when it has a name to validate by.
             return tier_for_add_constraint(not_valid=bool(constraint.name))
-        case CheckConstraintAdded() | UniqueConstraintAdded() | ExclusionConstraintAdded():
+        case (
+            CheckConstraintAdded()
+            | UniqueConstraintAdded()
+            | PrimaryKeyAdded()
+            | ExclusionConstraintAdded()
+        ):
             # An EXCLUDE builds its index under the lock; it has no NOT VALID.
             return tier_for_add_constraint(not_valid=False)
         case IndexDropped():
@@ -142,6 +149,7 @@ def _table_object_tier(change: TableObjectChange) -> RiskTier | None:
             ForeignKeyDropped()
             | CheckConstraintDropped()
             | UniqueConstraintDropped()
+            | PrimaryKeyDropped()
             | ExclusionConstraintDropped()
         ):
             return _TIER_BY_KIND["drop_constraint"]
@@ -211,7 +219,9 @@ def tier_of(change: SchemaChange) -> RiskTier | None:
             | CheckConstraintAdded()
             | CheckConstraintDropped()
             | UniqueConstraintAdded()
+            | PrimaryKeyAdded()
             | UniqueConstraintDropped()
+            | PrimaryKeyDropped()
             | ExclusionConstraintAdded()
             | ExclusionConstraintDropped()
         ):

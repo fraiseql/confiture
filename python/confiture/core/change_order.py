@@ -42,6 +42,8 @@ from confiture.core.schema_change import (
     ObjectAdded,
     ObjectDropped,
     ObjectReplaced,
+    PrimaryKeyAdded,
+    PrimaryKeyDropped,
     SchemaChange,
     SequenceAdded,
     SequenceDropped,
@@ -119,7 +121,9 @@ def _rank(change: SchemaChange) -> int:
             | CheckConstraintAdded()
             | CheckConstraintDropped()
             | UniqueConstraintAdded()
+            | PrimaryKeyAdded()
             | UniqueConstraintDropped()
+            | PrimaryKeyDropped()
             | ExclusionConstraintAdded()
             | ExclusionConstraintDropped()
         ):

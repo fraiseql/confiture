@@ -33,6 +33,8 @@ from confiture.core.schema_change import (
     ObjectAdded,
     ObjectDropped,
     ObjectReplaced,
+    PrimaryKeyAdded,
+    PrimaryKeyDropped,
     SchemaChange,
     SequenceAdded,
     SequenceDropped,
@@ -84,7 +86,9 @@ def is_body_change(change: SchemaChange) -> bool:
             | CheckConstraintAdded()
             | CheckConstraintDropped()
             | UniqueConstraintAdded()
+            | PrimaryKeyAdded()
             | UniqueConstraintDropped()
+            | PrimaryKeyDropped()
             | ExclusionConstraintAdded()
             | ExclusionConstraintDropped()
         ):

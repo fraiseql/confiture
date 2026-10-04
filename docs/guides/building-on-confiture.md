@@ -232,7 +232,7 @@ hold, so one name holds a model object in one variant and a spelling in another:
 | `ColumnNullabilityChanged` | `table: str`, `column: str`, `nullable: bool` | the table |
 | `ColumnDefaultChanged` | `table: str`, `column: str`, `old: str \| None`, `new: str \| None` | the table |
 | `IndexAdded`, `IndexDropped` | `table: str`, `index: Index` | the table |
-| `ForeignKeyAdded`, `ForeignKeyDropped`, `CheckConstraintAdded`, `CheckConstraintDropped`, `UniqueConstraintAdded`, `UniqueConstraintDropped` | `table: str`, `constraint: Constraint` | the table |
+| `ForeignKeyAdded`, `ForeignKeyDropped`, `CheckConstraintAdded`, `CheckConstraintDropped`, `UniqueConstraintAdded`, `UniqueConstraintDropped`, `PrimaryKeyAdded`, `PrimaryKeyDropped` | `table: str`, `constraint: Constraint` | the table |
 | `EnumTypeAdded`, `EnumTypeDropped` | `enum: EnumType` | the type |
 | `EnumValuesChanged` | `enum: str`, `added: tuple[str, ...]`, `removed: tuple[str, ...]` | the type |
 | `SequenceAdded`, `SequenceDropped` | `sequence: Sequence` | the sequence |

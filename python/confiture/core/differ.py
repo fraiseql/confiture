@@ -9,11 +9,15 @@ This module provides functionality to:
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
+import pglast
+
 from confiture.core.ddl_objects import DDLObject, pair_definitions
+from confiture.core.ddl_walk import canonical_default
 from confiture.core.linting.inventory import signatures_match
 from confiture.core.linting.quoted_names import QuotedName
 from confiture.core.schema_change import (
@@ -37,6 +41,8 @@ from confiture.core.schema_change import (
     ObjectAdded,
     ObjectDropped,
     ObjectReplaced,
+    PrimaryKeyAdded,
+    PrimaryKeyDropped,
     SchemaChange,
     SchemaDiff,
     SequenceAdded,
@@ -50,7 +56,9 @@ from confiture.core.schema_change import (
 from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_words
 from confiture.core.schema_model import (
     ALL_PARITY_RULES,
+    TVIEW_OPTIONS,
     Column,
+    Constraint,
     EnumType,
     ObjectRef,
     Provenance,
@@ -59,6 +67,7 @@ from confiture.core.schema_model import (
     SchemaModel,
     Sequence,
     Table,
+    TView,
     parity_column,
     parity_constraint,
     parity_indexes,
@@ -93,11 +102,16 @@ class ComparisonPolicy:
             by similarity as one renamed.
         rules: The parity normalisations applied to both sides before an object
             is compared, each a key of ``PARITY_NORMALISATIONS``.
+        author: The side an author wrote when the other is a database's. Its
+            unnamed constraints and indexes are paired by what they say, whatever
+            name PostgreSQL gave each — a name of PostgreSQL's own shape is not the
+            only one it leaves: a renamed table keeps ``old_name_pkey``.
     """
 
     name: Literal["author", "catalogued", "exact"]
     renames: bool
     rules: frozenset[str]
+    author: Literal["old", "new"] | None = None
 
 
 #: Two trees: today's differ, renames detected, everything as written.
@@ -240,6 +254,11 @@ def _object_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
     """
     if obj.name:
         return (obj.name,)
+    return _content_identity(obj, fields)
+
+
+def _content_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
+    """What *obj* says, as :func:`_object_identity` identifies an unnamed one."""
     return (
         "",
         *(
@@ -247,6 +266,26 @@ def _object_identity(obj: Any, fields: tuple[str, ...]) -> tuple[Any, ...]:
             for value in (getattr(obj, field) for field in fields)
         ),
     )
+
+
+def _pair_by_content(
+    unnamed: dict[tuple[Any, ...], list[tuple[Any, Any]]],
+    named: dict[tuple[Any, ...], list[tuple[Any, Any]]],
+    fields: tuple[str, ...],
+) -> None:
+    """Re-key each of *named*'s objects under what it says, where *unnamed* has one more saying it.
+
+    *unnamed* is an author's side, whose unnamed objects PostgreSQL names at apply
+    time; a name only *named* holds is that name, so the two are one object.
+    """
+    for key in [key for key in named if key[0] and key not in unnamed]:
+        for entry in list(named[key]):
+            content = _content_identity(entry[1], fields)
+            if len(unnamed.get(content, [])) > len(named.get(content, [])):
+                named[key].remove(entry)
+                named[content].append(entry)
+        if not named[key]:
+            del named[key]
 
 
 def _types_differ(old: Column, new: Column) -> bool:
@@ -258,6 +297,50 @@ def _types_differ(old: Column, new: Column) -> bool:
     spellings: ``int4`` and ``integer`` are one type whichever side wrote which.
     """
     return not same_type(old.type_key, new.type_key)
+
+
+def _fields_differ(fields: tuple[str, ...]) -> Callable[[Any, Any], bool]:
+    """Whether two objects paired by identity differ in any of *fields*."""
+    return lambda old, new: any(getattr(old, f) != getattr(new, f) for f in fields)
+
+
+def _says_otherwise(old: Constraint, new: Constraint) -> bool:
+    """Whether one key-like constraint, paired by name, says something else (#501).
+
+    Its columns; for a foreign key, the table it references, its referential
+    actions, and the referenced columns when both sides list them — ``REFERENCES
+    p`` with no list means the referenced key, which a database always spells
+    out and a tree need not; and when it is checked. A dropped or re-pointed key
+    lets rows exist that could not before.
+    """
+    return (
+        old.columns != new.columns
+        or _referenced(old.ref_table) != _referenced(new.ref_table)
+        or bool(old.ref_columns and new.ref_columns and old.ref_columns != new.ref_columns)
+        or (old.on_delete, old.on_update) != (new.on_delete, new.on_update)
+        or old.deferrable != new.deferrable
+    )
+
+
+def _referenced(relation: RelationName | None) -> tuple[str, str] | None:
+    return None if relation is None else relation.identity
+
+
+def _default(column: Column, seen: Column, policy: ComparisonPolicy) -> str | None:
+    """*column*'s default as *policy* compares it.
+
+    PostgreSQL stores a default analysed (``'x'`` as ``'x'::text``), so under the
+    ``analysed_expressions`` rule the default is compared as a parse tree
+    (``ddl_walk.canonical_default``) — the value, not its spelling. A default the
+    rules already set aside (a ``serial``'s own ``nextval``) stays set aside, and
+    one the parser rejects is compared as written.
+    """
+    if "analysed_expressions" not in policy.rules or seen.default is None:
+        return seen.default
+    try:
+        return canonical_default(column.default, column.type_text or column.type_key)
+    except pglast.parser.ParseError:
+        return column.default
 
 
 def _object_sort_key(ref: Any) -> tuple[str, str, str, str]:
@@ -328,10 +411,27 @@ def _redefined(
     if section == "views":
         return parity_view(old.views[ref], rules) != parity_view(new.views[ref], rules)
     if section == "tviews":
-        return parity_tview(old.tviews[ref], rules) != parity_tview(new.tviews[ref], rules)
+        return _tview_redefined(old.tviews[ref], new.tviews[ref], policy)
     if section == "other_objects" and old.coverage.shared(new.coverage, section) == "definition":
         return before.definition != after.definition
     return False
+
+
+def _tview_redefined(old: TView, new: TView, policy: ComparisonPolicy) -> bool:
+    """Whether one TVIEW, on both sides, is defined differently.
+
+    Against an author's side, an option that side does not pin is pg_tviews' to
+    choose, whatever the database holds (``tview_defaults``), and one it pins is
+    compared as pinned. With no author side, the rule's own reading decides.
+    """
+    if policy.author is None:
+        return parity_tview(old, policy.rules) != parity_tview(new, policy.rules)
+    pins = old if policy.author == "old" else new
+    unpinned = {key: None for key in TVIEW_OPTIONS if getattr(pins, key) is None}
+    rules = policy.rules - {"tview_defaults"}
+    return parity_tview(replace(old, **unpinned), rules) != parity_tview(
+        replace(new, **unpinned), rules
+    )
 
 
 class SchemaDiffer:
@@ -401,6 +501,8 @@ class SchemaDiffer:
         refuse_quoted_names("new", new.quoted)
         if policy is None:
             policy = policy_between(old.model.source, new.model.source)
+        if policy.rules and old.model.source != new.model.source:
+            policy = replace(policy, author="old" if old.model.source == "author" else "new")
 
         changes = self._compare_tables(old.tables, new.tables, policy)
         changes.extend(self._compare_enum_types(old.enum_types, new.enum_types))
@@ -465,6 +567,7 @@ class SchemaDiffer:
             *self._compare_foreign_keys(old_table, new_table, policy),
             *self._compare_check_constraints(old_table, new_table, policy),
             *self._compare_unique_constraints(old_table, new_table, policy),
+            *self._compare_primary_keys(old_table, new_table, policy),
             *self._compare_exclusion_constraints(old_table, new_table, policy),
         ]
 
@@ -653,7 +756,7 @@ class SchemaDiffer:
                 ColumnNullabilityChanged(table, old_col.folded, nullable=not new_col.not_null)
             )
 
-        if old_seen.default != new_seen.default:
+        if _default(old_col, old_seen, policy) != _default(new_col, new_seen, policy):
             changes.append(
                 ColumnDefaultChanged(table, old_col.folded, old_col.default, new_col.default)
             )
@@ -675,6 +778,7 @@ class SchemaDiffer:
         declared.
         """
         return self._compare_named_objects(
+            author=policy.author,
             old=parity_indexes(old_table.indexes, policy.rules),
             new=parity_indexes(new_table.indexes, policy.rules),
             added=IndexAdded,
@@ -683,7 +787,7 @@ class SchemaDiffer:
             # The access method is part of what an index *is*: a btree and a hash
             # index on one column are two indexes.
             identity=("columns", "unique", "method"),
-            compared=("method",),
+            differs=_fields_differ(("method",)),
         )
 
     @staticmethod
@@ -699,12 +803,14 @@ class SchemaDiffer:
     ) -> list[SchemaChange]:
         """Detect added / dropped foreign keys."""
         return self._compare_named_objects(
+            author=policy.author,
             old=self._constraints(old_table, "foreign_key", policy),
             new=self._constraints(new_table, "foreign_key", policy),
             added=ForeignKeyAdded,
             dropped=ForeignKeyDropped,
             table=old_table.relation,
             identity=("columns", "ref_table", "ref_columns"),
+            differs=_says_otherwise,
         )
 
     def _compare_check_constraints(
@@ -712,6 +818,7 @@ class SchemaDiffer:
     ) -> list[SchemaChange]:
         """Detect added / dropped check constraints."""
         return self._compare_named_objects(
+            author=policy.author,
             old=self._constraints(old_table, "check", policy),
             new=self._constraints(new_table, "check", policy),
             added=CheckConstraintAdded,
@@ -725,7 +832,7 @@ class SchemaDiffer:
             # other is the same constraint spelled twice, and telling that apart
             # means resolving the parent's primary key — so reporting it would
             # generate a DROP CONSTRAINT for a constraint that did not change.
-            compared=("expression",),
+            differs=_fields_differ(("expression",)),
         )
 
     def _compare_unique_constraints(
@@ -733,12 +840,29 @@ class SchemaDiffer:
     ) -> list[SchemaChange]:
         """Detect added / dropped unique constraints."""
         return self._compare_named_objects(
+            author=policy.author,
             old=self._constraints(old_table, "unique", policy),
             new=self._constraints(new_table, "unique", policy),
             added=UniqueConstraintAdded,
             dropped=UniqueConstraintDropped,
             table=old_table.relation,
             identity=("columns",),
+            differs=_says_otherwise,
+        )
+
+    def _compare_primary_keys(
+        self, old_table: Table, new_table: Table, policy: ComparisonPolicy
+    ) -> list[SchemaChange]:
+        """Detect an added, dropped or re-keyed primary key."""
+        return self._compare_named_objects(
+            author=policy.author,
+            old=self._constraints(old_table, "primary_key", policy),
+            new=self._constraints(new_table, "primary_key", policy),
+            added=PrimaryKeyAdded,
+            dropped=PrimaryKeyDropped,
+            table=old_table.relation,
+            identity=("columns",),
+            differs=_says_otherwise,
         )
 
     def _compare_exclusion_constraints(
@@ -752,13 +876,14 @@ class SchemaDiffer:
         """
         parts = ("columns", "operators", "method", "where", "key_options")
         return self._compare_named_objects(
+            author=policy.author,
             old=self._constraints(old_table, "exclusion", policy),
             new=self._constraints(new_table, "exclusion", policy),
             added=ExclusionConstraintAdded,
             dropped=ExclusionConstraintDropped,
             table=old_table.relation,
             identity=parts,
-            compared=parts,
+            differs=_fields_differ(parts),
         )
 
     def _compare_enum_types(
@@ -811,37 +936,58 @@ class SchemaDiffer:
         dropped: Callable[[RelationName, Any], SchemaChange],
         table: RelationName,
         identity: tuple[str, ...],
-        compared: tuple[str, ...] = (),
+        differs: Callable[[Any, Any], bool] | None = None,
+        author: Literal["old", "new"] | None = None,
     ) -> list[SchemaChange]:
         """Add/drop (and, where asked, replace) comparison for a table's own objects.
 
         *old* and *new* pair each object with how the policy's rules see it: the
         rules decide identity and change, the change carries what the side wrote.
         *identity* names the fields that tell two **unnamed** objects apart —
-        see :func:`_object_identity`. *compared* names the fields that, differing
-        under one name, make the object a change rather than a constant; a kind
-        that passes none is compared by add and drop only.
+        see :func:`_object_identity`. *differs* says whether two objects paired
+        under one identity are a change rather than a constant; a kind that
+        passes none is compared by add and drop only.
+
+        Two unnamed objects can say the same thing — under the catalogued policy
+        every CHECK says ``<expression>`` — so each identity holds a list, paired
+        in order: one more on a side is one added or dropped, never one collapsed
+        into another. An *author* side's unnamed object is paired by what it
+        says with the other side's under any name that side alone holds.
 
         Emitted in a stable order, and a changed object's drop immediately
         precedes its add: PostgreSQL has no ``ALTER CONSTRAINT``, so replacing one
         *is* the pair, and the pair is only valid in that order.
         """
         changes: list[SchemaChange] = []
-        old_map = {_object_identity(seen, identity): (obj, seen) for obj, seen in old}
-        new_map = {_object_identity(seen, identity): (obj, seen) for obj, seen in new}
+        old_map: dict[tuple[Any, ...], list[tuple[Any, Any]]] = defaultdict(list)
+        new_map: dict[tuple[Any, ...], list[tuple[Any, Any]]] = defaultdict(list)
+        for found, pairs in ((old, old_map), (new, new_map)):
+            for obj, seen in found:
+                pairs[_object_identity(seen, identity)].append((obj, seen))
+        if author is not None:
+            _pair_by_content(
+                *((old_map, new_map) if author == "old" else (new_map, old_map)), identity
+            )
+        keys = sorted(old_map.keys() | new_map.keys(), key=str)
 
         changes.extend(
-            added(table, new_map[key][0]) for key in sorted(set(new_map) - set(old_map), key=str)
+            added(table, obj)
+            for key in keys
+            for obj, _ in new_map.get(key, [])[len(old_map.get(key, [])) :]
         )
         changes.extend(
-            dropped(table, old_map[key][0]) for key in sorted(set(old_map) - set(new_map), key=str)
+            dropped(table, obj)
+            for key in keys
+            for obj, _ in old_map.get(key, [])[len(new_map.get(key, [])) :]
         )
 
-        for key in sorted(set(old_map) & set(new_map), key=str):
-            (before, before_seen), (after, after_seen) = old_map[key], new_map[key]
-            if any(getattr(before_seen, f) != getattr(after_seen, f) for f in compared):
-                changes.append(dropped(table, before))
-                changes.append(added(table, after))
+        for key in keys:
+            for (before, before_seen), (after, after_seen) in zip(
+                old_map.get(key, []), new_map.get(key, []), strict=False
+            ):
+                if differs is not None and differs(before_seen, after_seen):
+                    changes.append(dropped(table, before))
+                    changes.append(added(table, after))
 
         return changes
 

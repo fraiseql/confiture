@@ -33,6 +33,13 @@ CREATE TABLE IF NOT EXISTS people (
     PRIMARY KEY (id)
 );
 
+-- confiture:tier additive
+CREATE TABLE IF NOT EXISTS rekeyed (
+    a INTEGER NOT NULL,
+    b INTEGER NOT NULL,
+    CONSTRAINT rekeyed_pk PRIMARY KEY (a, b)
+);
+
 -- confiture:tier lock_risky
 CREATE TABLE IF NOT EXISTS things (
     id INTEGER NOT NULL,

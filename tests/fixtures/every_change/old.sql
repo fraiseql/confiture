@@ -12,6 +12,7 @@ CREATE TABLE ren.tb_orders_archive (id INT PRIMARY KEY);
 
 CREATE TABLE legacy (id INT PRIMARY KEY);
 CREATE TABLE parent (id INT PRIMARY KEY);
+CREATE TABLE rekeyed (a INT NOT NULL, b INT NOT NULL, CONSTRAINT rekeyed_pk PRIMARY KEY (a));
 
 CREATE TABLE people (
     id INT PRIMARY KEY,

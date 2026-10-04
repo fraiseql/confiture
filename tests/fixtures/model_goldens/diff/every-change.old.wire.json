@@ -3,7 +3,7 @@
   "stdout": {
     "has_changes": true,
     "summary": {
-      "tables_added": 5,
+      "tables_added": 6,
       "tables_dropped": 0,
       "tables_renamed": 0,
       "columns_added": 0,
@@ -99,6 +99,38 @@
               "name": "",
               "columns": [
                 "id"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "rekeyed",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "a",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            },
+            {
+              "name": "b",
+              "type": "INTEGER",
+              "nullable": false,
+              "default": null
+            }
+          ],
+          "constraints": [
+            {
+              "kind": "PRIMARY KEY",
+              "name": "rekeyed_pk",
+              "columns": [
+                "a"
               ]
             }
           ]

@@ -146,11 +146,8 @@ def _table_details(table: Table) -> dict[str, Any]:
     the column so that a composite one has somewhere to go.
     """
     constraints: list[dict[str, Any]] = [
-        {
-            "kind": "PRIMARY KEY",
-            "name": "",
-            "columns": [column.folded for column in table.columns if column.primary_key],
-        }
+        {"kind": "PRIMARY KEY", "name": pk.name, "columns": list(pk.columns)}
+        for pk in primary_keys(table)
     ]
     constraints.extend(_foreign_key_detail(fk) for fk in table.constraints_of("foreign_key"))
     constraints.extend(_unique_detail(uc) for uc in table.constraints_of("unique"))
@@ -159,6 +156,15 @@ def _table_details(table: Table) -> dict[str, Any]:
         "columns": [_column_detail(column) for column in table.columns],
         "constraints": [c for c in constraints if c.get("columns") or c.get("expression")],
     }
+
+
+def primary_keys(table: Table) -> list[Constraint]:
+    """*table*'s primary key as its constraint, or as its columns say when it holds none."""
+    declared = table.constraints_of("primary_key")
+    if declared:
+        return list(declared)
+    columns = tuple(column.folded for column in table.columns if column.primary_key)
+    return [Constraint(kind="primary_key", columns=columns)]
 
 
 def _nullable(value: bool) -> str:
@@ -571,6 +577,34 @@ class UniqueConstraintDropped(_OnTable):
         return {"table": self.table.qualified, "details": _unique_wire(self.constraint)}
 
 
+@dataclass(frozen=True)
+class PrimaryKeyAdded(_OnTable):
+    """A primary key only the new tree declares on a table both hold."""
+
+    WIRE: ClassVar[str] = "ADD_PRIMARY_KEY"
+    TEMPLATE: ClassVar[str] = "ADD PRIMARY KEY {name} ON {table}"
+
+    table: RelationName
+    constraint: Constraint
+
+    def _wire_fields(self) -> dict[str, Any]:
+        return {"table": self.table.qualified, "details": _unique_wire(self.constraint)}
+
+
+@dataclass(frozen=True)
+class PrimaryKeyDropped(_OnTable):
+    """A primary key only the old tree declares on a table both hold."""
+
+    WIRE: ClassVar[str] = "DROP_PRIMARY_KEY"
+    TEMPLATE: ClassVar[str] = "DROP PRIMARY KEY {name}"
+
+    table: RelationName
+    constraint: Constraint
+
+    def _wire_fields(self) -> dict[str, Any]:
+        return {"table": self.table.qualified, "details": _unique_wire(self.constraint)}
+
+
 def _exclusion_wire(ec: Constraint) -> dict[str, Any]:
     options = ec.key_options or ("",) * len(ec.columns)
     return {
@@ -798,6 +832,8 @@ SchemaChange = (
     | CheckConstraintDropped
     | UniqueConstraintAdded
     | UniqueConstraintDropped
+    | PrimaryKeyAdded
+    | PrimaryKeyDropped
     | ExclusionConstraintAdded
     | ExclusionConstraintDropped
     | EnumTypeAdded
@@ -831,6 +867,8 @@ TableObjectChange = (
     | CheckConstraintDropped
     | UniqueConstraintAdded
     | UniqueConstraintDropped
+    | PrimaryKeyAdded
+    | PrimaryKeyDropped
     | ExclusionConstraintAdded
     | ExclusionConstraintDropped
 )
@@ -858,11 +896,16 @@ _SUMMARY: tuple[tuple[str, tuple[type[SchemaChange], ...]], ...] = (
     ("foreign_keys_dropped", (ForeignKeyDropped,)),
     (
         "constraints_added",
-        (CheckConstraintAdded, UniqueConstraintAdded, ExclusionConstraintAdded),
+        (CheckConstraintAdded, UniqueConstraintAdded, PrimaryKeyAdded, ExclusionConstraintAdded),
     ),
     (
         "constraints_dropped",
-        (CheckConstraintDropped, UniqueConstraintDropped, ExclusionConstraintDropped),
+        (
+            CheckConstraintDropped,
+            UniqueConstraintDropped,
+            PrimaryKeyDropped,
+            ExclusionConstraintDropped,
+        ),
     ),
     ("enum_types_added", (EnumTypeAdded,)),
     ("enum_types_dropped", (EnumTypeDropped,)),

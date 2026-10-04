@@ -14,6 +14,9 @@ DROP TABLE ren.tb_orders_archive;
 DROP TABLE things;
 
 -- confiture:tier irreversible
+DROP TABLE rekeyed;
+
+-- confiture:tier irreversible
 DROP TABLE people;
 
 -- confiture:tier irreversible

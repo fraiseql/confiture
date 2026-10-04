@@ -1226,6 +1226,8 @@ SchemaChange = (
     | CheckConstraintDropped
     | UniqueConstraintAdded
     | UniqueConstraintDropped
+    | PrimaryKeyAdded
+    | PrimaryKeyDropped
     | ExclusionConstraintAdded
     | ExclusionConstraintDropped
     | EnumTypeAdded
@@ -1484,6 +1486,32 @@ class UniqueConstraintDropped(_OnTable)
 ```
 
 A UNIQUE constraint only the old tree declares.
+
+| Field | Type | Default |
+|---|---|---|
+| `table` | `RelationName` | required |
+| `constraint` | `Constraint` | required |
+
+### `PrimaryKeyAdded`
+
+```python
+class PrimaryKeyAdded(_OnTable)
+```
+
+A primary key only the new tree declares on a table both hold.
+
+| Field | Type | Default |
+|---|---|---|
+| `table` | `RelationName` | required |
+| `constraint` | `Constraint` | required |
+
+### `PrimaryKeyDropped`
+
+```python
+class PrimaryKeyDropped(_OnTable)
+```
+
+A primary key only the old tree declares on a table both hold.
 
 | Field | Type | Default |
 |---|---|---|

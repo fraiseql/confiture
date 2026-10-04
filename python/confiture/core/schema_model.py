@@ -522,6 +522,10 @@ class TView:
         return qualified_name(self.schema, self.name)
 
 
+#: The pg_tviews ``options`` keys a tree can pin, as :class:`TView` holds them.
+TVIEW_OPTIONS = ("logged", "fillfactor")
+
+
 def tview_ref(tview: TView) -> ObjectRef:
     """The bucket of a TVIEW: its schema and its ``tv_*`` relation."""
     return ref_for("tview", tview.schema, tview.name)

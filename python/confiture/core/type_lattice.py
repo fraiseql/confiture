@@ -369,7 +369,9 @@ def same_type(written: str | None, other: str | None) -> bool:
     schema that is visible through ``search_path``, so a DDL that spelled
     ``public.citext`` meets a live ``citext``. Two schemas that both say
     something and disagree are two types — ``app.custom_t`` and
-    ``other.custom_t``.
+    ``other.custom_t``. And an array is one type however many dimensions it was
+    declared with: PostgreSQL records none, so a column written ``integer[][]``
+    is held as ``integer[]``.
 
     That wildcard is the rule
     :func:`confiture.core.linting.inventory.types_match` applies to a routine's
@@ -383,9 +385,16 @@ def same_type(written: str | None, other: str | None) -> bool:
     if not written or not other:
         return False
     left, right = _schema_and_type(written), _schema_and_type(other)
-    if left[1] != right[1]:
+    if _one_dimension(left[1]) != _one_dimension(right[1]):
         return False
     return left[0] is None or right[0] is None or left[0] == right[0]
+
+
+def _one_dimension(canonical: str | None) -> str | None:
+    """*canonical* with every array dimension past the first taken off."""
+    if canonical is None or not canonical.endswith("[]"):
+        return canonical
+    return canonical.rstrip("[]") + "[]"
 
 
 def _schema_and_type(written: str) -> tuple[str | None, str | None]:

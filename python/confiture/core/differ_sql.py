@@ -54,6 +54,8 @@ from confiture.core.schema_change import (
     ObjectAdded,
     ObjectDropped,
     ObjectReplaced,
+    PrimaryKeyAdded,
+    PrimaryKeyDropped,
     SchemaChange,
     SequenceAdded,
     SequenceDropped,
@@ -64,6 +66,7 @@ from confiture.core.schema_change import (
     TableRenamed,
     UniqueConstraintAdded,
     UniqueConstraintDropped,
+    primary_keys,
 )
 from confiture.core.schema_identity import quote_identifier
 from confiture.core.schema_model import (
@@ -197,15 +200,12 @@ def _table_constraints(table: Table) -> list[Constraint]:
     """A table's own constraints in the order a ``CREATE TABLE`` writes them.
 
     The primary key is written at table level rather than on the column, so that
-    a composite one has somewhere to go. A constraint that says nothing — a CHECK
+    a composite one has somewhere to go, under the name the schema gave it: a
+    later ``DROP CONSTRAINT`` names it. A constraint that says nothing — a CHECK
     with no expression, any other with no column — is not written at all.
     """
-    primary = Constraint(
-        kind="primary_key",
-        columns=tuple(column.folded for column in table.columns if column.primary_key),
-    )
     listed = [
-        primary,
+        *primary_keys(table),
         *table.constraints_of("foreign_key"),
         *table.constraints_of("unique"),
         *table.constraints_of("check"),
@@ -418,7 +418,9 @@ def _add_constraint(
     change: CheckConstraintAdded
     | CheckConstraintDropped
     | UniqueConstraintAdded
+    | PrimaryKeyAdded
     | UniqueConstraintDropped
+    | PrimaryKeyDropped
     | ExclusionConstraintAdded
     | ExclusionConstraintDropped,
     missing: str,
@@ -435,7 +437,9 @@ def _drop_constraint(
     | CheckConstraintAdded
     | CheckConstraintDropped
     | UniqueConstraintAdded
+    | PrimaryKeyAdded
     | UniqueConstraintDropped
+    | PrimaryKeyDropped
     | ExclusionConstraintAdded
     | ExclusionConstraintDropped,
 ) -> str:
@@ -454,7 +458,7 @@ def _table_object_up(change: TableObjectChange) -> str:
             return _add_foreign_key(change)
         case CheckConstraintAdded():
             return _add_constraint(change, "a CHECK expression")
-        case UniqueConstraintAdded():
+        case UniqueConstraintAdded() | PrimaryKeyAdded():
             return _add_constraint(change, "a column list")
         case ExclusionConstraintAdded():
             return _add_constraint(change, "its elements")
@@ -462,6 +466,7 @@ def _table_object_up(change: TableObjectChange) -> str:
             ForeignKeyDropped()
             | CheckConstraintDropped()
             | UniqueConstraintDropped()
+            | PrimaryKeyDropped()
             | ExclusionConstraintDropped()
         ):
             return _drop_constraint(change)
@@ -485,7 +490,7 @@ def _table_object_down(change: TableObjectChange) -> str | None:
             return _add_foreign_key(change)
         case CheckConstraintDropped():
             return _add_constraint(change, "a CHECK expression")
-        case UniqueConstraintDropped():
+        case UniqueConstraintDropped() | PrimaryKeyDropped():
             return _add_constraint(change, "a column list")
         case ExclusionConstraintDropped():
             return _add_constraint(change, "its elements")
@@ -493,6 +498,7 @@ def _table_object_down(change: TableObjectChange) -> str | None:
             ForeignKeyAdded()
             | CheckConstraintAdded()
             | UniqueConstraintAdded()
+            | PrimaryKeyAdded()
             | ExclusionConstraintAdded()
         ):
             return _drop_constraint(change) if change.constraint.name else None
@@ -575,7 +581,9 @@ class DifferSQLGenerator:
                 | CheckConstraintAdded()
                 | CheckConstraintDropped()
                 | UniqueConstraintAdded()
+                | PrimaryKeyAdded()
                 | UniqueConstraintDropped()
+                | PrimaryKeyDropped()
                 | ExclusionConstraintAdded()
                 | ExclusionConstraintDropped()
             ):
@@ -615,7 +623,9 @@ class DifferSQLGenerator:
                 | CheckConstraintAdded()
                 | CheckConstraintDropped()
                 | UniqueConstraintAdded()
+                | PrimaryKeyAdded()
                 | UniqueConstraintDropped()
+                | PrimaryKeyDropped()
                 | ExclusionConstraintAdded()
                 | ExclusionConstraintDropped()
             ):

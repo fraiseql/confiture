@@ -54,6 +54,12 @@ ALTER TABLE things DROP COLUMN created_at;
 -- confiture:tier additive
 ALTER TABLE things ADD COLUMN legacy_flag BOOLEAN;
 
+-- confiture:tier destructive
+ALTER TABLE rekeyed DROP CONSTRAINT IF EXISTS rekeyed_pk;
+
+-- confiture:tier lock_risky
+ALTER TABLE rekeyed ADD CONSTRAINT rekeyed_pk PRIMARY KEY (a);
+
 -- confiture:tier reversible
 ALTER TABLE people RENAME COLUMN display_name TO full_name;
 
