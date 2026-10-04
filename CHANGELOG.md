@@ -35,6 +35,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ⚠️ **PostgreSQL 16 is the minimum.** Every CI leg runs PostgreSQL 16 (the pg_tviews leg,
+  18); none ran 16 before — the main suite, the version matrix, the plpgsql_check image and
+  the publish gate ran 15. The documents that named a minimum disagreed (12, 14, and "tested
+  against 14 to 17", which no leg did) and now say 16. Nothing refuses an older server; nothing
+  tests one.
+
+- **CI: one full suite per pull request, on every core.** The quality gate runs the suite on
+  3.11 with `-n auto` and collects coverage once, across its workers (`patch =
+  ["subprocess"]`, then `coverage combine`; the same 35,478 statements). The serial run took
+  12 minutes on main. The `Integration (parallel, -n 4)` job, which re-ran the database
+  suites to prove them safe in parallel, is gone: the main run is that proof now. The 3.12
+  and 3.13 legs run on main and nightly, without coverage, and no longer on pull requests;
+  a pull request had waited for three serial full suites of about 14 minutes each.
+
 - **`confiture drift` is the one comparison, said as findings.** It compared a tree with a
   database itself, beside the differ, and the two disagreed; now it asks
   `SchemaDiffer.compare_sides` under the policy a tree and a database call for and reports

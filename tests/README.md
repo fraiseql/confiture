@@ -51,8 +51,7 @@ dropped after the test), `superuser_db_url`, `drop_roles`.
 ## Running in parallel
 
 ```
-uv run pytest tests/unit -n auto
-uv run pytest tests/integration tests/e2e tests/contract -n 4
+uv run pytest tests/ -n auto
 ```
 
 Under pytest-xdist every worker gets its own databases: `confiture_test` becomes
@@ -66,8 +65,10 @@ When a test derives another database's URL, use `maintenance_url` or
 `database_url_for(url, name)`; a string replace on the database *name* breaks under the
 worker suffix.
 
-CI runs the database suites both serially (the `Tests` job, with coverage) and with
-`-n 4` (the `Integration (parallel, -n 4)` job).
+CI runs the whole suite once per pull request, on 3.11 with `-n auto` and coverage (the
+quality gate's `Tests` job): coverage measures each worker from its first line
+(`patch = ["subprocess"]` under `[tool.coverage.run]`) and `coverage combine` joins
+them. The 3.12 and 3.13 legs (`python-version-matrix.yml`) run on main and nightly.
 
 ## Test doubles
 

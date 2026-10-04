@@ -353,7 +353,7 @@ Check `include_dirs` in configuration matches actual directory structure.
 
 3. Test database connectivity from pod:
    ```bash
-   kubectl run -it --rm debug --image=postgres:15 -- \
+   kubectl run -it --rm debug --image=postgres:16 -- \
      psql "$DATABASE_URL" -c "SELECT 1"
    ```
 
