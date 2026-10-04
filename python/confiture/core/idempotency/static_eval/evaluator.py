@@ -68,6 +68,12 @@ def _scope_body(node: ast.AST, collector: _BindingCollector) -> list[ast.AST]:
     raise _ScopeMismatch(type(node).__name__)  # pragma: no cover — every scope node is listed above
 
 
+#: The scope Python 3.14 compiles an object's annotations into (PEP 649,
+#: ``__annotate__``): one per annotated module, class and function, in no AST node
+#: of its own. It binds nothing a migration reads, so it is not paired.
+_ANNOTATION_SCOPE = "annotation"
+
+
 class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin, _FileReadsMixin):
     """One parsed migration: its scopes, its bindings, and an evaluator over them.
 
@@ -141,7 +147,9 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin, _FileReadsM
         silent pass.
         """
         children = (
-            list(scope.table.get_children()) if self.scopes_ok and scope.table is not None else []
+            [c for c in scope.table.get_children() if c.get_type() != _ANNOTATION_SCOPE]
+            if self.scopes_ok and scope.table is not None
+            else []
         )
         with_own_table = [n for n in nested if not isinstance(n, _INLINED_COMPREHENSIONS)]
         if self.scopes_ok and len(children) != len(with_own_table):

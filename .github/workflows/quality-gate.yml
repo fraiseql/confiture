@@ -488,6 +488,33 @@ jobs:
           tests/unit/test_pg_tviews_contract.py \
           -q -rs -p no:randomly
 
+  wheel-python-314:
+    name: Wheel on Python 3.14
+    runs-on: ubuntu-latest
+    # The newest CPython confiture supports gets a wheel, and an install takes it.
+    # The release workflow builds every wheel, but only on a tag; this builds one
+    # on every pull request, so a binding that rejects an interpreter (#587) or a
+    # wheel that is not built (#586) fails here and not at release.
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python 3.14 and uv
+      uses: ./.github/actions/python-uv
+      with:
+        python-version: '3.14'
+        native: 'true'
+
+    - name: Build the wheel
+      run: maturin build --release --interpreter python3.14 --out dist
+
+    - name: A fresh venv installs it, never the sdist
+      # No cache: an earlier source build in uv's cache would hide a missing wheel.
+      run: |
+        uv venv --python 3.14 /tmp/v314
+        uv pip install --python /tmp/v314/bin/python --no-cache \
+          --only-binary fraiseql-confiture dist/*.whl
+        /tmp/v314/bin/python -c "import sys; from confiture.core.builder import HAS_RUST; assert HAS_RUST, 'no native extension'; print(sys.version)"
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -627,7 +654,7 @@ jobs:
   quality-gate:
     name: Quality Gate ✅
     runs-on: ubuntu-latest
-    needs: [test, pggit-plugin, pglast-matrix, plpgsql-check, pg-tviews, lint, type-check, rust-checks, security]
+    needs: [test, pggit-plugin, pglast-matrix, plpgsql-check, pg-tviews, wheel-python-314, lint, type-check, rust-checks, security]
     if: always()
     steps:
       - name: Check quality gate status
@@ -661,6 +688,11 @@ jobs:
           # leg that runs the rule, and an advisory one would let it rot unseen.
           if [[ "${{ needs.plpgsql-check.result }}" != "success" ]]; then
             echo "❌ Body analysis failed - Quality gate blocked"
+            exit 1
+          fi
+          # Required: the newest supported CPython must get a wheel (#586, #587).
+          if [[ "${{ needs.wheel-python-314.result }}" != "success" ]]; then
+            echo "❌ Python 3.14 wheel failed - Quality gate blocked"
             exit 1
           fi
           if [[ "${{ needs.lint.result }}" != "success" ]]; then

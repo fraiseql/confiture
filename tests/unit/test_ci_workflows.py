@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -48,6 +49,18 @@ def _run_scripts(steps: list[dict]) -> str:
     return "\n".join(step.get("run", "") for step in steps)
 
 
+def _supported() -> list[str]:
+    """Every CPython the package declares, from its ``Programming Language`` classifiers."""
+    classifiers = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())["project"][
+        "classifiers"
+    ]
+    prefix = "Programming Language :: Python :: 3."
+    return [f"3.{c.removeprefix(prefix)}" for c in classifiers if c.startswith(prefix)]
+
+
+SUPPORTED = _supported()
+
+
 class TestPythonMatrix:
     def test_venv_is_built_on_the_matrix_interpreter(self) -> None:
         script = _run_scripts(_steps("python-version-matrix.yml", "test-matrix"))
@@ -76,7 +89,7 @@ class TestPythonMatrix:
         versions = matrix["jobs"]["test-matrix"]["strategy"]["matrix"]["python-version"]
         gate = _steps("quality-gate.yml", "test")
         (setup,) = [step for step in gate if step.get("uses") == "./.github/actions/python-uv"]
-        assert [setup["with"]["python-version"], *versions] == ["3.11", "3.12", "3.13"]
+        assert [setup["with"]["python-version"], *versions] == SUPPORTED
 
     def test_the_other_interpreters_run_on_main_and_nightly(self) -> None:
         """A pull request waits for one full suite, not three."""
@@ -325,3 +338,36 @@ class TestOneToolchainSetup:
     def test_the_action_is_used(self) -> None:
         users = [job for _, job, uses in self._jobs() if self.ACTION in uses]
         assert len(users) >= 10
+
+
+class TestReleaseWheels:
+    """Every supported CPython gets a wheel on every platform (#586, #587)."""
+
+    def test_the_declared_interpreters_are_the_ones_tested(self) -> None:
+        assert SUPPORTED == ["3.11", "3.12", "3.13", "3.14"]
+
+    def test_linux_builds_a_wheel_for_each(self) -> None:
+        build = next(
+            step["env"]["CIBW_BUILD"]
+            for step in _steps("publish.yml", "build-wheels")
+            if "cibuildwheel" in step.get("uses", "")
+        )
+        built = {tag.split("-")[0] for tag in build.split()}
+        assert built == {f"cp3{v.split('.')[1]}" for v in SUPPORTED}
+
+    def test_macos_and_windows_find_each_interpreter(self) -> None:
+        setup = next(
+            step
+            for step in _steps("publish.yml", "build-wheels")
+            if step.get("uses", "").startswith("actions/setup-python")
+        )
+        assert setup["with"]["python-version"].split() == SUPPORTED
+
+    def test_no_build_leans_on_forward_compatibility(self) -> None:
+        """The wheels are version-specific; the flag only hid a missing one."""
+        assert "PYO3_USE_ABI3_FORWARD_COMPATIBILITY" not in (WORKFLOWS / "publish.yml").read_text()
+
+    def test_the_newest_is_installed_from_its_wheel_on_every_pull_request(self) -> None:
+        script = _run_scripts(_steps("quality-gate.yml", "wheel-python-314"))
+        assert "--only-binary fraiseql-confiture" in script and "--no-cache" in script
+        assert SUPPORTED[-1] == "3.14"

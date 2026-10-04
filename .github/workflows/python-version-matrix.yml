@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false  # Continue testing other versions even if one fails
       matrix:
-        python-version: ['3.12', '3.13']
+        python-version: ['3.12', '3.13', '3.14']
 
     services:
       postgres:
@@ -150,7 +150,7 @@ jobs:
           echo "=== Python Version Matrix Test Results ==="
 
           if [[ "${{ needs.test-matrix.result }}" == "success" ]]; then
-            echo "✅ Python 3.12 and 3.13 tests passed (3.11 is the quality gate's)"
+            echo "✅ Python 3.12, 3.13 and 3.14 tests passed (3.11 is the quality gate's)"
             exit 0
           else
             echo "❌ Python version testing failed"
