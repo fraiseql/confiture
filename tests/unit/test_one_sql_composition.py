@@ -12,11 +12,11 @@ text into it takes an explicit ``Template(text)`` interpolated with ``:q``.
 not matched. Generated DDL — text written to a file, never executed here — stays
 on ``schema_identity.quote_identifier`` (``test_one_identifier_quoter.py``).
 
-The guard covers :data:`CONVERTED`, the modules whose executed SQL is templates;
-the conversion widens it until it covers ``python/``.
+The guard reads every module under ``python/``.
 """
 
 import ast
+import subprocess
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -25,44 +25,6 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "python" / "confiture"
 
-#: The modules whose executed SQL is templates, relative to ``python/confiture``.
-CONVERTED: tuple[str, ...] = (
-    "core/_migrator/apply.py",
-    "core/_migrator/baseline.py",
-    "core/_migrator/engine.py",
-    "core/_migrator/ports.py",
-    "core/_migrator/replay.py",
-    "core/_migrator/rollback.py",
-    "core/_migrator/squashed.py",
-    "core/_migrator/state.py",
-    "core/backfill.py",
-    "core/checksum.py",
-    "core/drift.py",
-    "core/dry_run.py",
-    "core/expected_db.py",
-    "core/large_tables.py",
-    "core/ledger.py",
-    "core/linting/bodies.py",
-    "core/live_catalog.py",
-    "core/locking.py",
-    "core/mcp_server.py",
-    "core/preconditions.py",
-    "core/schema_to_schema.py",
-    "core/seed/executor.py",
-    "core/seed/validation/prep_seed/level_4_runtime.py",
-    "core/seed/validation/prep_seed/level_5_execution.py",
-    "core/seed/validation/prep_seed/resolvers.py",
-    "core/server_constants.py",
-    "core/squash.py",
-    "core/step_runner.py",
-    "core/syncer.py",
-    "core/temp_database.py",
-    "core/test_db.py",
-    "core/view_manager.py",
-    "testing/fixtures/data_validator.py",
-    "testing/fixtures/migration_runner.py",
-    "testing/sandbox.py",
-)
 
 #: A call this guard would refuse, kept for a reason: ``(module, line text)`` → why.
 ALLOWED: dict[tuple[str, str], str] = {
@@ -178,9 +140,20 @@ def test_the_rows(source: str, count: int) -> None:
     assert len(list(findings(source))) == count
 
 
+def _modules() -> list[str]:
+    out = subprocess.run(
+        ["git", "ls-files", "--", "python/confiture/*.py"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return [line.removeprefix("python/confiture/") for line in out.splitlines() if line]
+
+
 def _refused() -> list[tuple[str, str]]:
     refused = []
-    for module in CONVERTED:
+    for module in _modules():
         path = PACKAGE / module
         lines = path.read_text().splitlines()
         for line, what in findings(path.read_text()):
@@ -199,12 +172,8 @@ def test_executed_sql_is_composed_as_templates() -> None:
 
 def test_every_allowed_call_still_exists() -> None:
     present = set()
-    for module in CONVERTED:
+    for module in _modules():
         path = PACKAGE / module
         lines = path.read_text().splitlines()
         present |= {(module, lines[line - 1].strip()) for line, _ in findings(path.read_text())}
     assert sorted(set(ALLOWED) - present) == []
-
-
-def test_every_converted_module_exists() -> None:
-    assert [m for m in CONVERTED if not (PACKAGE / m).is_file()] == []
