@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The body checks are the one comparison, restricted to one slot.** `migrate validate
+  --check-body-views`, `--check-body` and `--check-body-replay` paired their two sides and
+  compared a deparsed query or a normalised body themselves. Each now hands the engine two
+  sides whose statements carry only that slot (`differ.slot_side`), and renders what
+  `SchemaDiffer.compare_sides` answers: it pairs a routine's overloads by signature within
+  its bucket and replaces one whose body differs. Payloads, hashes and goldens are unchanged;
+  a guard fails on a body check that compares two values itself.
+
 - **`confiture drift` is the one comparison, said as findings.** It compared a tree with a
   database itself, beside the differ, and the two disagreed; now it asks
   `SchemaDiffer.compare_sides` under the policy a tree and a database call for and reports

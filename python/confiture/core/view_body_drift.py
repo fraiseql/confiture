@@ -30,10 +30,14 @@ import time
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
+from confiture.core.ddl_objects import DDLObject
+from confiture.core.differ import EXACT, SchemaDiffer, slot_side
+from confiture.core.schema_change import ObjectAdded, ObjectReplaced
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_model import view_ref
 
 if TYPE_CHECKING:
-    from confiture.core.schema_model import View
+    from confiture.core.schema_model import ObjectRef, View
 
 
 @dataclasses.dataclass(frozen=True)
@@ -126,8 +130,41 @@ def _hash_viewdef(definition: str) -> str:
 
 
 def _view_key(view: View) -> str:
-    """``schema.name`` — how both sides key a view."""
+    """``schema.name`` — how a report names a view."""
     return f"{view.schema or DEFAULT_SCHEMA}.{view.name}"
+
+
+def _statements(views: dict[ObjectRef, View]) -> dict[ObjectRef, list[DDLObject]]:
+    """Each view as the one slot compared: its deparsed query, normalised."""
+    return {
+        ref: [DDLObject(ref, _normalize_viewdef(view.definition or ""), "")]
+        for ref, view in views.items()
+    }
+
+
+def _drift(src: View, live_view: View) -> ViewBodyDrift:
+    """The report of one view whose deparsed query is another on each side."""
+    key = _view_key(live_view)
+    src_def, live_def = src.definition or "", live_view.definition or ""
+    unified = "\n".join(
+        difflib.unified_diff(
+            _normalize_viewdef(src_def).splitlines(),
+            _normalize_viewdef(live_def).splitlines(),
+            fromfile=f"{key} (expected)",
+            tofile=f"{key} (live)",
+            lineterm="",
+        )
+    )
+    return ViewBodyDrift(
+        schema=live_view.schema or DEFAULT_SCHEMA,
+        name=live_view.name,
+        relkind="m" if live_view.materialized else "v",
+        source_hash=_hash_viewdef(src_def),
+        db_hash=_hash_viewdef(live_def),
+        expected_def=src_def,
+        live_def=live_def,
+        unified_diff=unified,
+    )
 
 
 class ViewBodyDriftDetector:
@@ -145,7 +182,9 @@ class ViewBodyDriftDetector:
         """Detect definition drift for every view both sides hold.
 
         Only views present on *both* sides are compared: one present on one side
-        only is ``confiture drift``'s ``missing_view`` / ``extra_view``.
+        only is ``confiture drift``'s ``missing_view`` / ``extra_view``. The
+        comparison is the engine's (``SchemaDiffer.compare_sides``) over each
+        view's query alone; a view it replaces is one that drifted.
 
         Args:
             source: The expected views, read back deparsed from the scratch DB.
@@ -155,44 +194,24 @@ class ViewBodyDriftDetector:
             A :class:`ViewBodyDriftReport` with drift details and timing.
         """
         start = time.monotonic()
-        source_defs = {_view_key(view): view for view in source}
-        live_defs = {_view_key(view): view for view in live}
-        common_keys = set(source_defs) & set(live_defs)
-        drifts: list[ViewBodyDrift] = []
-
-        for key in sorted(common_keys):
-            src = source_defs[key]
-            live_view = live_defs[key]
-            src_def, live_def = src.definition or "", live_view.definition or ""
-            src_norm = _normalize_viewdef(src_def)
-            live_norm = _normalize_viewdef(live_def)
-            if src_norm != live_norm:
-                unified = "\n".join(
-                    difflib.unified_diff(
-                        src_norm.splitlines(),
-                        live_norm.splitlines(),
-                        fromfile=f"{key} (expected)",
-                        tofile=f"{key} (live)",
-                        lineterm="",
-                    )
-                )
-                drifts.append(
-                    ViewBodyDrift(
-                        schema=live_view.schema or DEFAULT_SCHEMA,
-                        name=live_view.name,
-                        relkind="m" if live_view.materialized else "v",
-                        source_hash=_hash_viewdef(src_def),
-                        db_hash=_hash_viewdef(live_def),
-                        expected_def=src_def,
-                        live_def=live_def,
-                        unified_diff=unified,
-                    )
-                )
+        source_views = {view_ref(view): view for view in source}
+        live_views = {view_ref(view): view for view in live}
+        diff = SchemaDiffer().compare_sides(
+            slot_side("views", _statements(live_views)),
+            slot_side("views", _statements(source_views)),
+            EXACT,
+        )
+        replaced = sorted(
+            (c.ref for c in diff.changes if isinstance(c, ObjectReplaced)),
+            key=lambda ref: _view_key(live_views[ref]),
+        )
+        drifts = [_drift(source_views[ref], live_views[ref]) for ref in replaced]
+        added = sum(isinstance(c, ObjectAdded) for c in diff.changes)
 
         elapsed = (time.monotonic() - start) * 1000
         return ViewBodyDriftReport(
             body_drifts=drifts,
-            views_checked=len(common_keys),
+            views_checked=len(source_views) - added,
             has_drift=len(drifts) > 0,
             detection_time_ms=elapsed,
         )
