@@ -8,9 +8,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from rich.text import Text
+
 from confiture.cli.dry_run import save_text_report
 from confiture.cli.helpers import console, emit, error_console
-from confiture.cli.markup import verbatim
 
 
 def _render_dry_run_analysis(
@@ -41,14 +42,14 @@ def _render_dry_run_analysis(
 
     text = render_dry_run_text(summary, rollback=rollback)
     if not rollback:
-        console.print(f"[cyan]📦 Found {len(pending)} pending migration(s)[/cyan]\n")
-    console.print(text, end="", highlight=False, markup=False)
+        console.print(t"[cyan]📦 Found {len(pending)} pending migration(s)[/cyan]\n")
+    console.print(Text(text), end="", highlight=False)
     if output_file:
         title = (
             "DRY-RUN ROLLBACK ANALYSIS REPORT" if rollback else "DRY-RUN MIGRATION ANALYSIS REPORT"
         )
         save_text_report(title + "\n" + "=" * 80 + "\n\n" + text, output_file)
-        console.print(f"[green]✅ Report saved to: {verbatim(output_file.absolute())}[/green]")
+        console.print(t"[green]✅ Report saved to: {output_file.absolute()}[/green]")
 
 
 def _row_estimator(connection: Any) -> Any:

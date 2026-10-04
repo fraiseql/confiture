@@ -3,9 +3,7 @@
 Provides helpers for integrating git validation into CLI commands.
 """
 
-from rich.console import Console
-
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import Printer
 from confiture.core.git import GitRepository
 from confiture.core.git_accompaniment import MigrationAccompanimentChecker
 from confiture.core.git_schema import GitSchemaDiffer
@@ -34,7 +32,7 @@ def validate_git_drift(
     env: str,
     base_ref: str,
     target_ref: str,
-    console: Console,
+    console: Printer,
     format_output: str = "text",
 ) -> dict:
     """Validate schema drift between git refs.
@@ -63,7 +61,7 @@ def validate_git_drift(
             if diff.has_changes():
                 console.print("[yellow]⚠️  Schema differences detected[/yellow]")
                 for change in diff.changes:
-                    console.print(f"  • {verbatim(change)}")
+                    console.print(t"  • {change}")
             else:
                 console.print("[green]✅ No schema differences detected[/green]")
 
@@ -84,7 +82,7 @@ def validate_git_drift(
 
     except (NotAGitRepositoryError, GitError) as e:
         if format_output == "text":
-            console.print(f"[red]❌ Git validation error: {verbatim(e)}[/red]")
+            console.print(t"[red]❌ Git validation error: {e}[/red]")
         raise
 
 
@@ -92,7 +90,7 @@ def validate_migration_accompaniment(
     env: str,
     base_ref: str,
     target_ref: str,
-    console: Console,
+    console: Printer,
     format_output: str = "text",
     *,
     check_bodies: bool = False,
@@ -131,7 +129,7 @@ def validate_migration_accompaniment(
                 console.print(
                     "[red]❌ The accompaniment check could not run: the schema does not parse[/red]"
                 )
-                console.print(f"   {verbatim(report.migration_error)}")
+                console.print(t"   {report.migration_error}")
                 console.print(
                     "   [yellow]A schema PostgreSQL rejects is a schema "
                     "`confiture build` rejects. Fix the statement it names; the "
@@ -146,24 +144,24 @@ def validate_migration_accompaniment(
                 console.print("[green]✅ No DDL changes detected[/green]")
             elif report.is_valid:
                 console.print("[green]✅ DDL changes accompanied by migrations[/green]")
-                console.print(f"   Changes: {len(report.ddl_changes)}")
-                console.print(f"   Migrations: {len(report.new_migration_files)}")
+                console.print(t"   Changes: {len(report.ddl_changes)}")
+                console.print(t"   Migrations: {len(report.new_migration_files)}")
             else:
                 if report.has_ddl_changes and not report.has_new_migrations:
                     console.print("[red]❌ DDL changes without migration files[/red]")
-                    console.print(f"   Changes: {len(report.ddl_changes)}")
+                    console.print(t"   Changes: {len(report.ddl_changes)}")
                     console.print("   DDL changes found but no migrations added")
                 if report.signature_violations:
                     console.print(
                         "[red]❌ Function parameter type changes detected without DROP FUNCTION[/red]"
                     )
                     for v in report.signature_violations:
-                        console.print(f"   • {verbatim(v.function_key)}")
-                        console.print(f"     Old signature: {verbatim(v.old_signature)}")
-                        console.print(f"     New signature: {verbatim(v.new_signature)}")
+                        console.print(t"   • {v.function_key}")
+                        console.print(t"     Old signature: {v.old_signature}")
+                        console.print(t"     New signature: {v.new_signature}")
                         console.print(
-                            f"     [yellow]Fix: add DROP FUNCTION {verbatim(v.old_signature)}; "
-                            f"before CREATE OR REPLACE in a migration[/yellow]"
+                            t"     [yellow]Fix: add DROP FUNCTION {v.old_signature}; "
+                            t"before CREATE OR REPLACE in a migration[/yellow]"
                         )
                 if report.body_violations:
                     _render_body_violations(report.body_violations, console)
@@ -173,24 +171,24 @@ def validate_migration_accompaniment(
                 # both of which already exist and are opt-in. What the gate owes
                 # the reader is that the tree it compared may not be the tree the
                 # build produces (#313).
-                console.print(f"[yellow]⚠️  {verbatim(warning.message)}[/yellow]")
+                console.print(t"[yellow]⚠️  {warning.message}[/yellow]")
 
         return report.to_dict()
 
     except (NotAGitRepositoryError, GitError) as e:
         if format_output == "text":
-            console.print(f"[red]❌ Git validation error: {verbatim(e)}[/red]")
+            console.print(t"[red]❌ Git validation error: {e}[/red]")
         raise
 
 
-def _render_body_violations(violations: list, console: Console) -> None:
+def _render_body_violations(violations: list, console: Printer) -> None:
     """Print function body-change violations (#178) for human eyes."""
     console.print("[red]❌ Function body changes detected without an accompanying migration[/red]")
     for v in violations:
-        console.print(f"   • {verbatim(v.signature_key)}")
+        console.print(t"   • {v.signature_key}")
         console.print(
-            f"     [yellow]Fix: add a migration with "
-            f"CREATE OR REPLACE FUNCTION {verbatim(v.function_key)}(...)[/yellow]"
+            t"     [yellow]Fix: add a migration with "
+            t"CREATE OR REPLACE FUNCTION {v.function_key}(...)[/yellow]"
         )
 
 
@@ -198,7 +196,7 @@ def report_unmigrated_bodies(
     env: str,
     base_ref: str,
     target_ref: str,
-    console: Console,
+    console: Printer,
     format_output: str = "text",
 ) -> dict:
     """Report function body changes not carried by a migration — without failing.
@@ -221,16 +219,16 @@ def report_unmigrated_bodies(
             console.print("[green]✅ No un-migrated function body changes[/green]")
         else:
             console.print(
-                f"[yellow]⚠ {len(violations)} function body change(s) not carried by a "
-                f"migration (report-only):[/yellow]"
+                t"[yellow]⚠ {len(violations)} function body change(s) not carried by a "
+                t"migration (report-only):[/yellow]"
             )
             for v in violations:
-                console.print(f"   • {verbatim(v.signature_key)}")
+                console.print(t"   • {v.signature_key}")
 
     return {"body_violations": [v.to_dict() for v in violations], "count": len(violations)}
 
 
-def _render_grant_report(report, console: Console) -> None:
+def _render_grant_report(report, console: Printer) -> None:
     """Render the semantic grant-accompaniment report for human eyes (issue #162).
 
     Three sections, driven by the report: unmatched grants (the hard failure,
@@ -253,11 +251,11 @@ def _render_grant_report(report, console: Console) -> None:
             statement = grant.get("statement", "<grant>") if isinstance(grant, dict) else str(grant)
             changed_in = grant.get("changed_in") if isinstance(grant, dict) else None
             inspected = grant.get("migrations_inspected") if isinstance(grant, dict) else None
-            console.print(f"   [bold]{verbatim(statement)}[/bold]")
+            console.print(t"   [bold]{statement}[/bold]")
             if changed_in:
-                console.print(f"     changed in {verbatim(changed_in)}")
+                console.print(t"     changed in {changed_in}")
             if inspected:
-                console.print(f"     not found in: {verbatim(', '.join(inspected))}")
+                console.print(t"     not found in: {', '.join(inspected)}")
             else:
                 console.print("     no accompanying migration carries it")
             console.print("")
@@ -277,7 +275,7 @@ def _render_grant_report(report, console: Console) -> None:
         else:
             console.print("[yellow]⚠️  Could not statically verify:[/yellow]")
         for note in notes:
-            console.print(f"     - {verbatim(note)}")
+            console.print(t"     - {note}")
         if not report.is_valid and not unmatched:
             console.print(
                 "\n  No accompanying migration was found, so these unverifiable grant\n"
@@ -287,8 +285,8 @@ def _render_grant_report(report, console: Console) -> None:
 
     if report.is_valid and not notes:
         console.print("[green]✅ Grant changes accompanied by migrations[/green]")
-        console.print(f"   Grant files: {len(report.grant_files_changed)}")
-        console.print(f"   Migrations: {len(report.migration_files_staged)}")
+        console.print(t"   Grant files: {len(report.grant_files_changed)}")
+        console.print(t"   Migrations: {len(report.migration_files_staged)}")
     elif report.is_valid:
         console.print("\n[green]✅ Grant changes carried by accompanying migrations[/green]")
 
@@ -297,7 +295,7 @@ def validate_grant_accompaniment(
     base_ref: str,
     target_ref: str,
     staged_only: bool,
-    console: Console,
+    console: Printer,
     format_output: str = "text",
     grant_dir: str = "db/7_grant",
     migrations_dir: str = "db/migrations",
@@ -345,5 +343,5 @@ def validate_grant_accompaniment(
 
     except (NotAGitRepositoryError, GitError) as e:
         if format_output == "text":
-            console.print(f"[red]❌ Git validation error: {verbatim(e)}[/red]")
+            console.print(t"[red]❌ Git validation error: {e}[/red]")
         raise

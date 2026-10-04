@@ -5,10 +5,8 @@ Handles text, JSON, and CSV formatting for build results.
 
 from pathlib import Path
 
-from rich.console import Console
-
 from confiture.cli.formatters.common import handle_output
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import Printer, markup
 from confiture.core.builder import SelectionReport
 from confiture.core.linting.inventory import label_for
 from confiture.models.results import BuildResult
@@ -18,7 +16,7 @@ def format_build_result(
     result: BuildResult,
     format_type: str,
     output_path: Path | None,
-    console: Console,
+    console: Printer,
 ) -> None:
     """Format build result in requested format.
 
@@ -50,7 +48,7 @@ def format_build_result(
         handle_output(format_type, result.to_dict(), csv_data, output_path, console)
 
 
-def format_text(result: BuildResult, console: Console) -> None:
+def format_text(result: BuildResult, console: Printer) -> None:
     """Format build result as rich text for console output.
 
     Args:
@@ -59,28 +57,28 @@ def format_text(result: BuildResult, console: Console) -> None:
     """
     if result.success:
         console.print("[green]✅ Schema built successfully![/green]")
-        console.print(f"\n📁 Output: {verbatim(result.output_path)}")
-        console.print(f"📏 Size: {result.schema_size_bytes:,} bytes")
-        console.print(f"📊 Files: {verbatim(result.files_processed)}")
+        console.print(t"\n📁 Output: {result.output_path}")
+        console.print(t"📏 Size: {result.schema_size_bytes:,} bytes")
+        console.print(t"📊 Files: {result.files_processed}")
         if result.hash:
-            console.print(f"🔐 Hash: {verbatim(result.hash)}")
+            console.print(t"🔐 Hash: {result.hash}")
         if result.seed_files_applied > 0:
-            console.print(f"🌱 Seeds: {verbatim(result.seed_files_applied)} files applied")
+            console.print(t"🌱 Seeds: {result.seed_files_applied} files applied")
         if result.artifact_path:
-            console.print(f"📦 Artifact: {verbatim(result.artifact_path)}")
+            console.print(t"📦 Artifact: {result.artifact_path}")
         if result.execution_time_ms > 0:
-            console.print(f"⏱️ Time: {verbatim(result.execution_time_ms)}ms")
+            console.print(t"⏱️ Time: {result.execution_time_ms}ms")
         format_warnings(result, console)
         if result.duplicates:
             console.print(
-                f"\n[yellow]Duplicate definitions: {len(result.duplicates)} (see above)[/yellow]"
+                t"\n[yellow]Duplicate definitions: {len(result.duplicates)} (see above)[/yellow]"
             )
     else:
-        console.print(f"[red]❌ Build failed: {verbatim(result.error)}[/red]")
+        console.print(t"[red]❌ Build failed: {result.error}[/red]")
         format_warnings(result, console)
 
 
-def format_warnings(result: BuildResult, console: Console) -> None:
+def format_warnings(result: BuildResult, console: Printer) -> None:
     """Print the build's own diagnostics — the only place a `BuildWarning` is rendered.
 
     A build that stopped is exactly when its warnings are worth reading, so a
@@ -96,7 +94,7 @@ def format_warnings(result: BuildResult, console: Console) -> None:
     for warning in result.warnings:
         style = "yellow" if warning.severity == "warning" else "dim"
         console.print(
-            f"  [{style}]{verbatim(warning.code)} {verbatim(warning.message)}[/{style}]",
+            t"  [{markup(style)}]{warning.code} {warning.message}[/{markup(style)}]",
             soft_wrap=True,
         )
 
@@ -130,7 +128,7 @@ def format_selection_report(
     report: SelectionReport,
     format_type: str,
     project_dir: Path | None,
-    console: Console,
+    console: Printer,
 ) -> None:
     """Print what the build would read; nothing is built.
 
@@ -143,13 +141,13 @@ def format_selection_report(
     payload = selection_payload(report, project_dir)
     if format_type == "text":
         console.print(
-            f"{verbatim(payload['total'])} file(s) selected for env '{verbatim(payload['env'])}' — nothing was built",
+            t"{payload['total']} file(s) selected for env '{payload['env']}' — nothing was built",
             soft_wrap=True,
         )
         for entry in payload["files"]:
             console.print(
-                f"  {verbatim(entry['path'])}  ← {verbatim(entry['entry'])} · "
-                f"order {verbatim(entry['order'])} · {verbatim(entry['pattern'])}",
+                t"  {entry['path']}  ← {entry['entry']} · "
+                t"order {entry['order']} · {entry['pattern']}",
                 soft_wrap=True,
             )
         return

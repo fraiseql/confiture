@@ -25,7 +25,6 @@ import yaml
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import _resolve_config, console
-from confiture.cli.markup import verbatim
 from confiture.cli.options import CONFITURE_YAML, config_option, env_option, mode_option
 from confiture.core.hooks.context import ExecutionContext, HookContext
 from confiture.core.hooks.notifications.config import load_notifications_config
@@ -154,13 +153,13 @@ def hooks_test(
         # what would be sent.
         hook.transport = StdoutTransport()
         console.print(
-            f"[cyan]🔍 Plan for hook {verbatim(repr(chosen.id))} "
-            "(transport swapped to stdout).  Pass --mode send to send for real.[/cyan]"
+            t"[cyan]🔍 Plan for hook {repr(chosen.id)} "
+            t"(transport swapped to stdout).  Pass --mode send to send for real.[/cyan]"
         )
     else:
         console.print(
-            f"[yellow]⚠️  Sending real notification through hook {verbatim(repr(chosen.id))} "
-            f"(transport: {verbatim(type(hook.transport).__name__)}).[/yellow]"
+            t"[yellow]⚠️  Sending real notification through hook {repr(chosen.id)} "
+            t"(transport: {type(hook.transport).__name__}).[/yellow]"
         )
 
     ctx = _synthetic_execution_context()
@@ -168,11 +167,9 @@ def hooks_test(
     result = asyncio.run(hook.execute(wrapped))
 
     if result.success:
-        console.print(f"[green]✅ Hook {verbatim(repr(chosen.id))} executed successfully.[/green]")
+        console.print(t"[green]✅ Hook {repr(chosen.id)} executed successfully.[/green]")
         raise typer.Exit(SUCCESS)  # success-signal: clean pass
-    console.print(
-        f"[red]❌ Hook {verbatim(repr(chosen.id))} failed: {verbatim(result.error)}[/red]"
-    )
+    console.print(t"[red]❌ Hook {repr(chosen.id)} failed: {result.error}[/red]")
     # success-signal: the test ran and is reporting that the configured hook
     # failed — the diagnostic result the user asked for, not a confiture error.
     raise typer.Exit(FINDINGS)

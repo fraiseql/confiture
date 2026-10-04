@@ -14,6 +14,7 @@ from confiture.cli.formatters.common import (
     print_csv,
     save_csv,
 )
+from confiture.cli.markup import Printer
 
 
 class TestSaveCsv:
@@ -80,7 +81,7 @@ class TestHandleOutput:
         """Test handle_output with JSON format to file."""
         with TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "output.json"
-            console = Console()
+            console = Printer(Console())
             data = {"test": "data"}
 
             handle_output("json", data, None, output_path, console)
@@ -93,7 +94,7 @@ class TestHandleOutput:
         """Test handle_output with CSV format to file."""
         with TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "output.csv"
-            console = Console()
+            console = Printer(Console())
             data = {"count": 2}
             csv_data = (["name", "value"], [["foo", "1"], ["bar", "2"]])
 
@@ -107,7 +108,7 @@ class TestHandleOutput:
         """Test handle_output with CSV format when csv_data is None."""
         with TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "output.csv"
-            console = Console()
+            console = Printer(Console())
             data = {"test": "data"}
 
             handle_output("csv", data, None, output_path, console)
@@ -117,7 +118,7 @@ class TestHandleOutput:
 
     def test_handle_output_json_to_console(self, capsys):
         """Test handle_output with JSON format to console (no file)."""
-        console = Console()
+        console = Printer(Console())
         data = {"test": "data"}
 
         # Should not raise

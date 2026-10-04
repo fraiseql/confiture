@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from confiture.cli.helpers import _emit_hint, console, emit
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import markup
 from confiture.core.idempotency import IdempotencyFixer, IdempotencyValidator
 from confiture.core.idempotency.collect import collect_report
 from confiture.core.idempotency.python_migration_extractor import (
@@ -63,7 +63,7 @@ def _report_empty_scope(
             f"({scope_meta['files_skipped']} unchanged file(s) skipped.)"
         )
 
-    hints: list[dict[str, Any]] = []
+    hints: list[str] = []
     _emit_hint(message, hints_list=hints, format_=format_output)
 
     if format_output == "json":
@@ -76,7 +76,7 @@ def _report_empty_scope(
             "meta": meta,
             "hints": hints,
         }
-    console.print(f"[green]✅ {verbatim(message)}[/green]")
+    console.print(t"[green]✅ {message}[/green]")
     return None
 
 
@@ -175,8 +175,8 @@ def _validate_idempotency(
                 else f"changed since {scope_meta['base_ref']}"
             )
             console.print(
-                f"[cyan]🔍 Scoped to {verbatim(scope_meta['files_selected'])} migration(s) "
-                f"{verbatim(where)} ({verbatim(scope_meta['files_skipped'])} skipped)[/cyan]"
+                t"[cyan]🔍 Scoped to {scope_meta['files_selected']} migration(s) "
+                t"{where} ({scope_meta['files_skipped']} skipped)[/cyan]"
             )
 
     if not sql_files and not py_files:
@@ -230,9 +230,7 @@ def _validate_idempotency(
         qualifier = (
             "blocking under --strict-cor" if strict_cor else "informational, do not fail the gate"
         )
-        console.print(
-            f"\n[yellow]ℹ️  {len(info)} heuristic note(s) ({verbatim(qualifier)})[/yellow]\n"
-        )
+        console.print(t"\n[yellow]ℹ️  {len(info)} heuristic note(s) ({qualifier})[/yellow]\n")
         _render_violations_by_file(info)
         if not strict_cor:
             console.print("[dim]Pass --strict-cor to treat these as blocking.[/dim]\n")
@@ -242,7 +240,7 @@ def _validate_idempotency(
     if blocking:
         console.print("[cyan]To auto-fix .sql files, run:[/cyan]")
         console.print(
-            f"[cyan]  confiture migrate fix --idempotent --migrations-dir {verbatim(migrations_dir)}[/cyan]"
+            t"[cyan]  confiture migrate fix --idempotent --migrations-dir {migrations_dir}[/cyan]"
         )
         console.print("[cyan]For .py migrations, edit them manually.[/cyan]")
 
@@ -276,25 +274,25 @@ def _render_idempotency_headline(report: Any, *, fail: bool, strict_cor: bool) -
     unverified = _unverified_summary(report)
 
     if blocking:
-        console.print(f"[red]❌ Found {len(blocking)} idempotency violation(s)[/red]")
+        console.print(t"[red]❌ Found {len(blocking)} idempotency violation(s)[/red]")
         if not report.analysis_complete:
-            console.print(f"[yellow]   {verbatim(unverified)}[/yellow]")
+            console.print(t"[yellow]   {unverified}[/yellow]")
         console.print()
         return
 
     if info and strict_cor:
         console.print(
-            f"[red]❌ Found {len(info)} heuristic note(s) — blocking under --strict-cor[/red]"
+            t"[red]❌ Found {len(info)} heuristic note(s) — blocking under --strict-cor[/red]"
         )
     elif not report.analysis_complete:
         style, icon = ("red", "❌") if fail else ("yellow", "⚠️ ")
-        console.print(f"[{style}]{verbatim(icon)} {verbatim(unverified)}[/{style}]")
+        console.print(t"[{markup(style)}]{icon} {unverified}[/{markup(style)}]")
     else:
         console.print("[green]✅ All migrations are idempotent[/green]")
 
-    scanned = f"   Scanned {report.files_scanned} file(s)"
+    scanned = t"   Scanned {report.files_scanned} file(s)"
     if info and strict_cor and not report.analysis_complete:
-        scanned += f" · {unverified}"
+        scanned += t" · {unverified}"
     console.print(scanned)
 
 
@@ -305,20 +303,17 @@ def _render_violations_by_file(violations: list[Any]) -> None:
         by_file.setdefault(violation.file_path, []).append(violation)
     for file_path, group in by_file.items():
         file_name = Path(file_path).name
-        console.print(f"[yellow]{verbatim(file_name)}[/yellow]")
+        console.print(t"[yellow]{file_name}[/yellow]")
         for v in group:
             location = (
                 f"Line {v.source_line} (SQL line {v.line_number})"
                 if v.source_line is not None
                 else f"Line {v.line_number}"
             )
-            console.print(f"  {verbatim(location)}: {verbatim(v.pattern.value)}")
-            console.print(
-                f"    [dim]{v.sql_snippet[:60]}...[/dim]"
-                if len(v.sql_snippet) > 60
-                else f"    [dim]{v.sql_snippet}[/dim]"
-            )
-            console.print(f"    💡 {verbatim(v.suggestion)}")
+            console.print(t"  {location}: {v.pattern.value}")
+            snippet = f"{v.sql_snippet[:60]}..." if len(v.sql_snippet) > 60 else v.sql_snippet
+            console.print(t"    [dim]{snippet}[/dim]")
+            console.print(t"    💡 {v.suggestion}")
         console.print()
 
 
@@ -327,17 +322,15 @@ def _render_extractor_warnings(report: Any) -> None:
     if not report.has_warnings:
         return
     console.print(
-        f"[yellow]⚠️  {len(report.warnings)} dynamic SQL call(s) "
-        "could not be statically analyzed:[/yellow]"
+        t"[yellow]⚠️  {len(report.warnings)} dynamic SQL call(s) "
+        t"could not be statically analyzed:[/yellow]"
     )
     for warn in report.warnings:
         source = Path(str(warn.source_file)).name
-        console.print(
-            f"  {verbatim(source)}:{verbatim(warn.source_line)} — {verbatim(warn.kind.value)}"
-        )
-        console.print(f"    [dim]{verbatim(warn.message)}[/dim]")
+        console.print(t"  {source}:{warn.source_line} — {warn.kind.value}")
+        console.print(t"    [dim]{warn.message}[/dim]")
         if getattr(warn, "remedy", ""):
-            console.print(f"    [dim]→ {verbatim(warn.remedy)}[/dim]")
+            console.print(t"    [dim]→ {warn.remedy}[/dim]")
     console.print("    [dim]These calls were skipped. Idempotency cannot be guaranteed.[/dim]")
     console.print()
 
@@ -384,7 +377,7 @@ def _render_fix_text(
         if manual_report.analysis_complete:
             console.print("[green]✅ All migrations are already idempotent[/green]")
         else:
-            console.print(f"[yellow]⚠️  {verbatim(_unverified_summary(manual_report))}[/yellow]")
+            console.print(t"[yellow]⚠️  {_unverified_summary(manual_report)}[/yellow]")
         _render_extractor_warnings(manual_report)
         return
 
@@ -395,11 +388,11 @@ def _render_fix_text(
             console.print("[green]✅ Applied idempotency fixes:[/green]\n")
 
         for file_info in files_changed:
-            console.print(f"[yellow]{verbatim(file_info['file'])}[/yellow]")
+            console.print(t"[yellow]{file_info['file']}[/yellow]")
             for change in file_info["changes"]:
-                console.print(f"  Line {verbatim(change['line'])}: {verbatim(change['pattern'])}")
-                console.print(f"    - {verbatim(change['original'])}")
-                console.print(f"    + {verbatim(change['suggested_fix'])}")
+                console.print(t"  Line {change['line']}: {change['pattern']}")
+                console.print(t"    - {change['original']}")
+                console.print(t"    + {change['suggested_fix']}")
             console.print()
 
     if manual_fix_required:
@@ -409,25 +402,23 @@ def _render_fix_text(
         )
         for file_path in manual_fix_required:
             file_name = Path(file_path).name
-            console.print(f"[yellow]  • {verbatim(file_name)}[/yellow]")
+            console.print(t"[yellow]  • {file_name}[/yellow]")
             for v in py_violations_by_file[file_path]:
                 location = (
                     f"line {v.source_line}"
                     if v.source_line is not None
                     else f"line {v.line_number}"
                 )
-                console.print(
-                    f"    {verbatim(location)}: {verbatim(v.pattern.value)} — 💡 {verbatim(v.suggestion)}"
-                )
+                console.print(t"    {location}: {v.pattern.value} — 💡 {v.suggestion}")
         console.print()
 
     _render_extractor_warnings(manual_report)
 
     if files_changed and dry_run:
-        console.print(f"[cyan]Would fix {len(files_changed)} file(s)[/cyan]")
+        console.print(t"[cyan]Would fix {len(files_changed)} file(s)[/cyan]")
         console.print("[cyan]Run without --dry-run to apply changes[/cyan]")
     elif files_changed:
-        console.print(f"[green]Fixed {len(files_changed)} file(s)[/green]")
+        console.print(t"[green]Fixed {len(files_changed)} file(s)[/green]")
 
 
 def _fix_idempotency(

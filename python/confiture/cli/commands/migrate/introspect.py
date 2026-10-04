@@ -9,7 +9,6 @@ import typer
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _get_tracking_table, console, emit, is_json, open_connection
-from confiture.cli.markup import verbatim
 from confiture.cli.options import config_option, format_option
 from confiture.core import baseline_detector as _core_baseline_detector
 from confiture.core import connection as _core_connection
@@ -65,17 +64,17 @@ def migrate_introspect(
 
         if format_output == "text":
             console.print("\n[cyan]Introspecting database schema...[/cyan]\n")
-            console.print(f"  Snapshots directory: {verbatim(snapshots_dir)}")
+            console.print(t"  Snapshots directory: {snapshots_dir}")
             if not snapshots_dir.exists():
                 console.print("  [yellow](directory not found — no snapshots available)[/yellow]")
             else:
                 snap_count = len(
                     _core_baseline_detector.BaselineDetector(snapshots_dir).snapshot_files()
                 )
-                console.print(f"  ({verbatim(snap_count)} snapshot(s) found)")
+                console.print(t"  ({snap_count} snapshot(s) found)")
             console.print(
-                f"  {verbatim(_get_tracking_table(config_data))}: "
-                f"{verbatim('PRESENT' if tb_present else '[yellow]NOT FOUND[/yellow]')}"
+                t"  {_get_tracking_table(config_data)}: "
+                t"{'PRESENT' if tb_present else '[yellow]NOT FOUND[/yellow]'}"
             )
 
         if not snapshots_dir.exists():
@@ -117,21 +116,15 @@ def migrate_introspect(
                 )
             )
         else:
-            console.print(
-                f"  [green]✓ Match found: {verbatim(detected_version)}_{verbatim(detected_name)}[/green]"
-            )
-            console.print(
-                f"\n  Detected migration level: [bold]{verbatim(detected_version)}[/bold]"
-            )
+            console.print(t"  [green]✓ Match found: {detected_version}_{detected_name}[/green]")
+            console.print(t"\n  Detected migration level: [bold]{detected_version}[/bold]")
             if not tb_present:
                 console.print("\n  To restore tracking, run:")
                 console.print(
-                    f"    confiture migrate baseline --through {verbatim(detected_version)} --config {verbatim(config)}"
+                    t"    confiture migrate baseline --through {detected_version} --config {config}"
                 )
                 console.print("\n  Or apply automatically with:")
-                console.print(
-                    f"    confiture migrate up --auto-detect-baseline --config {verbatim(config)}"
-                )
+                console.print(t"    confiture migrate up --auto-detect-baseline --config {config}")
     else:
         closest = detector.last_closest
         if format_output == "json":
@@ -144,7 +137,7 @@ def migrate_introspect(
             console.print("  [yellow]✗ No matching snapshot found[/yellow]")
             if closest:
                 _cv, _cr = closest
-                console.print(f"  [dim]Closest: {verbatim(_cv)} ({_cr:.0%} similar)[/dim]")
+                console.print(t"  [dim]Closest: {_cv} ({_cr:.0%} similar)[/dim]")
             console.print("\n  The live schema does not exactly match any stored snapshot.")
             console.print("  This can happen if the schema was modified outside of confiture.")
 

@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 from rich.console import Console
 
 from confiture.cli.formatters.migrate_formatter import format_migrate_down_result
+from confiture.cli.markup import Printer
 from confiture.models.results import MigrateDownResult, MigrationApplied
 
 
@@ -27,7 +28,7 @@ class TestMigrateDownFormatter:
                 total_duration_ms=350,
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_down_result(result, "json", output_file, console)
 
             assert output_file.exists()
@@ -49,7 +50,7 @@ class TestMigrateDownFormatter:
                 total_duration_ms=150,
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_down_result(result, "csv", output_file, console)
 
             assert output_file.exists()
@@ -69,7 +70,7 @@ class TestMigrateDownFormatter:
             total_duration_ms=200,
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_migrate_down_result(result, "text", None, console)
@@ -85,7 +86,7 @@ class TestMigrateDownFormatter:
             error="Rollback failed",
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_migrate_down_result(result, "text", None, console)

@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 from rich.console import Console
 
 from confiture.cli.formatters.migrate_formatter import format_migrate_up_result
+from confiture.cli.markup import Printer
 from confiture.models.results import MigrateUpResult, MigrationApplied
 
 
@@ -28,7 +29,7 @@ class TestMigrateUpFormatter:
             total_duration_ms=300,
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_migrate_up_result(result, "json", None, console)
@@ -51,7 +52,7 @@ class TestMigrateUpFormatter:
                 checksums_verified=True,
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_up_result(result, "json", output_file, console)
 
             assert output_file.exists()
@@ -76,7 +77,7 @@ class TestMigrateUpFormatter:
                 total_duration_ms=300,
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_up_result(result, "csv", output_file, console)
 
             assert output_file.exists()
@@ -99,7 +100,7 @@ class TestMigrateUpFormatter:
             total_duration_ms=100,
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_migrate_up_result(result, "text", None, console)
@@ -117,7 +118,7 @@ class TestMigrateUpFormatter:
                 errors=["Lock timeout"],
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_up_result(result, "json", output_file, console)
 
             assert output_file.exists()
@@ -135,7 +136,7 @@ class TestMigrateUpFormatter:
             total_duration_ms=0,
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_migrate_up_result(result, "text", None, console)
@@ -156,7 +157,7 @@ class TestMigrateUpFormatter:
                 warnings=["Checksum mismatch for 002"],
             )
 
-            console = Console()
+            console = Printer(Console())
             format_migrate_up_result(result, "json", output_file, console)
 
             data = json.loads(output_file.read_text())
@@ -175,7 +176,7 @@ class TestMigrateUpFormatter:
             dry_run=True,
         )
 
-        console = Console()
+        console = Printer(Console())
 
         # Should not raise
         format_migrate_up_result(result, "text", None, console)

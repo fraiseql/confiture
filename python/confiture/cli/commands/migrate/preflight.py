@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from rich.table import Table
 
 from confiture.cli.dsn import (
     NO_CONFIG_OPTION_HELP,
@@ -29,7 +28,7 @@ from confiture.cli.helpers import (
     is_json,
     open_connection,
 )
-from confiture.cli.markup import markup, verbatim
+from confiture.cli.markup import Table, markup
 from confiture.cli.options import (
     config_option,
     database_url_option,
@@ -233,13 +232,13 @@ def _display_change_set(change_set: Any, cons: Any) -> None:
         # "classified" counts only what carries a tier — saying it of the whole
         # set would be the confident-wrong phrasing this feature exists to avoid.
         cons.print(
-            f"Risk: [{color}]{verbatim(worst.value)}[/{color}] "
-            f"(worst of {verbatim(total - unclassified)} classified change(s) of {verbatim(total)})"
+            t"Risk: [{markup(color)}]{worst.value}[/{markup(color)}] "
+            t"(worst of {total - unclassified} classified change(s) of {total})"
         )
     if unclassified:
         cons.print(
-            f"  [yellow]⚠️  {verbatim(unclassified)} change(s) could not be classified — "
-            "a consumer gating on risk will refuse them[/yellow]"
+            t"  [yellow]⚠️  {unclassified} change(s) could not be classified — "
+            t"a consumer gating on risk will refuse them[/yellow]"
         )
     # #199: a full-table rewrite is the thing that turns a deploy into an
     # outage, and it is not recoverable from the tier — an `additive`
@@ -248,8 +247,8 @@ def _display_change_set(change_set: Any, cons: Any) -> None:
     rewrites = [c for c in change_set.changes if c.lock is not None and c.lock.rewrites_table]
     if rewrites:
         cons.print(
-            f"  [yellow]⏳ {len(rewrites)} change(s) rewrite the table[/yellow] — "
-            "plan for a maintenance window proportional to its size"
+            t"  [yellow]⏳ {len(rewrites)} change(s) rewrite the table[/yellow] — "
+            t"plan for a maintenance window proportional to its size"
         )
 
     for change in change_set.changes:
@@ -258,7 +257,7 @@ def _display_change_set(change_set: Any, cons: Any) -> None:
         color = _CHANGE_SET_TIER_COLOR.get(change.tier.value, "yellow")
         cost = _lock_annotation(change.lock)
         cons.print(
-            f"  [{color}]{verbatim(change.tier.value)}[/{color}] {verbatim(change.kind)} {verbatim(change.object)}{verbatim(cost)}"
+            t"  [{markup(color)}]{change.tier.value}[/{markup(color)}] {change.kind} {change.object}{cost}"
         )
 
 
@@ -280,7 +279,7 @@ def _display_large_tables(large: list[Any], cons: Any) -> None:
             if table.estimated_rows is None
             else f"≈{table.estimated_rows:,} rows"
         )
-        cons.print(f"  [yellow]{verbatim(table.table)}[/yellow] {verbatim(rows)}")
+        cons.print(t"  [yellow]{table.table}[/yellow] {rows}")
 
 
 def _lock_annotation(lock: Any) -> str:
@@ -308,40 +307,38 @@ def _display_against_result(
 
     safe_url = redact_url(result.against_url)
     cons.print(
-        f"\nExecution check: {len(result.migrations)} migration(s) against [dim]{verbatim(safe_url)}[/dim]"
+        t"\nExecution check: {len(result.migrations)} migration(s) against [dim]{safe_url}[/dim]"
     )
 
     for m in result.migrations:
         if m.skipped:
-            cons.print(
-                f"  [yellow]⤳[/yellow]  {verbatim(m.version)}  {verbatim(m.name, '<40')}  [dim](skipped)[/dim]"
-            )
+            cons.print(t"  [yellow]⤳[/yellow]  {m.version}  {m.name:<40}  [dim](skipped)[/dim]")
             if m.skipped_reason:
-                cons.print(f"       [dim]{verbatim(m.skipped_reason)}[/dim]")
+                cons.print(t"       [dim]{m.skipped_reason}[/dim]")
         elif m.success:
             cons.print(
-                f"  [green]✓[/green]  {verbatim(m.version)}  {verbatim(m.name, '<40')}  "
-                f"({m.execution_time_ms / 1000:.2f}s)"
+                t"  [green]✓[/green]  {m.version}  {m.name:<40}  "
+                t"({m.execution_time_ms / 1000:.2f}s)"
             )
         else:
-            cons.print(f"  [red]✗[/red]  {verbatim(m.version)}  {verbatim(m.name, '<40')}")
+            cons.print(t"  [red]✗[/red]  {m.version}  {m.name:<40}")
             if m.error:
                 first_line = m.error.splitlines()[0][:120]
-                cons.print(f"       [red]Error:[/red] {verbatim(first_line)}")
+                cons.print(t"       [red]Error:[/red] {first_line}")
 
     cons.print()
     if result.all_passed:
         if result.has_skipped:
             cons.print(
-                f"  [green]✓[/green] All {len(result.migrations)} migration(s) passed "
-                f"({len(result.skipped_migrations)} skipped)."
+                t"  [green]✓[/green] All {len(result.migrations)} migration(s) passed "
+                t"({len(result.skipped_migrations)} skipped)."
             )
         else:
-            cons.print(f"  [green]✓[/green] All {len(result.migrations)} migration(s) passed.")
+            cons.print(t"  [green]✓[/green] All {len(result.migrations)} migration(s) passed.")
     else:
         cons.print(
-            f"  [red]✗[/red] {len(result.failures)} of "
-            f"{len(result.migrations)} migration(s) would fail."
+            t"  [red]✗[/red] {len(result.failures)} of "
+            t"{len(result.migrations)} migration(s) would fail."
         )
     if result.db_consumed:
         cons.print("  [yellow]⚠[/yellow]  Preflight DB consumed — reprovision before next run.")
@@ -375,7 +372,7 @@ def _run_dependent_check(
         with connect_url(against_url) as conn:
             return DependentObjectsChecker(severity=severity).check(targets, conn)
     except DatabaseError as e:
-        error_console.print(f"[red]❌ Dependent check connection failed: {verbatim(e)}[/red]")
+        error_console.print(t"[red]❌ Dependent check connection failed: {e}[/red]")
         return DependentAnalysisReport(
             entries=[], status="skipped", skip_reason="connection_failed"
         )
@@ -386,7 +383,7 @@ def _display_dependent_analysis(report: Any, cons: Any) -> None:
     cons.print()
     if report.status == "skipped":
         cons.print(
-            f"[yellow]⚠️  Dependent analysis skipped[/yellow] [dim]({verbatim(report.skip_reason)})[/dim]"
+            t"[yellow]⚠️  Dependent analysis skipped[/yellow] [dim]({report.skip_reason})[/dim]"
         )
         return
 
@@ -409,18 +406,16 @@ def _display_dependent_analysis(report: Any, cons: Any) -> None:
         sev = entry.severity
         marker = "[red]✗[/red]" if sev == "error" else "[yellow]ℹ[/yellow]"
         cons.print(
-            f"  {markup(marker)} {verbatim(entry.target.kind)} [cyan]{verbatim(entry.target.qualified)}[/cyan] "
-            f"is being replaced; {len(entry.dependents)} dependent(s):"
+            t"  {markup(marker)} {entry.target.kind} [cyan]{entry.target.qualified}[/cyan] "
+            t"is being replaced; {len(entry.dependents)} dependent(s):"
         )
         for dep in entry.dependents:
             cols = (
-                f"  [dim](references: {verbatim(', '.join(dep.referenced_columns))})[/dim]"
+                t"  [dim](references: {', '.join(dep.referenced_columns)})[/dim]"
                 if dep.referenced_columns
-                else ""
+                else t""
             )
-            cons.print(
-                f"      - {verbatim(dep.kind)} [cyan]{verbatim(dep.schema)}.{verbatim(dep.name)}[/cyan]{markup(cols)}"
-            )
+            cons.print(t"      - {dep.kind} [cyan]{dep.schema}.{dep.name}[/cyan]{cols}")
 
 
 AgainstOpt = Annotated[
@@ -576,8 +571,8 @@ def migrate_preflight(
 
     if check_dependents not in {"off", "fail", "warn"}:
         error_console.print(
-            f"[red]❌ Invalid --check-dependents value: {verbatim(repr(check_dependents))}. "
-            "Must be one of 'off', 'fail', 'warn'.[/red]"
+            t"[red]❌ Invalid --check-dependents value: {repr(check_dependents)}. "
+            t"Must be one of 'off', 'fail', 'warn'.[/red]"
         )
         raise typer.Exit(USAGE)
 
@@ -716,7 +711,7 @@ def _static_preflight(
     result: Any,
     *,
     migrations_dir: Path,
-    config: Path,
+    config: Path | None,
     env: str | None,
     check_dependents: str,
     strict: bool,
@@ -777,8 +772,8 @@ def _render_static_preflight(
         table.add_row(m.version, m.name, rev, txn)
     console.print(table)
     console.print(
-        f"\nSummary: {verbatim(summary['migrations_checked'])} migration(s) checked, "
-        f"{verbatim(summary['errors'])} error(s), {verbatim(summary['warnings'])} warning(s)"
+        t"\nSummary: {summary['migrations_checked']} migration(s) checked, "
+        t"{summary['errors']} error(s), {summary['warnings']} warning(s)"
     )
     _display_change_set(change_set, console)
     if not issues:
@@ -786,10 +781,10 @@ def _render_static_preflight(
     for issue in issues:
         color = "red" if issue.severity == "error" else "yellow"
         console.print(
-            f"  [{color}]{verbatim(issue.severity.upper())}[/{color}] {verbatim(issue.code)}: {verbatim(issue.message)}"
+            t"  [{markup(color)}]{issue.severity.upper()}[/{markup(color)}] {issue.code}: {issue.message}"
         )
         if issue.actionable:
-            console.print(f"    [dim]💡 {verbatim(issue.actionable)}[/dim]")
+            console.print(t"    [dim]💡 {issue.actionable}[/dim]")
     if check_dependents != "off":
         console.print(
             "[yellow]⚠️  Dependent check skipped: no preflight DB configured. "
@@ -801,7 +796,7 @@ def _against_pending_files(
     ctx: typer.Context,
     *,
     migrations_dir: Path,
-    config: Path,
+    config: Path | None,
     env: str | None,
     since: str | None,
     database_url: str | None,

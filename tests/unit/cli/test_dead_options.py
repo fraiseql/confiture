@@ -18,6 +18,7 @@ from tests.unit._doubles import session_double
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.cli.markup import Printer
 from confiture.core.large_tables import BatchConfig
 from confiture.models.results import MigrateUpResult
 
@@ -168,6 +169,6 @@ def test_prep_seed_table_report_honours_output(tmp_path: Path) -> None:
         scanned_files=["a.sql"], violation_count=0, has_violations=False, violations=[]
     )
     target = tmp_path / "report.txt"
-    output_table(report, target, Console(record=True))
+    output_table(report, target, Printer(Console(record=True)))
     assert target.exists()
     assert "Prep-Seed Validation Report" in target.read_text()

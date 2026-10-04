@@ -82,6 +82,8 @@ def _interpolated(item: Interpolation) -> str:
         value = _CONVERSIONS[item.conversion](value)
     elif isinstance(value, Markup) and not item.format_spec:
         return value
+    elif isinstance(value, Template) and not item.format_spec:
+        return render(value)
     return verbatim(value, item.format_spec)
 
 
@@ -90,7 +92,7 @@ def render(template: Template) -> str:
 
     An interpolation is converted (``!r``/``!s``/``!a``), formatted with its spec
     and escaped exactly as :func:`verbatim` does — unless its value is a
-    :class:`Markup`, which is written as is.
+    :class:`Markup`, written as is, or a template, rendered in place.
     """
     return "".join(part if isinstance(part, str) else _interpolated(part) for part in template)
 
@@ -117,8 +119,10 @@ class Table:
     def __init__(self, *headers: LiteralString, **options: Any) -> None:
         self._table = _RichTable(*headers, **options)
 
-    def add_column(self, header: LiteralString = "", **options: Any) -> None:
-        self._table.add_column(header, **options)
+    def add_column(self, header: LiteralString | Template = "", **options: Any) -> None:
+        self._table.add_column(
+            render(header) if isinstance(header, Template) else header, **options
+        )
 
     def add_row(
         self, *cells: Cell, style: str | Style | None = None, end_section: bool = False

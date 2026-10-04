@@ -21,6 +21,7 @@ from rich.console import Console
 from typer.testing import CliRunner
 
 from confiture.cli.main import app
+from confiture.cli.markup import Printer
 
 runner = CliRunner()
 
@@ -61,7 +62,7 @@ class TestValidateIdempotentZeroFiles:
         from confiture.cli import helpers
 
         err_buf = io.StringIO()
-        monkeypatch.setattr(helpers, "error_console", Console(file=err_buf))
+        monkeypatch.setattr(helpers, "error_console", Printer(Console(file=err_buf)))
 
         result = runner.invoke(
             app,
@@ -90,7 +91,7 @@ class TestValidateIdempotentZeroFiles:
         from confiture.cli import helpers
 
         err_buf = io.StringIO()
-        monkeypatch.setattr(helpers, "error_console", Console(file=err_buf))
+        monkeypatch.setattr(helpers, "error_console", Printer(Console(file=err_buf)))
 
         result = runner.invoke(
             app,
@@ -144,7 +145,7 @@ class TestEmitHintHelper:
         from confiture.cli.helpers import _emit_hint
 
         err_buf = io.StringIO()
-        err_console = Console(file=err_buf)
+        err_console = Printer(Console(file=err_buf))
         hints: list[str] = []
         _emit_hint(
             "Migration directory exists but contains no files.",
@@ -160,7 +161,7 @@ class TestEmitHintHelper:
         from confiture.cli.helpers import _emit_hint
 
         err_buf = io.StringIO()
-        err_console = Console(file=err_buf)
+        err_console = Printer(Console(file=err_buf))
         hints: list[str] = []
         _emit_hint(
             "Migration directory exists but contains no files.",
@@ -176,7 +177,7 @@ class TestEmitHintHelper:
         from confiture.cli.helpers import _emit_hint
 
         err_buf = io.StringIO()
-        err_console = Console(file=err_buf)
+        err_console = Printer(Console(file=err_buf))
         hints: list[str] = []
         _emit_hint("x", hints_list=hints, format_=fmt, error_console=err_console)
         assert hints == ["x"]

@@ -288,7 +288,7 @@ class SeedApplier:
                     self.connection.rollback()
                 result.failed += 1
                 result.failed_files.append(self.seed_name(seed_file))
-                self.console.print(f"[red]✗ {e}[/red]")
+                self.console.print(f"[red]✗ {escape(str(e))}[/red]")
                 if not continue_on_error:
                     if progress and apply_task is not None:
                         progress.update(apply_task, advance=1)
@@ -307,7 +307,7 @@ class SeedApplier:
     ) -> None:
         """Run one seed file (as COPY when large enough); commit in transaction mode."""
         assert self.connection is not None
-        self.console.print(f"[cyan]→ {self.seed_name(seed_file)}[/cyan]", end=" ")
+        self.console.print(f"[cyan]→ {escape(self.seed_name(seed_file))}[/cyan]", end=" ")
         sql_content = read_seed(seed_file)
         if self.copy_format and count_insert_rows(sql_content) >= self.copy_threshold:
             sql_content = self._as_copy(sql_content, seed_file)
@@ -339,7 +339,7 @@ class SeedApplier:
         if result.failed > 0:
             self.console.print(f"[yellow]⚠ {result.failed} files failed[/yellow]")
             for failed_file in result.failed_files:
-                self.console.print(f"  - {failed_file}")
+                self.console.print(f"  - {escape(str(failed_file))}")
 
 
 def _existing(path: Path) -> Path:

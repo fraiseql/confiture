@@ -21,11 +21,10 @@ from pathlib import Path
 from typing import Any
 
 import typer
-from rich.console import Console
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.helpers import emit
-from confiture.cli.markup import markup, verbatim
+from confiture.cli.markup import Printer, markup
 from confiture.cli.options import database_url_option, migrations_dir_option, output_option
 from confiture.core.connection import DatabaseError, connect_url
 from confiture.core.git import GitRepository
@@ -65,7 +64,7 @@ def _detect_repo_root(schema_dir: Path) -> Path | None:
 
 
 # Create Rich console for pretty output
-console = Console()
+console = Printer.stdout()
 
 # Create generate subcommand group
 generate_app = typer.Typer(
@@ -218,7 +217,7 @@ def scaffold_functions(
     dry_tag = " [dim](dry run)[/dim]" if dry_run else ""
     for r in results:
         icon = "[yellow]~[/yellow]" if r.action == "skip" else "[green]✓[/green]"
-        console.print(f"{markup(icon)} {verbatim(r.action)}{markup(dry_tag)}: {verbatim(r.path)}")
+        console.print(t"{markup(icon)} {r.action}{markup(dry_tag)}: {r.path}")
 
 
 # ---------------------------------------------------------------------------
@@ -260,42 +259,37 @@ def _print_renumber_result(result: RenumberResult, *, dry_run: bool) -> None:
     """``generate renumber``'s text report."""
     dry_tag = " [dim](dry run)[/dim]" if dry_run else ""
     for plan in result.plans:
-        console.print(
-            f"[green]→[/green] move{markup(dry_tag)}: {verbatim(plan.old_path)} → {verbatim(plan.new_path)}"
-        )
+        console.print(t"[green]→[/green] move{markup(dry_tag)}: {plan.old_path} → {plan.new_path}")
     for rw in result.ref_rewrites:
         if rw.old_name != rw.new_name:
             console.print(
-                f"[cyan]~[/cyan] rewrite{markup(dry_tag)}: {verbatim(rw.ref_file)} "
-                f"({verbatim(rw.old_name)} → {verbatim(rw.new_name)})"
+                t"[cyan]~[/cyan] rewrite{markup(dry_tag)}: {rw.ref_file} "
+                t"({rw.old_name} → {rw.new_name})"
             )
         else:
-            console.print(
-                f"[dim]ℹ refs:[/dim] {verbatim(rw.ref_file)} calls {verbatim(rw.old_name)}"
-            )
+            console.print(t"[dim]ℹ refs:[/dim] {rw.ref_file} calls {rw.old_name}")
     for ref_file, name in result.dangling_refs:
         console.print(
-            f"[red]⚠ dangling:[/red] {verbatim(ref_file)} still references '{verbatim(name)}' "
-            f"(likely inside a string literal — fix manually)"
+            t"[red]⚠ dangling:[/red] {ref_file} still references '{name}' "
+            t"(likely inside a string literal — fix manually)"
         )
     if result.cross_repo_refs:
         console.print("[yellow]⚠ proceeded with --force despite cross-repo refs:[/yellow]")
         for p in result.cross_repo_refs:
-            console.print(f"  {verbatim(p)}")
+            console.print(t"  {p}")
     for change in result.reordered:
         for label, others in (("before", change.now_before), ("after", change.now_after)):
             if others:
                 names = ", ".join(str(p) for p in others)
                 console.print(
-                    f"[yellow]⚠ build order:[/yellow] {verbatim(change.new_path)} now builds "
-                    f"{verbatim(label)} {verbatim(names)}"
+                    t"[yellow]⚠ build order:[/yellow] {change.new_path} now builds {label} {names}"
                 )
     if result.unresolved_reads:
         console.print(
             "[yellow]⚠ proceeded with --force past migration reads it cannot resolve:[/yellow]"
         )
         for r in result.unresolved_reads:
-            console.print(f"  {verbatim(r.migration)}:{verbatim(r.line)}: {verbatim(r.reason)}")
+            console.print(t"  {r.migration}:{r.line}: {r.reason}")
 
 
 @generate_app.command("renumber")
@@ -448,9 +442,9 @@ def generate_pgtap(
     else:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(sql)
-        console.print(f"[green]pgTAP tests written to {verbatim(output)}[/green]")
+        console.print(t"[green]pgTAP tests written to {output}[/green]")
         console.print(
-            f"[dim]{verbatim(pgtap_file.function_count)} function(s), {len(pgtap_file.tests)} test(s).[/dim]"
+            t"[dim]{pgtap_file.function_count} function(s), {len(pgtap_file.tests)} test(s).[/dim]"
         )
 
 
@@ -488,5 +482,5 @@ def generate_stubs(
     else:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(code)
-        console.print(f"[green]Generated stubs written to {verbatim(output)}[/green]")
-        console.print(f"[dim]{len(stub_file.functions)} function(s) exported.[/dim]")
+        console.print(t"[green]Generated stubs written to {output}[/green]")
+        console.print(t"[dim]{len(stub_file.functions)} function(s) exported.[/dim]")

@@ -21,7 +21,7 @@ import yaml
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import connect, console, emit, is_json
-from confiture.cli.markup import markup, verbatim
+from confiture.cli.markup import markup
 from confiture.cli.options import format_option
 from confiture.core import connection as _core_connection
 from confiture.core.schema_to_schema import SchemaToSchemaMigrator
@@ -171,13 +171,11 @@ def s2s_analyze(
         if json_mode:
             emit({"tables": recommendations})
         else:
-            console.print(f"[cyan]Strategy recommendations for schema '{verbatim(schema)}':[/cyan]")
+            console.print(t"[cyan]Strategy recommendations for schema '{schema}':[/cyan]")
             for table, info in recommendations.items():
                 strat = info.get("recommended_strategy", info.get("strategy", "?"))
                 rows = info.get("row_count", info.get("rows", "?"))
-                console.print(
-                    f"  • {verbatim(table)}: [bold]{verbatim(strat)}[/bold] ({verbatim(rows)} rows)"
-                )
+                console.print(t"  • {table}: [bold]{strat}[/bold] ({rows} rows)")
     finally:
         _close(m)
 
@@ -218,12 +216,8 @@ def s2s_migrate(
             emit({"strategy": strategy, "migrated": results})
         else:
             for table, rows in results.items():
-                console.print(
-                    f"  • {verbatim(table)}: [green]{verbatim(rows)}[/green] rows migrated"
-                )
-            console.print(
-                f"[green]✅ Migrated {len(results)} table(s) via {verbatim(strategy)}[/green]"
-            )
+                console.print(t"  • {table}: [green]{rows}[/green] rows migrated")
+            console.print(t"[green]✅ Migrated {len(results)} table(s) via {strategy}[/green]")
     finally:
         _close(m)
 
@@ -256,9 +250,7 @@ def s2s_migrate_table(
         if json_mode:
             emit({"target_table": target_table, "rows": rows})
         else:
-            console.print(
-                f"[green]✅ {verbatim(target_table)}: {verbatim(rows)} rows migrated[/green]"
-            )
+            console.print(t"[green]✅ {target_table}: {rows} rows migrated[/green]")
     finally:
         _close(m)
 
@@ -316,13 +308,11 @@ def s2s_verify(
                 ok = info.get("match", False)
                 mark = "[green]✓[/green]" if ok else "[red]✗[/red]"
                 console.print(
-                    f"  {markup(mark)} {verbatim(table)}: source={verbatim(info.get('source_count', '?'))} "
-                    f"target={verbatim(info.get('target_count', '?'))}"
+                    t"  {markup(mark)} {table}: source={info.get('source_count', '?')} "
+                    t"target={info.get('target_count', '?')}"
                 )
             if mismatches:
-                console.print(
-                    f"[red]❌ Row-count mismatch: {verbatim(', '.join(mismatches))}[/red]"
-                )
+                console.print(t"[red]❌ Row-count mismatch: {', '.join(mismatches)}[/red]")
             else:
                 console.print("[green]✅ All tables match[/green]")
         if mismatches:

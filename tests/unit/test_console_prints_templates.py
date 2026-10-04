@@ -3,7 +3,7 @@
 The printer takes templates, literals and Rich renderables; ty refuses a computed
 ``str`` (``invalid-argument-type`` is on for the modules that print). What ty
 cannot see is a way around the printer, so this fails, in the modules converted
-to it (:data:`CONVERTED`, widened until it covers ``python/``), on:
+to it — every module under ``python/`` but :data:`NOT_PRINTERS` — on:
 
 - a Rich ``Console`` or ``Table`` constructed outside ``cli/markup.py``;
 - the printer's ``.rich`` console printed through (it is only handed to a Rich
@@ -26,11 +26,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = REPO_ROOT / "python" / "confiture"
 TYPING_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "printer_typing" / "printing.py"
 
-#: The modules that print through a ``Printer``, relative to ``python/confiture``.
-CONVERTED: tuple[str, ...] = ()
-
-#: A construction or call this guard would refuse, kept for a reason.
-ALLOWED: dict[tuple[str, str], str] = {}
+#: Modules that print and cannot hold a ``Printer``, and why.
+NOT_PRINTERS: dict[str, str] = {
+    "core/error_handler.py": (
+        "core does not import cli (test_import_graph.py): it prints through the Rich "
+        "console its caller hands it (printer.rich), each value through rich's escape"
+    ),
+    "core/seed/applier.py": (
+        "core does not import cli (test_import_graph.py): the seed command hands it "
+        "printer.rich, and it prints each value through rich's escape"
+    ),
+}
 
 PRINTING = frozenset({"print", "log", "rule", "status", "input", "add_row"})
 RICH_CLASSES = {"rich.console": "Console", "rich.table": "Table"}
@@ -94,23 +100,35 @@ def test_the_rows(source: str, count: int) -> None:
     assert len(list(findings(source))) == count
 
 
-def _refused() -> list[str]:
-    refused = []
-    for module in CONVERTED:
-        path = PACKAGE / module
-        lines = path.read_text().splitlines()
-        for line, what in findings(path.read_text()):
-            if (module, lines[line - 1].strip()) not in ALLOWED:
-                refused.append(f"{module}:{line}: {what}")
-    return refused
+def _modules() -> list[Path]:
+    out = subprocess.run(
+        ["git", "ls-files", "--", "python/confiture/*.py"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return [REPO_ROOT / line for line in out.splitlines() if line]
 
 
-def test_the_converted_modules_print_through_the_printer() -> None:
-    assert _refused() == []
+def _key(path: Path) -> str:
+    return path.relative_to(PACKAGE).as_posix()
 
 
-def test_every_converted_module_exists() -> None:
-    assert [m for m in CONVERTED if not (PACKAGE / m).is_file()] == []
+def test_every_module_prints_through_the_printer() -> None:
+    refused = [
+        f"{_key(path)}:{line}: {what}"
+        for path in _modules()
+        if _key(path) != "cli/markup.py" and _key(path) not in NOT_PRINTERS
+        for line, what in findings(path.read_text())
+    ]
+    assert refused == []
+
+
+def test_every_exempt_module_still_prints() -> None:
+    """An exemption whose module no longer prints is a reason with nothing to explain."""
+    printing = {_key(p) for p in _modules() if list(findings(p.read_text()))}
+    assert sorted(set(NOT_PRINTERS) - printing) == []
 
 
 def test_ty_refuses_a_computed_string_and_nothing_else() -> None:

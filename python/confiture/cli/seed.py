@@ -9,13 +9,11 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from rich.console import Console
-from rich.table import Table
 
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.seed_formatter import format_apply_result
 from confiture.cli.helpers import connect, emit, error_console, is_json
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import Printer, Table
 from confiture.cli.options import database_url_option, env_option, format_option, output_option
 from confiture.cli.prep_seed_formatter import format_prep_seed_report
 from confiture.cli.seed_copy import DEFAULT_SEEDS_DIR, convert
@@ -33,7 +31,7 @@ from confiture.error_codes import FAILURE, FINDINGS, SUCCESS
 from confiture.exceptions import ConfigurationError, ConfiturError, SeedError
 
 # Create Rich console for pretty output
-console = Console()
+console = Printer.stdout()
 
 # Create seed subcommand group
 seed_app = typer.Typer(
@@ -203,11 +201,11 @@ def _fix_seed_files(
             continue
         if dry_run:
             console.print(
-                f"[yellow]~ Would fix {verbatim(fix_result.fixes_applied)} issues in {verbatim(file_path)}[/yellow]"
+                t"[yellow]~ Would fix {fix_result.fixes_applied} issues in {file_path}[/yellow]"
             )
         else:
             console.print(
-                f"[green]✓ Fixed {verbatim(fix_result.fixes_applied)} issues in {verbatim(file_path)}[/green]"
+                t"[green]✓ Fixed {fix_result.fixes_applied} issues in {file_path}[/green]"
             )
     return fixes
 
@@ -239,8 +237,8 @@ def _render_seed_validation(
     # Text format (default)
     console.print("\nSeed Validation Report")
     console.print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    console.print(f"Files scanned: {len(all_files)}")
-    console.print(f"Violations found: {len(all_violations)}")
+    console.print(t"Files scanned: {len(all_files)}")
+    console.print(t"Violations found: {len(all_violations)}")
 
     if all_violations:
         console.print("\n[red]Issues found:[/red]")
@@ -252,10 +250,10 @@ def _render_seed_validation(
 
         for violation in sorted(all_violations, key=lambda v: (v.file_path, v.line_number)):
             table.add_row(
-                violation.file_path,
-                str(violation.line_number),
-                violation.pattern.name,
-                violation.suggestion,
+                t"{violation.file_path}",
+                t"{violation.line_number}",
+                t"{violation.pattern.name}",
+                t"{violation.suggestion}",
             )
 
         console.print(table)
@@ -529,7 +527,7 @@ def apply(
             seeds_dir=seeds_dir,
             env=env,
             connection=connection,
-            console=error_console if is_json(format_type) else console,
+            console=(error_console if is_json(format_type) else console).rich,
             copy_format=copy_format,
             copy_threshold=copy_threshold,
         )
@@ -636,12 +634,12 @@ def seed_generate(
     if format_type == "json":
         emit(result.to_dict())
     elif result.success:
-        console.print(f"[green]Seed stub generated: {verbatim(result.output_path)}[/green]")
+        console.print(t"[green]Seed stub generated: {result.output_path}[/green]")
         console.print(
-            f"[dim]{verbatim(result.column_count)} column(s), {verbatim(result.row_count)} stub row(s).[/dim]"
+            t"[dim]{result.column_count} column(s), {result.row_count} stub row(s).[/dim]"
         )
     else:
-        console.print(f"[red]Error: {verbatim(result.error)}[/red]")
+        console.print(t"[red]Error: {result.error}[/red]")
     if not result.success:
         # The result carries the failure in either format; the exit says so in both.
         raise typer.Exit(FAILURE)

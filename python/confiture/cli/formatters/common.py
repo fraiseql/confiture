@@ -9,10 +9,8 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
-from rich.console import Console
-
 from confiture.cli.helpers import emit
-from confiture.cli.markup import verbatim
+from confiture.cli.markup import Printer, markup
 
 
 def csv_text(headers: list[str], rows: list[list[Any]]) -> str:
@@ -54,7 +52,7 @@ def print_csv(headers: list[str], rows: list[list[Any]]) -> None:
     print(csv_text(headers, rows), end="")
 
 
-def display_drift_report(report: Any, console: Console) -> None:
+def display_drift_report(report: Any, console: Printer) -> None:
     """Display drift report to console.
 
     Args:
@@ -65,10 +63,10 @@ def display_drift_report(report: Any, console: Console) -> None:
         console.print("[green]✅ No schema drift detected.[/green]")
         return
     console.print(
-        f"[yellow]⚠️  Schema drift detected[/yellow]: "
-        f"{verbatim(report.critical_count)} critical, "
-        f"{verbatim(report.warning_count)} warnings, "
-        f"{verbatim(report.info_count)} info"
+        t"[yellow]⚠️  Schema drift detected[/yellow]: "
+        t"{report.critical_count} critical, "
+        t"{report.warning_count} warnings, "
+        t"{report.info_count} info"
     )
 
     # Partition items so structural, ACL, and ownership drift are visually distinct.
@@ -85,9 +83,9 @@ def display_drift_report(report: Any, console: Console) -> None:
     def _emit(item: Any) -> None:
         color = "red" if item.severity.value == "critical" else "yellow"
         console.print(
-            f"  [{color}]{verbatim(item.severity.value.upper())}[/{color}] "
-            f"{verbatim(item.drift_type.value.upper())} "
-            f"{verbatim(item.object_name)}: {verbatim(item.message)}"
+            t"  [{markup(color)}]{item.severity.value.upper()}[/{markup(color)}] "
+            t"{item.drift_type.value.upper()} "
+            t"{item.object_name}: {item.message}"
         )
 
     for item in structural_items:
@@ -102,7 +100,7 @@ def display_drift_report(report: Any, console: Console) -> None:
             _emit(item)
 
 
-def display_signature_drift_report(report: Any, console: Console) -> None:
+def display_signature_drift_report(report: Any, console: Printer) -> None:
     """Display a FunctionSignatureDriftReport to console.
 
     Args:
@@ -111,25 +109,25 @@ def display_signature_drift_report(report: Any, console: Console) -> None:
     """
     if not report.has_drift:
         console.print(
-            f"[green]✅ No stale function overloads detected "
-            f"({verbatim(report.functions_checked)} functions checked)[/green]"
+            t"[green]✅ No stale function overloads detected "
+            t"({report.functions_checked} functions checked)[/green]"
         )
         return
 
     console.print(
-        f"[red]❌ {len(report.stale_overloads)} stale function overload(s) detected[/red]"
+        t"[red]❌ {len(report.stale_overloads)} stale function overload(s) detected[/red]"
     )
     for overload in report.stale_overloads:
-        console.print(f"\n  [bold]{verbatim(overload.schema)}.{verbatim(overload.name)}[/bold]")
-        console.print(f"    Stale (in DB):   [red]{verbatim(overload.stale_signature)}[/red]")
+        console.print(t"\n  [bold]{overload.schema}.{overload.name}[/bold]")
+        console.print(t"    Stale (in DB):   [red]{overload.stale_signature}[/red]")
         for src in overload.source_signatures:
-            console.print(f"    Source defines:  [green]{verbatim(src)}[/green]")
-        console.print(f"    [cyan]Fix: {verbatim(overload.drop_sql)}[/cyan]")
+            console.print(t"    Source defines:  [green]{src}[/green]")
+        console.print(t"    [cyan]Fix: {overload.drop_sql}[/cyan]")
 
     if report.missing_from_db:
         console.print(
-            f"\n  [dim]ℹ️  {len(report.missing_from_db)} source function(s) "
-            f"not yet in DB (pending deployment)[/dim]"
+            t"\n  [dim]ℹ️  {len(report.missing_from_db)} source function(s) "
+            t"not yet in DB (pending deployment)[/dim]"
         )
 
 
@@ -138,7 +136,7 @@ def handle_output(
     data_dict: dict[str, Any],
     csv_data: tuple[list[str], list[list[Any]]] | None,
     output_path: Path | None,
-    console: Console,
+    console: Printer,
 ) -> None:
     """Handle output in requested format.
 
@@ -163,8 +161,6 @@ def handle_output(
         headers, rows = csv_data
         if output_path:
             save_csv(headers, rows, output_path)
-            console.print(
-                f"[green]✓ CSV report saved to {verbatim(output_path.absolute())}[/green]"
-            )
+            console.print(t"[green]✓ CSV report saved to {output_path.absolute()}[/green]")
         else:
             print_csv(headers, rows)

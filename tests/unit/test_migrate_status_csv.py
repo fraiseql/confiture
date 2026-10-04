@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from rich.console import Console
 
 from confiture.cli.formatters.common import handle_output
+from confiture.cli.markup import Printer
 
 
 class TestMigrateStatusCSV:
@@ -41,7 +42,7 @@ class TestMigrateStatusCSV:
         """Test handle_output with CSV format to file."""
         with TemporaryDirectory() as tmpdir:
             output_file = Path(tmpdir) / "output.csv"
-            console = Console()
+            console = Printer(Console())
 
             csv_data = (
                 ["version", "name", "status"],
@@ -60,7 +61,7 @@ class TestMigrateStatusCSV:
 
     def test_handle_output_csv_to_console(self, capsys):
         """Test handle_output with CSV format to console."""
-        console = Console()
+        console = Printer(Console())
 
         csv_data = (
             ["version", "name", "status"],

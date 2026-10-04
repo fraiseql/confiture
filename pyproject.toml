@@ -378,11 +378,10 @@ include = [
 unresolved-attribute = "ignore"
 
 [[tool.ty.overrides]]
-# The modules that print through `cli.markup.Printer`: there a computed `str`
-# handed to the printer is a type error, which is what keeps a value data
-# (#600). Widened module by module until it covers every printing module.
+# The CLI prints through `cli.markup.Printer`: a computed `str` handed to it is a
+# type error, which is what keeps a printed value data (#600).
 include = [
-    "python/confiture/cli/markup.py",
+    "python/confiture/cli/**",
 ]
 [tool.ty.overrides.rules]
 invalid-argument-type = "error"

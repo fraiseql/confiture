@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from rich.table import Table
 
 from confiture.cli.commands.validate_checks import (
     ValidateOptions,
@@ -16,6 +15,7 @@ from confiture.cli.commands.validate_checks import (
 from confiture.cli.dsn import param_is_explicit, require_readable_config
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import _resolve_config, console, emit, is_json
+from confiture.cli.markup import Table
 from confiture.cli.options import (
     CONFITURE_YAML,
     CheckSignatureSchemasOpt,
@@ -68,11 +68,11 @@ def _pattern_catalog_payload(opts: Any) -> dict[str, Any] | None:
     table.add_column("description")
     for entry in entries:
         table.add_row(
-            entry["id"],
-            entry["severity"],
+            t"{entry['id']}",
+            t"{entry['severity']}",
             "yes" if entry["has_skip_regex"] else "no",
             "yes" if entry["has_auto_fix"] else "no",
-            entry["description"],
+            t"{entry['description']}",
         )
     console.print(table)
     return None

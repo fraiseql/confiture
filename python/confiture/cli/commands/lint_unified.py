@@ -5,13 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import typer
+from rich.text import Text
 
 from confiture.cli.error_json import cli_boundary
 from confiture.cli.helpers import (
     console,
     emit,
 )
-from confiture.cli.markup import verbatim
 from confiture.cli.options import (
     env_option,
     format_option,
@@ -180,9 +180,7 @@ def lint_unified(
         _exit_on_errors(unified_result, fail_on_error=fail_on_error)
         return
     for skip in unified_result.skipped:
-        console.print(
-            f"Skipped {skip.check} ({skip.tool}): {skip.reason}", markup=False, style="yellow"
-        )
+        console.print(Text(f"Skipped {skip.check} ({skip.tool}): {skip.reason}"), style="yellow")
     if not unified_result.issues:
         if unified_result.skipped:
             console.print("No issues found by the checks that ran.", style="yellow")
@@ -190,15 +188,14 @@ def lint_unified(
             console.print("[green]No issues found.[/green]")
     else:
         for tool, tool_issues in unified_result.by_tool.items():
-            console.print(f"\n[bold]{verbatim(tool)}[/bold] ({len(tool_issues)} issue(s)):")
+            console.print(t"\n[bold]{tool}[/bold] ({len(tool_issues)} issue(s)):")
             for issue in tool_issues:
                 sev = issue.severity.value.upper()
                 loc = f"{issue.file}:{issue.line}" if issue.line else issue.file
                 rule = f" [{issue.rule}]" if issue.rule else ""
-                # markup=False: every field is data. Rich reads `[tree_001]` as a
-                # style tag and prints nothing where the rule id should be — the
-                # uppercase codes only survived because they are not style names.
-                console.print(f"  [{sev}]{rule} {loc}: {issue.message}", markup=False)
+                # A Text: every field is data, brackets included. Rich reads `[tree_001]`
+                # as a style tag and prints nothing where the rule id should be.
+                console.print(Text(f"  [{sev}]{rule} {loc}: {issue.message}"))
 
     _exit_on_errors(unified_result, fail_on_error=fail_on_error)
 

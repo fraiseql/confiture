@@ -20,6 +20,7 @@ import pytest
 from rich.console import Console
 
 from confiture.cli.helpers import emit
+from confiture.cli.markup import Printer
 
 CLI_ROOT = Path(__file__).resolve().parents[2] / "python" / "confiture" / "cli"
 
@@ -80,5 +81,5 @@ def test_the_emitter_adds_the_envelope_after_the_payload(
 
 def test_the_emitter_writes_a_report_into_a_new_directory(tmp_path: Path) -> None:
     target = tmp_path / "reports" / "out.json"
-    emit({"success": True}, target, Console(file=(tmp_path / "log").open("w")))
+    emit({"success": True}, target, Printer(Console(file=(tmp_path / "log").open("w"))))
     assert json.loads(target.read_text())["ok"] is True
