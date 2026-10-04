@@ -33,6 +33,11 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
     m.up()
 ```
 
+The dump is zstd-compressed by `pg_dump` itself (`backups/<migration>.sql.zst`;
+restore with `zstd -dc <file> | psql <url>`); `BackupConfig(compression="gzip")`
+writes `.sql.gz` instead (`gunzip -c <file> | psql <url>`). See
+[the backup file](../api/hooks.md#the-backup-file).
+
 `AuditHook` (post-migration, HMAC-signed audit rows) registers the same way on
 `HookPhase.AFTER_EXECUTE`. See [Built-in hooks](../api/hooks.md#built-in-hooks).
 

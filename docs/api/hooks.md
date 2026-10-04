@@ -26,8 +26,9 @@ Confiture ships two ready-to-use lifecycle hooks. Both are **opt-in** — they d
 nothing until you register them on a `Migrator` instance, so the default
 migration path is unchanged.
 
-- **`BackupHook`** — runs `pg_dump` (optionally gzip-compressed, with a retention
-  cap) *before* each migration. Registers on `HookPhase.BEFORE_EXECUTE`.
+- **`BackupHook`** — runs `pg_dump` *before* each migration, compressed (zstd by
+  default) and written by `pg_dump` itself, with a retention cap. Registers on
+  `HookPhase.BEFORE_EXECUTE`.
 - **`AuditHook`** — appends an HMAC-SHA256-signed audit row *after* each
   migration for tamper-evident history. Registers on `HookPhase.AFTER_EXECUTE`.
 
@@ -64,8 +65,37 @@ with Migrator.from_config("db/environments/prod.yaml") as m:
     m.up()
 ```
 
-> `BackupConfig` accepts `compress` (default `True`) and `max_backups` (default
-> `10`). `AuditConfig` accepts an `environment` label (default `"unknown"`).
+> `BackupConfig` accepts `compression` (default `"zstd"`) and `max_backups`
+> (default `10`). `AuditConfig` accepts an `environment` label (default
+> `"unknown"`).
+
+### The backup file
+
+`compression` is `"zstd"`, `"gzip"`, `"lz4"` or `"none"`, optionally with a level
+(`"zstd:9"`, `"gzip:9"`). `pg_dump` compresses the dump and writes the file, so
+the dump never passes through the migrating process's memory:
+
+| `compression` | File | Restore |
+|---|---|---|
+| `zstd` (default) | `<migration>.sql.zst` | `zstd -dc <file>` piped into `psql <url>` |
+| `gzip` | `<migration>.sql.gz` | `gunzip -c <file>` piped into `psql <url>` |
+| `lz4` | `<migration>.sql.lz4` | `lz4 -dc <file>` piped into `psql <url>` |
+| `none` | `<migration>.sql` | `psql <url> -f <file>` |
+
+```bash
+zstd -dc backups/004_add_label.sql.zst | psql postgresql://localhost/restored
+```
+
+- `pg_dump` writes `<file>.partial`, renamed onto the final name only when it
+  exits 0: a failed dump leaves no file and never counts as a backup.
+- `zstd` and `lz4` need a `pg_dump` client of version 16 or newer (the client's
+  version, not the server's); an older client is refused before anything runs.
+- Retention keeps the `max_backups` newest backups whatever method wrote them, so
+  a history of `.sql.gz` files is pruned once the hook writes `.sql.zst`.
+- `compress=True` / `compress=False`, the older switch, still mean `gzip` /
+  `none` and warn (`DeprecationWarning`). The constructor never refuses a value:
+  an unknown method, a bad level, or both `compress` and `compression` given fail
+  the hook when it runs, naming the accepted values.
 
 ---
 

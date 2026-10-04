@@ -14,6 +14,7 @@ the only way a password reaches a libpq client is ``PGPASSWORD``.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -49,16 +50,21 @@ class TestBackupHookArgv:
     async def test_password_rides_in_pgpassword_not_argv(
         self, tmp_path, url: str, safe: str
     ) -> None:
-        hook = BackupHook(BackupConfig(backup_dir=tmp_path, database_url=url, compress=False))
+        hook = BackupHook(BackupConfig(backup_dir=tmp_path, database_url=url, compression="none"))
         context = HookContext(
             phase=HookPhase.BEFORE_EXECUTE,
             data=ExecutionContext(metadata={"migration_name": "m"}),
         )
         proc = AsyncMock()
         proc.returncode = 0
-        proc.communicate.return_value = (b"-- dump", b"")
+        proc.communicate.return_value = (b"pg_dump (PostgreSQL) 18.4", b"")
 
-        with patch("asyncio.create_subprocess_exec", return_value=proc) as spawn:
+        def spawn_pg_dump(*argv: str, **_: object) -> AsyncMock:
+            if "-f" in argv:  # the dump writes its file, as pg_dump does
+                Path(argv[argv.index("-f") + 1]).write_text("-- dump")
+            return proc
+
+        with patch("asyncio.create_subprocess_exec", side_effect=spawn_pg_dump) as spawn:
             result = await hook.execute(context)
 
         assert result.success, result.error

@@ -14,10 +14,12 @@ never reappear in *any* doc that carries hook snippets.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from doc_snippets import assert_doc_imports_resolve, read_doc
 
-from confiture import AuditHook, BackupHook, HookPhase
+from confiture import AuditHook, BackupConfig, BackupHook, HookPhase
 from confiture.core.hooks import Hook, HookContext, HookError, HookResult
 from confiture.core.hooks.context import ExecutionContext
 
@@ -80,3 +82,15 @@ def test_no_fictional_context_types(doc: str) -> None:
     text = read_doc(doc)
     leaked = [tok for tok in FORBIDDEN_CONTEXT_TYPES if tok in text]
     assert not leaked, f"fictional hook context names present in {doc}: {leaked}"
+
+
+@pytest.mark.parametrize("doc", HOOK_DOCS)
+def test_the_documented_backup_file_is_the_one_the_hook_writes(doc: str) -> None:
+    """Both docs name the default backup's suffix and how to read it back."""
+    config = BackupConfig(backup_dir=Path("backups"), database_url="postgresql://h/db")
+    method = config.method()
+    assert not isinstance(method, str), method
+    text = read_doc(doc)
+    assert method.suffix in text
+    assert "zstd -dc" in text
+    assert "gunzip -c" in text
