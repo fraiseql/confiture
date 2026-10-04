@@ -46,4 +46,4 @@ def test_a_body_check_compares_nothing_itself(module: str) -> None:
 def test_a_body_check_asks_the_engine(module: str) -> None:
     """Directly, or through ``function_body_drift.changed_bodies``, which does."""
     text = (CORE / module).read_text(encoding="utf-8")
-    assert "compare_sides" in text or "changed_bodies(" in text
+    assert "compare_sides" in text or "changed_bodies(" in text  # either reaches the engine
