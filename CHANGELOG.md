@@ -35,6 +35,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ⚠️ **A schema-history snapshot is the model's wire, and a baseline is detected by the one
+  comparison.** `migrate generate` writes `db/schema_history/<version>_<name>.json`
+  (`SchemaModel.to_json`, byte-stable) instead of DDL text; `--live-snapshot` reads the build
+  back from a temporary database instead of running `pg_dump`. `migrate introspect` and
+  `migrate up --auto-detect-baseline` compare the database with each snapshot, newest first,
+  the way `migrate diff --from db` compares a database with a tree (`database_side`,
+  `SchemaDiffer.compare_sides`). A database built from a snapshot's tree is now an exact match:
+  the old detector rebuilt tables and columns as SQL and compared text with `difflib`, so
+  constraints, indexes and every object were out of its sight, and a default PostgreSQL
+  re-spells was a difference. `similarity_threshold` keeps its meaning for a sparse history:
+  the share of what the two schemas say that the diff leaves alone. A history of `.sql`
+  snapshots is still read, through the one schema read; a snapshot that cannot be read is
+  logged and listed (`BaselineDetector.unreadable`), never silently skipped. Library API:
+  `find_matching_snapshot(conn)` returns a `Snapshot` (version, name, model);
+  `introspect_live_schema` and `normalize_schema` are gone.
+- **`migrate generate` writes the snapshot into the project's `db/schema_history`**, the
+  directory the config belongs to, not the one the command runs from. The suite had written
+  6,079 snapshots into the repository's own history that way; a fixture now fails a test that
+  writes one.
+
 - **The body checks are the one comparison, restricted to one slot.** `migrate validate
   --check-body-views`, `--check-body` and `--check-body-replay` paired their two sides and
   compared a deparsed query or a normalised body themselves. Each now hands the engine two

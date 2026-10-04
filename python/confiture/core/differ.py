@@ -212,6 +212,23 @@ class Side:
         return list(self.model.sequences.values())
 
 
+def stated_side(model: SchemaModel, constants: ConstantSpellings = AS_WRITTEN) -> Side:
+    """*model* as a side of the comparison: each object it holds stands for its own statement.
+
+    For a reader asking what the model says — whether an object exists, what a TVIEW
+    pins, what a routine's model holds — never a statement's text: each object is
+    given a statement that carries nothing but its key, so the side is compared and
+    never generated from. *constants* are how this side's server spells the other's
+    (``server_constants``), when it is a database.
+    """
+    objects: dict[ObjectRef, list[DDLObject]] = defaultdict(list)
+    for ref, overloads in model.routines.items():
+        objects[ref] += [DDLObject(ref, "", "", r.signature_key) for r in overloads]
+    for ref in (*model.views, *model.triggers, *model.tviews, *model.other_objects):
+        objects[ref].append(DDLObject(ref, "", ""))
+    return Side(model, objects, constants=constants)
+
+
 def slot_side(section: str, statements: Mapping[ObjectRef, list[DDLObject]]) -> Side:
     """A side holding one slot of *section*'s objects, for a comparison of that slot alone.
 

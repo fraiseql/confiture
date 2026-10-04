@@ -34,21 +34,14 @@ _MIGRATIONS_RECURSIVE = (
     "a lint over migration files, recursive since it was written; the migrator lists "
     "the directory flat — a migrations listing, not an SQL tree"
 )
-_SNAPSHOTS = (
-    "`db/schema_history/` is a flat listing of schema snapshots named by version, "
-    "one file per migration; there is no tree to walk"
-)
 
 # ``module:receiver`` → why that walk is not a walk of an SQL tree.
 ALLOWED: dict[str, str] = {
     "cli/commands/apply_as.py:migrations_dir": _MIGRATIONS,
-    "cli/commands/migrate/introspect.py:snapshots_dir": _SNAPSHOTS,
     "cli/helpers.py:migrations_dir": _MIGRATIONS,
     "cli/idempotency.py:migrations_dir": _MIGRATIONS,
     "cli/commands/migrate/preflight.py:migrations_dir": _MIGRATIONS,
     "core/_migrator/discovery.py:migrations_dir": _MIGRATIONS,
-    "core/_migrator/policy.py:snapshots_dir": _SNAPSHOTS,
-    "core/baseline_detector.py:self.snapshots_dir": _SNAPSHOTS,
     "core/change_set/__init__.py:migrations_dir": _MIGRATIONS,
     "core/checksum.py:migrations_dir": _MIGRATIONS,
     "core/import_checker.py:self.migrations_dir": _MIGRATIONS,

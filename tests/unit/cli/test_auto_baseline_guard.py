@@ -86,11 +86,11 @@ def doubles(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
         return list(state["elsewhere"])
 
     monkeypatch.setattr("confiture.core.ledger.find_ledger_relations", fake_sweep)
-    # The live schema the detector compares with its snapshots: none, on a
-    # connection that is a stand-in. What is under test is the guard before it.
+    # How alike the database and a snapshot are: not at all, on a connection that
+    # is a stand-in. What is under test is the guard before it.
     monkeypatch.setattr(
-        "confiture.core.baseline_detector.BaselineDetector.introspect_live_schema",
-        lambda _self, _conn: "",
+        "confiture.core.baseline_detector.BaselineDetector.similarity",
+        lambda _self, _conn, _snapshot: 0.0,
     )
     with injected_engine(migrator):
         yield state

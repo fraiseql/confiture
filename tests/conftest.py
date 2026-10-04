@@ -612,3 +612,24 @@ def quoted_names_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr("confiture.core.differ.refuse_quoted_names", lambda *_: None)
     monkeypatch.setattr("confiture.core.drift.refuse_quoted_names", lambda *_: None)
+
+
+#: The repository's own schema history, which `migrate generate` writes into when a
+#: test runs it against the repository's default environment.
+_REPOSITORY_HISTORY = _TESTS_ROOT.parent / "db" / "schema_history"
+
+
+@pytest.fixture(autouse=True)
+def _the_repository_history_is_left_alone() -> Iterator[None]:
+    """Fail a test that writes a snapshot into the repository's `db/schema_history`.
+
+    The directory is ignored by git, so such a write is never seen: 6,079 snapshots
+    had built up there before a test noticed, each one a schema read the next
+    baseline detection would compare against. Pass `--no-snapshot`, or a config of
+    the test's own project.
+    """
+    before = set(_REPOSITORY_HISTORY.iterdir()) if _REPOSITORY_HISTORY.is_dir() else set()
+    yield
+    after = set(_REPOSITORY_HISTORY.iterdir()) if _REPOSITORY_HISTORY.is_dir() else set()
+    written = sorted(path.name for path in after - before)
+    assert not written, f"the test wrote into the repository's db/schema_history: {written}"

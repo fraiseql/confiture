@@ -173,7 +173,15 @@ class TestMigrateGenerateCommand:
         migrations_dir = tmp_path / "migrations"
 
         result = runner.invoke(
-            app, ["migrate", "generate", "add_users_table", "--migrations-dir", str(migrations_dir)]
+            app,
+            [
+                "migrate",
+                "generate",
+                "add_users_table",
+                "--no-snapshot",
+                "--migrations-dir",
+                str(migrations_dir),
+            ],
         )
 
         assert result.exit_code == 0

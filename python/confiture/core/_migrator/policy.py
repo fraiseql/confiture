@@ -92,7 +92,8 @@ def auto_baseline(
                 "--auto-detect-baseline"
             ),
         )
-    if not list(snapshots_dir.glob("*.sql")):
+    detector = _core_baseline_detector.BaselineDetector(snapshots_dir, tracking_table=table)
+    if not detector.snapshot_files():
         raise ConfigurationError(
             f"--auto-detect-baseline: no snapshot files found in {snapshots_dir}",
             resolution_hint=(
@@ -104,9 +105,8 @@ def auto_baseline(
     emit(
         on_event, "baseline_probe", message=f"{table} missing — attempting auto-detect baseline..."
     )
-    detector = _core_baseline_detector.BaselineDetector(snapshots_dir)
-    live_sql = detector.introspect_live_schema(conn)
-    detected = detector.find_matching_snapshot(live_sql)
+    found = detector.find_matching_snapshot(conn)
+    detected = found.version if found is not None else None
     if detected:
         migrator.initialize()
         migrator.baseline_through(detected, migrations_dir)

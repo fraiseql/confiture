@@ -78,7 +78,7 @@ LiveSnapshotOpt = Annotated[
     bool | None,
     typer.Option(
         "--live-snapshot/--no-live-snapshot",
-        help="Snapshot via temp database + pg_dump (captures DO-block objects)",
+        help="Snapshot the build read back from a temporary database (captures DO-block objects)",
     ),
 ]
 
@@ -475,13 +475,14 @@ def _write_history_snapshot(
     )
     live_db_url = settings.database_url if (use_live and settings is not None) else None
     try:
-        resolved_dir = snapshots_dir
-        if resolved_dir is None and settings is not None:
-            resolved_dir = Path(settings.migration.snapshots_dir)
-        if resolved_dir is None:
-            resolved_dir = Path("db/schema_history")
-        snap_gen = _core_schema_snapshot.SchemaSnapshotGenerator(snapshots_dir=resolved_dir)
         env_name, project_dir = config.stem, config.parent.parent.parent
+        # The configured history is the project's, as its schema is: a run from
+        # elsewhere writes it beside the project's migrations, not where it stands.
+        resolved_dir = snapshots_dir
+        if resolved_dir is None:
+            configured = settings.migration.snapshots_dir if settings else "db/schema_history"
+            resolved_dir = project_dir / configured
+        snap_gen = _core_schema_snapshot.SchemaSnapshotGenerator(snapshots_dir=resolved_dir)
         if live_db_url:
             try:
                 return (

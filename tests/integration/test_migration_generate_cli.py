@@ -28,6 +28,7 @@ class TestMigrateGenerateJSONOutput:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -62,6 +63,7 @@ class TestMigrateGenerateJSONOutput:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_users",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -93,6 +95,7 @@ class TestMigrateGenerateJSONOutput:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -119,6 +122,7 @@ class TestMigrateGenerateDryRun:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -143,6 +147,7 @@ class TestMigrateGenerateDryRun:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -165,6 +170,7 @@ class TestMigrateGenerateDryRun:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -199,6 +205,7 @@ class TestMigrateGenerateVerbose:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -240,6 +247,7 @@ class TestMigrateGenerateForceFlag:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -271,6 +279,7 @@ class TestMigrateGenerateForceFlag:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -316,6 +325,7 @@ class TestMigrateGenerateValidationWarnings:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -342,6 +352,7 @@ class TestMigrateGenerateValidationWarnings:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -374,6 +385,7 @@ class TestMigrateGenerateValidationWarnings:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_users",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -398,6 +410,7 @@ class TestMigrateGenerateIntegration:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -431,6 +444,7 @@ class TestMigrateGenerateIntegration:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "first_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -450,6 +464,7 @@ class TestMigrateGenerateIntegration:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "second_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -551,6 +566,7 @@ class TestMigrateGenerateExternalGenerator:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_bar_column",
                 "--generator",
                 "fake",
@@ -601,6 +617,7 @@ class TestMigrateGenerateExternalGenerator:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_bar_column",
                 "--generator",
                 "fake",
@@ -642,6 +659,7 @@ class TestMigrateGenerateExternalGenerator:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_bar_column",
                 "--generator",
                 "fake",
@@ -676,6 +694,7 @@ class TestMigrateGenerateExternalGenerator:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_bar_column",
                 "--generator",
                 "fake",
@@ -709,6 +728,7 @@ class TestMigrateGenerateExternalGenerator:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_bar_column",
                 "--generator",
                 "fake",
@@ -744,6 +764,7 @@ class TestMigrateGenerateExternalGenerator:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_bar_column",
                 "--generator",
                 "nonexistent_generator",
@@ -771,6 +792,7 @@ class TestMigrateGenerateExternalGenerator:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_bar_column",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -807,6 +829,7 @@ class TestMigrateGenerateExternalGenerator:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_bar_column",
                 "--generator",
                 "fake",

@@ -132,6 +132,7 @@ class TestMigrateGenerateCommand:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "add_users_table",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -157,6 +158,7 @@ class TestMigrateGenerateCommand:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),
@@ -179,6 +181,7 @@ class TestMigrateGenerateCommand:
             [
                 "migrate",
                 "generate",
+                "--no-snapshot",
                 "test_migration",
                 "--migrations-dir",
                 str(migrations_dir),

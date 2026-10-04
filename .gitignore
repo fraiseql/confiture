@@ -56,6 +56,7 @@ Thumbs.db
 # stray project tree (python/db/…) cannot re-track them (#207).
 **/db/generated/
 **/db/schema_history/*.sql
+**/db/schema_history/*.json
 *.db
 *.sqlite
 *.sql.bak

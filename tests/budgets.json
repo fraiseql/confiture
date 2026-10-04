@@ -143,7 +143,6 @@
     "python/confiture/testing/sandbox.py": 1
   },
   "sql_keyword_regex": {
-    "python/confiture/core/baseline_detector.py": 2,
     "python/confiture/core/git_accompaniment.py": 1,
     "python/confiture/core/idempotency/fixer.py": 20,
     "python/confiture/core/linting/libraries/acl.py": 1,
