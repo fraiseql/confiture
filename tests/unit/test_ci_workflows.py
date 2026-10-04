@@ -70,10 +70,38 @@ class TestPythonMatrix:
         env = data["jobs"]["test-matrix"].get("env", {})
         assert env.get("UV_PYTHON") == "${{ matrix.python-version }}", env
 
-    def test_matrix_declares_three_interpreters(self) -> None:
+    def test_every_supported_interpreter_runs_the_suite(self) -> None:
+        """3.11 in the quality gate, on every pull request; 3.12 and 3.13 in the matrix."""
+        matrix = yaml.safe_load((WORKFLOWS / "python-version-matrix.yml").read_text())
+        versions = matrix["jobs"]["test-matrix"]["strategy"]["matrix"]["python-version"]
+        gate = _steps("quality-gate.yml", "test")
+        (setup,) = [step for step in gate if step.get("uses") == "./.github/actions/python-uv"]
+        assert [setup["with"]["python-version"], *versions] == ["3.11", "3.12", "3.13"]
+
+    def test_the_other_interpreters_run_on_main_and_nightly(self) -> None:
+        """A pull request waits for one full suite, not three."""
         data = yaml.safe_load((WORKFLOWS / "python-version-matrix.yml").read_text())
-        versions = data["jobs"]["test-matrix"]["strategy"]["matrix"]["python-version"]
-        assert versions == ["3.11", "3.12", "3.13"]
+        triggers = data[True]  # YAML 1.1 reads the bare key `on` as true
+        assert "pull_request" not in triggers
+        assert triggers["push"] == {"branches": ["main"]}
+        assert triggers["schedule"], "a nightly run catches what main's pushes do not"
+
+
+class TestQualityGate:
+    def test_the_suite_runs_on_every_core(self) -> None:
+        script = _run_scripts(_steps("quality-gate.yml", "test"))
+        assert "-m pytest tests/" in script and "-n auto" in script, script
+
+    def test_coverage_is_collected_once(self) -> None:
+        """By the quality gate's run, across its workers; no other leg measures."""
+        gate = _run_scripts(_steps("quality-gate.yml", "test"))
+        assert "coverage combine" in gate
+        matrix = _run_scripts(_steps("python-version-matrix.yml", "test-matrix"))
+        assert "--cov" not in matrix and "coverage run" not in matrix
+
+    def test_no_job_runs_a_suite_the_test_job_already_runs(self) -> None:
+        data = yaml.safe_load((WORKFLOWS / "quality-gate.yml").read_text())
+        assert "integration-parallel" not in data["jobs"]
 
 
 class TestExamplesJob:

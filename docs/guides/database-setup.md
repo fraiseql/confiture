@@ -249,7 +249,7 @@ Confiture uses GitHub Actions for automated testing across multiple PostgreSQL v
 
 #### Configuration Files
 
-- `.github/workflows/quality-gate.yml` - Full test suite (PostgreSQL 15)
+- `.github/workflows/quality-gate.yml` - Full test suite (PostgreSQL 16)
 - `.github/workflows/migration-tests.yml` - Migration-specific tests (PostgreSQL 16)
 - `.github/workflows/python-version-matrix.yml` - Python 3.11/3.12/3.13 compatibility
 - `.github/workflows/migration-performance.yml` - Performance regression detection
@@ -494,7 +494,7 @@ services:
       - "5432:5432"
 
   postgres-15:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     environment:
       POSTGRES_DB: confiture_test
     ports:
