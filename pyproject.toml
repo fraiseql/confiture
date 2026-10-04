@@ -68,7 +68,7 @@ dev = [
 ]
 
 fraiseql = [
-    # FraiseQL integration (requires Python 3.13+)
+    # FraiseQL integration
 ]
 
 # fraiseql-uuid is the CANONICAL home for the structured pattern-UUID convention

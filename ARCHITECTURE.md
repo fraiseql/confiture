@@ -567,6 +567,25 @@ through the `except Exception` fallback. One function with a parity test is a
 contract; a second implementation of the build is not. See Decision 8 for why
 the crate is not the start of a port.
 
+### Decision 15: One interpreter, and what confiture executes or prints is a template
+
+**Choice**: confiture declares Python 3.14 alone (one wheel per platform, one CI
+interpreter, `pglast>=8.1`). SQL it composes *and executes* is a `t"…"` handed to
+psycopg — `{name:i}` an identifier, `{value:l}` a literal, `{fragment:q}` a nested
+template, a bare `{value}` a bound parameter, and raw text only through an explicit
+`Template(text)`. Text it prints goes through `cli.markup.Printer`, which takes a
+template, a literal or a Rich renderable: a template's literal text is confiture's
+markup and every interpolation is data. Generated DDL — text written to a file and
+never executed here — stays on `schema_identity.quote_identifier`.
+
+**Rationale**: four interpreters cost a matrix, four wheels and bugs that lived on one
+version only; confiture, fraisier and semis run as one ecosystem and can share one
+floor. 3.14's template strings make two disciplines properties of a type instead of
+patterns a guard matches: an f-string reaching `execute` or a console was the defect
+the guards hunted, and a template keeps the statement or the message readable as itself
+while psycopg and the printer decide what is data. Written DDL is a file's text, not a
+statement with parameters, so it keeps the one quoter that writes it.
+
 ---
 
 ## Testing Architecture
@@ -576,7 +595,7 @@ the crate is not the start of a port.
 - **Total collected**: 5,583
 - **Unit tests passing**: 4,518
 - **Skipped**: 13
-- **Python versions**: 3.11, 3.12, 3.13
+- **Python versions**: 3.14 (one interpreter; the next CPython is run by hand before it is declared)
 
 ### Test Pyramid
 

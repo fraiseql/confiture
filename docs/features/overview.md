@@ -38,4 +38,4 @@ The full feature laundry list — for the 30-second pitch and quick-start, see [
 - **Git-aware validation** — detect schema drift vs. main branch, enforce migrations for DDL changes.
 - **PII anonymization** — built-in strategies for production sync.
 - **Optional Rust extension** — drop-in performance boost for SQL parsing and hashing.
-- **Python 3.11, 3.12, 3.13** — tested across all supported versions.
+- **Python 3.14** — the one supported interpreter, tested on every pull request.

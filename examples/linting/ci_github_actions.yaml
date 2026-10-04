@@ -250,7 +250,7 @@ jobs:
 #
 # 1. LINT JOB
 #    - Runs on all PRs and pushes that modify db/schema/
-#    - Tests Python 3.11, 3.12, 3.13
+#    - Tests Python 3.14
 #    - Lints staging schema (fail-on-error)
 #    - Generates JSON report if failed
 #    - Uploads report as artifact

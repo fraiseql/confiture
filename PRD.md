@@ -286,7 +286,7 @@ fraiseql schema sync
 ### Technology Stack
 
 **Phase 1 (Pure Python)**:
-- **Language**: Python 3.11+
+- **Language**: Python 3.14+
 - **CLI**: Typer (rich terminal output)
 - **Database**: psycopg3 (PostgreSQL driver)
 - **Config**: PyYAML + Pydantic

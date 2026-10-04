@@ -309,7 +309,8 @@ into generated text, quoting it when PostgreSQL's own keyword lists (pglast's
 `RESERVED` and `TYPE_FUNC_NAME`) or its characters need it; `identifier_identity` reads
 one back. A role is an identity and a spelling like any object: `OwnershipExpectation`
 carries `owner_identity` (compared) and `owner_spelling` (written). SQL that is
-*executed* is composed with `psycopg.sql.Identifier`, never with this.
+*executed* is a template string handed to psycopg (`{name:i}`), never this
+(`tests/unit/test_one_sql_composition.py`, `tests/unit/test_template_parameters.py`).
 `tests/unit/test_one_identifier_quoter.py` fails on a module elsewhere that doubles a
 `"` into an identifier or undoubles one out of it; the allow-list is empty.
 

@@ -76,7 +76,7 @@ changes     testing        build       test     approval    approval
 
 ### Required Software
 
-- **Python 3.11+**: `python --version`
+- **Python 3.14+**: `python --version`
 - **PostgreSQL 14+**: `psql --version`
 - **Confiture**: `pip install fraiseql-confiture`
 - **Git**: `git --version`

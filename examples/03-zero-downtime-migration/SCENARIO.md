@@ -209,7 +209,7 @@ def concat_names(first_name: str, last_name: str) -> str:
 **Application**:
 - Architecture: Microservices (Kubernetes)
 - Replicas: 20 pods (horizontal autoscaling)
-- Language: Python 3.11 (FastAPI)
+- Language: Python 3.14 (FastAPI)
 - ORM: SQLAlchemy 2.0
 - Connection pool: 10 connections per pod (200 total)
 - Average request latency: 45ms (p95: 120ms)
