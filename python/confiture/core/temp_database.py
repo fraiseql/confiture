@@ -13,7 +13,6 @@ from collections.abc import Sequence
 from urllib.parse import urlparse, urlunparse
 
 import psycopg
-import psycopg.sql
 
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.exceptions import SchemaError, base_message
@@ -77,17 +76,13 @@ def force_drop_database(conn: psycopg.Connection, db_name: str) -> None:
     """Drop *db_name* if it exists, terminating any remaining backends first.
 
     ``DROP DATABASE … WITH (FORCE)`` terminates them itself. The database name is
-    quoted via :class:`psycopg.sql.Identifier` (never string-interpolated).
+    quoted as an identifier (never string-interpolated).
 
     Args:
         conn: An autocommit maintenance connection.
         db_name: Database to drop.
     """
-    conn.execute(
-        psycopg.sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
-            psycopg.sql.Identifier(db_name)
-        )
-    )
+    conn.execute(t"DROP DATABASE IF EXISTS {db_name:i} WITH (FORCE)")
 
 
 class TempDatabase:
@@ -127,9 +122,7 @@ class TempDatabase:
                 ),
             ) from exc
 
-        self._maintenance_conn.execute(
-            psycopg.sql.SQL("CREATE DATABASE {}").format(psycopg.sql.Identifier(self._db_name))
-        )
+        self._maintenance_conn.execute(t"CREATE DATABASE {self._db_name:i}")
         return _replace_dbname(self._server_url, self._db_name)
 
     def __exit__(

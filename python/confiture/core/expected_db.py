@@ -45,7 +45,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import psycopg
-from psycopg import sql
 
 from confiture.core import builder as _core_builder
 from confiture.core.temp_database import TempDatabase
@@ -224,9 +223,7 @@ class ExpectedSchemaDB:
         assert self._temp_url is not None
         with psycopg.connect(self._temp_url, autocommit=True) as conn:
             conn.execute(
-                sql.SQL("ALTER DATABASE {} SET search_path TO {}, public").format(
-                    sql.Identifier(conn.info.dbname), sql.Identifier(schema)
-                )
+                t"ALTER DATABASE {conn.info.dbname:i} SET search_path TO {schema:i}, public"
             )
 
     def _resolve_source_sql(self) -> str:

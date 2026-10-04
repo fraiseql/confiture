@@ -168,3 +168,17 @@ def test_from_base_plus_migrations_without_base_starts_empty(
             ).fetchall()
         }
         assert "solo" in tables
+
+
+@pytest.mark.integration
+def test_from_source_lands_an_unqualified_name_in_the_search_path_schema(
+    server_url: str, _require_server: None
+) -> None:
+    ddl = "CREATE SCHEMA app;\nCREATE TABLE widgets (id BIGINT PRIMARY KEY);\n"
+
+    with ExpectedSchemaDB(server_url).from_source(schema_sql=ddl, search_path="app") as conn:
+        placed = conn.execute(
+            "SELECT schemaname FROM pg_tables WHERE tablename = 'widgets'"
+        ).fetchall()
+
+    assert placed == [("app",)]

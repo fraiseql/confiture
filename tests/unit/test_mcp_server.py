@@ -95,12 +95,13 @@ def test_mcp_server_handle_tools_call():
         "method": "tools/call",
         "params": {"name": "add", "arguments": {"x": 1, "y": 2}},
     }
-    with patch("confiture.core.mcp_server.psycopg.RawCursor", return_value=mock_cursor):
+    with patch("confiture.core.mcp_server.psycopg.Cursor", return_value=mock_cursor):
         response = server.handle_message(msg)
     assert response["id"] == 3
     content = response["result"]["content"]
     assert len(content) == 1
     assert content[0]["type"] == "text"
+    assert content[0]["text"] == "42"
 
 
 def test_mcp_server_handle_unknown_method():
@@ -310,6 +311,7 @@ def test_a_routine_is_called_by_its_name_as_an_identifier():
     import pglast
 
     from confiture.core.mcp_server import MCPServer
+    from confiture.sql_text import rendered
 
     name = "helper(); DROP TABLE keepme; COMMIT; SELECT now"
     func = dataclasses.replace(_make_catalog().functions[0], name=name, params=[])
@@ -317,15 +319,14 @@ def test_a_routine_is_called_by_its_name_as_an_identifier():
     server = MCPServer(MagicMock(), schema="Tools", expose_confiture_tools=False)
     with patch.object(server._introspector, "introspect", return_value=catalog):
         server.initialize()
-    raw = MagicMock()
-    cursor = raw.return_value.__enter__.return_value
+    cursor_class = MagicMock()
+    cursor = cursor_class.return_value.__enter__.return_value
     cursor.fetchone.return_value = (1,)
 
-    with patch("confiture.core.mcp_server.psycopg.RawCursor", raw):
+    with patch("confiture.core.mcp_server.psycopg.Cursor", cursor_class):
         server.call_tool(name, {})
 
-    statement = cursor.execute.call_args.args[0]
-    text = statement if isinstance(statement, str) else statement.as_string()
+    text = rendered(cursor.execute.call_args.args[0])
     (parsed,) = pglast.parse_sql(text)
     (target,) = parsed.stmt.targetList
     assert tuple(part.sval for part in target.val.funcname) == ("Tools", name)

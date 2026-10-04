@@ -23,9 +23,12 @@ from confiture.core.preconditions import (
     IndexExists,
     IndexNotExists,
     Precondition,
+    RowCountEquals,
+    RowCountGreaterThan,
     SchemaExists,
     SchemaNotExists,
     TableExists,
+    TableIsEmpty,
     TableNotExists,
 )
 
@@ -43,6 +46,7 @@ CREATE TABLE app.child (
 CREATE INDEX ix_child_name ON app.child (name);
 CREATE VIEW app.v AS SELECT id FROM app.child;
 CREATE TABLE public.solo (id INT);
+INSERT INTO app.parent VALUES (1), (2);
 """
 
 
@@ -74,6 +78,9 @@ HOLDS: list[Precondition] = [
     IndexNotExists("child", "absent", schema="app"),
     SchemaExists("app"),
     SchemaNotExists("absent"),
+    RowCountEquals("parent", 2, schema="app"),
+    RowCountGreaterThan("parent", 1, schema="app"),
+    TableIsEmpty("child", schema="app"),
 ]
 
 FAILS: list[Precondition] = [
@@ -91,6 +98,9 @@ FAILS: list[Precondition] = [
     IndexNotExists("child", "ix_child_name", schema="app"),
     SchemaExists("absent"),
     SchemaNotExists("app"),
+    RowCountEquals("parent", 3, schema="app"),
+    RowCountGreaterThan("parent", 2, schema="app"),
+    TableIsEmpty("parent", schema="app"),
 ]
 
 

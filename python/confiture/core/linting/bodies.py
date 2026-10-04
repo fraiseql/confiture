@@ -24,10 +24,11 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from string.templatelib import Template
 from typing import Any
 
 import psycopg
-import psycopg.sql
+from psycopg import sql
 
 from confiture.core.linting import references
 from confiture.core.linting.rule_registry import BODY_CLASS_CODES
@@ -187,19 +188,22 @@ class Diagnosis:
 #: that is not a diagnosis of anything PostgreSQL would raise.
 _NO_CONDITION = "00000"
 
-#: Every PL/pgSQL routine the DDL created, and what the analyser says about it.
-#:
-#: A trigger function cannot be checked without the relation it fires on —
-#: asking for one without it raises ``missing trigger relation``, which in a
-#: single query would take the whole analysis down — so the relation comes from
-#: ``pg_trigger``, and a trigger function nothing fires is left alone.
-#: ``format_type`` over ``proargtypes`` spells the input types the way the
-#: catalog does; ``pg_depend`` keeps an extension's own routines out.
-#:
-#: ``{check}`` is the analyser, schema-qualified: the connection's
-#: ``search_path`` is set to the one the application uses, which need not
-#: contain the schema the extension was installed into.
-_ANALYSIS = """
+
+def _analysis(schema: str) -> Template:
+    """Every PL/pgSQL routine the DDL created, and what the analyser says about it.
+
+    A trigger function cannot be checked without the relation it fires on —
+    asking for one without it raises ``missing trigger relation``, which in a
+    single query would take the whole analysis down — so the relation comes from
+    ``pg_trigger``, and a trigger function nothing fires is left alone.
+    ``format_type`` over ``proargtypes`` spells the input types the way the
+    catalog does; ``pg_depend`` keeps an extension's own routines out.
+
+    The analyser is named by *schema*, the one the extension was installed
+    into: the connection's ``search_path`` is set to the one the application
+    uses, which need not contain it.
+    """
+    return t"""
 WITH routines AS (
     SELECT p.oid,
            n.nspname AS schema,
@@ -226,7 +230,7 @@ WITH routines AS (
 SELECT r.schema, r.name, r.arity, r.kind, r.identity,
        c.lineno, c.level, c.sqlstate, c.message, c.hint
   FROM routines r
-  CROSS JOIN LATERAL {check}(
+  CROSS JOIN LATERAL {schema:i}.plpgsql_check_function_tb(
            funcoid := r.oid,
            relid := COALESCE(r.relid, 0),
            fatal_errors := false,
@@ -257,13 +261,10 @@ def diagnose(
     from confiture.core.expected_db import ExpectedSchemaDB
 
     with ExpectedSchemaDB(server_url).from_source(schema_sql=schema_sql) as connection:
-        analyser = _install(connection)
+        analyser_schema = _install(connection)
         if search_path:
-            connection.execute(
-                psycopg.sql.SQL("SET search_path = {}").format(
-                    psycopg.sql.SQL(", ").join(psycopg.sql.Identifier(s) for s in search_path)
-                )
-            )
+            schemas = sql.SQL(", ").join(t"{s:i}" for s in search_path)
+            connection.execute(t"SET search_path = {schemas:q}")
         return [
             Diagnosis(
                 schema=schema,
@@ -278,31 +279,26 @@ def diagnose(
                 hint=hint,
             )
             for schema, name, arity, kind, identity, lineno, level, sqlstate, message, hint in (
-                connection.execute(psycopg.sql.SQL(_ANALYSIS).format(check=analyser)).fetchall()
+                connection.execute(_analysis(analyser_schema)).fetchall()
             )
         ]
 
 
-def _install(connection: Any) -> psycopg.sql.Identifier:
-    """Create the extension in the scratch database; return its analyser, qualified.
+def _install(connection: Any) -> str:
+    """Create the extension in the scratch database; return the schema it landed in.
 
     An extension lands in whichever schema is first on the ``search_path`` when
     it is created — usually ``public``, which the project's own
     ``lint.search_path`` need not contain. Naming the function by its schema is
     what keeps the two independent.
     """
-    connection.execute(
-        psycopg.sql.SQL("CREATE EXTENSION IF NOT EXISTS {}").format(
-            psycopg.sql.Identifier(EXTENSION)
-        )
-    )
-    schema = connection.execute(
+    connection.execute(t"CREATE EXTENSION IF NOT EXISTS {EXTENSION:i}")
+    return connection.execute(
         "SELECT n.nspname FROM pg_extension e"
         " JOIN pg_namespace n ON n.oid = e.extnamespace"
         " WHERE e.extname = %s",
         (EXTENSION,),
     ).fetchone()[0]
-    return psycopg.sql.Identifier(schema, "plpgsql_check_function_tb")
 
 
 def locations(files: Iterable[ParsedFile]) -> dict[tuple[str, str, int], Location]:

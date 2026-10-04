@@ -4,6 +4,7 @@ Tests the precondition validation system that provides fail-fast behavior
 before migration execution.
 """
 
+from string.templatelib import Template
 from typing import ClassVar
 from unittest.mock import MagicMock, Mock
 
@@ -32,6 +33,7 @@ from confiture.core.preconditions import (
 )
 from confiture.core.schema_model import Column
 from confiture.core.type_lattice import canonical_type
+from confiture.sql_text import rendered
 
 # =============================================================================
 # Helper to create mock connections with specific query results
@@ -48,9 +50,9 @@ def create_mock_connection(query_results: dict[str, list]) -> MagicMock:
     mock_cursor = MagicMock()
 
     def execute_side_effect(sql, params=None):
-        # Identifier-bearing queries arrive as psycopg.sql.Composed; render
-        # them so the substring match sees the same text the server would.
-        text = sql if isinstance(sql, str) else sql.as_string()
+        # Identifier-bearing queries arrive as templates; render them so the
+        # substring match sees the same text the server would.
+        text = rendered(sql)
         for query_substring, result in query_results.items():
             if query_substring in text:
                 mock_cursor.fetchone.return_value = result
@@ -651,12 +653,10 @@ class TestRowCountPreconditionsQuoteIdentifiers:
         ids=["RowCountEquals", "RowCountGreaterThan", "TableIsEmpty"],
     )
     def test_hostile_names_are_escaped_by_the_driver(self, precondition):
-        from psycopg import sql
-
         mock_conn = create_mock_connection({"COUNT(*)": [0]})
 
         precondition.check(mock_conn)
 
         (query,), _ = mock_conn.cursor.return_value.execute.call_args
-        assert isinstance(query, sql.Composed)
-        assert query.as_string() == 'SELECT COUNT(*) FROM "sch;ema"."we""ird"'
+        assert isinstance(query, Template)
+        assert rendered(query) == 'SELECT COUNT(*) FROM "sch;ema"."we""ird"'

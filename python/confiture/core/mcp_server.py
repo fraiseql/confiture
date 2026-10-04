@@ -20,6 +20,7 @@ import sys
 from collections import Counter
 from dataclasses import replace
 from pathlib import Path
+from string.templatelib import Template
 from typing import TYPE_CHECKING, Any
 
 import psycopg
@@ -351,21 +352,24 @@ class MCPServer:
         if func_info is None:
             raise ValueError(f"Unknown tool: {name!r}")
         given = [p for p in func_info.in_params if p.name in arguments]
-        args = [arguments[p.name] for p in given]
         # The schema and the routine's name are identifiers, quoted whatever they
-        # hold: the name is pg_proc's and the schema the caller's. A raw cursor
-        # binds `$n` server-side and reads no `%` in the text, so a `%` in a name
-        # is only ever part of the name (#375).
-        # Each argument is cast to the type its parameter declares, so PostgreSQL
-        # resolves exactly this overload and never a sibling of the same name.
-        placeholders = sql.SQL(", ").join(
-            sql.SQL(f"${i}::{p.pg_type}") for i, p in enumerate(given, start=1)
+        # hold: the name is pg_proc's and the schema the caller's. A template's
+        # text is never `%`-formatted, so a `%` in a name is only ever part of the
+        # name (#375).
+        # Each argument is bound as a parameter and cast to the type its parameter
+        # declares (pg_proc's spelling, written in), so PostgreSQL resolves exactly
+        # this overload and never a sibling of the same name.
+        args = sql.SQL(", ").join(t"{arguments[p.name]}::{Template(p.pg_type):q}" for p in given)
+        schema, name = self._schema, func_info.name
+        statement = (
+            t"CALL {schema:i}.{name:i}({args:q})"
+            if func_info.is_procedure
+            else t"SELECT {schema:i}.{name:i}({args:q})"
         )
-        statement = sql.SQL("CALL {}({})" if func_info.is_procedure else "SELECT {}({})").format(
-            sql.Identifier(self._schema, func_info.name), placeholders
-        )
-        with psycopg.RawCursor(self._conn) as cur:
-            cur.execute(statement, args)
+        # psycopg's own cursor class, whatever factory the caller's connection has:
+        # a raw cursor refuses a template.
+        with psycopg.Cursor(self._conn) as cur:
+            cur.execute(statement)
             if func_info.is_procedure:
                 return None
             row = cur.fetchone()

@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 
 from confiture.core.test_db import TestDbProvisioner, _clone_sql
 from confiture.exceptions import ConfigurationError
+from confiture.sql_text import rendered
 from confiture.testing.worker_db import resolve_clone_strategy
 
 
@@ -38,7 +39,7 @@ class _Conn:
         return False
 
     def execute(self, query: object, params: object = None, **_: object) -> _Conn:
-        text = query.as_string(None) if hasattr(query, "as_string") else str(query)
+        text = rendered(query)
         self.statements.append(text)
         if self.fail_on and text.startswith("CREATE DATABASE") and self.fail_on in text:
             import psycopg
@@ -59,13 +60,13 @@ def _provisioner(monkeypatch: pytest.MonkeyPatch, conn: _Conn) -> TestDbProvisio
 
 
 def test_file_copy_is_written_as_the_strategy_option() -> None:
-    sql = _clone_sql("t_gw0", "tmpl", strategy="file_copy").as_string(None)
+    sql = rendered(_clone_sql("t_gw0", "tmpl", strategy="file_copy"))
 
     assert _options(sql) == {"template": "tmpl", "strategy": "file_copy"}
 
 
 def test_no_strategy_writes_no_strategy_option() -> None:
-    assert "strategy" not in _options(_clone_sql("t_gw0", "tmpl").as_string(None))
+    assert "strategy" not in _options(rendered(_clone_sql("t_gw0", "tmpl")))
 
 
 def test_an_unknown_strategy_is_refused_before_anything_runs(monkeypatch) -> None:
