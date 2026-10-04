@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from psycopg import sql
 
 from confiture.core.schema_sources import read_schema
 from confiture.core.seed.validation.prep_seed.level_4_runtime import Level4RuntimeValidator
 from confiture.core.seed.validation.prep_seed.level_5_execution import Level5ExecutionValidator
 from confiture.core.seed.validation.prep_seed.resolvers import Resolver, find_resolvers
+from confiture.sql_text import rendered
 
 
 class _Recorder:
@@ -29,7 +29,7 @@ class _Recorder:
 
     def execute(self, query: Any, params: Any = None) -> None:
         assert params is None, "a resolver call passes no parameters"
-        self.statements.append(query.as_string() if isinstance(query, sql.Composable) else query)
+        self.statements.append(rendered(query))
 
 
 def _resolver(tmp_path: Path, create: str) -> Resolver:

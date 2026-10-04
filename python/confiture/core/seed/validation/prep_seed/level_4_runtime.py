@@ -12,8 +12,6 @@ import contextlib
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from psycopg import sql
-
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedViolation,
@@ -92,7 +90,7 @@ class Level4RuntimeValidator:
         """Call *resolver* inside a SAVEPOINT and roll it back: nothing it writes is kept.
 
         The call names the routine by :attr:`Resolver.identifier` and the
-        savepoint by :class:`psycopg.sql.Identifier`, with no parameters, so a
+        savepoint as an identifier, with no parameters, so a
         mixed-case or ``%``-bearing name is the routine the DDL created.
 
         Args:
@@ -103,15 +101,14 @@ class Level4RuntimeValidator:
         Returns:
             List of violations found
         """
-        savepoint = sql.Identifier(savepoint_name)
         try:
-            connection.execute(sql.SQL("SAVEPOINT {}").format(savepoint))
-            connection.execute(sql.SQL("SELECT {}()").format(resolver.identifier))
-            connection.execute(sql.SQL("ROLLBACK TO SAVEPOINT {}").format(savepoint))
+            connection.execute(t"SAVEPOINT {savepoint_name:i}")
+            connection.execute(t"SELECT {resolver.identifier:q}()")
+            connection.execute(t"ROLLBACK TO SAVEPOINT {savepoint_name:i}")
         except Exception as e:  # Reason: executes a user resolution function under a savepoint; any failure is a reported violation
             # The savepoint may not exist if creating it is what failed.
             with contextlib.suppress(Exception):
-                connection.execute(sql.SQL("ROLLBACK TO SAVEPOINT {}").format(savepoint))
+                connection.execute(t"ROLLBACK TO SAVEPOINT {savepoint_name:i}")
             return [
                 PrepSeedViolation(
                     pattern=PrepSeedPattern.MISSING_FK_TRANSFORMATION,

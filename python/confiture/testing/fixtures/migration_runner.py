@@ -10,9 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import psycopg
-from psycopg import sql as pgsql
 
-from confiture.core.ledger import table_identifier
+from confiture.core.ledger import split_qualified_table
 
 
 @dataclass
@@ -153,10 +152,11 @@ class MigrationRunner:
                 "nothing applied" for a broken database and turn assertions
                 against it silently vacuous (#190).
         """
-        ident = table_identifier(self.tracking_table)
+        schema, table = split_qualified_table(self.tracking_table)
+        ledger = t"{schema:i}.{table:i}" if schema else t"{table:i}"
         try:
             with self.connection.cursor() as cur:
-                cur.execute(pgsql.SQL("SELECT slug FROM {} ORDER BY applied_at ASC").format(ident))
+                cur.execute(t"SELECT slug FROM {ledger:q} ORDER BY applied_at ASC")
                 return [row[0] for row in cur.fetchall()]
         except psycopg.errors.UndefinedTable:
             # The one genuinely-empty case: no ledger yet.

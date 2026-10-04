@@ -12,6 +12,7 @@ import contextlib
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
+from string.templatelib import Template
 from typing import TYPE_CHECKING, Any
 
 import psycopg
@@ -146,7 +147,7 @@ class Level5ExecutionValidator:
 
         for resolver in resolution_functions:
             try:
-                connection.execute(sql.SQL("SELECT {}()").format(resolver.identifier))
+                connection.execute(t"SELECT {resolver.identifier:q}()")
             except Exception as e:  # Reason: executes a user resolution function; any failure is a reported violation
                 violations.append(
                     PrepSeedViolation(
@@ -188,8 +189,9 @@ class Level5ExecutionValidator:
             return self._locate(*self._qualified(table))
         return self._name(table), 1
 
-    def _relation(self, table: FinalName) -> sql.Identifier:
-        return sql.Identifier(*self._qualified(table))
+    def _relation(self, table: FinalName) -> Template:
+        schema, name = self._qualified(table)
+        return t"{schema:i}.{name:i}"
 
     def _columns(self, connection: Any, table: FinalName) -> tuple[Column, ...]:
         """The columns of *table*, in order; none for a table that is not there."""
@@ -205,7 +207,7 @@ class Level5ExecutionValidator:
         return [constraint for constraint in found if constraint.kind == kind]
 
     @staticmethod
-    def _referenced(constraint: Constraint) -> tuple[sql.Identifier, str]:
+    def _referenced(constraint: Constraint) -> tuple[Template, str]:
         """The relation a foreign key references, and its name for a message.
 
         ``pg_get_constraintdef`` qualifies the referenced table only when
@@ -214,15 +216,17 @@ class Level5ExecutionValidator:
         """
         target = constraint.ref_table
         if target is None:
-            return sql.Identifier(""), ""
-        parts = (target.schema, target.name) if target.schema else (target.name,)
-        return sql.Identifier(*parts), target.name
+            return t"{'':i}", ""
+        if target.schema:
+            return t"{target.schema:i}.{target.name:i}", target.name
+        return t"{target.name:i}", target.name
 
-    def _count(self, connection: Any, table: FinalName, predicate: sql.Composable) -> int:
+    def _count(self, connection: Any, table: FinalName, predicate: Template) -> int:
         """How many rows of *table* satisfy *predicate*."""
-        query = sql.SQL("SELECT COUNT(*) FROM {} WHERE {}").format(self._relation(table), predicate)
         with _probe(connection):
-            row = connection.execute(query).fetchone()
+            row = connection.execute(
+                t"SELECT COUNT(*) FROM {self._relation(table):q} WHERE {predicate:q}"
+            ).fetchone()
         return int(row[0]) if row else 0
 
     def detect_null_fks(
@@ -250,11 +254,7 @@ class Level5ExecutionValidator:
             try:
                 columns = [c.name for c in self._columns(connection, table)]
                 for column in (name for name in columns if name.startswith("fk_")):
-                    null_count = self._count(
-                        connection,
-                        table,
-                        sql.SQL("{} IS NULL").format(sql.Identifier(column)),
-                    )
+                    null_count = self._count(connection, table, t"{column:i} IS NULL")
                     if null_count > 0:
                         violations.append(
                             PrepSeedViolation(
@@ -298,10 +298,10 @@ class Level5ExecutionValidator:
         for table in tables:
             try:
                 # Check for duplicate identifiers
-                query = sql.SQL(
-                    "SELECT id, COUNT(*) AS cnt FROM {} GROUP BY id HAVING COUNT(*) > 1"
-                ).format(self._relation(table))
-
+                query = (
+                    t"SELECT id, COUNT(*) AS cnt FROM {self._relation(table):q} "
+                    t"GROUP BY id HAVING COUNT(*) > 1"
+                )
                 with _probe(connection):
                     duplicates = connection.execute(query).fetchall()
 
@@ -352,11 +352,7 @@ class Level5ExecutionValidator:
             try:
                 columns = [c.name for c in self._columns(connection, table) if c.not_null]
                 for column in columns:
-                    null_count = self._count(
-                        connection,
-                        table,
-                        sql.SQL("{} IS NULL").format(sql.Identifier(column)),
-                    )
+                    null_count = self._count(connection, table, t"{column:i} IS NULL")
                     if null_count > 0:
                         violations.append(
                             PrepSeedViolation(
@@ -405,7 +401,7 @@ class Level5ExecutionValidator:
                     if not expression:
                         continue
                     violation_count = self._count(
-                        connection, table, sql.SQL("({}) IS FALSE").format(sql.SQL(expression))
+                        connection, table, t"({Template(expression):q}) IS FALSE"
                     )
                     if violation_count > 0:
                         violations.append(
@@ -458,24 +454,16 @@ class Level5ExecutionValidator:
                         continue
                     parent, parent_table = self._referenced(fk)
                     joins = sql.SQL(" AND ").join(
-                        sql.SQL("parent.{} = child.{}").format(
-                            sql.Identifier(parent_col), sql.Identifier(child_col)
-                        )
+                        t"parent.{parent_col:i} = child.{child_col:i}"
                         for child_col, parent_col in zip(child_cols, parent_cols, strict=True)
                     )
                     set_cols = sql.SQL(" AND ").join(
-                        sql.SQL("child.{} IS NOT NULL").format(sql.Identifier(col))
-                        for col in child_cols
+                        t"child.{col:i} IS NOT NULL" for col in child_cols
                     )
-                    query = sql.SQL(
-                        "SELECT COUNT(*) FROM {child} AS child "
-                        "WHERE {set_cols} AND NOT EXISTS ("
-                        "SELECT 1 FROM {parent} AS parent WHERE {joins})"
-                    ).format(
-                        child=self._relation(table),
-                        parent=parent,
-                        set_cols=set_cols,
-                        joins=joins,
+                    query = (
+                        t"SELECT COUNT(*) FROM {self._relation(table):q} AS child "
+                        t"WHERE {set_cols:q} AND NOT EXISTS ("
+                        t"SELECT 1 FROM {parent:q} AS parent WHERE {joins:q})"
                     )
                     with _probe(connection):
                         row = connection.execute(query).fetchone()
