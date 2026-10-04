@@ -19,6 +19,7 @@ from confiture.core.differ import (
     AUTHOR,
     CATALOGUED,
     EXACT,
+    MATERIALISED,
     SchemaDiffer,
     Side,
     policy_between,
@@ -224,3 +225,41 @@ def test_constraint_kind_is_kept_by_the_rules() -> None:
     (change,) = SchemaDiffer().compare_sides(Side.of(tree), Side(model=live)).changes
     assert type(change).__name__ == "UniqueConstraintAdded"
     assert change.constraint.name == "child_s_key"
+
+
+@pytest.mark.parametrize(
+    ("policy", "fidelity"),
+    [
+        (AUTHOR, "as_written"),
+        (CATALOGUED, "structural"),
+        (MATERIALISED, "materialised"),
+        (EXACT, "materialised"),
+    ],
+)
+def test_each_policy_says_how_closely_it_reads_an_expression(policy, fidelity) -> None:
+    assert policy.fidelity == fidelity
+
+
+def test_a_materialised_tree_compares_what_postgresql_analyses_as_stored() -> None:
+    """Both sides are PostgreSQL's spelling: only what the catalog cannot say is a rule."""
+    assert MATERIALISED.rules == ALL_PARITY_RULES - {"analysed_expressions", "view_definitions"}
+    stored = "CREATE TABLE t (a INT, CHECK ((a > 0)));"
+    other = "CREATE TABLE t (a INT, CHECK ((a > 1)));"
+    side = Side.of(read_text(stored))
+    changed = Side.of(read_text(other))
+
+    assert SchemaDiffer().compare_sides(side, changed, CATALOGUED).changes == []
+    materialised = SchemaDiffer().compare_sides(side, changed, MATERIALISED).changes
+    assert sorted(c.to_wire().type for c in materialised) == [
+        "ADD_CHECK_CONSTRAINT",
+        "DROP_CHECK_CONSTRAINT",
+    ]
+
+
+def test_a_named_index_that_indexes_something_else_is_rebuilt() -> None:
+    old = Side.of(read_text("CREATE TABLE t (a INT, b INT); CREATE INDEX t_i ON t (a);"))
+    new = Side.of(read_text("CREATE TABLE t (a INT, b INT); CREATE INDEX t_i ON t (a, b);"))
+    assert [c.to_wire().type for c in SchemaDiffer().compare_sides(old, new).changes] == [
+        "DROP_INDEX",
+        "ADD_INDEX",
+    ]

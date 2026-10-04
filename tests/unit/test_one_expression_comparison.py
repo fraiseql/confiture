@@ -28,13 +28,15 @@ ENGINE = ("core/differ.py", "core/drift.py")
 #: first: between two trees or two databases the text is one writer's spelling, and
 #: between a tree and a database ``analysed_expressions`` reduces it to that it
 #: exists — the stored text is PostgreSQL's analysis, which only a database built
-#: from the tree can be compared with.
+#: from the tree can be compared with, and the materialised tier builds one.
 NAMED: dict[str, str] = {
     "core/differ.py:expression": (
-        "a CHECK paired and compared by its parity rendering: as written, or existence"
+        "a CHECK paired and compared by its parity rendering: as written, existence, or "
+        "— materialised — as stored on both sides"
     ),
     "core/differ.py:where": (
-        "an EXCLUDE constraint's predicate, compared whole by its parity rendering"
+        "an EXCLUDE constraint's or a partial index's predicate, compared by its parity "
+        "rendering: as written, existence, or — materialised — as stored on both sides"
     ),
 }
 

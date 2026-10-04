@@ -153,6 +153,14 @@
         }
       }
     },
+    "fidelity": {
+      "enum": [
+        "as_written",
+        "structural",
+        "materialised"
+      ],
+      "description": "How closely expressions were compared — CHECKs, index expression keys and predicates, view bodies. Present only when a scratch server built the tree and read it back (`materialised`: every expression compared as PostgreSQL stores it); absent at the command's default tier: `structural` where a database is a side (a default compared as a value, every other expression only as existing), `as_written` between two trees."
+    },
     "ok": {
       "type": "boolean",
       "const": true,

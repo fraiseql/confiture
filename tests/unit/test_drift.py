@@ -506,7 +506,8 @@ class TestConstraintBackedIndexes:
     def test_declared_index_that_backs_a_constraint_is_matched_by_name(self, mock_connection):
         conn, _ = mock_connection
         detector = SchemaDriftDetector(conn)
-        expected = model_of({"users": {"id": "integer"}}, indexes={"users": ["users_email_uq"]})
+        declared = index("users_email_uq", "users", "email", unique=True, method="btree")
+        expected = model_of({"users": {"id": "integer"}}, indexes={"users": [declared]})
         actual = model_of(
             {"users": {"id": "integer"}},
             indexes={

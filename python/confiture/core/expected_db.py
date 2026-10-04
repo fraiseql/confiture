@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import psycopg
+from psycopg import sql
 
 from confiture.core import builder as _core_builder
 from confiture.core.temp_database import TempDatabase
@@ -105,6 +106,7 @@ class ExpectedSchemaDB:
 
         self._mode: str | None = None
         self._schema_sql: str | None = None
+        self._search_path: str | None = None
         self._base_sql: str | None = None
         self._replay: Replay | None = None
 
@@ -115,16 +117,22 @@ class ExpectedSchemaDB:
 
     # -- mode selection -------------------------------------------------- #
 
-    def from_source(self, *, schema_sql: str | None = None) -> ExpectedSchemaDB:
+    def from_source(
+        self, *, schema_sql: str | None = None, search_path: str | None = None
+    ) -> ExpectedSchemaDB:
         """Build the scratch DB from the expected DDL.
 
         Args:
             schema_sql: Explicit DDL to apply. When ``None``, the schema is built
                 from the configured ``env`` via :class:`SchemaBuilder`
                 (``schema_only=True``).
+            search_path: The schema an unqualified name lands in, ahead of
+                ``public``, as the DDL is applied and read back; PostgreSQL's
+                default when ``None``.
         """
         self._mode = _MODE_SOURCE
         self._schema_sql = schema_sql
+        self._search_path = search_path
         return self
 
     def from_base_plus_migrations(
@@ -203,11 +211,23 @@ class ExpectedSchemaDB:
         assert self._td is not None and self._temp_url is not None  # set by __enter__
         if self._mode == _MODE_SOURCE:
             schema_sql = self._resolve_source_sql()
+            if self._search_path is not None:
+                self._set_search_path(self._search_path)
             self._td.apply_schema(self._temp_url, schema_sql)
         else:
             if self._base_sql:
                 self._td.apply_schema(self._temp_url, self._base_sql)
             self._replay_migrations()
+
+    def _set_search_path(self, schema: str) -> None:
+        """Every later session on the scratch database resolves a bare name in *schema* first."""
+        assert self._temp_url is not None
+        with psycopg.connect(self._temp_url, autocommit=True) as conn:
+            conn.execute(
+                sql.SQL("ALTER DATABASE {} SET search_path TO {}, public").format(
+                    sql.Identifier(conn.info.dbname), sql.Identifier(schema)
+                )
+            )
 
     def _resolve_source_sql(self) -> str:
         if self._schema_sql is not None:

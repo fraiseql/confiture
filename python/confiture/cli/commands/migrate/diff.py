@@ -5,6 +5,7 @@ Split out of the monolithic migrate command modules.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import typer
@@ -16,16 +17,20 @@ from confiture.cli.helpers import (
     console,
     is_json,
 )
-from confiture.cli.options import config_option, format_option, migrations_dir_option
+from confiture.cli.options import (
+    config_option,
+    format_option,
+    migrations_dir_option,
+    scratch_url_option,
+)
 from confiture.config.environment import MigrationConfig
 from confiture.core import connection as _core_connection
 from confiture.core.desired_state import DesiredStateSource, load_desired_state
 from confiture.core.destructive import data_loss_reason, resolve_policy
-from confiture.core.differ import SchemaDiffer, Side
+from confiture.core.differ import MATERIALISED, ComparisonPolicy, SchemaDiffer, Side
 from confiture.core.migration_generator import MigrationGenerator
-from confiture.core.schema_model import SchemaModel
-from confiture.core.schema_read import read_segments
-from confiture.core.schema_sources import database_side
+from confiture.core.schema_read import SchemaRead, read_segments
+from confiture.core.schema_sources import database_side, materialised_side
 from confiture.error_codes import FAILURE
 from confiture.exceptions import DifferError, ValidationError
 from confiture.models.results import MigrateDiffChange, MigrateDiffResult
@@ -56,6 +61,7 @@ def migrate_diff(
     config: Path = config_option(
         help="Environment config, read for `--from db` (default: db/environments/local.yaml)"
     ),
+    scratch_url: str | None = scratch_url_option(),
     generate: bool = typer.Option(
         False,
         "--generate",
@@ -117,10 +123,10 @@ def migrate_diff(
         )
         desired_read = read_segments(desired.segments())
         try:
-            current_side = _current_side(current, config, desired_read.model)
-            diff = SchemaDiffer().compare_sides(
-                current_side, Side.of(desired_read, held=current_side.model.source == "catalog")
+            current_side, desired_side, policy, fidelity = _compared(
+                current, desired, desired_read, config=config, scratch_url=scratch_url
             )
+            diff = SchemaDiffer().compare_sides(current_side, desired_side, policy)
         except DifferError as exc:  # a name that needs quotes (DIFFER_403) carries its own code
             fail(exc, json_mode=is_json(format_type), output_file=report_file)
 
@@ -133,7 +139,7 @@ def migrate_diff(
             for change in diff.changes
         ]
         migration_file_name = None
-        policy: str | None = None
+        gate: str | None = None
 
         # Handle migration generation if requested
         if generate:
@@ -155,7 +161,7 @@ def migrate_diff(
             # Generate migration
             generator = MigrationGenerator(migrations_dir=migrations_dir)
             ingest = from_ is not None or to is not None
-            policy = _destructive_policy(
+            gate = _destructive_policy(
                 config,
                 allow=allow_destructive,
                 forbid=forbid_destructive,
@@ -164,9 +170,9 @@ def migrate_diff(
             )
             try:
                 migration_file = (
-                    generator.generate_sql(diff, name=name, destructive=policy)
+                    generator.generate_sql(diff, name=name, destructive=gate)
                     if ingest
-                    else generator.generate(diff, name=name, destructive=policy)
+                    else generator.generate(diff, name=name, destructive=gate)
                 )
             except DifferError as exc:  # the gate's refusal (DIFFER_401) carries its own code
                 fail(exc, json_mode=is_json(format_type), output_file=report_file)
@@ -180,8 +186,9 @@ def migrate_diff(
             migration_generated=generate and migration_file_name is not None,
             migration_file=migration_file_name,
             source=desired.describe(),
-            destructive_gate=policy,
+            destructive_gate=gate,
             warnings=diff.warnings,
+            fidelity=fidelity,
         )
 
         format_migrate_diff_result(result, format_type, report_file, console)
@@ -257,21 +264,37 @@ def _resolve_sides(
     return str(old_schema), load_desired_state(str(new_schema))
 
 
-def _current_side(spec: str, config: Path, desired: SchemaModel) -> Side:
-    """The current schema: ``db`` is the configured database, read live; else a file/dir/stdin.
+def _compared(
+    spec: str,
+    desired: DesiredStateSource,
+    desired_read: SchemaRead,
+    *,
+    config: Path,
+    scratch_url: str | None,
+) -> tuple[Side, Side, ComparisonPolicy | None, str | None]:
+    """The two sides, the policy they are compared under, and its fidelity when it is not theirs.
 
-    The database is read through ``live_catalog`` in the schemas the desired tree
-    names, and compared with that tree through the parity rules: a database built
-    from the tree is no change from it.
+    The current side is a file/dir/stdin, or ``db``: the configured database, read
+    through ``live_catalog`` in the schemas the desired tree names and compared with
+    that tree through the parity rules, so a database built from the tree is no
+    change from it. With a scratch server (``--scratch-url``, else the
+    environment's ``scratch_url``), the tree is built there and read back, and its
+    expressions compare as PostgreSQL stores them (``materialised``).
     """
-    if spec == "db":
-        config_data = _core_connection.load_config(config)
-        return database_side(
-            _core_connection.dsn_from_config(config_data),
-            against=desired,
-            tracking_table=_get_tracking_table(config_data),
-        )
-    return Side.of(read_segments(load_desired_state(spec).segments()))
+    if spec != "db":
+        current = Side.of(read_segments(load_desired_state(spec).segments()))
+        return current, Side.of(desired_read), None, None
+    config_data = _core_connection.load_config(config)
+    database = database_side(
+        _core_connection.dsn_from_config(config_data),
+        against=desired_read.model,
+        tracking_table=_get_tracking_table(config_data),
+    )
+    scratch = _core_connection.scratch_url_from_config(config_data, scratch_url)
+    if scratch is None:
+        return database, Side.of(desired_read, held=True), None, None
+    built = materialised_side(desired.read(), scratch, declared=desired_read.model)
+    return database, built, replace(MATERIALISED, author="new"), "materialised"
 
 
 def _destructive_policy(

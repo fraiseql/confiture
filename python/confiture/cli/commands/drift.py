@@ -8,9 +8,14 @@ import typer
 from confiture.cli.error_json import cli_boundary, fail
 from confiture.cli.formatters.common import display_drift_report
 from confiture.cli.helpers import console, emit, is_json, open_connection
-from confiture.cli.options import CONFITURE_YAML, config_option, format_option
+from confiture.cli.options import (
+    CONFITURE_YAML,
+    config_option,
+    format_option,
+    scratch_url_option,
+)
 from confiture.config.environment import AclExpectation, OwnershipExpectation
-from confiture.core.connection import load_config
+from confiture.core.connection import load_config, scratch_url_from_config
 from confiture.core.drift import (
     AclDriftDetector,
     DriftReport,
@@ -39,6 +44,7 @@ class _DriftRequest:
     check_ownership: bool
     warn_only: bool
     fail_on_warning: bool
+    scratch_url: str | None = None
 
 
 def _run_drift(
@@ -84,6 +90,7 @@ def _run_drift(
                 conn,
                 ignore_column_order=request.ignore_column_order or drift_cfg.ignore_column_order,
                 column_order_severity=drift_cfg.column_order_severity,
+                scratch_url=scratch_url_from_config(config_data, request.scratch_url),
             ).compare_with_schema_file(str(request.schema), default_schema=request.default_schema)
         if request.check_acls:
             drift_report = _merge(drift_report, AclDriftDetector(conn).check(expectations))
@@ -168,6 +175,7 @@ def drift(
         "--warn-only",
         help="Demote MISSING_GRANT items from critical to warning (progressive rollout)",
     ),
+    scratch_url: str | None = scratch_url_option(),
     format_output: str = format_option("table", "json"),
     fail_on_warning: bool = typer.Option(
         False,
@@ -192,6 +200,9 @@ def drift(
 
       confiture drift --config confiture.yaml --schema db/schema.sql --fail-on-warning
         ↳ Exit 1 on any drift (including warnings)
+
+      confiture drift --config confiture.yaml --schema db/schema.sql --scratch-url postgresql://localhost/postgres
+        ↳ Build the schema on a scratch server and compare CHECKs, index predicates and expressions as stored
 
       confiture drift --config confiture.yaml --check-acls
         ↳ Check ACL coverage only (no structural diff)
@@ -225,6 +236,7 @@ def drift(
         check_ownership=check_ownership,
         warn_only=warn_only,
         fail_on_warning=fail_on_warning,
+        scratch_url=scratch_url,
     )
     try:
         _run_drift(config, request, format_output=format_output, json_mode=json_mode)

@@ -23,6 +23,10 @@ confiture migrate up
   with `tviews.pg_tviews_drop`. Confiture's own tables (`tb_confiture`, …) are not the project's.
   An object the database holds that confiture reads only by existence (a domain, a policy, …) and
   the tree does not declare is a `DIFFER_404` warning: the diff cannot write its statement.
+  With a scratch server (`--scratch-url`, or `scratch_url` in the environment) the tree is built
+  there and read back first, so a CHECK, an index predicate or a view's query that changed is a
+  change rather than an expression that exists on both sides; the payload says
+  `"fidelity": "materialised"` ([Comparison fidelity](../reference/comparison-fidelity.md)).
 - `--to` is the desired state: a schema file, a directory of `.sql` files (read in name order), or
   `-` for stdin, so `fraiseql compile … --emit-ddl - | confiture migrate diff --from db --to -` is
   one pipeline when the emitter writes to stdout.

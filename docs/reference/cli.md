@@ -1135,6 +1135,7 @@ confiture migrate diff [OPTIONS] [old_schema] [new_schema]
 | `--from` | - | str | - | Current state: a schema file, a directory (every .sql under it, recursively), '-' for stdin, or 'db' for the configured database (default: the first positional) |
 | `--to` | - | str | - | Desired state: a schema file, a directory (every .sql under it, recursively — what fraiseql's emit-ddl option writes), or '-' for stdin (default: the second positional) |
 | `--config` | `-c` | path | `db/environments/local.yaml` | Environment config, read for `--from db` (default: db/environments/local.yaml) |
+| `--scratch-url` | - | str | - | Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, index expressions and predicates and view bodies compare as PostgreSQL stores them (default: the environment's scratch_url; without one, they compare structurally) |
 | `--generate` | - | Flag | off | Generate a migration from the differences: a .up.sql/.down.sql pair with --from/--to, a Python migration with positional files |
 | `--name` | - | str | - | Migration name (default: none, required with --generate) |
 | `--migrations-dir` | - | path | `db/migrations` | Migrations directory (default: db/migrations) |
@@ -3144,14 +3145,21 @@ each base table belong to it and are never reported as extra. A storage option t
 --check-live-drift` runs the same comparison; the two cannot disagree, because they share one detector.
 
 Constraints are compared too (since 1.25.1). A named constraint is paired by its name and an
-unnamed one by what it says; a pair that declares something else is `constraint_mismatch`. A CHECK
-is paired but its text is not compared, because PostgreSQL stores it analysed. A lost or mismatched
-constraint is `critical` (since 1.26.0), and an extra one is `info`.
+unnamed one by what it says; a pair that declares something else is `constraint_mismatch`. A lost
+or mismatched constraint is `critical` (since 1.26.0), and an extra one is `info`.
 
-What it does **not** compare, so that nothing has to guess: sequences, column defaults,
-and the *bodies* of views and routines. Defaults are left out for a measured reason — PostgreSQL
-rewrites a default expression on storage, so `'x'` comes back as `'x'::text` and `1 + 2` as `(1 + 2)`,
-and only 5 of 12 measured columns agreed as text. Bodies have their own opt-in checks
+A column default is compared as a value: PostgreSQL stores `'x'` as `'x'::text` and a `jsonb`
+object with its keys sorted, so the default is read as a parse tree whose constants the
+database's server spells, and `default_mismatch` means another value. A CHECK, an index
+expression and a partial index's predicate are stored analysed too; how closely they are
+compared is the comparison's **fidelity**. Without a scratch server it is `structural`: a CHECK
+is paired but its text is not compared. With one (`--scratch-url`, or `scratch_url` in the
+environment), the DDL is built there and read back, every expression compares as PostgreSQL
+stores it, and the payload says `"fidelity": "materialised"`. See
+[Comparison fidelity](comparison-fidelity.md).
+
+What it does **not** compare, so that nothing has to guess: sequences, generated column
+expressions, and the *bodies* of views and routines. Bodies have their own opt-in checks
 (`--check-body`, `--check-body-views`, `--check-body-replay`); grants and ownership have theirs
 (`--check-acls`, `--check-ownership-coverage`).
 
@@ -3243,6 +3251,7 @@ confiture drift [OPTIONS]
 | `--check-acls` | - | Flag | off | Also compare live grants against the `acls:` block in the config |
 | `--check-ownership` | - | Flag | off | Also compare live `pg_class.relowner` against the `ownership:` block |
 | `--warn-only` | - | Flag | off | Demote MISSING_GRANT items from critical to warning (progressive rollout) |
+| `--scratch-url` | - | str | - | Writable PostgreSQL server to build the tree on and read it back from, so CHECKs, index expressions and predicates and view bodies compare as PostgreSQL stores them (default: the environment's scratch_url; without one, they compare structurally) |
 | `--format` | `-f` | str | `table` | Output format: table or json (default: table) |
 | `--fail-on-warning` | - | Flag | off | Exit with code 1 on warnings as well as critical drift (default: off) |
 

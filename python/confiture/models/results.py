@@ -562,6 +562,9 @@ class MigrateDiffResult:
     #: a reason the diff may be reading a tree `confiture build` does not
     #: produce (#313). Present and empty when there is nothing to report.
     warnings: list[BuildWarning] = field(default_factory=list)
+    #: ``materialised`` when a scratch server read the tree back; ``None`` for the
+    #: tier the two sides call for, and then absent from the payload.
+    fidelity: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization.
@@ -569,7 +572,7 @@ class MigrateDiffResult:
         Returns:
             Dictionary with all fields suitable for JSON output.
         """
-        return {
+        payload: dict[str, Any] = {
             "success": self.success,
             "has_changes": self.has_changes,
             "changes": [c.to_dict() for c in self.changes],
@@ -581,6 +584,9 @@ class MigrateDiffResult:
             "destructive_gate": self.destructive_gate,
             "warnings": [warning.to_dict() for warning in self.warnings],
         }
+        if self.fidelity is not None:
+            payload["fidelity"] = self.fidelity
+        return payload
 
 
 @dataclass

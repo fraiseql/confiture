@@ -583,6 +583,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 |---|---|---|---|
 | `name` | str | `` | Environment name (e.g., "local", "production") |
 | `database_url` | str | **required** | PostgreSQL connection URL |
+| `scratch_url` | str \| NoneType | - | A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally. |
 | `include_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories to include when building schema (supports both string and dict formats) |
 | `superuser_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories whose files run in the superuser phase of ``build_split()`` (extensions, roles); excluded from the schema hash. |
 | `superuser_post_dirs` | list[str \| [DirectoryConfig](#directoryconfig)] | `[]` | Directories routed to the post-schema superuser phase in build_split() |
@@ -815,6 +816,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 ```yaml
 name: ''
 database_url: null
+scratch_url: null
 include_dirs:
   - path: null
     recursive: true

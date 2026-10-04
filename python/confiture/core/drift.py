@@ -20,7 +20,15 @@ from confiture.core import live_catalog
 from confiture.core.ddl_clauses import constraint_body
 from confiture.core.ddl_objects import DDLObject
 from confiture.core.desired_state import load_desired_state
-from confiture.core.differ import CATALOGUED, SchemaDiffer, Side, refuse_quoted_names
+from confiture.core.differ import (
+    CATALOGUED,
+    MATERIALISED,
+    ComparisonPolicy,
+    Fidelity,
+    SchemaDiffer,
+    Side,
+    refuse_quoted_names,
+)
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.schema_analyzer import SchemaAnalyzer
 from confiture.core.schema_change import (
@@ -71,6 +79,7 @@ from confiture.core.schema_model import (
     trigger_ref,
 )
 from confiture.core.schema_read import SchemaRead, read_segments, read_text
+from confiture.core.schema_sources import materialised_side
 from confiture.core.server_constants import server_constants
 from confiture.core.type_lattice import signatures_match
 from confiture.exceptions import ConfigurationError, SchemaError
@@ -210,6 +219,9 @@ class DriftReport:
     #: declares whose *existence* is checked (#303).
     objects_checked: int = 0
     detection_time_ms: int = 0
+    #: How closely expressions were compared (``differ.Fidelity``): ``structural``
+    #: unless a scratch server read the tree back (``materialised``).
+    fidelity: Fidelity = "structural"
 
     @property
     def has_drift(self) -> bool:
@@ -238,7 +250,7 @@ class DriftReport:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        payload: dict[str, Any] = {
             "database_name": self.database_name,
             "expected_schema_source": self.expected_schema_source,
             "has_drift": self.has_drift,
@@ -255,6 +267,10 @@ class DriftReport:
             "detection_time_ms": self.detection_time_ms,
             "drift_items": [d.to_dict() for d in self.drift_items],
         }
+        # Said only when it is not the tier drift has always compared at.
+        if self.fidelity != "structural":
+            payload["fidelity"] = self.fidelity
+        return payload
 
 
 #: Which pair of drift types reports a kind's existence: every kind the schema
@@ -487,6 +503,9 @@ def _constraint_label(constraint: Constraint) -> str:
 #: How drift compares: the tree is an author's and the database PostgreSQL's,
 #: whatever each model says (a test may build both from DDL).
 _POLICY = replace(CATALOGUED, author="new")
+#: How drift compares once a scratch server has read the tree back: still the
+#: tree's side whose unnamed objects PostgreSQL named.
+_MATERIALISED = replace(MATERIALISED, author="new")
 
 #: Every change the comparison makes, as the finding drift reports for it — or,
 #: for a change drift has no finding for, why. A constraint dropped and added under
@@ -1036,6 +1055,7 @@ class SchemaDriftDetector:
         *,
         ignore_column_order: bool = False,
         column_order_severity: str = "warning",
+        scratch_url: str | None = None,
     ):
         """Initialize drift detector.
 
@@ -1045,8 +1065,12 @@ class SchemaDriftDetector:
             ignore_column_order: Skip the column-order comparison (#226)
             column_order_severity: ``"warning"`` (default) or ``"critical"`` for a
                 ``column_order_mismatch`` item
+            scratch_url: A writable server to build a schema file into and read it
+                back from, so its expressions compare as PostgreSQL stores them
+                (``materialised``); ``None`` compares them structurally.
         """
         self.connection = connection
+        self.scratch_url = scratch_url
         self.ignore_column_order = ignore_column_order
         self.column_order_severity = (
             DriftSeverity.CRITICAL if column_order_severity == "critical" else DriftSeverity.WARNING
@@ -1082,14 +1106,21 @@ class SchemaDriftDetector:
         Returns:
             DriftReport with differences
         """
+        # The database's server spells the tree's constants (#564).
+        constants = server_constants(self.connection, self._kept(expected))
+        return self._compare(expected, actual, replace(_POLICY, constants=constants))
+
+    def _compare(
+        self, expected: SchemaModel, actual: SchemaModel, policy: ComparisonPolicy
+    ) -> DriftReport:
+        """*expected* against *actual* under *policy*, said as drift."""
         start_time = time.perf_counter()
         report = DriftReport(
             database_name=self._get_database_name(),
             expected_schema_source="provided",
+            fidelity=policy.fidelity,
         )
         expected, actual = self._kept(expected), self._kept(actual)
-        # The database's server spells the tree's constants (#564).
-        policy = replace(_POLICY, constants=server_constants(self.connection, expected))
         diff = SchemaDiffer().compare_sides(_stated(actual), _stated(expected), policy)
         _Findings(expected, actual, self.column_order_severity).render(
             diff.changes, report, column_order=not self.ignore_column_order
@@ -1158,7 +1189,17 @@ class SchemaDriftDetector:
             _read_expected(lambda: read_segments(source.segments())), default_schema
         )
         actual = self.get_live_schema(expected.schemas, objects=True)
-        report = self.compare_schemas(expected.model, actual)
+        if self.scratch_url is None:
+            report = self.compare_schemas(expected.model, actual)
+        else:
+            built = materialised_side(
+                source.read(),
+                self.scratch_url,
+                declared=expected.model,
+                schemas=sorted(expected.schemas),
+                default_schema=default_schema,
+            )
+            report = self._compare(built.model, actual, _MATERIALISED)
         report.expected_schema_source = f"file:{schema_file_path}"
         return report
 
