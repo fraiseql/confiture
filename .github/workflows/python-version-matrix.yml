@@ -36,6 +36,8 @@ jobs:
 
     services:
       postgres:
+        # PostgreSQL 16 only: this matrix varies the interpreter, not the server; the
+        # quality gate runs the suite on 16 and 18 (#608).
         image: postgres:16
         env:
           POSTGRES_USER: confiture

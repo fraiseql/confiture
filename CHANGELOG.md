@@ -81,6 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`tests/unit/test_supported_server_answers.py`). Nothing new refuses an older server.
   `lock_profile.FAST_DEFAULT_SINCE` and `NOT_NULL_FROM_CHECK_SINCE` are no longer exported.
 
+- **CI tests the floor and the newest server: PostgreSQL 16 and 18 (#608).** The quality
+  gate's test job, the plpgsql_check leg and the examples run on both servers, each test leg
+  with the `pg_dump` of its own server; coverage is combined from both legs and the per-file
+  floors are judged once, on the union. The release, deployment-gate, benchmark and
+  version-matrix workflows stay on 16, the floor. Before, 18 was reached only by the
+  pg_tviews leg, so a reading that differs on 18 was tested nowhere a pull request waits.
+
 - ⚠️ **PostgreSQL 16 is the minimum.** Every CI leg runs PostgreSQL 16 (the pg_tviews leg,
   18); none ran 16 before — the main suite, the version matrix, the plpgsql_check image and
   the publish gate ran 15. The documents that named a minimum disagreed (12, 14, and "tested

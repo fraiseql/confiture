@@ -17,12 +17,19 @@ concurrency:
 
 jobs:
   test:
-    name: Tests
+    name: Tests (PostgreSQL ${{ matrix.postgres }})
     runs-on: ubuntu-latest
+    # The floor confiture supports and the newest server (#608): 18 changed what
+    # the catalog says (NOT NULL rows in pg_constraint, conenforced, virtual
+    # generated columns), and a developer's machine is likelier to run 18 than 16.
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '18']
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           # uv sync builds the native extension; the parity tests must run it, not skip it
           CONFITURE_REQUIRE_NATIVE: "1"
@@ -62,6 +69,17 @@ jobs:
         # Build and install Rust extension with modern maturin+uv integration
         uv run maturin develop --uv
 
+    - name: PostgreSQL ${{ matrix.postgres }} client tools
+      # pg_dump refuses a server newer than itself, and a pg_dump newer than the
+      # server writes settings (`SET transaction_timeout`, 17+) an older server
+      # rejects on restore. The runner's stock client is 16, so each leg installs
+      # the client of its own server and puts it first on PATH.
+      run: |
+        sudo apt-get install -y --no-install-recommends postgresql-common
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+        sudo apt-get install -y --no-install-recommends postgresql-client-${{ matrix.postgres }}
+        echo /usr/lib/postgresql/${{ matrix.postgres }}/bin >> "$GITHUB_PATH"
+
     - name: Verify Environment
       run: |
         echo "=== Environment Verification ==="
@@ -70,10 +88,9 @@ jobs:
         uv run pytest --version
         rustc --version
         pg_isready -h localhost -p 5432 -U confiture && echo '✅ PostgreSQL Ready' || echo '❌ PostgreSQL Not Ready'
-        # Client version, on the record: pg_dump refuses to dump a server newer
-        # than itself, and pg_dump 17+ emits `SET transaction_timeout` which a
-        # 15 server rejects. Both directions of that skew break the restore
-        # round-trip tests, and neither is visible without this line.
+        # Server and client versions, on the record: both directions of a skew
+        # break the restore round-trip tests, and neither is visible without them.
+        PGPASSWORD=confiture psql -h localhost -U confiture -d confiture_test -Atc "SHOW server_version;"
         pg_dump --version
         uv run python -c "import psycopg; conn = psycopg.connect('postgresql://confiture:confiture@localhost:5432/confiture_test'); print('✅ DB connection successful'); conn.close()" || echo "❌ DB connection failed"
         echo "=== Rust Extension Verification ==="
@@ -130,13 +147,53 @@ jobs:
             exit 1
           }
         echo "✅ Core tests completed successfully"
-    - name: Coverage report (fail_under from pyproject) and per-file floors
+    - name: Combine this leg's workers
+      # One data file per server; the coverage job joins the two and judges them.
       run: |
         uv run coverage combine
-        uv run coverage xml
-        uv run coverage json -o coverage.json
-        uv run coverage report --skip-covered | tail -5
-        uv run python scripts/coverage_floors.py --check coverage.json
+        mv .coverage coverage-pg${{ matrix.postgres }}.data
+
+    - name: Upload this leg's coverage data
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-pg${{ matrix.postgres }}
+        path: coverage-pg${{ matrix.postgres }}.data
+        retention-days: 1
+        if-no-files-found: error
+
+  coverage:
+    name: Coverage (PostgreSQL 16 and 18 combined)
+    # The floors are judged once, over both servers together: checked per leg,
+    # a line only one server reaches would read as missed on the other; checked
+    # on one leg, the other's tests would count for nothing.
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Set up Python and uv
+      uses: ./.github/actions/python-uv
+      with:
+        python-version: '3.14'
+
+    - name: Install coverage (no project build needed to read the data)
+      run: |
+        uv venv
+        uv sync --locked --no-install-project --extra dev
+
+    - name: Download both legs' data
+      uses: actions/download-artifact@v4
+      with:
+        pattern: coverage-pg*
+        merge-multiple: true
+
+    - name: Coverage report (fail_under from pyproject) and per-file floors
+      run: |
+        uv run --no-sync coverage combine coverage-pg16.data coverage-pg18.data
+        uv run --no-sync coverage xml
+        uv run --no-sync coverage json -o coverage.json
+        uv run --no-sync coverage report --skip-covered | tail -5
+        uv run --no-sync python scripts/coverage_floors.py --check coverage.json
 
     - name: Upload coverage
       uses: codecov/codecov-action@v5
@@ -154,6 +211,7 @@ jobs:
     # only here: confiture's own suite walks the live command tree, and must see
     # confiture's commands alone.
     runs-on: ubuntu-latest
+    # The floor only: the plugin's tests exercise its CLI seams, not the catalog.
     services:
       postgres:
         image: postgres:16
@@ -210,33 +268,42 @@ jobs:
       run: uv run --no-sync pytest plugins/fraiseql-confiture-pggit/tests -rs --tb=short
 
   plpgsql-check:
-    name: Body analysis (plpgsql_check)
+    name: Body analysis (plpgsql_check, PostgreSQL ${{ matrix.postgres }})
     runs-on: ubuntu-latest
     # No `services:` block: a service takes a pre-built image, and there is no
     # published PostgreSQL image carrying plpgsql_check. The extension ships
-    # with no distribution — not the stock `postgres:16` this repository uses
-    # everywhere else, not `postgres:16-alpine` in docker-compose.yml, not a
+    # with no distribution — not the stock `postgres` images this repository
+    # uses everywhere else, not `postgres:16-alpine` in docker-compose.yml, not a
     # local install — which is why `body_001` skips on every other leg and this
-    # one exists. The base is pinned by digest so the leg is a function of the
-    # commit; the one added layer is the PGDG package.
+    # one exists. Each base is pinned by digest so the leg is a function of the
+    # commit; the one added layer is the PGDG package, built for 16 and for 18.
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['16', '18']
+        include:
+        - postgres: '16'
+          digest: sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
+        - postgres: '18'
+          digest: sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
     steps:
     - uses: actions/checkout@v6
 
     - name: Build a PostgreSQL carrying plpgsql_check
       run: |
         cat > /tmp/Dockerfile.plpgsql-check <<'DOCKERFILE'
-        FROM postgres:16@sha256:1a6ab3f5345eb6dbe04a1349529caabdb0ab09293a09590fad07b2246bfa4b54
+        FROM postgres:${{ matrix.postgres }}@${{ matrix.digest }}
         RUN apt-get update \
-         && apt-get install -y --no-install-recommends postgresql-16-plpgsql-check \
+         && apt-get install -y --no-install-recommends postgresql-${{ matrix.postgres }}-plpgsql-check \
          && rm -rf /var/lib/apt/lists/*
         DOCKERFILE
-        docker build -f /tmp/Dockerfile.plpgsql-check -t confiture-plpgsql-check:16 /tmp
+        docker build -f /tmp/Dockerfile.plpgsql-check -t confiture-plpgsql-check:${{ matrix.postgres }} /tmp
 
     - name: Start it
       run: |
         docker run -d --name plpgsql-check-db \
           -e POSTGRES_USER=confiture -e POSTGRES_PASSWORD=confiture \
-          -e POSTGRES_DB=confiture_test -p 5432:5432 confiture-plpgsql-check:16
+          -e POSTGRES_DB=confiture_test -p 5432:5432 confiture-plpgsql-check:${{ matrix.postgres }}
         for _ in $(seq 1 60); do
           docker exec plpgsql-check-db pg_isready -U confiture && break
           sleep 1
@@ -532,7 +599,7 @@ jobs:
   quality-gate:
     name: Quality Gate ✅
     runs-on: ubuntu-latest
-    needs: [test, pggit-plugin, plpgsql-check, pg-tviews, wheel-python-314, lint, type-check, rust-checks, security]
+    needs: [test, coverage, pggit-plugin, plpgsql-check, pg-tviews, wheel-python-314, lint, type-check, rust-checks, security]
     if: always()
     steps:
       - name: Check quality gate status
@@ -540,6 +607,11 @@ jobs:
           # This job will fail if any of the required jobs failed
           if [[ "${{ needs.test.result }}" != "success" ]]; then
             echo "❌ Tests failed - Quality gate blocked"
+            exit 1
+          fi
+          # Required: the floors are judged on both servers' coverage combined.
+          if [[ "${{ needs.coverage.result }}" != "success" ]]; then
+            echo "❌ Coverage below its floors - Quality gate blocked"
             exit 1
           fi
           # Required: the plugin imports confiture's CLI seams, so a change here
