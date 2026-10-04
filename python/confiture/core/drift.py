@@ -64,11 +64,14 @@ from confiture.core.schema_change import (
     UniqueConstraintDropped,
 )
 from confiture.core.schema_model import (
+    OTHER_OBJECT_KINDS,
+    SCHEMALESS_KINDS,
     TVIEW_OPTIONS,
     Column,
     Constraint,
     Index,
     ObjectRef,
+    OtherObject,
     RoutineKind,
     SchemaModel,
     Signature,
@@ -123,6 +126,8 @@ class DriftType(Enum):
     MISSING_TVIEW = "missing_tview"
     EXTRA_TVIEW = "extra_tview"
     TVIEW_OPTION_MISMATCH = "tview_option_mismatch"
+    MISSING_OBJECT = "missing_object"
+    EXTRA_OBJECT = "extra_object"
     MISSING_GRANT = "missing_grant"
     EXTRA_GRANT = "extra_grant"
     WRONG_OWNER = "wrong_owner"
@@ -145,24 +150,31 @@ class DriftSubject:
     finding is on, ``name`` the column, index, constraint, trigger or routine in
     it — ``None`` for a finding on the relation itself, or for a constraint or
     index the DDL left unnamed (its definition is in ``expected``). A routine's
-    ``arguments`` are its argument types and a grant's ``role`` its grantee.
+    ``arguments`` are its argument types and a grant's ``role`` its grantee. An
+    object no typed section holds names its ``kind`` (``extension``, ``policy``, …,
+    :data:`~confiture.core.schema_model.OTHER_OBJECT_KINDS`), and has no ``schema``
+    when it lives in none.
     """
 
-    schema: str
+    schema: str | None
     relation: str | None = None
     name: str | None = None
     arguments: tuple[str, ...] | None = None
     role: str | None = None
+    kind: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """The parts as the payload's ``subject`` carries them."""
-        return {
+        """The parts as the payload's ``subject`` carries them; ``kind`` only where there is one."""
+        parts: dict[str, Any] = {
             "schema": self.schema,
             "relation": self.relation,
             "name": self.name,
             "arguments": list(self.arguments) if self.arguments is not None else None,
             "role": self.role,
         }
+        if self.kind is not None:
+            parts["kind"] = self.kind
+        return parts
 
 
 @dataclass
@@ -282,6 +294,9 @@ _OBJECT_DRIFT_TYPES: dict[str, tuple[DriftType, DriftType]] = {
     "trigger": (DriftType.MISSING_TRIGGER, DriftType.EXTRA_TRIGGER),
     "tview": (DriftType.MISSING_TVIEW, DriftType.EXTRA_TVIEW),
     **dict.fromkeys(get_args(RoutineKind), (DriftType.MISSING_ROUTINE, DriftType.EXTRA_ROUTINE)),
+    # One generic pair for every kind no typed section holds: ``subject.kind`` says
+    # which, and a severity that does not vary by kind needs no wire name per kind.
+    **dict.fromkeys(OTHER_OBJECT_KINDS, (DriftType.MISSING_OBJECT, DriftType.EXTRA_OBJECT)),
 }
 
 
@@ -357,7 +372,22 @@ def _objects(model: SchemaModel, sections: frozenset[str]) -> list[_Object]:
         for ref, tview in model.tviews.items()
         if "tviews" in sections
     ]
+    found += [
+        _other(ref, obj) for ref, obj in model.other_objects.items() if "other_objects" in sections
+    ]
     return found
+
+
+def _other(ref: ObjectRef, obj: OtherObject) -> _Object:
+    """An object no typed section holds, named by its kind and, where it has one, its schema."""
+    schema = None if obj.kind in SCHEMALESS_KINDS else obj.schema
+    named = obj.name if schema is None else f"{schema}.{obj.name}"
+    return _Object(ref, None, named, named, DriftSubject(schema, None, obj.name, kind=obj.kind))
+
+
+def _kind_label(kind: str) -> str:
+    """How a message names a kind: ``foreign_data_wrapper`` is "Foreign data wrapper"."""
+    return kind.replace("_", " ").capitalize()
 
 
 def _order(obj: _Object) -> str:
@@ -851,7 +881,7 @@ class _Findings:
         """
         sections = frozenset(
             section
-            for section in ("views", "routines", "triggers", "tviews")
+            for section in ("views", "routines", "triggers", "tviews", "other_objects")
             if self.expected.coverage.shared(self.actual.coverage, section)
         )
         report.objects_checked += sum(
@@ -882,7 +912,7 @@ class _Findings:
                     subject=obj.subject,
                     expected=obj.written,
                     actual=None,
-                    message=f"{obj.ref.kind.capitalize()} '{obj.written}' is missing from database",
+                    message=f"{_kind_label(obj.ref.kind)} '{obj.written}' is missing from database",
                 )
             )
         for obj in sorted(extra, key=_order):
@@ -895,7 +925,7 @@ class _Findings:
                     expected=None,
                     actual=obj.catalogued,
                     message=(
-                        f"{obj.ref.kind.capitalize()} '{obj.catalogued}' exists but is not "
+                        f"{_kind_label(obj.ref.kind)} '{obj.catalogued}' exists but is not "
                         "in expected schema"
                     ),
                 )
@@ -1112,9 +1142,17 @@ class SchemaDriftDetector:
         return report
 
     def _kept(self, model: SchemaModel) -> SchemaModel:
-        """*model* without the tables drift ignores."""
+        """*model* without the tables drift ignores, and without the default schema itself.
+
+        A tree puts objects in the default schema without creating it, and a
+        database recreates it (a test database's `public` is a user object), so
+        the schema object is never the tree's to report missing or extra; one the
+        tree writes ``CREATE SCHEMA`` for is compared on both sides, or neither.
+        """
         tables = {ref: t for ref, t in model.tables.items() if not self._ignored(_named(t))}
-        return replace(model, tables=tables)
+        default = ref_for("schema", None, DEFAULT_SCHEMA)
+        others = {ref: o for ref, o in model.other_objects.items() if ref != default}
+        return replace(model, tables=tables, other_objects=others)
 
     def get_live_schema(
         self, schemas: Iterable[str] | None = None, *, objects: bool = False
@@ -1134,6 +1172,7 @@ class SchemaDriftDetector:
             routines=objects,
             views=objects,
             triggers=objects,
+            other_objects=objects,
         )
 
     def compare_with_expected(self, expected: SchemaModel) -> DriftReport:

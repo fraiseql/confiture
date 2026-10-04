@@ -35,12 +35,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from confiture.core.drift import SchemaDriftDetector, parse_expected_schema
+from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import (
     Coverage,
+    OtherObject,
     Routine,
     SchemaModel,
     Trigger,
     View,
+    other_ref,
     routine_ref,
     trigger_ref,
     view_ref,
@@ -68,10 +71,13 @@ def live(*objects: View | Routine | Trigger) -> SchemaModel:
     for obj in objects:
         if isinstance(obj, Routine):
             routines[routine_ref(obj)].append(obj)
+    # The schema the tree creates: a database holding its objects holds it too.
+    core = OtherObject("schema", DEFAULT_SCHEMA, "core")
     return SchemaModel(
         views={view_ref(o): o for o in objects if isinstance(o, View)},
         routines={ref: tuple(found) for ref, found in routines.items()},
         triggers={trigger_ref(o): o for o in objects if isinstance(o, Trigger)},
+        other_objects={other_ref(core): core},
         coverage=Coverage.every(),
     )
 

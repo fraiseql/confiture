@@ -590,6 +590,41 @@ class OtherObject:
     definition: str | None = None
 
 
+#: Every kind an :class:`OtherObject` is — what drift names in ``subject.kind``,
+#: published as an enum in ``_common.schema.json``.
+OTHER_OBJECT_KINDS = (
+    "schema",
+    "extension",
+    "domain",
+    "type",
+    "policy",
+    "rule",
+    "event_trigger",
+    "statistics",
+    "foreign_table",
+    "foreign_data_wrapper",
+    "server",
+    "publication",
+    "conversion",
+    "operator_class",
+    "operator_family",
+    "access_method",
+)
+
+#: The kinds of :data:`OTHER_OBJECT_KINDS` that live in no schema; their
+#: ``OtherObject.schema`` is the default schema their identity folds to, not a place.
+SCHEMALESS_KINDS = frozenset(
+    {
+        "schema",
+        "extension",
+        "event_trigger",
+        "foreign_data_wrapper",
+        "server",
+        "publication",
+        "access_method",
+    }
+)
+
 #: The object kinds a typed section holds; every other tracked kind is an
 #: :class:`OtherObject`.
 TYPED_KINDS = frozenset(

@@ -131,7 +131,9 @@
             "extra_grant",
             "wrong_owner",
             "column_order_mismatch",
-            "constraint_mismatch"
+            "constraint_mismatch",
+            "missing_object",
+            "extra_object"
           ]
         },
         "severity": {
@@ -171,7 +173,7 @@
             "null"
           ],
           "additionalProperties": false,
-          "description": "What the item is about, in parts, never joined (1.26.0, #505). `relation` is the table, view or trigger's table; `name` the column, index, constraint, trigger or routine in it, null for a finding on the relation itself or a constraint or index the DDL left unnamed. A routine carries its argument types in `arguments`, a grant its grantee in `role`.",
+          "description": "What the item is about, in parts, never joined (1.26.0, #505). `relation` is the table, view or trigger's table; `name` the column, index, constraint, trigger or routine in it, null for a finding on the relation itself or a constraint or index the DDL left unnamed. A routine carries its argument types in `arguments`, a grant its grantee in `role`. An object no other type names (missing_object, extra_object) carries its `kind`; `schema` is null for one that lives in no schema (a schema, an extension, an event trigger, a foreign-data wrapper, a server, a publication, an access method), and a policy's or rule's `name` is `table.name`.",
           "required": [
             "schema",
             "relation",
@@ -181,7 +183,10 @@
           ],
           "properties": {
             "schema": {
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "relation": {
               "type": [
@@ -209,6 +214,28 @@
                 "string",
                 "null"
               ]
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "schema",
+                "extension",
+                "domain",
+                "type",
+                "policy",
+                "rule",
+                "event_trigger",
+                "statistics",
+                "foreign_table",
+                "foreign_data_wrapper",
+                "server",
+                "publication",
+                "conversion",
+                "operator_class",
+                "operator_family",
+                "access_method"
+              ],
+              "description": "Present only on missing_object and extra_object: which kind of object, of the kinds no other drift type names. An extra_object is reported only for a kind the expected DDL declares at least one of, in a schema it declares one in — a tree that declares no policy is silent about policies, so a stray policy on such a database is not reported. Compared by existence: a redefined domain or policy is not drift."
             }
           }
         }

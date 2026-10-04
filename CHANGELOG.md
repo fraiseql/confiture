@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Drift reports the objects the model holds by existence: `missing_object` (critical) and
+  `extra_object` (info).** A schema, an extension, a domain, a composite or range type, a
+  policy, a rule, an event trigger, extended statistics, a foreign table, a foreign-data
+  wrapper, a server, a publication, a conversion, an operator class or family and an access
+  method were in the model and compared by `migrate diff`, and drift said nothing of them.
+  One generic pair, with `subject.kind` naming the kind — published as an enum in
+  `_common.schema.json` — rather than a pair per kind: the severity does not vary by kind.
+  `subject.schema` is null for an object that lives in no schema, and `subject.kind` appears
+  only on these items, so every existing payload and golden is byte-identical. An extra one
+  is reported only for a kind the DDL declares, in a schema it declares; the default schema
+  is never reported unless the DDL creates it.
+
 - **A materialised tier for `drift` and `migrate diff --from db`.** A CHECK, an index
   expression, a partial index's predicate and a view's query are stored analysed, so
   compared with a database a tree's could only be said to *exist*: a changed CHECK was no
