@@ -55,6 +55,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ⚠️ **The backup hook's dump is zstd-compressed by `pg_dump` and never passes through
+  confiture's memory: the default file is `<migration>.sql.zst`, no longer `.sql.gz`.**
+  `BackupHook` held the whole plain dump in the deploy process, then a gzipped second copy.
+  `pg_dump --compress=… -f` now writes the file itself, to `<file>.partial`, renamed onto the
+  final name only when it exits 0, so a failed dump leaves nothing and never counts as a
+  backup. `BackupConfig(compression=…)` takes `zstd` (default), `gzip`, `lz4` or `none`,
+  optionally with a level (`zstd:9`); `zstd` and `lz4` need a `pg_dump` client of 16 or
+  newer, and an older one is refused with its version. `compress=True`/`False` still mean
+  `gzip`/`none` and warn (`DeprecationWarning`). The constructor never refuses a value: an
+  unknown method, a bad level, or both settings given fail the hook when it runs, naming the
+  accepted values. Retention prunes every suffix the hook writes, so a `.sql.gz` history is
+  pruned once it writes `.sql.zst`; `pg_dump`'s error has its credentials masked. Restore
+  with `zstd -dc <file> | psql <url>` (gzip: `gunzip -c`).
+
 - ⚠️ **PostgreSQL 16 is the minimum.** Every CI leg runs PostgreSQL 16 (the pg_tviews leg,
   18); none ran 16 before — the main suite, the version matrix, the plpgsql_check image and
   the publish gate ran 15. The documents that named a minimum disagreed (12, 14, and "tested
