@@ -14,8 +14,6 @@ static parser.  We surface that via :meth:`has_dynamic_sql` so callers
 can emit an INFO note rather than silently miss the table.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass, field
 from typing import Any

@@ -10,8 +10,6 @@ on a database applied verbatim from that tree (#301).
 The DDL below is #301's own reproduction.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.inventory import SchemaObject

@@ -13,8 +13,6 @@ body is the text between the ``AS`` quotes on both sides, so a comparison needs 
 PL/pgSQL compiler.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import difflib
 import time

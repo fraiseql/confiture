@@ -1,7 +1,5 @@
 """Pre-migration database backup via pg_dump."""
 
-from __future__ import annotations
-
 import asyncio
 import gzip
 import logging

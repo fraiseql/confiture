@@ -11,8 +11,6 @@ Covers:
 - Render timeout via ``threading.Timer`` (not ``signal.alarm``).
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 import pytest

@@ -6,8 +6,6 @@ loop over a static tuple fans out, one path per item, here and only here;
 ``evaluate`` still refuses a loop variable.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.idempotency.static_eval import ModuleModel, PathV, Refusal, Str, Unknown

@@ -11,8 +11,6 @@ notice this once described is gone, and so is the module that covered it:
 it tested, and this line went on pointing at it.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

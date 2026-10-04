@@ -8,8 +8,6 @@ passwords from ``CREATE``/``ALTER ROLE``. A hash or an obvious placeholder is no
 a finding, and a finding never repeats the secret it found.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.rule_registry import LINT_RULES

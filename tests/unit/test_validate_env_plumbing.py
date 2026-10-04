@@ -15,8 +15,6 @@ functions are patched on their source module because ``migrate_validate``
 imports them lazily.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import pytest

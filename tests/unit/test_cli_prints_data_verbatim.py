@@ -17,8 +17,6 @@ are markup too (#488), is one of:
 Anything else fails here, with its file and line.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

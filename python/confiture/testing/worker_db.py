@@ -19,8 +19,6 @@ The :func:`confiture_worker_db` fixture (in ``pytest_plugin``) is convenience fo
 apps that read the URL lazily; it cannot retro-fix an already-frozen singleton.
 """
 
-from __future__ import annotations
-
 import os
 import re
 from collections.abc import Mapping

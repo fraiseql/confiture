@@ -15,8 +15,6 @@ catalogues, which are descriptions with no `check()` and no caller, and a second
 that is empty — `UNPARSEABLE` was in it until #274 made it a registered rule.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

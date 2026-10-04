@@ -7,8 +7,6 @@ plugin they would not otherwise trust. Name it what it is (an import
 lint), say so when a plugin is loaded, and stop the docs from promising more.
 """
 
-from __future__ import annotations
-
 import importlib
 import logging
 import sys

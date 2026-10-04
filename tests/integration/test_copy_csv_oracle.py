@@ -4,8 +4,6 @@ Each case is loaded by the server (``COPY … FROM STDIN``) and decoded by
 confiture, and the rows must be the same: PostgreSQL is the oracle.
 """
 
-from __future__ import annotations
-
 import random
 
 import psycopg

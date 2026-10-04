@@ -3,8 +3,6 @@
 ``PFLIGHT_TVIEW_BASE_COLUMN`` is PostgreSQL's own dependency on the TVIEW's backing view.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

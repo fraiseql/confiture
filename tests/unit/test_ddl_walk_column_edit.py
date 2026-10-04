@@ -12,8 +12,6 @@ index >= 13 down by one, so a literal ordinal stops matching silently and the
 branch is simply never taken (#192).
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 

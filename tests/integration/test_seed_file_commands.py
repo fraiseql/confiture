@@ -16,8 +16,6 @@ and a non-ASCII character.
 Every test runs in databases of its own.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import shutil

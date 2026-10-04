@@ -7,8 +7,6 @@ Compares the live database schema against a DDL schema file. Requires a config
 at module scope so tests can patch them on this module.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import psycopg

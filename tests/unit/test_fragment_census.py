@@ -14,8 +14,6 @@ record variable's initialiser, one the reader fills from the declaration — and
 each slot it fills is an entry. It runs on each pglast major in the matrix leg.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 from pathlib import Path

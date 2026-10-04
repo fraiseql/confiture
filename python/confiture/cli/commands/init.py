@@ -1,7 +1,5 @@
 """``confiture init``: scaffold a new project's ``db/`` tree."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import typer

@@ -5,8 +5,6 @@ All databases created here use the ``confiture_p2_`` prefix and are dropped in
 fixture teardown.
 """
 
-from __future__ import annotations
-
 import logging
 import shutil
 import threading

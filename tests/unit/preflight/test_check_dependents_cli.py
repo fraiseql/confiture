@@ -7,8 +7,6 @@ Live-DB execution is exercised in integration tests; here we cover:
 - the input validation on the flag value
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

@@ -5,8 +5,6 @@ accented COMMENT, a translated label in a seed) is longer on disk than that, so
 the figure matched neither ``ls`` nor ``wc -c`` nor a CI step comparing bundles.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

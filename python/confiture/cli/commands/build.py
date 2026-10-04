@@ -1,7 +1,5 @@
 """``confiture build``: concatenate the schema tree into one DDL file, or apply it."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any

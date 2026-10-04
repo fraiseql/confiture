@@ -4,8 +4,6 @@ All exceptions raised by Confiture inherit from ConfiturError.
 This allows users to catch all Confiture-specific errors with a single except clause.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any
 
 from confiture.error_codes import ERROR_CODE_REGISTRY, FAILURE

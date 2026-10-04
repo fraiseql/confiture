@@ -8,8 +8,6 @@ classifies the default from the parse tree it holds, so both sides answer
 Requires a running PostgreSQL server accessible via CONFITURE_TEST_DB_URL.
 """
 
-from __future__ import annotations
-
 import psycopg
 
 from confiture.core import live_catalog

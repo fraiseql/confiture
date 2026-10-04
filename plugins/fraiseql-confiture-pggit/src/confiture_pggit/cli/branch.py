@@ -7,8 +7,6 @@ NOTE: pgGit is for DEVELOPMENT and STAGING databases only.
 Do NOT install pgGit on production databases.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

@@ -9,8 +9,6 @@ structural-diff feature preflight doesn't have. (A real structural diff is
 Also asserts the dry-run guide's Python sample imports resolve.
 """
 
-from __future__ import annotations
-
 from doc_snippets import REPO_ROOT, assert_doc_imports_resolve
 
 DOCS_DIR = REPO_ROOT / "docs"

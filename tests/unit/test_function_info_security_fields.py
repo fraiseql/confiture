@@ -1,7 +1,5 @@
 """Unit tests for the security_definer / search_path_pinned fields on FunctionInfo (issue #161)."""
 
-from __future__ import annotations
-
 from dataclasses import replace
 
 from confiture.core.live_catalog import RoutineRow

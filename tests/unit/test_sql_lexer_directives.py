@@ -7,8 +7,6 @@ by its own rule. The lexer reads comment tokens, so only a real comment is a
 directive, and it attaches to the first statement after it.
 """
 
-from __future__ import annotations
-
 from confiture.core.sql_lexer import Directive, comments, directives
 
 

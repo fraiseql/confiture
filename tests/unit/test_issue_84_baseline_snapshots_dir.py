@@ -4,8 +4,6 @@ When a user explicitly passes --auto-detect-baseline, a missing or empty snapsho
 directory should be a hard error (exit 5, configuration failure), not a silent warning.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

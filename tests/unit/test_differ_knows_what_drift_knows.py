@@ -8,8 +8,6 @@ its column was written as ``ADD COLUMN id INTEGER NOT NULL`` — the key lost. E
 test here is one of those, on both policies where both apply.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 
 from confiture.core.differ import SchemaDiffer, Side

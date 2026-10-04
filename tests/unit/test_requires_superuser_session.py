@@ -1,7 +1,5 @@
 """Unit tests for halt-at-first-skip semantics on MigratorSession.up (issue #137)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock
 

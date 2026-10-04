@@ -16,8 +16,6 @@ it refuses — a value that enum does not hold yet — are left as written: the 
 type or value is a difference of its own.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import psycopg

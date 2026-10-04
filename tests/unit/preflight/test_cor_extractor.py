@@ -1,7 +1,5 @@
 """Tests for the CREATE OR REPLACE target extractor."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

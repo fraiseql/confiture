@@ -7,8 +7,6 @@ leaf of the live command tree speaks JSON when it takes ``--json`` or a
 help it writes). The commands that cannot are listed, each with the reason.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from typing import Any
 

@@ -21,8 +21,6 @@ new required parameter appeared that the consumer does not pass. Widening — a 
 optional parameter — is always allowed.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import importlib
 import inspect

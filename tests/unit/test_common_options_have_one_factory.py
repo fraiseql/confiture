@@ -9,8 +9,6 @@ default is a different lookup: what it fixes is the flag,
 its short form and its help.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

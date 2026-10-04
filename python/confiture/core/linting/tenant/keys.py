@@ -23,8 +23,6 @@ Every fact is read from the model: :class:`~confiture.core.schema_model.Constrai
 as ``ddl_walk.read_constraint`` left it, ``ALTER TABLE … ADD CONSTRAINT`` folded in.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 

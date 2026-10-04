@@ -16,8 +16,6 @@ constant joins this guard by being declared rather than by someone remembering
 to extend a parallel table here.
 """
 
-from __future__ import annotations
-
 import re
 import tokenize
 from pathlib import Path

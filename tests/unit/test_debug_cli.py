@@ -8,8 +8,6 @@ the table/json rendering tests elsewhere — it is intentionally not an error
 envelope.
 """
 
-from __future__ import annotations
-
 import json
 from unittest.mock import patch
 

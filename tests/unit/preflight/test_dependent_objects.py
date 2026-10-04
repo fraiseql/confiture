@@ -1,7 +1,5 @@
 """Tests for the dependent-objects preflight check."""
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.models.preflight import (

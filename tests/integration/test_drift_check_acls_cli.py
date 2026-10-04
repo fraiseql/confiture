@@ -3,8 +3,6 @@
 Drives the Typer CLI end-to-end against a real Postgres instance.
 """
 
-from __future__ import annotations
-
 import json
 import textwrap
 from collections.abc import Generator

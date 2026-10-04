@@ -110,7 +110,6 @@ python3 -c "from sqlglot import parse_one; print('sqlglot installed')"
 ```python
 """Validate INSERT statements using semantic AST analysis."""
 
-from __future__ import annotations
 
 from sqlglot import exp, parse_one
 

@@ -7,8 +7,6 @@ A `DependentObject` is a live object that depends on the target. A
 `DependentAnalysisReport` is the aggregate result.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any

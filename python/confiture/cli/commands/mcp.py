@@ -6,8 +6,6 @@ refuses a request without it. None is generated: a token nobody chose is one
 nobody holds, and printing it would put it in a log.
 """
 
-from __future__ import annotations
-
 import typer
 
 from confiture.cli.error_json import fail

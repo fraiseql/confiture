@@ -4,8 +4,6 @@ Each check names the guide, the sentence and the code fact it rests on, so a cha
 either side lands here before it lands on a reader.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

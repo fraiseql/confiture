@@ -15,8 +15,6 @@ way ``format_type`` writes it on the other:
 * a type ``format_type`` quotes is the type the DDL named without quotes.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.inventory import (

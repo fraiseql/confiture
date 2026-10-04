@@ -6,8 +6,6 @@ statistics hold for the tables it touches, and its findings; whatever cannot be
 known is ``null``. ``.py`` migrations are unclassified by construction.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any

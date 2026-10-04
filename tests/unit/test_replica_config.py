@@ -1,7 +1,5 @@
 """Tests for replica-safety config (issue #139)."""
 
-from __future__ import annotations
-
 from confiture.config.environment import Environment, InfrastructureConfig, MigrationConfig
 
 

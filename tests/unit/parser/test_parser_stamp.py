@@ -7,8 +7,6 @@ grammar it embeds, and every JSON envelope — payload or error — carries
 ``parser: {"pglast": "<x.y>", "pg_major": <N>}``.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from importlib import metadata

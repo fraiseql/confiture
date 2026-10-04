@@ -13,8 +13,6 @@ has ``connect_url`` and ``DatabaseError`` for the first two; the SQL moved to
 ``core``.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

@@ -38,8 +38,6 @@ because the callers disagree on purpose — a drift check asks what the *tree*
 holds, an introspector what the *database* holds.
 """
 
-from __future__ import annotations
-
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace

@@ -16,8 +16,6 @@ into ``overrides/functions/sandbox/`` and re-run scaffold; that file's slot
 will report ``action="skip"`` instead of being overwritten.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.scaffold.emitter import EmittedFunction

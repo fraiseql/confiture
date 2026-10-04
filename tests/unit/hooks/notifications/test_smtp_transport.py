@@ -10,8 +10,6 @@ surface it.  ``_login_safely`` is the scrubbing wrapper that pins this
 boundary.
 """
 
-from __future__ import annotations
-
 import smtplib
 from datetime import UTC, datetime
 from unittest import mock

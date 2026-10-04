@@ -15,8 +15,6 @@ own docstring: *a column type must keep [typmods] or ``varchar(50)`` and
 ``varchar(100)`` compare equal*.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 
 import pglast

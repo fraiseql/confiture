@@ -16,8 +16,6 @@ This module requires ``pglast``, a dependency since 0.50.0. It raises
 not installed.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pglast.parser

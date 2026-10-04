@@ -4,8 +4,6 @@ Uses capsys for real FD-level stdout/stderr separation (CliRunner cannot
 separate the streams).
 """
 
-from __future__ import annotations
-
 import json
 
 import pytest

@@ -7,8 +7,6 @@ Each module has one home now; the old paths are thin shims for one release
 (removed at 1.0.0) and nothing inside the package uses them.
 """
 
-from __future__ import annotations
-
 import ast
 import importlib
 import inspect

@@ -21,8 +21,6 @@ normalisation (trailing-whitespace trim) before comparing — aggressive
 normalisation is unnecessary and could mask real drift.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import difflib
 import hashlib

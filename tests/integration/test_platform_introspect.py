@@ -6,8 +6,6 @@ created and not yet committed. What comes back is the model and nothing of the
 driver's, and its wire is the published one.
 """
 
-from __future__ import annotations
-
 import json
 
 import psycopg

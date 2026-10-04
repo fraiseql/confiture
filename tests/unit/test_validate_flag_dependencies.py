@@ -4,8 +4,6 @@ The CLI guard test can only see the exit code (the error console is not
 captured by the runner), so the message is pinned here, on the function.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

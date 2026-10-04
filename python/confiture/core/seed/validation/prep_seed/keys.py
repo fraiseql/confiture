@@ -14,8 +14,6 @@ A resolver resolves a key where it matches the key's UUID to the target's
 which is how a self-reference is resolved.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from typing import Any
 

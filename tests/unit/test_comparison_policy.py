@@ -8,8 +8,6 @@ comparison runs, not prose a test fixture reads: dropping any one of them change
 what the normalisation says about a model that exercises it.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 from pathlib import Path
 

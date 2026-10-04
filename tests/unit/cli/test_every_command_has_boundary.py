@@ -5,8 +5,6 @@ The boundary re-raises ``typer.Exit`` and routes everything else through
 it by omission.
 """
 
-from __future__ import annotations
-
 import pytest
 import typer
 

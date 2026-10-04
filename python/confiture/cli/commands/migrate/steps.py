@@ -1,7 +1,5 @@
 """``confiture migrate steps``: the online runner's checkpoints — list them, resume one."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Annotated, Any
 

@@ -6,8 +6,6 @@ A regex over ``INSERT … VALUES`` text saw no ``COPY`` at all, stopped at the f
 value holding a hyphen for a UUID. Each test below is one of those, inverted.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

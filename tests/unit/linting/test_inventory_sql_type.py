@@ -16,8 +16,6 @@ The dimension collapse belongs here and not in ``canonical_type``:
 IDENTICAL for a change that rewrites every page.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.schema_read import read_text

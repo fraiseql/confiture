@@ -26,8 +26,6 @@ Three rules shape the code:
 pglast is the one parser; a statement it rejects yields an unclassified entry.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 import pglast.parser

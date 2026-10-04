@@ -5,8 +5,6 @@ identifiers, so a view whose name holds a quote, a hyphen or a whole statement i
 dropped and recreated as itself, and nothing else runs.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 
 import psycopg

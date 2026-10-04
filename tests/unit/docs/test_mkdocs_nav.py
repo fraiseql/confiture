@@ -7,8 +7,6 @@ pages unreachable. Every local nav entry must exist under `docs/`, and every
 so a page cannot be orphaned or invented without this failing.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

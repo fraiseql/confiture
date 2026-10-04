@@ -17,8 +17,6 @@ would take. Shrinking a published enum breaks a consumer with an exhaustive
 not deleted.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

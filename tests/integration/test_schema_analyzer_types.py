@@ -10,8 +10,6 @@ verbatim from that DDL.
 this column", and it is the same vocabulary the DDL is written in.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

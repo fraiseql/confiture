@@ -14,8 +14,6 @@ because the whole point of ``apply-as`` is to use a different role
 than the default migrator.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import typer

@@ -100,8 +100,6 @@ there is nothing to reconstruct and no guess worth making. It is written down
 because the next reader deserves to know it was looked at.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass

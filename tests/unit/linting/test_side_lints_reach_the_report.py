@@ -8,8 +8,6 @@ see them either. They go through the same report as every other rule now, which
 is also what lets the gate read them.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

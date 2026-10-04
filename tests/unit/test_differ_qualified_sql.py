@@ -10,8 +10,6 @@ syntax error is exactly the failure mode a qualifier introduces, and a string
 assertion cannot see one.
 """
 
-from __future__ import annotations
-
 from typing import ClassVar
 
 import pglast

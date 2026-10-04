@@ -15,8 +15,6 @@ The secret is mandatory. There is no default key: a well-known default is a
 public key, and a public key is no key.
 """
 
-from __future__ import annotations
-
 import hashlib
 import hmac
 import os

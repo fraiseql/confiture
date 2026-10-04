@@ -12,8 +12,6 @@ path, so they now default on the model itself.  Build safety is unchanged:
 ``SchemaBuilder`` independently rejects an empty ``include_dirs``.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.config.environment import Environment

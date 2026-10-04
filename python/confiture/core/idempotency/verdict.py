@@ -7,8 +7,6 @@ gate, never the status: ``--strict-cor`` makes an info-severity finding blocking
 ``--fail-on-unanalyzable`` makes *unverified* fail.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

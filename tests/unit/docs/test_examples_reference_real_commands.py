@@ -20,8 +20,6 @@ The extraction and resolution live in :mod:`command_truth`, shared with
 the record of what it was built to catch.
 """
 
-from __future__ import annotations
-
 import itertools
 
 import pytest

@@ -11,8 +11,6 @@ Reviewer extras from the 2026-09-06 review:
   ``git ls-tree`` is never handed an option-shaped ref.
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock

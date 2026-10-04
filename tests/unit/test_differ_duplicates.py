@@ -13,8 +13,6 @@ The answer is ``core.linting.duplicates.wins`` — ``build_001``'s own rule — 
 a second one written here.
 """
 
-from __future__ import annotations
-
 from confiture.core.differ import SchemaDiffer
 
 

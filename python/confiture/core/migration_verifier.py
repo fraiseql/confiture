@@ -15,8 +15,6 @@ File format contract:
   the state most sidecars are in on the day they are created (#311)
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

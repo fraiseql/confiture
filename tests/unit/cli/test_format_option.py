@@ -7,8 +7,6 @@ with the error on stderr and nothing on stdout. Commands are discovered from
 the Typer app so a new command cannot opt out by omission.
 """
 
-from __future__ import annotations
-
 import pytest
 import typer
 from typer.testing import CliRunner

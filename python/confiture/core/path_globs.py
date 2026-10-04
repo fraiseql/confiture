@@ -24,8 +24,6 @@ exclude a ``.bak`` at the root of the include directory and ``temp/*.sql`` would
 exclude one at any depth (issue #256).
 """
 
-from __future__ import annotations
-
 import re
 from collections.abc import Iterable
 from functools import lru_cache

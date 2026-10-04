@@ -3,8 +3,6 @@
 Issue #40
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )

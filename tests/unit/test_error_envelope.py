@@ -4,8 +4,6 @@ The `error` object IS the unified inner issue object: {severity, code, message, 
 details, migration, file, line}. Required keys are always present (nullable).
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.cli.error_json import coerce_to_confiture_error, emit_error_json

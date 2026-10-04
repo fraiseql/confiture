@@ -4,8 +4,6 @@ Tests the orchestration of all 5 validation levels with progressive execution,
 violation accumulation, and early exit on CRITICAL violations.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

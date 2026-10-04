@@ -18,8 +18,6 @@ final table's ``REFERENCES`` names, in that ``INSERT`` or a second-pass
 language) is a finding naming it, never a clean result.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from confiture.core.ddl_walk import relation_parts, walk_nodes

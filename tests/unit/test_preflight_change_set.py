@@ -6,8 +6,6 @@ the shapes, fraisier parses them. What is pinned here is the *payload* — the
 `window_safe` (#154) exactly where it was.
 """
 
-from __future__ import annotations
-
 import json
 from unittest.mock import MagicMock, patch
 

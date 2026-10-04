@@ -12,8 +12,6 @@ surface. This covers all four paths it can take, because they are separate
 * no ledger without that flag — the error envelope, ``PRECON_1001``.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

@@ -12,8 +12,6 @@ Invoking the *library* under a command does not count, and that is the point:
 stay that way. It is empty: every command confiture ships is run by its command line.
 """
 
-from __future__ import annotations
-
 import ast
 
 from tests.unit.docs.command_truth import REPO_ROOT, resolve, root

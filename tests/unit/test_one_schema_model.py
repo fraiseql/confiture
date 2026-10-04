@@ -15,8 +15,6 @@ one-lexer and one-canonicaliser guards list theirs; an entry that matches nothin
 fails, so the list shrinks as models retire.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

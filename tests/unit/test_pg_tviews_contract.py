@@ -6,8 +6,6 @@ database whose pg_tviews answers another number, or has no such function (0.1.0-
 and earlier), is refused before anything is read from it or applied to it.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core import live_catalog

@@ -12,8 +12,6 @@ the only way a password reaches a libpq client is ``PGPASSWORD``.
   instead of marking it — a second implementation is a second place to drift.
 """
 
-from __future__ import annotations
-
 from unittest.mock import AsyncMock, patch
 
 import pytest

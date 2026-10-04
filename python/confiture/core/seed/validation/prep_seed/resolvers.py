@@ -12,8 +12,6 @@ already folded an unquoted name and kept a quoted one's case, so
 :attr:`Resolver.identifier` calls exactly the routine the DDL created.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 
 from psycopg import sql

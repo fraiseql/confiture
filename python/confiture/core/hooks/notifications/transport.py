@@ -19,8 +19,6 @@ current ``HookRegistry``; async transports buy nothing today and would
 double the dependency footprint.
 """
 
-from __future__ import annotations
-
 import logging
 import smtplib
 import ssl

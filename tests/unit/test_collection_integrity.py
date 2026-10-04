@@ -9,8 +9,6 @@ test module builds its parametrizations from files the repository tracks —
 paths under ``tests/`` — never from a filesystem walk of the repo root.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

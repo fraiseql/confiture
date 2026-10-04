@@ -1,7 +1,5 @@
 """Unit tests for lock-holder identity collection (issue #147)."""
 
-from __future__ import annotations
-
 import os
 import socket
 

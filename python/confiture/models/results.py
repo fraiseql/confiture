@@ -5,8 +5,6 @@ results in JSON/CSV formats. These models ensure consistent output
 across all commands that support structured output.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path

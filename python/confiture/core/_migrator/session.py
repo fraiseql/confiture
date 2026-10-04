@@ -16,8 +16,6 @@ of each signature — the ``Args:`` block, the forwarding call, and the fence in
 ``docs/api/migrator.md`` — against the signature itself.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType

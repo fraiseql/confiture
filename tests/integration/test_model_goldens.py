@@ -10,8 +10,6 @@ Recorded by ``scripts/refresh_model_goldens.py --write --only model``; a refresh
 names its reason in ``CHANGELOG.md`` under ``## [Unreleased]``.
 """
 
-from __future__ import annotations
-
 from test_diff_goldens import _explain, goldens
 
 

@@ -7,8 +7,6 @@ discriminator; a uniqueness that is deliberately platform-wide is written as its
 own ``CREATE UNIQUE INDEX`` under ``-- confiture:tenant-global <reason>``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

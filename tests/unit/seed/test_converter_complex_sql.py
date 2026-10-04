@@ -3,8 +3,6 @@
 Add detection for SQL patterns that cannot be converted.
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
 

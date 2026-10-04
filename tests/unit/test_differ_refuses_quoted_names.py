@@ -7,8 +7,6 @@ written. A crafted name (``"v; DROP TABLE victim; --"``) never reaches a
 generated statement.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

@@ -7,8 +7,6 @@ never reported. ``apply_seeds`` loaded the top level of the tree
 ``builder.files_under``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

@@ -11,8 +11,6 @@ sides of it: one schema whose worst finding is an `error`, one whose worst is a
 `warning`.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

@@ -7,8 +7,6 @@ root and reported as escaping the root from any other cwd. Every scenario
 below is one the three consumers must now agree on.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

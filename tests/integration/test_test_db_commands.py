@@ -24,8 +24,6 @@ the server reads only names with that prefix, and teardown drops only the names
 the test created. ``prune`` is scoped by its template, which carries the prefix.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import pwd

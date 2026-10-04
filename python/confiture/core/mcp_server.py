@@ -12,8 +12,6 @@ name no other tool holds: a routine whose name a built-in or another routine's
 tool already holds is listed as ``<name>__<oid>``.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import sys

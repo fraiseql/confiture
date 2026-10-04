@@ -13,8 +13,6 @@ needs no CORS preflight, and the MCP transport's DNS-rebinding rule is an
 ``Origin`` check.
 """
 
-from __future__ import annotations
-
 import json
 import sys
 

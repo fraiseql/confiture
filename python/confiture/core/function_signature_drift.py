@@ -23,8 +23,6 @@ it was read from: consumers key their alert state on these strings, and one
 routine is one string.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import time
 from collections import defaultdict

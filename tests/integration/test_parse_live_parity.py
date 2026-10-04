@@ -13,8 +13,6 @@ into a dict keyed by strings and the parse side into three unrelated models, so
 as drift.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable
 from pathlib import Path

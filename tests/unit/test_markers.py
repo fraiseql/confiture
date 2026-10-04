@@ -9,8 +9,6 @@ fails with the load on the machine, so it runs only when asked for
 (``-m benchmark``), never inside the default gate.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 import tomllib

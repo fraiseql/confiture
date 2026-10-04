@@ -16,8 +16,6 @@ does a decision about a member pglast no longer defines. confiture supports one
 pglast major, so no member is tolerated as defined by only part of a range.
 """
 
-from __future__ import annotations
-
 from pglast.enums.parsenodes import ConstrType
 
 from confiture.core._pglast_enums import REQUIRED_MEMBERS

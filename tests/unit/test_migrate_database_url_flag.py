@@ -5,8 +5,6 @@ malformed-DSN validation, and the override-only path reaching a real
 connection attempt (which fails fast against an unreachable DSN → exit 3).
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from unittest.mock import patch

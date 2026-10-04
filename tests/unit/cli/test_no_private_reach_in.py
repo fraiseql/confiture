@@ -4,8 +4,6 @@
 implementation detail. What the CLI needs is public or moved to where the CLI is.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

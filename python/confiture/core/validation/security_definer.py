@@ -14,8 +14,6 @@ Default severity is ``warning`` (advisory, exit 0). Set
 check a hard CI gate (exit 1 when ``has_errors``).
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING

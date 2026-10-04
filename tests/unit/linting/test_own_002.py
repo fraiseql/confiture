@@ -14,8 +14,6 @@ AST-only, and pglast is a dependency — the rule always runs. There is
 no skip notice: a file pglast rejects is reported rather than passed over.
 """
 
-from __future__ import annotations
-
 import textwrap
 from pathlib import Path
 

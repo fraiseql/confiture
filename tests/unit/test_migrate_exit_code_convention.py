@@ -6,8 +6,6 @@ registry-contract test in test_exit_code_convention.py by exercising the real
 CLI/connection paths that produce those numbers.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import patch
 

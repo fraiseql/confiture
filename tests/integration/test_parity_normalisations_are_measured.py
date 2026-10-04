@@ -37,8 +37,6 @@ statement writes no ``USING`` is ``btree`` on both sides, because PostgreSQL's
 grammar fills in the default before the parse tree is built.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 import psycopg

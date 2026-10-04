@@ -5,8 +5,6 @@ DB needed for the non-checksum-guard tests — the helper degrades to "no
 applied migrations" when it can't open a connection).
 """
 
-from __future__ import annotations
-
 import json
 import textwrap
 from pathlib import Path

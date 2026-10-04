@@ -6,8 +6,6 @@ each model carries its :class:`Coverage`: a tree covers every section, a live
 read the sections it was asked for, a model built by hand the structural ones.
 """
 
-from __future__ import annotations
-
 from confiture.core.schema_model import SECTIONS, Coverage, SchemaModel
 from confiture.core.schema_read import read_text
 

@@ -10,8 +10,6 @@ hint pointing at the most likely root cause. Hints are:
 Hints never change the exit code.
 """
 
-from __future__ import annotations
-
 import io
 import json
 from pathlib import Path

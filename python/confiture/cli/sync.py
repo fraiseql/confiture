@@ -27,8 +27,6 @@ guide's "Basic sync"; the warning makes the risk legible (text → stderr, JSON 
 the ``warnings`` array).
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import typer

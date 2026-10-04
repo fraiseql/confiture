@@ -8,8 +8,6 @@ is rewritten, so the ratchet only ever tightens; ``--write-baseline``
 creates or resets it.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

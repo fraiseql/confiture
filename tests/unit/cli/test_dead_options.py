@@ -7,8 +7,6 @@ the ``BatchConfig`` to each migration), ``--verbose`` (debug logging),
 --benchmark`` and ``seed validate --mode``.
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch

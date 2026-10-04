@@ -4,8 +4,6 @@ Split out of ``session.py``. Every function takes the
 ``MigratorSession`` as its first argument; the session's methods delegate here.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from confiture.exceptions import ConfigurationError, MigrationError

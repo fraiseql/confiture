@@ -5,8 +5,6 @@ privilege, grantee) and the migration(s) inspected — not the old generic
 ".up.sql was not staged" text — and must surface degradation notes.
 """
 
-from __future__ import annotations
-
 import json
 from contextlib import contextmanager
 from pathlib import Path

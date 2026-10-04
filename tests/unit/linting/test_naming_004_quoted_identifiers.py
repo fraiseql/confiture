@@ -6,8 +6,6 @@ error, reported once per object, spelled as SQL writes it, with a snake_case
 name that needs no quotes as the fix. A dotted name is ``naming_003``'s.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.gate import Threshold

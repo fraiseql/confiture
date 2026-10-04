@@ -6,8 +6,6 @@ generates from an empty current schema with version ``20260101000000``. Changing
 either side is a contract change and needs a CHANGELOG line.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.desired_state import load_desired_state

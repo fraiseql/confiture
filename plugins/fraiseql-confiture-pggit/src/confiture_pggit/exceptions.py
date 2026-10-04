@@ -5,8 +5,6 @@ All pgGit exceptions inherit from PgGitError, which itself inherits
 from ConfiturError, allowing unified exception handling.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from confiture.exceptions import ConfiturError

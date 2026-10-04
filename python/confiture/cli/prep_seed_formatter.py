@@ -4,8 +4,6 @@ Handles output formatting in text/JSON/CSV formats with rich tables and
 severity-based grouping.
 """
 
-from __future__ import annotations
-
 import csv
 from io import StringIO
 from pathlib import Path

@@ -1,7 +1,5 @@
 """Tests for two-pass FK emission in SchemaBuilder (issue #94)."""
 
-from __future__ import annotations
-
 from confiture.core.builder import SchemaBuilder
 
 

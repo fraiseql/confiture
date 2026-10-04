@@ -11,8 +11,6 @@ A statement level 1 cannot check is never passed over in silence: it is an
 statement of its kind writes no row to check.
 """
 
-from __future__ import annotations
-
 from bisect import bisect_left
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass

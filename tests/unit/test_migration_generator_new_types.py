@@ -1,7 +1,5 @@
 """MigrationGenerator: delegate 13 new change types via DifferSQLGenerator."""
 
-from __future__ import annotations
-
 from confiture.core.migration_generator import MigrationGenerator
 from confiture.core.schema_change import (
     CheckConstraintAdded,

@@ -6,8 +6,6 @@ The CLI's ``--schema-only`` filtered include dirs by the substring ``"seed"``
 and counted files with an exact-component match — two other answers.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

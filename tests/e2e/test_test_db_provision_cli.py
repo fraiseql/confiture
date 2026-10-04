@@ -10,8 +10,6 @@ psql-applier → error-handler wiring that the core-level tests bypass:
 Requires a reachable local PostgreSQL and `psql` on PATH; skips cleanly otherwise.
 """
 
-from __future__ import annotations
-
 import shutil
 
 import psycopg

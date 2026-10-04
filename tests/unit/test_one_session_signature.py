@@ -35,8 +35,6 @@ entry fails, and an entry naming a verb that no longer delegates fails too, as i
 the one-lexer and one-path-matcher guards.
 """
 
-from __future__ import annotations
-
 import ast
 import inspect
 import re

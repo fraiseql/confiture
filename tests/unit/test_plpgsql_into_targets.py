@@ -10,8 +10,6 @@ may also *substitute* a declared variable's type with ``text``; it is still the
 compiler that decides, one substitution at a time, which are needed.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 

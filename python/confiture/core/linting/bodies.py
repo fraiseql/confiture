@@ -20,8 +20,6 @@ code, the state and what to do about it — and the gate reads those, so a
 threshold the skipped rule could have reached does not exit 0.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any

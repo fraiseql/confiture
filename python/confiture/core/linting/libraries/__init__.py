@@ -1,7 +1,5 @@
 """Compliance and best-practices rule libraries."""
 
-from __future__ import annotations
-
 from .gdpr import GDPRLibrary
 from .general import GeneralLibrary
 from .hipaa import HIPAALibrary

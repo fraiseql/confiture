@@ -5,8 +5,6 @@ the regex backtracks forever, or the pattern reaches outside the directory it
 is relative to — and both are cheap to make impossible.
 """
 
-from __future__ import annotations
-
 import time
 from pathlib import Path, PurePosixPath
 

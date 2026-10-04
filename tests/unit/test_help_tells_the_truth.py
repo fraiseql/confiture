@@ -6,8 +6,6 @@ the source of truth — the drift kinds ``DriftType`` can report, the rule catal
 ``--list-rules`` prints — and cannot drift from it again.
 """
 
-from __future__ import annotations
-
 import re
 
 from confiture.cli.commands.lint import lint

@@ -20,8 +20,6 @@ instead. The identity is the fold; the *spelling* an object prints is
 qualifier the author did not write.
 """
 
-from __future__ import annotations
-
 import re
 from functools import cache
 

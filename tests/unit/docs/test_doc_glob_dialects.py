@@ -5,8 +5,6 @@ the ones issue #256 measured; a prose description of what they exclude is worth
 nothing unless something runs them.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

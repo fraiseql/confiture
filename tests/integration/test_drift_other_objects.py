@@ -9,8 +9,6 @@ with ``subject.kind`` naming which. The pair is generic on purpose: escalation p
 kind is ``subject.kind``'s, and a uniform severity needs no wire name per kind.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable
 from pathlib import Path

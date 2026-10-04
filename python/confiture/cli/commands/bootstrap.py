@@ -24,8 +24,6 @@ Operational warning
 Run during a maintenance window.  See ``docs/guides/bootstrap.md``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import typer

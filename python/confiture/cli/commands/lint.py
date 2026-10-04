@@ -1,7 +1,5 @@
 """``confiture lint``: the schema linter, its rule selection, gate and baseline."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Annotated, Any
 

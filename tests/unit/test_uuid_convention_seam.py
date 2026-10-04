@@ -21,8 +21,6 @@ End-to-end workflow ("confiture build → fraiseql-data seed → confiture
 seed-validate") is documented in ``docs/guides/prep-seed-validation.md``.
 """
 
-from __future__ import annotations
-
 import re
 import uuid
 from pathlib import Path

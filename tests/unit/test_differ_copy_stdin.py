@@ -15,8 +15,6 @@ SQL-looking fragments, so they must be stripped as a block (COPY statement
 through the ``\\.`` terminator), not statement-split.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.differ import SchemaDiffer

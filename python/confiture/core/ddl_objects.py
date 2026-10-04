@@ -22,8 +22,6 @@ rendering: they say how the statement behaves when the object already exists,
 not what the object is.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass

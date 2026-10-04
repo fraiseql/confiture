@@ -16,8 +16,6 @@ The archived files are never read: the ledger's own checksums are what the diges
 is compared with.
 """
 
-from __future__ import annotations
-
 import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass

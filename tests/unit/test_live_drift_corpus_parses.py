@@ -8,8 +8,6 @@ a parse error wearing an empty expectation, so it is checked here first, where
 no server is needed.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pglast

@@ -8,8 +8,6 @@ nothing about tenants. A malformed file is refused as a malformed environment fi
 is, ``CONFIG_001`` (#468).
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator

@@ -1,7 +1,5 @@
 """``confiture introspect``: a live database's tables and relationships."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import typer

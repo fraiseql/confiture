@@ -10,8 +10,6 @@ overloads and the verdict are the engine's, and the module renders the answer. T
 fails on one of them comparing two values itself, or not asking the engine.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

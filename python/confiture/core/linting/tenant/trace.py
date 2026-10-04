@@ -19,8 +19,6 @@ It is the only module that walks a ``SELECT``'s target list to say where an outp
 column comes from (``tests/unit/test_one_column_tracer.py``).
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol

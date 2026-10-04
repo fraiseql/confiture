@@ -7,8 +7,6 @@ Provides:
 - Full observability infrastructure (tracing, circuit breakers)
 """
 
-from __future__ import annotations
-
 from .base import Hook, HookError, HookExecutor, HookResult
 from .context import (
     ExecutionContext,

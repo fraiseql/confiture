@@ -6,8 +6,6 @@ back on its last dot, so ``REFERENCES app."a.b"`` named table ``b`` in schema
 ``app.a``. Now the parts come from the parser as parts and stay apart.
 """
 
-from __future__ import annotations
-
 import json
 
 import pglast

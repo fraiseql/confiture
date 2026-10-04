@@ -1,7 +1,5 @@
 """Integration tests for lock-holder identity metadata (issue #147)."""
 
-from __future__ import annotations
-
 import os
 import socket
 import time

@@ -8,8 +8,6 @@ This is a key component of the pgGit integration: pgGit is used for
 development coordination, then migrations are generated for production.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path

@@ -1,7 +1,5 @@
 """What ``confiture init`` writes: package templates, copied under the project's ``db/``."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.scaffold.project import scaffold

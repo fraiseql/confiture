@@ -6,8 +6,6 @@ Validates by actually executing seeds and transformations.
 Catches runtime issues that static analysis can't detect.
 """
 
-from __future__ import annotations
-
 import contextlib
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager

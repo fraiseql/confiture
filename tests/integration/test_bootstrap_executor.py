@@ -5,8 +5,6 @@ provisions a throwaway database, runs the planner + executor, and
 verifies the post-state in pg_catalog.
 """
 
-from __future__ import annotations
-
 from collections.abc import Generator
 
 import psycopg

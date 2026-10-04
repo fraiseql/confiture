@@ -1,7 +1,5 @@
 """The whitelisted pure ``str`` methods and f-strings the evaluator can fold."""
 
-from __future__ import annotations
-
 import ast
 from typing import TYPE_CHECKING
 

@@ -1,7 +1,5 @@
 """Which tables a change set touches are large enough to name, without a database."""
 
-from __future__ import annotations
-
 from confiture.core.large_tables import LARGE_TABLE_THRESHOLD, LargeTable, large_tables, table_of
 
 ESTIMATES = {

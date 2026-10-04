@@ -8,8 +8,6 @@ answers as if the schema were empty. Each reader below is asked the same
 question twice, once with the block and once without, and must answer alike.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from typing import Any
 

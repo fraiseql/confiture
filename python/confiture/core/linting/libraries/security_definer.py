@@ -33,8 +33,6 @@ scan will false-positive.  The live catalog path (``proconfig``) is
 authoritative for this case and will correctly report it as pinned.
 """
 
-from __future__ import annotations
-
 import fnmatch
 from dataclasses import dataclass
 from pathlib import Path

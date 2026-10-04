@@ -32,8 +32,6 @@ PostgreSQL 9.1); with it off, ``psql`` would treat *more* text as string
 literal than the scanner does, so the disagreement can only over-report.
 """
 
-from __future__ import annotations
-
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path

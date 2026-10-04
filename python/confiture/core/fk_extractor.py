@@ -14,8 +14,6 @@ key the model cannot hold whole (``ddl_walk.model_holds``) stays where it was
 written, as does every key of a statement the parser rejects.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any

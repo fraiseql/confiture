@@ -4,8 +4,6 @@ This module coordinates running all validation levels (1-5) sequentially,
 accumulating violations, and optionally stopping early on CRITICAL violations.
 """
 
-from __future__ import annotations
-
 import contextlib
 from collections.abc import Iterator
 from dataclasses import dataclass, field

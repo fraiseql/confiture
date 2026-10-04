@@ -7,8 +7,6 @@ reader copies verbatim actually works. The legacy top-level ``migration_table``
 key (rejected by ``_reject_legacy_migration_table``) must never reappear.
 """
 
-from __future__ import annotations
-
 import yaml
 from doc_snippets import fenced_after_anchor, read_doc
 

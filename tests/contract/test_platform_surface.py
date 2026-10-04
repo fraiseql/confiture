@@ -12,8 +12,6 @@ against the published ``schema-model.schema.json``, and ``from_json`` gives back
 the model it was written from, for every tree the model goldens record.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import inspect
 import json

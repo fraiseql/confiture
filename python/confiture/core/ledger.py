@@ -29,8 +29,6 @@ buy nothing and would put an unhandled psycopg exception on the hot ledger path
 The asymmetry is the point, not an oversight.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from dataclasses import dataclass

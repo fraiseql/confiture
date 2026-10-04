@@ -1,7 +1,5 @@
 """Validate ``confiture lint --list-rules --format json`` against its schema (#150)."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

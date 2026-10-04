@@ -12,8 +12,6 @@ go unnoticed while every higher-level test stayed green — the broad ``except``
 returned the default and the output looked right.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

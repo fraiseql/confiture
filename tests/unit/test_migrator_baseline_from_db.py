@@ -8,8 +8,6 @@ warnings to surface.
 Issue #119.
 """
 
-from __future__ import annotations
-
 import pytest
 
 

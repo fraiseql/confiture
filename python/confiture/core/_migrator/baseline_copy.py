@@ -14,8 +14,6 @@ generation).  The IO parts (opening the source connection, executing
 INSERTs against the target) live on :meth:`MigrationEngine.baseline_from_db`.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
 

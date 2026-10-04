@@ -14,8 +14,6 @@ project-root-confined resolver shared with the runtime.
 The extractor never imports or executes the migration file.
 """
 
-from __future__ import annotations
-
 import ast
 from dataclasses import dataclass
 from enum import Enum

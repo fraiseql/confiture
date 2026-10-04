@@ -3,8 +3,6 @@
 All tests use pytest's ``tmp_path`` fixture.  No database required.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

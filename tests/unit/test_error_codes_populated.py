@@ -1,7 +1,5 @@
 """Tests that public-API raise sites populate error_code correctly."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

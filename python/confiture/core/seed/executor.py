@@ -10,8 +10,6 @@ rows go through the driver's ``COPY`` protocol — the file loads the same way i
 would through ``psql``, inside this file's savepoint.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

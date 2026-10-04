@@ -1,7 +1,5 @@
 """Introspect PostgreSQL functions and procedures, through ``core/live_catalog``."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 

@@ -4,8 +4,6 @@ Every function takes the ``MigratorSession`` as its first argument; the session'
 methods delegate here.
 """
 
-from __future__ import annotations
-
 import time as _time
 from dataclasses import dataclass, field
 from pathlib import Path

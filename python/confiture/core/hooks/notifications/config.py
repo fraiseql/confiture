@@ -29,8 +29,6 @@ The Jinja renderer requires ``notifications.allow_templated_renderers: true``
 at the root.  Default off.
 """
 
-from __future__ import annotations
-
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator

@@ -3,8 +3,6 @@
 Cycles 1-3: Validates seed files for correct schema target, FK naming, UUID format.
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )

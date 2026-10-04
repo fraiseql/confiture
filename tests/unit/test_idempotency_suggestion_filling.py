@@ -8,8 +8,6 @@ Patterns in :data:`TEMPLATE_NOT_AVAILABLE` keep the generic suggestion
 and explicitly say "no auto-template available — manual fix required".
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.idempotency._captures import Captures

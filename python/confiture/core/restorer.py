@@ -7,8 +7,6 @@ pre-data and post-data phases serially and only parallelising the data phase
 Requires custom format (-Fc) or directory format (-Fd) dumps.
 """
 
-from __future__ import annotations
-
 import contextlib
 import dataclasses
 import logging

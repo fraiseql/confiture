@@ -10,8 +10,6 @@ carries, and writes to ``--output`` or stdout. A call to ``json.dump``,
 writer, and its payload leaves the envelope behind.
 """
 
-from __future__ import annotations
-
 import ast
 import json
 from pathlib import Path

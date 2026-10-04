@@ -5,8 +5,6 @@
 moving it into the `PGPASSWORD` environment variable.
 """
 
-from __future__ import annotations
-
 import time
 
 import pytest

@@ -4,8 +4,6 @@ This module provides the SeedValidator class which scans seed SQL files
 and detects data consistency issues.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.builder import files_under

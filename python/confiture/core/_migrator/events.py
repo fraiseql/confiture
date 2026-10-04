@@ -6,8 +6,6 @@ loop of its own. Events are informational — nothing about the result depends
 on whether anyone listens.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal

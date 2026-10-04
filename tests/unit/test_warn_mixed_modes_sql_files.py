@@ -4,8 +4,6 @@ It used to import each file as a Python module, so a SQL-file migration in the
 batch made the check itself fail.
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from unittest.mock import MagicMock

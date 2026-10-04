@@ -12,8 +12,6 @@ profile-driven lookup. These tests pin that the whitelist is a subset of the
 registered strategies and that a profile naming all four resolves end to end.
 """
 
-from __future__ import annotations
-
 import importlib
 
 from confiture.core.anonymization import strategies as strategies_mod

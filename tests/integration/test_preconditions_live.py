@@ -6,8 +6,6 @@ must hold and once where it must not, so a probe that always says yes — or alw
 no — fails here.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterator
 
 import psycopg

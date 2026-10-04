@@ -64,8 +64,6 @@ Usage (one rule directly)::
     violations = Tree001PrefixUnique().check(files_under(schema), [schema])
 """
 
-from __future__ import annotations
-
 from collections import defaultdict
 from collections.abc import Collection, Sequence
 from pathlib import Path

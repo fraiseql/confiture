@@ -15,8 +15,6 @@ Usage:
     uv run python scripts/gen_tree.py --write    # refresh CLAUDE.md
 """
 
-from __future__ import annotations
-
 import ast
 import subprocess
 import sys

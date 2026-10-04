@@ -12,8 +12,6 @@ text compares exactly: a real change in each slot is a change, a spelling is not
 and the payload says which tier ran (``fidelity``).
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable
 from pathlib import Path

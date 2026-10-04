@@ -4,8 +4,6 @@ Analyzes schema changes from multiple agents to detect conflicts
 before code is written.
 """
 
-from __future__ import annotations
-
 import re
 
 from confiture_pggit.coordination.models import (

@@ -5,8 +5,6 @@ command has a schema when every command offering ``--format json`` has one, by t
 answer ``tests/unit/json_schemas/test_every_json_command_has_a_schema.py`` gives.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

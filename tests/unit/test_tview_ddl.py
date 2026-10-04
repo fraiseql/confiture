@@ -5,8 +5,6 @@ and only that one, so the reader applies the same rule. Until #504 the
 statement was invisible: neither a table nor a view.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 from pglast.stream import RawStream

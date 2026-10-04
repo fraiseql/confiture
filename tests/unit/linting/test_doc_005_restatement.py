@@ -9,8 +9,6 @@ is what `--baseline` is for; the length bound the issue also offers is
 rule would punish it.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

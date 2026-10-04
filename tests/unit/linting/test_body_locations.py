@@ -16,8 +16,6 @@ Where the join cannot be certain — two overloads of one name with the same
 argument count — no location is better than the wrong file.
 """
 
-from __future__ import annotations
-
 from confiture.core.linting import bodies
 from confiture.core.linting.schema_linter import RuleSeverity
 from confiture.core.sql_lexer import parse_file

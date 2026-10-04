@@ -8,8 +8,6 @@ CI cannot see the sibling repository, this is where producer drift is caught.
 `detail` is excluded from the comparison — see the fixture directory's README.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

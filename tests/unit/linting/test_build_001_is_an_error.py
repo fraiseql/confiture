@@ -14,8 +14,6 @@ emits it, a plain `confiture lint` exits 1 on it, and the three ways to decline
 it all work.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

@@ -7,8 +7,6 @@ directives written in the files — and, for the rule that reads views, the
 inventory and the files themselves.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

@@ -8,8 +8,6 @@ forces ``window_safe: false``), and lint's ``UNPARSEABLE``
 finding (``error`` since 1.9.0, so the default gate fires on it too).
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

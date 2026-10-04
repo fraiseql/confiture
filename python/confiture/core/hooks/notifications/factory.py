@@ -5,8 +5,6 @@ The factory builds a :class:`NotificationHook` from a validated
 types to their concrete classes.
 """
 
-from __future__ import annotations
-
 from confiture.core.hooks.notifications.config import (
     DiscordRendererConfig,
     EmailRendererConfig,

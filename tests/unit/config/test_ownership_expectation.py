@@ -5,8 +5,6 @@ is a single dict (not a list of expectations), and ``lint_enabled`` defaults
 to ``True`` — opt-in by default per the issue's "Definition of done."
 """
 
-from __future__ import annotations
-
 import textwrap
 from pathlib import Path
 

@@ -21,8 +21,6 @@ the documented "re-stamp everything" escape hatch. Neither is what ``--fix``
 calls any more.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock
 

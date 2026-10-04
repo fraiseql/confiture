@@ -1,7 +1,5 @@
 """Unit tests for the connection-free ConfigValidator (issue #144)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

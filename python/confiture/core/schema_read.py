@@ -19,8 +19,6 @@ each child with its parents' columns (``inventory.inherit_columns``) — the mod
 reader compares with a live database.
 """
 
-from __future__ import annotations
-
 import bisect
 from collections.abc import Iterable
 from dataclasses import dataclass, replace

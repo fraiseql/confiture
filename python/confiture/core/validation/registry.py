@@ -10,8 +10,6 @@ The registry's order is the order checks run and report in, and a single-flag
 invocation emits exactly what that one check emits.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any

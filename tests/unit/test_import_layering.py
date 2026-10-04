@@ -12,8 +12,6 @@ through core helpers; they keep the public import path and are listed here
 explicitly so any growth of that exception is visible.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

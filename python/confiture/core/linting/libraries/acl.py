@@ -14,8 +14,6 @@ The inverse direction — *"grants changed without a matching migration"*
 They share the same ``7_grant/`` convention but no parsing surface.
 """
 
-from __future__ import annotations
-
 import fnmatch
 import re
 from pathlib import Path

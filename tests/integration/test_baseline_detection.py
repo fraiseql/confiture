@@ -9,8 +9,6 @@ columns from the catalog and compared SQL text with ``difflib``: such a database
 best a near miss, and ``'{}'::jsonb`` against ``'{}'`` was a difference.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

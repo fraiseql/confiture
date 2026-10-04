@@ -5,8 +5,6 @@ block PostgreSQL's own parser rejects teaches nothing, so each ```sql fence is
 parsed with pglast — whole statements only, never a clause on its own.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 from doc_snippets import all_fenced, read_doc

@@ -7,8 +7,6 @@ model. A row that reads into a different model is a build that applies a
 different schema than the author wrote (#511).
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 

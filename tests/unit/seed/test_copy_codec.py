@@ -7,8 +7,6 @@ hex digits, anything else the character itself — are decoded, as bytes in the
 file's encoding.
 """
 
-from __future__ import annotations
-
 import random
 from pathlib import Path
 

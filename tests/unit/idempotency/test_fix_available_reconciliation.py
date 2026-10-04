@@ -9,8 +9,6 @@ This module pins the contract: every pattern that ``fix_available`` reports
 as ``True`` must also be routed by ``_get_suggested_fix``.
 """
 
-from __future__ import annotations
-
 from confiture.core.idempotency.fixer import (
     FIXABLE_PATTERNS,
     IdempotencyFixer,

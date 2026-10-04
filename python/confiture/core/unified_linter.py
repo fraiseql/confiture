@@ -1,7 +1,5 @@
 """Unified SQL linter orchestrating Squawk, SQLFluff, and other tools."""
 
-from __future__ import annotations
-
 import json
 import shutil
 import subprocess

@@ -7,8 +7,6 @@ These checks read the workflow files, so a regression is a failing unit test
 rather than a green badge over an untested claim.
 """
 
-from __future__ import annotations
-
 import os
 import re
 import subprocess

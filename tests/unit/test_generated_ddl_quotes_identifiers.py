@@ -7,8 +7,6 @@ statement is checked by parsing it and reading the names back from the tree,
 never by matching text.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 from pglast import ast

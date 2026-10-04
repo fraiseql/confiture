@@ -12,8 +12,6 @@ The before/after pairs an example ships are applied the same way on top of the
 migration that builds their *before*.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

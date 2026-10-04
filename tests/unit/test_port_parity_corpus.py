@@ -18,8 +18,6 @@ same model and validates against the published schema. It is not
 static evaluator's floor test. printoptim's 8.4 MB ``db/0_schema`` passes in 36 s.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import json
 import os

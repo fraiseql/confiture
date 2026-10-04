@@ -6,8 +6,6 @@ duplicate key. A file is converted only when every statement in it can become CO
 otherwise it runs as written, and the progress line says why.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

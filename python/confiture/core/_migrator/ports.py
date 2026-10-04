@@ -15,8 +15,6 @@ The apply pipeline's own contract is here too: :class:`ApplyStage`, the
 collaborators a strategy is handed, and :class:`Strategy`, what a strategy is.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path

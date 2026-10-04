@@ -5,8 +5,6 @@
 nothing: each still starts, connects, and answers the one question it exists for.
 """
 
-from __future__ import annotations
-
 import json
 
 import pytest

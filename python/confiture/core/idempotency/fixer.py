@@ -4,8 +4,6 @@ This module provides the IdempotencyFixer class which transforms
 non-idempotent SQL statements into their idempotent equivalents.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from typing import ClassVar

@@ -3,8 +3,6 @@
 Add try_convert() method with graceful fallback.
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
 

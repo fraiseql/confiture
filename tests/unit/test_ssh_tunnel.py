@@ -1,7 +1,5 @@
 """Unit tests for confiture.core.ssh_tunnel."""
 
-from __future__ import annotations
-
 import socket
 import subprocess
 from unittest.mock import MagicMock, patch

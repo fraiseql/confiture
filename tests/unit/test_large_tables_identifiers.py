@@ -6,8 +6,6 @@ stay raw SQL by documented contract — they are code the migration author
 writes — but a name is a name and goes through ``psycopg.sql.Identifier``.
 """
 
-from __future__ import annotations
-
 from typing import Any
 from unittest.mock import MagicMock
 

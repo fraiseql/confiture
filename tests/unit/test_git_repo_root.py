@@ -7,8 +7,6 @@ produces garbage from any subdirectory — an ordinary monorepo layout — and t
 resulting empty intersection reads as a passing gate.
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 

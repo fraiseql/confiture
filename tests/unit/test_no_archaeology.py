@@ -21,8 +21,6 @@ without writing down. It is declared once and read from there everywhere else,
 so the exemption is one line rather than a family of files.
 """
 
-from __future__ import annotations
-
 import re
 import subprocess
 from pathlib import Path

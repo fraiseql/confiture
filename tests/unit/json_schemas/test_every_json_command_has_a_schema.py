@@ -7,8 +7,6 @@ linking a schema file that exists, or it is an alias of one that does. There is 
 list of exceptions: a new command that writes JSON publishes its shape with it.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from typing import Any

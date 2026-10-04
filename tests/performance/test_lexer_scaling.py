@@ -23,8 +23,6 @@ deterministic half of the guard, on how much text is handed to the scanner, is a
 unit test: ``TestTheTextIsScannedOnce`` in ``tests/unit/test_sql_lexer_copy_blocks``.
 """
 
-from __future__ import annotations
-
 import time
 
 import pytest

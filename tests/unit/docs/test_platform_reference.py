@@ -7,8 +7,6 @@ nothing hand-copied that could drift. ``scripts/gen_platform_reference.py
 --check`` runs in the Lint leg beside the other generators.
 """
 
-from __future__ import annotations
-
 import importlib.util
 from pathlib import Path
 

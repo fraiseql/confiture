@@ -9,8 +9,6 @@ risk) and whether PostgreSQL *rewrites* the heap. `varchar(50)`→`text` is
 widening **and** rewrite-free; `int`→`bigint` is widening but still rewrites.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.type_lattice import (

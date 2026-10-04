@@ -11,8 +11,6 @@ Five-level validation:
 - Level 5: Full seed execution (integration test)
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.validation.prep_seed.level_1_seed_files import (
     Level1SeedValidator,
 )

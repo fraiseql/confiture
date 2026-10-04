@@ -5,8 +5,6 @@ the first becomes a live hyperlink; written raw, the second is an escape
 sequence the terminal obeys (a title, a hyperlink, a cleared screen).
 """
 
-from __future__ import annotations
-
 import io
 
 from rich.console import Console

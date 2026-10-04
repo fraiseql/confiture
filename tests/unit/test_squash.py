@@ -1,7 +1,5 @@
 """The parts of ``migrate squash`` that need no database (#539)."""
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.squash import archived_digest, baseline_version, usable_version

@@ -17,8 +17,6 @@ empty facts, and every consumer degrades to the static answer. Losing the
 refinement is acceptable; failing a preflight because of it is not.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 

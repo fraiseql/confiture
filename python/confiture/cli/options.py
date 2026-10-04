@@ -17,8 +17,6 @@ on (``migrate validate`` reads ``./confiture.yaml``, ``migrate up`` reads
 ``db/environments/local.yaml``, ``migrate status`` reads none).
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Annotated, Any
 

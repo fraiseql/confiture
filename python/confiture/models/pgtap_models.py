@@ -1,7 +1,5 @@
 """Data models for pgTAP test scaffold generation."""
 
-from __future__ import annotations
-
 import dataclasses
 from typing import TYPE_CHECKING
 

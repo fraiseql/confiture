@@ -15,8 +15,6 @@ These functions never decide exit codes — the runner aggregates outcomes;
 genuine failures travel as ``ConfiturError`` to the ``fail()`` boundary.
 """
 
-from __future__ import annotations
-
 from pathlib import Path as _Path
 from typing import Any
 

@@ -7,8 +7,6 @@ thin shims for one release (removed at 1.0.0) so an embedder's import does not
 break overnight, but nothing inside the package uses them.
 """
 
-from __future__ import annotations
-
 import ast
 import importlib
 from pathlib import Path

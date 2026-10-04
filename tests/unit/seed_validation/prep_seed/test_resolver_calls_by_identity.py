@@ -7,8 +7,6 @@ PostgreSQL's own identity, so quoting it every time calls the routine the DDL
 created — and no parameter is passed, so a ``%`` in a name is not a placeholder.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

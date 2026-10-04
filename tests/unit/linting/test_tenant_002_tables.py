@@ -6,8 +6,6 @@ Tenancy is a column, never an inference: a table is tenant-scoped because it has
 reason. A table that is neither is a decision nobody made — the finding.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

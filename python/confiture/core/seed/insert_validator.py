@@ -5,8 +5,6 @@ safely converted to COPY format. Uses sqlglot's AST for semantic analysis instea
 of fragile regex patterns.
 """
 
-from __future__ import annotations
-
 import sqlglot.errors
 from sqlglot import exp, parse_one
 

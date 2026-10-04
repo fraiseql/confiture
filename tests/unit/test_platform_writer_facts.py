@@ -9,8 +9,6 @@ an enum's labels, and the row a foreign key points at, found the way PostgreSQL
 found it rather than as the DDL spelled it.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture import platform

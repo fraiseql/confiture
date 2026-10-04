@@ -27,8 +27,6 @@ tree in base 16 turns ``0009`` → ``0010`` into a gap of seven, which
 base 16 puts 100 before 154 when the author wrote 256 after 154.
 """
 
-from __future__ import annotations
-
 import re
 from collections import defaultdict
 from collections.abc import Iterable, Iterator, Sequence

@@ -6,8 +6,6 @@ about the tree, which is how #301 happened in the first place. The decision is
 ``ddl_walk.object_edits``; only the application differs.
 """
 
-from __future__ import annotations
-
 from confiture.core.differ import SchemaDiffer
 
 

@@ -10,8 +10,6 @@ The modules allowed one *write* a name — a class name from a function name —
 read a fixed format (a rule code), never a name's meaning.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

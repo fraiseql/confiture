@@ -5,8 +5,6 @@ Two shapes are covered:
 * `--against <url>`: static analysis + execution outcomes (mocked here)
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

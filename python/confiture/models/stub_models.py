@@ -1,7 +1,5 @@
 """Data models for Python stub generation from PostgreSQL functions."""
 
-from __future__ import annotations
-
 import dataclasses
 from collections.abc import Sequence
 from enum import StrEnum

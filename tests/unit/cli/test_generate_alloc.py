@@ -4,8 +4,6 @@ Uses Typer's CliRunner — no database required.  Temporary directories
 are created with pytest's ``tmp_path`` fixture.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

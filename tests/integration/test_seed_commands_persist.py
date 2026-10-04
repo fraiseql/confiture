@@ -10,8 +10,6 @@ These tests read the rows back on a connection of their own, which is the only
 reading that distinguishes the two.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

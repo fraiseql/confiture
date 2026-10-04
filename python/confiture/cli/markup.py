@@ -8,8 +8,6 @@ Rich reads ``[...]`` in a printed string as a style tag: a value interpolated in
 ``tests/unit/test_cli_prints_data_verbatim.py`` fails on one that is neither.
 """
 
-from __future__ import annotations
-
 import unicodedata
 
 from rich.markup import escape

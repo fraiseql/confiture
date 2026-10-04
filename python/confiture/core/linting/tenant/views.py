@@ -21,8 +21,6 @@ resolved inner view first, each view's scope computed once. A materialized view 
 view here.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import Enum

@@ -7,8 +7,6 @@ where a table moved from tenant→catalog schema and the resolution
 function was never updated.
 """
 
-from __future__ import annotations
-
 from confiture.core.schema_sources import read_schema
 from confiture.core.seed.validation.prep_seed.level_3_resolvers import (
     Level3ResolutionValidator,

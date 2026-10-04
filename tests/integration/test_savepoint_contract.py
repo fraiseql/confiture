@@ -16,8 +16,6 @@ is built on these tests passing.  Treat any failure here as a *contract*
 failure — file a separate bug and do not paper over with doc edits.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

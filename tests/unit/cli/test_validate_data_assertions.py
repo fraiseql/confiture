@@ -11,8 +11,6 @@ blocks, so any two flags meant the second was silently skipped and the gate
 still exited 0.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

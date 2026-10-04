@@ -21,8 +21,6 @@ Pre-state simulation (Issue #10):
     ...     # Assertions...
 """
 
-from __future__ import annotations
-
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path

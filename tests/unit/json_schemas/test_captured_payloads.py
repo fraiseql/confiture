@@ -18,8 +18,6 @@ one-migration project: ``squash-ledger-none`` before the migration was applied, 
 others after). Recapture the same way when a payload changes on purpose.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

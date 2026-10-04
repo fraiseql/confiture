@@ -7,8 +7,6 @@ exceptions are the ones the reference names: schemas that required them when
 they were published, and payloads whose ``ok`` is their own verdict.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

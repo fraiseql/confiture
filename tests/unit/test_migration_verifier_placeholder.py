@@ -23,8 +23,6 @@ Emitting placeholders without this fix would have inverted the release.
 nothing emitted. This is what it is for.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock
 

@@ -7,8 +7,6 @@ continues from the first stage not done, and only when ``contract`` has
 finished does the migration reach the ledger. Against the local database.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

@@ -6,8 +6,6 @@ holds them — ``format_type``'s spelling of a type, a composite foreign key pai
 column by column, a reference into another schema.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 

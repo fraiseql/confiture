@@ -4,8 +4,6 @@ All tests mock subprocess.Popen and psycopg.connect via monkeypatch /
 unittest.mock — no real database or pg_restore binary is required.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

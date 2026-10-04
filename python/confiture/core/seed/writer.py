@@ -21,8 +21,6 @@ hand. Either way a table's generated key is left out and PostgreSQL fills it —
 COPY honours a column's default and identity for every column its list omits.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass

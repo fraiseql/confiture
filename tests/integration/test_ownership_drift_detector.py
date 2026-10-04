@@ -8,8 +8,6 @@ matview) under a dedicated schema, sets their owners, then asks the
 detector to compare against an :class:`OwnershipExpectation`.
 """
 
-from __future__ import annotations
-
 from collections.abc import Generator
 
 import psycopg

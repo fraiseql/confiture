@@ -25,8 +25,6 @@ time, a query whose outputs cannot be counted. Each is named in the rule's
 the run, not a finding about the schema, so no ``--baseline`` silences it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from functools import cached_property

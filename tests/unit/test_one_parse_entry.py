@@ -12,8 +12,6 @@ one expression, one generated statement, one PL/pgSQL fragment — and says
 which. An entry whose module no longer calls the parser fails too.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

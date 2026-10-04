@@ -47,8 +47,6 @@ The ten spellings that split, each a `CREATE` written one way and a `COMMENT`
 the other, are pinned in `tests/unit/linting/test_type_spellings_are_one_type.py`.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

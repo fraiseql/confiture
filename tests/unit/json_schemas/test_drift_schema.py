@@ -6,8 +6,6 @@ Instead, we validate the emitted JSON shape against the schema using the
 ``hints: []`` field injected at the emit site).
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

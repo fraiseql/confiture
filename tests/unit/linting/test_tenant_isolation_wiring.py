@@ -6,8 +6,6 @@ names while the rule asks the family's question — does an ``INSERT`` into a
 tenant table supply the discriminator.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

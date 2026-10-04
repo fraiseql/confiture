@@ -10,8 +10,6 @@ The deprecated ``tb_confiture_present`` alias was added in 0.39.0 and removed in
 cannot creep back in.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import patch

@@ -11,8 +11,6 @@ database through ``ExpectedSchemaDB.from_source``, the analyser reaches every
 routine in it, and the database is gone afterwards.
 """
 
-from __future__ import annotations
-
 import psycopg
 import pytest
 from psycopg.conninfo import conninfo_to_dict

@@ -7,8 +7,6 @@ new_status`` on one run and ``new_status, mood`` on the next, so ``migrate diff
 the one tables already had — by identity.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 import sys

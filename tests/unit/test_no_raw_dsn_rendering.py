@@ -13,8 +13,6 @@ referenced by its arguments — through f-strings, ``%``-formatting and
 does not arrive in a variable called ``docs_url``.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

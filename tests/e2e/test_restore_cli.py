@@ -4,8 +4,6 @@ All tests mock DatabaseRestorer.restore via unittest.mock — no real database
 or pg_restore binary is required.
 """
 
-from __future__ import annotations
-
 from unittest.mock import patch
 
 from typer.testing import CliRunner

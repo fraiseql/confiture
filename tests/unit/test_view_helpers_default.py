@@ -6,8 +6,6 @@ Verifies that:
 3. The view column rename regex matches PostgreSQL error messages
 """
 
-from __future__ import annotations
-
 import pytest
 from pydantic import ValidationError
 

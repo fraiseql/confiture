@@ -14,8 +14,6 @@ silently miss violations that the AST detector catches, leading to
 confusing "fix → re-validate → still flagged" cycles.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from pathlib import Path

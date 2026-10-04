@@ -7,8 +7,6 @@ sides read an index through this one function — a tree's ``CREATE INDEX`` and
 the catalogue's ``pg_get_indexdef`` — so what it keeps, both keep.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 

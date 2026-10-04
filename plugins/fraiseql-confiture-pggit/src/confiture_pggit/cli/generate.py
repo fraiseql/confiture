@@ -4,8 +4,6 @@ Registered into ``confiture``'s own ``generate`` group by :func:`confiture_pggit
 beside the ``generate`` commands ``confiture`` ships.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import typer

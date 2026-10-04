@@ -11,8 +11,6 @@ in a fixed section order; nothing is listed that does not exist. The rest of
 ``tests/unit/docs/test_mkdocs_nav.py`` runs the check.
 """
 
-from __future__ import annotations
-
 import argparse
 import re
 import subprocess

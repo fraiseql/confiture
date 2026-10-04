@@ -5,8 +5,6 @@ Both bugs touch the same code path — confiture's outer transaction
 envelope — so they're exercised here against a real PostgreSQL.
 """
 
-from __future__ import annotations
-
 import psycopg
 import pytest
 

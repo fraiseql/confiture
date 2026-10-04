@@ -10,8 +10,6 @@ unterminated string) ends the code — everything after it is opaque, which is
 what ``psql`` would do too.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.sql_lexer import code_text, tokens

@@ -8,8 +8,6 @@ Exit code contract for migrate up / migrate down:
     6  Lock/pool error (retriable — another process holds the lock).
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

@@ -6,8 +6,6 @@ was a token and ``lessons`` held an ``ssn``, while ``smtp_passwd`` and
 ``'PLACEHOLDER-not-a-real-credential'`` was reported as a live secret.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.schema_linter import SchemaLinter

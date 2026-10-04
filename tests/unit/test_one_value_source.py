@@ -8,8 +8,6 @@ test fails on a module that decides again: one that names ``SERIAL_TYPES`` or
 matches ``nextval(`` in a string.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

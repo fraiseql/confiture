@@ -4,8 +4,6 @@ The ledger's ``slug`` was ``<name>_<timestamp to the second>``; two migrations
 sharing a name and applied within the same second collided on ``slug UNIQUE``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

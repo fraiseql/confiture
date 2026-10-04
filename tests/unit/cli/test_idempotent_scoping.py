@@ -14,8 +14,6 @@ asserting it passes while the gate scans nothing.  Every scoping test asserts a
 untouched basenames absent.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 from pathlib import Path

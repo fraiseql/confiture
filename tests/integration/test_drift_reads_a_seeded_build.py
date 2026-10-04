@@ -10,8 +10,6 @@ so a database built from it has no drift.
 Requires a running PostgreSQL server accessible via CONFITURE_TEST_DB_URL.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

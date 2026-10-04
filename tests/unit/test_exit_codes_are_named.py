@@ -13,8 +13,6 @@ fails here. The guard reads code: a docstring that quotes ``typer.Exit(1)`` is
 not a site.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

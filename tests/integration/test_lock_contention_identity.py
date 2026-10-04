@@ -5,8 +5,6 @@ contention and must surface A's identity in stderr (human) and the #145
 envelope (JSON).
 """
 
-from __future__ import annotations
-
 import json
 import os
 from pathlib import Path

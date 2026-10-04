@@ -12,8 +12,6 @@ escalated one, both exercised. A rule added to `LINT_RULES` without a fixture
 here fails, so the table cannot grow a lie.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

@@ -12,8 +12,6 @@ every `LintConfig` switch belongs to one of them; see
 `linting/test_every_switch_has_a_rule.py` for the other direction.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.rule_registry import (

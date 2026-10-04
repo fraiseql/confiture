@@ -7,8 +7,6 @@ rules off there. So it lives once, in ``db/project.yaml``, and an environment fi
 that carries it is refused.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

@@ -3,8 +3,6 @@
 Requires a reachable local PostgreSQL.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from pathlib import Path
 

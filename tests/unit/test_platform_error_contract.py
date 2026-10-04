@@ -8,8 +8,6 @@ empty result reads as success. Two errors are Python's own on purpose: a
 docstrings promise for an argument combination that cannot run.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

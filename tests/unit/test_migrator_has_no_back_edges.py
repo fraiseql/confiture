@@ -9,8 +9,6 @@ interpreter never checks. What a concern needs of its host is ``_migrator/ports.
 ``EngineHost`` / ``SessionHost`` protocols, which name exactly the members it reads.
 """
 
-from __future__ import annotations
-
 import ast
 import inspect
 from pathlib import Path

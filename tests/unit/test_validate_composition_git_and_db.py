@@ -16,8 +16,6 @@ Two defects are pinned here beyond plain composition:
   spun up two tunnel subprocesses.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 import textwrap

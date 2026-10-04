@@ -11,8 +11,6 @@ otherwise) and two classifiers keyword-match the message (matching hint text
 otherwise). Both read :attr:`ConfiturError.message`.
 """
 
-from __future__ import annotations
-
 import json
 
 from confiture.cli.error_json import coerce_to_confiture_error, emit_error_json

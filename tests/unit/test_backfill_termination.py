@@ -6,8 +6,6 @@ re-selects the first *batch_size* rows, forever. Termination must come from
 the iteration itself — the table's block range — not from the predicate.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 from confiture.core.large_tables import BatchConfig, BatchedMigration

@@ -13,8 +13,6 @@ never consults the source DDL.
 Requires a PostgreSQL server at ``CONFITURE_TEST_DB_URL``.
 """
 
-from __future__ import annotations
-
 import uuid
 from collections.abc import Generator
 from pathlib import Path

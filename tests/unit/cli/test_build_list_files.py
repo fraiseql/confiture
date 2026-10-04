@@ -4,8 +4,6 @@ The surface a project diffs across an upgrade — it prints the selection and
 builds nothing.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

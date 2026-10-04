@@ -25,8 +25,6 @@ Three patterns, one per advisory:
 ``plan`` is pure: text and a server version in, plans out, nothing touched.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any, Literal
 

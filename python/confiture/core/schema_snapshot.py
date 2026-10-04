@@ -5,8 +5,6 @@ generated migration, so the migration level of a database that lost its ledger c
 be recovered (:class:`~confiture.core.baseline_detector.BaselineDetector`).
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.builder import SchemaBuilder

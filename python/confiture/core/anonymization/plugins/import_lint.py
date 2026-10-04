@@ -12,8 +12,6 @@ line.
 Process isolation would be a separate feature; nothing here claims it.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import logging
 import time

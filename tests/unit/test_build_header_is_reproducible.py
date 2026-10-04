@@ -8,8 +8,6 @@ its timestamp from ``SOURCE_DATE_EPOCH`` when set: two builds of one tree are
 then byte-identical.
 """
 
-from __future__ import annotations
-
 import hashlib
 import re
 from pathlib import Path

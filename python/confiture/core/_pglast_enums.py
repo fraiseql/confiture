@@ -20,8 +20,6 @@ automatically rather than needing to be kept in sync by hand.
 pglast is a dependency, so this module imports it at module scope.
 """
 
-from __future__ import annotations
-
 import itertools
 from importlib import metadata
 from typing import Final

@@ -4,8 +4,6 @@ Creates throwaway PostgreSQL databases — the scratch databases ``ExpectedSchem
 builds a tree into — and dumps one as DDL text for ``migrate squash``'s baseline.
 """
 
-from __future__ import annotations
-
 import re
 import subprocess
 import uuid

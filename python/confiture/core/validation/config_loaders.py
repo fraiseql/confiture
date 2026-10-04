@@ -13,8 +13,6 @@ envelope. They never import ``typer`` or print directly — that keeps them pure
 config-parsers and lets the orchestration layer decide how failures surface.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

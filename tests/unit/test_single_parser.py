@@ -7,8 +7,6 @@ the sqlparse paths are gone; so are the env vars, module flags and test markers
 that selected them. This test keeps them gone.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

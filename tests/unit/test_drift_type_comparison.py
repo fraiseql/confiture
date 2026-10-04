@@ -16,8 +16,6 @@ Every row is a pair the drift comparison actually sees: the left column is what
 ``format_type(atttypid, atttypmod)`` returns from the database.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.type_lattice import same_type

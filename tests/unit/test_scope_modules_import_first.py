@@ -8,8 +8,6 @@ says so where it would hurt — every module in that scope, imported alone, by a
 interpreter.
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor

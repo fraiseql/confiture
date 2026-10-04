@@ -6,8 +6,6 @@ metadata blip from a multi-minute outage. Two rows are version-dependent and mus
 answer conservatively when the server version is unknown.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.lock_profile import Duration, LockLevel, lock_profile

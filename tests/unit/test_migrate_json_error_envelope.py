@@ -5,8 +5,6 @@ envelope (CliRunner cannot reliably separate stdout/stderr); the boundary's
 stream separation is covered by test_cli_fail_boundary.py with capsys.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import patch

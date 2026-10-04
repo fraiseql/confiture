@@ -1,7 +1,5 @@
 """Unit tests for seed-profile filtering and config."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

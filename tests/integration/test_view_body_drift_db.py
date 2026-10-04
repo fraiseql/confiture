@@ -12,8 +12,6 @@ databases here, so the test is fully self-contained.
 Requires a PostgreSQL server at ``CONFITURE_TEST_DB_URL``.
 """
 
-from __future__ import annotations
-
 import psycopg
 import pytest
 

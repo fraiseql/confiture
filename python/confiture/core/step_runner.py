@@ -9,8 +9,6 @@ migration reaches the ledger only when its last ``contract`` stage has
 finished — until then it is pending, and ``migrate steps`` says so.
 """
 
-from __future__ import annotations
-
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager

@@ -1,7 +1,5 @@
 """Tests for MigratorSession and Migrator.from_config()."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock
 

@@ -1,7 +1,5 @@
 """Scoping: bindings, ``symtable``-driven scope collection and name lookup."""
 
-from __future__ import annotations
-
 import ast
 import symtable
 from dataclasses import dataclass, field

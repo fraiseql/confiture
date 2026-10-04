@@ -3,8 +3,6 @@
 Add convert_batch() method for batch processing.
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
 

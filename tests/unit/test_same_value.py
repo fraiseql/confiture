@@ -11,8 +11,6 @@ number only where the type is a number. What is measured against a real server i
 row per rewrite.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.ddl_walk import AS_WRITTEN, ConstantSpellings, same_value, typed_constants

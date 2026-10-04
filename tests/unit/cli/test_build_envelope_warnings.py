@@ -11,8 +11,6 @@ nothing can fill is a defect, so every array this envelope publishes has a
 scenario here that fills it.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable
 from pathlib import Path

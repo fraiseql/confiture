@@ -23,8 +23,6 @@ resolve in a shallow CI checkout, and staged mode verifies the base ref up front
 (``confiture.cli.git_validation``) since ``migrate_validate`` imports them lazily.
 """
 
-from __future__ import annotations
-
 import re
 from typing import Any
 

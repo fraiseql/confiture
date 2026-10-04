@@ -1,7 +1,5 @@
 """Unit tests for SshTunnelConfig Pydantic model and Environment.ssh_tunnel field."""
 
-from __future__ import annotations
-
 import pytest
 from pydantic import ValidationError
 

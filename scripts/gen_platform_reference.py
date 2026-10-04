@@ -12,8 +12,6 @@ explained; ``tests/contract/test_platform_surface.py`` pins what is rendered.
 ``tests/unit/docs/test_platform_reference.py`` runs the check.
 """
 
-from __future__ import annotations
-
 import argparse
 import dataclasses
 import enum

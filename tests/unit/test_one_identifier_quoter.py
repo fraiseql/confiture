@@ -12,8 +12,6 @@ The guard fails on a module outside ``schema_identity`` that doubles a double
 quote into an identifier, or undoubles one out of it. The allow-list is empty.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

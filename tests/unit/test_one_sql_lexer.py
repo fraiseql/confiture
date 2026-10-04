@@ -12,8 +12,6 @@ different residue — shape matching pglast should do — and are counted by the
 shrink-only ``sql_keyword_regex`` budget in ``tests/budgets.json``.
 """
 
-from __future__ import annotations
-
 import ast
 import importlib.util
 from pathlib import Path

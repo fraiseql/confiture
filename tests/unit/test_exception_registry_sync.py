@@ -8,8 +8,6 @@ envelope at all. This test builds one instance of every subclass — with the
 smallest arguments its constructor accepts — and asks for its exit code.
 """
 
-from __future__ import annotations
-
 import inspect
 from pathlib import Path
 from typing import Any

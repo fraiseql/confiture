@@ -20,8 +20,6 @@ postgres_fdw is not a trusted extension, and ``setup`` maps the connecting role 
 empty password, which only a superuser may use: without one the tests skip.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable
 from pathlib import Path

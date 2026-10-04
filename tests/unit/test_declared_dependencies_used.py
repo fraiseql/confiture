@@ -7,8 +7,6 @@ dependency used only through ``importlib`` needs an entry in ``IMPORTED_DYNAMICA
 with the reason.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 import tomllib

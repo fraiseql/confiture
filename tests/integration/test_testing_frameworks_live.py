@@ -6,8 +6,6 @@ performance profiler timing a genuine ``Migrator.apply()``, and the mutation
 runner executing a mutated migration on the server and reporting on it.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

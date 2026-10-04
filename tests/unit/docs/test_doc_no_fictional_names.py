@@ -16,8 +16,6 @@ Word boundaries keep legitimate identifiers (``tb_confiture_version_key``,
 ``idx_tb_confiture_version``) from tripping the table-name patterns.
 """
 
-from __future__ import annotations
-
 import re
 
 from doc_snippets import REPO_ROOT

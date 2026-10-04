@@ -6,8 +6,6 @@ and when it lived in ``results`` it made ``schema`` import ``results`` while
 layer imports.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

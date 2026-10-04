@@ -14,8 +14,6 @@ Exercises the bundled features end-to-end:
 Requires PostgreSQL on localhost as the `postgres` superuser.
 """
 
-from __future__ import annotations
-
 import textwrap
 from collections.abc import Generator
 from pathlib import Path

@@ -11,8 +11,6 @@ Each entry is ``module:function`` → the question. An entry that matches nothin
 fails too, so the table is an edit, never an escape.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

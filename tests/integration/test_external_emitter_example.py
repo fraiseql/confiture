@@ -4,8 +4,6 @@ The example README documents an exact CLI sequence — if any of it stops
 working, this test should fail before the example goes stale.
 """
 
-from __future__ import annotations
-
 import shutil
 import sys
 from pathlib import Path

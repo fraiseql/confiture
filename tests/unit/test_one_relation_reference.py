@@ -13,8 +13,6 @@ This guard fails on a module that splits text on a dot. Its allow-list is keyed
 An entry that matches nothing fails too.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

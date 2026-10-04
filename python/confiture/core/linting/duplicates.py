@@ -16,8 +16,6 @@ The rules that report a property of an object once group through that same
 function, so a duplicate can never silence a finding it does not cover.
 """
 
-from __future__ import annotations
-
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass

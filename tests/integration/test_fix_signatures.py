@@ -9,8 +9,6 @@ The stale overloads here are the shape a deploy leaves behind: a migration wrote
 treats as a second function rather than a replacement.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

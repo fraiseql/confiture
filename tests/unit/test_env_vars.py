@@ -7,8 +7,6 @@ cryptic downstream failure (typically "role does not exist" from
 psycopg).
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.config._env_vars import expand_env_vars

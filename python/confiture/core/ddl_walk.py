@@ -17,8 +17,6 @@ pglast's members are answered for and, for the rest, why not — because a membe
 nobody considered looks exactly like one that was decided (#288, #301).
 """
 
-from __future__ import annotations
-
 import json
 import re
 from collections.abc import Callable, Iterator

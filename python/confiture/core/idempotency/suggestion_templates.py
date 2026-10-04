@@ -13,8 +13,6 @@ generic pattern suggestion with an explicit
 :data:`NO_TEMPLATE_AVAILABLE_MARKER` appended.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 from confiture.core.idempotency._captures import Captures

@@ -14,8 +14,6 @@ tree a snapshot was taken of has no change from it, so the first snapshot with n
 is the level.
 """
 
-from __future__ import annotations
-
 import logging
 from dataclasses import dataclass
 from pathlib import Path

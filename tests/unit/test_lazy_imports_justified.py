@@ -7,8 +7,6 @@ fourth that is not: it was easier than scrolling up. Every such import carries
 a ``# Reason:`` comment on its line or the line above; there is no budget.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

@@ -6,8 +6,6 @@ the schema it lives in, the extension its default calls and the enum type its co
 has, and before the tables its foreign keys reference.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.change_order import apply_order

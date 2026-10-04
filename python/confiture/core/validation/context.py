@@ -12,8 +12,6 @@ at module scope so tests can patch them here — this module is the single place
 the live connection is opened.
 """
 
-from __future__ import annotations
-
 from contextlib import ExitStack
 from typing import TYPE_CHECKING, Any
 

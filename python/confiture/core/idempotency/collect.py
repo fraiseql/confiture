@@ -1,7 +1,5 @@
 """The idempotency report for a set of migration files: SQL read directly, Python through the static evaluator."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 
