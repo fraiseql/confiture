@@ -117,8 +117,12 @@ jobs:
         # coverage starts BEFORE pytest imports its plugins: the confiture pytest11
         # plugin would otherwise be imported (with everything it pulls in) before
         # pytest-cov could begin recording, and those lines would read as missed.
+        # Every xdist worker is measured the same way, from its first line
+        # (`patch = ["subprocess"]` in pyproject.toml); each writes its own data
+        # file, combined below. One job runs the suite on every core, and it is
+        # also the proof the suite is safe in parallel.
         uv run coverage run --source=python/confiture -m pytest tests/ \
-          -v \
+          -n auto \
           -rs \
           --tb=short \
           || {
@@ -128,6 +132,7 @@ jobs:
         echo "✅ Core tests completed successfully"
     - name: Coverage report (fail_under from pyproject) and per-file floors
       run: |
+        uv run coverage combine
         uv run coverage xml
         uv run coverage json -o coverage.json
         uv run coverage report --skip-covered | tail -5
@@ -146,94 +151,6 @@ jobs:
   # for a library whose `[ast]` extra accepts a range: #192 was a silent
   # misclassification that only appeared on the version CI did not install.
   # This leg walks the range's ends explicitly.
-  integration-parallel:
-    name: Integration (parallel, -n 4)
-    runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: confiture
-          POSTGRES_PASSWORD: confiture
-          POSTGRES_DB: confiture_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-    steps:
-    - uses: actions/checkout@v6
-
-    - name: Set up Python and uv
-      uses: ./.github/actions/python-uv
-      with:
-        python-version: '3.11'
-        native: 'true'
-
-    - name: Setup environment and install dependencies
-      run: |
-        # Create virtual environment with uv
-        uv venv
-
-        # Sync from the COMMITTED uv.lock so this run is a function of the
-        # commit alone (#191). --locked fails loudly when the lock has drifted
-        # from pyproject.toml; the fix is `uv lock` + commit, never a silent
-        # re-resolve. The [notifications] and [ast] extras are required —
-        # tests/unit/hooks/notifications/ requires jinja2, and the SQL parsers
-        # depend on pglast for the primary path.
-        uv sync --locked --extra dev --extra notifications
-
-        # Build and install Rust extension with modern maturin+uv integration
-        uv run maturin develop --uv
-
-    - name: Verify Environment
-      run: |
-        echo "=== Environment Verification ==="
-        uv run python --version
-        uv --version
-        uv run pytest --version
-        rustc --version
-        pg_isready -h localhost -p 5432 -U confiture && echo '✅ PostgreSQL Ready' || echo '❌ PostgreSQL Not Ready'
-        # Client version, on the record: pg_dump refuses to dump a server newer
-        # than itself, and pg_dump 17+ emits `SET transaction_timeout` which a
-        # 15 server rejects. Both directions of that skew break the restore
-        # round-trip tests, and neither is visible without this line.
-        pg_dump --version
-        uv run python -c "import psycopg; conn = psycopg.connect('postgresql://confiture:confiture@localhost:5432/confiture_test'); print('✅ DB connection successful'); conn.close()" || echo "❌ DB connection failed"
-        echo "=== Rust Extension Verification ==="
-        uv run python -c "from confiture.core.builder import HAS_RUST; print(f'✅ Rust extension loaded: {HAS_RUST}')" || echo "❌ Builder import failed"
-
-    - name: Create test databases
-      run: |
-        PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_test || PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_test;"
-        PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_source_test || PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_source_test;"
-        PGPASSWORD=confiture psql -h localhost -U confiture -c "SELECT 1;" confiture_target_test || PGPASSWORD=confiture psql -h localhost -U confiture -d postgres -c "CREATE DATABASE confiture_target_test;"
-
-    - name: Run database suites in parallel
-      env:
-        # The three CONFITURE_* variables are the only database routing the
-        # suite reads (tests/conftest.py, tests/README.md). Setting them here is
-        # what makes a failed connection a *failure* in CI rather than a skip.
-        CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
-        CONFITURE_SOURCE_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_source_test
-        CONFITURE_TARGET_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_target_test
-        POSTGRES_HOST: localhost
-        POSTGRES_PORT: 5432
-        POSTGRES_USER: confiture
-        POSTGRES_PASSWORD: confiture
-        POSTGRES_DB: confiture_test
-      run: |
-        # The database suites under four xdist workers. Each worker gets its own
-        # databases (tests/conftest.py resolves `confiture_test` to
-        # `confiture_test_gw0`, …); a test that only passes serially is a
-        # shared-state bug, and this leg is where it shows (TST-03).
-        echo "=== Running database suites with -n 4 ==="
-        uv run pytest tests/integration tests/e2e tests/contract -n 4 -rs --tb=short
-
   pggit-plugin:
     name: pgGit plugin (plugins/fraiseql-confiture-pggit)
     # pgGit's commands left the package for a sibling distribution that registers
