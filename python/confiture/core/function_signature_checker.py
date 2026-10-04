@@ -18,10 +18,12 @@ import pglast
 from confiture.core.ddl_walk import object_edits, object_kinds
 from confiture.core.function_body_checker import migration_sql
 from confiture.core.function_signature_drift import (
-    by_function,
+    by_name,
     declared_routines,
+    function_key,
     printed_arguments,
     printed_signature,
+    unpaired_routines,
 )
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.sql_lexer import parse_file
@@ -118,17 +120,16 @@ class FunctionSignatureChecker:
         of a ``schema.name``, as a file that redefines a function in place does.
         """
         violations: list[FunctionSignatureViolation] = []
-        new_by_fn = by_function(new_routines)
+        old_last = {fn_key: found[-1] for fn_key, found in by_name(old_routines).items()}
+        new_last = {fn_key: found[-1] for fn_key, found in by_name(new_routines).items()}
+        # A function only the old ref declares was deleted: the accompaniment check's.
+        kept = [fn_key for fn_key in old_last if fn_key in new_last]
+        retyped, _added = unpaired_routines(
+            (old_last[fn_key] for fn_key in kept), (new_last[fn_key] for fn_key in kept)
+        )
 
-        for fn_key, old_overloads in by_function(old_routines).items():
-            new_overloads = new_by_fn.get(fn_key)
-            if not new_overloads:
-                # Function deleted — not a violation (accompaniment check handles this)
-                continue
-            old, new = old_overloads[-1], new_overloads[-1]
-            if signatures_match(old.signature_key, new.signature_key):
-                # No type change — no violation
-                continue
+        for fn_key in (function_key(routine) for routine in retyped):
+            old, new = old_last[fn_key], new_last[fn_key]
 
             # Parameter types changed: need DROP FUNCTION(old_types) in a migration
             if not self._migration_has_drop(old, migration_files):

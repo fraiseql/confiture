@@ -25,12 +25,7 @@ from typing import TYPE_CHECKING, Any
 from confiture.core.ddl_objects import DDLObject
 from confiture.core.differ import EXACT, SchemaDiffer, slot_side
 from confiture.core.function_body_normalizer import FunctionBodyNormalizer
-from confiture.core.function_signature_drift import (
-    by_function,
-    function_key,
-    matching,
-    printed_signature,
-)
+from confiture.core.function_signature_drift import printed_signature
 from confiture.core.schema_change import ObjectAdded, ObjectReplaced
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import routine_ref
@@ -120,17 +115,6 @@ class FunctionBodyDriftReport:
             "functions_checked": self.functions_checked,
             "detection_time_ms": self.detection_time_ms,
         }
-
-
-def paired(source: Iterable[Routine], live: Iterable[Routine]) -> list[tuple[Routine, Routine]]:
-    """Every source routine the live side also holds, with its live twin."""
-    live_by_fn = by_function(live)
-    pairs: list[tuple[Routine, Routine]] = []
-    for routine in source:
-        twin = matching(routine, live_by_fn.get(function_key(routine), []))
-        if twin is not None:
-            pairs.append((routine, twin))
-    return pairs
 
 
 def changed_bodies(
