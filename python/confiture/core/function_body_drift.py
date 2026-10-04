@@ -133,6 +133,43 @@ def paired(source: Iterable[Routine], live: Iterable[Routine]) -> list[tuple[Rou
     return pairs
 
 
+def changed_bodies(
+    old: Iterable[Routine], new: Iterable[Routine]
+) -> tuple[list[tuple[Routine, Routine]], int]:
+    """Each routine both sides hold whose normalised body differs, as ``(old, new)``,
+    and how many routines both sides hold.
+
+    The engine's answer (``SchemaDiffer.compare_sides``) over each routine's body
+    alone, normalised — comments, whitespace and case are no change. A routine with
+    no body (a LANGUAGE C one's ``AS`` is a symbol) compares as ``""``, so one with
+    a body on a single side is in the answer: the caller decides what that means.
+    """
+    normalizer = FunctionBodyNormalizer()
+    routines: dict[int, Routine] = {}
+
+    def statements(found: Iterable[Routine]) -> dict[ObjectRef, list[DDLObject]]:
+        by_ref: dict[ObjectRef, list[DDLObject]] = defaultdict(list)
+        for routine in found:
+            ref = routine_ref(routine)
+            body = "" if routine.body is None else normalizer.normalize(routine.body)
+            statement = DDLObject(ref, body, "", routine.signature_key)
+            routines[id(statement)] = routine
+            by_ref[ref].append(statement)
+        return by_ref
+
+    old_side, new_side = statements(old), statements(new)
+    diff = SchemaDiffer().compare_sides(
+        slot_side("routines", old_side), slot_side("routines", new_side), EXACT
+    )
+    changed = [
+        (routines[id(c.old)], routines[id(c.new)])
+        for c in diff.changes
+        if isinstance(c, ObjectReplaced)
+    ]
+    added = sum(isinstance(c, ObjectAdded) for c in diff.changes)
+    return changed, sum(len(found) for found in new_side.values()) - added
+
+
 class FunctionBodyDriftDetector:
     """Compare normalised function bodies between source SQL and a live DB.
 
@@ -172,46 +209,20 @@ class FunctionBodyDriftDetector:
             A :class:`FunctionBodyDriftReport` with drift details and timing.
         """
         start = time.monotonic()
-        routines: dict[int, Routine] = {}
-        source_side, live_side = (
-            self._statements(source, routines),
-            self._statements(live, routines),
-        )
-        diff = SchemaDiffer().compare_sides(
-            slot_side("routines", live_side), slot_side("routines", source_side), EXACT
-        )
-        pairs = [
-            (routines[id(c.new)], routines[id(c.old)])
-            for c in diff.changes
-            if isinstance(c, ObjectReplaced)
-        ]
+        changed, checked = changed_bodies(live, source)
         drifts = [
             self._drift(actual, expected.body, actual.body)
-            for expected, actual in sorted(pairs, key=lambda pair: printed_signature(pair[1]))
+            for actual, expected in sorted(changed, key=lambda pair: printed_signature(pair[0]))
             if expected.body is not None and actual.body is not None
         ]
-        added = sum(isinstance(c, ObjectAdded) for c in diff.changes)
 
         elapsed = (time.monotonic() - start) * 1000
         return FunctionBodyDriftReport(
             body_drifts=drifts,
-            functions_checked=sum(len(found) for found in source_side.values()) - added,
+            functions_checked=checked,
             has_drift=len(drifts) > 0,
             detection_time_ms=elapsed,
         )
-
-    def _statements(
-        self, routines: Iterable[Routine], seen: dict[int, Routine]
-    ) -> dict[ObjectRef, list[DDLObject]]:
-        """Each routine as the one slot compared: its normalised body, ``""`` for none."""
-        statements: dict[ObjectRef, list[DDLObject]] = defaultdict(list)
-        for routine in routines:
-            ref = routine_ref(routine)
-            body = "" if routine.body is None else self._normalizer.normalize(routine.body)
-            statement = DDLObject(ref, body, "", routine.signature_key)
-            seen[id(statement)] = routine
-            statements[ref].append(statement)
-        return statements
 
     def _drift(self, actual: Routine, src: str, live_body: str) -> FunctionBodyDrift:
         """The report of *actual*, whose body *live_body* is not the source's *src*."""

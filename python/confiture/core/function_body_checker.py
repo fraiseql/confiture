@@ -20,7 +20,7 @@ import dataclasses
 import difflib
 from typing import TYPE_CHECKING
 
-from confiture.core.function_body_drift import paired
+from confiture.core.function_body_drift import changed_bodies
 from confiture.core.function_body_normalizer import FunctionBodyNormalizer
 from confiture.core.function_signature_drift import (
     declared_routines,
@@ -130,12 +130,12 @@ class FunctionBodyChecker:
         types — is not a body change.
         """
         violations: list[FunctionBodyViolation] = []
-        for after, before in paired(new, old):
+        changed, _checked = changed_bodies(old, new)
+        # In the order the new ref declares them, as a reader of the file meets them.
+        for before, after in sorted(changed, key=lambda pair: new.index(pair[1])):
             old_body, new_body = before.body, after.body
             if old_body is None or new_body is None:
                 continue  # C/internal — no extractable body to compare
-            if self._normalizer.hash_body(old_body) == self._normalizer.hash_body(new_body):
-                continue  # body unchanged (modulo comments/whitespace/case)
 
             fn_key = function_key(after)
             if fn_key in carried:
