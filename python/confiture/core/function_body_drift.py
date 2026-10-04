@@ -6,9 +6,11 @@ database's (``pg_proc.prosrc``), or a migration replay's and the live
 database's — to detect a function modified directly in the database (e.g. via
 an ad-hoc CREATE OR REPLACE) without updating the corresponding source.
 
-The two sides are paired by ``schema.name`` and ``signature_key``, through the
-one signature canonicaliser; a body is the text between the ``AS`` quotes on
-both, so a comparison needs no PL/pgSQL compiler.
+The comparison is the engine's (``SchemaDiffer.compare_sides``) over each
+routine's normalised body alone: it pairs overloads by ``signature_key``, through
+the one signature canonicaliser, and a routine it replaces is one that drifted. A
+body is the text between the ``AS`` quotes on both sides, so a comparison needs no
+PL/pgSQL compiler.
 """
 
 from __future__ import annotations
@@ -16,9 +18,12 @@ from __future__ import annotations
 import dataclasses
 import difflib
 import time
+from collections import defaultdict
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
+from confiture.core.ddl_objects import DDLObject
+from confiture.core.differ import EXACT, SchemaDiffer, slot_side
 from confiture.core.function_body_normalizer import FunctionBodyNormalizer
 from confiture.core.function_signature_drift import (
     by_function,
@@ -26,10 +31,12 @@ from confiture.core.function_signature_drift import (
     matching,
     printed_signature,
 )
+from confiture.core.schema_change import ObjectAdded, ObjectReplaced
 from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_model import routine_ref
 
 if TYPE_CHECKING:
-    from confiture.core.schema_model import Routine
+    from confiture.core.schema_model import ObjectRef, Routine
 
 
 @dataclasses.dataclass(frozen=True)
@@ -126,6 +133,43 @@ def paired(source: Iterable[Routine], live: Iterable[Routine]) -> list[tuple[Rou
     return pairs
 
 
+def changed_bodies(
+    old: Iterable[Routine], new: Iterable[Routine]
+) -> tuple[list[tuple[Routine, Routine]], int]:
+    """Each routine both sides hold whose normalised body differs, as ``(old, new)``,
+    and how many routines both sides hold.
+
+    The engine's answer (``SchemaDiffer.compare_sides``) over each routine's body
+    alone, normalised — comments, whitespace and case are no change. A routine with
+    no body (a LANGUAGE C one's ``AS`` is a symbol) compares as ``""``, so one with
+    a body on a single side is in the answer: the caller decides what that means.
+    """
+    normalizer = FunctionBodyNormalizer()
+    routines: dict[int, Routine] = {}
+
+    def statements(found: Iterable[Routine]) -> dict[ObjectRef, list[DDLObject]]:
+        by_ref: dict[ObjectRef, list[DDLObject]] = defaultdict(list)
+        for routine in found:
+            ref = routine_ref(routine)
+            body = "" if routine.body is None else normalizer.normalize(routine.body)
+            statement = DDLObject(ref, body, "", routine.signature_key)
+            routines[id(statement)] = routine
+            by_ref[ref].append(statement)
+        return by_ref
+
+    old_side, new_side = statements(old), statements(new)
+    diff = SchemaDiffer().compare_sides(
+        slot_side("routines", old_side), slot_side("routines", new_side), EXACT
+    )
+    changed = [
+        (routines[id(c.old)], routines[id(c.new)])
+        for c in diff.changes
+        if isinstance(c, ObjectReplaced)
+    ]
+    added = sum(isinstance(c, ObjectAdded) for c in diff.changes)
+    return changed, sum(len(found) for found in new_side.values()) - added
+
+
 class FunctionBodyDriftDetector:
     """Compare normalised function bodies between source SQL and a live DB.
 
@@ -165,47 +209,44 @@ class FunctionBodyDriftDetector:
             A :class:`FunctionBodyDriftReport` with drift details and timing.
         """
         start = time.monotonic()
-        pairs = sorted(paired(source, live), key=lambda pair: printed_signature(pair[1]))
-        drifts: list[FunctionBodyDrift] = []
-
-        for expected, actual in pairs:
-            src, live_body = expected.body, actual.body
-            if src is None or live_body is None:
-                continue  # cannot compare C/internal functions
-            src_hash = self._normalizer.hash_body(src)
-            live_hash = self._normalizer.hash_body(live_body)
-            if src_hash != live_hash:
-                key = printed_signature(actual)
-                exp_norm = self._normalizer.normalize_for_diff(src)
-                live_norm = self._normalizer.normalize_for_diff(live_body)
-                unified = "\n".join(
-                    difflib.unified_diff(
-                        exp_norm.splitlines(),
-                        live_norm.splitlines(),
-                        fromfile=f"{key} (expected)",
-                        tofile=f"{key} (live)",
-                        lineterm="",
-                    )
-                )
-                drifts.append(
-                    FunctionBodyDrift(
-                        schema=actual.schema or DEFAULT_SCHEMA,
-                        name=actual.name,
-                        signature_key=key,
-                        source_hash=src_hash,
-                        db_hash=live_hash,
-                        expected_body=src,
-                        live_body=live_body,
-                        expected_normalized=exp_norm,
-                        live_normalized=live_norm,
-                        unified_diff=unified,
-                    )
-                )
+        changed, checked = changed_bodies(live, source)
+        drifts = [
+            self._drift(actual, expected.body, actual.body)
+            for actual, expected in sorted(changed, key=lambda pair: printed_signature(pair[0]))
+            if expected.body is not None and actual.body is not None
+        ]
 
         elapsed = (time.monotonic() - start) * 1000
         return FunctionBodyDriftReport(
             body_drifts=drifts,
-            functions_checked=len(pairs),
+            functions_checked=checked,
             has_drift=len(drifts) > 0,
             detection_time_ms=elapsed,
+        )
+
+    def _drift(self, actual: Routine, src: str, live_body: str) -> FunctionBodyDrift:
+        """The report of *actual*, whose body *live_body* is not the source's *src*."""
+        key = printed_signature(actual)
+        exp_norm = self._normalizer.normalize_for_diff(src)
+        live_norm = self._normalizer.normalize_for_diff(live_body)
+        unified = "\n".join(
+            difflib.unified_diff(
+                exp_norm.splitlines(),
+                live_norm.splitlines(),
+                fromfile=f"{key} (expected)",
+                tofile=f"{key} (live)",
+                lineterm="",
+            )
+        )
+        return FunctionBodyDrift(
+            schema=actual.schema or DEFAULT_SCHEMA,
+            name=actual.name,
+            signature_key=key,
+            source_hash=self._normalizer.hash_body(src),
+            db_hash=self._normalizer.hash_body(live_body),
+            expected_body=src,
+            live_body=live_body,
+            expected_normalized=exp_norm,
+            live_normalized=live_norm,
+            unified_diff=unified,
         )

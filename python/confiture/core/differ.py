@@ -58,6 +58,7 @@ from confiture.core.schema_model import (
     TVIEW_OPTIONS,
     Column,
     Constraint,
+    Coverage,
     EnumType,
     Index,
     ObjectRef,
@@ -209,6 +210,20 @@ class Side:
     def sequences(self) -> list[Sequence]:
         """The model's sequences, in the order the tree declared them."""
         return list(self.model.sequences.values())
+
+
+def slot_side(section: str, statements: Mapping[ObjectRef, list[DDLObject]]) -> Side:
+    """A side holding one slot of *section*'s objects, for a comparison of that slot alone.
+
+    Each statement's ``definition`` is the slot's text — a view's deparsed query, a
+    routine's normalised body — so two sides compared ``EXACT`` pair the objects
+    the engine's way (a routine's overloads by signature, within its bucket) and
+    call one *replaced* exactly when that text differs. What a body check asks is
+    this comparison, restricted to its slot.
+    """
+    return Side(
+        SchemaModel(coverage=Coverage.of({section: "definition"}), source="catalog"), statements
+    )
 
 
 def refuse_quoted_names(side: str, quoted: list[QuotedName]) -> None:
