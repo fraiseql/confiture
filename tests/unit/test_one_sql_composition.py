@@ -30,6 +30,11 @@ CONVERTED: tuple[str, ...] = (
     "core/dry_run.py",
     "core/locking.py",
     "core/seed/executor.py",
+    "core/seed/validation/prep_seed/level_4_runtime.py",
+    "core/seed/validation/prep_seed/level_5_execution.py",
+    "core/seed/validation/prep_seed/resolvers.py",
+    "testing/fixtures/data_validator.py",
+    "testing/fixtures/migration_runner.py",
     "testing/sandbox.py",
 )
 

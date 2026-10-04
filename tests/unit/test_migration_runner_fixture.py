@@ -21,6 +21,7 @@ from typing import Any
 import psycopg
 import pytest
 
+from confiture.sql_text import rendered
 from confiture.testing.fixtures.migration_runner import MigrationRunner
 
 
@@ -96,9 +97,8 @@ def test_configured_tracking_table_is_queried() -> None:
     )
 
     assert runner.get_applied_migrations() == ["001_init"]
-    rendered = str(conn.cursor_obj.executed[0])
-    assert "audit" in rendered and "tb_migrations" in rendered
-    assert "tb_confiture" not in rendered
+    statement = rendered(conn.cursor_obj.executed[0])
+    assert statement == 'SELECT slug FROM "audit"."tb_migrations" ORDER BY applied_at ASC'
 
 
 def test_defaults_to_tb_confiture() -> None:
@@ -107,4 +107,6 @@ def test_defaults_to_tb_confiture() -> None:
     runner = MigrationRunner(connection=conn)  # type: ignore[arg-type]
 
     runner.get_applied_migrations()
-    assert "tb_confiture" in str(conn.cursor_obj.executed[0])
+    assert rendered(conn.cursor_obj.executed[0]) == (
+        'SELECT slug FROM "tb_confiture" ORDER BY applied_at ASC'
+    )

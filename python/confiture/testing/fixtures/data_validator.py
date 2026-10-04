@@ -7,7 +7,6 @@ and foreign key relationships. Can be extracted to confiture-testing package.
 from dataclasses import dataclass
 
 import psycopg
-from psycopg import sql
 
 
 @dataclass
@@ -138,16 +137,9 @@ class DataValidator:
                 # Handle schema.table format
                 if "." in table_name:
                     schema, table = table_name.split(".", 1)
-                    cur.execute(
-                        sql.SQL("SELECT COUNT(*) FROM {}.{}").format(
-                            sql.Identifier(schema),
-                            sql.Identifier(table),
-                        )
-                    )
+                    cur.execute(t"SELECT COUNT(*) FROM {schema:i}.{table:i}")
                 else:
-                    cur.execute(
-                        sql.SQL("SELECT COUNT(*) FROM {}").format(sql.Identifier(table_name))
-                    )
+                    cur.execute(t"SELECT COUNT(*) FROM {table_name:i}")
                 row = cur.fetchone()
                 return row[0] if row else 0
         except psycopg.Error:

@@ -15,8 +15,7 @@ already folded an unquoted name and kept a quoted one's case, so
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-from psycopg import sql
+from string.templatelib import Template
 
 from confiture.core.introspection.dependency_graph import dependency_order
 from confiture.core.linting import references
@@ -60,10 +59,11 @@ class Resolver:
         return self.name.lower().removeprefix(TABLE_PREFIX)
 
     @property
-    def identifier(self) -> sql.Identifier:
+    def identifier(self) -> Template:
         """The routine as SQL names it: schema-qualified when its ``CREATE`` was."""
-        parts = (self.schema, self.name) if self.schema else (self.name,)
-        return sql.Identifier(*parts)
+        if self.schema:
+            return t"{self.schema:i}.{self.name:i}"
+        return t"{self.name:i}"
 
     def where(self, line: int | None = None) -> tuple[str, int]:
         """``(file, line)`` for a finding at *line* of the body, or at the ``CREATE``.
