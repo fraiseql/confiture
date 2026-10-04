@@ -22,6 +22,7 @@ from typing import cast
 
 from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
+from confiture.core.ddl_walk import AS_WRITTEN
 from confiture.core.differ import SchemaDiffer, Side
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.linting.inventory import label_for
@@ -30,6 +31,7 @@ from confiture.core.schema_change import SchemaDiff
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import SchemaModel, ref_for
 from confiture.core.schema_read import SchemaRead, Segment, read_segments
+from confiture.core.server_constants import server_constants
 from confiture.exceptions import SchemaError
 
 #: DDL text (a ``str``), one file or directory (a ``Path``), or several in order —
@@ -173,7 +175,8 @@ def database_side(
     every user schema is read. The default schema, which a tree puts objects in
     without creating, is the tree's whether or not it writes ``CREATE SCHEMA``.
     The model says it is the catalog's (``source``), so a comparison with a tree
-    applies the parity rules.
+    applies the parity rules, and the side carries how its server spells the
+    tree's constants (``server_constants``), so a default compares as a value.
 
     Raises:
         ConfigurationError: ``CONFIG_006`` when the URL does not connect;
@@ -186,7 +189,8 @@ def database_side(
             conn, schemas=wanted, routines=True, views=True, triggers=True, other_objects=True
         )
         model = _the_projects(model, against, tracking_table)
-        return Side(model, catalogued_objects(conn, model, wanted))
+        constants = AS_WRITTEN if against is None else server_constants(conn, against)
+        return Side(model, catalogued_objects(conn, model, wanted), constants=constants)
 
 
 def _the_projects(

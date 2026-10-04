@@ -183,6 +183,7 @@ module moves, not when one grows.
 | `schema_sources.py` | database orchestration |
 | `schema_to_schema.py` | database orchestration |
 | `seed/` | database orchestration |
+| `server_constants.py` | database orchestration |
 | `sql_path.py` | database orchestration |
 | `sql_utils.py` | neutral |
 | `squash.py` | database orchestration |

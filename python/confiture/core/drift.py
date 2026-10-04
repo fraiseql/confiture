@@ -71,6 +71,7 @@ from confiture.core.schema_model import (
     trigger_ref,
 )
 from confiture.core.schema_read import SchemaRead, read_segments, read_text
+from confiture.core.server_constants import server_constants
 from confiture.core.type_lattice import signatures_match
 from confiture.exceptions import ConfigurationError, SchemaError
 
@@ -1071,7 +1072,8 @@ class SchemaDriftDetector:
         comparison (``SchemaDiffer.compare_sides``) under the policy a tree and a
         database call for, and drift is that diff said as findings
         (:data:`DRIFT_OF`): what would make the database the tree is what is
-        wrong with it.
+        wrong with it. A default is compared as a value: the database's server
+        spells the tree's constants (``server_constants``).
 
         Args:
             expected: Expected schema state
@@ -1086,7 +1088,9 @@ class SchemaDriftDetector:
             expected_schema_source="provided",
         )
         expected, actual = self._kept(expected), self._kept(actual)
-        diff = SchemaDiffer().compare_sides(_stated(actual), _stated(expected), _POLICY)
+        # The database's server spells the tree's constants (#564).
+        policy = replace(_POLICY, constants=server_constants(self.connection, expected))
+        diff = SchemaDiffer().compare_sides(_stated(actual), _stated(expected), policy)
         _Findings(expected, actual, self.column_order_severity).render(
             diff.changes, report, column_order=not self.ignore_column_order
         )
