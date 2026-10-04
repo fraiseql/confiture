@@ -97,7 +97,7 @@ def _resolve(module: str, symbol: str | None) -> str | None:
     try:
         if importlib.util.find_spec(module) is None:
             return f"no module named {module!r}"
-    except (ImportError, ValueError, ModuleNotFoundError):
+    except ImportError, ValueError, ModuleNotFoundError:
         return f"no module named {module!r}"
     try:
         imported = importlib.import_module(module)

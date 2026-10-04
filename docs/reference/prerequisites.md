@@ -13,7 +13,7 @@ PostgreSQL 18. An older server is not supported: nothing refuses it, and nothing
 
 ## Python
 
-Python **3.11, 3.12, or 3.13**. Older versions are not supported.
+Python **3.14**. Older versions are not supported; confiture 1.29 is the last release for 3.11–3.13.
 
 Install with `uv` (recommended) or `pip`:
 

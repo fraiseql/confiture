@@ -75,7 +75,7 @@ class ProgressManager:
                 transient=True,  # Clear completed tasks
             )
 
-    def start(self) -> "ProgressManager":
+    def start(self) -> ProgressManager:
         """Start the progress display.
 
         Returns:
@@ -90,7 +90,7 @@ class ProgressManager:
         if self.progress:
             self.progress.stop()
 
-    def __enter__(self) -> "ProgressManager":
+    def __enter__(self) -> ProgressManager:
         """Context manager entry."""
         return self.start()
 

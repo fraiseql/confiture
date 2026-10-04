@@ -5,14 +5,12 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .context import HookContext
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar("T")
 
 
 class HookError(Exception):
@@ -72,7 +70,7 @@ class HookResult:
     error: str | None = None
 
 
-class Hook(Generic[T], ABC):
+class Hook[T](ABC):
     """Base class for all hooks."""
 
     def __init__(

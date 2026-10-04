@@ -104,6 +104,6 @@ def test_every_lazy_import_resolves() -> None:
     for name in _LAZY_IMPORTS:
         try:
             assert getattr(confiture, name) is not None
-        except (AttributeError, ImportError):
+        except AttributeError, ImportError:
             broken.append(name)
     assert not broken, f"_LAZY_IMPORTS symbols that fail to resolve: {broken}"

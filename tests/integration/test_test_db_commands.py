@@ -524,7 +524,7 @@ def _server_os_user(project: Project) -> tuple[str, int] | None:
     try:
         uid = Path(datadir).stat().st_uid
         return pwd.getpwuid(uid).pw_name, uid
-    except (OSError, KeyError):
+    except OSError, KeyError:
         return None
 
 

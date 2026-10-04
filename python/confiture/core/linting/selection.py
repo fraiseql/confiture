@@ -157,7 +157,7 @@ def env_ddl_files(env: str, project_dir: Path) -> tuple[list[Path], list[Path]]:
     try:
         builder = _core_builder.SchemaBuilder(env=env, project_dir=project_dir)
         return builder.find_sql_files(), list(builder.include_dirs)
-    except (ConfiturError, OSError):
+    except ConfiturError, OSError:
         return [], []
 
 
@@ -223,7 +223,7 @@ def _env_block(env: str, project_dir: Path, attribute: str) -> Any:
     """
     try:
         return getattr(Environment.load(env, project_dir=project_dir), attribute)
-    except (ConfiturError, OSError):
+    except ConfiturError, OSError:
         return None
 
 

@@ -56,7 +56,7 @@ def _detect_repo_root(schema_dir: Path) -> Path | None:
     resolved = schema_dir.resolve()
     try:
         return GitRepository(resolved if resolved.exists() else Path.cwd()).get_repo_root()
-    except (ConfiturError, FileNotFoundError, subprocess.TimeoutExpired):
+    except ConfiturError, FileNotFoundError, subprocess.TimeoutExpired:
         pass
     # Canonical layout fallback only — don't guess outside it.
     if resolved.parent.name == "db":

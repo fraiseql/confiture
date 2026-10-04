@@ -52,7 +52,7 @@ resolution hint surfaced in the envelope.
 | `CONFIG_008` | 5 | error | Invalid migration.tracking_table: {value} | Use letters, digits and underscores only, optionally schema-qualified (e.g. public.tb_confiture) |
 | `CONFIG_009` | 5 | error | Anonymization secret not set ({env_var}) | Export ANONYMIZATION_SECRET to a long random string kept out of version control before running an anonymizing sync or a keyed hash strategy |
 | `CONFIG_010` | 5 | error | Database URL not set in environment '{env}' | Set database_url in db/environments/{env}.yaml or DATABASE_URL environment variable |
-| `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=6.0, current major) |
+| `CONFIG_011` | 5 | error | pglast {version} does not expose {members}; confiture cannot walk DDL with it | Install a pglast release confiture supports (pglast>=8.1) |
 | `CONFIG_012` | 5 | error | Lint baseline file is missing or malformed: {file} | Create or regenerate it with `confiture lint --baseline <file> --write-baseline` |
 | `CONFIG_013` | 5 | error | {call} needs a connection {mode}: {reason} | Pass a connection in the mode the call names, or a URL: confiture never changes the mode of a connection it did not open |
 | `CONFIG_014` | 5 | error | pg_tviews {installed} offers read contract {contract}; confiture reads contract {supported} | Run a pg_tviews whose `tviews.contract_version()` is the contract confiture reads; an extension created by 0.1.0-beta.19 or earlier is moved with pg_tviews' scripts/migrate-from-0.1.0.sql |

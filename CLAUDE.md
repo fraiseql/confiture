@@ -92,14 +92,14 @@ uv run ty check python/confiture/
 ```toml
 # pyproject.toml dependencies
 [project.dependencies]
-python = ">=3.11"
+python = ">=3.14"
 typer = ">=0.12"          # CLI framework
 pydantic = ">=2.5"        # Configuration validation
 pyyaml = ">=6.0"          # YAML parsing
 psycopg = {version = ">=3.1", extras = ["binary", "pool"]}  # PostgreSQL driver
 rich = ">=13.7"           # Terminal formatting
 sqlglot = ">=28.0"        # SQL dialect-aware parsing (transpilation)
-pglast = ">=6.0"          # PostgreSQL's own C parser (libpg_query) — the one parser
+pglast = ">=8.1"          # PostgreSQL's own C parser (libpg_query) — the one parser
 
 [project.optional-dependencies]
 ast = []                  # empty alias: an older `fraiseql-confiture[ast]` still resolves
@@ -456,12 +456,11 @@ Every file-naming shape (`execute_file`, `read_text`, the runtime's
 wins; static analyzers additionally confine the winner to the project root. Do not add
 a fourth resolver.
 
-#### pglast version matrix
+#### pglast: one major
 
-Confiture depends on **`pglast>=6.0`, uncapped**, verified on 6.16, 7.18 and 8.4;
-`uv.lock` pins the current major and the required `pglast-matrix` CI leg runs the
-AST-backed suites against both ends of the range (`>=6,<7` and `>=8`). That leg runs an
-explicit list of test files: a change that moves DDL reading adds its guards there.
+Confiture depends on **`pglast>=8.1`, uncapped**: one major, verified on 8.4, which
+`uv.lock` pins. 8.1 is the first pglast with a cp314 wheel on every platform confiture
+ships, and 8 embeds PostgreSQL 18's grammar, so 18's constraint attributes are readable.
 
 **Never compare a parse-node enum against a literal ordinal.** PostgreSQL 18 inserted a
 member into `AlterTableType`, so pglast 8 renumbered everything after it: a literal
@@ -476,9 +475,9 @@ _AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
 
 Add the member to `REQUIRED_MEMBERS` there — `tests/unit/test_pglast_enum_binding.py`
 enumerates from it, and checks inline literals (`if sub_int == 17:`) as well as constant
-blocks. **Never add a member that only one supported pglast defines**: if a member is
-missing, `enums_are_usable()` raises `CONFIG_011` naming the installed pglast at first
-use, so a pglast-8-only member would make confiture refuse to start on 6 and 7.
+blocks. If a member is missing, `enums_are_usable()` raises `CONFIG_011` naming the
+installed pglast at first use, so a later major that drops or renames one refuses to
+start rather than misreading DDL.
 
 ### Native extension (schema hash only)
 
@@ -1400,7 +1399,7 @@ except psycopg.OperationalError as e:
   and `coordinate`: `plugins/fraiseql-confiture-pggit/`)
 - ✅ **Validation System**: 5-level prep-seed orchestrator with full database support
 - ✅ **CI/CD**: Multi-platform wheel building, quality gates (ruff + ty + pytest)
-- ✅ **Python Support**: 3.11, 3.12, 3.13 tested
+- ✅ **Python Support**: 3.14 (the floor; the next CPython is run by hand before it is declared)
 - ✅ **Library API**: `Migrator.from_config()` + `MigratorSession` context manager
 - ✅ **Introspection layer**: `FunctionIntrospector`, `TypeMapper`, `DependencyGraph`
 - ✅ **Structured error hierarchy**: `ConfiturError` + error codes + exit codes

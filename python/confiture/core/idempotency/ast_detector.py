@@ -55,10 +55,10 @@ if TYPE_CHECKING:
 # Enum constants
 # ---------------------------------------------------------------------------
 
-# Resolved BY NAME, never by literal ordinal (#192). ObjectType and ConstrType
-# happen to be stable across pglast 7 and 8 while AlterTableType is not — but
-# the bug class is "literal ordinal", not "this particular literal ordinal", so
-# leaving the stable ones as literals would just invite the next addition.
+# Resolved BY NAME, never by literal ordinal (#192). PostgreSQL 18 renumbered
+# AlterTableType and left ObjectType and ConstrType alone — but the bug class is
+# "literal ordinal", not "this particular literal ordinal", so leaving the
+# stable ones as literals would just invite the next renumbering.
 _OBJECT_TABLE = _pg_member("ObjectType", "OBJECT_TABLE")
 _OBJECT_VIEW = _pg_member("ObjectType", "OBJECT_VIEW")
 _OBJECT_MATVIEW = _pg_member("ObjectType", "OBJECT_MATVIEW")
@@ -109,7 +109,7 @@ def _enum_value(value: object) -> int | None:
     inner = getattr(value, "value", value)
     try:
         return int(inner)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

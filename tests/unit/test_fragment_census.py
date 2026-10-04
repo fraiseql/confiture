@@ -112,7 +112,7 @@ def _census() -> list[tuple[str, Fragment]]:
     for where, statement in _bodies():
         try:
             compiled = parse_body(statement)
-        except (pglast.parser.ParseError, json.JSONDecodeError):
+        except pglast.parser.ParseError, json.JSONDecodeError:
             continue
         read.extend((where, fragment) for fragment in fragments(compiled))
     return read

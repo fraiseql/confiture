@@ -16,7 +16,6 @@ generic pattern suggestion with an explicit
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeAlias
 
 from confiture.core.idempotency._captures import Captures
 from confiture.core.idempotency._naming import qualify
@@ -26,7 +25,7 @@ from confiture.core.schema_identity import DEFAULT_SCHEMA
 NO_TEMPLATE_AVAILABLE_MARKER = "no auto-template available — manual fix required"
 
 
-_TemplateFn: TypeAlias = Callable[[Captures], str | None]
+type _TemplateFn = Callable[[Captures], str | None]
 
 
 def _t_create_table(cap: Captures) -> str | None:

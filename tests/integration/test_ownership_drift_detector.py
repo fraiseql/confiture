@@ -27,7 +27,7 @@ _TEST_ROLES = ("own_migrator", "own_intruder")
 
 
 @pytest.fixture
-def own_db(clean_test_db: psycopg.Connection) -> Generator[psycopg.Connection, None, None]:
+def own_db(clean_test_db: psycopg.Connection) -> Generator[psycopg.Connection]:
     """Clean test schema and roles before/after each test."""
     conn = clean_test_db
 

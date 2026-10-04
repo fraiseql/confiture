@@ -193,7 +193,7 @@ def migrate_diff(
 
         format_migrate_diff_result(result, format_type, report_file, console)
 
-    except (typer.Exit, typer.BadParameter):
+    except typer.Exit, typer.BadParameter:
         raise
     # Reason: the diff result carries the failure so the formatter can render it in every format
     except Exception as e:

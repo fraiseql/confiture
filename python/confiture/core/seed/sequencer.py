@@ -65,7 +65,7 @@ def apply_seed_files(
             continue_on_error=continue_on_error, profile=profile, transaction_mode=transaction_mode
         )
         connection.commit()
-    except (ConfigurationError, SeedError):
+    except ConfigurationError, SeedError:
         raise
     # Reason: seed application runs user SQL; any failure is a SeedError
     except Exception as e:

@@ -3,7 +3,7 @@ name = "fraiseql-confiture"
 version = "1.29.0"
 description = "PostgreSQL migrations, sweetly done: build from DDL, migrate, preflight, sync 🍓"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = {text = "MIT"}
 authors = [
     {name = "evoludigit", email = "lionel.hamayon@evolution-digitale.fr"}
@@ -23,9 +23,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
@@ -39,10 +36,11 @@ dependencies = [
     "psycopg[binary,pool]>=3.1.0",
     "sqlglot>=28.0",
     # PostgreSQL's own parser (libpg_query) — the one parser since 0.50.0 (D13).
-    # Uncapped since 0.39.0 (#192): enum members are resolved by name through
-    # `core/_pglast_enums.py`, `tests/unit/test_pglast_enum_binding.py` guards the
-    # binding, and CI runs the AST suites on both ends of the range.
-    "pglast>=6.0",
+    # One major, uncapped: 8.1 is the first pglast with a cp314 wheel on every
+    # platform confiture ships. Enum members are resolved by name through
+    # `core/_pglast_enums.py` (`tests/unit/test_pglast_enum_binding.py`), so a
+    # later major that renumbers them is caught at first use, not misread.
+    "pglast>=8.1",
 ]
 
 [project.optional-dependencies]
@@ -194,7 +192,7 @@ exclude_lines = [
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 src = ["python"]
 # One extractor-coverage fixture is deliberately unparsable (it pins the
 # `syntax_error` warning); ruff cannot lint what it cannot parse.
@@ -343,7 +341,7 @@ include = ["python"]
 exclude = ["examples", "tests", "**/test_*.py"]
 
 [tool.ty.environment]
-python-version = "3.11"
+python-version = "3.14"
 root = ["python"]
 
 [tool.ty.analysis]

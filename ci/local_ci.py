@@ -25,7 +25,7 @@ from dagger import dag
 
 # --- parity constants (mirror quality-gate.yml) ------------------------------
 
-PY_VERSION = "3.11"
+PY_VERSION = "3.14"
 UV_IMAGE = f"ghcr.io/astral-sh/uv:python{PY_VERSION}-bookworm-slim"
 RUST_IMAGE = "rust:1-bookworm"
 POSTGRES_IMAGE = "postgres:16"
@@ -68,7 +68,7 @@ def _source() -> dagger.Directory:
 
 
 def _uv_base() -> dagger.Container:
-    """uv + Python 3.11 image with the repo mounted and uv's cache warmed."""
+    """uv + Python 3.14 image with the repo mounted and uv's cache warmed."""
     return (
         dag.container()
         .from_(UV_IMAGE)

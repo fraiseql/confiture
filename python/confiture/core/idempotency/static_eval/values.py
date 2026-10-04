@@ -33,6 +33,7 @@ class Refusal(str, Enum):
     NON_STRING = "non_string"
     FSTRING_DYNAMIC = "fstring_dynamic"
     FSTRING_FORMAT = "fstring_format"
+    TEMPLATE_STRING = "template_string"
     UNSUPPORTED_CALL = "unsupported_call"
     UNSUPPORTED = "unsupported_expression"
     HELPER_SHAPE = "helper_shape"
@@ -80,6 +81,10 @@ REMEDIES: dict[Refusal, str] = {
     ),
     Refusal.FSTRING_FORMAT: (
         "Drop the conversion or format spec; a plain {name} over a static string resolves."
+    ),
+    Refusal.TEMPLATE_STRING: (
+        'Pass a plain string ("…" or a static f"…"); a t"…" is a Template whose SQL is '
+        "what the driver renders, so the analyzer cannot read it."
     ),
     Refusal.UNSUPPORTED_CALL: (
         "Only Path(...), .read_text(), dedent() and the str methods replace/strip/upper/"

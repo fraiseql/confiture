@@ -45,7 +45,7 @@ jobs:
       - name: Set up Python and uv
         uses: ./.github/actions/python-uv
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable

@@ -89,7 +89,7 @@ class LintConfig:
     exclude_tables: list[str] = field(default_factory=list)
 
     @classmethod
-    def default(cls) -> "LintConfig":
+    def default(cls) -> LintConfig:
         """Create LintConfig with sensible defaults for all rules.
 
         Returns:

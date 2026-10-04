@@ -79,7 +79,7 @@ def _referenced(index: Index) -> set[str]:
     for key in index.columns:
         try:
             expression = pglast.parse_sql(f"SELECT {key}")[0].stmt
-        except (pglast.parser.ParseError, IndexError):
+        except pglast.parser.ParseError, IndexError:
             found.add(key.lower())
             continue
         for node in walk_nodes(expression):

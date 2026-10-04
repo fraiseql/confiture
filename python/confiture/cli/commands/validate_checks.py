@@ -322,7 +322,7 @@ def _resolve_grant_dir(opts: ValidateOptions, ctx: ValidationContext) -> str:
         configured = (
             cfg_data.get("migration", {}).get("grant_dir") if isinstance(cfg_data, dict) else None
         )
-    except (AttributeError, KeyError, TypeError):
+    except AttributeError, KeyError, TypeError:
         return "db/7_grant"
     return str(configured) if configured else "db/7_grant"
 

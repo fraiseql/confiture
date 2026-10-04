@@ -1049,7 +1049,7 @@ def extra_objects_of(flag: str | None, configured: ExtraObjects) -> ExtraObjects
     )
 
 
-def drift_config_from(config_data: Any) -> "DriftConfig":
+def drift_config_from(config_data: Any) -> DriftConfig:
     """The ``drift:`` block of a loaded config as a :class:`DriftConfig` (#226).
 
     A missing block is the defaults; a block that is not a mapping or fails
@@ -1316,7 +1316,7 @@ class AclDriftDetector:
     def __init__(self, connection: psycopg.Connection) -> None:
         self.connection = connection
 
-    def check(self, expectations: "list[AclExpectation]") -> DriftReport:
+    def check(self, expectations: list[AclExpectation]) -> DriftReport:
         """Compare every expectation against the live ACL state.
 
         Returns a :class:`DriftReport` with the originating database name
@@ -1370,7 +1370,7 @@ class AclDriftDetector:
     def _discover_tables(
         self,
         schema: str,
-        apply_to: "str | list[str]",
+        apply_to: str | list[str],
         ignore: list[str],
     ) -> list[str]:
         """Return base-table relnames in *schema* matching *apply_to*, less *ignore*.
@@ -1419,7 +1419,7 @@ class AclDriftDetector:
         self,
         schema: str,
         table: str,
-        grant: "AclGrant",
+        grant: AclGrant,
     ) -> DriftItem | None:
         """Return a single ``MISSING_GRANT`` item if *role* lacks any expected priv.
 
@@ -1513,7 +1513,7 @@ class AclDriftDetector:
         self,
         schema: str,
         table: str,
-        grant: "AclGrant",
+        grant: AclGrant,
     ) -> DriftItem | None:
         """Return an ``EXTRA_GRANT`` item if *role* directly holds privileges beyond expected.
 
@@ -1588,7 +1588,7 @@ class OwnershipDriftDetector:
     def __init__(self, connection: psycopg.Connection) -> None:
         self.connection = connection
 
-    def check(self, expectation: "OwnershipExpectation") -> DriftReport:
+    def check(self, expectation: OwnershipExpectation) -> DriftReport:
         """Compare every reachable relation against the expected owner.
 
         Returns a :class:`DriftReport` with one :class:`DriftItem` per

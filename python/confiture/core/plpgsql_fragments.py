@@ -75,7 +75,7 @@ class Mode(StrEnum):
 _S, _E, _A, _D = Mode.STATEMENT, Mode.EXPRESSION, Mode.ASSIGNMENT, Mode.DYNAMIC
 
 #: ``(node, slot)`` → how the fragment in that slot is read. Measured against
-#: libpg_query's serialisation on pglast 6.16, 7.18 and 8.4, which agree.
+#: libpg_query's serialisation on pglast 8.4.
 SLOTS: Mapping[tuple[str, str], Mode] = {
     ("PLpgSQL_var", "default_val"): _E,
     ("PLpgSQL_var", "cursor_explicit_expr"): _S,

@@ -278,7 +278,7 @@ def temp_relations(files: Iterable[ParsedFile]) -> frozenset[str]:
             compiled = plpgsql_parse.parse_body(
                 _statement_text(sql, raw), body_at=None if at is None else at - offset
             )
-        except (pglast.parser.ParseError, json.JSONDecodeError):
+        except pglast.parser.ParseError, json.JSONDecodeError:
             continue
         for fragment in plpgsql_fragments.fragments(compiled):
             if fragment.mode is plpgsql_fragments.Mode.STATEMENT and fragment.tree:
@@ -311,7 +311,7 @@ def referenced_objects(parsed: ParsedFile) -> list[Reference]:
 def _string_constants(sql: str) -> list[tuple[int, int]]:
     try:
         return sql_lexer.string_constants(sql)
-    except (ValueError, IndexError):
+    except ValueError, IndexError:
         return []
 
 

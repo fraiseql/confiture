@@ -34,7 +34,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
         native: 'true'
 
     - name: Build and install with production optimization
@@ -140,7 +140,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Install dependencies
       run: |
@@ -160,7 +160,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Install dependencies and ty
       run: |
@@ -182,7 +182,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Install dependencies
       run: |
@@ -240,9 +240,6 @@ jobs:
         # Every interpreter a wheel is built for: `maturin --find-interpreter`
         # builds one wheel per interpreter it finds, and finds only these (#586).
         python-version: |
-          3.11
-          3.12
-          3.13
           3.14
 
     - name: Setup Rust toolchain
@@ -257,7 +254,7 @@ jobs:
         CIBW_ARCHS: x86_64
         # One wheel per CPython: the wheels are version-specific (cp3XX), so a
         # version missing here has no wheel and installs from the sdist (#586).
-        CIBW_BUILD: 'cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64'
+        CIBW_BUILD: 'cp314-manylinux_x86_64'
         CIBW_MANYLINUX_X86_64_IMAGE: 'quay.io/pypa/manylinux_2_28_x86_64:latest'
 
     - name: Build wheels (macOS/Windows)
@@ -310,7 +307,7 @@ jobs:
     - name: Every platform has a wheel for every supported CPython (#586)
       run: |
         missing=0
-        for py in cp311 cp312 cp313 cp314; do
+        for py in cp314; do
           for platform in manylinux macosx win; do
             if ! ls dist/*-"$py"-"$py"-*"$platform"*.whl >/dev/null 2>&1; then
               echo "❌ no $py wheel for $platform"

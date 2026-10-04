@@ -80,7 +80,7 @@ def tb_confiture_dir() -> Path:
 def confiture_sandbox(
     confiture_db_url: str,
     tb_confiture_dir: Path,
-) -> Generator[MigrationSandbox, None, None]:
+) -> Generator[MigrationSandbox]:
     """Provide a migration sandbox with automatic rollback.
 
     Creates a MigrationSandbox that automatically rolls back all changes
@@ -302,7 +302,7 @@ def confiture_worker_db(
     confiture_test_server_url: str,
     confiture_worker_id: str | None,
     confiture_ram_tablespace_usable: str | None,
-) -> Generator[str, None, None]:
+) -> Generator[str]:
     """Yield a per-worker database cloned from the shared template.
 
     One clone per xdist worker (session scope is per worker process), dropped on

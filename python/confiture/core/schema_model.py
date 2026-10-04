@@ -862,14 +862,11 @@ def _view_from(data: dict[str, Any]) -> View:
     return View(**{**data, "indexes": tuple(_index_from(i) for i in data["indexes"])})
 
 
-_T = TypeVar("_T")
-
-
-def _keyed(
+def _keyed[T](
     items: list[dict[str, Any]],
-    read: Callable[[dict[str, Any]], _T],
-    ref: Callable[[_T], ObjectRef],
-) -> dict[ObjectRef, _T]:
+    read: Callable[[dict[str, Any]], T],
+    ref: Callable[[T], ObjectRef],
+) -> dict[ObjectRef, T]:
     return {ref(obj): obj for obj in map(read, items)}
 
 
@@ -1103,7 +1100,7 @@ def _parity_index(index: Index, rules: frozenset[str]) -> Index:
     )
 
 
-def _in_order(objects: list[_T], rules: frozenset[str]) -> tuple[_T, ...]:
+def _in_order[T](objects: list[T], rules: frozenset[str]) -> tuple[T, ...]:
     return tuple(sorted(objects, key=repr) if "declaration_order" in rules else objects)
 
 

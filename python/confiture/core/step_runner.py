@@ -211,7 +211,7 @@ def run(
                 for statement in stage.statements:
                     with connection.cursor() as cur:
                         cur.execute(statement)
-        except (psycopg.Error, ConfiturError):
+        except psycopg.Error, ConfiturError:
             store.failed(migration, plan_index, stage.name)
             raise
         store.done(migration, plan_index, stage.name)

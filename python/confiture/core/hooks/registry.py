@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from .base import Hook, HookResult
 from .context import HookContext
@@ -25,8 +25,6 @@ from .observability import (
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar("T")
-
 
 def _extract_phase_value(phase: Any) -> str:
     """Extract string value from phase enum or convert to string.
@@ -40,7 +38,7 @@ def _extract_phase_value(phase: Any) -> str:
     return phase.value if hasattr(phase, "value") else str(phase)
 
 
-class HookRegistry(Generic[T]):
+class HookRegistry[T]:
     """Manage hook registration and execution."""
 
     def __init__(self, execution_config: dict[Any, HookPhaseConfig] | None = None):

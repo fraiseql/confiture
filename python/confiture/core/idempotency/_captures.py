@@ -149,7 +149,7 @@ def _captures_ast_alter_add_column(node: Any) -> Captures:
         sub_val = getattr(subtype, "value", subtype)
         try:
             sub_int = int(sub_val) if sub_val is not None else None
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             sub_int = None
         if sub_int == _AT_ADD_COLUMN:
             col_def = getattr(cmd, "def_", None)
@@ -168,7 +168,7 @@ def _captures_ast_alter_add_constraint(node: Any) -> Captures:
         sub_val = getattr(subtype, "value", subtype)
         try:
             sub_int = int(sub_val) if sub_val is not None else None
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             sub_int = None
         if sub_int == _AT_ADD_CONSTRAINT:
             constraint_def = getattr(cmd, "def_", None)

@@ -37,7 +37,7 @@ def live_issues(files: Iterable[Path], tviews: Mapping[str, str]) -> list[Prefli
         version = _version_from_migration_filename(path.name)
         try:
             statements = parse(path.read_text(encoding="utf-8"))
-        except (pglast.parser.ParseError, OSError):
+        except pglast.parser.ParseError, OSError:
             continue
         dropped: set[str] = set()
         for statement in statements:
@@ -136,7 +136,7 @@ class _Reads:
         self._star = False
         try:
             root = pglast.parse_sql(query)[0].stmt
-        except (pglast.parser.ParseError, IndexError):
+        except pglast.parser.ParseError, IndexError:
             self._star = True
             return
         nodes = list(walk_nodes(root))

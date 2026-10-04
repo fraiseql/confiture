@@ -82,7 +82,7 @@ class Precondition(ABC):
     """
 
     @abstractmethod
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         """Check if the precondition is satisfied.
 
         Args:
@@ -118,7 +118,7 @@ class TableExists(Precondition):
     table: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         exists = live_catalog.relation_exists(
             connection, self.schema, self.table, kinds=live_catalog.TABLE_LIKE
         )
@@ -142,7 +142,7 @@ class TableNotExists(Precondition):
     table: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         not_exists = not live_catalog.relation_exists(
             connection, self.schema, self.table, kinds=live_catalog.TABLE_LIKE
         )
@@ -170,7 +170,7 @@ class ColumnExists(Precondition):
     column: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         exists = live_catalog.column(connection, self.schema, self.table, self.column) is not None
         return (exists, f"Column {self.schema}.{self.table}.{self.column} exists")
 
@@ -190,7 +190,7 @@ class ColumnNotExists(Precondition):
     column: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         not_exists = live_catalog.column(connection, self.schema, self.table, self.column) is None
         return (
             not_exists,
@@ -215,7 +215,7 @@ class ColumnType(Precondition):
     expected_type: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         found = live_catalog.column(connection, self.schema, self.table, self.column)
         if found is None:
             return (False, f"Column {self.schema}.{self.table}.{self.column} not found")
@@ -251,7 +251,7 @@ class ConstraintExists(Precondition):
     constraint: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         exists = live_catalog.constraint_exists(
             connection, self.schema, self.table, self.constraint
         )
@@ -276,7 +276,7 @@ class ConstraintNotExists(Precondition):
     constraint: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         not_exists = not live_catalog.constraint_exists(
             connection, self.schema, self.table, self.constraint
         )
@@ -304,7 +304,7 @@ class ForeignKeyExists(Precondition):
     schema: str = "public"
     references_schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         exists = any(
             self.column in fk.columns
             and self.references_column in fk.ref_columns
@@ -342,7 +342,7 @@ class IndexExists(Precondition):
     index: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         exists = live_catalog.index_exists(connection, self.schema, self.index, self.table)
         return (exists, f"Index {self.index} on {self.schema}.{self.table} exists")
 
@@ -362,7 +362,7 @@ class IndexNotExists(Precondition):
     index: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         not_exists = not live_catalog.index_exists(connection, self.schema, self.index, self.table)
         return (
             not_exists,
@@ -389,7 +389,7 @@ class SchemaExists(Precondition):
 
     schema: str
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         exists = live_catalog.schema_exists(connection, self.schema)
         return (exists, f"Schema {self.schema} exists")
 
@@ -407,7 +407,7 @@ class SchemaNotExists(Precondition):
 
     schema: str
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         not_exists = not live_catalog.schema_exists(connection, self.schema)
         return (not_exists, f"Schema {self.schema} does not exist")
 
@@ -437,7 +437,7 @@ class RowCountEquals(Precondition):
     expected_count: int
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         with connection.cursor() as cursor:
             cursor.execute(_count_rows(self.schema, self.table))
             result = cursor.fetchone()
@@ -465,7 +465,7 @@ class RowCountGreaterThan(Precondition):
     min_count: int
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         with connection.cursor() as cursor:
             cursor.execute(_count_rows(self.schema, self.table))
             result = cursor.fetchone()
@@ -492,7 +492,7 @@ class TableIsEmpty(Precondition):
     table: str
     schema: str = "public"
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         with connection.cursor() as cursor:
             cursor.execute(_count_rows(self.schema, self.table))
             result = cursor.fetchone()
@@ -526,7 +526,7 @@ class CustomSQL(Precondition):
     description: str
     params: tuple = field(default_factory=tuple)
 
-    def check(self, connection: "psycopg.Connection") -> tuple[bool, str]:
+    def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         with connection.cursor() as cursor:
             if self.params:
                 cursor.execute(self.sql, self.params)
@@ -560,7 +560,7 @@ class PreconditionValidator:
         >>> validator.check(preconditions)  # Returns (passed, failures)
     """
 
-    def __init__(self, connection: "psycopg.Connection"):
+    def __init__(self, connection: psycopg.Connection):
         """Initialize validator with database connection.
 
         Args:

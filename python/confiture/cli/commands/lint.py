@@ -356,8 +356,8 @@ def lint(
 def _with_rule_catalogue(doc: str) -> str:
     """``doc`` with its ``{rule_catalogue}`` line replaced by the registry's paragraphs.
 
-    The indent is read off that line: Python 3.13 dedents docstrings at compile
-    time, so the same source gives six spaces on 3.11 and none on 3.13.
+    The indent is read off that line rather than assumed: Python dedents
+    docstrings at compile time, so today it is none.
     """
     lines = doc.splitlines()
     for index, line in enumerate(lines):

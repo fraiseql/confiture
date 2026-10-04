@@ -41,7 +41,7 @@ _SCHEMA = "catalog"
 
 
 @pytest.fixture
-def widgets(clean_test_db: psycopg.Connection) -> Generator[psycopg.Connection, None, None]:
+def widgets(clean_test_db: psycopg.Connection) -> Generator[psycopg.Connection]:
     """A prep-seed-shaped catalog: a parent, a child with an ``fk_`` column.
 
     Deliberately *valid*: every constraint holds and no column that matters is
@@ -229,7 +229,7 @@ def test_an_orphaned_reference_to_a_table_on_search_path_is_found(
 @pytest.fixture
 def prep_seed_project(
     clean_test_db: psycopg.Connection, tmp_path: pytest.TempPathFactory
-) -> Generator[tuple[psycopg.Connection, list[str]], None, None]:
+) -> Generator[tuple[psycopg.Connection, list[str]]]:
     """A whole, valid prep-seed cycle: UUID prep table, resolver, BIGINT catalog."""
     conn = clean_test_db
     with conn.cursor() as cur:

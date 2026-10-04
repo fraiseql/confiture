@@ -11,7 +11,6 @@ from __future__ import annotations
 import dataclasses
 import heapq
 from collections.abc import Iterable
-from typing import Generic, TypeVar
 
 from confiture.core.model_facts import resolve, table_ref
 from confiture.core.schema_model import ObjectRef, SchemaModel
@@ -19,11 +18,10 @@ from confiture.exceptions import SchemaError
 from confiture.models.introspection import IntrospectionResult
 
 #: A table as the graph holds it: a bare name, or ``(schema, name)`` for a model's.
-Node = TypeVar("Node", str, tuple[str, str])
 
 
 @dataclasses.dataclass
-class DependencyOrder(Generic[Node]):
+class DependencyOrder[Node: (str, tuple[str, str])]:
     """Result of topological sort on the FK graph."""
 
     ordered: list[Node]
@@ -47,7 +45,7 @@ class DependencyCycleError(SchemaError):
         )
 
 
-class DependencyGraph(Generic[Node]):
+class DependencyGraph[Node: (str, tuple[str, str])]:
     """Build and query a directed graph of FK dependencies.
 
     An edge A -> B means "A has a FK pointing to B" (A depends on B).

@@ -101,7 +101,7 @@ def _detect_transactional(up_file: Path) -> bool:
             # The statement is about to be executed: PostgreSQL will reject it
             # with its own error inside the transaction. Nothing to classify.
             return True
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return True
 
 
@@ -217,7 +217,7 @@ class FileSQLMigration(Migration):
         cls,
         up_file: Path,
         down_file: Path,
-    ) -> type["FileSQLMigration"]:
+    ) -> type[FileSQLMigration]:
         """Create a migration class from SQL file pair.
 
         This creates a new class (not instance) that can be used with the
@@ -328,7 +328,7 @@ def get_sql_migration_version(up_file: Path) -> str:
 
 def load_preconditions_from_yaml(
     yaml_file: Path,
-) -> tuple[list["Precondition"], list["Precondition"]]:
+) -> tuple[list[Precondition], list[Precondition]]:
     """Load preconditions from a YAML sidecar file.
 
     The YAML file should have the following structure:
@@ -392,7 +392,7 @@ def load_preconditions_from_yaml(
     with yaml_file.open() as f:
         data = yaml.safe_load(f) or {}
 
-    def parse_preconditions(items: list[dict] | None) -> list["Precondition"]:
+    def parse_preconditions(items: list[dict] | None) -> list[Precondition]:
         if not items:
             return []
 

@@ -39,7 +39,7 @@ def _maint(url: str) -> str:
 
 
 @pytest.fixture
-def live_db() -> Generator[str, None, None]:
+def live_db() -> Generator[str]:
     """A fresh, persistent live database (dropped after the test)."""
     server = _server_url()
     maint = _maint(server)

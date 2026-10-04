@@ -8,7 +8,7 @@ Build from DDL. Adopt on day one against a database that already has migrations 
 [![Quality Gate](https://github.com/fraiseql/confiture/actions/workflows/quality-gate.yml/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/quality-gate.yml)
 [![Python Version Matrix](https://github.com/fraiseql/confiture/actions/workflows/python-version-matrix.yml/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/python-version-matrix.yml)
 [![Examples](https://github.com/fraiseql/confiture/actions/workflows/examples.yml/badge.svg)](https://github.com/fraiseql/confiture/actions/workflows/examples.yml)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)](https://www.python.org/)
+[![Python 3.14+](https://img.shields.io/badge/Python-3.14%2B-blue)](https://www.python.org/)
 [![PostgreSQL 16+](https://img.shields.io/badge/PostgreSQL-16%2B-blue)](https://www.postgresql.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 

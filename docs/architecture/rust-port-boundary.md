@@ -35,11 +35,9 @@ holds.
 
 ## The grammar the crate inherits
 
-The Python package supports pglast 6 through 8, which embed the PostgreSQL 16, 17 and 18
-grammars. A crate that links `libpg_query` links one of them. The crate targets
-**PostgreSQL 18**, the grammar the lockfile pins today (pglast 8.4; `confiture --version`
-names it on its second line). A 16 or 17 grammar is a build of the crate against that
-`libpg_query`, not a switch at run time.
+The Python package supports pglast 8, which embeds the PostgreSQL 18 grammar. The crate
+targets **PostgreSQL 18** too, the grammar the lockfile pins today (pglast 8.4;
+`confiture --version` names it on its second line).
 
 The majors do not agree on the parse-node enums. PostgreSQL 18 inserted an
 `AlterTableType` member, which shifted every member from index 13 on down by one. A

@@ -283,6 +283,8 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin, _FileReadsM
             )
         if isinstance(node, ast.JoinedStr):
             return self._eval_fstring(node, scope, ctx)
+        if isinstance(node, ast.TemplateStr):
+            return Unknown(Refusal.TEMPLATE_STRING, "a template string is a Template, not a str")
         if isinstance(node, ast.BinOp):
             return self._eval_binop(node, scope, ctx)
         if isinstance(node, ast.Name):
@@ -294,24 +296,25 @@ class ModuleModel(_ScopeLookupMixin, _StrMethodsMixin, _FileIOMixin, _FileReadsM
         if isinstance(node, ast.Call):
             return self._eval_call(node, scope, ctx)
         if isinstance(node, (ast.Tuple, ast.List)):
-            items: list[Value] = []
-            for element in node.elts:
-                if isinstance(element, ast.Starred):
-                    inner = self._eval(element.value, scope, ctx)
-                    if isinstance(inner, Unknown):
-                        return inner
-                    if not isinstance(inner, Seq):
-                        return Unknown(
-                            Refusal.UNSUPPORTED, "`*` on something that is not a sequence"
-                        )
-                    items.extend(inner.items)
-                    continue
-                value = self._eval(element, scope, ctx)
-                if isinstance(value, Unknown):
-                    return value
-                items.append(value)
-            return Seq(tuple(items))
+            return self._eval_sequence(node, scope, ctx)
         return Unknown(Refusal.UNSUPPORTED, f"{type(node).__name__} is not in the static grammar")
+
+    def _eval_sequence(self, node: ast.Tuple | ast.List, scope: _Scope, ctx: _Context) -> Value:
+        items: list[Value] = []
+        for element in node.elts:
+            if isinstance(element, ast.Starred):
+                inner = self._eval(element.value, scope, ctx)
+                if isinstance(inner, Unknown):
+                    return inner
+                if not isinstance(inner, Seq):
+                    return Unknown(Refusal.UNSUPPORTED, "`*` on something that is not a sequence")
+                items.extend(inner.items)
+                continue
+            value = self._eval(element, scope, ctx)
+            if isinstance(value, Unknown):
+                return value
+            items.append(value)
+        return Seq(tuple(items))
 
     def _eval_binop(self, node: ast.BinOp, scope: _Scope, ctx: _Context) -> Value:
         if isinstance(node.op, ast.Mod):

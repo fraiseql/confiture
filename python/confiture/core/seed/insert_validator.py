@@ -234,7 +234,7 @@ class InsertValidator:
                 # Use SQL method to get qualified name (handles schema.table)
                 return table.sql(dialect="postgres")
             return None
-        except (sqlglot.errors.SqlglotError, AttributeError, IndexError):
+        except sqlglot.errors.SqlglotError, AttributeError, IndexError:
             return None
 
     def extract_columns(self, insert_sql: str) -> list[str] | None:
@@ -266,5 +266,5 @@ class InsertValidator:
                     columns.append(str(col_expr))
 
             return columns
-        except (sqlglot.errors.SqlglotError, AttributeError, IndexError):
+        except sqlglot.errors.SqlglotError, AttributeError, IndexError:
             return None

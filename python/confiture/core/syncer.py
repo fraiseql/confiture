@@ -154,7 +154,7 @@ class ProductionSyncer:
         # `_sync_with_anonymization` forces it up front when a keyed rule exists.
         self._pseudonymizer_cache: Pseudonymizer | None = None
 
-    def __enter__(self) -> "ProductionSyncer":
+    def __enter__(self) -> ProductionSyncer:
         """Context manager entry."""
         self._source_conn = create_connection(self.source_config)
         try:

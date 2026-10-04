@@ -251,7 +251,7 @@ Confiture uses GitHub Actions for automated testing across multiple PostgreSQL v
 
 - `.github/workflows/quality-gate.yml` - Full test suite (PostgreSQL 16)
 - `.github/workflows/migration-tests.yml` - Migration-specific tests (PostgreSQL 16)
-- `.github/workflows/python-version-matrix.yml` - Python 3.11/3.12/3.13 compatibility
+- `.github/workflows/python-version-matrix.yml` - the next CPython, run by hand before it is declared
 - `.github/workflows/migration-performance.yml` - Performance regression detection
 
 #### Databases Created

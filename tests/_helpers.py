@@ -49,7 +49,7 @@ def _probe(url: str | None) -> str | None:
             available = connection.execute(
                 "SELECT 1 FROM pg_available_extensions WHERE name = %s", (PLPGSQL_CHECK,)
             ).fetchone()
-    except (psycopg.Error, OSError):
+    except psycopg.Error, OSError:
         return None
     return url if available else None
 

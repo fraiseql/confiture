@@ -3,7 +3,7 @@ name = "fraiseql-confiture-pggit"
 version = "0.1.0"
 description = "pgGit branching and multi-agent coordination commands for confiture"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [
     "fraiseql-confiture>=1.16",

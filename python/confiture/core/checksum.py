@@ -162,7 +162,7 @@ class MigrationChecksumVerifier:
 
     def __init__(
         self,
-        connection: "psycopg.Connection",
+        connection: psycopg.Connection,
         config: ChecksumConfig | None = None,
         migration_table: str = "tb_confiture",
     ):

@@ -40,8 +40,8 @@ def ascii_shadow(text: str) -> str:
     Same length, same newlines, same token boundaries — an offset into the shadow
     is that offset in *text* — and pure ASCII, which is the point: pglast reports
     the offset of a syntax error in a unit that is neither characters nor bytes
-    when a multibyte character precedes it (measured on 6.16 and 8.4, both
-    ``scan`` and ``parse_sql``). Over ASCII the three agree, so an index taken
+    when a multibyte character precedes it (measured on 8.4, both ``scan`` and
+    ``parse_sql``). Over ASCII the three agree, so an index taken
     from the shadow indexes *text*.
 
     The substitution is lexically invisible: PostgreSQL's scanner classes every

@@ -42,8 +42,8 @@ from confiture.core.sql_lexer import parse_file
 from confiture.core.type_lattice import canonical_type
 
 # Resolved BY NAME, never by literal ordinal (#192): PG18 renumbered
-# AlterTableType, so pglast 8 numbers every member at index >= 13 one lower than
-# pglast 6 and 7, and a literal ordinal would silently miss on one side of that.
+# AlterTableType, every member at index >= 13 one lower than before, and a
+# literal ordinal silently misses the next time a major does that.
 _AT_ADD_COLUMN = _pg_member("AlterTableType", "AT_AddColumn")
 _AT_DROP_COLUMN = _pg_member("AlterTableType", "AT_DropColumn")
 _AT_ALTER_COLUMN_TYPE = _pg_member("AlterTableType", "AT_AlterColumnType")

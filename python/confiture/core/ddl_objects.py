@@ -352,7 +352,7 @@ def _named(value: Any) -> tuple[str | None, str] | None:
         return value.relation.schemaname, value.relation.relname
     try:
         return split_names(value)
-    except (AttributeError, IndexError, TypeError):
+    except AttributeError, IndexError, TypeError:
         return None
 
 

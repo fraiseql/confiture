@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ast
 import symtable
-import sys
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -123,16 +122,13 @@ def _pattern_captures(pattern: ast.pattern) -> list[str]:
     return names
 
 
-# PEP 709 (Python 3.12) inlines list, set and dict comprehensions into the
-# enclosing scope: ``symtable`` emits no child table for them, and their
-# targets are symbols of the enclosing table. Generator expressions keep their
-# own table on every version. The walker still gives an inlined comprehension
+# PEP 709 inlines list, set and dict comprehensions into the enclosing scope:
+# ``symtable`` emits no child table for them, and their targets are symbols of
+# the enclosing table. Generator expressions keep their own table. The walker still gives an inlined comprehension
 # its own ``_Scope`` — a comprehension target is a binding the evaluator
 # refuses — but pairs that scope with the *enclosing* table instead of
 # consuming a symtable child that does not exist.
-_INLINED_COMPREHENSIONS: tuple[type[ast.AST], ...] = (
-    (ast.ListComp, ast.SetComp, ast.DictComp) if sys.version_info >= (3, 12) else ()
-)
+_INLINED_COMPREHENSIONS: tuple[type[ast.AST], ...] = (ast.ListComp, ast.SetComp, ast.DictComp)
 
 
 class _BindingCollector:
@@ -277,12 +273,8 @@ class _BindingCollector:
             self.statements(case.body, top_level=False)
 
     def _type_alias(self, stmt: ast.stmt, top_level: bool) -> None:
-        # `type X = ...` (3.12+); the node is absent from 3.11's stubs.
-        type_alias = getattr(ast, "TypeAlias", None)
-        if type_alias is not None and isinstance(stmt, type_alias):
-            alias_name = getattr(stmt, "name", None)
-            if isinstance(alias_name, ast.Name):
-                self.add(alias_name.id, "typealias", stmt.lineno, top_level=top_level)
+        if isinstance(stmt, ast.TypeAlias) and isinstance(stmt.name, ast.Name):
+            self.add(stmt.name.id, "typealias", stmt.lineno, top_level=top_level)
 
     # Statement node types → the method that records their bindings; the first
     # entry whose types match handles the statement.

@@ -12,7 +12,7 @@ assertion cannot see one.
 
 from __future__ import annotations
 
-from typing import ClassVar, TypeVar
+from typing import ClassVar
 
 import pglast
 
@@ -27,14 +27,12 @@ from confiture.core.schema_change import (
 )
 from confiture.core.schema_model import RelationName
 
-_Change = TypeVar("_Change")
-
 
 def _changes(old: str, new: str) -> list[SchemaChange]:
     return SchemaDiffer().compare(old, new).changes
 
 
-def _by_type(changes: list[SchemaChange], kind: type[_Change]) -> _Change:
+def _by_type[Change](changes: list[SchemaChange], kind: type[Change]) -> Change:
     return next(c for c in changes if isinstance(c, kind))
 
 
