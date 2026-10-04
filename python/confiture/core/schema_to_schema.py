@@ -94,22 +94,16 @@ class SchemaToSchemaMigrator:
             cursor: Database cursor
             params: The source's connection parameters (:meth:`_get_connection_params`)
         """
-        cursor.execute(
-            sql.SQL("""
-                CREATE SERVER IF NOT EXISTS {server}
-                FOREIGN DATA WRAPPER postgres_fdw
-                OPTIONS (
-                    host {host},
-                    dbname {dbname},
-                    port {port}
-                )
-            """).format(
-                server=sql.Identifier(self.server_name),
-                host=sql.Literal(params["host"]),
-                dbname=sql.Literal(params["dbname"]),
-                port=sql.Literal(params["port"]),
+        host, dbname, port = params["host"], params["dbname"], params["port"]
+        cursor.execute(t"""
+            CREATE SERVER IF NOT EXISTS {self.server_name:i}
+            FOREIGN DATA WRAPPER postgres_fdw
+            OPTIONS (
+                host {host:l},
+                dbname {dbname:l},
+                port {port:l}
             )
-        )
+        """)
 
     def _create_user_mapping(self, cursor: psycopg.Cursor, params: dict[str, str]) -> None:
         """Create user mapping for foreign server authentication.
@@ -118,20 +112,15 @@ class SchemaToSchemaMigrator:
             cursor: Database cursor
             params: The source's connection parameters (:meth:`_get_connection_params`)
         """
-        cursor.execute(
-            sql.SQL("""
-                CREATE USER MAPPING IF NOT EXISTS FOR CURRENT_USER
-                SERVER {server}
-                OPTIONS (
-                    user {user},
-                    password {password}
-                )
-            """).format(
-                server=sql.Identifier(self.server_name),
-                user=sql.Literal(params["user"]),
-                password=sql.Literal(params["password"]),
+        user, password = params["user"], params["password"]
+        cursor.execute(t"""
+            CREATE USER MAPPING IF NOT EXISTS FOR CURRENT_USER
+            SERVER {self.server_name:i}
+            OPTIONS (
+                user {user:l},
+                password {password:l}
             )
-        )
+        """)
 
     def _create_foreign_schema(self, cursor: psycopg.Cursor) -> None:
         """Create foreign schema container.
@@ -139,11 +128,7 @@ class SchemaToSchemaMigrator:
         Args:
             cursor: Database cursor
         """
-        cursor.execute(
-            sql.SQL("CREATE SCHEMA IF NOT EXISTS {schema}").format(
-                schema=sql.Identifier(self.foreign_schema_name)
-            )
-        )
+        cursor.execute(t"CREATE SCHEMA IF NOT EXISTS {self.foreign_schema_name:i}")
 
     def _drop_imported_tables(self, cursor: psycopg.Cursor) -> None:
         """Drop the foreign tables an earlier ``setup`` imported, so the import runs again.
@@ -166,11 +151,7 @@ class SchemaToSchemaMigrator:
             (self.foreign_schema_name, self.server_name),
         )
         for (table,) in cursor.fetchall():
-            cursor.execute(
-                sql.SQL("DROP FOREIGN TABLE {schema}.{table}").format(
-                    schema=sql.Identifier(self.foreign_schema_name), table=sql.Identifier(table)
-                )
-            )
+            cursor.execute(t"DROP FOREIGN TABLE {self.foreign_schema_name:i}.{table:i}")
 
     def _import_foreign_schema(self, cursor: psycopg.Cursor) -> None:
         """Import foreign schema tables from source database, replacing an earlier import.
@@ -179,16 +160,11 @@ class SchemaToSchemaMigrator:
             cursor: Database cursor
         """
         self._drop_imported_tables(cursor)
-        cursor.execute(
-            sql.SQL("""
-                IMPORT FOREIGN SCHEMA public
-                FROM SERVER {server}
-                INTO {schema}
-            """).format(
-                server=sql.Identifier(self.server_name),
-                schema=sql.Identifier(self.foreign_schema_name),
-            )
-        )
+        cursor.execute(t"""
+            IMPORT FOREIGN SCHEMA public
+            FROM SERVER {self.server_name:i}
+            INTO {self.foreign_schema_name:i}
+        """)
 
     def setup_fdw(self, skip_import: bool = False) -> None:
         """Setup Foreign Data Wrapper to source database.
@@ -241,21 +217,11 @@ class SchemaToSchemaMigrator:
         """
         try:
             with self.target_connection.cursor() as cursor:
+                cursor.execute(t"DROP SCHEMA IF EXISTS {self.foreign_schema_name:i} CASCADE")
                 cursor.execute(
-                    sql.SQL("DROP SCHEMA IF EXISTS {schema} CASCADE").format(
-                        schema=sql.Identifier(self.foreign_schema_name)
-                    )
+                    t"DROP USER MAPPING IF EXISTS FOR CURRENT_USER SERVER {self.server_name:i}"
                 )
-                cursor.execute(
-                    sql.SQL("DROP USER MAPPING IF EXISTS FOR CURRENT_USER SERVER {server}").format(
-                        server=sql.Identifier(self.server_name)
-                    )
-                )
-                cursor.execute(
-                    sql.SQL("DROP SERVER IF EXISTS {server} CASCADE").format(
-                        server=sql.Identifier(self.server_name)
-                    )
-                )
+                cursor.execute(t"DROP SERVER IF EXISTS {self.server_name:i} CASCADE")
 
             self.target_connection.commit()
 
@@ -299,34 +265,17 @@ class SchemaToSchemaMigrator:
 
         try:
             with self.target_connection.cursor() as cursor:
-                # Build SELECT clause with column mapping
-                # Maps: old_col AS new_col, old_col AS new_col, ...
-                select_items = []
-                for source_col, target_col in column_mapping.items():
-                    select_items.append(
-                        sql.SQL("{source} AS {target}").format(
-                            source=sql.Identifier(source_col),
-                            target=sql.Identifier(target_col),
-                        )
-                    )
-
-                # Build target column list
-                target_cols = [sql.Identifier(col) for col in column_mapping.values()]
-
-                # Build INSERT ... SELECT statement
-                insert_query = sql.SQL("""
-                    INSERT INTO {target_table} ({target_cols})
-                    SELECT {select_items}
-                    FROM {foreign_schema}.{source_table}
-                """).format(
-                    target_table=sql.Identifier(target_table),
-                    target_cols=sql.SQL(", ").join(target_cols),
-                    select_items=sql.SQL(", ").join(select_items),
-                    foreign_schema=sql.Identifier(self.foreign_schema_name),
-                    source_table=sql.Identifier(source_table),
+                # old_col AS new_col, old_col AS new_col, ...
+                select_items = sql.SQL(", ").join(
+                    t"{source:i} AS {target:i}" for source, target in column_mapping.items()
                 )
+                target_cols = sql.SQL(", ").join(t"{col:i}" for col in column_mapping.values())
 
-                cursor.execute(insert_query)
+                cursor.execute(t"""
+                    INSERT INTO {target_table:i} ({target_cols:q})
+                    SELECT {select_items:q}
+                    FROM {self.foreign_schema_name:i}.{source_table:i}
+                """)
                 rows_migrated = cursor.rowcount or 0
 
             self.target_connection.commit()
@@ -387,49 +336,30 @@ class SchemaToSchemaMigrator:
         buffer = BytesIO()
 
         try:
-            # Build SELECT query with column mapping for COPY
-            # We select from the foreign schema with source column names
-            select_items = []
-            select_items.extend(
-                sql.SQL("{source}").format(source=sql.Identifier(source_col))
-                for source_col in column_mapping
-            )
-
-            select_query = sql.SQL(
-                "SELECT {select_items} FROM {foreign_schema}.{source_table}"
-            ).format(
-                select_items=sql.SQL(", ").join(select_items),
-                foreign_schema=sql.Identifier(self.foreign_schema_name),
-                source_table=sql.Identifier(source_table),
-            )
-
-            # Build target column list (using mapped target names)
-            target_cols = [sql.Identifier(col) for col in column_mapping.values()]
+            # Select from the foreign schema by the source column names, load into
+            # the target by the mapped names.
+            select_items = sql.SQL(", ").join(t"{col:i}" for col in column_mapping)
+            target_cols = sql.SQL(", ").join(t"{col:i}" for col in column_mapping.values())
+            copy_out = t"""
+                COPY (
+                    SELECT {select_items:q}
+                    FROM {self.foreign_schema_name:i}.{source_table:i}
+                ) TO STDOUT WITH (FORMAT csv)
+            """
 
             # Step 1: COPY data from source to buffer
-            with self.target_connection.cursor() as cursor:
-                copy_to_query = sql.SQL("COPY ({select_query}) TO STDOUT WITH (FORMAT csv)").format(
-                    select_query=select_query
-                )
-
-                with cursor.copy(copy_to_query.as_string(cursor)) as copy:
-                    # Read all data into buffer
-                    for chunk in copy:
-                        buffer.write(chunk)
+            with self.target_connection.cursor() as cursor, cursor.copy(copy_out) as copy:
+                for chunk in copy:
+                    buffer.write(chunk)
 
             # Reset buffer to beginning for reading
             buffer.seek(0)
 
             # Step 2: COPY data from buffer to target table
             with self.target_connection.cursor() as cursor:
-                copy_from_query = sql.SQL(
-                    "COPY {target_table} ({target_cols}) FROM STDIN WITH (FORMAT csv)"
-                ).format(
-                    target_table=sql.Identifier(target_table),
-                    target_cols=sql.SQL(", ").join(target_cols),
-                )
-
-                with cursor.copy(copy_from_query.as_string(cursor)) as copy:
+                with cursor.copy(
+                    t"COPY {target_table:i} ({target_cols:q}) FROM STDIN WITH (FORMAT csv)"
+                ) as copy:
                     # Write data from buffer
                     copy.write(buffer.getvalue())
 
@@ -497,27 +427,19 @@ class SchemaToSchemaMigrator:
 
             with self.source_connection.cursor() as cursor:
                 # Get all tables in the schema with their row counts
-                cursor.execute(
-                    sql.SQL("""
-                        SELECT
-                            relname AS tablename,
-                            n_live_tup AS estimated_rows
-                        FROM pg_stat_user_tables
-                        WHERE schemaname = %s
-                        ORDER BY relname
-                    """),
-                    (schema,),
-                )
+                cursor.execute(t"""
+                    SELECT
+                        relname AS tablename,
+                        n_live_tup AS estimated_rows
+                    FROM pg_stat_user_tables
+                    WHERE schemaname = {schema}
+                    ORDER BY relname
+                """)
 
                 for table_name, estimated_rows in cursor.fetchall():
                     # For tables without statistics, do a count
                     if estimated_rows is None or estimated_rows == 0:
-                        cursor.execute(
-                            sql.SQL("SELECT COUNT(*) FROM {schema}.{table}").format(
-                                schema=sql.Identifier(schema),
-                                table=sql.Identifier(table_name),
-                            )
-                        )
+                        cursor.execute(t"SELECT COUNT(*) FROM {schema:i}.{table_name:i}")
                         result = cursor.fetchone()
                         row_count = int(result[0]) if result else 0
                     else:
@@ -598,22 +520,12 @@ class SchemaToSchemaMigrator:
                 for table_name in tables:
                     # Count rows in source table (via foreign schema), by its own name
                     source_name = (source_tables or {}).get(table_name, table_name)
-                    cursor.execute(
-                        sql.SQL("SELECT COUNT(*) FROM {schema}.{table}").format(
-                            schema=sql.Identifier(source_schema),
-                            table=sql.Identifier(source_name),
-                        )
-                    )
+                    cursor.execute(t"SELECT COUNT(*) FROM {source_schema:i}.{source_name:i}")
                     source_result = cursor.fetchone()
                     source_count = int(source_result[0]) if source_result else 0
 
                     # Count rows in target table
-                    cursor.execute(
-                        sql.SQL("SELECT COUNT(*) FROM {schema}.{table}").format(
-                            schema=sql.Identifier(target_schema),
-                            table=sql.Identifier(table_name),
-                        )
-                    )
+                    cursor.execute(t"SELECT COUNT(*) FROM {target_schema:i}.{table_name:i}")
                     target_result = cursor.fetchone()
                     target_count = int(target_result[0]) if target_result else 0
 

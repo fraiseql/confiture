@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from difflib import get_close_matches
 from pathlib import Path
+from string.templatelib import Template
 from typing import Any
 
 import psycopg
@@ -292,16 +293,14 @@ class ProductionSyncer:
         start_time = time.time()
 
         with self._source_conn.cursor() as src_cursor, self._target_conn.cursor() as dst_cursor:
-            table_ident = pgsql.Identifier(table_name)
-
             # Truncate target table first (unless the caller already has —
             # CASCADE here would empty any table already copied that references
             # this one).
             if truncate:
-                dst_cursor.execute(pgsql.SQL("TRUNCATE TABLE {} CASCADE").format(table_ident))
+                dst_cursor.execute(t"TRUNCATE TABLE {table_name:i} CASCADE")
 
             # Get row count for verification
-            src_cursor.execute(pgsql.SQL("SELECT COUNT(*) FROM {}").format(table_ident))
+            src_cursor.execute(t"SELECT COUNT(*) FROM {table_name:i}")
             expected_row = src_cursor.fetchone()
             expected_count: int = expected_row[0] if expected_row else 0
 
@@ -310,7 +309,7 @@ class ProductionSyncer:
                 progress.update(progress_task, total=expected_count)
 
             # Temporarily disable triggers to allow FK constraint violations
-            dst_cursor.execute(pgsql.SQL("ALTER TABLE {} DISABLE TRIGGER ALL").format(table_ident))
+            dst_cursor.execute(t"ALTER TABLE {table_name:i} DISABLE TRIGGER ALL")
 
             try:
                 if anonymization_rules:
@@ -338,9 +337,7 @@ class ProductionSyncer:
                 # aborted: another statement would only mask the real error, and
                 # the rollback undoes the DISABLE anyway.
                 if self._target_conn.info.transaction_status != TransactionStatus.INERROR:
-                    dst_cursor.execute(
-                        pgsql.SQL("ALTER TABLE {} ENABLE TRIGGER ALL").format(table_ident)
-                    )
+                    dst_cursor.execute(t"ALTER TABLE {table_name:i} ENABLE TRIGGER ALL")
 
             # Commit target transaction
             self._target_conn.commit()
@@ -385,10 +382,9 @@ class ProductionSyncer:
         Returns:
             Number of rows synced
         """
-        table_ident = pgsql.Identifier(table_name)
         with (
-            src_cursor.copy(pgsql.SQL("COPY {} TO STDOUT").format(table_ident)) as copy_out,
-            dst_cursor.copy(pgsql.SQL("COPY {} FROM STDIN").format(table_ident)) as copy_in,
+            src_cursor.copy(t"COPY {table_name:i} TO STDOUT") as copy_out,
+            dst_cursor.copy(t"COPY {table_name:i} FROM STDIN") as copy_in,
         ):
             for data in copy_out:
                 copy_in.write(data)
@@ -396,7 +392,7 @@ class ProductionSyncer:
                     progress.update(progress_task, advance=1)
 
         # Get final count
-        dst_cursor.execute(pgsql.SQL("SELECT COUNT(*) FROM {}").format(table_ident))
+        dst_cursor.execute(t"SELECT COUNT(*) FROM {table_name:i}")
         result = dst_cursor.fetchone()
         return int(result[0]) if result else 0
 
@@ -424,10 +420,8 @@ class ProductionSyncer:
         Returns:
             Number of rows synced
         """
-        table_ident = pgsql.Identifier(table_name)
-
         # Get column names
-        src_cursor.execute(pgsql.SQL("SELECT * FROM {} LIMIT 0").format(table_ident))
+        src_cursor.execute(t"SELECT * FROM {table_name:i} LIMIT 0")
         column_names = [desc[0] for desc in src_cursor.description]
 
         # Read the secret before the first row, not on it: an unset secret is a
@@ -443,7 +437,7 @@ class ProductionSyncer:
                 anonymize_map[col_idx] = rule
 
         # Fetch all rows
-        src_cursor.execute(pgsql.SQL("SELECT * FROM {}").format(table_ident))
+        src_cursor.execute(t"SELECT * FROM {table_name:i}")
 
         # Process in batches
         rows_synced = 0
@@ -494,10 +488,12 @@ class ProductionSyncer:
         if not rows:
             return
 
-        columns_sql = pgsql.SQL(", ").join(pgsql.Identifier(c) for c in column_names)
-        placeholders_sql = pgsql.SQL(", ").join([pgsql.Placeholder()] * len(column_names))
-        query = pgsql.SQL("INSERT INTO {} ({}) VALUES ({})").format(
-            pgsql.Identifier(table_name), columns_sql, placeholders_sql
+        columns = pgsql.SQL(", ").join(t"{c:i}" for c in column_names)
+        placeholders = Template(", ".join(["%s"] * len(column_names)))
+        # executemany binds one parameter row per execution, and psycopg refuses
+        # parameters with a template: the statement goes as text, with a %s per column.
+        query = pgsql.as_string(
+            t"INSERT INTO {table_name:i} ({columns:q}) VALUES ({placeholders:q})"
         )
 
         cursor.executemany(query, rows)
@@ -521,11 +517,8 @@ class ProductionSyncer:
         if not tables or not self._target_conn:
             return
         with self._target_conn.cursor() as cur:
-            cur.execute(
-                pgsql.SQL("TRUNCATE TABLE {} CASCADE").format(
-                    pgsql.SQL(", ").join(pgsql.Identifier(name) for name in tables)
-                )
-            )
+            names = pgsql.SQL(", ").join(t"{name:i}" for name in tables)
+            cur.execute(t"TRUNCATE TABLE {names:q} CASCADE")
         self._target_conn.commit()
 
     def sync(self, config: SyncConfig) -> dict[str, int]:
