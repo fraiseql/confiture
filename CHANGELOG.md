@@ -173,6 +173,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Python 3.14 is supported, from a wheel (#586, #587).** 1.29.0 published a cp314 wheel
+  for Windows only, and its sdist could not build on 3.14 either: pyo3 0.23 refuses the
+  interpreter. pyo3 is now 0.29, and the release builds a cp314 wheel for Linux and macOS
+  beside cp311–cp313. The release checks that every platform has a wheel for every supported
+  CPython and that a fresh 3.14 venv installs the wheel with the sdist forbidden; every pull
+  request builds a 3.14 wheel and installs it the same way. 3.14 joins the main and nightly
+  test matrix and the classifiers. The `PYO3_USE_ABI3_FORWARD_COMPATIBILITY` flag the
+  builds set is gone: the wheels are version-specific, and the flag only hid a missing one.
+- **The Python-migration evaluator reads a migration on Python 3.14.** 3.14 compiles an
+  annotated module's, class's or function's annotations into a scope of their own
+  (`__annotate__`, PEP 649); the evaluator paired the compiler's scopes with the syntax
+  tree's one for one, lost the pairing, and refused every name in a migration that
+  annotates anything, so `migrate validate --idempotent` and the other `.py` readers
+  reported nothing resolvable. Those scopes are left out of the pairing; 74 tests that
+  failed on 3.14 pass.
+
 - **A named index that indexes something else is a change.** `migrate diff` and `drift`
   paired two indexes of one name and compared only their access method, so an index
   redefined on other columns, unique where it was not, or with another predicate was no

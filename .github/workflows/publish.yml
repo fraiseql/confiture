@@ -226,11 +226,8 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            python-version: '3.x'  # Use latest 3.x for primary build
           - os: macos-latest
-            python-version: '3.x'
           - os: windows-latest
-            python-version: '3.x'
 
     steps:
     - uses: actions/checkout@v6
@@ -240,22 +237,28 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v6
       with:
-        python-version: ${{ matrix.python-version }}
+        # Every interpreter a wheel is built for: `maturin --find-interpreter`
+        # builds one wheel per interpreter it finds, and finds only these (#586).
+        python-version: |
+          3.11
+          3.12
+          3.13
+          3.14
 
     - name: Setup Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
     - name: Build wheels (Linux with multiple Python versions)
       if: matrix.os == 'ubuntu-latest'
-      uses: pypa/cibuildwheel@v2.23
+      uses: pypa/cibuildwheel@v3.4
       with:
         output-dir: dist
       env:
         CIBW_ARCHS: x86_64
-        CIBW_BUILD: 'cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64'
+        # One wheel per CPython: the wheels are version-specific (cp3XX), so a
+        # version missing here has no wheel and installs from the sdist (#586).
+        CIBW_BUILD: 'cp311-manylinux_x86_64 cp312-manylinux_x86_64 cp313-manylinux_x86_64 cp314-manylinux_x86_64'
         CIBW_MANYLINUX_X86_64_IMAGE: 'quay.io/pypa/manylinux_2_28_x86_64:latest'
-        # Enable forward compatibility for Python 3.14+ (uses stable ABI)
-        PYO3_USE_ABI3_FORWARD_COMPATIBILITY: "1"
 
     - name: Build wheels (macOS/Windows)
       if: matrix.os != 'ubuntu-latest'
@@ -264,9 +267,6 @@ jobs:
         maturin-version: "1.9.6"
         command: build
         args: --release --out dist --find-interpreter
-      env:
-        # Enable forward compatibility for Python 3.14+ (uses stable ABI)
-        PYO3_USE_ABI3_FORWARD_COMPATIBILITY: "1"
 
     - name: Upload wheels
       uses: actions/upload-artifact@v7
@@ -306,6 +306,32 @@ jobs:
             echo "✓ Rust extension found in $whl"
           fi
         done
+
+    - name: Every platform has a wheel for every supported CPython (#586)
+      run: |
+        missing=0
+        for py in cp311 cp312 cp313 cp314; do
+          for platform in manylinux macosx win; do
+            if ! ls dist/*-"$py"-"$py"-*"$platform"*.whl >/dev/null 2>&1; then
+              echo "❌ no $py wheel for $platform"
+              missing=1
+            fi
+          done
+        done
+        exit $missing
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@v7
+
+    - name: Python 3.14 installs the wheel, never the sdist (#587)
+      # A fresh venv and no cache: once anything has built the sdist, uv's cache
+      # serves that build and hides a missing wheel.
+      run: |
+        version="$(ls dist/*.tar.gz | sed -E 's/.*fraiseql_confiture-(.*)\.tar\.gz/\1/')"
+        uv venv --python 3.14 /tmp/v314
+        uv pip install --python /tmp/v314/bin/python --no-cache \
+          --only-binary fraiseql-confiture --find-links dist "fraiseql-confiture==$version"
+        /tmp/v314/bin/python -c "import sys; from confiture.core.builder import HAS_RUST; assert HAS_RUST, 'no native extension'; print(sys.version)"
 
     - name: List all artifacts
       run: |

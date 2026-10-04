@@ -32,7 +32,7 @@ fn feed(hasher: &mut Sha256, path: &Path, base_dir: &Path) -> std::io::Result<()
 #[pyfunction]
 #[allow(clippy::needless_pass_by_value)] // Reason: pyo3 hands a #[pyfunction] owned arguments
 pub fn hash_files(py: Python<'_>, files: Vec<String>, base_dir: String) -> PyResult<String> {
-    py.allow_threads(|| {
+    py.detach(|| {
         let base = Path::new(&base_dir);
         let mut hasher = Sha256::new();
         for file in &files {
