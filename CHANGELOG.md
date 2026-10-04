@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`build --list-files --compare-to <ref>` proves a renumbering kept the build order** (#580).
+  A renumbering that arrives by merge, vendoring or a hand `git mv` was checked by diffing two
+  listings, in which every renamed file reads as a removal plus an addition. The comparison reads
+  the build's own selection on both sides (the ref's tree through `git archive`, with the
+  environment file the ref holds), pairs renames through git's rename detection, and names only
+  the files whose relative order moved, each with its neighbours at the ref and now. It exits 1
+  when a file moved; `--allow <path>` records a reviewed move. `--format json` publishes
+  `build-list-files-compare.schema.json`. `--compare-to` without `--list-files` is refused (exit 5).
+
 - **`drift.extra_objects: all` (`--extra-objects all` on `drift` and `migrate validate
   --check-live-drift`) reports every stray object.** By default an `extra_object` is reported
   only for a kind the DDL declares, so a policy nobody declared on a table with row-level

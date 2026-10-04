@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.dev/schemas/build-list-files-compare.schema.json",
+  "title": "confiture build --list-files --compare-to <ref> --format json",
+  "description": "The build order at a git ref against the working tree's. Each side is what `build --list-files` selects there, named relative to the repository root. Renamed files are paired by git's rename detection; `moved` holds only the files whose relative order changed — the fewest whose move explains the change. The command exits 1 when a moved file is not in `allowed`. Nothing is built.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "env",
+    "ref",
+    "files",
+    "renamed",
+    "added",
+    "removed",
+    "moved",
+    "allowed"
+  ],
+  "$defs": {
+    "neighbour": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "The adjacent file among those selected on both sides; null at either end."
+    }
+  },
+  "properties": {
+    "env": {
+      "type": "string",
+      "description": "The environment both sides selected for, each reading its own environment file."
+    },
+    "ref": {
+      "type": "string",
+      "description": "The git revision compared against, as given."
+    },
+    "files": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "How many files the working tree's build selects."
+    },
+    "renamed": {
+      "type": "array",
+      "description": "Each file selected on both sides under a different name.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "to"
+        ],
+        "properties": {
+          "from": {
+            "type": "string",
+            "description": "Its path at the ref."
+          },
+          "to": {
+            "type": "string",
+            "description": "Its path now."
+          }
+        }
+      }
+    },
+    "added": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Selected now and not at the ref, after renames are paired."
+    },
+    "removed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Selected at the ref and not now, after renames are paired."
+    },
+    "moved": {
+      "type": "array",
+      "description": "The files whose relative order changed, in working-tree order, each with its neighbours at the ref and now.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "was_after",
+          "was_before",
+          "now_after",
+          "now_before"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The file, by its path now."
+          },
+          "was_after": {
+            "$ref": "#/$defs/neighbour"
+          },
+          "was_before": {
+            "$ref": "#/$defs/neighbour"
+          },
+          "now_after": {
+            "$ref": "#/$defs/neighbour"
+          },
+          "now_before": {
+            "$ref": "#/$defs/neighbour"
+          }
+        }
+      }
+    },
+    "allowed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The moved files an `--allow` names: reported, and not a failure."
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. What the report found is in its own fields; a command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture` (`migrate up`, `lint`)."
+    },
+    "parser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pglast",
+        "pg_major"
+      ],
+      "description": "What parsed the SQL behind this payload: the installed pglast release and the PostgreSQL grammar major it embeds. In the envelope since 1.16.0.",
+      "properties": {
+        "pglast": {
+          "type": "string"
+        },
+        "pg_major": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

@@ -141,6 +141,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "view_body_drift.py": (GLUE, ORCHESTRATION),
     "view_manager.py": (GLUE, ORCHESTRATION),
     "__init__.py": (GLUE, NEUTRAL),
+    "build_order.py": (GLUE, NEUTRAL),
     "dry_run_summary.py": (GLUE, NEUTRAL),
     "error_context.py": (GLUE, NEUTRAL),
     "error_handler.py": (GLUE, NEUTRAL),

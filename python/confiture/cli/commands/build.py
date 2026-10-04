@@ -13,6 +13,7 @@ from confiture.cli.formatters.build_formatter import (
     format_build_result,
     format_selection_report,
 )
+from confiture.cli.formatters.build_order_formatter import format_order_comparison
 from confiture.cli.helpers import (
     console,
     error_console,
@@ -26,6 +27,7 @@ from confiture.cli.options import (
     format_option,
     output_option,
 )
+from confiture.core.build_order import compare_to_ref
 from confiture.core.builder import SchemaBuilder
 from confiture.core.linting.duplicates import duplicate_violations, find_duplicates, inventory_files
 from confiture.core.progress import ProgressManager
@@ -143,6 +145,22 @@ ListFilesOpt = Annotated[
         "its order and the pattern that matched each — and build nothing",
     ),
 ]
+CompareToOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--compare-to",
+        help="With --list-files: compare the build order with the one at this git ref, "
+        "renames paired, and report each file whose relative order moved (exit 1)",
+    ),
+]
+AllowMoveOpt = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--allow",
+        help="With --compare-to: a reviewed move, named by its path relative to the "
+        "repository root (exact, repeatable); it is reported and does not fail",
+    ),
+]
 SeedProfileOpt = Annotated[
     str | None,
     typer.Option(
@@ -183,6 +201,8 @@ def build(
     dump_format: DumpFormatOpt = "custom",
     seed_profile: SeedProfileOpt = None,
     list_files: ListFilesOpt = False,
+    compare_to: CompareToOpt = None,
+    allow: AllowMoveOpt = None,
 ) -> None:
     """Build complete schema from DDL files in one fast operation.
 
@@ -211,6 +231,10 @@ def build(
       confiture build --list-files
         ↳ Print what the build would read — file, entry, order, pattern — and build nothing
 
+      confiture build --list-files --compare-to HEAD
+        ↳ After a renumbering, prove the build order is unchanged: renames are
+          paired, and each file whose relative order moved is named (exit 1)
+
     RELATED:
       confiture migrate up      - Apply incremental migrations instead
       confiture seed validate   - Validate seed data separately
@@ -223,8 +247,8 @@ def build(
       ADVANCED: --show-hash, --schema-only, --two-pass, --separator-style, --separator-template
         Optional parameters for customizing output format
 
-      DIAGNOSTIC: --list-files
-        Print the selection instead of building it
+      DIAGNOSTIC: --list-files, --compare-to, --allow
+        Print the selection instead of building it, or how its order moved since a ref
 
       STRUCTURED OUTPUT: --format, --report
         Export results in JSON/CSV format for automation and integration
@@ -237,10 +261,10 @@ def build(
     out = error_console if is_json(format_type) else console
     json_mode = is_json(format_type)
     try:
-        builder = SchemaBuilder(env=env, project_dir=project_dir)
-        if list_files:
-            format_selection_report(builder.selection_report(), format_type, project_dir, console)
+        if list_files or compare_to is not None or allow:
+            _list_files(env, project_dir, format_type, list_files, compare_to, allow or [])
             return
+        builder = SchemaBuilder(env=env, project_dir=project_dir)
         _apply_build_overrides(
             builder,
             out,
@@ -351,6 +375,42 @@ def build(
             json_mode=json_mode,
             output_file=report_output,
         )
+
+
+def _list_files(
+    env: str,
+    project_dir: Path,
+    format_type: str,
+    list_files: bool,
+    compare_to: str | None,
+    allow: list[str],
+) -> None:
+    """``--list-files``: the selection, or with ``--compare-to`` how its order moved since a ref.
+
+    A modifier without the flag it modifies is refused, so it never changes what
+    ``build`` does. A comparison exits ``FINDINGS`` when a file moved that no
+    ``--allow`` names.
+    """
+    if allow and compare_to is None:
+        raise ConfigurationError(
+            "--allow requires --compare-to",
+            resolution_hint="Run: confiture build --list-files --compare-to <ref> --allow <path>",
+        )
+    if not list_files:
+        raise ConfigurationError(
+            "--compare-to requires --list-files",
+            resolution_hint="Run: confiture build --list-files --compare-to <ref>",
+        )
+    if compare_to is None:
+        builder = SchemaBuilder(env=env, project_dir=project_dir)
+        format_selection_report(builder.selection_report(), format_type, project_dir, console)
+        return
+    comparison = compare_to_ref(project_dir, env, compare_to, allow)
+    format_order_comparison(
+        comparison, env=env, ref=compare_to, format_type=format_type, console=console
+    )
+    if comparison.refused:
+        raise typer.Exit(FINDINGS)  # success-signal: the order changed
 
 
 def _duplicate_gate(
