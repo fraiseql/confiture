@@ -536,7 +536,7 @@ confiture/
 │   │   ├── idempotency.py        # ``migrate validate --idempotent`` / ``migrate fix --idempotent``: scopi…
 │   │   ├── lint_formatter.py     # Output formatting for linting results
 │   │   ├── main.py               # Main CLI entry point for Confiture
-│   │   ├── markup.py             # What a Rich console prints as data, and what it prints as confiture's o…
+│   │   ├── markup.py             # What confiture prints as data, and what it prints as its own markup
 │   │   ├── options.py            # Shared CLI option factories and the option aliases more than one comman…
 │   │   ├── ownership.py          # ``migrate fix --ownership``: apply the ownership expectation to a live…
 │   │   ├── plugins.py            # Commands other distributions add to ``confiture``: the ``confiture.plug…
@@ -1121,6 +1121,14 @@ an f-string passed to a `print`/`log`/`status`/`rule`/`input`/`add_row` method u
 whatever the console is named; a style-tag position, `len(…)` and a numeric format
 spec need neither. A table cell that is data is `verbatim_text(value)`, never a bare
 `str`. Both escape a control character, so a name holding an ESC commands nothing.
+
+The replacement is being rolled out: `cli/markup.py`'s `Printer` prints a `t"…"`
+template, a literal or a Rich renderable — never a computed `str` (ty's
+`invalid-argument-type` is on for the modules that print through it) — and
+`render(t)` writes each interpolation exactly as `verbatim` does unless it is a
+`Markup` (`markup(…)`). Its `Table` takes template cells; `printer.rich` is handed
+to a Rich object that draws (`Progress(console=out.rich)`), never printed through.
+`tests/unit/test_console_prints_templates.py` guards the converted modules.
 
 ### Adding a `confiture lint` rule
 
