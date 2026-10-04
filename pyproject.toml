@@ -162,6 +162,11 @@ markers = [
 
 [tool.coverage.run]
 source = ["python/confiture"]
+# Measure the processes the run starts — pytest-xdist's workers among them — from
+# their first line, as `coverage run` measures its own: a worker imports the
+# confiture pytest plugin before pytest-cov could begin recording. Each process
+# writes its own data file; `coverage combine` joins them.
+patch = ["subprocess"]
 omit = [
     "*/tests/*",
     "*/__pycache__/*",

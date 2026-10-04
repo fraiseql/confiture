@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from confiture.cli import helpers
 from confiture.cli.main import app
 
 runner = CliRunner()
@@ -117,12 +118,13 @@ class TestReplica:
 
 
 class TestTheTable:
-    def test_a_located_finding_shows_its_file_and_line(self, definer_project: Path) -> None:
-        result = runner.invoke(
-            app,
-            ["lint", "--check-security-definer", "--fail-on", "never"],
-            env={"COLUMNS": "200"},
-        )
+    def test_a_located_finding_shows_its_file_and_line(
+        self, definer_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The table is as wide as the console, which read its width once, when it was
+        # made: a `COLUMNS` set for this run alone comes too late (#589).
+        monkeypatch.setattr(helpers.console, "width", 200)
+        result = runner.invoke(app, ["lint", "--check-security-definer", "--fail-on", "never"])
 
         assert "db/schema/010_widget.sql:3" in result.output
 

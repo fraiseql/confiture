@@ -478,7 +478,7 @@ fi
 
 ```dockerfile
 # In your test Dockerfile
-FROM postgres:15
+FROM postgres:16
 
 # Install confiture
 COPY requirements.txt .
