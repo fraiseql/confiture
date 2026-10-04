@@ -323,6 +323,22 @@ LINT_RULES: tuple[LintRule, ...] = (
         enabled_by="tenancy",
     ),
     LintRule(
+        code="softdel_001",
+        family="softdel",
+        title="A unique key on a soft-deleting table excludes deleted rows",
+        severity="warning",
+        default_on=False,
+        enabled_by="soft_delete",
+    ),
+    LintRule(
+        code="softdel_002",
+        family="softdel",
+        title="A nullable column in such a key is NULLS NOT DISTINCT",
+        severity="info",
+        default_on=False,
+        enabled_by="soft_delete",
+    ),
+    LintRule(
         code="tview_001",
         family="tview",
         title="No index over data or updated_at on a TVIEW: it blocks HOT",

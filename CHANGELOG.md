@@ -25,6 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when a file moved; `--allow <path>` records a reviewed move. `--format json` publishes
   `build-list-files-compare.schema.json`. `--compare-to` without `--list-files` is refused (exit 5).
 
+- **The `softdel` lint family: unique keys on a table that soft-deletes (#597).** A
+  `soft_delete:` block in `db/project.yaml` (`column: deleted_at` by default) names the
+  tombstone column; a table that has it soft-deletes, and the family is on for every lint.
+  `softdel_001` (warning) reports each `UNIQUE` constraint or unique index of such a table
+  whose predicate does not imply `<column> IS NULL` — it keeps reserving a deleted row's
+  value, so re-creating the row fails with `23505` — and gives the partial-index rewrite,
+  noting that `ON CONFLICT ON CONSTRAINT` cannot target a partial index. The primary key, a
+  one-column key PostgreSQL fills (identity, sequence, generated uuid) and a `uuid` column
+  are exempt. `softdel_002` (info) reports such a key over a nullable column without `NULLS
+  NOT DISTINCT`. `-- confiture:softdel-keep-reserved` above the statement that writes a key
+  waives it (above a `CREATE TABLE`, naming the key). An environment file carrying
+  `soft_delete:` is refused, as one carrying `tenancy:` is.
+
 - **`drift.extra_objects: all` (`--extra-objects all` on `drift` and `migrate validate
   --check-live-drift`) reports every stray object.** By default an `extra_object` is reported
   only for a kind the DDL declares, so a policy nobody declared on a table with row-level

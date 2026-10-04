@@ -168,6 +168,21 @@ FIXTURES: dict[str, Fixture] = {
         {"010.sql": "CREATE TABLE tb_user (id INT PRIMARY KEY, tenant_id INT NOT NULL);\n"},
         extra_files={"db/project.yaml": "tenancy: {}\n"},
     ),
+    "softdel_001": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_user (id INT PRIMARY KEY, email TEXT NOT NULL UNIQUE,\n"
+            "  deleted_at TIMESTAMPTZ);\n"
+        },
+        extra_files={"db/project.yaml": "soft_delete: {}\n"},
+    ),
+    "softdel_002": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_node (id INT PRIMARY KEY, fk_parent INT, name TEXT,\n"
+            "  deleted_at TIMESTAMPTZ);\n"
+            "CREATE UNIQUE INDEX ux ON tb_node (fk_parent, name) WHERE deleted_at IS NULL;\n"
+        },
+        extra_files={"db/project.yaml": "soft_delete: {}\n"},
+    ),
     "tview_001": Fixture(
         {
             "010.sql": "CREATE TABLE tb_p (pk_p bigint PRIMARY KEY, fk_u bigint, t text);\n"

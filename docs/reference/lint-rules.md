@@ -35,6 +35,8 @@ Adopt a rule on a schema that already trips it with a
 | `tenant_003` | tenant | warning | with `tenancy:` | A view reading tenant data publishes the discriminator as a plain column, or is declared global |
 | `tenant_004` | tenant | warning | with `tenancy:` | A foreign key between tenant tables carries the discriminator on both sides |
 | `tenant_005` | tenant | warning | with `tenancy:` | A tenant table's primary key and unique keys keep tenants apart |
+| `softdel_001` | softdel | warning | with `soft_delete:` | A unique key on a soft-deleting table excludes deleted rows |
+| `softdel_002` | softdel | info | with `soft_delete:` | A nullable column in such a key is NULLS NOT DISTINCT |
 | `tview_001` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT |
 | `tview_002` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
@@ -946,6 +948,95 @@ them can adopt the family with a `--baseline`, or with
 `--ignore tenant_003,tenant_004,tenant_005` until its views and keys are rebuilt;
 the [guide](../guides/multi-tenant-schemas.md#moving-an-existing-schema) walks the
 migration step by step.
+
+## The `softdel` family — unique keys on a table that soft-deletes
+
+On when `db/project.yaml` declares the tombstone column:
+
+```yaml
+soft_delete:
+  column: deleted_at   # the default; a table that has this column soft-deletes
+```
+
+A table that soft-deletes keeps its deleted rows, and their keys. A `UNIQUE`
+constraint or unique index that does not exclude them keeps reserving a deleted
+row's value: adding the same product to the same order again fails with `23505`,
+and so does renaming another row to the freed value.
+
+### `softdel_001` — a unique key excludes deleted rows
+
+Each unique key of a soft-deleting table must be a partial index whose predicate
+implies `<column> IS NULL`: a top-level `AND` term that is exactly that test.
+`WHERE deleted_at IS NULL AND kind = 'x'` implies it; `WHERE deleted_at IS NULL OR …`
+does not, nor does a function of the column. A `UNIQUE` constraint cannot be
+partial, so it is always reported. Not judged:
+
+- the primary key — a row is not re-created under a deleted row's key;
+- a one-column key whose value no author chooses (an identity, a sequence, a
+  generated uuid), or a `uuid` column — never reused by intent;
+- an index that backs a constraint, judged once as the constraint.
+
+```sql
+-- reported: the key outlives the row
+CREATE TABLE app.tb_order_line (
+    pk_order_line BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id            UUID NOT NULL UNIQUE,                 -- not reported: a uuid
+    fk_order      BIGINT NOT NULL,
+    fk_product    BIGINT NOT NULL,
+    deleted_at    TIMESTAMPTZ,
+    CONSTRAINT tb_order_line_order_product_key UNIQUE (fk_order, fk_product)
+);
+
+-- the fix the finding gives
+ALTER TABLE app.tb_order_line DROP CONSTRAINT tb_order_line_order_product_key;
+CREATE UNIQUE INDEX tb_order_line_order_product_key
+    ON app.tb_order_line (fk_order, fk_product) WHERE deleted_at IS NULL;
+```
+
+A partial index is not a constraint, so `ON CONFLICT ON CONSTRAINT <name>` no
+longer finds it: a writer says `ON CONFLICT (fk_order, fk_product) WHERE
+deleted_at IS NULL` instead. The finding says so.
+
+A value that must stay reserved after its row is deleted is waived on the line
+above the statement that writes the key — a `CREATE UNIQUE INDEX` or an
+`ALTER TABLE … ADD CONSTRAINT`:
+
+```sql
+-- confiture:softdel-keep-reserved
+CREATE UNIQUE INDEX ux_account_handle ON app.tb_account (handle);
+```
+
+A `CREATE TABLE` writes several keys, so above one the directive names the key it
+waives — an unnamed key by the name PostgreSQL gives it, `<table>_<columns>_key`:
+
+```sql
+-- confiture:softdel-keep-reserved tb_account_handle_key
+CREATE TABLE app.tb_account (id BIGINT PRIMARY KEY, handle TEXT UNIQUE, deleted_at TIMESTAMPTZ);
+```
+
+A key a later `DROP INDEX` removes is not judged; one a later `ALTER TABLE … DROP
+CONSTRAINT` removes still is, because the model does not fold that statement yet
+(tracked in #624). A child table (`INHERITS`,
+`PARTITION OF`) soft-deletes when it inherits the column.
+
+### `softdel_002` — a nullable key column says `NULLS NOT DISTINCT`
+
+Info. A key `softdel_001` judges — partial or not — that covers a nullable column
+and does not say `NULLS NOT DISTINCT` (PostgreSQL 15+): two rows holding `NULL`
+there never collide. When `NULL` is a real value of the key — a tree's root has
+no parent — two roots may then share a name:
+
+```sql
+CREATE UNIQUE INDEX ux_node_parent_name ON app.tb_node (fk_parent, name)
+    NULLS NOT DISTINCT WHERE deleted_at IS NULL;
+```
+
+The flag is read from the statement that writes the key. The schema model does
+not hold it, so `confiture drift` and `migrate diff` do not see it change (tracked
+in #623).
+
+Both rules report themselves *skipped*, with the reason, when selected in a
+project with no `soft_delete:` block.
 
 ## The `tview` family — how a pg_tviews TVIEW's storage is left
 

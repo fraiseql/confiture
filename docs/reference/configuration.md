@@ -793,6 +793,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `tenancy` | [TenancyConfig](#tenancyconfig) \| NoneType | - | Declares the project tenant-scoped; absent, no tenant rule runs. |
+| `soft_delete` | [SoftDeleteConfig](#softdeleteconfig) \| NoneType | - | Declares the tombstone column of the tables that soft-delete; absent, no ``softdel`` rule runs. |
 | `squash` | [SquashConfig](#squashconfig) \| NoneType | - | What ``migrate squash`` checks before it cuts; absent, its defaults. |
 
 #### `TenancyConfig`
@@ -802,6 +803,12 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `discriminator` | str | `tenant_id` | The column every tenant-scoped relation carries, ``NOT NULL``. |
 | `root` | str \| NoneType | - | The table of tenants, schema-qualified (``management.tb_organization``, or ``"my.schema".tb_org`` quoted as SQL quotes it): its key is the tenant id, so it carries no discriminator of its own. |
 | `global_schemas` | list[str] | `[]` | Schemas holding shared reference data — every relation in them is global, never tenant-scoped. |
+
+#### `SoftDeleteConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `column` | str | `deleted_at` | The tombstone column: a table that has it soft-deletes, and a row whose value in it is not ``NULL`` is deleted. |
 
 #### `SquashConfig`
 
@@ -957,6 +964,8 @@ tenancy:
   discriminator: tenant_id
   root: null
   global_schemas: []
+soft_delete:
+  column: deleted_at
 squash:
   min_age_days: 90
   skip_environments: []

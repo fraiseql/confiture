@@ -64,6 +64,28 @@ class TenancyConfig(BaseModel):
                 )
 
 
+class SoftDeleteConfig(BaseModel):
+    """The project soft-deletes, and which column says a row is deleted.
+
+    Declaring it turns the ``softdel`` lint family on for every run.
+
+    Attributes:
+        column: The tombstone column: a table that has it soft-deletes, and a row
+            whose value in it is not ``NULL`` is deleted.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    column: str = "deleted_at"
+
+    @field_validator("column")
+    @classmethod
+    def _column_is_a_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("soft_delete.column must name a column, got an empty name")
+        return value
+
+
 class SquashConfig(BaseModel):
     """How far back ``migrate squash`` may cut, and which environments it asks first.
 
@@ -89,12 +111,15 @@ class ProjectConfig(BaseModel):
 
     Attributes:
         tenancy: Declares the project tenant-scoped; absent, no tenant rule runs.
+        soft_delete: Declares the tombstone column of the tables that soft-delete;
+            absent, no ``softdel`` rule runs.
         squash: What ``migrate squash`` checks before it cuts; absent, its defaults.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     tenancy: TenancyConfig | None = None
+    soft_delete: SoftDeleteConfig | None = None
     squash: SquashConfig | None = None
 
     def declared_blocks(self) -> frozenset[str]:

@@ -93,6 +93,8 @@ def linter_config(
         check_tenant_views="tenant_003" in selected,
         check_tenant_foreign_keys="tenant_004" in selected,
         check_tenant_unique_keys="tenant_005" in selected,
+        check_softdel_reserved_keys="softdel_001" in selected,
+        check_softdel_null_keys="softdel_002" in selected,
         check_tview_hot="tview_001" in selected,
         check_tview_replicas="tview_002" in selected,
         has_replicas=has_replicas,
