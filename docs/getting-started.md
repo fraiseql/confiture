@@ -23,7 +23,7 @@ uv add confiture
 ## Prerequisites
 
 - Python 3.11+
-- PostgreSQL 14+
+- PostgreSQL 16+
 - Basic understanding of SQL and database migrations
 
 ## Quick Start (5 minutes)

@@ -4,11 +4,12 @@ What Confiture needs from the world to do its job.
 
 ## PostgreSQL version
 
-**Minimum: PostgreSQL 12.**
+**Minimum: PostgreSQL 16.**
 
 Confiture's day-to-day commands (`build`, `migrate up | down | status | preflight`, `sync`) work against any modern PostgreSQL. The schema-to-schema medium uses **`postgres_fdw`**, which requires a PostgreSQL that ships the extension (all supported versions do).
 
-Confiture is tested in CI against PostgreSQL 14, 15, 16, and 17.
+CI runs the suite against PostgreSQL 16, the minimum, and the pg_tviews leg against
+PostgreSQL 18. An older server is not supported: nothing refuses it, and nothing tests it.
 
 ## Python
 
