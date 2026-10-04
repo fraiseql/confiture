@@ -25,11 +25,12 @@ import pytest
 import confiture
 from confiture.core import destructive, git_accompaniment
 from confiture.core.change_set.diff_tiers import tier_of
-from confiture.core.differ import SchemaDiffer
+from confiture.core.differ import CATALOGUED, SchemaDiffer, Side
 from confiture.core.differ_sql import DifferSQLGenerator
 from confiture.core.risk_tier import RiskTier
 from confiture.core.schema_change import (
     KINDS,
+    OBSERVATIONS,
     ColumnChange,
     DefinitionChange,
     EnumOrSequenceChange,
@@ -37,6 +38,7 @@ from confiture.core.schema_change import (
     TableChange,
     TableObjectChange,
 )
+from confiture.core.schema_read import read_text
 
 PACKAGE = Path(confiture.__file__).resolve().parent
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "every_change"
@@ -53,9 +55,14 @@ WIRE_SPELLINGS_ALLOWED: dict[str, str] = {
 
 
 def _samples() -> dict[type[SchemaChange], SchemaChange]:
-    old = (FIXTURES / "old.sql").read_text()
-    new = (FIXTURES / "new.sql").read_text()
-    return {type(change): change for change in SchemaDiffer().compare(old, new).changes}
+    """One change of each kind; an observation from the pair compared as a database would be."""
+    old = read_text((FIXTURES / "old.sql").read_text())
+    new = read_text((FIXTURES / "new.sql").read_text())
+    against = SchemaDiffer().compare_sides(Side.of(old), Side.of(new), CATALOGUED).changes
+    return {
+        **{type(change): change for change in SchemaDiffer().compare_reads(old, new).changes},
+        **{type(change): change for change in against if type(change) in OBSERVATIONS},
+    }
 
 
 SAMPLES = _samples()
@@ -83,6 +90,11 @@ def test_every_kind_is_answered_for(kind: type[SchemaChange]) -> None:
     assert all(sql.endswith("\n") for sql in rendered if sql is not None), rendered
     assert destructive.data_loss_reason(change) in (None, "data")
     assert git_accompaniment.is_body_change(change) in (True, False)
+    if kind in OBSERVATIONS:
+        # No statement carries an observation: nothing runs, so nothing is at risk.
+        assert rendered == [None, None]
+        assert tier_of(change) is None
+        return
     assert isinstance(tier_of(change), RiskTier), f"{kind.__name__} declares no tier"
 
 
@@ -163,4 +175,4 @@ def test_the_wire_types_are_spelled_only_by_the_serialiser() -> None:
 
 
 def test_the_serialiser_spells_every_fixed_wire_type() -> None:
-    assert len(_wire_spellings((PACKAGE / SERIALISER).read_text(encoding="utf-8"))) == 26
+    assert len(_wire_spellings((PACKAGE / SERIALISER).read_text(encoding="utf-8"))) == 27

@@ -42,6 +42,7 @@ from confiture.core.schema_change import (
     ColumnDefaultChanged,
     ColumnDropped,
     ColumnNullabilityChanged,
+    ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
     DefinitionChange,
@@ -123,6 +124,8 @@ def _column_tier(change: ColumnChange) -> RiskTier | None:
             return _TIER_BY_KIND["drop_not_null" if nullable else "set_not_null"]
         case ColumnDefaultChanged(new=new):
             return _TIER_BY_KIND["set_column_default" if new else "drop_column_default"]
+        case ColumnOrderChanged():
+            return None
         case _:
             assert_never(change)
 
@@ -209,6 +212,7 @@ def tier_of(change: SchemaChange) -> RiskTier | None:
             | ColumnTypeChanged()
             | ColumnNullabilityChanged()
             | ColumnDefaultChanged()
+            | ColumnOrderChanged()
         ):
             return _column_tier(change)
         case (

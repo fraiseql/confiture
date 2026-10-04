@@ -231,6 +231,7 @@ hold, so one name holds a model object in one variant and a spelling in another:
 | `ColumnTypeChanged` | `table: str`, `old: Column`, `new: Column` | the table |
 | `ColumnNullabilityChanged` | `table: str`, `column: str`, `nullable: bool` | the table |
 | `ColumnDefaultChanged` | `table: str`, `column: str`, `old: str \| None`, `new: str \| None` | the table |
+| `ColumnOrderChanged` | `table: str`, `old: tuple[str, ...]`, `new: tuple[str, ...]` | the table |
 | `IndexAdded`, `IndexDropped` | `table: str`, `index: Index` | the table |
 | `ForeignKeyAdded`, `ForeignKeyDropped`, `CheckConstraintAdded`, `CheckConstraintDropped`, `UniqueConstraintAdded`, `UniqueConstraintDropped`, `PrimaryKeyAdded`, `PrimaryKeyDropped` | `table: str`, `constraint: Constraint` | the table |
 | `EnumTypeAdded`, `EnumTypeDropped` | `enum: EnumType` | the type |

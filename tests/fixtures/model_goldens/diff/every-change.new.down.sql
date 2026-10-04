@@ -23,6 +23,9 @@ DROP TABLE people;
 DROP TABLE parent;
 
 -- confiture:tier irreversible
+DROP TABLE ordered;
+
+-- confiture:tier irreversible
 DROP TABLE audit;
 
 -- confiture:tier irreversible

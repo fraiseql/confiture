@@ -5,7 +5,7 @@ tree)`` *what would make it the tree*: one question, asked of one comparison. So
 every perturbation of a database built from its own tree, each drift item is about
 an object the diff changes, and each change the diff makes is about an object drift
 reports — unless the change is of a kind drift has no item for, which
-:data:`NOT_DRIFT` names with its reason.
+``drift.DRIFT_OF`` names with its reason.
 
 The perturbations are the live-drift corpus' mutation table
 (``test_live_drift_identity.MUTATIONS``) and the shapes beside it that one
@@ -22,7 +22,7 @@ import pytest
 from test_live_drift_identity import MUTATIONS, corpus_sql
 
 from confiture import platform
-from confiture.core.drift import DriftItem, DriftType, SchemaDriftDetector
+from confiture.core.drift import DRIFT_OF, DriftItem, DriftType, SchemaDriftDetector
 from confiture.core.psql_applier import apply_sql_via_psql
 from confiture.core.schema_change import (
     CheckConstraintAdded,
@@ -31,10 +31,8 @@ from confiture.core.schema_change import (
     ColumnDefaultChanged,
     ColumnDropped,
     ColumnNullabilityChanged,
+    ColumnOrderChanged,
     ColumnTypeChanged,
-    EnumTypeAdded,
-    EnumTypeDropped,
-    EnumValuesChanged,
     ExclusionConstraintAdded,
     ExclusionConstraintDropped,
     ForeignKeyAdded,
@@ -47,8 +45,6 @@ from confiture.core.schema_change import (
     PrimaryKeyAdded,
     PrimaryKeyDropped,
     SchemaChange,
-    SequenceAdded,
-    SequenceDropped,
     TableAdded,
     TableDropped,
     UniqueConstraintAdded,
@@ -67,6 +63,7 @@ _DRIFT_FAMILY: dict[DriftType, str] = {
     DriftType.TYPE_MISMATCH: "column",
     DriftType.NULLABLE_MISMATCH: "column",
     DriftType.DEFAULT_MISMATCH: "column",
+    DriftType.COLUMN_ORDER_MISMATCH: "order",
     DriftType.MISSING_INDEX: "index",
     DriftType.EXTRA_INDEX: "index",
     DriftType.MISSING_CONSTRAINT: "constraint",
@@ -105,16 +102,6 @@ _COLUMN_CHANGES = (
     ColumnDefaultChanged,
 )
 
-#: The changes drift has no item for, and why. A kind named here is one more
-#: thing a deploy gate on ``confiture drift`` does not see.
-NOT_DRIFT: dict[type[SchemaChange], str] = {
-    EnumTypeAdded: "drift reports no enum type",
-    EnumTypeDropped: "drift reports no enum type",
-    EnumValuesChanged: "drift reports no enum type",
-    SequenceAdded: "drift reports no sequence",
-    SequenceDropped: "drift reports no sequence",
-}
-
 
 def _drift_key(item: DriftItem) -> Key:
     subject = item.subject
@@ -126,15 +113,17 @@ def _drift_key(item: DriftItem) -> Key:
         if item.drift_type in {DriftType.MISSING_TRIGGER, DriftType.EXTRA_TRIGGER}:
             return (family, subject.schema, None, f"{subject.relation}.{subject.name}")
         return (family, subject.schema, None, subject.relation)
-    if family == "table":
+    if family in {"table", "order"}:
         return (family, subject.schema, subject.relation, None)
     return (family, subject.schema, subject.relation, subject.name or None)
 
 
 def _change_key(change: SchemaChange) -> Key | None:
     """The object *change* is about, or ``None`` for a kind drift has no item for."""
-    if type(change) in NOT_DRIFT:
+    if isinstance(DRIFT_OF[type(change)], str):
         return None
+    if isinstance(change, ColumnOrderChanged):
+        return ("order", *change.table.identity, None)
     if isinstance(change, TableAdded | TableDropped):
         return ("table", *change.table.relation.identity, None)
     if isinstance(change, _COLUMN_CHANGES):
@@ -166,14 +155,14 @@ def built(fresh_database: str, tmp_path: Path) -> tuple[str, Path]:
     return fresh_database, schema_file
 
 
-def _disagreement(url: str, schema_file: Path) -> tuple[set[Key], set[Key]]:
-    """What drift reports that the diff does not change, and the other way round."""
+def _disagreement(url: str, schema_file: Path) -> tuple[set[Key], set[Key], set[str]]:
+    """What drift reports that the diff does not change, the other way round, and drift's types."""
     with psycopg.connect(url) as conn:
         report = SchemaDriftDetector(conn).compare_with_schema_file(str(schema_file))
     found = {_drift_key(item) for item in report.drift_items}
     changes = platform.diff(url, schema_file).changes
     changed = {key for change in changes if (key := _change_key(change)) is not None}
-    return found - changed, changed - found
+    return found - changed, changed - found, {item.drift_type.value for item in report.drift_items}
 
 
 #: The shapes beside the mutation table: ``(mutation SQL, drift type)``.
@@ -194,6 +183,11 @@ MORE = [
         id="unique-gains-a-column",
     ),
     pytest.param(
+        "ALTER TABLE core.tb_widget DROP COLUMN maybe_null, ADD COLUMN maybe_null TEXT NOT NULL",
+        "column_order_mismatch",
+        id="column-order",
+    ),
+    pytest.param(
         "CREATE TRIGGER trg_handmade BEFORE INSERT ON core.tb_widget "
         "FOR EACH ROW EXECUTE FUNCTION core.fn_touch()",
         "extra_trigger",
@@ -203,7 +197,7 @@ MORE = [
 
 
 def test_a_pristine_database_is_no_drift_and_no_change(built: tuple[str, Path]) -> None:
-    assert _disagreement(*built) == (set(), set())
+    assert _disagreement(*built) == (set(), set(), set())
 
 
 @pytest.mark.parametrize(
@@ -215,7 +209,8 @@ def test_drift_and_diff_are_about_the_same_objects(
 ) -> None:
     url, schema_file = built
     apply_sql_via_psql(url, sql=mutation)
-    drift_only, diff_only = _disagreement(url, schema_file)
+    drift_only, diff_only, reported = _disagreement(url, schema_file)
+    assert drift_type in reported, f"{mutation}: drift reported {reported}"
     assert (drift_only, diff_only) == (set(), set()), (
         f"{mutation} ({drift_type})\n  drift only: {drift_only}\n  diff only:  {diff_only}"
     )

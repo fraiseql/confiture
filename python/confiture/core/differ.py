@@ -27,6 +27,7 @@ from confiture.core.schema_change import (
     ColumnDefaultChanged,
     ColumnDropped,
     ColumnNullabilityChanged,
+    ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
     EnumTypeAdded,
@@ -60,6 +61,7 @@ from confiture.core.schema_model import (
     Column,
     Constraint,
     EnumType,
+    Index,
     ObjectRef,
     Provenance,
     RelationName,
@@ -302,6 +304,19 @@ def _types_differ(old: Column, new: Column) -> bool:
 def _fields_differ(fields: tuple[str, ...]) -> Callable[[Any, Any], bool]:
     """Whether two objects paired by identity differ in any of *fields*."""
     return lambda old, new: any(getattr(old, f) != getattr(new, f) for f in fields)
+
+
+def _built_otherwise(old: Index, new: Index) -> bool:
+    """Whether one index under one name is built with another access method.
+
+    A side that does not say how an index is built says nothing about it.
+    """
+    return None not in (old.method, new.method) and old.method != new.method
+
+
+def _names(indexes: Iterable[Index]) -> frozenset[str]:
+    """The names *indexes* were declared with."""
+    return frozenset(index.name for index in indexes if index.name)
 
 
 def _says_otherwise(old: Constraint, new: Constraint) -> bool:
@@ -718,6 +733,12 @@ class SchemaDiffer:
             new_col = new_col_map[col_name]
             changes.extend(self._compare_column_properties(table, old_col, new_col, policy))
 
+        # Observed only where a database is a side: two trees that list a table's
+        # columns in another order have not changed it, and no statement reorders one.
+        old_order, new_order = tuple(old_col_map), tuple(new_col_map)
+        if policy.rules and set(old_order) == set(new_order) and old_order != new_order:
+            changes.append(ColumnOrderChanged(table, old_order, new_order))
+
         return changes
 
     def _detect_column_renames(
@@ -779,15 +800,15 @@ class SchemaDiffer:
         """
         return self._compare_named_objects(
             author=policy.author,
-            old=parity_indexes(old_table.indexes, policy.rules),
-            new=parity_indexes(new_table.indexes, policy.rules),
+            old=parity_indexes(old_table.indexes, policy.rules, _names(new_table.indexes)),
+            new=parity_indexes(new_table.indexes, policy.rules, _names(old_table.indexes)),
             added=IndexAdded,
             dropped=IndexDropped,
             table=old_table.relation,
             # The access method is part of what an index *is*: a btree and a hash
             # index on one column are two indexes.
             identity=("columns", "unique", "method"),
-            differs=_fields_differ(("method",)),
+            differs=_built_otherwise,
         )
 
     @staticmethod
@@ -809,7 +830,9 @@ class SchemaDiffer:
             added=ForeignKeyAdded,
             dropped=ForeignKeyDropped,
             table=old_table.relation,
-            identity=("columns", "ref_table", "ref_columns"),
+            # Not the referenced columns: `REFERENCES p` means p's key, which a
+            # database always spells out and a tree need not (`_says_otherwise`).
+            identity=("columns", "ref_table"),
             differs=_says_otherwise,
         )
 

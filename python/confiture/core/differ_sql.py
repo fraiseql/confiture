@@ -38,6 +38,7 @@ from confiture.core.schema_change import (
     ColumnDefaultChanged,
     ColumnDropped,
     ColumnNullabilityChanged,
+    ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
     DefinitionChange,
@@ -293,7 +294,7 @@ def _retype(table: RelationName, old: Column, new: Column) -> str:
     )
 
 
-def _column_up(change: ColumnChange) -> str:
+def _column_up(change: ColumnChange) -> str | None:
     match change:
         case ColumnAdded(table, column):
             return f"ALTER TABLE {relation(table)} ADD COLUMN {column_element(column)};\n"
@@ -307,11 +308,13 @@ def _column_up(change: ColumnChange) -> str:
             return _nullability(table, column, nullable=nullable)
         case ColumnDefaultChanged(table, column, _, new):
             return _default(table, column, new)
+        case ColumnOrderChanged():
+            return None
         case _:
             assert_never(change)
 
 
-def _column_down(change: ColumnChange) -> str:
+def _column_down(change: ColumnChange) -> str | None:
     """The reverse of each column change; a dropped column comes back, its rows do not."""
     match change:
         case ColumnAdded(table, column):
@@ -326,6 +329,8 @@ def _column_down(change: ColumnChange) -> str:
             return _nullability(table, column, nullable=not nullable)
         case ColumnDefaultChanged(table, column, old, _):
             return _default(table, column, old)
+        case ColumnOrderChanged():
+            return None
         case _:
             assert_never(change)
 
@@ -571,6 +576,7 @@ class DifferSQLGenerator:
                 | ColumnTypeChanged()
                 | ColumnNullabilityChanged()
                 | ColumnDefaultChanged()
+                | ColumnOrderChanged()
             ):
                 return _column_up(change)
             case (
@@ -613,6 +619,7 @@ class DifferSQLGenerator:
                 | ColumnTypeChanged()
                 | ColumnNullabilityChanged()
                 | ColumnDefaultChanged()
+                | ColumnOrderChanged()
             ):
                 return _column_down(change)
             case (

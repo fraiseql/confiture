@@ -9,38 +9,69 @@ import json
 import logging
 import time
 from collections import defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar, get_args
 
-import pglast
 import psycopg
 
 from confiture.core import live_catalog
 from confiture.core.ddl_clauses import constraint_body
-from confiture.core.ddl_walk import canonical_default
+from confiture.core.ddl_objects import DDLObject
 from confiture.core.desired_state import load_desired_state
-from confiture.core.differ import refuse_quoted_names
+from confiture.core.differ import CATALOGUED, SchemaDiffer, Side, refuse_quoted_names
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.schema_analyzer import SchemaAnalyzer
+from confiture.core.schema_change import (
+    CheckConstraintAdded,
+    CheckConstraintDropped,
+    ColumnAdded,
+    ColumnDefaultChanged,
+    ColumnDropped,
+    ColumnNullabilityChanged,
+    ColumnOrderChanged,
+    ColumnRenamed,
+    ColumnTypeChanged,
+    EnumTypeAdded,
+    EnumTypeDropped,
+    EnumValuesChanged,
+    ExclusionConstraintAdded,
+    ExclusionConstraintDropped,
+    ForeignKeyAdded,
+    ForeignKeyDropped,
+    IndexAdded,
+    IndexDropped,
+    ObjectAdded,
+    ObjectDropped,
+    ObjectReplaced,
+    PrimaryKeyAdded,
+    PrimaryKeyDropped,
+    SchemaChange,
+    SequenceAdded,
+    SequenceDropped,
+    TableAdded,
+    TableDropped,
+    TableRenamed,
+    UniqueConstraintAdded,
+    UniqueConstraintDropped,
+)
 from confiture.core.schema_model import (
+    TVIEW_OPTIONS,
     Column,
     Constraint,
     Index,
     ObjectRef,
-    RelationName,
     RoutineKind,
     SchemaModel,
     Signature,
     Table,
-    ValueSource,
     ref_for,
     routine_ref,
     trigger_ref,
 )
 from confiture.core.schema_read import SchemaRead, read_segments, read_text
-from confiture.core.type_lattice import same_type, signatures_match
+from confiture.core.type_lattice import signatures_match
 from confiture.exceptions import ConfigurationError, SchemaError
 
 if TYPE_CHECKING:
@@ -317,114 +348,6 @@ def _order(obj: _Object) -> str:
     return str((obj.ref.kind, obj.ref.schema, obj.ref.name.lower(), obj.ref.signature))
 
 
-def _compare_objects(
-    expected: SchemaModel, actual: SchemaModel, sections: frozenset[str]
-) -> list[DriftItem]:
-    """Views, matviews, triggers, routines and TVIEWs: what the tree declares against what exists.
-
-    Paired by :class:`ObjectRef` and, inside a routine's bucket, by
-    ``signatures_match`` — so ``fn(bigint)`` in a tree and ``fn(int8)`` in a
-    database are one routine, and ``app.f(app.t)`` / ``app.f(other.t)`` two.
-
-    A **missing** object is CRITICAL, by analogy with ``missing_column``: the DDL
-    declares it and the database has not got it, which is what a deploy gate is
-    for. An **extra** object is INFO, and only for a kind the tree declares at
-    least one of, in a schema it declares one in — because "this project does not
-    manage views here" and "this project has lost all its views" are
-    indistinguishable from an empty expected set, and a live database
-    legitimately carries objects no DDL tree declares.
-    """
-    declared = _objects(expected, sections)
-    unclaimed: dict[ObjectRef, list[_Object]] = defaultdict(list)
-    for obj in _objects(actual, sections):
-        unclaimed[obj.ref].append(obj)
-
-    missing: list[_Object] = []
-    for obj in declared:
-        candidates = unclaimed.get(obj.ref, [])
-        twin = next((c for c in candidates if signatures_match(obj.signature, c.signature)), None)
-        if twin is None:
-            missing.append(obj)
-        else:
-            candidates.remove(twin)
-
-    declared_kinds = {obj.ref.kind for obj in declared}
-    declared_schemas = {obj.ref.schema for obj in declared}
-    extra = [
-        obj
-        for found in unclaimed.values()
-        for obj in found
-        if obj.ref.kind in declared_kinds and obj.ref.schema in declared_schemas
-    ]
-
-    items = [
-        DriftItem(
-            drift_type=_OBJECT_DRIFT_TYPES[obj.ref.kind][0],
-            severity=DriftSeverity.CRITICAL,
-            object_name=obj.written,
-            subject=obj.subject,
-            expected=obj.written,
-            actual=None,
-            message=f"{obj.ref.kind.capitalize()} '{obj.written}' is missing from database",
-        )
-        for obj in sorted(missing, key=_order)
-    ]
-    items += [
-        DriftItem(
-            drift_type=_OBJECT_DRIFT_TYPES[obj.ref.kind][1],
-            severity=DriftSeverity.INFO,
-            object_name=obj.catalogued,
-            subject=obj.subject,
-            expected=None,
-            actual=obj.catalogued,
-            message=(
-                f"{obj.ref.kind.capitalize()} '{obj.catalogued}' exists but is not in expected schema"
-            ),
-        )
-        for obj in sorted(extra, key=_order)
-    ]
-    return items
-
-
-#: The pg_tviews ``options`` keys a tree can pin, as the model holds them.
-_TVIEW_OPTIONS = ("logged", "fillfactor")
-
-
-def _compare_tview_options(expected: SchemaModel, actual: SchemaModel) -> list[DriftItem]:
-    """Each option a TVIEW's tree pins that the database's TVIEW does not hold.
-
-    A key the tree does not pin is pg_tviews' default or a choice made by hand,
-    which the tree left open: never drift. A TVIEW missing on either side is
-    ``_compare_objects``' finding.
-    """
-    items = []
-    for ref, declared in sorted(
-        expected.tviews.items(), key=lambda item: (item[0].schema, item[0].name)
-    ):
-        found = actual.tviews.get(ref)
-        if found is None:
-            continue
-        for key in _TVIEW_OPTIONS:
-            pinned, held = getattr(declared, key), getattr(found, key)
-            if pinned is None or pinned == held:
-                continue
-            items.append(
-                DriftItem(
-                    drift_type=DriftType.TVIEW_OPTION_MISMATCH,
-                    severity=DriftSeverity.WARNING,
-                    object_name=declared.qualified,
-                    subject=DriftSubject(ref.schema, declared.name, key),
-                    expected=f"{key} = {json.dumps(pinned)}",
-                    actual=f"{key} = {json.dumps(held)}",
-                    message=(
-                        f"TVIEW '{declared.qualified}' pins {key} = {json.dumps(pinned)}; "
-                        f"the database holds {json.dumps(held)}"
-                    ),
-                )
-            )
-    return items
-
-
 DEFAULT_SCHEMA = "public"
 
 
@@ -549,93 +472,512 @@ def _column_facts(column: Column) -> dict[str, Any]:
     return {"type": column.type_text, "nullable": not column.not_null, "default": column.default}
 
 
-def _comparable_defaults(exp: Column, act: Column) -> tuple[str | None, str | None]:
-    """Both defaults as they are compared, or ``(None, None)`` where no default is.
+def _constraint_label(constraint: Constraint) -> str:
+    if constraint.name:
+        return constraint.name
+    keyword = _CONSTRAINT_KEYWORDS[constraint.kind]
+    return f"{keyword} ({', '.join(constraint.columns)})" if constraint.columns else keyword
 
-    Compared as parse trees through ``ddl_walk.canonical_default``, never as text:
-    PostgreSQL stores a default analysed (``'x'`` as ``'x'::text``). An identity or a
-    generated column has no default, and a ``serial``'s ``nextval`` is its own.
+
+# ---------------------------------------------------------------------------
+# Drift is the one comparison, said as findings
+# ---------------------------------------------------------------------------
+
+#: How drift compares: the tree is an author's and the database PostgreSQL's,
+#: whatever each model says (a test may build both from DDL).
+_POLICY = replace(CATALOGUED, author="new")
+
+#: Every change the comparison makes, as the finding drift reports for it — or,
+#: for a change drift has no finding for, why. A constraint dropped and added under
+#: one name is one ``constraint_mismatch``; an object's kind picks its pair of
+#: ``_OBJECT_DRIFT_TYPES``; a TVIEW redefined is one ``tview_option_mismatch`` per
+#: option the tree pins; the column order's severity is ``column_order_severity``.
+DRIFT_OF: dict[type[SchemaChange], tuple[DriftType | None, DriftSeverity] | str] = {
+    TableAdded: (DriftType.MISSING_TABLE, DriftSeverity.CRITICAL),
+    TableDropped: (DriftType.EXTRA_TABLE, DriftSeverity.WARNING),
+    TableRenamed: "a database renames nothing by similarity: drift's policy pairs no rename",
+    ColumnAdded: (DriftType.MISSING_COLUMN, DriftSeverity.CRITICAL),
+    ColumnDropped: (DriftType.EXTRA_COLUMN, DriftSeverity.WARNING),
+    ColumnRenamed: "a database renames nothing by similarity: drift's policy pairs no rename",
+    ColumnTypeChanged: (DriftType.TYPE_MISMATCH, DriftSeverity.WARNING),
+    ColumnNullabilityChanged: (DriftType.NULLABLE_MISMATCH, DriftSeverity.WARNING),
+    ColumnDefaultChanged: (DriftType.DEFAULT_MISMATCH, DriftSeverity.WARNING),
+    ColumnOrderChanged: (DriftType.COLUMN_ORDER_MISMATCH, DriftSeverity.WARNING),
+    IndexAdded: (DriftType.MISSING_INDEX, DriftSeverity.WARNING),
+    IndexDropped: (DriftType.EXTRA_INDEX, DriftSeverity.INFO),
+    **dict.fromkeys(
+        (
+            ForeignKeyAdded,
+            CheckConstraintAdded,
+            UniqueConstraintAdded,
+            PrimaryKeyAdded,
+            ExclusionConstraintAdded,
+        ),
+        (DriftType.MISSING_CONSTRAINT, DriftSeverity.CRITICAL),
+    ),
+    **dict.fromkeys(
+        (
+            ForeignKeyDropped,
+            CheckConstraintDropped,
+            UniqueConstraintDropped,
+            PrimaryKeyDropped,
+            ExclusionConstraintDropped,
+        ),
+        (DriftType.EXTRA_CONSTRAINT, DriftSeverity.INFO),
+    ),
+    EnumTypeAdded: "drift reports no enum type",
+    EnumTypeDropped: "drift reports no enum type",
+    EnumValuesChanged: "drift reports no enum type",
+    SequenceAdded: "drift reports no sequence",
+    SequenceDropped: "drift reports no sequence",
+    ObjectAdded: (None, DriftSeverity.CRITICAL),
+    ObjectDropped: (None, DriftSeverity.INFO),
+    ObjectReplaced: (DriftType.TVIEW_OPTION_MISMATCH, DriftSeverity.WARNING),
+}
+
+_CONSTRAINT_ADDED = (
+    ForeignKeyAdded,
+    CheckConstraintAdded,
+    UniqueConstraintAdded,
+    PrimaryKeyAdded,
+    ExclusionConstraintAdded,
+)
+_CONSTRAINT_DROPPED = (
+    ForeignKeyDropped,
+    CheckConstraintDropped,
+    UniqueConstraintDropped,
+    PrimaryKeyDropped,
+    ExclusionConstraintDropped,
+)
+
+
+_ON_TABLE = (
+    ColumnAdded,
+    ColumnDropped,
+    ColumnTypeChanged,
+    ColumnNullabilityChanged,
+    ColumnDefaultChanged,
+    ColumnOrderChanged,
+    IndexAdded,
+    IndexDropped,
+    *_CONSTRAINT_ADDED,
+    *_CONSTRAINT_DROPPED,
+)
+
+
+def _stated(model: SchemaModel) -> Side:
+    """*model* as a side of the comparison: each object it holds stands for its own statement.
+
+    Drift asks whether an object exists and, for a TVIEW, what it pins — what the
+    model says, under the catalogued policy, never a statement's text. So each
+    object is given a statement that carries nothing but its key: this side is
+    compared, never generated from.
     """
-    computed = {ValueSource.IDENTITY, ValueSource.GENERATED}
-    if exp.value_source in computed or act.value_source in computed:
-        return None, None
-    # A `serial` writes no default: the `nextval` the catalog holds is its own.
-    if exp.value_source is ValueSource.SEQUENCE and exp.default is None:
-        return None, None
-    column_type = act.type_text or exp.type_text
-    try:
-        return (
-            canonical_default(exp.default, column_type),
-            canonical_default(act.default, column_type),
-        )
-    except pglast.parser.ParseError:
-        return exp.default, act.default
-
-
-def _index_keys(index: Index) -> tuple[str | None, ...]:
-    return tuple(
-        key if key.replace("_", "").isalnum() else canonical_default(key, None)
-        for key in index.columns
-    )
-
-
-def _same_index(expected: Index, live: Index) -> bool:
-    """Whether an index the DDL left unnamed is *live*, whatever PostgreSQL named it."""
-    return (expected.unique, expected.method, _index_keys(expected)) == (
-        live.unique,
-        live.method,
-        _index_keys(live),
-    )
+    objects: dict[ObjectRef, list[DDLObject]] = defaultdict(list)
+    for ref, overloads in model.routines.items():
+        objects[ref] += [DDLObject(ref, "", "", r.signature_key) for r in overloads]
+    for ref in (*model.views, *model.triggers, *model.tviews):
+        objects[ref].append(DDLObject(ref, "", ""))
+    return Side(model, objects)
 
 
 def _index_label(index: Index) -> str:
     return f"({', '.join(index.columns)})"
 
 
-def _same_constraint(expected: Constraint, live: Constraint) -> bool:
-    """Whether *live* is the constraint *expected* declares.
-
-    By name when the DDL wrote one — whether it still says what the DDL says is
-    :func:`_same_definition`'s question, and a difference is a mismatch, not a
-    missing constraint. Otherwise by what it says. An unnamed CHECK matches any live
-    CHECK still unclaimed: its text is stored analysed and cannot be compared.
-    """
-    if expected.kind != live.kind:
-        return False
-    if expected.name:
-        return expected.name == live.name
-    return expected.kind == "check" or _same_definition(expected, live)
+def _nth(found: Sequence[Any], wanted: Iterable[Any]) -> list[int]:
+    """Where each of *wanted* is in *found*, each position used once: equal ones are distinct."""
+    taken: set[int] = set()
+    positions = []
+    for item in wanted:
+        at = next(i for i, other in enumerate(found) if i not in taken and other == item)
+        taken.add(at)
+        positions.append(at)
+    return positions
 
 
-def _same_definition(expected: Constraint, live: Constraint) -> bool:
-    """Whether two constraints of one kind say the same thing (#501).
+@dataclass
+class _Findings:
+    """The changes of one comparison, said as drift: in drift's order, with drift's words."""
 
-    Their columns; for a foreign key, what it references (``REFERENCES p`` with no
-    column list means the referenced key, which the catalog always spells out), its
-    referential actions; for an EXCLUDE, its access method and the operator each
-    element is compared with; and when it is checked. A CHECK's expression and an
-    EXCLUDE's predicate are not compared: PostgreSQL stores them analysed.
-    """
-    return (
-        expected.columns == live.columns
-        and expected.operators == live.operators
-        and expected.method == live.method
-        and _identity(expected.ref_table) == _identity(live.ref_table)
-        and (not expected.ref_columns or expected.ref_columns == live.ref_columns)
-        and (expected.on_delete, expected.on_update) == (live.on_delete, live.on_update)
-        and expected.deferrable == live.deferrable
+    expected: SchemaModel
+    actual: SchemaModel
+    column_order_severity: DriftSeverity
+
+    def render(
+        self, changes: list[SchemaChange], report: DriftReport, *, column_order: bool
+    ) -> None:
+        """Every finding *changes* is, appended to *report* with what it counted."""
+        on_table: dict[tuple[str, str], list[SchemaChange]] = defaultdict(list)
+        objects: list[SchemaChange] = []
+        for change in changes:
+            if isinstance(change, ObjectAdded | ObjectDropped | ObjectReplaced):
+                objects.append(change)
+            elif isinstance(change, TableAdded | TableDropped):
+                on_table[("", "")].append(change)
+            elif isinstance(change, _ON_TABLE) and (
+                column_order or not isinstance(change, ColumnOrderChanged)
+            ):
+                on_table[change.table.identity].append(change)
+        self._tables(on_table.pop(("", ""), []), report)
+        expected = {t.relation.identity: t for t in self.expected.tables.values()}
+        actual = {t.relation.identity: t for t in self.actual.tables.values()}
+        for key in sorted(expected.keys() & actual.keys(), key=lambda k: _named(expected[k])):
+            report.tables_checked += 1
+            self._table(expected[key], actual[key], on_table.get(key, []), report)
+        self._objects(objects, report)
+
+    def _tables(self, changes: list[SchemaChange], report: DriftReport) -> None:
+        added = sorted((c.table for c in changes if isinstance(c, TableAdded)), key=_named)
+        dropped = sorted((c.table for c in changes if isinstance(c, TableDropped)), key=_named)
+        for table in added:
+            name = _named(table)
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.MISSING_TABLE,
+                    severity=DriftSeverity.CRITICAL,
+                    object_name=name,
+                    expected=name,
+                    actual=None,
+                    subject=_subject(table),
+                    message=f"Table '{name}' is missing from database",
+                )
+            )
+        for table in dropped:
+            name = _named(table)
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.EXTRA_TABLE,
+                    severity=DriftSeverity.WARNING,
+                    object_name=name,
+                    expected=None,
+                    actual=name,
+                    subject=_subject(table),
+                    message=f"Table '{name}' exists but is not in expected schema",
+                )
+            )
+
+    def _table(
+        self, expected: Table, actual: Table, changes: list[SchemaChange], report: DriftReport
+    ) -> None:
+        self._columns(expected, actual, changes, report)
+        self._indexes(expected, actual, changes, report)
+        self._constraints(expected, actual, changes, report)
+
+    def _columns(
+        self, expected: Table, actual: Table, changes: list[SchemaChange], report: DriftReport
+    ) -> None:
+        table = _named(expected)
+        for change in sorted(
+            (c for c in changes if isinstance(c, ColumnAdded)), key=lambda c: c.column.folded
+        ):
+            col = change.column.folded
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.MISSING_COLUMN,
+                    severity=DriftSeverity.CRITICAL,
+                    object_name=f"{table}.{col}",
+                    expected=_column_facts(change.column),
+                    subject=_subject(expected, col),
+                    actual=None,
+                    message=f"Column '{table}.{col}' is missing",
+                )
+            )
+        for change in sorted(
+            (c for c in changes if isinstance(c, ColumnDropped)), key=lambda c: c.column.folded
+        ):
+            col = change.column.folded
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.EXTRA_COLUMN,
+                    severity=DriftSeverity.WARNING,
+                    object_name=f"{table}.{col}",
+                    expected=None,
+                    actual=_column_facts(change.column),
+                    subject=_subject(actual, col),
+                    message=f"Column '{table}.{col}' exists but is not expected",
+                )
+            )
+        shared = {c.folded for c in expected.columns} & {c.folded for c in actual.columns}
+        report.columns_checked += len(shared)
+        for col in sorted(shared):
+            for change in changes:
+                item = _column_finding(change, col, f"{table}.{col}", _subject(expected, col))
+                if item is not None:
+                    report.drift_items.append(item)
+        for change in changes:
+            if isinstance(change, ColumnOrderChanged):
+                expected_order, actual_order = list(change.new), list(change.old)
+                report.drift_items.append(
+                    DriftItem(
+                        drift_type=DriftType.COLUMN_ORDER_MISMATCH,
+                        severity=self.column_order_severity,
+                        object_name=table,
+                        subject=_subject(expected),
+                        expected=", ".join(expected_order),
+                        actual=", ".join(actual_order),
+                        message=(
+                            f"Columns of '{table}' are in a different order: expected "
+                            f"({', '.join(expected_order)}), got ({', '.join(actual_order)})"
+                        ),
+                        details={"expected_order": expected_order, "actual_order": actual_order},
+                    )
+                )
+
+    def _indexes(
+        self, expected: Table, actual: Table, changes: list[SchemaChange], report: DriftReport
+    ) -> None:
+        """A declared index the database lacks, and an index it has that nothing declares.
+
+        An index PostgreSQL created to back a constraint is the constraint's, never
+        extra; one the DDL left unnamed is the live one that says the same thing.
+        """
+        table = _named(expected)
+        added = [c.index for c in changes if isinstance(c, IndexAdded)]
+        extra = sorted(c.index.name or "" for c in changes if isinstance(c, IndexDropped))
+        report.indexes_checked += len(expected.indexes) + len(extra)
+        missing: list[tuple[str, str | None]] = [
+            (name, name) for name in sorted(ix.name for ix in added if ix.name)
+        ]
+        unnamed = [ix for ix in added if not ix.name]
+        missing += [
+            (_index_label(expected.indexes[at]), None)
+            for at in sorted(_nth(expected.indexes, unnamed))
+        ]
+        for label, name in missing:
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.MISSING_INDEX,
+                    severity=DriftSeverity.WARNING,
+                    object_name=f"{table}.{label}",
+                    subject=_subject(expected, name),
+                    expected=label,
+                    actual=None,
+                    message=f"Index '{label}' on '{table}' is missing",
+                )
+            )
+        for name in extra:
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.EXTRA_INDEX,
+                    severity=DriftSeverity.INFO,
+                    object_name=f"{table}.{name}",
+                    subject=_subject(actual, name),
+                    expected=None,
+                    actual=name,
+                    message=f"Index '{name}' on '{table}' exists but is not expected",
+                )
+            )
+
+    def _constraints(
+        self, expected: Table, actual: Table, changes: list[SchemaChange], report: DriftReport
+    ) -> None:
+        """A constraint the tree declares and the database lost, holds otherwise, or lacks.
+
+        A lost constraint and one that says something else under its name are
+        CRITICAL (#506): a dropped or re-pointed foreign key lets rows exist that
+        could not before. An extra one is INFO: it loses no data.
+        """
+        table = _named(expected)
+        added = [c.constraint for c in changes if isinstance(c, _CONSTRAINT_ADDED)]
+        dropped = [c.constraint for c in changes if isinstance(c, _CONSTRAINT_DROPPED)]
+        changed = [
+            (declared, live)
+            for declared in added
+            for live in dropped
+            if declared.name and (declared.kind, declared.name) == (live.kind, live.name)
+        ]
+        missing = [c for c in added if all(c is not declared for declared, _ in changed)]
+        extra = [c for c in dropped if all(c is not live for _, live in changed)]
+        declared_order = sorted(expected.constraints, key=lambda c: not c.name)
+        report.constraints_checked += len(expected.constraints) + len(extra)
+        report.constraint_definitions_compared += sum(
+            c.kind != "check" for c in expected.constraints
+        ) - sum(c.kind != "check" for c in missing)
+
+        for at in sorted(_nth(declared_order, missing)):
+            constraint = declared_order[at]
+            label = _constraint_label(constraint)
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.MISSING_CONSTRAINT,
+                    severity=DriftSeverity.CRITICAL,
+                    object_name=f"{table}.{label}",
+                    subject=_subject(expected, constraint.name),
+                    expected=label,
+                    actual=None,
+                    message=f"Constraint '{label}' on '{table}' is missing",
+                )
+            )
+        for declared, live in sorted(changed, key=lambda pair: _nth(declared_order, [pair[0]])[0]):
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.CONSTRAINT_MISMATCH,
+                    severity=DriftSeverity.CRITICAL,
+                    object_name=f"{table}.{declared.name}",
+                    subject=_subject(expected, declared.name),
+                    expected=constraint_body(declared),
+                    actual=constraint_body(live),
+                    message=f"Constraint '{declared.name}' on '{table}' is not what the DDL declares",
+                )
+            )
+        for at in sorted(_nth(actual.constraints, extra)):
+            constraint = actual.constraints[at]
+            label = _constraint_label(constraint)
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=DriftType.EXTRA_CONSTRAINT,
+                    severity=DriftSeverity.INFO,
+                    object_name=f"{table}.{label}",
+                    subject=_subject(actual, constraint.name),
+                    expected=None,
+                    actual=label,
+                    message=f"Constraint '{label}' on '{table}' exists but is not expected",
+                )
+            )
+
+    def _objects(self, changes: list[SchemaChange], report: DriftReport) -> None:
+        """Views, matviews, triggers, routines and TVIEWs: what the tree declares against what exists.
+
+        A **missing** object is CRITICAL, by analogy with ``missing_column``. An
+        **extra** one is INFO, and only of a kind the tree declares at least one
+        of, in a schema it declares one in: "this project does not manage views
+        here" and "this project has lost all its views" are indistinguishable from
+        an empty expected set. Only the kinds both sides read are compared:
+        silence from a section nobody asked the catalogue about is not absence.
+        """
+        sections = frozenset(
+            section
+            for section in ("views", "routines", "triggers", "tviews")
+            if self.expected.coverage.shared(self.actual.coverage, section)
+        )
+        report.objects_checked += sum(
+            len(getattr(self.expected, section))
+            for section in ("views", "routines", "triggers")
+            if section in sections
+        )
+        declared = _objects(self.expected, sections)
+        live = _objects(self.actual, sections)
+        missing = [
+            _object_for(declared, c.ref, c.obj.signature)
+            for c in changes
+            if isinstance(c, ObjectAdded) and c.ref.kind in _OBJECT_DRIFT_TYPES
+        ]
+        kinds = {obj.ref.kind for obj in declared}
+        schemas = {obj.ref.schema for obj in declared}
+        extra = [
+            _object_for(live, c.ref, c.obj.signature)
+            for c in changes
+            if isinstance(c, ObjectDropped) and c.ref.kind in kinds and c.ref.schema in schemas
+        ]
+        for obj in sorted(missing, key=_order):
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=_OBJECT_DRIFT_TYPES[obj.ref.kind][0],
+                    severity=DriftSeverity.CRITICAL,
+                    object_name=obj.written,
+                    subject=obj.subject,
+                    expected=obj.written,
+                    actual=None,
+                    message=f"{obj.ref.kind.capitalize()} '{obj.written}' is missing from database",
+                )
+            )
+        for obj in sorted(extra, key=_order):
+            report.drift_items.append(
+                DriftItem(
+                    drift_type=_OBJECT_DRIFT_TYPES[obj.ref.kind][1],
+                    severity=DriftSeverity.INFO,
+                    object_name=obj.catalogued,
+                    subject=obj.subject,
+                    expected=None,
+                    actual=obj.catalogued,
+                    message=(
+                        f"{obj.ref.kind.capitalize()} '{obj.catalogued}' exists but is not "
+                        "in expected schema"
+                    ),
+                )
+            )
+        redefined = sorted(
+            (c.ref for c in changes if isinstance(c, ObjectReplaced) and c.ref.kind == "tview"),
+            key=lambda ref: (ref.schema, ref.name),
+        )
+        for ref in redefined:
+            report.drift_items.extend(_tview_options(ref, self.expected, self.actual))
+
+
+def _column_finding(
+    change: SchemaChange, col: str, name: str, subject: DriftSubject
+) -> DriftItem | None:
+    """The finding *change* is on column *col*, or ``None`` when it is on another or not one."""
+    if isinstance(change, ColumnTypeChanged) and change.new.folded == col:
+        exp_type, act_type = change.new.type_text or "", change.old.type_text or ""
+        return DriftItem(
+            drift_type=DriftType.TYPE_MISMATCH,
+            severity=DriftSeverity.WARNING,
+            object_name=name,
+            subject=subject,
+            expected=exp_type,
+            actual=act_type,
+            message=f"Column '{name}' type mismatch: expected {exp_type}, got {act_type}",
+        )
+    if isinstance(change, ColumnNullabilityChanged) and change.column == col:
+        nullable = change.nullable
+        return DriftItem(
+            drift_type=DriftType.NULLABLE_MISMATCH,
+            severity=DriftSeverity.WARNING,
+            object_name=name,
+            subject=subject,
+            expected=f"nullable={nullable}",
+            actual=f"nullable={not nullable}",
+            message=f"Column '{name}' nullable mismatch: expected {nullable}, got {not nullable}",
+        )
+    if isinstance(change, ColumnDefaultChanged) and change.column == col:
+        return DriftItem(
+            drift_type=DriftType.DEFAULT_MISMATCH,
+            severity=DriftSeverity.WARNING,
+            object_name=name,
+            subject=subject,
+            expected=change.new,
+            actual=change.old,
+            message=f"Column '{name}' default mismatch: expected {change.new}, got {change.old}",
+        )
+    return None
+
+
+def _object_for(found: list[_Object], ref: ObjectRef, signature: Signature | None) -> _Object:
+    """The object of *found* a change on *ref* is about: a routine by its signature."""
+    return next(
+        obj for obj in found if obj.ref == ref and signatures_match(signature, obj.signature)
     )
 
 
-def _identity(relation: RelationName | None) -> tuple[str, str] | None:
-    return None if relation is None else relation.identity
+def _tview_options(ref: ObjectRef, expected: SchemaModel, actual: SchemaModel) -> list[DriftItem]:
+    """Each option a TVIEW's tree pins that the database's TVIEW does not hold.
 
-
-def _constraint_label(constraint: Constraint) -> str:
-    if constraint.name:
-        return constraint.name
-    keyword = _CONSTRAINT_KEYWORDS[constraint.kind]
-    return f"{keyword} ({', '.join(constraint.columns)})" if constraint.columns else keyword
+    A key the tree does not pin is pg_tviews' default or a choice made by hand,
+    which the tree left open: never drift.
+    """
+    declared, found = expected.tviews[ref], actual.tviews[ref]
+    items = []
+    for key in TVIEW_OPTIONS:
+        pinned, held = getattr(declared, key), getattr(found, key)
+        if pinned is None or pinned == held:
+            continue
+        items.append(
+            DriftItem(
+                drift_type=DriftType.TVIEW_OPTION_MISMATCH,
+                severity=DriftSeverity.WARNING,
+                object_name=declared.qualified,
+                subject=DriftSubject(ref.schema, declared.name, key),
+                expected=f"{key} = {json.dumps(pinned)}",
+                actual=f"{key} = {json.dumps(held)}",
+                message=(
+                    f"TVIEW '{declared.qualified}' pins {key} = {json.dumps(pinned)}; "
+                    f"the database holds {json.dumps(held)}"
+                ),
+            )
+        )
+    return items
 
 
 def drift_config_from(config_data: Any) -> "DriftConfig":
@@ -722,11 +1064,14 @@ class SchemaDriftDetector:
         expected: SchemaModel,
         actual: SchemaModel,
     ) -> DriftReport:
-        """Compare two schema models: the expected one from DDL, the actual one live.
+        """What is wrong with the database *actual* holds, against the tree *expected* declares.
 
-        Both are ``core/schema_model`` values — the expected side built by the lint
-        inventory, the live side by ``live_catalog`` — so what differs is the schema,
-        not two representations of it.
+        Both are ``core/schema_model`` values — the expected side the tree's, the
+        live side ``live_catalog``'s. They are compared once, by the one
+        comparison (``SchemaDiffer.compare_sides``) under the policy a tree and a
+        database call for, and drift is that diff said as findings
+        (:data:`DRIFT_OF`): what would make the database the tree is what is
+        wrong with it.
 
         Args:
             expected: Expected schema state
@@ -736,344 +1081,22 @@ class SchemaDriftDetector:
             DriftReport with differences
         """
         start_time = time.perf_counter()
-
         report = DriftReport(
             database_name=self._get_database_name(),
             expected_schema_source="provided",
         )
-
-        expected_tables = {
-            key: table
-            for table in expected.tables.values()
-            if not self._ignored(key := _named(table))
-        }
-        actual_tables = {
-            key: table
-            for table in actual.tables.values()
-            if not self._ignored(key := _named(table))
-        }
-
-        for table in sorted(expected_tables.keys() - actual_tables.keys()):
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.MISSING_TABLE,
-                    severity=DriftSeverity.CRITICAL,
-                    object_name=table,
-                    expected=table,
-                    actual=None,
-                    subject=_subject(expected_tables[table]),
-                    message=f"Table '{table}' is missing from database",
-                )
-            )
-
-        for table in sorted(actual_tables.keys() - expected_tables.keys()):
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.EXTRA_TABLE,
-                    severity=DriftSeverity.WARNING,
-                    object_name=table,
-                    expected=None,
-                    actual=table,
-                    subject=_subject(actual_tables[table]),
-                    message=f"Table '{table}' exists but is not in expected schema",
-                )
-            )
-
-        for table in sorted(expected_tables.keys() & actual_tables.keys()):
-            report.tables_checked += 1
-            self._compare_table_columns(table, expected_tables[table], actual_tables[table], report)
-            self._compare_indexes(table, expected_tables[table], actual_tables[table], report)
-            self._compare_constraints(table, expected_tables[table], actual_tables[table], report)
-
-        # Compare object existence: a view, matview, trigger or routine the tree
-        # declares and the database has not got is drift, not exit 0 (#303) — in
-        # each section both sides read. Silence from a section nobody asked the
-        # catalogue about is not evidence of absence.
-        sections = frozenset(
-            section
-            for section in ("views", "routines", "triggers", "tviews")
-            if expected.coverage.shared(actual.coverage, section)
+        expected, actual = self._kept(expected), self._kept(actual)
+        diff = SchemaDiffer().compare_sides(_stated(actual), _stated(expected), _POLICY)
+        _Findings(expected, actual, self.column_order_severity).render(
+            diff.changes, report, column_order=not self.ignore_column_order
         )
-        report.drift_items.extend(_compare_objects(expected, actual, sections))
-        if "tviews" in sections:
-            report.drift_items.extend(_compare_tview_options(expected, actual))
-        report.objects_checked = sum(
-            len(getattr(expected, section))
-            for section in ("views", "routines", "triggers")
-            if section in sections
-        )
-
         report.detection_time_ms = int((time.perf_counter() - start_time) * 1000)
         return report
 
-    def _compare_table_columns(
-        self,
-        table_name: str,
-        expected_table: Table,
-        actual_table: Table,
-        report: DriftReport,
-    ) -> None:
-        """Compare the columns of one table present on both sides."""
-        expected_cols = {c.folded: c for c in expected_table.columns}
-        actual_cols = {c.folded: c for c in actual_table.columns}
-
-        for col in sorted(expected_cols.keys() - actual_cols.keys()):
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.MISSING_COLUMN,
-                    severity=DriftSeverity.CRITICAL,
-                    object_name=f"{table_name}.{col}",
-                    expected=_column_facts(expected_cols[col]),
-                    subject=_subject(expected_table, col),
-                    actual=None,
-                    message=f"Column '{table_name}.{col}' is missing",
-                )
-            )
-
-        for col in sorted(actual_cols.keys() - expected_cols.keys()):
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.EXTRA_COLUMN,
-                    severity=DriftSeverity.WARNING,
-                    object_name=f"{table_name}.{col}",
-                    expected=None,
-                    actual=_column_facts(actual_cols[col]),
-                    subject=_subject(actual_table, col),
-                    message=f"Column '{table_name}.{col}' exists but is not expected",
-                )
-            )
-
-        for col in sorted(expected_cols.keys() & actual_cols.keys()):
-            report.columns_checked += 1
-            self._compare_column(
-                f"{table_name}.{col}",
-                _subject(expected_table, col),
-                (expected_cols[col], actual_cols[col]),
-                report,
-            )
-
-        self._compare_column_order(
-            table_name, _subject(expected_table), list(expected_cols), list(actual_cols), report
-        )
-
-    def _compare_column(
-        self,
-        name: str,
-        subject: DriftSubject,
-        pair: tuple[Column, Column],
-        report: DriftReport,
-    ) -> None:
-        """Type, nullability and default of one column present on both sides."""
-        exp, act = pair
-        # One canonicaliser answers for both sides: the DDL's own spelling and
-        # `format_type`'s are two vocabularies for one type (#302).
-        exp_type, act_type = exp.type_text or "", act.type_text or ""
-        if exp_type and act_type and not same_type(exp_type, act_type):
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.TYPE_MISMATCH,
-                    severity=DriftSeverity.WARNING,
-                    object_name=name,
-                    subject=subject,
-                    expected=exp_type,
-                    actual=act_type,
-                    message=f"Column '{name}' type mismatch: expected {exp_type}, got {act_type}",
-                )
-            )
-
-        if exp.not_null != act.not_null:
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.NULLABLE_MISMATCH,
-                    severity=DriftSeverity.WARNING,
-                    object_name=name,
-                    subject=subject,
-                    expected=f"nullable={not exp.not_null}",
-                    actual=f"nullable={not act.not_null}",
-                    message=f"Column '{name}' nullable mismatch: "
-                    f"expected {not exp.not_null}, got {not act.not_null}",
-                )
-            )
-
-        expected_default, actual_default = _comparable_defaults(exp, act)
-        if expected_default != actual_default:
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.DEFAULT_MISMATCH,
-                    severity=DriftSeverity.WARNING,
-                    object_name=name,
-                    subject=subject,
-                    expected=exp.default,
-                    actual=act.default,
-                    message=f"Column '{name}' default mismatch: "
-                    f"expected {exp.default}, got {act.default}",
-                )
-            )
-
-    def _compare_column_order(
-        self,
-        table_name: str,
-        subject: DriftSubject,
-        expected_order: list[str],
-        actual_order: list[str],
-        report: DriftReport,
-    ) -> None:
-        """One ``column_order_mismatch`` per table whose columns are the same set in another order (#226).
-
-        Both sides keep declaration order: the expected DDL as written, the live
-        side by ``attnum``. A differing set is already reported column by column,
-        so only equal sets are compared.
-        """
-        if self.ignore_column_order:
-            return
-        if set(expected_order) != set(actual_order) or expected_order == actual_order:
-            return
-        report.drift_items.append(
-            DriftItem(
-                drift_type=DriftType.COLUMN_ORDER_MISMATCH,
-                severity=self.column_order_severity,
-                object_name=table_name,
-                subject=subject,
-                expected=", ".join(expected_order),
-                actual=", ".join(actual_order),
-                message=(
-                    f"Columns of '{table_name}' are in a different order: expected "
-                    f"({', '.join(expected_order)}), got ({', '.join(actual_order)})"
-                ),
-                details={"expected_order": expected_order, "actual_order": actual_order},
-            )
-        )
-
-    def _compare_indexes(
-        self, table: str, expected: Table, actual: Table, report: DriftReport
-    ) -> None:
-        """Compare one table's declared indexes with its live ones.
-
-        A live index that backs a constraint is PostgreSQL's, not the DDL's: it is
-        never *extra*. It still matches a declared index by name, so ``UNIQUE USING
-        INDEX`` reports nothing. An index the DDL left unnamed matches a live index
-        with the same keys, uniqueness and method, whatever PostgreSQL named it.
-        """
-        act_by_name = {ix.name: ix for ix in actual.indexes if ix.name}
-        exp_named = {ix.name for ix in expected.indexes if ix.name}
-        matched = set(exp_named & act_by_name.keys())
-        unnamed_missing: list[Index] = []
-        for ix in expected.indexes:
-            if ix.name:
-                continue
-            twin = next(
-                (
-                    live
-                    for live in actual.indexes
-                    if live.name not in matched and _same_index(ix, live)
-                ),
-                None,
-            )
-            if twin is None:
-                unnamed_missing.append(ix)
-            else:
-                matched.add(twin.name)
-        backing = {ix.name for ix in actual.indexes if ix.backs_constraint}
-        extra = sorted(act_by_name.keys() - backing - matched)
-        missing = sorted(exp_named - act_by_name.keys())
-        report.indexes_checked += len(expected.indexes) + len(extra)
-
-        labelled: list[tuple[str, str | None]] = [(idx, idx) for idx in missing]
-        labelled += [(_index_label(ix), None) for ix in unnamed_missing]
-        for idx, name in labelled:
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.MISSING_INDEX,
-                    severity=DriftSeverity.WARNING,
-                    object_name=f"{table}.{idx}",
-                    subject=_subject(expected, name),
-                    expected=idx,
-                    actual=None,
-                    message=f"Index '{idx}' on '{table}' is missing",
-                )
-            )
-        for idx in extra:
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.EXTRA_INDEX,
-                    severity=DriftSeverity.INFO,
-                    object_name=f"{table}.{idx}",
-                    subject=_subject(actual, idx),
-                    expected=None,
-                    actual=idx,
-                    message=f"Index '{idx}' on '{table}' exists but is not expected",
-                )
-            )
-
-    def _compare_constraints(
-        self, table: str, expected: Table, actual: Table, report: DriftReport
-    ) -> None:
-        """Compare one table's constraints: a constraint the tree declares and the database lost.
-
-        Keyed by name where the DDL wrote one, and by what the constraint says where
-        it did not — PostgreSQL names an unnamed constraint at apply time
-        (``child_pid_fkey``), and two unnamed foreign keys on one table are two
-        (#315). A named constraint that says something else is a mismatch (#501). A
-        CHECK's text is not compared: PostgreSQL stores it analysed.
-
-        A lost constraint and a mismatched one are CRITICAL (#506): a dropped or
-        re-pointed foreign key lets rows exist that could not before, so it fails a
-        gate like a missing column. An extra one is INFO: it loses no data.
-        """
-        unmatched = list(actual.constraints)
-        missing: list[Constraint] = []
-        changed: list[tuple[Constraint, Constraint]] = []
-        for constraint in sorted(expected.constraints, key=lambda c: not c.name):
-            twin = next((live for live in unmatched if _same_constraint(constraint, live)), None)
-            if twin is None:
-                missing.append(constraint)
-                continue
-            unmatched.remove(twin)
-            if constraint.kind == "check":
-                continue
-            report.constraint_definitions_compared += 1
-            if not _same_definition(constraint, twin):
-                changed.append((constraint, twin))
-        report.constraints_checked += len(expected.constraints) + len(unmatched)
-
-        for constraint in missing:
-            label = _constraint_label(constraint)
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.MISSING_CONSTRAINT,
-                    severity=DriftSeverity.CRITICAL,
-                    object_name=f"{table}.{label}",
-                    subject=_subject(expected, constraint.name),
-                    expected=label,
-                    actual=None,
-                    message=f"Constraint '{label}' on '{table}' is missing",
-                )
-            )
-        for constraint, live in changed:
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.CONSTRAINT_MISMATCH,
-                    severity=DriftSeverity.CRITICAL,
-                    object_name=f"{table}.{constraint.name}",
-                    subject=_subject(expected, constraint.name),
-                    expected=constraint_body(constraint),
-                    actual=constraint_body(live),
-                    message=f"Constraint '{constraint.name}' on '{table}' is not what the DDL declares",
-                )
-            )
-        for constraint in unmatched:
-            label = _constraint_label(constraint)
-            report.drift_items.append(
-                DriftItem(
-                    drift_type=DriftType.EXTRA_CONSTRAINT,
-                    severity=DriftSeverity.INFO,
-                    object_name=f"{table}.{label}",
-                    subject=_subject(actual, constraint.name),
-                    expected=None,
-                    actual=label,
-                    message=f"Constraint '{label}' on '{table}' exists but is not expected",
-                )
-            )
+    def _kept(self, model: SchemaModel) -> SchemaModel:
+        """*model* without the tables drift ignores."""
+        tables = {ref: t for ref, t in model.tables.items() if not self._ignored(_named(t))}
+        return replace(model, tables=tables)
 
     def get_live_schema(
         self, schemas: Iterable[str] | None = None, *, objects: bool = False

@@ -3,7 +3,7 @@
   "stdout": {
     "has_changes": true,
     "summary": {
-      "tables_added": 6,
+      "tables_added": 7,
       "tables_dropped": 0,
       "tables_renamed": 0,
       "columns_added": 0,
@@ -50,6 +50,30 @@
               ]
             }
           ]
+        }
+      },
+      {
+        "type": "ADD_TABLE",
+        "table": "ordered",
+        "column": null,
+        "old_value": null,
+        "new_value": null,
+        "details": {
+          "columns": [
+            {
+              "name": "b",
+              "type": "INTEGER",
+              "nullable": true,
+              "default": null
+            },
+            {
+              "name": "a",
+              "type": "INTEGER",
+              "nullable": true,
+              "default": null
+            }
+          ],
+          "constraints": []
         }
       },
       {

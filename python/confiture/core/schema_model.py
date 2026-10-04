@@ -987,8 +987,10 @@ def _parity_relation(relation: RelationName, rules: frozenset[str]) -> RelationN
     return RelationName(*relation.identity) if "schema_spelling" in rules else relation
 
 
-def _generated_name(table: str, name: str) -> bool:
-    return bool(re.fullmatch(rf"{re.escape(table)}(_.+)?_(pkey|key|fkey|check|excl)\d*", name))
+def _generated_name(table: str, name: str | None) -> bool:
+    return name is not None and bool(
+        re.fullmatch(rf"{re.escape(table)}(_.+)?_(pkey|key|fkey|check|excl)\d*", name)
+    )
 
 
 def _generated_index_name(table: str, name: str | None) -> bool:
@@ -1031,17 +1033,20 @@ def parity_constraint(
 
 
 def parity_indexes(
-    indexes: Iterable[Index], rules: frozenset[str] = ALL_PARITY_RULES
+    indexes: Iterable[Index],
+    rules: frozenset[str] = ALL_PARITY_RULES,
+    declared: frozenset[str] = frozenset(),
 ) -> list[tuple[Index, Index]]:
     """Each of *indexes* that *rules* compare, paired with how they compare it.
 
     An index backing a constraint is the constraint's, which the DDL declares
-    instead (``backing_indexes``): it is not compared at all.
+    instead (``backing_indexes``): it is not compared — unless the other side
+    *declared* an index of its name, as ``UNIQUE USING INDEX`` does.
     """
     return [
         (index, _parity_index(index, rules))
         for index in indexes
-        if not ("backing_indexes" in rules and index.backs_constraint)
+        if not ("backing_indexes" in rules and index.backs_constraint) or index.name in declared
     ]
 
 
