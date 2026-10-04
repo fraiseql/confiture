@@ -425,6 +425,6 @@ class TestMigrateValidateCheckLiveDrift:
 
         assert result.exit_code == 0
         mock_detector_class.assert_called_once_with(
-            mock_conn, ignore_column_order=False, column_order_severity="warning"
+            mock_conn, ignore_column_order=False, column_order_severity="warning", scratch_url=None
         )
         mock_detector.compare_with_schema_file.assert_called_once_with(str(schema_file))

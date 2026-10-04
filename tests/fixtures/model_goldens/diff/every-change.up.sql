@@ -45,6 +45,21 @@ ALTER TABLE rekeyed DROP CONSTRAINT IF EXISTS rekeyed_pk;
 -- confiture:tier lock_risky
 ALTER TABLE rekeyed ADD CONSTRAINT rekeyed_pk PRIMARY KEY (a, b);
 
+-- confiture:tier destructive
+DROP INDEX CONCURRENTLY IF EXISTS things_old_ix;
+
+-- confiture:tier destructive
+ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_fk;
+
+-- confiture:tier destructive
+ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_ck;
+
+-- confiture:tier destructive
+ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_uq;
+
+-- confiture:tier destructive
+ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_ex;
+
 -- confiture:irreversible data
 -- confiture:tier irreversible
 ALTER TABLE things DROP COLUMN legacy_flag;
@@ -63,33 +78,18 @@ ALTER TABLE things ALTER COLUMN status SET DEFAULT 'open';
 -- confiture:tier additive
 CREATE INDEX CONCURRENTLY IF NOT EXISTS things_new_ix ON things (code, qty);
 
--- confiture:tier destructive
-DROP INDEX CONCURRENTLY IF EXISTS things_old_ix;
-
 -- confiture:tier reversible
 ALTER TABLE things ADD CONSTRAINT things_new_fk FOREIGN KEY (pid) REFERENCES parent (id) ON DELETE CASCADE NOT VALID;
 ALTER TABLE things VALIDATE CONSTRAINT things_new_fk;
 
--- confiture:tier destructive
-ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_fk;
-
 -- confiture:tier lock_risky
 ALTER TABLE things ADD CONSTRAINT things_new_ck CHECK (qty >= 0);
-
--- confiture:tier destructive
-ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_ck;
 
 -- confiture:tier lock_risky
 ALTER TABLE things ADD CONSTRAINT things_new_uq UNIQUE (code, qty);
 
--- confiture:tier destructive
-ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_uq;
-
 -- confiture:tier lock_risky
 ALTER TABLE things ADD CONSTRAINT things_new_ex EXCLUDE USING gist (span WITH &&) WHERE (qty > 0);
-
--- confiture:tier destructive
-ALTER TABLE things DROP CONSTRAINT IF EXISTS things_old_ex;
 
 -- confiture:tier reversible
 CREATE OR REPLACE VIEW v_added AS SELECT 2 AS two;

@@ -23,9 +23,19 @@
         "type": "ADD_INDEX",
         "details": "ADD INDEX idx_users_last_name ON users",
         "irreversible_reason": null
+      },
+      {
+        "type": "DROP_INDEX",
+        "details": "DROP INDEX idx_users_full_name",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_INDEX",
+        "details": "ADD INDEX idx_users_full_name ON users",
+        "irreversible_reason": null
       }
     ],
-    "change_count": 4,
+    "change_count": 6,
     "migration_generated": true,
     "migration_file": "<version>_golden.up.sql",
     "error": null,

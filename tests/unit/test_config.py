@@ -80,6 +80,18 @@ class TestEnvironmentValidation:
         with pytest.raises(ConfigurationError, match="Invalid database_url"):
             Environment.load("invalid_url", project_dir=temp_project_dir)
 
+    def test_a_scratch_server_is_optional_and_a_postgresql_url(self) -> None:
+        """``scratch_url`` names where drift and diff build the tree; none is the structural tier."""
+        assert Environment.model_validate({"database_url": "postgresql://h/db"}).scratch_url is None
+        env = Environment.model_validate(
+            {"database_url": "postgresql://h/db", "scratch_url": "postgresql://s/postgres"}
+        )
+        assert env.scratch_url == "postgresql://s/postgres"
+        with pytest.raises(ValueError, match="Invalid scratch_url"):
+            Environment.model_validate(
+                {"database_url": "postgresql://h/db", "scratch_url": "mysql://u:secret@s/x"}
+            )
+
     def test_include_dirs_must_exist(self, temp_project_dir: Path):
         """Should validate that include_dirs exist"""
         env_file = temp_project_dir / "db" / "environments" / "missing_dirs.yaml"

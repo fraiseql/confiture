@@ -916,10 +916,13 @@ PARITY_NORMALISATIONS: dict[str, str] = {
         "child_pid_idx); a name of PostgreSQL's own shape is no name, on either side"
     ),
     "analysed_expressions": (
-        "a default, a CHECK, a generation expression, an index's expression key and a "
-        "partial index's predicate are stored analysed — implicit casts added, IN "
-        "written back as = ANY (ARRAY[…]) — so what is compared is that one exists, "
-        "never its text; a key that is a plain column name is compared as written"
+        "a CHECK, a generation expression, an index's expression key and a partial "
+        "index's predicate are stored analysed — implicit casts added, IN written back "
+        "as = ANY (ARRAY[…]) — so what is compared is that one exists, never its text, "
+        "unless the tree is materialised (read back from a scratch database); a key "
+        "that is a plain column name is compared as written. A default is stored "
+        "analysed too; set aside here, the engine compares it as the value it is, a "
+        "parse tree whose constants the database's server spells (ddl_walk.same_value)"
     ),
     "spellings": (
         "a column's name, type and position as a file wrote them (`UserId`, "
@@ -958,8 +961,8 @@ PARITY_NORMALISATIONS: dict[str, str] = {
     "view_definitions": (
         "a view's query is stored as a parse tree and read back through "
         "pg_get_viewdef's deparse — qualified, reparenthesised, `*` expanded — so what "
-        "is compared is that one exists; comparing two through one deparser is "
-        "--check-body-views' question"
+        "is compared is that one exists, unless the tree is materialised and both "
+        "queries come through one deparser"
     ),
 }
 

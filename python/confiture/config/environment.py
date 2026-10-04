@@ -54,7 +54,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from confiture.config._env_vars import expand_env_vars
 from confiture.core.schema_identity import identifier_identity
@@ -903,6 +910,7 @@ class Environment(BaseModel):
         lint: What the lint rules resolve against — ``lint.ignore_objects`` excuses a name ``build_003`` cannot find in the build.
         name: Environment name (e.g., "local", "production")
         database_url: PostgreSQL connection URL
+        scratch_url: A writable PostgreSQL server ``confiture drift`` and ``migrate diff --from db`` build the tree on to read it back, so its expressions compare as PostgreSQL stores them; ``null`` compares them structurally.
         include_dirs: Directories to include when building schema (supports both string and dict formats)
         superuser_post_dirs: Directories routed to the post-schema superuser phase in build_split()
         exclude_dirs: Directories to exclude from schema build
@@ -925,6 +933,7 @@ class Environment(BaseModel):
     # ``SchemaBuilder`` independently rejects an empty ``include_dirs``.
     name: str = ""
     database_url: str
+    scratch_url: str | None = None
     include_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     superuser_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
     superuser_post_dirs: list[str | DirectoryConfig] = Field(default_factory=list)
@@ -1008,13 +1017,13 @@ class Environment(BaseModel):
             )
         return data
 
-    @field_validator("database_url")
+    @field_validator("database_url", "scratch_url")
     @classmethod
-    def validate_database_url(cls, v: str) -> str:
+    def validate_database_url(cls, v: str | None, info: ValidationInfo) -> str | None:
         """Validate PostgreSQL connection URL format"""
-        if not v.startswith(("postgresql://", "postgres://")):
+        if v is not None and not v.startswith(("postgresql://", "postgres://")):
             raise ValueError(
-                "Invalid database_url: must start with postgresql:// or postgres://, "
+                f"Invalid {info.field_name}: must start with postgresql:// or postgres://, "
                 f"got: {redact_url(v)}"
             )
         return v

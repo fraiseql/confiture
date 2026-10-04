@@ -364,3 +364,41 @@ def test_squash_from_build_accepts_a_tree_with_a_tview(
     plan = plan_squash(migrations, "20260102000000", server_url=test_db_url, build_sql=TREE)
 
     assert plan.source == "build"
+
+
+def _materialised_drift(
+    url: str, ddl: str, scratch_url: str, tmp_path
+) -> list[tuple[str, str, str]]:
+    """``confiture drift`` with a scratch server: the tree built there, read back, compared."""
+    from confiture.core.drift import SchemaDriftDetector
+
+    schema = tmp_path / "schema.sql"
+    schema.write_text(f"CREATE EXTENSION IF NOT EXISTS pg_tviews;\n{ddl}")
+    with psycopg.connect(url) as conn:
+        report = SchemaDriftDetector(conn, scratch_url=scratch_url).compare_with_schema_file(
+            str(schema)
+        )
+    assert report.fidelity == "materialised"
+    return sorted((i.drift_type.value, i.severity.value, i.object_name) for i in report.drift_items)
+
+
+def test_a_materialised_tree_pins_what_it_wrote_and_nothing_else(
+    tview_database: str, test_db_url: str, tmp_path
+) -> None:
+    """The scratch registry holds every key; the tree pins none, so none is drift."""
+    with psycopg.connect(tview_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET LOGGED")
+
+    assert _materialised_drift(tview_database, TREE, test_db_url, tmp_path) == []
+
+
+def test_a_materialised_pinned_option_changed_by_hand_is_drift(
+    pinned_database: str, test_db_url: str, tmp_path
+) -> None:
+    with psycopg.connect(pinned_database, autocommit=True) as conn:
+        conn.execute("ALTER TABLE tv_post SET (fillfactor = 60)")
+
+    # Read back from a database, the tree is spelled as PostgreSQL spells it: qualified.
+    assert _materialised_drift(pinned_database, PINNED, test_db_url, tmp_path) == [
+        ("tview_option_mismatch", "warning", "public.tv_post"),
+    ]

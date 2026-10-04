@@ -8,7 +8,7 @@ import yaml
 from psycopg.conninfo import conninfo_to_dict
 
 from confiture.core._migrator.loader import get_migration_class, load_migration_module
-from confiture.core.connection import create_connection, load_config
+from confiture.core.connection import create_connection, load_config, scratch_url_from_config
 from confiture.exceptions import ConfigurationError, MigrationError
 
 
@@ -239,3 +239,26 @@ class SecondMigration(Migration):
 
         # Should return one of the migration classes
         assert migration_class.__name__ in ["FirstMigration", "SecondMigration"]
+
+
+class TestScratchUrl:
+    """Where a tree is built to be read back: the flag, else the environment, never the target."""
+
+    def test_the_flag_wins_over_the_environment(self):
+        config = {
+            "database_url": "postgresql://live/db",
+            "scratch_url": "postgresql://env/postgres",
+        }
+        assert scratch_url_from_config(config, "postgresql://flag/postgres") == (
+            "postgresql://flag/postgres"
+        )
+        assert scratch_url_from_config(config) == "postgresql://env/postgres"
+
+    def test_the_database_compared_is_never_the_scratch_server(self):
+        assert scratch_url_from_config({"database_url": "postgresql://live/db"}) is None
+
+    def test_a_scratch_url_that_is_not_postgresql_is_config_003(self):
+        with pytest.raises(ConfigurationError) as caught:
+            scratch_url_from_config({"scratch_url": "mysql://u:secret@s/x"})
+        assert caught.value.error_code == "CONFIG_003"
+        assert "secret" not in str(caught.value)

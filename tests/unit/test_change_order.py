@@ -126,3 +126,18 @@ def test_a_tview_is_created_after_what_it_reads_and_dropped_before_it() -> None:
         "ADD_TVIEW tv_user",
     ]
     assert _ordered(tree, "")[0] == "DROP_TVIEW tv_user"
+
+
+def test_a_tables_indexes_are_detached_before_its_columns_change_and_attached_after() -> None:
+    """The down undoes the up in reverse, so an index rebuilt on renamed columns must
+    be dropped before them and created after them, or the down recreates the old index
+    on a column that is not back yet."""
+    old = "CREATE TABLE u (full_name TEXT); CREATE INDEX u_i ON u (full_name);"
+    new = "CREATE TABLE u (first_name TEXT, last_name TEXT); CREATE INDEX u_i ON u (first_name, last_name);"
+    changes = apply_order(SchemaDiffer().compare(old, new).changes)
+    assert [c.to_wire().type for c in changes] == [
+        "DROP_INDEX",
+        "RENAME_COLUMN",
+        "ADD_COLUMN",
+        "ADD_INDEX",
+    ]

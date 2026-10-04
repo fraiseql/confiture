@@ -24,12 +24,13 @@ from confiture.core.builder import SchemaBuilder, files_under
 from confiture.core.connection import Connection, connection_for
 from confiture.core.ddl_walk import AS_WRITTEN
 from confiture.core.differ import SchemaDiffer, Side
+from confiture.core.expected_db import ExpectedSchemaDB
 from confiture.core.ledger import bookkeeping_tables
 from confiture.core.linting.inventory import label_for
 from confiture.core.live_catalog import catalogued_objects, read, user_schemas
 from confiture.core.schema_change import SchemaDiff
 from confiture.core.schema_identity import DEFAULT_SCHEMA
-from confiture.core.schema_model import SchemaModel, ref_for
+from confiture.core.schema_model import TVIEW_OPTIONS, SchemaModel, ref_for
 from confiture.core.schema_read import SchemaRead, Segment, read_segments
 from confiture.core.server_constants import server_constants
 from confiture.exceptions import SchemaError
@@ -191,6 +192,49 @@ def database_side(
         model = _the_projects(model, against, tracking_table)
         constants = AS_WRITTEN if against is None else server_constants(conn, against)
         return Side(model, catalogued_objects(conn, model, wanted), constants=constants)
+
+
+def materialised_side(
+    sql: str,
+    scratch_url: str,
+    *,
+    declared: SchemaModel,
+    schemas: Sequence[str] | None = None,
+    default_schema: str = DEFAULT_SCHEMA,
+) -> Side:
+    """The side a tree is once PostgreSQL holds it: built into a scratch database, read back.
+
+    *sql* is applied to a throwaway database on the writable server *scratch_url*
+    (``ExpectedSchemaDB``, dropped on the way out, whatever happens) with
+    *default_schema* first on its ``search_path``, and read as a database is
+    (:func:`database_side`) in *schemas* — the ones *declared* names when omitted.
+    Every expression on this side is then PostgreSQL's analysis of the tree's, so
+    it compares with a database's exactly (``differ.MATERIALISED``).
+
+    What the catalog cannot say about the tree is taken from *declared*, the tree
+    as written: a TVIEW option it does not pin is pg_tviews' choice, not the
+    tree's, whatever the scratch registry holds.
+
+    Raises:
+        SchemaError: when the scratch server cannot build the tree.
+        ConfigurationError: ``CONFIG_014`` when the tree's TVIEWs need a pg_tviews
+            the scratch server does not have in a version confiture reads.
+    """
+    wanted = list(schemas) if schemas is not None else declared_schemas(declared)
+    search_path = None if default_schema == DEFAULT_SCHEMA else default_schema
+    with ExpectedSchemaDB(scratch_url).from_source(schema_sql=sql, search_path=search_path) as conn:
+        model = read(
+            conn, schemas=wanted, routines=True, views=True, triggers=True, other_objects=True
+        )
+        model = _the_projects(model, declared, None)
+        objects = catalogued_objects(conn, model, wanted)
+    tviews = {
+        ref: replace(tview, **{key: getattr(declared.tviews[ref], key) for key in TVIEW_OPTIONS})
+        if ref in declared.tviews
+        else tview
+        for ref, tview in model.tviews.items()
+    }
+    return Side(replace(model, tviews=tviews), objects)
 
 
 def _the_projects(

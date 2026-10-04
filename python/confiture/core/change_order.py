@@ -15,6 +15,7 @@ serves both.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import replace
 from typing import assert_never
@@ -134,6 +135,60 @@ def _rank(change: SchemaChange) -> int:
             assert_never(change)
 
 
+#: What a table's edit does to its indexes and constraints: drops one, or adds one.
+#: Every other edit changes its columns.
+_DETACHING = (
+    IndexDropped,
+    ForeignKeyDropped,
+    CheckConstraintDropped,
+    UniqueConstraintDropped,
+    PrimaryKeyDropped,
+    ExclusionConstraintDropped,
+)
+_ATTACHING = (
+    IndexAdded,
+    ForeignKeyAdded,
+    CheckConstraintAdded,
+    UniqueConstraintAdded,
+    PrimaryKeyAdded,
+    ExclusionConstraintAdded,
+)
+
+
+_EDITS = (
+    *_DETACHING,
+    *_ATTACHING,
+    ColumnAdded,
+    ColumnDropped,
+    ColumnRenamed,
+    ColumnTypeChanged,
+    ColumnNullabilityChanged,
+    ColumnDefaultChanged,
+    ColumnOrderChanged,
+)
+
+
+def _phase(change: SchemaChange) -> int:
+    if isinstance(change, _DETACHING):
+        return 0
+    return 2 if isinstance(change, _ATTACHING) else 1
+
+
+def _detached_then_attached(edits: list[SchemaChange]) -> list[SchemaChange]:
+    """Each table's *edits* together, in the order the tables first appear: its indexes and
+    constraints dropped, then its columns changed, then its indexes and constraints added.
+
+    An index or a constraint names columns. Dropped before they change and added after,
+    it is never one PostgreSQL cannot build — and neither is it in the down, which
+    undoes the up in reverse: the old index comes back after its columns have.
+    """
+    by_table: dict[tuple[str, str], list[SchemaChange]] = defaultdict(list)
+    for change in edits:
+        if isinstance(change, _EDITS):
+            by_table[change.table.identity].append(change)
+    return [change for found in by_table.values() for change in sorted(found, key=_phase)]
+
+
 def _in_foreign_key_order(
     tables: Sequence[Table],
 ) -> tuple[list[Table], list[ForeignKeyAdded]]:
@@ -178,8 +233,11 @@ def apply_order(changes: Sequence[SchemaChange]) -> list[SchemaChange]:
         whole[ref_for("table", t.schema, t.name)] for t in _in_foreign_key_order(dropped)[0]
     ][::-1]
     ordered: list[SchemaChange] = []
+    edits = _detached_then_attached([c for c in ranked if isinstance(c, _EDITS)])
     for change in ranked:
-        if isinstance(change, TableAdded):
+        if isinstance(change, _EDITS):
+            ordered.append(edits.pop(0))
+        elif isinstance(change, TableAdded):
             ordered.append(TableAdded(tables.pop(0)))
             if not tables:
                 ordered.extend(held)

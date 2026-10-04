@@ -135,6 +135,7 @@ nav:
   - 'Reference':
       - 'CLI Reference': reference/cli.md
       - 'Configuration Reference': reference/configuration.md
+      - 'Comparison fidelity: how drift and diff compare expressions': reference/comparison-fidelity.md
       - 'Dry-Run Mode API Reference': reference/dry-run-api.md
       - 'Emitter Protocol Reference': reference/emitter-protocol.md
       - 'Error-code codebook': reference/error-codes.md
