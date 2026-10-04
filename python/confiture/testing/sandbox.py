@@ -380,7 +380,7 @@ class MigrationSandbox:
             ) from e
 
     @contextmanager
-    def in_pre_state(self, migration: Migration) -> Generator[Migration, None, None]:
+    def in_pre_state(self, migration: Migration) -> Generator[Migration]:
         """Context manager for testing in pre-migration state.
 
         A convenience wrapper around simulate_pre_state() that yields the migration

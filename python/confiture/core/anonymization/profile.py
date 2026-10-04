@@ -180,7 +180,7 @@ class AnonymizationProfile(BaseModel):
     """Dictionary of table rules by table name."""
 
     @model_validator(mode="after")
-    def validate_rules_name_defined_strategies(self) -> "AnonymizationProfile":
+    def validate_rules_name_defined_strategies(self) -> AnonymizationProfile:
         """Every rule must name a strategy this profile defines (#285).
 
         ``StrategyDefinition.type`` is whitelisted by the model, but a *rule*
@@ -211,7 +211,7 @@ class AnonymizationProfile(BaseModel):
         return self
 
     @classmethod
-    def load(cls, path: Path | str) -> "AnonymizationProfile":
+    def load(cls, path: Path | str) -> AnonymizationProfile:
         """Load profile from YAML file with safe loading and validation.
 
         Uses yaml.safe_load() to prevent code injection attacks, then validates
@@ -257,7 +257,7 @@ class AnonymizationProfile(BaseModel):
         return profile
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AnonymizationProfile":
+    def from_dict(cls, data: dict[str, Any]) -> AnonymizationProfile:
         """Create profile from dictionary (for testing).
 
         Args:

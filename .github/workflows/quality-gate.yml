@@ -43,7 +43,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
         native: 'true'
 
     - name: Setup environment and install dependencies
@@ -143,14 +143,10 @@ jobs:
       with:
         files: ./coverage.xml
         flags: unittests
-        name: Python-3.11
+        name: Python-3.14
         fail_ci_if_error: false
       continue-on-error: true
 
-  # The lockfile pins ONE pglast. That is right for reproducibility and wrong
-  # for a library whose `[ast]` extra accepts a range: #192 was a silent
-  # misclassification that only appeared on the version CI did not install.
-  # This leg walks the range's ends explicitly.
   pggit-plugin:
     name: pgGit plugin (plugins/fraiseql-confiture-pggit)
     # pgGit's commands left the package for a sibling distribution that registers
@@ -177,7 +173,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Install confiture's locked tree, then the plugin beside it
       run: |
@@ -212,124 +208,6 @@ jobs:
         CONFITURE_TEST_DB_URL: postgresql://confiture:confiture@localhost:5432/confiture_test
       # --no-sync: a re-sync would remove the plugin, which the lock does not name.
       run: uv run --no-sync pytest plugins/fraiseql-confiture-pggit/tests -rs --tb=short
-
-  pglast-matrix:
-    name: AST backend (pglast ${{ matrix.pglast }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # The floor and the current major. Both are claimed by the
-        # `pglast>=6.0` dependency, so both are tested. They are not the same
-        # parser: #270 was a PL/pgSQL *compiler* stub that only pglast 8 has,
-        # refusing every schema-qualified type name, and pglast 6.16 and 7.18
-        # resolve all of them — so the body suites below assert the contract on
-        # every major and probe for the stub before pinning its behaviour.
-        pglast: ['>=6,<7', '>=8']
-    steps:
-    - uses: actions/checkout@v6
-    - name: Set up Python and uv
-      uses: ./.github/actions/python-uv
-      with:
-        python-version: '3.11'
-
-    - name: Install dependencies, then override pglast
-      run: |
-        uv venv
-        # Locked tree first (#191), then deliberately step pglast off the lock —
-        # `uv pip install` does not touch uv.lock, so this overrides exactly one
-        # package and leaves the rest reproducible.
-        uv sync --locked --no-install-project --extra dev --extra notifications
-        uv pip install "pglast${{ matrix.pglast }}"
-        uv run --no-sync python -c "import pglast; print('pglast', pglast.__version__)"
-    - name: Run the AST-backed suites
-      # --no-sync: a re-sync would restore the locked pglast and silently
-      # test the wrong thing — which is this leg's entire failure mode.
-      run: |
-        uv run --no-sync pytest \
-          tests/unit/idempotency \
-          tests/unit/test_operation_classifier.py \
-          tests/unit/test_replica_corpus.py \
-          tests/unit/test_replica_rule.py \
-          tests/unit/test_replica_preflight.py \
-          tests/unit/test_tview_preflight.py \
-          tests/unit/linting/test_tview_rules.py \
-          tests/unit/test_idempotency_captures.py \
-          tests/unit/test_idempotency_suggestion_wiring.py \
-          tests/unit/test_pglast_enum_binding.py \
-          tests/unit/test_plpgsql_parse.py \
-          tests/unit/test_plpgsql_into_targets.py \
-          tests/unit/test_plpgsql_fragments.py \
-          tests/unit/test_fragment_census.py \
-          tests/unit/test_data_assertions.py \
-          tests/unit/linting/test_reference_extraction.py \
-          tests/unit/test_relation_references.py \
-          tests/unit/test_generated_ddl_quotes_identifiers.py \
-          tests/unit/linting/test_naming_003_dotted_identifiers.py \
-          tests/unit/linting/test_naming_004_quoted_identifiers.py \
-          tests/unit/linting/test_build_003_references.py \
-          tests/unit/linting/test_build_004.py \
-          tests/unit/test_constraint_reader_is_exhaustive.py \
-          tests/unit/test_alter_subtypes_are_exhaustive.py \
-          tests/unit/test_ddl_objects_are_exhaustive.py \
-          tests/unit/test_ddl_statement_kinds_are_exhaustive.py \
-          tests/unit/test_one_alter_folder.py \
-          tests/unit/test_one_schema_model.py \
-          tests/unit/test_ddl_walk_read_constraint.py \
-          tests/unit/test_ddl_walk_read_index.py \
-          tests/unit/test_fk_extractor.py \
-          tests/unit/test_one_constraint_reader.py \
-          tests/unit/test_mutation_sql_validity.py \
-          tests/unit/test_schema_analyzer.py \
-          tests/unit/test_differ_sql.py \
-          tests/unit/test_differ_sql_objects.py \
-          tests/unit/test_change_order.py \
-          tests/unit/test_exclusion_constraints.py \
-          tests/unit/test_one_identifier_quoter.py \
-          tests/unit/test_one_column_tracer.py \
-          tests/unit/linting/test_tenant_003_views.py \
-          tests/unit/linting/test_tenant_004_foreign_keys.py \
-          tests/unit/linting/test_tenant_005_unique_keys.py \
-          tests/unit/linting/test_tenant_001_inserts.py \
-          tests/unit/linting/test_tenant_partitions.py \
-          tests/unit/linting/test_tenant_like_and_inherits.py \
-          tests/unit/linting/test_inventory_like_and_inherits.py \
-          tests/unit/test_schema_change.py \
-          tests/unit/test_schema_change_is_exhaustive.py \
-          tests/unit/test_schema_change_tiers.py \
-          tests/unit/test_differ_order_is_stable.py \
-          tests/unit/linting/test_inventory_reads_columns_whole.py \
-          tests/unit/linting/test_inventory_builds_the_model.py \
-          tests/unit/test_live_catalog_reads_text_like_ddl.py \
-          tests/unit/test_routine_identity.py \
-          tests/unit/test_copy_blocks_everywhere.py \
-          tests/unit/test_schema_read.py \
-          tests/unit/test_migrations_with_copy_blocks.py \
-          tests/unit/test_one_parse_entry.py \
-          tests/unit/test_no_silent_parse_failure.py \
-          tests/unit/linting/test_columns_are_where_written.py \
-          tests/unit/linting/test_a_finding_names_the_file_that_wrote_it.py \
-          tests/unit/test_drift_expected_parser.py \
-          tests/unit/test_differ_copy_stdin.py \
-          tests/unit/test_wide_signatures.py \
-          tests/unit/test_function_signature_checker.py \
-          tests/unit/test_function_body_checker.py \
-          tests/unit/test_sql_lexer_scripts.py \
-          tests/unit/test_sql_lexer_multibyte.py \
-          tests/unit/test_platform_dependency_order.py \
-          tests/unit/test_platform_writer_facts.py \
-          tests/unit/test_platform_seed_writers.py \
-          tests/unit/seed_validation/prep_seed/test_level_1_reads_statements.py \
-          tests/unit/seed_validation/prep_seed/test_level_1_seed_files.py \
-          tests/unit/seed_validation/prep_seed/test_union_uncast_nulls.py \
-          tests/unit/seed_validation/prep_seed/test_union_inline_comments.py \
-          tests/unit/seed_validation/prep_seed/test_level_2_reads_one_model.py \
-          tests/unit/seed_validation/prep_seed/test_level_3_resolvers.py \
-          tests/unit/seed_validation/prep_seed/test_resolvers_by_definition.py \
-          tests/unit/seed_validation/prep_seed/test_final_table_per_resolver.py \
-          tests/contract/test_platform_surface.py \
-          tests/unit/test_port_parity_corpus.py \
-          -q
 
   plpgsql-check:
     name: Body analysis (plpgsql_check)
@@ -367,7 +245,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Setup environment and install dependencies
       run: |
@@ -445,7 +323,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Setup environment and install dependencies
       run: |
@@ -523,7 +401,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Install dependencies
       run: |
@@ -560,7 +438,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Cache ty tool
       uses: actions/cache@v5
@@ -612,7 +490,7 @@ jobs:
     - name: Set up Python (cargo test links libpython without the extension-module feature)
       uses: actions/setup-python@v5
       with:
-        python-version: "3.11"
+        python-version: "3.14"
 
     - name: Run cargo test
       run: scripts/cargo-test.sh
@@ -625,7 +503,7 @@ jobs:
     - name: Set up Python and uv
       uses: ./.github/actions/python-uv
       with:
-        python-version: '3.11'
+        python-version: '3.14'
 
     - name: Install dependencies
       run: |
@@ -654,7 +532,7 @@ jobs:
   quality-gate:
     name: Quality Gate ✅
     runs-on: ubuntu-latest
-    needs: [test, pggit-plugin, pglast-matrix, plpgsql-check, pg-tviews, wheel-python-314, lint, type-check, rust-checks, security]
+    needs: [test, pggit-plugin, plpgsql-check, pg-tviews, wheel-python-314, lint, type-check, rust-checks, security]
     if: always()
     steps:
       - name: Check quality gate status
@@ -668,13 +546,6 @@ jobs:
           # that breaks it is caught in this repository, not after a release.
           if [[ "${{ needs.pggit-plugin.result }}" != "success" ]]; then
             echo "❌ pgGit plugin tests failed - Quality gate blocked"
-            exit 1
-          fi
-          # Required, not advisory: the `[ast]` extra accepts pglast >=6.0, and
-          # #192 was a silent misclassification on a version the lock did not
-          # pin. An advisory leg here would have let it ship again.
-          if [[ "${{ needs.pglast-matrix.result }}" != "success" ]]; then
-            echo "❌ AST backend matrix failed - Quality gate blocked"
             exit 1
           fi
           # Required, not advisory: pg_tviews is in no stock PostgreSQL, so every

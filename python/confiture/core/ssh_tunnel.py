@@ -96,7 +96,7 @@ def _build_ssh_cmd(config: SshTunnelConfig, local_port: int) -> list[str]:
 def ssh_tunnel(
     config: SshTunnelConfig,
     database_url: str,
-) -> Generator[str, None, None]:
+) -> Generator[str]:
     """Open an SSH tunnel and yield a patched *database_url*.
 
     Replaces the ``${TUNNEL_LOCAL_PORT}`` placeholder in *database_url* with

@@ -14,7 +14,6 @@ and the generator looked in the wrong field.
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TypeVar
 
 import pglast
 
@@ -27,10 +26,7 @@ from tests.unit._schema_models import table
 ONE_COLUMN = ("CREATE TABLE tenant.t (id INT);", "CREATE TABLE tenant.t (id INT, x INT NOT NULL);")
 
 
-_Change = TypeVar("_Change")
-
-
-def _change(old: str, new: str, kind: type[_Change]) -> _Change:
+def _change[Change](old: str, new: str, kind: type[Change]) -> Change:
     return next(c for c in SchemaDiffer().compare(old, new).changes if isinstance(c, kind))
 
 

@@ -22,7 +22,7 @@ uv add confiture
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.14+
 - PostgreSQL 16+
 - Basic understanding of SQL and database migrations
 
@@ -403,7 +403,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.14"
 
       - name: Install Confiture
         run: pip install fraiseql-confiture

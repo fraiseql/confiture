@@ -416,5 +416,5 @@ def _query_applied_versions(config_data: dict[str, Any]) -> set[str]:
     try:
         with open_connection(config_data) as conn:
             return recorded_versions(conn, table)
-    except (ConfiturError, DatabaseError):
+    except ConfiturError, DatabaseError:
         return set()

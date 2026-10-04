@@ -80,7 +80,7 @@ ROOT_FILES = (
 def _docstring_line(path: Path) -> str:
     try:
         doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8")))
-    except (SyntaxError, UnicodeDecodeError):
+    except SyntaxError, UnicodeDecodeError:
         return ""
     if not doc:
         return ""

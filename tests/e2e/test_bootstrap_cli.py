@@ -18,7 +18,7 @@ from confiture.cli.main import app
 @pytest.fixture()
 def bootstrap_db(
     superuser_db_url: str, fresh_database: str, maintenance_connection: psycopg.Connection
-) -> Generator[str, None, None]:
+) -> Generator[str]:
     """Throwaway database, connected as a superuser: the executor creates roles."""
     drop_roles(maintenance_connection, "bootstrap_e2e_role")
     yield fresh_database

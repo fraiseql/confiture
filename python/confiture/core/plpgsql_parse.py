@@ -3,9 +3,8 @@
 ``pglast.parse_plpgsql`` is the only thing that reads a PL/pgSQL body, and it
 is the wrong shape twice: the compiler behind it refuses a routine it should
 read, and the serialiser behind *that* writes a body it did read as JSON that
-does not decode. Both are pglast 8's alone — 6.16 and 7.18, which the
-dependency equally accepts, have neither — and both end in the same place, a
-routine ``build_003`` never looks at. So both are answered here, and
+does not decode. Both end in the same place, a routine ``build_003`` never
+looks at. So both are answered here, and
 :func:`parse_body` is the one place either is.
 
 The catalogue, first.
@@ -82,9 +81,9 @@ blanked too eagerly, or a brace deleted on a hunch, hands back a tree that is
 missing something without saying so — and a routine reported as clean because
 it was never read is the failure both repairs exist to prevent.
 
-Both are pglast 8's, both are reported upstream as
+Both are reported upstream as
 https://github.com/pganalyze/libpg_query/issues/337, and neither is repaired
-here for want of a better place: confiture depends on ``pglast>=6.0``
+here for want of a better place: confiture depends on ``pglast>=8.1``
 uncapped and confiture cannot ship libpg_query, so a fix that lands upstream
 lands in a future wheel and never in the one an installed environment already
 has. Both repairs are written to retire themselves rather than to be removed —
@@ -287,8 +286,7 @@ def _compile(text: str) -> tuple[Any, int]:
     serialisation, and that serialisation is not always valid JSON: a trigger
     function's implicit ``TG_`` datums are written ``{}}``, one closing brace
     too many each, so unrepaired every ``RETURNS TRIGGER`` and
-    ``RETURNS event_trigger`` body fails to decode (issue #272, pglast 8 only —
-    6.16 and 7.18 do not write those datums at all).
+    ``RETURNS event_trigger`` body fails to decode (issue #272).
 
     The decoder is what says where the defect is. It stops at the first
     character it cannot accept, so ``JSONDecodeError.pos`` names a stray brace
@@ -353,7 +351,7 @@ def _compiles(statement: str, spans: list[Span], types: Sequence[Span] = ()) -> 
     """
     try:
         _compile(_edited(statement, spans, types))
-    except (pglast.parser.ParseError, json.JSONDecodeError):
+    except pglast.parser.ParseError, json.JSONDecodeError:
         return False
     return True
 

@@ -615,7 +615,7 @@ class SchemaBuilder:
                 rel_path = file_path.relative_to(self.base_dir)
             else:
                 rel_path = file_path
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             rel_path = file_path
 
         # Block comment style (recommended, immune to spillover)

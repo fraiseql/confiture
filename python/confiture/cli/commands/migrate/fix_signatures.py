@@ -205,7 +205,7 @@ def migrate_fix_signatures(
         )
         if has_residual:
             raise typer.Exit(FINDINGS)
-    except (typer.Exit, ConfiturError):
+    except typer.Exit, ConfiturError:
         raise
     # Reason: any failure below the config check is one error, rendered by the boundary
     except Exception as e:

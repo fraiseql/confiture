@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Generic, TypeVar
+from typing import Any
 from uuid import UUID, uuid4
-
-T = TypeVar("T")
 
 
 @dataclass
@@ -129,7 +127,7 @@ class RebuildContext:
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
-class HookContext(Generic[T]):
+class HookContext[T]:
     """Type-safe hook context with phase-specific information."""
 
     def __init__(

@@ -35,7 +35,7 @@ pytest.importorskip("pglast")
 @pytest.fixture()
 def smoke_env(
     superuser_db_url: str, fresh_database: str, maintenance_connection: psycopg.Connection
-) -> Generator[tuple[str, str], None, None]:
+) -> Generator[tuple[str, str]]:
     """Throwaway DB plus a dedicated migrator role name (bootstrap creates roles)."""
     role = "smoke_018_migrator"
     drop_roles(maintenance_connection, role)

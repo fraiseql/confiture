@@ -79,7 +79,7 @@ class LockHolder:
         }
 
 
-def _holder_phrase(holder: "LockHolder | None") -> str:
+def _holder_phrase(holder: LockHolder | None) -> str:
     """A short ' Held by ...' clause for the human error message (#147).
 
     Empty when no identity is available (graceful degradation).
@@ -160,7 +160,7 @@ class LockAcquisitionError(Exception):
         self,
         message: str,
         timeout: bool = False,
-        holder: "LockHolder | None" = None,
+        holder: LockHolder | None = None,
     ):
         super().__init__(message)
         self.timeout = timeout
@@ -200,7 +200,7 @@ class MigrationLock:
 
     def __init__(
         self,
-        connection: "psycopg.Connection",
+        connection: psycopg.Connection,
         config: LockConfig | None = None,
     ):
         """Initialize migration lock.
@@ -250,7 +250,7 @@ class MigrationLock:
         return int.from_bytes(hash_bytes[:4], "big") & 0x7FFFFFFF
 
     @contextmanager
-    def acquire(self) -> Generator[None, None, None]:
+    def acquire(self) -> Generator[None]:
         """Context manager for lock acquisition.
 
         Acquires the lock on entry and releases it on exit (even if an
@@ -468,7 +468,7 @@ class MigrationLock:
             with contextlib.suppress(Exception):
                 self.connection.rollback()
 
-    def _safe_read_lock_holder(self) -> "LockHolder | None":
+    def _safe_read_lock_holder(self) -> LockHolder | None:
         """read_lock_holder() that never raises (used on the error path)."""
         try:
             return self.read_lock_holder()
@@ -478,7 +478,7 @@ class MigrationLock:
                 self.connection.rollback()
             return None
 
-    def read_lock_holder(self) -> "LockHolder | None":
+    def read_lock_holder(self) -> LockHolder | None:
         """Return the current lock holder, merging metadata + live activity.
 
         Reads the ``confiture_lock_holder`` row (exact command/acquired_at) and

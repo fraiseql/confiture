@@ -104,6 +104,11 @@ class TestLiterals:
         value, _ = _evaluate(tmp_path, "", 't = "a"\nself.execute(f"DROP TABLE {t!r}")')
         _refused(value, Refusal.FSTRING_FORMAT, "!r")
 
+    def test_template_string_is_refused_as_a_template(self, tmp_path):
+        """A ``t"…"`` is a ``Template``, not a ``str``: its SQL is what the driver renders."""
+        value, _ = _evaluate(tmp_path, 'T = "a"', 'self.execute(t"DROP TABLE {T:i}")')
+        _refused(value, Refusal.TEMPLATE_STRING, "template string")
+
     def test_percent_format_is_outside_the_grammar(self, tmp_path):
         value, _ = _evaluate(tmp_path, "", 'self.execute("DROP TABLE %s" % "a")')
         _refused(value, Refusal.UNSUPPORTED, "%")

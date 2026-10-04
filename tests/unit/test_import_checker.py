@@ -668,7 +668,7 @@ class FStringPath(Migration):
 class TestExecuteFileRefValidation:
     """IMP010/IMP011: validate execute_file() file references."""
 
-    def test_missing_file_imp010(self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch") -> None:
+    def test_missing_file_imp010(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         _write_migration(tmp_path, "20260426140000_ref.py", EXECUTE_FILE_MISSING_REF)
 
@@ -679,7 +679,7 @@ class TestExecuteFileRefValidation:
         assert len(imp010) == 1
         assert "nonexistent.sql" in imp010[0].message
 
-    def test_existing_file_passes(self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch") -> None:
+    def test_existing_file_passes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
         # Create the referenced file
         func_dir = tmp_path / "db" / "schema" / "functions"
@@ -713,7 +713,7 @@ class TestExecuteFileRefValidation:
         assert "`name`" in imp011[0].message
 
     def test_local_path_resolves_and_is_validated(
-        self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch"
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A path built from a single-assignment local is checked like a literal (0.46.0)."""
         monkeypatch.chdir(tmp_path)
@@ -733,7 +733,7 @@ class TestExecuteFileRefValidation:
         assert [v for v in present.violations if v.rule in {"IMP010", "IMP011"}] == []
 
     def test_imp010_is_error_imp011_is_warning(
-        self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch"
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """IMP010 should cause failure, IMP011 should not."""
         monkeypatch.chdir(tmp_path)
@@ -756,7 +756,7 @@ class TestExecuteFileRefsResolveFromTheProjectRoot:
     """
 
     def test_in_root_target_is_found_from_a_foreign_cwd(
-        self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch"
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         func_dir = tmp_path / "db" / "schema" / "functions"
         func_dir.mkdir(parents=True)
@@ -771,7 +771,7 @@ class TestExecuteFileRefsResolveFromTheProjectRoot:
         assert [v for v in result.violations if v.rule == "IMP010"] == []
 
     def test_target_outside_the_project_root_is_reported(
-        self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch"
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         project = tmp_path / "project"
         (project / "db").mkdir(parents=True)

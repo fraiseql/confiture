@@ -328,7 +328,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
         try:
             float(value)
             return True
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return False
 
     def validate_comprehensive(
@@ -354,7 +354,7 @@ class DifferentialPrivacyStrategy(AnonymizationStrategy):
             numeric_value = float(value)
             if math.isnan(numeric_value):
                 errors.append(f"Column {table_name}.{column_name}: NaN value cannot be anonymized")
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             errors.append(
                 f"Column {table_name}.{column_name}: "
                 f"DifferentialPrivacyStrategy requires numeric values, "

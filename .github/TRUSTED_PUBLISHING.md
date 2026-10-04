@@ -85,7 +85,7 @@ We have 3 workflow files:
 - Must pass before merging PRs
 
 ### 2. `python-version-matrix.yml` - Multi-Version Testing
-- Tests Python 3.11, 3.12, 3.13
+- Runs the suite on the next CPython, by hand, before it is declared
 - Ensures compatibility across all supported versions
 - Runs on PR and main branch
 

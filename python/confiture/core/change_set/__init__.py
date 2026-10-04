@@ -144,5 +144,5 @@ def _python_migrations(migrations_dir: Path) -> Iterator[Path]:
 def _read_sql(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except OSError, UnicodeDecodeError:
         return ""

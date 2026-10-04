@@ -18,7 +18,6 @@ Usage:
 """
 
 from datetime import datetime
-from typing import Optional
 
 import strawberry
 
@@ -92,7 +91,7 @@ class Comment:
 
     # Embedded relations
     author: Author
-    parent_comment: Optional["Comment"] = strawberry.field(name="parentComment", default=None)
+    parent_comment: Comment | None = strawberry.field(name="parentComment", default=None)
 
     # Metadata
     depth: int = 0  # Comment nesting level

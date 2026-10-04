@@ -27,7 +27,7 @@ _TEST_ROLES = ("acl_app", "acl_etl", "acl_admin", "acl_missing_role")
 
 
 @pytest.fixture
-def acl_db(clean_test_db: psycopg.Connection) -> Generator[psycopg.Connection, None, None]:
+def acl_db(clean_test_db: psycopg.Connection) -> Generator[psycopg.Connection]:
     """Clean test schema and roles before/after each test."""
     conn = clean_test_db
 

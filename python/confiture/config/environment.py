@@ -448,7 +448,7 @@ class DatabaseConfig(BaseModel):
     password: str = ""
 
     @classmethod
-    def from_url(cls, url: str) -> "DatabaseConfig":
+    def from_url(cls, url: str) -> DatabaseConfig:
         """Parse database configuration from PostgreSQL URL.
 
         Args:
@@ -1033,7 +1033,7 @@ class Environment(BaseModel):
         return v
 
     @classmethod
-    def load(cls, env_name: str, project_dir: Path | None = None) -> "Environment":
+    def load(cls, env_name: str, project_dir: Path | None = None) -> Environment:
         """Load environment configuration from YAML file
 
         Args:

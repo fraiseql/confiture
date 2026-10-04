@@ -83,24 +83,48 @@ class TestPythonMatrix:
         env = data["jobs"]["test-matrix"].get("env", {})
         assert env.get("UV_PYTHON") == "${{ matrix.python-version }}", env
 
-    def test_every_supported_interpreter_runs_the_suite(self) -> None:
-        """3.11 in the quality gate, on every pull request; 3.12 and 3.13 in the matrix."""
-        matrix = yaml.safe_load((WORKFLOWS / "python-version-matrix.yml").read_text())
-        versions = matrix["jobs"]["test-matrix"]["strategy"]["matrix"]["python-version"]
+    def test_the_supported_interpreter_runs_the_suite_on_every_pull_request(self) -> None:
         gate = _steps("quality-gate.yml", "test")
         (setup,) = [step for step in gate if step.get("uses") == "./.github/actions/python-uv"]
-        assert [setup["with"]["python-version"], *versions] == SUPPORTED
+        assert [setup["with"]["python-version"]] == SUPPORTED
 
-    def test_the_other_interpreters_run_on_main_and_nightly(self) -> None:
-        """A pull request waits for one full suite, not three."""
+    def test_the_matrix_runs_the_next_cpython_by_hand(self) -> None:
+        """No final CPython above the floor builds the package yet, so no leg is listed.
+
+        A matrix cannot be empty, so the workflow takes the version to try as an
+        input; a pull request never waits for it.
+        """
         data = yaml.safe_load((WORKFLOWS / "python-version-matrix.yml").read_text())
         triggers = data[True]  # YAML 1.1 reads the bare key `on` as true
-        assert "pull_request" not in triggers
-        assert triggers["push"] == {"branches": ["main"]}
-        assert triggers["schedule"], "a nightly run catches what main's pushes do not"
+        assert set(triggers) == {"workflow_dispatch"}
+        versions = data["jobs"]["test-matrix"]["strategy"]["matrix"]["python-version"]
+        assert versions == ["${{ inputs.python-version }}"]
+
+    def test_every_job_runs_the_supported_interpreter(self) -> None:
+        """A job on another interpreter tests a package nobody can install there."""
+        offenders = []
+        for path in sorted(WORKFLOWS.glob("*.yml")):
+            if path.name == "python-version-matrix.yml":
+                continue
+            data = yaml.safe_load(path.read_text())
+            for name, job in data["jobs"].items():
+                for step in job.get("steps", []):
+                    version = (step.get("with") or {}).get("python-version")
+                    if version is not None and str(version).split() != SUPPORTED:
+                        offenders.append(f"{path.name}:{name}: {version}")
+        assert offenders == []
+
+    def test_the_project_interpreter_is_the_supported_one(self) -> None:
+        """``uv venv`` with no ``--python`` reads ``.python-version``."""
+        assert (REPO_ROOT / ".python-version").read_text().split() == SUPPORTED
 
 
 class TestQualityGate:
+    def test_one_pglast_major_needs_no_matrix(self) -> None:
+        """``pglast>=8.1`` is one major; the lock pins it and the suite runs it."""
+        data = yaml.safe_load((WORKFLOWS / "quality-gate.yml").read_text())
+        assert "pglast-matrix" not in data["jobs"]
+
     def test_the_suite_runs_on_every_core(self) -> None:
         script = _run_scripts(_steps("quality-gate.yml", "test"))
         assert "-m pytest tests/" in script and "-n auto" in script, script
@@ -343,8 +367,8 @@ class TestOneToolchainSetup:
 class TestReleaseWheels:
     """Every supported CPython gets a wheel on every platform (#586, #587)."""
 
-    def test_the_declared_interpreters_are_the_ones_tested(self) -> None:
-        assert SUPPORTED == ["3.11", "3.12", "3.13", "3.14"]
+    def test_the_declared_interpreter_is_the_floor(self) -> None:
+        assert SUPPORTED == ["3.14"]
 
     def test_linux_builds_a_wheel_for_each(self) -> None:
         build = next(
@@ -362,6 +386,11 @@ class TestReleaseWheels:
             if step.get("uses", "").startswith("actions/setup-python")
         )
         assert setup["with"]["python-version"].split() == SUPPORTED
+
+    def test_the_publish_check_loops_over_the_supported_tags(self) -> None:
+        script = _run_scripts(_steps("publish.yml", "validate"))
+        tags = " ".join(f"cp3{v.split('.')[1]}" for v in SUPPORTED)
+        assert f"for py in {tags}; do" in script
 
     def test_no_build_leans_on_forward_compatibility(self) -> None:
         """The wheels are version-specific; the flag only hid a missing one."""

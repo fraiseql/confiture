@@ -121,7 +121,7 @@ def _elog_level_of(raise_stmt: str) -> int | None:
     try:
         compiled = parse_body(_PROBE.format(raise_stmt=raise_stmt))
     # Reason: a probe that will not compile disables the check; it never crashes it
-    except (pglast.parser.ParseError, json.JSONDecodeError):
+    except pglast.parser.ParseError, json.JSONDecodeError:
         return None
     for node in nodes(compiled.tree):
         if node.kind == "PLpgSQL_stmt_raise":
@@ -496,7 +496,7 @@ def scan_sql(sql: str, file: Path) -> AssertionScan:
         # Reason: most statements are not PL/pgSQL at all; the compiler rejecting one is expected
         try:
             compiled = parse_body(text)
-        except (pglast.parser.ParseError, json.JSONDecodeError):
+        except pglast.parser.ParseError, json.JSONDecodeError:
             unparseable = unparseable or _defines_plpgsql(text)
             continue
         read = list(fragments(compiled))

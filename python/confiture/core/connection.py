@@ -236,10 +236,10 @@ ConnectionFactory = Callable[[Any], "psycopg.Connection[Any]"]
 
 @contextmanager
 def open_connection(
-    config: "dict[str, Any] | Any",
+    config: dict[str, Any] | Any,
     *,
     factory: ConnectionFactory = create_connection,
-) -> "Generator[psycopg.Connection[Any], None, None]":
+) -> Generator[psycopg.Connection[Any]]:
     """Open a psycopg connection, transparently handling SSH tunnels.
 
     If *config* has an ``ssh_tunnel`` section (``Environment.ssh_tunnel`` or a

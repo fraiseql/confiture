@@ -24,7 +24,7 @@ from collections import defaultdict
 from collections.abc import Callable, Hashable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 from pglast.stream import RawStream
 
@@ -83,8 +83,6 @@ from confiture.core.type_lattice import (
     signature_type,
     signatures_match,
 )
-
-_T = TypeVar("_T")
 
 _OBJECT_TABLE = _pg_member("ObjectType", "OBJECT_TABLE")
 _OBJECT_FUNCTION = _pg_member("ObjectType", "OBJECT_FUNCTION")
@@ -291,7 +289,7 @@ class Inventory:
 def _enum_value(value: Any) -> int | None:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -1392,11 +1390,11 @@ def object_key(obj: SchemaObject) -> ObjectKey:
     )
 
 
-def group_by_signature(
-    items: Iterable[_T],
-    key: Callable[[_T], Hashable],
-    signature: Callable[[_T], Signature | None],
-) -> list[list[_T]]:
+def group_by_signature[T](
+    items: Iterable[T],
+    key: Callable[[T], Hashable],
+    signature: Callable[[T], Signature | None],
+) -> list[list[T]]:
     """Group ``items`` that define one routine, in first-seen order.
 
     ``key`` buckets what could be the same — it cannot be the whole answer,
@@ -1411,8 +1409,8 @@ def group_by_signature(
     reporting three definitions of one routine where PostgreSQL has two of one
     and one of another.
     """
-    buckets: dict[Hashable, list[list[_T]]] = defaultdict(list)
-    order: list[list[_T]] = []
+    buckets: dict[Hashable, list[list[T]]] = defaultdict(list)
+    order: list[list[T]] = []
     for item in items:
         groups = buckets[key(item)]
         item_signature = signature(item)

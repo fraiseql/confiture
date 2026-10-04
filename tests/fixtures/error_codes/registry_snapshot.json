@@ -189,7 +189,7 @@
     "message_template": "pglast {version} does not expose {members}; confiture cannot walk DDL with it",
     "severity": "error",
     "exit_code": 5,
-    "resolution_hint": "Install a pglast release confiture supports (pglast>=6.0, current major)"
+    "resolution_hint": "Install a pglast release confiture supports (pglast>=8.1)"
   },
   "CONFIG_012": {
     "message_template": "Lint baseline file is missing or malformed: {file}",

@@ -69,6 +69,7 @@ EXPECTED: dict[str, tuple[int, dict[str, int]]] = {
     "20260101000033_guard_helper_fstring.py": (1, {}),
     "20260101000034_class_attribute_path.py": (1, {}),
     "20260101000035_pathlib_variants.py": (1, {}),
+    "20260101000036_template_string.py": (0, {"dynamic_execute": 1}),
 }
 
 

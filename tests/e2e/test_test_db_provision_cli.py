@@ -48,7 +48,7 @@ def _combined_output(result) -> str:
     try:
         if result.stderr:
             out += result.stderr
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         # Older Click mixes stderr into output; result.stderr then raises.
         pass
     return out.lower()

@@ -12,10 +12,13 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, get_args
+from pathlib import Path
+from typing import Any, ClassVar, Literal, get_args
 
 import psycopg
+from pydantic import ValidationError
 
+from confiture.config.environment import AclExpectation, AclGrant, DriftConfig, OwnershipExpectation
 from confiture.core import live_catalog
 from confiture.core.ddl_clauses import constraint_body
 from confiture.core.desired_state import load_desired_state
@@ -86,16 +89,6 @@ from confiture.core.server_constants import server_constants
 from confiture.core.type_lattice import signatures_match
 from confiture.exceptions import ConfigurationError, SchemaError
 from confiture.exceptions import ValidationError as InvalidOption
-
-if TYPE_CHECKING:
-    from confiture.config.environment import AclExpectation, AclGrant, OwnershipExpectation
-
-
-from pathlib import Path
-
-from pydantic import ValidationError
-
-from confiture.config.environment import DriftConfig
 
 logger = logging.getLogger(__name__)
 
@@ -1049,7 +1042,7 @@ def extra_objects_of(flag: str | None, configured: ExtraObjects) -> ExtraObjects
     )
 
 
-def drift_config_from(config_data: Any) -> "DriftConfig":
+def drift_config_from(config_data: Any) -> DriftConfig:
     """The ``drift:`` block of a loaded config as a :class:`DriftConfig` (#226).
 
     A missing block is the defaults; a block that is not a mapping or fails
@@ -1316,7 +1309,7 @@ class AclDriftDetector:
     def __init__(self, connection: psycopg.Connection) -> None:
         self.connection = connection
 
-    def check(self, expectations: "list[AclExpectation]") -> DriftReport:
+    def check(self, expectations: list[AclExpectation]) -> DriftReport:
         """Compare every expectation against the live ACL state.
 
         Returns a :class:`DriftReport` with the originating database name
@@ -1370,7 +1363,7 @@ class AclDriftDetector:
     def _discover_tables(
         self,
         schema: str,
-        apply_to: "str | list[str]",
+        apply_to: str | list[str],
         ignore: list[str],
     ) -> list[str]:
         """Return base-table relnames in *schema* matching *apply_to*, less *ignore*.
@@ -1419,7 +1412,7 @@ class AclDriftDetector:
         self,
         schema: str,
         table: str,
-        grant: "AclGrant",
+        grant: AclGrant,
     ) -> DriftItem | None:
         """Return a single ``MISSING_GRANT`` item if *role* lacks any expected priv.
 
@@ -1513,7 +1506,7 @@ class AclDriftDetector:
         self,
         schema: str,
         table: str,
-        grant: "AclGrant",
+        grant: AclGrant,
     ) -> DriftItem | None:
         """Return an ``EXTRA_GRANT`` item if *role* directly holds privileges beyond expected.
 
@@ -1588,7 +1581,7 @@ class OwnershipDriftDetector:
     def __init__(self, connection: psycopg.Connection) -> None:
         self.connection = connection
 
-    def check(self, expectation: "OwnershipExpectation") -> DriftReport:
+    def check(self, expectation: OwnershipExpectation) -> DriftReport:
         """Compare every reachable relation against the expected owner.
 
         Returns a :class:`DriftReport` with one :class:`DriftItem` per

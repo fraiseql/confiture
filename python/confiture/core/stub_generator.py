@@ -81,7 +81,7 @@ def jsonb_keys(info: FunctionInfo) -> list[JSONBKey]:
     """
     try:
         trees = list(_body_trees(info))
-    except (pglast.parser.ParseError, json.JSONDecodeError):
+    except pglast.parser.ParseError, json.JSONDecodeError:
         return []
     keys: dict[str, JSONBKey] = {}
     for tree in trees:

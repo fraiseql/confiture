@@ -11,13 +11,9 @@ a member PostgreSQL adds fails here instead of falling silently through the
 dispatch. Same shape as ``test_ddl_objects_are_exhaustive`` and the
 ``AlterTableType`` guard in ``test_one_alter_folder``.
 
-One difference from those, and it is deliberate: a *declined* member the
-installed pglast does not define is tolerated, because confiture supports
-pglast 6 through 8 and ``ConstrType`` grew across that range — PostgreSQL 18
-added the ``ENFORCED`` pair. The direction that protects against silence is the
-forward one (a member pglast defines that nobody decided), and that one still
-fires on every version. The tolerated names are listed below rather than
-implied, so a reason still cannot outlive what it explains.
+Both directions hold: a member pglast defines that nobody decided fails, and so
+does a decision about a member pglast no longer defines. confiture supports one
+pglast major, so no member is tolerated as defined by only part of a range.
 """
 
 from __future__ import annotations
@@ -30,13 +26,6 @@ from confiture.core.ddl_walk import (
     MODELLED_CONSTRAINTS,
     NOT_MODELLED_CONSTRAINTS,
 )
-
-#: Declined members that only some supported pglast defines, and where they
-#: came from. Anything else declined-but-undefined is a stale reason.
-ADDED_BY_A_LATER_POSTGRES = {
-    "CONSTR_ATTR_ENFORCED": "PostgreSQL 18 / pglast 8 — absent from 6 and 7",
-    "CONSTR_ATTR_NOT_ENFORCED": "PostgreSQL 18 / pglast 8 — absent from 6 and 7",
-}
 
 
 def _members() -> set[str]:
@@ -63,13 +52,9 @@ def test_no_kind_is_both_read_and_declined() -> None:
 
 
 def test_no_decision_has_gone_stale() -> None:
-    """A reason for a member this pglast does not define explains nothing.
-
-    Except across the supported version range, where the absence is the point —
-    see :data:`ADDED_BY_A_LATER_POSTGRES`.
-    """
+    """A reason for a member this pglast does not define explains nothing."""
     decided = set(MODELLED_CONSTRAINTS) | set(NOT_MODELLED_CONSTRAINTS)
-    stale = sorted(decided - _members() - set(ADDED_BY_A_LATER_POSTGRES))
+    stale = sorted(decided - _members())
     assert stale == [], f"decided kinds that pglast no longer defines: {stale}"
 
 

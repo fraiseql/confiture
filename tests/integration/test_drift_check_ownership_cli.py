@@ -27,7 +27,7 @@ def pg_url(test_db_url: str) -> str:
 
 
 @pytest.fixture
-def own_db(pg_url: str) -> Generator[psycopg.Connection, None, None]:
+def own_db(pg_url: str) -> Generator[psycopg.Connection]:
     try:
         conn = psycopg.connect(pg_url, autocommit=False)
     except psycopg.OperationalError as e:

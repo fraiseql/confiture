@@ -27,7 +27,7 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib.metadata import EntryPoint, entry_points
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from typer.main import get_command_name, solve_typer_info_defaults
 from typer.models import CommandInfo, TyperInfo
@@ -37,8 +37,6 @@ if TYPE_CHECKING:
 
 #: The entry-point group ``confiture`` reads.
 GROUP = "confiture.plugins"
-
-_Entry = TypeVar("_Entry", CommandInfo, TyperInfo)
 
 
 @dataclass(frozen=True)
@@ -98,11 +96,11 @@ def _restore(before: dict[int, _Group]) -> None:
         group.app.registered_callback = group.callback
 
 
-def _added(
-    now: list[_Entry], was: list[_Entry], taken: set[str], path: str
-) -> tuple[list[_Entry], list[str]]:
+def _added[Entry: (CommandInfo, TyperInfo)](
+    now: list[Entry], was: list[Entry], taken: set[str], path: str
+) -> tuple[list[Entry], list[str]]:
     """The entries a plugin added to one group whose names are free, and the names refused."""
-    kept: list[_Entry] = []
+    kept: list[Entry] = []
     refused: list[str] = []
     for entry in now:
         if any(entry is old for old in was):

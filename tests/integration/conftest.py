@@ -96,7 +96,7 @@ def _try_chown_to_pg(conn: psycopg.Connection, location: str) -> None:
         st = Path(datadir).stat()
         if st.st_uid != os.getuid():
             os.chown(location, st.st_uid, st.st_gid)
-    except (OSError, psycopg.Error):
+    except OSError, psycopg.Error:
         pass
 
 
@@ -115,7 +115,7 @@ def _provision_tmpfs_tablespace(url: str, name: str, location: str) -> bool:
                     psycopg.sql.Identifier(name), psycopg.sql.Literal(location)
                 )
             )
-        except (psycopg.errors.InsufficientPrivilege, psycopg.errors.UndefinedFile, OSError):
+        except psycopg.errors.InsufficientPrivilege, psycopg.errors.UndefinedFile, OSError:
             shutil.rmtree(location, ignore_errors=True)
             return False
     return True
@@ -201,7 +201,7 @@ def ram_setup_env() -> Iterator[tuple[TestDbProvisioner, str, str, str]]:
     try:
         st = Path(datadir).stat()
         owner = pwd.getpwuid(st.st_uid).pw_name
-    except (OSError, KeyError):
+    except OSError, KeyError:
         pytest.skip("cannot resolve the PostgreSQL server OS user from its data directory")
 
     _drop_tablespace(url, _RAMSETUP_TABLESPACE)
@@ -210,7 +210,7 @@ def ram_setup_env() -> Iterator[tuple[TestDbProvisioner, str, str, str]]:
         Path(_RAMSETUP_LOCATION).mkdir(mode=0o700, exist_ok=True, parents=True)
         if st.st_uid != os.getuid():
             os.chown(_RAMSETUP_LOCATION, st.st_uid, st.st_gid)
-    except (OSError, PermissionError):
+    except OSError, PermissionError:
         shutil.rmtree(_RAMSETUP_LOCATION, ignore_errors=True)
         pytest.skip("cannot prepare a PG-owned tmpfs dir (no chown rights)")
 

@@ -396,7 +396,7 @@ A: Yes, though not recommended. Use Confiture for local/test, Alembic for produc
 A: No, they're different approaches. But migrating is straightforward (see migration path above).
 
 **Q: Is Confiture stable/production-ready?**
-A: Yes. Confiture is production-tested with 4,420+ passing tests across Python 3.11, 3.12, and 3.13.
+A: Yes. Confiture is production-tested with 4,420+ passing tests on Python 3.14.
 
 **Q: What if I need complex Python migrations?**
 A: Use Alembic for those migrations, then switch to Confiture for simple ones. Or write hooks in Confiture (more limited but functional).

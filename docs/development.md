@@ -10,7 +10,7 @@ This guide explains how to set up your development environment and contribute to
 
 ### Prerequisites
 
-- **Python**: 3.11, 3.12, or 3.13
+- **Python**: 3.14
 - **PostgreSQL**: 12.0 or later (for running tests)
 - **uv**: Python package manager (see [installation](https://docs.astral.sh/uv/))
 

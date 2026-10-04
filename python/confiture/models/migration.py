@@ -3,16 +3,14 @@
 import inspect
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
 import psycopg
 
+from confiture.core.hooks import Hook
+from confiture.core.preconditions import Precondition
 from confiture.core.sql_lexer import split_statements
 from confiture.core.sql_path import find_project_root, resolve_sql_file
-
-if TYPE_CHECKING:
-    from confiture.core.hooks import Hook
-    from confiture.core.preconditions import Precondition
 from confiture.exceptions import SQLError
 
 
@@ -25,7 +23,7 @@ def _source_file_of(cls: type) -> Path | None:
     """
     try:
         source = inspect.getfile(cls)
-    except (TypeError, OSError):
+    except TypeError, OSError:
         return None
     candidate = Path(source)
     return candidate if candidate.is_file() else None
@@ -178,16 +176,16 @@ class Migration(ABC):
 
     # Precondition attributes (optional, default to empty lists)
     # Validated before migration execution - fail fast if not satisfied
-    up_preconditions: ClassVar[list["Precondition"]] = []
-    down_preconditions: ClassVar[list["Precondition"]] = []
+    up_preconditions: ClassVar[list[Precondition]] = []
+    down_preconditions: ClassVar[list[Precondition]] = []
 
     # Hook attributes (optional, default to empty lists)
-    before_validation_hooks: ClassVar[list["Hook"]] = []
-    before_ddl_hooks: ClassVar[list["Hook"]] = []
-    after_ddl_hooks: ClassVar[list["Hook"]] = []
-    after_validation_hooks: ClassVar[list["Hook"]] = []
-    cleanup_hooks: ClassVar[list["Hook"]] = []
-    error_hooks: ClassVar[list["Hook"]] = []
+    before_validation_hooks: ClassVar[list[Hook]] = []
+    before_ddl_hooks: ClassVar[list[Hook]] = []
+    after_ddl_hooks: ClassVar[list[Hook]] = []
+    after_validation_hooks: ClassVar[list[Hook]] = []
+    cleanup_hooks: ClassVar[list[Hook]] = []
+    error_hooks: ClassVar[list[Hook]] = []
 
     def __init__(self, connection: psycopg.Connection):
         """Initialize migration with database connection.

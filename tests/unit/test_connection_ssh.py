@@ -71,7 +71,7 @@ def test_open_connection_with_tunnel_uses_ssh_tunnel() -> None:
     seen_configs: list[SshTunnelConfig] = []
 
     @contextmanager
-    def fake_ssh_tunnel(cfg: SshTunnelConfig, database_url: str) -> Generator[str, None, None]:
+    def fake_ssh_tunnel(cfg: SshTunnelConfig, database_url: str) -> Generator[str]:
         seen_configs.append(cfg)
         yield patched_url
 
@@ -103,7 +103,7 @@ def test_open_connection_with_dict_tunnel() -> None:
     fake_conn.close = MagicMock()
 
     @contextmanager
-    def fake_ssh_tunnel(cfg: SshTunnelConfig, database_url: str) -> Generator[str, None, None]:
+    def fake_ssh_tunnel(cfg: SshTunnelConfig, database_url: str) -> Generator[str]:
         yield "postgresql://localhost:15432/testdb"
 
     with (

@@ -49,7 +49,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Install confiture and the pgGit plugin
         run: pip install fraiseql-confiture fraiseql-confiture-pggit
@@ -244,7 +244,7 @@ the command that lists them all.
 # .gitlab-ci.yml
 schema-conflict-check:
   stage: test
-  image: python:3.11
+  image: python:3.14
   variables:
     DATABASE_URL: $COORDINATION_DB_URL
   before_script:

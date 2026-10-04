@@ -509,7 +509,7 @@ class TreeRenumber:
                 check=False,
                 timeout=30,
             )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+        except FileNotFoundError, subprocess.TimeoutExpired:
             return None
         # Exit 128 → not a git repo.  Exit 1 → no matches (treated as empty).
         if proc.returncode == 128:

@@ -408,7 +408,7 @@ def rendered_query(text: str) -> str:
     """
     try:
         return RawStream()(pglast.parse_sql(text)[0].stmt)
-    except (pglast.parser.ParseError, IndexError):
+    except pglast.parser.ParseError, IndexError:
         return text
 
 
@@ -470,8 +470,6 @@ _NOT_A_FACT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "AT_ReAddDomainConstraint",
             "AT_ReAddComment",
             "AT_ReAddStatistics",
-            # PostgreSQL 16 and 17 only (pglast 6 and 7); 18 removed it.
-            "AT_CheckNotNull",
         ),
     ),
     (
@@ -1037,7 +1035,7 @@ def enum_int(value: object) -> int | None:
     inner = getattr(value, "value", value)
     try:
         return int(inner)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -1418,12 +1416,11 @@ NOT_MODELLED_CONSTRAINTS: dict[str, str] = {
         "recording it would make `c INT NULL` and `c INT` compare unequal"
     ),
     "CONSTR_ATTR_ENFORCED": (
-        "NOT ENFORCED arrives as a sibling node like deferrability, and PostgreSQL 18 "
-        "added the pair: pglast 6 and 7 do not define them, and a REQUIRED_MEMBERS "
-        "entry the installed pglast lacks makes confiture refuse to start"
+        "NOT ENFORCED arrives as a sibling node like deferrability, and the model holds "
+        "no enforcement yet; tracked in #603"
     ),
     "CONSTR_ATTR_NOT_ENFORCED": (
-        "the other half of the PostgreSQL 18 ENFORCED pair, declined for the same reason"
+        "the other half of the ENFORCED pair: the model holds no enforcement yet; tracked in #603"
     ),
 }
 

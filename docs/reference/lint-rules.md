@@ -424,8 +424,7 @@ suffix (`[]`, `[n]`, `ARRAY`, `ARRAY[n]`) is blanked the same way, and by the
 same rule: only when the compiler refuses the statement, and put back when it
 compiles without it, so `text[]` and a subscript `p[1]` in the body are left as
 written. A `VARIADIC` marker, which pglast 8's stub refuses whatever its type,
-is handled alike. All of this is pglast 8's alone: pglast 6.16 and 7.18 read
-these routines as written. A body refused for a reason no blank explains is
+is handled alike. A body refused for a reason no blank explains is
 **named** rather than passed off as clean (see `degraded`, below).
 
 #### A trigger function's body is read like any other

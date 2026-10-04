@@ -275,7 +275,7 @@ class SaltedHashingStrategy(AnonymizationStrategy):
         try:
             str(value)
             return True
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return False
 
     def validate_comprehensive(

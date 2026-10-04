@@ -102,7 +102,7 @@ def _server_version(conn: Any) -> int | None:
         raw = _scalar(conn, "SHOW server_version_num")
     try:
         number = int(raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     if number <= 0:
         return None

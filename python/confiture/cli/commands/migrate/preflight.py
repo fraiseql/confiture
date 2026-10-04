@@ -78,7 +78,7 @@ def _preflight_tracking_table(config: Path | None) -> str:
 
     try:
         return _get_tracking_table(_core_connection.load_config(Path(config)))
-    except (OSError, ValueError, ConfigurationError):
+    except OSError, ValueError, ConfigurationError:
         # An unreadable or malformed config: the preflight run itself fails
         # loudly a few lines later, so this advisory probe just defaults. The
         # catch is deliberately narrow: a bare `except Exception` would turn a

@@ -26,7 +26,7 @@ def pg_url(test_db_url: str) -> str:
 
 
 @pytest.fixture
-def tracking_db(pg_url: str) -> Generator[psycopg.Connection, None, None]:
+def tracking_db(pg_url: str) -> Generator[psycopg.Connection]:
     """Provide a connection with a clean tracking table."""
     try:
         conn = psycopg.connect(pg_url, autocommit=False)
