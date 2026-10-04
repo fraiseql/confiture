@@ -25,6 +25,16 @@
         "irreversible_reason": null
       },
       {
+        "type": "DROP_PRIMARY_KEY",
+        "details": "DROP PRIMARY KEY rekeyed_pk",
+        "irreversible_reason": null
+      },
+      {
+        "type": "ADD_PRIMARY_KEY",
+        "details": "ADD PRIMARY KEY rekeyed_pk ON rekeyed",
+        "irreversible_reason": null
+      },
+      {
         "type": "DROP_COLUMN",
         "details": "DROP COLUMN things.legacy_flag",
         "irreversible_reason": "data"
@@ -140,7 +150,7 @@
         "irreversible_reason": null
       }
     ],
-    "change_count": 27,
+    "change_count": 29,
     "migration_generated": true,
     "migration_file": "<version>_golden.up.sql",
     "error": null,

@@ -16,6 +16,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`migrate diff` sees every difference `drift` sees.** The two compared one database
+  and disagreed: the diff compared no primary key, no foreign key's actions or target under
+  one name, no UNIQUE's columns under one name, kept one of several unnamed CHECKs against a
+  database (each reads `<expression>` there), and compared a default against a database only
+  for being present. So `migrate diff --from db` generated no migration for a database
+  `drift` reported broken. Now a primary key added, dropped or re-keyed is a change
+  (`PrimaryKeyAdded` / `PrimaryKeyDropped`, wire `ADD_PRIMARY_KEY` / `DROP_PRIMARY_KEY`,
+  counted in `constraints_added` / `constraints_dropped`); a named foreign key or UNIQUE that
+  says something else is a drop and an add; every unnamed CHECK is paired; a default is
+  compared by value (`'a'` and `'a'::text` are one, `'a'` and `'b'` two, `DEFAULT NULL` is
+  none). Against a database, an unnamed constraint the tree declares is the one that says
+  the same thing whatever PostgreSQL named it — a renamed table keeps `old_pkey` — and a
+  TVIEW is compared on the options the tree pins. A test builds a database from a corpus,
+  perturbs it one way at a time, and holds that every drift item is about an object the
+  diff changes and every change about an object drift reports.
+- **A primary key added with its column is no longer lost**: `ADD COLUMN id INTEGER PRIMARY
+  KEY` was generated as `ADD COLUMN id INTEGER NOT NULL`.
+- **A generated `CREATE TABLE` writes the primary key under the name the tree gave it**: it
+  wrote `PRIMARY KEY (id)` for `CONSTRAINT pk_tb_user PRIMARY KEY (id)`, so the database
+  named it `tb_user_pkey` and a later `DROP CONSTRAINT pk_tb_user` dropped nothing. The diff
+  goldens of `02-fraiseql-integration` record it.
+- **An array is one type however many dimensions it was declared with**: PostgreSQL records
+  none, so `INTEGER[][]` against a database's `integer[]` is no change (`same_type`).
+
 - **`migrate diff --from db` reads the database as `drift` does: through its catalog, not
   `pg_dump`** (#562). It compared `pg_dump`'s text as if an author had written it, so a
   database built from a tree was never "no change" from it: every unnamed foreign key or

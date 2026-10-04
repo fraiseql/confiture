@@ -562,6 +562,7 @@ jobs:
           tests/integration/test_tview_live.py \
           tests/integration/test_tview_diff.py \
           tests/integration/test_diff_from_a_database.py \
+          tests/integration/test_drift_agrees_with_diff.py \
           tests/integration/test_tview_migrate.py \
           tests/integration/test_tview_restore.py \
           tests/unit/test_tview_model.py \

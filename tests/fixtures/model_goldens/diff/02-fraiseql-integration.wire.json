@@ -93,7 +93,7 @@
           "constraints": [
             {
               "kind": "PRIMARY KEY",
-              "name": "",
+              "name": "pk_tb_comment",
               "columns": [
                 "id"
               ]
@@ -263,7 +263,7 @@
           "constraints": [
             {
               "kind": "PRIMARY KEY",
-              "name": "",
+              "name": "pk_tb_post",
               "columns": [
                 "id"
               ]
@@ -400,7 +400,7 @@
           "constraints": [
             {
               "kind": "PRIMARY KEY",
-              "name": "",
+              "name": "pk_tb_user",
               "columns": [
                 "id"
               ]

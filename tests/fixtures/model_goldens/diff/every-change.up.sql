@@ -39,6 +39,12 @@ CREATE TABLE IF NOT EXISTS audit (
 -- confiture:tier reversible
 ALTER TABLE people RENAME COLUMN full_name TO display_name;
 
+-- confiture:tier destructive
+ALTER TABLE rekeyed DROP CONSTRAINT IF EXISTS rekeyed_pk;
+
+-- confiture:tier lock_risky
+ALTER TABLE rekeyed ADD CONSTRAINT rekeyed_pk PRIMARY KEY (a, b);
+
 -- confiture:irreversible data
 -- confiture:tier irreversible
 ALTER TABLE things DROP COLUMN legacy_flag;
