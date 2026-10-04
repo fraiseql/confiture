@@ -17,8 +17,9 @@ from pathlib import Path
 import pytest
 
 import confiture
-from confiture.core.differ import SchemaDiffer
-from confiture.core.schema_change import KINDS, SchemaChange, SchemaDiff
+from confiture.core.differ import CATALOGUED, SchemaDiffer, Side
+from confiture.core.schema_change import KINDS, OBSERVATIONS, SchemaChange, SchemaDiff
+from confiture.core.schema_read import read_text
 from confiture.models.warnings import BuildWarning
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "every_change"
@@ -42,7 +43,15 @@ def test_every_emitted_change_is_a_variant(old: str, new: str) -> None:
 
 def test_the_fixture_pair_emits_every_kind_once() -> None:
     changes = _changes((FIXTURES / "old.sql").read_text(), (FIXTURES / "new.sql").read_text())
-    assert Counter(type(change) for change in changes) == dict.fromkeys(KINDS, 1)
+    assert Counter(type(change) for change in changes) == dict.fromkeys(KINDS - OBSERVATIONS, 1)
+
+
+def test_the_fixture_pair_against_a_database_observes_each_observation_once() -> None:
+    old = Side.of(read_text((FIXTURES / "old.sql").read_text()))
+    new = Side.of(read_text((FIXTURES / "new.sql").read_text()))
+    changes = SchemaDiffer().compare_sides(old, new, CATALOGUED).changes
+    observed = Counter(type(change) for change in changes if type(change) in OBSERVATIONS)
+    assert observed == dict.fromkeys(OBSERVATIONS, 1)
 
 
 def test_a_duplicate_is_a_warning_not_a_change() -> None:

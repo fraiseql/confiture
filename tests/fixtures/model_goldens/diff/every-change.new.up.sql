@@ -21,6 +21,12 @@ CREATE TABLE IF NOT EXISTS audit (
 );
 
 -- confiture:tier additive
+CREATE TABLE IF NOT EXISTS ordered (
+    b INTEGER,
+    a INTEGER
+);
+
+-- confiture:tier additive
 CREATE TABLE IF NOT EXISTS parent (
     id INTEGER NOT NULL,
     PRIMARY KEY (id)

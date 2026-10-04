@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS legacy (
 );
 
 -- confiture:tier additive
+CREATE TABLE IF NOT EXISTS ordered (
+    a INTEGER,
+    b INTEGER
+);
+
+-- confiture:tier additive
 CREATE TABLE IF NOT EXISTS parent (
     id INTEGER NOT NULL,
     PRIMARY KEY (id)

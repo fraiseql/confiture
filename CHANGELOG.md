@@ -14,6 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`confiture drift` is the one comparison, said as findings.** It compared a tree with a
+  database itself, beside the differ, and the two disagreed; now it asks
+  `SchemaDiffer.compare_sides` under the policy a tree and a database call for and reports
+  what it answers, through one table (`drift.DRIFT_OF`) giving every change variant a drift
+  kind and severity or the reason drift has none (enum types, sequences, a routine's or a
+  view's body). Drift's kinds, severities, payload and goldens are byte-identical. What
+  changes is reach: a constraint redefined under one name, a primary key and an index's
+  access method are compared the way `migrate diff` compares them, so the two cannot
+  disagree. `drift.py` keeps no comparison of its own (a guard fails on one).
+- **Column order is an observation of the change union** (`ColumnOrderChanged`, wire
+  `CHANGE_COLUMN_ORDER`): reported where a database is a side — `drift`'s
+  `column_order_mismatch`, and `migrate diff --from db` — with no SQL and no risk tier,
+  since PostgreSQL cannot reorder columns. Two trees in another column order are no change.
+
 ### Fixed
 
 - **`migrate diff` sees every difference `drift` sees.** The two compared one database

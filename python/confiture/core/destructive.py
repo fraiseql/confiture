@@ -27,6 +27,7 @@ from confiture.core.schema_change import (
     ColumnDefaultChanged,
     ColumnDropped,
     ColumnNullabilityChanged,
+    ColumnOrderChanged,
     ColumnRenamed,
     ColumnTypeChanged,
     EnumTypeAdded,
@@ -152,6 +153,7 @@ def data_loss_reason(change: SchemaChange) -> str | None:
             | ColumnTypeChanged()
             | ColumnNullabilityChanged()
             | ColumnDefaultChanged()
+            | ColumnOrderChanged()
         ):
             return None
         case (

@@ -45,6 +45,7 @@ from confiture.models.warnings import BuildWarning
 
 __all__ = [
     "KINDS",
+    "OBSERVATIONS",
     "CheckConstraintAdded",
     "CheckConstraintDropped",
     "ColumnAdded",
@@ -52,6 +53,7 @@ __all__ = [
     "ColumnDefaultChanged",
     "ColumnDropped",
     "ColumnNullabilityChanged",
+    "ColumnOrderChanged",
     "ColumnRenamed",
     "ColumnTypeChanged",
     "DefinitionChange",
@@ -449,6 +451,30 @@ class ColumnDefaultChanged(_OnTable):
         }
 
 
+@dataclass(frozen=True)
+class ColumnOrderChanged(_OnTable):
+    """A table whose columns are one set in another order: an observation, not DDL.
+
+    PostgreSQL cannot reorder a table's columns, so no statement carries this:
+    it is reported where a database is a side of the comparison, and a
+    migration writes nothing for it. ``old`` and ``new`` are each side's order.
+    """
+
+    WIRE: ClassVar[str] = "CHANGE_COLUMN_ORDER"
+    TEMPLATE: ClassVar[str] = "CHANGE COLUMN ORDER {table}"
+
+    table: RelationName
+    old: tuple[str, ...]
+    new: tuple[str, ...]
+
+    def _wire_fields(self) -> dict[str, Any]:
+        return {
+            "table": self.table.qualified,
+            "old_value": ", ".join(self.old),
+            "new_value": ", ".join(self.new),
+        }
+
+
 def _index_detail(index: Index) -> dict[str, Any]:
     return {"name": index.name, "columns": list(index.columns), "unique": index.unique}
 
@@ -824,6 +850,7 @@ SchemaChange = (
     | ColumnTypeChanged
     | ColumnNullabilityChanged
     | ColumnDefaultChanged
+    | ColumnOrderChanged
     | IndexAdded
     | IndexDropped
     | ForeignKeyAdded
@@ -857,6 +884,7 @@ ColumnChange = (
     | ColumnTypeChanged
     | ColumnNullabilityChanged
     | ColumnDefaultChanged
+    | ColumnOrderChanged
 )
 TableObjectChange = (
     IndexAdded
@@ -879,6 +907,10 @@ DefinitionChange = ObjectAdded | ObjectDropped | ObjectReplaced
 
 #: Every variant, for the guards that must answer for each.
 KINDS: frozenset[type[SchemaChange]] = frozenset(get_args(SchemaChange))
+
+#: The variants no statement carries — facts a database holds that DDL cannot
+#: change, reported only where a database is a side of the comparison.
+OBSERVATIONS: frozenset[type[SchemaChange]] = frozenset({ColumnOrderChanged})
 
 
 #: ``confiture diff --format json``'s ``summary``, in its key order. A rename, a

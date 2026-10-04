@@ -1218,6 +1218,7 @@ SchemaChange = (
     | ColumnTypeChanged
     | ColumnNullabilityChanged
     | ColumnDefaultChanged
+    | ColumnOrderChanged
     | IndexAdded
     | IndexDropped
     | ForeignKeyAdded
@@ -1387,6 +1388,24 @@ A column whose default differs; `None` is no default.
 | `column` | `str` | required |
 | `old` | `str \| None` | required |
 | `new` | `str \| None` | required |
+
+### `ColumnOrderChanged`
+
+```python
+class ColumnOrderChanged(_OnTable)
+```
+
+A table whose columns are one set in another order: an observation, not DDL.
+
+PostgreSQL cannot reorder a table's columns, so no statement carries this:
+it is reported where a database is a side of the comparison, and a
+migration writes nothing for it. `old` and `new` are each side's order.
+
+| Field | Type | Default |
+|---|---|---|
+| `table` | `RelationName` | required |
+| `old` | `tuple[str, ...]` | required |
+| `new` | `tuple[str, ...]` | required |
 
 ### `IndexAdded`
 

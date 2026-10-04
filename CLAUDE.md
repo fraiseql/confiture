@@ -367,6 +367,21 @@ holds the one clause builder per element (`constraint_body`, `column_body`): the
 after `ADD` in an `ALTER` and the element in a `CREATE TABLE` are the same text. Assert
 generated SQL by parsing it with pglast, never by matching strings.
 
+**One comparison** — `SchemaDiffer.compare_sides(old, new, policy)` is the only place two
+schemas are compared. The policy follows from who wrote each side (`SchemaModel.source`):
+two trees `AUTHOR` (renames by similarity, everything as written), a tree and a database
+`CATALOGUED` (every `PARITY_NORMALISATIONS` rule applied as code, no fuzzy renames, and
+`policy.author` names the tree's side, whose unnamed constraints and indexes pair by what
+they say whatever PostgreSQL named them), two databases `EXACT`. `migrate diff` (any
+sides), `platform.diff` and `confiture drift` all ask it. **Drift is a rendering**:
+`drift.DRIFT_OF` maps every change variant to a drift kind and severity or says why drift
+has none (`tests/unit/test_drift_renders_the_engine.py` holds it exhaustive and fails on a
+`_compare_*` in `drift.py`), and `tests/integration/test_drift_agrees_with_diff.py`
+perturbs a built database one way at a time and holds every drift item to a diff change
+on the same object. A fact no statement changes (column order) is an **observation**
+(`schema_change.OBSERVATIONS`): no SQL, no tier, emitted only where a database is a side.
+Drift kinds and severities are a fraisier contract: tell fraisier before moving one.
+
 **The seam** — `confiture.platform` re-exports what a tool builds on: `parse_schema`,
 `introspect`, `diff`, `dependency_order`, `writable_columns`, `column_facts`,
 `naming_hints`, `write_copy_seed`, `write_insert_seed`, `apply_seeds`, `validate_seeds`,
