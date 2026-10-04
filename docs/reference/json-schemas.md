@@ -3,7 +3,7 @@
 > **Stable since 1.0.0, by intent.** The published schemas (fields are added, never renamed or removed) are meant to stay stable across 1.x. A change here is a break: it's flagged ⚠️ in the CHANGELOG and announced to the known consumers. It needs a major only once confiture has external users. See [What 1.x promises](../operations/release-trains.md#what-1x-promises).
 
 The commands whose `--format json` output ships a machine-validatable JSON
-Schema are `bootstrap`, `build` (and `build --list-files`), `debug cte`, `diff`, `drift` (and
+Schema are `bootstrap`, `build` (and `build --list-files`, `build --list-files --compare-to`), `debug cte`, `diff`, `drift` (and
 `drift --check-acls`), `install-helpers`, `introspect`, `lint` (and
 `lint --list-rules`), `lint-unified`, `schema dump-model`, `sync`,
 `validate-config`, `validate-profile`, `verify-checksums` and, in the migrate
@@ -579,6 +579,10 @@ Shape is identical to plain `drift` — items of type `missing_grant` / `extra_g
 ### `confiture build --list-files --format json`
 
 **Schema**: [`build-list-files.schema.json`](json-schemas/build-list-files.schema.json) — what the build *would* read, and why: `files[]` in build order, each naming the `include_dirs` entry that selected it, that entry's `order` and the include pattern that matched. Nothing is built.
+
+### `confiture build --list-files --compare-to <ref> --format json`
+
+**Schema**: [`build-list-files-compare.schema.json`](json-schemas/build-list-files-compare.schema.json) — the build order at a git ref against the working tree's, both named relative to the repository root: `renamed[]` (`{from, to}`, paired by git's rename detection), `added[]` and `removed[]` (counted, never moves), `moved[]` (each file whose relative order changed, with `was_after`/`was_before` at the ref and `now_after`/`now_before` now) and `allowed[]` (the moves an `--allow` names). Exit 1 when a moved file is not allowed.
 
 ### `confiture lint --format json`
 

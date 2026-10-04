@@ -72,6 +72,7 @@ MODEL_SCHEMAS: dict[str, str] = {
 CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "bootstrap.schema.json",
     "build-list-files.schema.json",
+    "build-list-files-compare.schema.json",
     "drift-check-acls.schema.json",
     "error-envelope.schema.json",
     "install-helpers.schema.json",

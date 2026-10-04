@@ -132,6 +132,7 @@ module moves, not when one grows.
 | `backfill.py` | database orchestration |
 | `baseline_detector.py` | database orchestration |
 | `bootstrap.py` | database orchestration |
+| `build_order.py` | neutral |
 | `builder.py` | database orchestration |
 | `checksum.py` | database orchestration |
 | `connection.py` | database orchestration |

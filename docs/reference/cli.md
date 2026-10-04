@@ -324,8 +324,31 @@ confiture build [OPTIONS]
 | `--dump-format` | - | str | `custom` | Artifact format for --dump: custom (-Fc) or directory (-Fd, parallel). Default: custom. |
 | `--seed-profile` | - | str | - | Apply only the named seed profile (seed.profiles.<name>) during --sequential seed application and --dump. Unknown name → exit 5. |
 | `--list-files` | - | Flag | off | Print the files this build would read — with the include_dirs entry, its order and the pattern that matched each — and build nothing |
+| `--compare-to` | - | str | - | With --list-files: compare the build order with the one at this git ref, renames paired, and report each file whose relative order moved (exit 1) |
+| `--allow` | - | str | - | With --compare-to: a reviewed move, named by its path relative to the repository root (exact, repeatable); it is reported and does not fail |
 
 <!-- END GENERATED: cli confiture build -->
+
+**Did a renumbering keep the build order?** `--list-files --compare-to <ref>` answers it for a
+renumbering `generate renumber` did not make — a merge, a vendored upstream update, a hand `git mv`.
+Each side is the build's own selection (the ref's tree is read with `git archive`, with the
+environment file the ref holds); renamed files are paired by git's rename detection, so a rename is
+one file, not a removal and an addition; and only the files whose *relative* order moved are
+named — the fewest whose move explains the change — each with its neighbours before and after:
+
+```
+$ confiture build --env local --list-files --compare-to HEAD
+5 files, 2 renamed, order preserved except:
+  db/schema/06_tables.sql
+    was after db/schema/02_types.sql, before db/schema/04_views.sql
+    now after db/schema/05_functions.sql, last
+```
+
+It exits 1 when a file moved; `--allow <path>` (repeatable, the path relative to the repository
+root, by its name now or at the ref) records a move reviewed as safe. Added and removed files are
+counted, never moves. A rename git sees is a tracked one: `git add` a file moved with plain `mv`.
+The ref's tree is what `git archive` writes, so a file `.gitattributes` marks `export-ignore` is
+not on its side.
 
 ## `confiture build --dump` (cacheable artifact)
 

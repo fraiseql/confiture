@@ -40,6 +40,9 @@ confiture build --env production
 
 # Show the files this build would read, and build nothing
 confiture build --env test --list-files
+
+# After a renumbering (a merge, a hand git mv): did the build order survive?
+confiture build --env test --list-files --compare-to HEAD
 ```
 
 ---

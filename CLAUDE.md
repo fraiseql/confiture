@@ -548,7 +548,7 @@ confiture/
 │   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
 │   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
 │   │   ├── commands/             # CLI command modules for Confiture (36 modules)
-│   │   └── formatters/           # (7 modules)
+│   │   └── formatters/           # (8 modules)
 │   ├── config/                   # Configuration module for Confiture
 │   │   ├── __init__.py           # Configuration module for Confiture
 │   │   ├── _env_vars.py          # Shared ``${VAR}`` expansion for Confiture YAML configuration
@@ -560,6 +560,7 @@ confiture/
 │   │   ├── backfill.py           # The batched backfill between expand and contract: bounded, observable,…
 │   │   ├── baseline_detector.py  # Which migration level a live database is at, read against the schema-hi…
 │   │   ├── bootstrap.py          # ``confiture bootstrap`` planner and executor (issue #137 part 1)
+│   │   ├── build_order.py        # Whether a build order survived a renumbering: the build's selection at…
 │   │   ├── builder.py            # Schema builder - builds PostgreSQL schemas from DDL files
 │   │   ├── change_order.py       # The order a generated migration applies its changes in: one PostgreSQL…
 │   │   ├── checksum.py           # Migration file checksum computation and verification
