@@ -54,6 +54,7 @@ _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
 
 _AT_ADD_CONSTRAINT = _pg_member("AlterTableType", "AT_AddConstraint")
 _AT_DROP_CONSTRAINT = _pg_member("AlterTableType", "AT_DropConstraint")
+_AT_VALIDATE_CONSTRAINT = _pg_member("AlterTableType", "AT_ValidateConstraint")
 _CONSTR_PRIMARY = _pg_member("ConstrType", "CONSTR_PRIMARY")
 
 _LIKE_DEFAULTS = _pg_member("TableLikeOption", "CREATE_TABLE_LIKE_DEFAULTS")
@@ -462,6 +463,11 @@ MODELLED_ELSEWHERE: dict[str, str] = {
         "`storage_pinned` reads `RESET (fillfactor)` into a TVIEW's pinned option (100, as "
         "pg_tviews' registry reads it back); a plain table's storage options are not modelled"
     ),
+    "AT_ValidateConstraint": (
+        "`validated_constraint` names the constraint, and the inventory validates a "
+        "NOT NULL the tree added `NOT VALID` under that name (PostgreSQL 18); a CHECK's "
+        "or a foreign key's validity is not modelled, so validating one changes nothing"
+    ),
     "AT_ChangeOwner": (
         "ownership is its own expectation and its own drift type (`wrong_owner`), "
         "read from the live catalogue rather than folded out of DDL"
@@ -486,11 +492,6 @@ _NOT_A_FACT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "AT_ReAddComment",
             "AT_ReAddStatistics",
         ),
-    ),
-    (
-        "`VALIDATE CONSTRAINT` turns a `NOT VALID` constraint valid, and the model holds "
-        "no validity: a constraint is the same constraint either way",
-        ("AT_ValidateConstraint",),
     ),
     (
         "`ALTER CONSTRAINT` changes a foreign key's deferrability, which the model holds "
@@ -1137,6 +1138,13 @@ class ColumnFact:
     default expression's text; ``identity`` the kind of ``AS IDENTITY``;
     ``generated`` the expression of a ``GENERATED ALWAYS AS (…)`` column and
     ``generated_kind`` whether it is stored or, from PostgreSQL 18, virtual.
+
+    PostgreSQL 18 also writes a ``NOT NULL`` at table level, naming its column —
+    ``CONSTRAINT nn_a NOT NULL a``, or ``ALTER TABLE … ADD NOT NULL a NOT VALID``.
+    Such a fact names that ``column`` and the ``constraint`` (empty when unnamed),
+    and ``not_null_validated`` is false when it was written ``NOT VALID``; whether
+    PostgreSQL keeps it unvalidated depends on where it was written, which the
+    caller knows (a new table is empty, so ``CREATE TABLE`` validates it).
     """
 
     not_null: bool = False
@@ -1145,12 +1153,18 @@ class ColumnFact:
     generated: str | None = None
     generated_kind: GeneratedKind | None = None
     default_kind: DefaultKind | None = None
+    not_null_validated: bool = True
+    column: str | None = None
+    constraint: str = ""
 
     def merged(self, other: ColumnFact) -> ColumnFact:
         """This fact with *other*'s clauses applied after it, as the grammar reads them."""
         later = other.default is not None
         return ColumnFact(
             not_null=self.not_null or other.not_null,
+            not_null_validated=self.not_null_validated and other.not_null_validated,
+            column=other.column or self.column,
+            constraint=other.constraint or self.constraint,
             default=other.default if later else self.default,
             default_kind=other.default_kind if later else self.default_kind,
             identity=other.identity or self.identity,
@@ -1359,8 +1373,17 @@ def _read_primary_key(node: Any, column: str | None) -> Constraint:
     )
 
 
-def _read_not_null(_node: Any, _column: str | None) -> ColumnFact:
-    return ColumnFact(not_null=True)
+def _read_not_null(node: Any, column: str | None) -> ColumnFact:
+    """``NOT NULL``, on its column or naming it at table level, validated unless ``NOT VALID``."""
+    if column is not None:
+        return ColumnFact(not_null=True)
+    named = _covered(getattr(node, "keys", None), None)
+    return ColumnFact(
+        not_null=True,
+        not_null_validated=not getattr(node, "skip_validation", False),
+        column=named[0] if named else None,
+        constraint=getattr(node, "conname", None) or "",
+    )
 
 
 def _read_default(node: Any, _column: str | None) -> ColumnFact:
@@ -1599,6 +1622,14 @@ def dropped_constraint(cmd: Any) -> str | None:
     dependency graph, which :class:`ObjectEdit` does not model either.
     """
     if enum_int(getattr(cmd, "subtype", None)) != _AT_DROP_CONSTRAINT:
+        return None
+    name = getattr(cmd, "name", None)
+    return str(name) if name else None
+
+
+def validated_constraint(cmd: Any) -> str | None:
+    """The constraint an ``ALTER TABLE … VALIDATE CONSTRAINT`` names, else ``None``."""
+    if enum_int(getattr(cmd, "subtype", None)) != _AT_VALIDATE_CONSTRAINT:
         return None
     name = getattr(cmd, "name", None)
     return str(name) if name else None

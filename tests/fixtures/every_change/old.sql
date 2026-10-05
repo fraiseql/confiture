@@ -37,6 +37,8 @@ CREATE TABLE things (
     CONSTRAINT things_old_ex EXCLUDE USING gist (span WITH &&)
 );
 CREATE INDEX things_old_ix ON things (code);
+-- PostgreSQL 18 holds a NOT NULL added NOT VALID; new.sql's is validated.
+ALTER TABLE things ADD CONSTRAINT things_qty_nn NOT NULL qty NOT VALID;
 
 CREATE VIEW v_retired AS SELECT 1 AS one;
 CREATE VIEW v_things AS SELECT id FROM things;

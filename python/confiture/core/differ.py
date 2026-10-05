@@ -24,6 +24,7 @@ from confiture.core.schema_change import (
     ColumnAdded,
     ColumnDefaultChanged,
     ColumnDropped,
+    ColumnNotNullValidityChanged,
     ColumnNullabilityChanged,
     ColumnOrderChanged,
     ColumnRenamed,
@@ -857,6 +858,12 @@ class SchemaDiffer:
         if old_seen.not_null != new_seen.not_null:
             changes.append(
                 ColumnNullabilityChanged(table, old_col.folded, nullable=not new_col.not_null)
+            )
+        elif old_seen.not_null and old_seen.not_null_validated != new_seen.not_null_validated:
+            changes.append(
+                ColumnNotNullValidityChanged(
+                    table, old_col.folded, validated=new_col.not_null_validated
+                )
             )
 
         if not _same_default(old_col, new_col, policy):

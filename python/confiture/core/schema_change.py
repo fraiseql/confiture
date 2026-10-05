@@ -52,6 +52,7 @@ __all__ = [
     "ColumnChange",
     "ColumnDefaultChanged",
     "ColumnDropped",
+    "ColumnNotNullValidityChanged",
     "ColumnNullabilityChanged",
     "ColumnOrderChanged",
     "ColumnRenamed",
@@ -171,6 +172,10 @@ def primary_keys(table: Table) -> list[Constraint]:
 
 def _nullable(value: bool) -> str:
     return "true" if value else "false"
+
+
+def _validity(validated: bool) -> str:
+    return "VALID" if validated else "NOT VALID"
 
 
 # ---------------------------------------------------------------------------
@@ -427,6 +432,31 @@ class ColumnNullabilityChanged(_OnTable):
             "column": self.column,
             "old_value": _nullable(not self.nullable),
             "new_value": _nullable(self.nullable),
+        }
+
+
+@dataclass(frozen=True)
+class ColumnNotNullValidityChanged(_OnTable):
+    """A ``NOT NULL`` column whose constraint is validated on one side and not the other.
+
+    PostgreSQL 18 can hold a NOT NULL ``NOT VALID``: rows from before it may still
+    be NULL. ``validated`` is the new tree's. A column whose nullability changes
+    too is a :class:`ColumnNullabilityChanged` instead.
+    """
+
+    WIRE: ClassVar[str] = "CHANGE_COLUMN_NOT_NULL_VALIDITY"
+    TEMPLATE: ClassVar[str] = "CHANGE COLUMN NOT NULL VALIDITY {table}.{column} FROM {old} TO {new}"
+
+    table: RelationName
+    column: str
+    validated: bool
+
+    def _wire_fields(self) -> dict[str, Any]:
+        return {
+            "table": self.table.qualified,
+            "column": self.column,
+            "old_value": _validity(not self.validated),
+            "new_value": _validity(self.validated),
         }
 
 
@@ -849,6 +879,7 @@ SchemaChange = (
     | ColumnRenamed
     | ColumnTypeChanged
     | ColumnNullabilityChanged
+    | ColumnNotNullValidityChanged
     | ColumnDefaultChanged
     | ColumnOrderChanged
     | IndexAdded
@@ -883,6 +914,7 @@ ColumnChange = (
     | ColumnRenamed
     | ColumnTypeChanged
     | ColumnNullabilityChanged
+    | ColumnNotNullValidityChanged
     | ColumnDefaultChanged
     | ColumnOrderChanged
 )

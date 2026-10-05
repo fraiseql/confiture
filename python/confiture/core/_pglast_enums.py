@@ -47,6 +47,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "AT_AlterColumnType",
         "AT_AddConstraint",
         "AT_DropConstraint",
+        "AT_ValidateConstraint",
         "AT_ChangeOwner",
         "AT_ColumnDefault",
         "AT_SetNotNull",
