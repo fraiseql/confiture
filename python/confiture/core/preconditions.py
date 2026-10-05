@@ -26,7 +26,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 import psycopg
-from psycopg import sql as pgsql
 
 from confiture.core import live_catalog
 from confiture.core.schema_model import RelationName
@@ -416,11 +415,6 @@ class SchemaNotExists(Precondition):
 # =============================================================================
 
 
-def _count_rows(schema: str, table: str) -> pgsql.Composed:
-    """``SELECT COUNT(*)`` over one relation, with both name parts quoted by the driver."""
-    return pgsql.SQL("SELECT COUNT(*) FROM {}").format(pgsql.Identifier(schema, table))
-
-
 @dataclass
 class RowCountEquals(Precondition):
     """Check that a table has exactly N rows.
@@ -435,7 +429,7 @@ class RowCountEquals(Precondition):
 
     def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         with connection.cursor() as cursor:
-            cursor.execute(_count_rows(self.schema, self.table))
+            cursor.execute(t"SELECT COUNT(*) FROM {self.schema:i}.{self.table:i}")
             result = cursor.fetchone()
             actual_count = result[0] if result else 0
             matches = actual_count == self.expected_count
@@ -463,7 +457,7 @@ class RowCountGreaterThan(Precondition):
 
     def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         with connection.cursor() as cursor:
-            cursor.execute(_count_rows(self.schema, self.table))
+            cursor.execute(t"SELECT COUNT(*) FROM {self.schema:i}.{self.table:i}")
             result = cursor.fetchone()
             actual_count = result[0] if result else 0
             matches = actual_count > self.min_count
@@ -490,7 +484,7 @@ class TableIsEmpty(Precondition):
 
     def check(self, connection: psycopg.Connection) -> tuple[bool, str]:
         with connection.cursor() as cursor:
-            cursor.execute(_count_rows(self.schema, self.table))
+            cursor.execute(t"SELECT COUNT(*) FROM {self.schema:i}.{self.table:i}")
             result = cursor.fetchone()
             count = result[0] if result else 0
             is_empty = count == 0

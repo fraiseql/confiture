@@ -47,7 +47,6 @@ from typing import TYPE_CHECKING, Any
 
 import pglast
 from pglast.stream import RawStream
-from psycopg import sql
 
 from confiture.core.ddl_objects import DDLObject, object_of, tview_object
 from confiture.core.ddl_walk import (
@@ -798,30 +797,12 @@ CONTRACT_VERSION = 1
 
 _HAS_CONTRACT = "SELECT to_regprocedure(%s) IS NOT NULL"
 
-#: Each registered TVIEW: its relation, the query pg_tviews holds, the storage
-#: options it reads from the catalog, and its backing view's oid, whose relation
-#: is the TVIEW's and not a view of the tree's (``NULL`` once that view is gone).
-_TVIEWS = """
-SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
-       {backing_view}::oid::bigint
-FROM {registry} r
-WHERE r.schema = ANY(%s)
-ORDER BY r.schema, r.name
-"""
-
 #: The registry's ``view`` column, which pg_tviews appended under contract 1: an
 #: earlier contract-1 build has none, and its backing view is the one it creates
 #: beside the table, ``v_<entity>``, found by name. Either is the view's oid, so the
 #: reader's ``search_path`` does not change it.
-_BACKING_VIEW = sql.SQL("r.view")
-_BACKING_VIEW_BY_NAME = sql.SQL("to_regclass(format('%%I.%%I', r.schema, 'v_' || r.entity))")
-
-_HAS_VIEW_COLUMN = """
-SELECT EXISTS (
-    SELECT 1 FROM pg_attribute
-    WHERE attrelid = to_regclass(%s) AND attname = 'view' AND NOT attisdropped
-)
-"""
+_BACKING_VIEW = t"r.view"
+_BACKING_VIEW_BY_NAME = t"to_regclass(format('%I.%I', r.schema, 'v_' || r.entity))"
 
 # The argument types are spelled inside the one query, in order: a round trip
 # per parameter was what the introspector used to pay. `input_types` come from
@@ -1007,9 +988,7 @@ def _contract(conn: psycopg.Connection) -> int | None:
     if not _scalar(conn, _HAS_CONTRACT, (f"{TVIEWS_SCHEMA}.contract_version()",)):
         return None
     with conn.cursor() as cursor:
-        cursor.execute(
-            sql.SQL("SELECT {}()").format(sql.Identifier(TVIEWS_SCHEMA, "contract_version"))
-        )
+        cursor.execute(t"SELECT {TVIEWS_SCHEMA:i}.contract_version()")
         row = cursor.fetchone()
     return None if row is None else int(row[0])
 
@@ -1032,11 +1011,28 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
     if installed is None:
         return []
     require_supported_pg_tviews(installed[0], _contract(conn))
-    registry = sql.Identifier(TVIEWS_SCHEMA, "registry")
-    has_view = _scalar(conn, _HAS_VIEW_COLUMN, (registry.as_string(conn),))
-    query = sql.SQL(_TVIEWS).format(
-        registry=registry, backing_view=_BACKING_VIEW if has_view else _BACKING_VIEW_BY_NAME
+    has_view_column = conn.execute(
+        t"""
+        SELECT EXISTS (
+            SELECT 1 FROM pg_attribute
+            WHERE attrelid = to_regclass(format('%I.%I', {TVIEWS_SCHEMA}::text, 'registry'))
+              AND attname = 'view' AND NOT attisdropped
+        )
+        """
+    ).fetchone()
+    backing_view = (
+        _BACKING_VIEW if has_view_column and has_view_column[0] else _BACKING_VIEW_BY_NAME
     )
+    # Each registered TVIEW: its relation, the query pg_tviews holds, the storage
+    # options it reads from the catalog, and its backing view's oid, whose relation
+    # is the TVIEW's and not a view of the tree's (``NULL`` once that view is gone).
+    query = t"""
+        SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
+               {backing_view:q}::oid::bigint
+        FROM {TVIEWS_SCHEMA:i}.registry r
+        WHERE r.schema = ANY({list(schemas)})
+        ORDER BY r.schema, r.name
+        """
     return [
         (
             TView(
@@ -1048,9 +1044,7 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
             ),
             view_oid,
         )
-        for schema, name, definition, logged, fillfactor, view_oid in conn.execute(
-            query, (list(schemas),)
-        ).fetchall()
+        for schema, name, definition, logged, fillfactor, view_oid in conn.execute(query).fetchall()
     ]
 
 

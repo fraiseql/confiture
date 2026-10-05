@@ -35,10 +35,10 @@ Usage in a Python migration::
 import logging
 from dataclasses import dataclass, field
 from importlib import resources
+from string.templatelib import Template
 from typing import Any
 
 import psycopg
-from psycopg import sql
 
 logger = logging.getLogger(__name__)
 
@@ -147,14 +147,9 @@ class SavedView:
         return f"{self.schema}.{self.name}"
 
 
-def _relation(view: SavedView) -> sql.Identifier:
-    """The view as SQL names it: both names quoted, whatever characters they hold."""
-    return sql.Identifier(view.schema, view.name)
-
-
-def _kind_keyword(view: SavedView) -> sql.SQL:
+def _kind_keyword(view: SavedView) -> Template:
     """``MATERIALIZED VIEW`` or ``VIEW``, the word a statement about *view* uses."""
-    return sql.SQL("MATERIALIZED VIEW" if view.kind == "m" else "VIEW")
+    return t"MATERIALIZED VIEW" if view.kind == "m" else t"VIEW"
 
 
 @dataclass
@@ -355,9 +350,7 @@ class ViewManager:
         with self._conn.cursor() as cur:
             for view in self._saved_views:
                 cur.execute(
-                    sql.SQL("DROP {} IF EXISTS {} CASCADE").format(
-                        _kind_keyword(view), _relation(view)
-                    )
+                    t"DROP {_kind_keyword(view):q} IF EXISTS {view.schema:i}.{view.name:i} CASCADE"
                 )
                 logger.debug("Dropped %s %s", view.kind, view.qualified_name)
 
@@ -404,26 +397,25 @@ class ViewManager:
 
         with self._conn.cursor() as cur:
             for position, view in enumerate(ordered):
-                relation = _relation(view)
+                schema, name = view.schema, view.name
                 # The body is pg_get_viewdef's deparse: SQL PostgreSQL wrote itself.
-                definition = sql.SQL(view.definition.rstrip().rstrip(";"))
+                definition = Template(view.definition.rstrip().rstrip(";"))
 
                 # A savepoint per view, so a single failure doesn't abort the batch.
                 # Its name is ours rather than built from the view's, which can
                 # run past the 63 bytes PostgreSQL keeps of an identifier.
-                savepoint = sql.Identifier(f"confiture_recreate_{position}")
-                cur.execute(sql.SQL("SAVEPOINT {}").format(savepoint))
+                savepoint = f"confiture_recreate_{position}"
+                cur.execute(t"SAVEPOINT {savepoint:i}")
 
                 try:
                     if view.kind == "m":
                         cur.execute(
-                            sql.SQL("CREATE MATERIALIZED VIEW {} AS {} WITH NO DATA").format(
-                                relation, definition
-                            )
+                            t"CREATE MATERIALIZED VIEW {schema:i}.{name:i} AS {definition:q} "
+                            t"WITH NO DATA"
                         )
-                        cur.execute(sql.SQL("REFRESH MATERIALIZED VIEW {}").format(relation))
+                        cur.execute(t"REFRESH MATERIALIZED VIEW {schema:i}.{name:i}")
                     else:
-                        cur.execute(sql.SQL("CREATE VIEW {} AS {}").format(relation, definition))
+                        cur.execute(t"CREATE VIEW {schema:i}.{name:i} AS {definition:q}")
 
                     # Restore indexes (materialized views only)
                     for idx in view.indexes:
@@ -432,18 +424,17 @@ class ViewManager:
                     # Restore comment
                     if view.comment:
                         cur.execute(
-                            sql.SQL("COMMENT ON {} {} IS {}").format(
-                                _kind_keyword(view), relation, sql.Literal(view.comment)
-                            )
+                            t"COMMENT ON {_kind_keyword(view):q} {schema:i}.{name:i} "
+                            t"IS {view.comment:l}"
                         )
 
-                    cur.execute(sql.SQL("RELEASE SAVEPOINT {}").format(savepoint))
+                    cur.execute(t"RELEASE SAVEPOINT {savepoint:i}")
                     result.recreated.append(view)
                     logger.debug("Recreated %s %s", view.kind, view.qualified_name)
 
                 except psycopg.Error as e:
-                    cur.execute(sql.SQL("ROLLBACK TO SAVEPOINT {}").format(savepoint))
-                    cur.execute(sql.SQL("RELEASE SAVEPOINT {}").format(savepoint))
+                    cur.execute(t"ROLLBACK TO SAVEPOINT {savepoint:i}")
+                    cur.execute(t"RELEASE SAVEPOINT {savepoint:i}")
                     error_msg = str(e).strip()
                     result.failed.append((view, error_msg))
                     logger.warning(
@@ -497,7 +488,7 @@ class ViewManager:
         with self._conn.cursor() as cur:
             cur.execute("""
                 SELECT nspname FROM pg_namespace
-                WHERE nspname NOT LIKE 'pg_%%'
+                WHERE nspname NOT LIKE 'pg_%'
                   AND nspname != 'information_schema'
                 ORDER BY nspname
             """)

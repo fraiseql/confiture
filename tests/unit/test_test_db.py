@@ -30,6 +30,7 @@ from confiture.core.test_db import (
     _validate_identifier,
 )
 from confiture.exceptions import ConfigurationError, SchemaError
+from confiture.sql_text import rendered
 
 
 class _FakeCursor:
@@ -96,7 +97,7 @@ class _CloneFakeConn:
         return False
 
     def execute(self, query: object, params: object = None, **kwargs: object) -> _FakeCursor:
-        text = query.as_string(None) if hasattr(query, "as_string") else str(query)
+        text = rendered(query)
         if text.startswith("CREATE DATABASE"):
             self.create_tablespaces.append("TABLESPACE" in text)
             outcome = self._outcomes.pop(0) if self._outcomes else None
@@ -167,7 +168,7 @@ class _SetupFakeConn:
         return False
 
     def execute(self, query: object, params: object = None, **kwargs: object) -> _SetupCursor:
-        text = query.as_string(None) if hasattr(query, "as_string") else str(query)
+        text = rendered(query)
         self.executed.append(text)
         if text.startswith("CREATE TABLESPACE"):
             self.present = True
@@ -211,47 +212,46 @@ class TestValidateIdentifier:
 class TestSqlComposition:
     def test_clone_sql_quotes_identifiers(self) -> None:
         assert (
-            _clone_sql("t_gw0", "tmpl").as_string(None)
-            == 'CREATE DATABASE "t_gw0" WITH TEMPLATE "tmpl"'
+            rendered(_clone_sql("t_gw0", "tmpl")) == 'CREATE DATABASE "t_gw0" WITH TEMPLATE "tmpl"'
         )
 
     def test_create_db_sql(self) -> None:
-        assert _create_db_sql("tmpl").as_string(None) == 'CREATE DATABASE "tmpl"'
+        assert rendered(_create_db_sql("tmpl")) == 'CREATE DATABASE "tmpl"'
 
     def test_clone_sql_without_tablespace_unchanged(self) -> None:
         # The None branch must stay byte-for-byte identical to today's output.
         assert (
-            _clone_sql("t_gw0", "tmpl", tablespace=None).as_string(None)
+            rendered(_clone_sql("t_gw0", "tmpl", tablespace=None))
             == 'CREATE DATABASE "t_gw0" WITH TEMPLATE "tmpl"'
         )
 
     def test_clone_sql_appends_tablespace(self) -> None:
         assert (
-            _clone_sql("t_gw0", "tmpl", tablespace="ram_ts").as_string(None)
+            rendered(_clone_sql("t_gw0", "tmpl", tablespace="ram_ts"))
             == 'CREATE DATABASE "t_gw0" WITH TEMPLATE "tmpl" TABLESPACE "ram_ts"'
         )
 
     def test_comment_sql_quotes_name_and_literal(self) -> None:
-        sql = _comment_sql("tmpl", "confiture:template:deadbeef").as_string(None)
+        sql = rendered(_comment_sql("tmpl", "confiture:template:deadbeef"))
         assert sql == "COMMENT ON DATABASE \"tmpl\" IS 'confiture:template:deadbeef'"
 
     def test_alter_db_set_sql_quotes_value(self) -> None:
         # The GUC value is rendered as a quoted literal ('off'), never interpolated —
         # PostgreSQL accepts a quoted string for the synchronous_commit enum GUC.
         assert (
-            _alter_db_set_sql("c", "synchronous_commit", "off").as_string(None)
+            rendered(_alter_db_set_sql("c", "synchronous_commit", "off"))
             == 'ALTER DATABASE "c" SET "synchronous_commit" TO \'off\''
         )
 
     def test_create_tablespace_sql_quotes_name_and_location(self) -> None:
         # Name is a quoted identifier; the path is a quoted literal — injection-safe.
         assert (
-            _create_tablespace_sql("ram_ts", "/dev/shm/ram_ts").as_string(None)
+            rendered(_create_tablespace_sql("ram_ts", "/dev/shm/ram_ts"))
             == "CREATE TABLESPACE \"ram_ts\" LOCATION '/dev/shm/ram_ts'"
         )
 
     def test_drop_tablespace_sql_quotes_name(self) -> None:
-        assert _drop_tablespace_sql("ram_ts").as_string(None) == 'DROP TABLESPACE "ram_ts"'
+        assert rendered(_drop_tablespace_sql("ram_ts")) == 'DROP TABLESPACE "ram_ts"'
 
     def test_dbs_in_tablespace_sql_shape(self) -> None:
         sql = _dbs_in_tablespace_sql()

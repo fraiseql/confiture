@@ -18,6 +18,7 @@ type or value is a difference of its own.
 
 from __future__ import annotations
 
+from string.templatelib import Template
 from typing import TYPE_CHECKING
 
 import psycopg
@@ -100,14 +101,11 @@ def _cast(
     """
     if not constants:
         return {}
-    query = sql.SQL("SELECT {}").format(
-        sql.SQL(", ").join(
-            sql.SQL("format('%%s', CAST({} AS {}))").format(
-                sql.Placeholder(), sql.SQL(types[type_])
-            )
-            for _, type_ in constants
-        )
+    # A type is the server's own spelling (format_type's), written in as it reads.
+    casts = sql.SQL(", ").join(
+        t"format('%s', CAST({literal} AS {Template(types[type_]):q}))"
+        for literal, type_ in constants
     )
     with conn.transaction():
-        row = conn.execute(query, [literal for literal, _ in constants]).fetchone()
+        row = conn.execute(t"SELECT {casts:q}").fetchone()
     return dict(zip(constants, row or (), strict=True))

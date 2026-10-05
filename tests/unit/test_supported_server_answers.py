@@ -18,6 +18,7 @@ from confiture.core.lock_profile import Duration, LockLevel, LockProfile, profil
 from confiture.core.risk_tier import RiskTier
 from confiture.core.schema_facts import SchemaFacts
 from confiture.core.temp_database import TempDatabase, force_drop_database
+from confiture.sql_text import rendered
 
 SUPPORTED = (16, 17, 18)
 
@@ -162,7 +163,7 @@ def test_a_database_is_dropped_with_force(server_version_num: int) -> None:
     force_drop_database(conn, "doomed")
 
     (call,) = conn.execute.call_args_list
-    assert call.args[0].as_string(None) == 'DROP DATABASE IF EXISTS "doomed" WITH (FORCE)'
+    assert rendered(call.args[0]) == 'DROP DATABASE IF EXISTS "doomed" WITH (FORCE)'
 
 
 @pytest.mark.parametrize("server_version_num", [160004, 170002, 180004])
@@ -179,7 +180,7 @@ def test_a_temporary_database_is_dropped_with_force(
     temp.__enter__()
     temp.__exit__(None, None, None)
 
-    drops = [c.args[0] for c in conn.execute.call_args_list if "DROP DATABASE" in str(c)]
-    assert [d.as_string(None) for d in drops] == [
+    sent = [rendered(c.args[0]) for c in conn.execute.call_args_list]
+    assert [s for s in sent if s.startswith("DROP DATABASE")] == [
         f'DROP DATABASE IF EXISTS "{temp._db_name}" WITH (FORCE)'
     ]
