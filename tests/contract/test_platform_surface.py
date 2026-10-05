@@ -223,6 +223,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("method", "str | None"),
         ("where", "str | None"),
         ("key_options", "tuple[str, ...]"),
+        ("temporal", "bool"),
     ),
     "Index": (
         ("name", "str | None"),

@@ -394,14 +394,21 @@ def _names(indexes: Iterable[Index]) -> frozenset[str]:
     return frozenset(index.name for index in indexes if index.name)
 
 
+#: What tells two unnamed keys apart: their columns, and whether the key is
+#: temporal — ``UNIQUE (id, valid)`` and ``UNIQUE (id, valid WITHOUT OVERLAPS)``
+#: may sit side by side, and each pairs with its own (#604).
+_KEY_IDENTITY = ("columns", "temporal")
+
+
 def _says_otherwise(old: Constraint, new: Constraint) -> bool:
     """Whether one key-like constraint, paired by name, says something else (#501).
 
     Its columns; for a foreign key, the table it references, its referential
     actions, and the referenced columns when both sides list them — ``REFERENCES
     p`` with no list means the referenced key, which a database always spells
-    out and a tree need not; and when it is checked. A dropped or re-pointed key
-    lets rows exist that could not before.
+    out and a tree need not; when it is checked; and whether it is temporal
+    (#604), which makes it an exclusion over a period. A dropped or re-pointed
+    key lets rows exist that could not before.
     """
     return (
         old.columns != new.columns
@@ -409,6 +416,7 @@ def _says_otherwise(old: Constraint, new: Constraint) -> bool:
         or bool(old.ref_columns and new.ref_columns and old.ref_columns != new.ref_columns)
         or (old.on_delete, old.on_update) != (new.on_delete, new.on_update)
         or old.deferrable != new.deferrable
+        or old.temporal != new.temporal
     )
 
 
@@ -914,7 +922,7 @@ class SchemaDiffer:
             table=old_table.relation,
             # Not the referenced columns: `REFERENCES p` means p's key, which a
             # database always spells out and a tree need not (`_says_otherwise`).
-            identity=("columns", "ref_table"),
+            identity=(*_KEY_IDENTITY, "ref_table"),
             differs=_says_otherwise,
         )
 
@@ -951,7 +959,7 @@ class SchemaDiffer:
             added=UniqueConstraintAdded,
             dropped=UniqueConstraintDropped,
             table=old_table.relation,
-            identity=("columns",),
+            identity=_KEY_IDENTITY,
             differs=_says_otherwise,
         )
 
@@ -966,7 +974,7 @@ class SchemaDiffer:
             added=PrimaryKeyAdded,
             dropped=PrimaryKeyDropped,
             table=old_table.relation,
-            identity=("columns",),
+            identity=_KEY_IDENTITY,
             differs=_says_otherwise,
         )
 

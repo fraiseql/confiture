@@ -1300,6 +1300,7 @@ def _read_foreign_key(node: Any, column: str | None) -> Constraint:
         on_delete=_fk_action(node.fk_del_action),
         on_update=_fk_action(node.fk_upd_action),
         deferrable=_deferral(node),
+        temporal=bool(node.fk_with_period),
     )
 
 
@@ -1347,6 +1348,7 @@ def _read_unique(node: Any, column: str | None) -> Constraint:
         name=node.conname or "",
         columns=_covered(node.keys, column),
         deferrable=_deferral(node),
+        temporal=bool(node.without_overlaps),
     )
 
 
@@ -1356,6 +1358,7 @@ def _read_primary_key(node: Any, column: str | None) -> Constraint:
         name=node.conname or "",
         columns=_covered(node.keys, column),
         deferrable=_deferral(node),
+        temporal=bool(node.without_overlaps),
     )
 
 
@@ -1471,10 +1474,10 @@ def read_constraint(node: Any, *, column: str | None = None) -> Constraint | Col
 def model_holds(node: Any) -> bool:
     """Whether what :func:`read_constraint` reads from *node* is all the node says.
 
-    The model carries a foreign key's columns, target, actions and deferral. It
-    does not carry a ``MATCH`` other than ``SIMPLE`` (the default), the column
-    list of ``ON DELETE SET NULL (…)``, or ``NOT ENFORCED``: a key rewritten from
-    the model would silently lose them.
+    The model carries a foreign key's columns, target, actions, deferral and
+    ``PERIOD``. It does not carry a ``MATCH`` other than ``SIMPLE`` (the
+    default), the column list of ``ON DELETE SET NULL (…)``, or ``NOT
+    ENFORCED``: a key rewritten from the model would silently lose them.
     """
     if getattr(node, "pktable", None) is None:
         return True

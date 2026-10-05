@@ -98,6 +98,17 @@ itself (⚠️ default suffix `.sql.zst`). New: `softdel_001`/`softdel_002` (#59
 
 ### Added
 
+- **Temporal keys are modelled: `WITHOUT OVERLAPS` and `PERIOD` (#604).** PostgreSQL 18's
+  `PRIMARY KEY (id, valid WITHOUT OVERLAPS)` is an exclusion over the period, not a btree
+  uniqueness, and was read as `PRIMARY KEY (id, valid)`: drift saw no change between the two,
+  a reader of the model saw a uniqueness that is not there, and generated DDL (and
+  `build.two_pass`) wrote the plain key. `Constraint.temporal` is read from the tree and,
+  through `pg_get_constraintdef`, from the catalog; `migrate diff` replaces a key that gains or
+  loses its period, and drift reports it as `constraint_mismatch` (critical), as it does any
+  other key that says something else under its name. The model's wire gains `temporal` on every
+  constraint, so every model golden and `schema-model.schema.json` change; a change payload's
+  `details` carry `"temporal": true` on a temporal key only, so no payload golden changes.
+
 - **`build --list-files --compare-to <ref>` proves a renumbering kept the build order** (#580).
   A renumbering that arrives by merge, vendoring or a hand `git mv` was checked by diffing two
   listings, in which every renamed file reads as a removal plus an addition. The comparison reads
