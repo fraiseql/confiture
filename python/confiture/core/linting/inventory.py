@@ -35,6 +35,7 @@ from confiture.core.ddl_walk import (
     added_constraint,
     column_edit,
     default_kind,
+    dropped_constraint,
     object_edits,
     object_kinds,
     read_column_constraints,
@@ -455,6 +456,21 @@ def _mark_primary_key(table: SchemaObject, constraint: Constraint) -> None:
         replace(column, primary_key=True, not_null=True) if column.folded in covered else column
         for column in table.columns
     ]
+
+
+def _drop_constraint(table: SchemaObject, name: str) -> None:
+    """Remove the constraint named *name*; a primary key's columns stay ``NOT NULL``.
+
+    Measured on PostgreSQL 18.4: dropping a primary key leaves its columns'
+    not-null constraints in place.
+    """
+    dropped = [c for c in table.constraints if c.name == name]
+    if not dropped:
+        return
+    table.constraints = [c for c in table.constraints if c.name != name]
+    if any(c.kind == "primary_key" for c in dropped):
+        table.has_primary_key = False
+        table.columns = [replace(column, primary_key=False) for column in table.columns]
 
 
 def _append_column(sql: str, table: SchemaObject, node: Any, *, file: str | None = None) -> None:
@@ -883,6 +899,10 @@ def _apply_alter(parsed: ParsedFile, stmt: Any, inventory: Inventory) -> None:
             read = read_constraint(node)
             if isinstance(read, Constraint):
                 _add_constraints(table, (read,))
+            continue
+        dropped = dropped_constraint(cmd)
+        if dropped is not None:
+            _drop_constraint(table, dropped)
             continue
         edit = column_edit(cmd)
         apply = _COLUMN_APPLIERS.get(edit.kind) if edit is not None else None

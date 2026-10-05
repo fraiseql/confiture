@@ -343,3 +343,12 @@ def test_softdel_002_reads_only_soft_deleting_tables(tmp_path: Path) -> None:
     sql = "CREATE TABLE tb_node (id INT PRIMARY KEY, fk_parent INT, name TEXT, UNIQUE (fk_parent, name));\n"
 
     assert _nulls(tmp_path, sql) == []
+
+
+def test_a_constraint_dropped_later_is_not_judged(tmp_path: Path) -> None:
+    """#624: the key ``ALTER TABLE … DROP CONSTRAINT`` drops is not one the table holds."""
+    sql = ORDER_LINE + (
+        "ALTER TABLE app.tb_order_line DROP CONSTRAINT tb_order_line_order_product_key;\n"
+    )
+
+    assert _reserved(tmp_path, sql) == []

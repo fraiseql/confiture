@@ -114,3 +114,53 @@ def test_set_default_and_drop_default_land_on_the_column() -> None:
     ).inventory.find(None, "t")
     assert dropped is not None
     assert dropped.columns[0].default is None
+
+
+def _table_t(sql: str) -> SchemaObject:
+    table = read_text(sql).inventory.find(None, "t")
+    assert table is not None
+    return table
+
+
+def test_a_dropped_constraint_is_not_in_the_expected_schema() -> None:
+    """#624: a key a later ``DROP CONSTRAINT`` drops is not one the table holds."""
+    table = _table_t(
+        "CREATE TABLE t (id int PRIMARY KEY, code text, CONSTRAINT t_code_key UNIQUE (code));\n"
+        "ALTER TABLE t DROP CONSTRAINT t_code_key;\n"
+    )
+    assert [c.kind for c in table.constraints] == ["primary_key"]
+
+
+def test_a_dropped_constraint_leaves_the_model() -> None:
+    model = read_text(
+        "CREATE TABLE t (id int, CONSTRAINT t_id_check CHECK (id > 0));\n"
+        "ALTER TABLE t DROP CONSTRAINT IF EXISTS t_id_check;\n"
+    ).model
+    (table,) = model.tables.values()
+    assert table.constraints == ()
+
+
+def test_a_dropped_primary_key_leaves_its_columns_not_null() -> None:
+    """Measured on PostgreSQL 18.4: the key goes, the column's ``NOT NULL`` stays."""
+    table = _table_t(
+        "CREATE TABLE t (id int, CONSTRAINT t_pkey PRIMARY KEY (id));\n"
+        "ALTER TABLE t DROP CONSTRAINT t_pkey;\n"
+    )
+    assert table.constraints == []
+    assert table.has_primary_key is False
+    assert (table.columns[0].primary_key, table.columns[0].not_null) == (False, True)
+
+
+def test_a_constraint_dropped_then_added_again_is_held() -> None:
+    """The fold is in statement order: the ``ADD`` after the ``DROP`` is what remains."""
+    table = _table_t(
+        "CREATE TABLE t (a int, b int, CONSTRAINT k UNIQUE (a));\n"
+        "ALTER TABLE t DROP CONSTRAINT k, ADD CONSTRAINT k UNIQUE (a, b);\n"
+    )
+    assert [c.columns for c in table.constraints] == [("a", "b")]
+
+
+def test_dropping_a_constraint_the_tree_never_named_changes_nothing() -> None:
+    """An unnamed key is identified by what it says; a name the tree never wrote is not it."""
+    table = _table_t("CREATE TABLE t (a int UNIQUE);\nALTER TABLE t DROP CONSTRAINT absent;\n")
+    assert [c.columns for c in table.constraints] == [("a",)]

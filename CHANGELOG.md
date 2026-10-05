@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A constraint a later `ALTER TABLE … DROP CONSTRAINT` drops is no longer in the model** (#624).
+  The expected schema kept it, so `softdel_001` and `tenant_005` reported a key the tree had
+  dropped and a database built from the tree read back without a constraint the tree still
+  declared. The drop is folded by name, in statement order; a dropped primary key leaves its
+  columns `NOT NULL`, as PostgreSQL does.
+
 ## [1.30.0] - 2026-10-05
 
 **One interpreter, and what confiture executes or prints is a template.** confiture
