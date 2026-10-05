@@ -22,8 +22,11 @@ Deliberately not read, each for a stated reason:
   extension's, not the tree's;
 - a sequence a **column** owns (``deptype`` ``a`` for ``serial``, ``i`` for an
   identity) — it is part of that column, and the tree never wrote it;
-- a ``NOT NULL`` constraint row (PostgreSQL 18's ``contype = 'n'``) — it is
-  ``attnotnull``, read on the column.
+- a ``NOT NULL`` constraint row (PostgreSQL 18's ``contype = 'n'``) as a
+  constraint — it is ``attnotnull``, read on the column, and its ``convalidated``
+  is the column's ``not_null_validated``: a NOT NULL added ``NOT VALID`` sets
+  ``attnotnull`` while the rows before it may be NULL. Before 18 there is no such
+  row and ``attnotnull`` is the whole answer.
 
 That list is :func:`read`'s, the model a tree is compared with. The listings
 below it answer narrower questions — which relations, which schemas, every index
@@ -254,7 +257,16 @@ WHERE c.relkind = ANY(%s)
 ORDER BY n.nspname, c.relname
 """
 
-_COLUMNS = """
+#: Whether no ``NOT VALID`` NOT NULL covers the column (PostgreSQL 18's
+#: ``contype = 'n'``; no row matches before 18, so every NOT NULL is validated).
+_NOT_NULL_VALIDATED = """
+NOT EXISTS (
+    SELECT 1 FROM pg_constraint n
+    WHERE n.conrelid = a.attrelid AND n.contype = 'n' AND n.conkey[1] = a.attnum
+      AND NOT n.convalidated
+)"""
+
+_COLUMNS = f"""
 SELECT
     a.attrelid,
     a.attname,
@@ -262,7 +274,8 @@ SELECT
     a.attnotnull,
     pg_get_expr(d.adbin, d.adrelid),
     a.attidentity,
-    a.attgenerated
+    a.attgenerated,
+    {_NOT_NULL_VALIDATED}
 FROM pg_attribute a
 LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
 WHERE a.attrelid = ANY(%s) AND a.attnum > 0 AND NOT a.attisdropped
@@ -349,7 +362,7 @@ def _type_nodes(types: list[str]) -> list[Any]:
 
 
 def _column(row: tuple[Any, ...], type_node: Any) -> Column:
-    _relid, name, spelled, not_null, stored, identity, generated = row
+    _relid, name, spelled, not_null, stored, identity, generated, validated = row
     generated_kind = _GENERATED.get(generated or "")
     expression = _expression(stored) if stored and not generated_kind else None
     return Column(
@@ -360,6 +373,7 @@ def _column(row: tuple[Any, ...], type_node: Any) -> Column:
         type_key=canonical_type(ddl_type_name(type_node)),
         raw_sql_type=written_type(type_node),
         not_null=bool(not_null),
+        not_null_validated=bool(validated) or not not_null,
         default=render_default(expression) if expression is not None else None,
         default_kind=default_kind(expression) if expression is not None else None,
         identity=_IDENTITY.get(identity or ""),
@@ -548,9 +562,10 @@ SELECT EXISTS (
 
 _SCHEMA_EXISTS = "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = %s)"
 
-_COLUMNS_OF = """
+_COLUMNS_OF = f"""
 SELECT a.attname, format_type(a.atttypid, a.atttypmod), a.attnotnull,
-       pg_get_expr(d.adbin, d.adrelid), a.attidentity, a.attgenerated
+       pg_get_expr(d.adbin, d.adrelid), a.attidentity, a.attgenerated,
+       {_NOT_NULL_VALIDATED}
 FROM pg_attribute a
 JOIN pg_class c ON c.oid = a.attrelid
 JOIN pg_namespace n ON n.oid = c.relnamespace

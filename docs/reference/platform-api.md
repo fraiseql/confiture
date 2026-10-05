@@ -416,6 +416,12 @@ a primary key — on the column or at table level — and an identity column all
 set it. `default` is the default expression's text, `identity` the kind
 of `GENERATED … AS IDENTITY`, `generated` the expression of a
 `GENERATED ALWAYS AS (…)` column and `generated_kind` how it is held.
+`not_null_validated` is false for a `NOT NULL` PostgreSQL 18 holds `NOT
+VALID` (`ALTER TABLE … ADD NOT NULL c NOT VALID`): `attnotnull` is set, yet
+the rows that were there may hold NULLs. It is true for every other column —
+a nullable one has no NOT NULL to validate, and a server before 18 cannot
+hold one unvalidated. The constraint's *name* is not read: the guarantee is
+what a reader trusts, and most NOT NULLs are unnamed.
 
 | Field | Type | Default |
 |---|---|---|
@@ -426,6 +432,7 @@ of `GENERATED … AS IDENTITY`, `generated` the expression of a
 | `type_key` | `str \| None` | `None` |
 | `raw_sql_type` | `str \| None` | `None` |
 | `not_null` | `bool` | `False` |
+| `not_null_validated` | `bool` | `True` |
 | `default` | `str \| None` | `None` |
 | `identity` | `IdentityKind \| None` | `None` |
 | `generated` | `str \| None` | `None` |
@@ -1236,6 +1243,7 @@ SchemaChange = (
     | ColumnRenamed
     | ColumnTypeChanged
     | ColumnNullabilityChanged
+    | ColumnNotNullValidityChanged
     | ColumnDefaultChanged
     | ColumnOrderChanged
     | IndexAdded
@@ -1392,6 +1400,24 @@ A column that became nullable, or stopped being; `nullable` is the new tree's.
 | `table` | `RelationName` | required |
 | `column` | `str` | required |
 | `nullable` | `bool` | required |
+
+### `ColumnNotNullValidityChanged`
+
+```python
+class ColumnNotNullValidityChanged(_OnTable)
+```
+
+A `NOT NULL` column whose constraint is validated on one side and not the other.
+
+PostgreSQL 18 can hold a NOT NULL `NOT VALID`: rows from before it may still
+be NULL. `validated` is the new tree's. A column whose nullability changes
+too is a `ColumnNullabilityChanged` instead.
+
+| Field | Type | Default |
+|---|---|---|
+| `table` | `RelationName` | required |
+| `column` | `str` | required |
+| `validated` | `bool` | required |
 
 ### `ColumnDefaultChanged`
 

@@ -195,6 +195,12 @@ class Column:
     set it. ``default`` is the default expression's text, ``identity`` the kind
     of ``GENERATED … AS IDENTITY``, ``generated`` the expression of a
     ``GENERATED ALWAYS AS (…)`` column and ``generated_kind`` how it is held.
+    ``not_null_validated`` is false for a ``NOT NULL`` PostgreSQL 18 holds ``NOT
+    VALID`` (``ALTER TABLE … ADD NOT NULL c NOT VALID``): ``attnotnull`` is set, yet
+    the rows that were there may hold NULLs. It is true for every other column —
+    a nullable one has no NOT NULL to validate, and a server before 18 cannot
+    hold one unvalidated. The constraint's *name* is not read: the guarantee is
+    what a reader trusts, and most NOT NULLs are unnamed.
     """
 
     name: str
@@ -204,6 +210,7 @@ class Column:
     type_key: str | None = None
     raw_sql_type: str | None = None
     not_null: bool = False
+    not_null_validated: bool = True
     default: str | None = None
     identity: IdentityKind | None = None
     generated: str | None = None

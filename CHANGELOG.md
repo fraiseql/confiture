@@ -240,6 +240,19 @@ itself (⚠️ default suffix `.sql.zst`). New: `softdel_001`/`softdel_002` (#59
   other key that says something else under its name. The model's wire gains `temporal` on every
   constraint, so every model golden and `schema-model.schema.json` change; a change payload's
   `details` carry `"temporal": true` on a temporal key only, so no payload golden changes.
+- **A `NOT NULL … NOT VALID` column reads as one (#605).** PostgreSQL 18 keeps
+  `attnotnull` true for a NOT NULL added `NOT VALID` while the rows before it may still be
+  NULL, so the model said a guarantee held that did not. `Column.not_null_validated` (true
+  unless the NOT NULL is held unvalidated) is read live from the constraint's own row
+  (`contype = 'n'`, `convalidated`; before 18 there is none and every NOT NULL reads
+  validated) and from the tree: `ALTER TABLE … ADD [CONSTRAINT n] NOT NULL c NOT VALID`
+  leaves it false, `VALIDATE CONSTRAINT n` and `SET NOT NULL` validate it, and a table-level
+  `NOT NULL c` — ignored until now — makes the column NOT NULL. Two sides that differ in it
+  alone are a `ColumnNotNullValidityChanged` (`CHANGE_COLUMN_NOT_NULL_VALIDITY`, `VALID` /
+  `NOT VALID`): `SET NOT NULL` validates, the other way drops the NOT NULL and adds it back
+  `NOT VALID`. Drift reports it as the column's `nullable_mismatch` (warning), the kind and
+  severity a nullability change already has. The constraint's name is not modelled. The
+  model goldens and `schema-model.schema.json` carry the new field.
 
 - **`build --list-files --compare-to <ref>` proves a renumbering kept the build order** (#580).
   A renumbering that arrives by merge, vendoring or a hand `git mv` was checked by diffing two

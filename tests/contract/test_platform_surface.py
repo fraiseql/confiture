@@ -57,6 +57,7 @@ CHANGES = (
     "ColumnRenamed",
     "ColumnTypeChanged",
     "ColumnNullabilityChanged",
+    "ColumnNotNullValidityChanged",
     "ColumnDefaultChanged",
     "ColumnOrderChanged",
     "IndexAdded",
@@ -196,6 +197,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("type_key", "str | None"),
         ("raw_sql_type", "str | None"),
         ("not_null", "bool"),
+        ("not_null_validated", "bool"),
         ("default", "str | None"),
         ("identity", "IdentityKind | None"),
         ("generated", "str | None"),
@@ -369,6 +371,11 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("table", "RelationName"),
         ("column", "str"),
         ("nullable", "bool"),
+    ),
+    "ColumnNotNullValidityChanged": (
+        ("table", "RelationName"),
+        ("column", "str"),
+        ("validated", "bool"),
     ),
     "ColumnDefaultChanged": (
         ("table", "RelationName"),

@@ -35,6 +35,7 @@ from confiture.core.schema_change import (
     ColumnChange,
     ColumnDefaultChanged,
     ColumnDropped,
+    ColumnNotNullValidityChanged,
     ColumnNullabilityChanged,
     ColumnOrderChanged,
     ColumnRenamed,
@@ -264,6 +265,20 @@ def _nullability(table: RelationName, column: str, *, nullable: bool) -> str:
     )
 
 
+def _not_null_validity(table: RelationName, column: str, *, validated: bool) -> str:
+    """A NOT NULL validated, or held ``NOT VALID`` again (PostgreSQL 18).
+
+    ``SET NOT NULL`` validates a ``NOT VALID`` one: it scans the table, and fails
+    on a NULL. No statement un-validates a constraint, so the other way drops the
+    NOT NULL and adds it back ``NOT VALID``, under the name PostgreSQL chooses.
+    """
+    if validated:
+        return _nullability(table, column, nullable=False)
+    return _nullability(table, column, nullable=True) + (
+        f"ALTER TABLE {relation(table)} ADD NOT NULL {quote_identifier(column)} NOT VALID;\n"
+    )
+
+
 def _default(table: RelationName, column: str, default: str | None) -> str:
     clause = f"SET DEFAULT {default}" if default else "DROP DEFAULT"
     return f"ALTER TABLE {relation(table)} ALTER COLUMN {quote_identifier(column)} {clause};\n"
@@ -304,6 +319,8 @@ def _column_up(change: ColumnChange) -> str | None:
             return _retype(table, old, new)
         case ColumnNullabilityChanged(table, column, nullable):
             return _nullability(table, column, nullable=nullable)
+        case ColumnNotNullValidityChanged(table, column, validated):
+            return _not_null_validity(table, column, validated=validated)
         case ColumnDefaultChanged(table, column, _, new):
             return _default(table, column, new)
         case ColumnOrderChanged():
@@ -325,6 +342,8 @@ def _column_down(change: ColumnChange) -> str | None:
             return _retype(table, new, old)
         case ColumnNullabilityChanged(table, column, nullable):
             return _nullability(table, column, nullable=not nullable)
+        case ColumnNotNullValidityChanged(table, column, validated):
+            return _not_null_validity(table, column, validated=not validated)
         case ColumnDefaultChanged(table, column, old, _):
             return _default(table, column, old)
         case ColumnOrderChanged():
@@ -574,6 +593,7 @@ class DifferSQLGenerator:
                 | ColumnRenamed()
                 | ColumnTypeChanged()
                 | ColumnNullabilityChanged()
+                | ColumnNotNullValidityChanged()
                 | ColumnDefaultChanged()
                 | ColumnOrderChanged()
             ):
@@ -617,6 +637,7 @@ class DifferSQLGenerator:
                 | ColumnRenamed()
                 | ColumnTypeChanged()
                 | ColumnNullabilityChanged()
+                | ColumnNotNullValidityChanged()
                 | ColumnDefaultChanged()
                 | ColumnOrderChanged()
             ):
