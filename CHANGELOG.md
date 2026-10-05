@@ -77,6 +77,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- ⚠️ **Python 3.14 or newer (#598).** confiture declares, builds, lints, type-checks and tests
+  one interpreter: `requires-python >=3.14`, one cp314 wheel per platform, every CI job on
+  3.14. A project on 3.11–3.13 stays on 1.29.x (pip and uv pick it for it). The pgGit
+  plugin moves with the package. A migration that hands `self.execute` a `t"…"` template is
+  refused by the idempotency evaluator with its own code, `template_string` (its SQL is what
+  the driver renders); at run time `Migration.execute` passes the template to psycopg.
+- ⚠️ **`pglast>=8.1`: one parser major (#606).** 8.1 is the first pglast with a cp314 wheel
+  on every platform confiture ships. The `pglast-matrix` CI job is gone; a project pinned to
+  pglast 6 or 7 stays on 1.29.x.
+- **SQL confiture executes is a template string (#599).** Every statement confiture composes
+  and executes is a `t"…"` handed to psycopg 3.3: `{name:i}` an identifier, `{value:l}` a
+  literal, a bare `{value}` a bound parameter, raw text only through an explicit
+  `Template(text)`. `psycopg.sql` composition and f-strings no longer reach `execute`
+  (`test_one_sql_composition.py`; `test_template_parameters.py` refuses a bound value in a
+  statement PostgreSQL does not prepare). Error messages render a statement through
+  `confiture.sql_text.rendered`. No behaviour change but the savepoint fix below.
+- **The CLI prints through one `Printer` (#600).** A printed value is a template's data by
+  construction: literal text is confiture's markup, every interpolation is escaped (credentials
+  masked, control characters written as escapes) unless it is `Markup` confiture built; ty
+  refuses a computed `str` handed to the printer anywhere under `cli/`. `--help` output is
+  byte-identical; the output fixes are below.
+
+
 - ⚠️ **The backup hook's dump is zstd-compressed by `pg_dump` and never passes through
   confiture's memory: the default file is `<migration>.sql.zst`, no longer `.sql.gz`.**
   `BackupHook` held the whole plain dump in the deploy process, then a gzipped second copy.
@@ -227,6 +250,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the file and line) where they raised pglast's `ParseError`.
 
 ### Fixed
+
+- **A savepoint name is an identifier.** The dry-run, seed and sandbox savepoints were
+  interpolated bare: a seed savepoint named `seed-01.users` or `select` was a syntax error.
+- **`migrate up --dry-run-execute`'s table printed the literal `.1f`** in its time column;
+  it prints the time.
+- **Values printed as markup are printed as data**: an idempotency finding's SQL snippet,
+  three of the seed applier's lines, and `migrate generate`'s template preview (a `[…]` in
+  them was eaten); the lock-timeout tip no longer multiplies an unset timeout.
+
 
 - **`--format csv` on stdout is the CSV, byte for byte (#602).** It was printed through a
   Rich console, which read `[legacy]` in a value as a markup tag and dropped it, and wrapped

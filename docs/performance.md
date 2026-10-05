@@ -492,4 +492,4 @@ print(f"Memory: {psutil.Process().memory_info().rss / 1024 / 1024:.1f} MB")
 
 **Last Updated**: October 2025
 **Benchmark Version**: Confiture 0.2.0-alpha
-**Test Environment**: PostgreSQL 16.3, Python 3.11, Linux x86_64
+**Test Environment** (measured before the 3.14 floor): PostgreSQL 16.3, CPython 3.11, Linux x86_64

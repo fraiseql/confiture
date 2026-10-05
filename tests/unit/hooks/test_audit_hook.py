@@ -161,7 +161,8 @@ class TestAuditHook:
 
             # Check that default values were used
             call_args = mock_conn.execute.call_args_list[1]  # Second call is INSERT
-            params = call_args[0][1]  # Query parameters
+            statement = call_args[0][0]  # a template: its interpolations are the bound values
+            params = [i.value for i in statement.interpolations if i.format_spec != "i"]
 
             assert params[0] == "unknown"  # migration default
             assert params[1] == "unknown"  # direction default

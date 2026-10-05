@@ -315,7 +315,7 @@ database:
 
 ```dockerfile
 # Run as non-root user
-FROM python:3.11-slim
+FROM python:3.14-slim
 RUN useradd -m confiture
 USER confiture
 

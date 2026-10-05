@@ -25,7 +25,7 @@ spec:
           - name: database-key
             default: "url"
       container:
-        image: python:3.11-slim
+        image: python:3.14-slim
         command: ["/bin/sh", "-c"]
         args:
           - |
@@ -52,7 +52,7 @@ spec:
           - name: migrations
             path: /app/db/migrations
       container:
-        image: python:3.11-slim
+        image: python:3.14-slim
         workingDir: /app
         command: ["/bin/sh", "-c"]
         args:
@@ -75,7 +75,7 @@ spec:
           - name: database-key
             default: "test-url"
       container:
-        image: python:3.11-slim
+        image: python:3.14-slim
         workingDir: /app
         command: ["/bin/sh", "-c"]
         args:
@@ -106,7 +106,7 @@ spec:
           - name: environment
             default: "production"
       container:
-        image: python:3.11-slim
+        image: python:3.14-slim
         workingDir: /app
         command: ["/bin/sh", "-c"]
         args:
@@ -151,7 +151,7 @@ spec:
           - name: steps
             default: "1"
       container:
-        image: python:3.11-slim
+        image: python:3.14-slim
         workingDir: /app
         command: ["/bin/sh", "-c"]
         args:
@@ -270,7 +270,7 @@ spec:
           - name: migrations
             path: /app/db/migrations
       container:
-        image: python:3.11-slim
+        image: python:3.14-slim
         workingDir: /app
         command: ["/bin/sh", "-c"]
         args:
@@ -287,7 +287,7 @@ spec:
         parameters:
           - name: database-key
       container:
-        image: python:3.11-slim
+        image: python:3.14-slim
         workingDir: /app
         command: ["/bin/sh", "-c"]
         args:
@@ -310,7 +310,7 @@ spec:
           - name: database-key
           - name: environment
       container:
-        image: python:3.11-slim
+        image: python:3.14-slim
         workingDir: /app
         command: ["/bin/sh", "-c"]
         args:
@@ -355,7 +355,7 @@ spec:
     templates:
       - name: drift-check
         container:
-          image: python:3.11-slim
+          image: python:3.14-slim
           command: ["/bin/sh", "-c"]
           args:
             - |

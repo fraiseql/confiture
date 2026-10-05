@@ -15,8 +15,8 @@ from confiture.core.hooks.context import ExecutionContext, HookContext
 logger = logging.getLogger(__name__)
 
 AUDIT_TABLE = "confiture_audit_log"
-AUDIT_DDL = f"""
-CREATE TABLE IF NOT EXISTS {AUDIT_TABLE} (
+AUDIT_DDL = t"""
+CREATE TABLE IF NOT EXISTS {AUDIT_TABLE:i} (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     migration   TEXT NOT NULL,
     direction   TEXT NOT NULL,
@@ -78,22 +78,15 @@ class AuditHook(Hook[ExecutionContext]):
             with psycopg.connect(self._config.database_url) as conn:
                 conn.execute(AUDIT_DDL)
                 conn.execute(
-                    f"""
-                    INSERT INTO {AUDIT_TABLE}
+                    t"""
+                    INSERT INTO {AUDIT_TABLE:i}
                         (migration, direction, environment, executed_by,
                          duration_ms, success, error, signature)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """,  # nosec B608 - AUDIT_TABLE is a module constant; all values are parameter-bound
-                    (
-                        record["migration"],
-                        record["direction"],
-                        record["environment"],
-                        record["executed_by"],
-                        record["duration_ms"],
-                        record["success"],
-                        record["error"],
-                        signature,
-                    ),
+                    VALUES ({record["migration"]}, {record["direction"]},
+                            {record["environment"]}, {record["executed_by"]},
+                            {record["duration_ms"]}, {record["success"]},
+                            {record["error"]}, {signature})
+                    """
                 )
                 conn.commit()
 

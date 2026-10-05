@@ -60,7 +60,7 @@ A production-ready blog API with:
 
 ### Software Requirements
 
-- Python 3.11 or higher
+- Python 3.14 or higher
 - PostgreSQL 14 or higher
 - pip or uv package manager
 

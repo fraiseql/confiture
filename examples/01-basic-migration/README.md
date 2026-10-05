@@ -15,7 +15,7 @@ This example demonstrates the fundamental workflow of using Confiture for Postgr
 
 ## Prerequisites
 
-- Python 3.11 or higher
+- Python 3.14 or higher
 - PostgreSQL 14 or higher
 - Confiture installed: `pip install fraiseql-confiture`
 
