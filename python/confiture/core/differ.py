@@ -407,9 +407,10 @@ def _says_otherwise(old: Constraint, new: Constraint) -> bool:
     actions, and the referenced columns when both sides list them — ``REFERENCES
     p`` with no list means the referenced key, which a database always spells
     out and a tree need not; when it is checked; whether ``NULL`` is a value of a
-    unique key (``NULLS NOT DISTINCT``, which no ``ALTER`` changes in place); and
-    whether it is temporal (#604), which makes it an exclusion over a period. A
-    dropped or re-pointed key lets rows exist that could not before.
+    unique key (``NULLS NOT DISTINCT``, which no ``ALTER`` changes in place);
+    whether it is temporal (#604), which makes it an exclusion over a period; and
+    whether it is enforced. A dropped, re-pointed or unenforced key lets rows exist
+    that could not before.
     """
     return (
         old.columns != new.columns
@@ -419,6 +420,7 @@ def _says_otherwise(old: Constraint, new: Constraint) -> bool:
         or (old.on_delete, old.on_update) != (new.on_delete, new.on_update)
         or old.deferrable != new.deferrable
         or old.temporal != new.temporal
+        or old.enforced != new.enforced
     )
 
 
@@ -947,7 +949,9 @@ class SchemaDiffer:
             # other is the same constraint spelled twice, and telling that apart
             # means resolving the parent's primary key — so reporting it would
             # generate a DROP CONSTRAINT for a constraint that did not change.
-            differs=_fields_differ(("expression",)),
+            # Its enforcement is compared too: PostgreSQL cannot alter a CHECK's,
+            # so a CHECK that stops or starts being enforced is replaced.
+            differs=_fields_differ(("expression", "enforced")),
         )
 
     def _compare_unique_constraints(

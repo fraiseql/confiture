@@ -158,9 +158,12 @@ def constraint_body(constraint: Constraint) -> str | None:
     needs — a CHECK with no expression, a foreign key with no referenced table —
     because writing ``CHECK ()`` produces a migration that fails at apply, and
     inventing the missing half one that succeeds and is wrong. A deferrable
-    constraint says so, and when it is checked.
+    constraint says so, and when it is checked; one PostgreSQL does not enforce
+    says ``NOT ENFORCED``.
     """
     body = _body(constraint)
-    if body is None or constraint.deferrable is None:
-        return body
-    return f"{body} DEFERRABLE INITIALLY {constraint.deferrable.upper()}"
+    if body is None:
+        return None
+    if constraint.deferrable is not None:
+        body = f"{body} DEFERRABLE INITIALLY {constraint.deferrable.upper()}"
+    return body if constraint.enforced else f"{body} NOT ENFORCED"

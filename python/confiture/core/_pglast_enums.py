@@ -68,6 +68,8 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "CONSTR_ATTR_NOT_DEFERRABLE",
         "CONSTR_ATTR_DEFERRED",
         "CONSTR_ATTR_IMMEDIATE",
+        "CONSTR_ATTR_ENFORCED",
+        "CONSTR_ATTR_NOT_ENFORCED",
     ),
     "ObjectType": (
         "OBJECT_TABLE",

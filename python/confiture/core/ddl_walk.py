@@ -1212,11 +1212,16 @@ class ColumnFact:
 
 
 @dataclass(frozen=True)
-class _Deferrable:
-    """A sibling ``DEFERRABLE`` / ``INITIALLY …`` node, for the constraint before it."""
+class _Attribute:
+    """A sibling attribute node, for the constraint before it.
+
+    ``DEFERRABLE`` / ``INITIALLY …`` set the deferral, ``[NOT] ENFORCED`` the
+    enforcement; ``None`` is a node that says nothing of it.
+    """
 
     deferrable: bool | None = None
     initially_deferred: bool | None = None
+    enforced: bool | None = None
 
 
 #: PostgreSQL's referential-action codes. ``ON DELETE`` and ``ON UPDATE`` are
@@ -1328,6 +1333,15 @@ def _deferral(node: Any) -> Deferral | None:
     return "deferred" if getattr(node, "initdeferred", False) else "immediate"
 
 
+def _enforced(node: Any) -> bool:
+    """Whether a CHECK or foreign key node is enforced: only ``NOT ENFORCED`` says no.
+
+    pglast fills ``is_enforced`` on these two kinds alone, and a node built by hand
+    may leave it unset, which is PostgreSQL's default.
+    """
+    return getattr(node, "is_enforced", None) is not False
+
+
 def _covered(nodes: Any, column: str | None) -> tuple[str, ...]:
     """The columns a constraint covers: the ones it names, or the one it sits on."""
     if column is not None:
@@ -1353,6 +1367,7 @@ def _read_foreign_key(node: Any, column: str | None) -> Constraint:
         on_update=_fk_action(node.fk_upd_action),
         deferrable=_deferral(node),
         temporal=bool(node.fk_with_period),
+        enforced=_enforced(node),
     )
 
 
@@ -1365,6 +1380,7 @@ def _read_check(node: Any, _column: str | None) -> Constraint | None:
         name=node.conname or "",
         expression=RawStream()(node.raw_expr),
         deferrable=_deferral(node),
+        enforced=_enforced(node),
     )
 
 
@@ -1440,23 +1456,31 @@ def _read_generated(node: Any, _column: str | None) -> ColumnFact:
     )
 
 
-def _read_deferrable(_node: Any, _column: str | None) -> _Deferrable:
-    return _Deferrable(deferrable=True)
+def _read_deferrable(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(deferrable=True)
 
 
-def _read_not_deferrable(_node: Any, _column: str | None) -> _Deferrable:
-    return _Deferrable(deferrable=False)
+def _read_not_deferrable(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(deferrable=False)
 
 
-def _read_initially_deferred(_node: Any, _column: str | None) -> _Deferrable:
-    return _Deferrable(initially_deferred=True)
+def _read_initially_deferred(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(initially_deferred=True)
 
 
-def _read_initially_immediate(_node: Any, _column: str | None) -> _Deferrable:
-    return _Deferrable(initially_deferred=False)
+def _read_initially_immediate(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(initially_deferred=False)
 
 
-_Read = Constraint | ColumnFact | _Deferrable | None
+def _read_enforced(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(enforced=True)
+
+
+def _read_not_enforced(_node: Any, _column: str | None) -> _Attribute:
+    return _Attribute(enforced=False)
+
+
+_Read = Constraint | ColumnFact | _Attribute | None
 
 #: What each ``ConstrType`` member becomes in the schema model, by member name so
 #: nothing here compares against a literal ordinal (#192). Every name is also in
@@ -1472,13 +1496,15 @@ MODELLED_CONSTRAINTS: dict[str, Callable[[Any, str | None], _Read]] = {
     "CONSTR_DEFAULT": _read_default,
     "CONSTR_IDENTITY": _read_identity,
     "CONSTR_GENERATED": _read_generated,
-    # On a column, deferrability arrives as sibling nodes after the constraint it
-    # qualifies (`DEFERRABLE INITIALLY DEFERRED` is two of them); at table level
-    # the grammar folds it into the constraint's own fields instead.
+    # On a column, deferrability and enforcement arrive as sibling nodes after the
+    # constraint they qualify (`DEFERRABLE INITIALLY DEFERRED` is two of them); at
+    # table level the grammar folds them into the constraint's own fields instead.
     "CONSTR_ATTR_DEFERRABLE": _read_deferrable,
     "CONSTR_ATTR_NOT_DEFERRABLE": _read_not_deferrable,
     "CONSTR_ATTR_DEFERRED": _read_initially_deferred,
     "CONSTR_ATTR_IMMEDIATE": _read_initially_immediate,
+    "CONSTR_ATTR_ENFORCED": _read_enforced,
+    "CONSTR_ATTR_NOT_ENFORCED": _read_not_enforced,
 }
 
 #: The kinds the model does not carry, and why — a table of **reasons**, so a
@@ -1489,13 +1515,6 @@ NOT_MODELLED_CONSTRAINTS: dict[str, str] = {
     "CONSTR_NULL": (
         "an explicit NULL restates the default; a column is nullable already, and "
         "recording it would make `c INT NULL` and `c INT` compare unequal"
-    ),
-    "CONSTR_ATTR_ENFORCED": (
-        "NOT ENFORCED arrives as a sibling node like deferrability, and the model holds "
-        "no enforcement yet; tracked in #603"
-    ),
-    "CONSTR_ATTR_NOT_ENFORCED": (
-        "the other half of the ENFORCED pair: the model holds no enforcement yet; tracked in #603"
     ),
 }
 
@@ -1517,32 +1536,30 @@ def read_constraint(node: Any, *, column: str | None = None) -> Constraint | Col
     columns for a form that names none; ``None`` for a constraint written at
     table level or added by ``ALTER TABLE``. ``None`` comes back for a kind the
     model declines (see :data:`NOT_MODELLED_CONSTRAINTS`) and for a lone
-    deferrability node, which qualifies a sibling — read a column's clauses
+    attribute node (deferrability, enforcement), which qualifies a sibling — read a column's clauses
     together with :func:`read_column_constraints`.
     """
     read = _read(node, column)
-    return None if isinstance(read, _Deferrable) else read
+    return None if isinstance(read, _Attribute) else read
 
 
 def model_holds(node: Any) -> bool:
     """Whether what :func:`read_constraint` reads from *node* is all the node says.
 
     The model carries a foreign key's columns, target, actions, deferral and
-    ``PERIOD``. It does not carry a ``MATCH`` other than ``SIMPLE`` (the
-    default), the column list of ``ON DELETE SET NULL (…)``, or ``NOT
-    ENFORCED``: a key rewritten from the model would silently lose them.
+    ``PERIOD`` and enforcement. It does not carry a ``MATCH`` other than ``SIMPLE``
+    (the default) or the column list of ``ON DELETE SET NULL (…)``: a key rewritten
+    from the model would silently lose them.
     """
     if getattr(node, "pktable", None) is None:
         return True
-    return (
-        node.fk_matchtype in ("s", "", None)
-        and not node.fk_del_set_cols
-        and getattr(node, "is_enforced", True) is not False
-    )
+    return node.fk_matchtype in ("s", "", None) and not node.fk_del_set_cols
 
 
-def _deferred(constraint: Constraint, attribute: _Deferrable) -> Constraint:
-    """*constraint* as a sibling ``DEFERRABLE`` / ``INITIALLY …`` node leaves it."""
+def _qualified(constraint: Constraint, attribute: _Attribute) -> Constraint:
+    """*constraint* as a sibling attribute node leaves it."""
+    if attribute.enforced is not None:
+        constraint = replace(constraint, enforced=attribute.enforced)
     deferrable = constraint.deferrable is not None
     initially = constraint.deferrable == "deferred"
     if attribute.deferrable is not None:
@@ -1559,7 +1576,7 @@ def _deferred(constraint: Constraint, attribute: _Deferrable) -> Constraint:
 def read_column_constraints(coldef: Any) -> tuple[ColumnFact, tuple[Constraint, ...]]:
     """Every clause written on one column: what it says of the column, and of the table.
 
-    The clauses are read in order, because a deferrability node qualifies the
+    The clauses are read in order, because an attribute node qualifies the
     constraint written before it. ``is_not_null`` and ``raw_default`` — the
     fields a ``ColumnDef`` built by hand may carry instead of clause nodes — are
     read too.
@@ -1578,8 +1595,8 @@ def read_column_constraints(coldef: Any) -> tuple[ColumnFact, tuple[Constraint, 
             fact = fact.merged(read)
         elif isinstance(read, Constraint):
             constraints.append(read)
-        elif isinstance(read, _Deferrable) and constraints:
-            constraints[-1] = _deferred(constraints[-1], read)
+        elif isinstance(read, _Attribute) and constraints:
+            constraints[-1] = _qualified(constraints[-1], read)
     return fact, tuple(constraints)
 
 

@@ -257,6 +257,10 @@ class Constraint:
     uniqueness — two rows may share the other keys when their periods do not
     overlap — so a temporal key and a plain one on the same columns are two
     constraints.
+
+    ``enforced`` is false for a CHECK or foreign key declared ``NOT ENFORCED``
+    (PostgreSQL 18): the database then guarantees nothing it says. Every other
+    constraint, and every one a server before 18 holds, is enforced.
     """
 
     kind: ConstraintKind
@@ -274,6 +278,7 @@ class Constraint:
     key_options: tuple[str, ...] = ()
     nulls_not_distinct: bool = False
     temporal: bool = False
+    enforced: bool = True
 
 
 @dataclass(frozen=True)
@@ -826,7 +831,11 @@ def _relation_from(data: dict[str, Any] | str | None) -> RelationName | None:
 
 
 def _constraint_from(data: dict[str, Any]) -> Constraint:
-    """A constraint from its wire; one written before EXCLUDE was modelled reads without it."""
+    """A constraint from its wire.
+
+    One written before EXCLUDE was modelled reads without it, and one written
+    before enforcement was reads as enforced: the model's default.
+    """
     return Constraint(
         **{
             **data,

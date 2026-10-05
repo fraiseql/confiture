@@ -147,6 +147,19 @@ CREATE TABLE c (
     CONSTRAINT c_fk FOREIGN KEY (id, PERIOD valid) REFERENCES p (id, PERIOD valid)
 );
 """,
+    "inline_not_enforced": """\
+CREATE TABLE b (
+    id int PRIMARY KEY,
+    org_id bigint REFERENCES org (id) NOT ENFORCED DEFERRABLE NOT NULL
+);
+""",
+    "table_level_not_enforced": """\
+CREATE TABLE b (
+    id int PRIMARY KEY,
+    org_id bigint,
+    CONSTRAINT b_org FOREIGN KEY (org_id) REFERENCES org (id) NOT ENFORCED
+);
+""",
 }
 
 

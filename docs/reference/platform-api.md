@@ -462,6 +462,10 @@ uniqueness — two rows may share the other keys when their periods do not
 overlap — so a temporal key and a plain one on the same columns are two
 constraints.
 
+`enforced` is false for a CHECK or foreign key declared `NOT ENFORCED`
+(PostgreSQL 18): the database then guarantees nothing it says. Every other
+constraint, and every one a server before 18 holds, is enforced.
+
 | Field | Type | Default |
 |---|---|---|
 | `kind` | `ConstraintKind` | required |
@@ -478,6 +482,7 @@ constraints.
 | `where` | `str \| None` | `None` |
 | `key_options` | `tuple[str, ...]` | `()` |
 | `temporal` | `bool` | `False` |
+| `enforced` | `bool` | `True` |
 
 ### `Index`
 
