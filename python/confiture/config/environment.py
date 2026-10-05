@@ -896,6 +896,10 @@ def _normalize_acls(data: dict[str, Any]) -> None:
         data["acls"] = acl_block.get("expectations", [])
 
 
+#: The ``db/project.yaml`` blocks an environment file refuses: facts about the schema.
+_PROJECT_FACTS = ("tenancy", "soft_delete")
+
+
 class Environment(BaseModel):
     """Environment configuration
 
@@ -1007,18 +1011,19 @@ class Environment(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _reject_project_facts(cls, data: Any) -> Any:
-        """Refuse ``tenancy:`` here: it describes the schema, not one environment.
+        """Refuse ``tenancy:`` and ``soft_delete:`` here: they describe the schema.
 
-        Pydantic would ignore it as an unknown key, and an environment that
-        carried it would look tenant-scoped while no tenant rule ran. It lives
-        once, in ``db/project.yaml``.
+        Pydantic would ignore either as an unknown key, and an environment that
+        carried one would look tenant-scoped, or soft-deleting, while no rule of
+        the family ran. They live once, in ``db/project.yaml``.
         """
-        if isinstance(data, dict) and "tenancy" in data:
-            raise ConfigurationError(
-                "'tenancy' is a fact about the schema, not about one environment: "
-                "move it to db/project.yaml, where every environment reads it.",
-                error_code="CONFIG_010",
-            )
+        for key in _PROJECT_FACTS:
+            if isinstance(data, dict) and key in data:
+                raise ConfigurationError(
+                    f"'{key}' is a fact about the schema, not about one environment: "
+                    "move it to db/project.yaml, where every environment reads it.",
+                    error_code="CONFIG_010",
+                )
         return data
 
     @field_validator("database_url", "scratch_url")

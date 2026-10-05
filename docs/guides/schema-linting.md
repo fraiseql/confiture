@@ -67,6 +67,7 @@ confiture lint
 | **Qualification** | A `CREATE` says which schema it lands in | `qual_001` routines (on), `qual_002` relations and types (opt-in) — see [lint-rules.md](../reference/lint-rules.md) |
 | **Structure** | Best practices | Primary keys, timestamps |
 | **Tenancy** | Rows belong to one tenant, and no key crosses tenants | `tenant_001`–`tenant_005`, on when `db/project.yaml` declares `tenancy:` — see [multi-tenant schemas](multi-tenant-schemas.md) |
+| **Soft delete** | A unique key does not keep reserving a deleted row's value | `softdel_001`–`softdel_002`, on when `db/project.yaml` declares `soft_delete:` — see [lint-rules.md](../reference/lint-rules.md#the-softdel-family-unique-keys-on-a-table-that-soft-deletes) |
 | **Security** | Prevent vulnerabilities | PII encryption, weak constraints |
 | **Performance** | Optimize queries | Missing indices, N+1 patterns |
 | **Compliance** | Meet regulations | Data retention, audit trails |
@@ -148,6 +149,19 @@ key crosses tenants (`tenant_004`), and every unique key contains it
 (`tenant_005`). Without the block the family is off, and selecting it reports it
 *skipped*. The [multi-tenant schemas guide](multi-tenant-schemas.md) explains the
 design and how to move an existing schema to it.
+
+### The `softdel` family
+
+A project whose tables soft-delete names the tombstone column in `db/project.yaml`
+(`soft_delete:`, `column: deleted_at` by default), and from then on every
+`confiture lint` judges the unique keys of each table that has the column: a key
+that does not exclude deleted rows keeps reserving their values (`softdel_001`,
+warning, with the partial-index rewrite), and a key over a nullable column without
+`NULLS NOT DISTINCT` lets two `NULL`s through (`softdel_002`, info). A value that
+must stay reserved is waived with `-- confiture:softdel-keep-reserved` above the
+statement that writes the key; the
+[rule reference](../reference/lint-rules.md#the-softdel-family-unique-keys-on-a-table-that-soft-deletes)
+gives the details.
 
 ### The `qual` family
 

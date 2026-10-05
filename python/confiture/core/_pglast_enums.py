@@ -92,6 +92,8 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_FOREIGN_TABLE",
     ),
     "SetOperation": ("SETOP_NONE",),
+    "BoolExprType": ("AND_EXPR",),
+    "NullTestType": ("IS_NULL",),
     "TableLikeOption": (
         "CREATE_TABLE_LIKE_DEFAULTS",
         "CREATE_TABLE_LIKE_IDENTITY",

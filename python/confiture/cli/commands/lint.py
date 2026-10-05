@@ -478,7 +478,8 @@ def _emit_rule_catalogue(format_type: str, output: Path | None) -> None:
 
     table = Table(title="confiture lint rules", show_lines=False)
     table.add_column("Code", style="cyan")
-    table.add_column("Family", style="magenta")
+    # A family is a selector the operator types: never cut it short.
+    table.add_column("Family", style="magenta", no_wrap=True)
     table.add_column("Severity")
     table.add_column("Default")
     table.add_column("Description")
