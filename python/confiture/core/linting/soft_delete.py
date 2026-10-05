@@ -34,8 +34,8 @@ waives: ``-- confiture:softdel-keep-reserved tb_order_line_code_key`` (an unname
 key by the name PostgreSQL gives it).
 
 A key is judged on the table the tree ends with — the model's: an index a later
-``DROP INDEX`` drops is not judged — and a child table reads the columns it
-inherits.
+``DROP INDEX`` drops, or a constraint a later ``DROP CONSTRAINT`` drops, is not
+judged — and a child table reads the columns it inherits.
 """
 
 import bisect

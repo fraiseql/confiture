@@ -146,3 +146,22 @@ def test_the_issues_exclusion_constraint_reads_back_as_itself(
     )
     parsed, live = _parity_of(sql, fresh_database_factory)
     assert live == parsed, _explain(parsed, live)
+
+
+def test_a_dropped_constraint_reads_back_as_absent(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """#624: the keys a later ``DROP CONSTRAINT`` drops, a primary key's among them."""
+    sql = (
+        "CREATE TABLE tb_code (id INT, code TEXT, kind TEXT,"
+        " CONSTRAINT tb_code_pkey PRIMARY KEY (id),"
+        " CONSTRAINT tb_code_code_key UNIQUE (code),"
+        " CONSTRAINT tb_code_kind_check CHECK (kind <> ''));\n"
+        "ALTER TABLE tb_code DROP CONSTRAINT tb_code_code_key;\n"
+        "ALTER TABLE tb_code DROP CONSTRAINT tb_code_pkey,"
+        " ADD CONSTRAINT tb_code_pkey PRIMARY KEY (id, kind);\n"
+    )
+    parsed, live = _parity_of(sql, fresh_database_factory)
+    (table,) = parsed["tables"]
+    assert [c["kind"] for c in table["constraints"]] == ["check", "primary_key"], parsed
+    assert live == parsed, _explain(parsed, live)

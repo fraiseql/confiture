@@ -229,3 +229,11 @@ def test_the_message_speaks_of_containing_the_discriminator(tmp_path: Path) -> N
     (finding,), _ = _keys(tmp_path, _table(", PRIMARY KEY (tenant_id, id), UNIQUE (email)"))
 
     assert "does not contain tenant_id" in finding.message
+
+
+def test_a_key_dropped_later_is_not_judged(tmp_path: Path) -> None:
+    """#624: the key ``ALTER TABLE … DROP CONSTRAINT`` drops is not one the table holds."""
+    sql = _table(", PRIMARY KEY (tenant_id, id), CONSTRAINT tb_user_email_key UNIQUE (email)")
+    found, _ = _keys(tmp_path, sql + "ALTER TABLE app.tb_user DROP CONSTRAINT tb_user_email_key;\n")
+
+    assert found == []
