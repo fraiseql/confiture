@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-10-05
+
+**One interpreter, and what confiture executes or prints is a template.** confiture
+now requires Python 3.14 (⚠️; a 3.11–3.13 user stays on 1.29.x) and pglast 8.1 (⚠️),
+ships one cp314 wheel per platform, and composes every statement it executes, and
+every line it prints, as a template string: a value is a bound parameter or data by
+construction. The backup hook lets `pg_dump` compress with zstd and write the file
+itself (⚠️ default suffix `.sql.zst`). New: `softdel_001`/`softdel_002` (#597) and
+`build --list-files --compare-to` (#580). CI runs on PostgreSQL 16 and 18.
+
 ### Added
 
 - **`build --list-files --compare-to <ref>` proves a renumbering kept the build order** (#580).
