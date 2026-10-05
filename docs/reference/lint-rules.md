@@ -539,7 +539,7 @@ by then; others are resolved when they are first used:
 | a `LANGUAGE sql … BEGIN ATOMIC` body, always | |
 | a column `DEFAULT`, a `CHECK`, a generated column, an index expression | |
 | a trigger's `EXECUTE FUNCTION`; the table an index, trigger or `ALTER TABLE` is on | |
-| a `REFERENCES`, an `INHERITS` | a `REFERENCES` in a `CREATE TABLE` when `build.two_pass` moves it to the end (a `MATCH FULL`, `SET NULL (col)` or `NOT ENFORCED` key stays put, and resolves when the statement runs) |
+| a `REFERENCES`, an `INHERITS` | a `REFERENCES` in a `CREATE TABLE` when `build.two_pass` moves it to the end (a `MATCH FULL` or `SET NULL (col)` key stays put, and resolves when the statement runs) |
 
 So the same helper fails the build written `LANGUAGE sql` in a directory that
 loads before its table, and builds written `LANGUAGE plpgsql`:

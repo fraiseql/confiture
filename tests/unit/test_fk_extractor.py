@@ -142,6 +142,19 @@ CREATE TABLE b (
     org_id bigint REFERENCES org (id)
 );
 """,
+    "inline_not_enforced": """\
+CREATE TABLE b (
+    id int PRIMARY KEY,
+    org_id bigint REFERENCES org (id) NOT ENFORCED DEFERRABLE NOT NULL
+);
+""",
+    "table_level_not_enforced": """\
+CREATE TABLE b (
+    id int PRIMARY KEY,
+    org_id bigint,
+    CONSTRAINT b_org FOREIGN KEY (org_id) REFERENCES org (id) NOT ENFORCED
+);
+""",
 }
 
 

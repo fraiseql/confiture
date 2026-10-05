@@ -400,8 +400,8 @@ def _says_otherwise(old: Constraint, new: Constraint) -> bool:
     Its columns; for a foreign key, the table it references, its referential
     actions, and the referenced columns when both sides list them — ``REFERENCES
     p`` with no list means the referenced key, which a database always spells
-    out and a tree need not; and when it is checked. A dropped or re-pointed key
-    lets rows exist that could not before.
+    out and a tree need not; when it is checked; and whether it is enforced. A
+    dropped, re-pointed or unenforced key lets rows exist that could not before.
     """
     return (
         old.columns != new.columns
@@ -409,6 +409,7 @@ def _says_otherwise(old: Constraint, new: Constraint) -> bool:
         or bool(old.ref_columns and new.ref_columns and old.ref_columns != new.ref_columns)
         or (old.on_delete, old.on_update) != (new.on_delete, new.on_update)
         or old.deferrable != new.deferrable
+        or old.enforced != new.enforced
     )
 
 
@@ -937,7 +938,9 @@ class SchemaDiffer:
             # other is the same constraint spelled twice, and telling that apart
             # means resolving the parent's primary key — so reporting it would
             # generate a DROP CONSTRAINT for a constraint that did not change.
-            differs=_fields_differ(("expression",)),
+            # Its enforcement is compared too: PostgreSQL cannot alter a CHECK's,
+            # so a CHECK that stops or starts being enforced is replaced.
+            differs=_fields_differ(("expression", "enforced")),
         )
 
     def _compare_unique_constraints(

@@ -249,6 +249,10 @@ class Constraint:
     on :class:`Index`; ``operators`` runs alongside too, the operator each element
     is compared with (``&&``, ``OPERATOR(pg_catalog.=)``). ``method`` is its index
     access method and ``where`` its partial predicate, rendered.
+
+    ``enforced`` is false for a CHECK or foreign key declared ``NOT ENFORCED``
+    (PostgreSQL 18): the database then guarantees nothing it says. Every other
+    constraint, and every one a server before 18 holds, is enforced.
     """
 
     kind: ConstraintKind
@@ -264,6 +268,7 @@ class Constraint:
     method: str | None = None
     where: str | None = None
     key_options: tuple[str, ...] = ()
+    enforced: bool = True
 
 
 @dataclass(frozen=True)
@@ -813,7 +818,11 @@ def _relation_from(data: dict[str, Any] | str | None) -> RelationName | None:
 
 
 def _constraint_from(data: dict[str, Any]) -> Constraint:
-    """A constraint from its wire; one written before EXCLUDE was modelled reads without it."""
+    """A constraint from its wire.
+
+    One written before EXCLUDE was modelled reads without it, and one written
+    before enforcement was reads as enforced: the model's default.
+    """
     return Constraint(
         **{
             **data,

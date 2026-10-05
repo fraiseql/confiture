@@ -455,6 +455,10 @@ on `Index`; `operators` runs alongside too, the operator each element
 is compared with (`&&`, `OPERATOR(pg_catalog.=)`). `method` is its index
 access method and `where` its partial predicate, rendered.
 
+`enforced` is false for a CHECK or foreign key declared `NOT ENFORCED`
+(PostgreSQL 18): the database then guarantees nothing it says. Every other
+constraint, and every one a server before 18 holds, is enforced.
+
 | Field | Type | Default |
 |---|---|---|
 | `kind` | `ConstraintKind` | required |
@@ -470,6 +474,7 @@ access method and `where` its partial predicate, rendered.
 | `method` | `str \| None` | `None` |
 | `where` | `str \| None` | `None` |
 | `key_options` | `tuple[str, ...]` | `()` |
+| `enforced` | `bool` | `True` |
 
 ### `Index`
 
