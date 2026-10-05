@@ -113,6 +113,15 @@ def column_definition(column: Column) -> str:
     return column_body(column)
 
 
+def _temporal(constraint: Constraint) -> dict[str, Any]:
+    """``{"temporal": true}`` on a temporal key (#604), nothing on a plain one.
+
+    Said only where it holds, so a plain key's wire is what it was before
+    temporal keys were modelled.
+    """
+    return {"temporal": True} if constraint.temporal else {}
+
+
 def _foreign_key_detail(fk: Constraint) -> dict[str, Any]:
     return {
         "kind": "FOREIGN KEY",
@@ -126,11 +135,12 @@ def _foreign_key_detail(fk: Constraint) -> dict[str, Any]:
         "ref_columns": list(fk.ref_columns),
         "on_delete": fk.on_delete,
         "on_update": fk.on_update,
+        **_temporal(fk),
     }
 
 
 def _unique_detail(uc: Constraint) -> dict[str, Any]:
-    return {"kind": "UNIQUE", "name": uc.name, "columns": list(uc.columns)}
+    return {"kind": "UNIQUE", "name": uc.name, "columns": list(uc.columns), **_temporal(uc)}
 
 
 def _check_detail(cc: Constraint) -> dict[str, Any]:
@@ -146,7 +156,7 @@ def _table_details(table: Table) -> dict[str, Any]:
     the column so that a composite one has somewhere to go.
     """
     constraints: list[dict[str, Any]] = [
-        {"kind": "PRIMARY KEY", "name": pk.name, "columns": list(pk.columns)}
+        {"kind": "PRIMARY KEY", "name": pk.name, "columns": list(pk.columns), **_temporal(pk)}
         for pk in primary_keys(table)
     ]
     constraints.extend(_foreign_key_detail(fk) for fk in table.constraints_of("foreign_key"))
@@ -570,7 +580,7 @@ class CheckConstraintDropped(_OnTable):
 
 
 def _unique_wire(uc: Constraint) -> dict[str, Any]:
-    return {"name": uc.name, "columns": list(uc.columns)}
+    return {"name": uc.name, "columns": list(uc.columns), **_temporal(uc)}
 
 
 @dataclass(frozen=True)

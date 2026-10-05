@@ -163,3 +163,44 @@ def test_a_dropped_constraint_reads_back_as_absent(
     (table,) = parsed["tables"]
     assert [c["kind"] for c in table["constraints"]] == ["check", "primary_key"], parsed
     assert live == parsed, _explain(parsed, live)
+
+
+TEMPORAL_KEYS = """
+CREATE TABLE p (
+    id INT4RANGE,
+    valid DATERANGE,
+    CONSTRAINT p_pkey PRIMARY KEY (id, valid WITHOUT OVERLAPS)
+);
+CREATE TABLE u (
+    id INT4RANGE,
+    valid DATERANGE,
+    UNIQUE (id, valid WITHOUT OVERLAPS),
+    UNIQUE (id, valid)
+);
+CREATE TABLE q (id INT4RANGE, valid DATERANGE, UNIQUE (id, valid));
+CREATE TABLE c (
+    id INT4RANGE,
+    valid DATERANGE,
+    CONSTRAINT c_fk FOREIGN KEY (id, PERIOD valid) REFERENCES p (id, PERIOD valid),
+    FOREIGN KEY (id, valid) REFERENCES q (id, valid)
+);
+"""
+
+
+def test_a_temporal_key_reads_back_as_itself(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """#604: ``WITHOUT OVERLAPS`` and ``PERIOD``, beside the plain key on the same columns.
+
+    PostgreSQL 18 is the first server that can hold one; on an older server the
+    statement is a syntax error and there is nothing to read back.
+    """
+    url = fresh_database_factory("confiture_parity")
+    with psycopg.connect(url, autocommit=True) as conn:
+        (version,) = conn.execute("SHOW server_version_num").fetchone() or ("0",)
+    if int(version) < 180000:
+        pytest.skip("temporal keys need PostgreSQL 18")
+    parsed, live = _parity_of(TEMPORAL_KEYS, fresh_database_factory)
+    temporal = [c["kind"] for t in parsed["tables"] for c in t["constraints"] if c["temporal"]]
+    assert sorted(temporal) == ["foreign_key", "primary_key", "unique"], parsed
+    assert live == parsed, _explain(parsed, live)

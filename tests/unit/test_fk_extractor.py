@@ -140,6 +140,13 @@ CREATE TABLE b (
     org_id bigint REFERENCES org (id)
 );
 """,
+    "table_level_temporal": """\
+CREATE TABLE c (
+    id int4range,
+    valid daterange,
+    CONSTRAINT c_fk FOREIGN KEY (id, PERIOD valid) REFERENCES p (id, PERIOD valid)
+);
+""",
 }
 
 

@@ -60,8 +60,19 @@ def named(name: str, body: str) -> str:
     return f"CONSTRAINT {quote_identifier(name)} {body}" if name else body
 
 
-def _columns(names: tuple[str, ...]) -> str:
-    return ", ".join(quote_identifier(name) for name in names)
+def _columns(constraint: Constraint, names: tuple[str, ...]) -> str:
+    """A key's column list; a temporal key's last column is its period.
+
+    ``(id, valid WITHOUT OVERLAPS)`` for a PRIMARY KEY or UNIQUE, ``(id, PERIOD
+    valid)`` for either side of a foreign key: PostgreSQL 18 puts the period last.
+    """
+    written = [quote_identifier(name) for name in names]
+    if constraint.temporal and written:
+        if constraint.kind == "foreign_key":
+            written[-1] = f"PERIOD {written[-1]}"
+        else:
+            written[-1] = f"{written[-1]} WITHOUT OVERLAPS"
+    return ", ".join(written)
 
 
 def relation(name: RelationName) -> str:
@@ -81,7 +92,7 @@ def references(fk: Constraint) -> str | None:
     if fk.ref_table is None:
         return None
     target = relation(fk.ref_table)
-    clause = f"{target} ({_columns(fk.ref_columns)})" if fk.ref_columns else target
+    clause = f"{target} ({_columns(fk, fk.ref_columns)})" if fk.ref_columns else target
     for keyword, action in (("ON DELETE", fk.on_delete), ("ON UPDATE", fk.on_update)):
         if action:
             clause += f" {keyword} {action}"
@@ -123,14 +134,17 @@ def _body(constraint: Constraint) -> str | None:
             reference = references(constraint)
             if not constraint.columns or reference is None:
                 return None
-            return f"FOREIGN KEY ({_columns(constraint.columns)}) REFERENCES {reference}"
+            columns = _columns(constraint, constraint.columns)
+            return f"FOREIGN KEY ({columns}) REFERENCES {reference}"
         case "check":
             return f"CHECK ({constraint.expression})" if constraint.expression else None
         case "unique" | "primary_key":
             keyword = "UNIQUE" if constraint.kind == "unique" else "PRIMARY KEY"
+            if not constraint.columns:
+                return None
             if constraint.nulls_not_distinct:
                 keyword += " NULLS NOT DISTINCT"
-            return f"{keyword} ({_columns(constraint.columns)})" if constraint.columns else None
+            return f"{keyword} ({_columns(constraint, constraint.columns)})"
         case "exclusion":
             return _exclusion(constraint)
     return None

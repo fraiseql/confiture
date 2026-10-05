@@ -250,6 +250,13 @@ class Constraint:
 
     ``nulls_not_distinct`` is a ``UNIQUE … NULLS NOT DISTINCT``: two rows holding
     ``NULL`` in a key column collide. No other kind can say it.
+
+    ``temporal`` is set on a PRIMARY KEY or UNIQUE whose last key is ``WITHOUT
+    OVERLAPS``, and on a foreign key whose last column pair is ``PERIOD``
+    (PostgreSQL 18): such a key is an exclusion over its period, not a btree
+    uniqueness — two rows may share the other keys when their periods do not
+    overlap — so a temporal key and a plain one on the same columns are two
+    constraints.
     """
 
     kind: ConstraintKind
@@ -266,6 +273,7 @@ class Constraint:
     where: str | None = None
     key_options: tuple[str, ...] = ()
     nulls_not_distinct: bool = False
+    temporal: bool = False
 
 
 @dataclass(frozen=True)
