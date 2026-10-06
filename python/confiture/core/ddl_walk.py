@@ -217,10 +217,15 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
 
 
 class TViewOptions(TypedDict, total=False):
-    """pg_tviews' ``options`` keys a tree can pin; a key it does not pin is absent."""
+    """pg_tviews' ``options`` keys a tree can pin; a key it does not pin is absent.
+
+    ``uncascaded_policy`` is passed in ``options`` too, though pg_tviews stores it
+    beside them (``tviews.registry.uncascaded_policy``).
+    """
 
     logged: bool
     fillfactor: int
+    uncascaded_policy: str
 
 
 def tview_options(stmt: Any) -> TViewOptions:
@@ -397,6 +402,10 @@ def _options_passed(arg: Any) -> TViewOptions:
     fillfactor = passed.get("fillfactor")
     if isinstance(fillfactor, int) and not isinstance(fillfactor, bool):
         options["fillfactor"] = fillfactor
+    # Kept as written, a value pg_tviews refuses included: the generated call then
+    # fails where pg_tviews names the values it accepts.
+    if isinstance(policy := passed.get("uncascaded_policy"), str):
+        options["uncascaded_policy"] = policy
     return options
 
 

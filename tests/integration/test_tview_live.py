@@ -64,12 +64,12 @@ def test_a_database_without_pg_tviews_has_none(fresh_database: str) -> None:
 
 def test_the_model_holds_the_tview_and_not_its_parts(tview_database: str) -> None:
     with psycopg.connect(tview_database) as conn:
-        model = live_catalog.read(conn, schemas=["public"], views=True, triggers=True)
+        model = live_catalog.read(conn, schemas=["public", "tviews"], views=True, triggers=True)
 
     assert list(model.tviews) == [ref_for("tview", "public", "tv_post")]
     assert isinstance(model.tviews[ref_for("tview", "public", "tv_post")], TView)
     assert ref_for("table", "public", "tv_post") not in model.tables
-    assert ref_for("view", "public", "v_post") not in model.views
+    assert dict(model.views) == {}
     assert [t.name for t in model.triggers.values()] == []
 
 
@@ -85,24 +85,137 @@ def _drift(url: str, ddl: str) -> list[tuple[str, str, str]]:
     return sorted((i.drift_type.value, i.severity.value, i.object_name) for i in report.drift_items)
 
 
-def test_a_view_that_took_a_stale_backing_views_name_is_the_trees(tview_database: str) -> None:
-    """The registry names the backing view; ``v_<entity>`` by name is only a guess.
+def _registry_has(conn: psycopg.Connection, column: str) -> bool:
+    return bool(
+        conn.execute(
+            "SELECT 1 FROM pg_attribute WHERE attrelid = 'tviews.registry'::regclass"
+            " AND attname = %s AND NOT attisdropped",
+            (column,),
+        ).fetchone()
+    )
 
-    Once ``v_post`` is dropped, the registration is stale (``view`` is NULL) and a
-    view the author creates under that name is theirs, read like any other view.
+
+def test_an_application_view_named_like_the_entity_is_the_trees(tview_database: str) -> None:
+    """The registry names the backing view, which pg_tviews keeps in ``tviews``.
+
+    ``v_<entity>`` is the application's query view in fraiseql's convention, so
+    pg_tviews 0.1.0-beta.25 freed the name (fraiseql/pg_tviews#181): a ``v_post``
+    created beside a live TVIEW is a view of the tree's, read like any other.
     """
     with psycopg.connect(tview_database, autocommit=True) as conn:
-        if not conn.execute(
-            "SELECT 1 FROM pg_attribute WHERE attrelid = 'tviews.registry'::regclass"
-            " AND attname = 'view'"
-        ).fetchone():
-            pytest.skip("this pg_tviews' registry has no `view` column (fraiseql/pg_tviews#153)")
-        conn.execute("DROP VIEW v_post")
+        backing = conn.execute(
+            "SELECT n.nspname FROM tviews.registry r"
+            " JOIN pg_class c ON c.oid = r.view JOIN pg_namespace n ON n.oid = c.relnamespace"
+        ).fetchone()
+        if backing is None or backing[0] == "public":
+            pytest.skip("this pg_tviews keeps its backing view in the application's schema")
         conn.execute("CREATE VIEW v_post AS SELECT 1 AS mine")
+        model = live_catalog.read(conn, schemas=["public", "tviews"], views=True)
+
+    # Read with `tviews` too: the backing view there is the TVIEW's part, folded.
+    assert list(model.tviews) == [ref_for("tview", "public", "tv_post")]
+    assert list(model.views) == [ref_for("view", "public", "v_post")]
+
+
+OWN_VIEW = f"{TREE}CREATE VIEW v_post AS SELECT data FROM tv_post;\n"
+
+
+def test_a_tree_that_declares_its_own_entity_view_has_no_drift(
+    fresh_database_factory: Callable[[str], str],
+) -> None:
+    """``tv_post`` and the application's ``v_post`` over it, built: one TVIEW and one view."""
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        try:
+            conn.execute(OWN_VIEW)
+        except psycopg.errors.DuplicateTable:
+            pytest.skip("this pg_tviews keeps its backing view as public.v_post (pg_tviews#181)")
         model = live_catalog.read(conn, schemas=["public"], views=True)
 
     assert list(model.tviews) == [ref_for("tview", "public", "tv_post")]
-    assert ref_for("view", "public", "v_post") in model.views
+    assert [ref.name for ref in model.views] == ["v_post"]
+    assert _drift(url, OWN_VIEW) == []
+
+
+UNCASCADED = """
+CREATE TABLE tb_label (k int PRIMARY KEY, v text);
+CREATE TABLE tb_user (pk_user bigint PRIMARY KEY, id uuid NOT NULL UNIQUE, name text);
+SELECT tviews.pg_tviews_create_or_replace('tv_user', $q$
+SELECT u.pk_user, u.id, jsonb_build_object('label', (SELECT v FROM tb_label LIMIT 1)) AS data
+FROM tb_user u$q$, options => '{"uncascaded_policy": "full_refresh"}');
+"""
+
+
+@pytest.fixture
+def uncascaded_database(fresh_database_factory: Callable[[str], str]) -> str:
+    """A TVIEW reading a table no cascade reaches, which declares what such a write does."""
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        if not conn.execute(
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'pg_tviews'"
+        ).fetchone():
+            pytest.skip("pg_tviews is not installed on this server (the pg-tviews CI leg has it)")
+        create_supported_pg_tviews(conn)
+        if not _registry_has(conn, "uncascaded_policy"):
+            pytest.skip("this pg_tviews has no uncascaded_policy (0.1.0-beta.25)")
+        conn.execute(UNCASCADED)
+    return url
+
+
+def test_the_live_side_reads_the_uncascaded_policy(uncascaded_database: str) -> None:
+    """``tviews.registry.uncascaded_policy``, stored beside ``options`` and not in them."""
+    from confiture.core.schema_model import normalise_for_parity
+
+    with psycopg.connect(uncascaded_database) as conn:
+        live = live_catalog.read(conn, schemas=["public"])
+
+    (found,) = live.tviews.values()
+    assert found.uncascaded_policy == "full_refresh"
+    assert (
+        normalise_for_parity(live).tviews
+        == normalise_for_parity(read_text(UNCASCADED).model).tviews
+    )
+    assert _drift(uncascaded_database, UNCASCADED) == []
+
+
+def test_a_policy_changed_on_the_database_is_drift(uncascaded_database: str) -> None:
+    with psycopg.connect(uncascaded_database, autocommit=True) as conn:
+        (definition,) = conn.execute("SELECT query FROM tviews.registry").fetchone()
+        (answer,) = conn.execute(
+            "SELECT tviews.pg_tviews_create_or_replace('tv_user', %s,"
+            ' options => \'{"uncascaded_policy": "warn"}\')',
+            (definition,),
+        ).fetchone()
+
+    assert answer == "altered"
+    assert _drift(uncascaded_database, UNCASCADED) == [
+        ("tview_option_mismatch", "warning", "tv_user")
+    ]
+
+
+def test_a_generated_migration_carries_the_policy_the_tree_declares(
+    uncascaded_database: str, fresh_database_factory: Callable[[str], str]
+) -> None:
+    """The call ``migrate diff --generate`` writes builds the TVIEW the tree declares."""
+    from confiture.core.ddl_objects import objects_in
+    from confiture.core.sql_lexer import parse_file
+
+    tview = next(
+        obj for ref, (obj,) in objects_in([parse_file(UNCASCADED)]).items() if ref.kind == "tview"
+    )
+    url = fresh_database_factory("confiture_tv")
+    with psycopg.connect(url, autocommit=True) as conn:
+        create_supported_pg_tviews(conn)
+        conn.execute(UNCASCADED.split("SELECT tviews", maxsplit=1)[0])
+        conn.execute(tview.create_sql)
+        (found,) = live_catalog.tviews(conn, ["public"])
+
+    assert found.uncascaded_policy == "full_refresh"
 
 
 def test_a_database_built_from_its_tree_has_no_drift(tview_database: str) -> None:
@@ -325,19 +438,21 @@ def test_a_database_without_pg_tviews_is_never_refused(
 def test_every_reader_of_a_database_holds_a_tview_as_one_object(tview_database: str) -> None:
     """``introspect`` (the seam) and a bare live read fold a TVIEW as drift does.
 
-    Read as parts, ``tv_post`` is a table and ``v_post`` a view: a tool reading
+    Read as parts, ``tv_post`` is a table and its backing view a view: a tool reading
     the seam, a snapshot, or ``squash``'s check would each see objects the tree
     never declared.
     """
     from confiture.platform import introspect
 
+    # `tviews` read too: from 0.1.0-beta.25 the backing view is there (pg_tviews#181).
+    schemas = ["public", "tviews"]
     for model in (
-        introspect(tview_database, schemas=["public"]),
-        live_catalog.read(psycopg.connect(tview_database), schemas=["public"], views=True),
+        introspect(tview_database, schemas=schemas),
+        live_catalog.read(psycopg.connect(tview_database), schemas=schemas, views=True),
     ):
         assert list(model.tviews) == [ref_for("tview", "public", "tv_post")]
         assert ref_for("table", "public", "tv_post") not in model.tables
-        assert not any(ref.name == "v_post" for ref in model.views)
+        assert dict(model.views) == {}
 
 
 def test_squash_from_build_accepts_a_tree_with_a_tview(

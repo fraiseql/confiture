@@ -143,3 +143,44 @@ def test_set_fillfactor_in_the_tree_is_a_pin_drift_compares() -> None:
     assert [(i.drift_type.value, i.expected, i.actual) for i in found] == [
         ("tview_option_mismatch", "fillfactor = 70", "fillfactor = 85")
     ]
+
+
+POLICY = """
+CREATE TABLE tb_post (pk_post bigint PRIMARY KEY);
+SELECT tviews.pg_tviews_create_or_replace('tv_post', 'SELECT pk_post FROM tb_post',
+    options => '{"uncascaded_policy": "full_refresh"}');
+"""
+
+
+def test_a_pinned_uncascaded_policy_is_compared_with_the_registrys() -> None:
+    """``tviews.registry.uncascaded_policy``, which pg_tviews keeps out of ``options``."""
+    found = compare_pinned(
+        POLICY,
+        live(
+            TView(
+                name="tv_post",
+                schema="public",
+                logged=False,
+                fillfactor=85,
+                uncascaded_policy="warn",
+            )
+        ),
+    )
+
+    assert [(i.drift_type.value, i.expected, i.actual) for i in found] == [
+        (
+            "tview_option_mismatch",
+            'uncascaded_policy = "full_refresh"',
+            'uncascaded_policy = "warn"',
+        )
+    ]
+
+
+def test_a_policy_the_tree_does_not_pin_is_never_drift() -> None:
+    """A ``CREATE TABLE … AS`` takes the session's ``pg_tviews.uncascaded_policy``."""
+    found = compare_pinned(
+        DECLARED,
+        live(TView(name="tv_post", schema="public", uncascaded_policy="warn")),
+    )
+
+    assert found == []

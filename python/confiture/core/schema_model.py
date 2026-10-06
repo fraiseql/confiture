@@ -492,15 +492,20 @@ TVIEWS_SCHEMA = "tviews"
 class TView:
     """A pg_tviews TVIEW: ``CREATE TABLE tv_<entity> AS SELECT …``.
 
-    pg_tviews turns that statement into a table, a backing view ``v_<entity>``
-    and triggers on each base table, and lists it in ``tviews.registry``. The
-    model holds the TVIEW as one object — its relation and its query — and its
-    parts belong to it. ``definition`` is the query as the reader holds it: the
-    DDL's ``SELECT`` rendered, or the registry's ``query``.
+    pg_tviews turns that statement into a table, a backing view in its own
+    ``tviews`` schema and triggers on each base table, and lists it in
+    ``tviews.registry``, whose ``view`` column names the backing view. The model
+    holds the TVIEW as one object — its relation and its query — and its parts
+    belong to it; a ``v_<entity>`` view in the application's schema is the tree's
+    own. ``definition`` is the query as the reader holds it: the DDL's ``SELECT``
+    rendered, or the registry's ``query``.
 
-    ``logged`` and ``fillfactor`` are pg_tviews' ``options`` keys of those names:
-    what the tree pins (``UNLOGGED``, ``WITH (fillfactor = n)``, ``SET LOGGED``),
-    ``None`` where it pins nothing, or what the registry holds, every key set.
+    ``logged`` and ``fillfactor`` are pg_tviews' ``options`` keys of those names,
+    and ``uncascaded_policy`` (``warn``, ``error`` or ``full_refresh``) what a write
+    to a table no cascade reaches does: what the tree pins (``UNLOGGED``, ``WITH
+    (fillfactor = n)``, ``SET LOGGED``, a ``pg_tviews_create_or_replace()`` call's
+    ``options``), ``None`` where it pins nothing, or what the registry holds, every
+    key set.
     """
 
     name: str
@@ -508,14 +513,11 @@ class TView:
     definition: str | None = None
     logged: bool | None = None
     fillfactor: int | None = None
+    uncascaded_policy: str | None = None
 
     @property
     def entity(self) -> str:
         return self.name.removeprefix(TVIEW_PREFIX)
-
-    @property
-    def backing_view(self) -> str:
-        return f"v_{self.entity}"
 
     @property
     def qualified(self) -> str:
@@ -523,7 +525,7 @@ class TView:
 
 
 #: The pg_tviews ``options`` keys a tree can pin, as :class:`TView` holds them.
-TVIEW_OPTIONS = ("logged", "fillfactor")
+TVIEW_OPTIONS = ("logged", "fillfactor", "uncascaded_policy")
 
 
 def tview_ref(tview: TView) -> ObjectRef:
@@ -987,8 +989,8 @@ PARITY_NORMALISATIONS: dict[str, str] = {
     ),
     "tview_defaults": (
         "a TVIEW option the tree does not pin is pg_tviews' to choose, and the registry "
-        "holds every key: a stock pg_tviews creates a TVIEW unlogged with fillfactor 85, "
-        "so those values are no pin, on either side"
+        "holds every key: a stock pg_tviews creates a TVIEW unlogged with fillfactor 85 "
+        "and uncascaded_policy error, so those values are no pin, on either side"
     ),
     "view_definitions": (
         "a view's query is stored as a parse tree and read back through "
@@ -1141,6 +1143,10 @@ def parity_view(view: View, rules: frozenset[str] = ALL_PARITY_RULES) -> View:
 #: ``pg_tviews.unlogged_by_default`` is on, so it is created unlogged.
 _TVIEW_DEFAULT_FILLFACTOR = 85
 
+#: The policy a stock pg_tviews stores for a TVIEW whose create named none: its
+#: ``pg_tviews.uncascaded_policy`` default, ``error`` from 0.1.0-beta.25.
+_TVIEW_DEFAULT_UNCASCADED_POLICY = "error"
+
 
 def parity_tview(tview: TView, rules: frozenset[str] = ALL_PARITY_RULES) -> TView:
     """*tview* as *rules* compare it: an option pg_tviews chose by default is no pin."""
@@ -1151,6 +1157,9 @@ def parity_tview(tview: TView, rules: frozenset[str] = ALL_PARITY_RULES) -> TVie
         tview,
         logged=True if tview.logged else None,
         fillfactor=None if tview.fillfactor == _TVIEW_DEFAULT_FILLFACTOR else tview.fillfactor,
+        uncascaded_policy=None
+        if tview.uncascaded_policy == _TVIEW_DEFAULT_UNCASCADED_POLICY
+        else tview.uncascaded_policy,
     )
 
 

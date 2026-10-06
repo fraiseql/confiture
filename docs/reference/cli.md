@@ -3163,10 +3163,11 @@ Compare the live database schema against expected DDL and/or the configured `acl
 Structural drift compares tables, columns (type, nullability, order), indexes, and — since 1.11.0 —
 the **existence** of views, materialized views, triggers and routines. A pg_tviews TVIEW
 (`CREATE TABLE tv_<entity> AS SELECT …`) is compared as one object: `missing_tview` is critical,
-`extra_tview` info. Its table, its backing `v_<entity>` view and the triggers pg_tviews puts on
-each base table belong to it and are never reported as extra. A storage option the tree pins
-(`UNLOGGED` or `SET LOGGED`, `WITH (fillfactor = n)`) that `tviews.registry` does not hold is
-`tview_option_mismatch` (warning); an option the tree does not pin is never drift. `migrate validate
+`extra_tview` info. Its table, its backing view (the one `tviews.registry.view` names, in the
+`tviews` schema from pg_tviews 0.1.0-beta.25) and the triggers pg_tviews puts on each base table
+belong to it and are never reported as extra; an application `v_<entity>` view is the tree's. An
+option the tree pins (`UNLOGGED` or `SET LOGGED`, `WITH (fillfactor = n)`, a call's
+`uncascaded_policy`) that `tviews.registry` does not hold is `tview_option_mismatch` (warning); an option the tree does not pin is never drift. `migrate validate
 --check-live-drift` runs the same comparison; the two cannot disagree, because they share one detector.
 
 Constraints are compared too (since 1.25.1). A named constraint is paired by its name and an
