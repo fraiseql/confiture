@@ -611,15 +611,20 @@ class TView
 
 A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`.
 
-pg_tviews turns that statement into a table, a backing view `v_<entity>`
-and triggers on each base table, and lists it in `tviews.registry`. The
-model holds the TVIEW as one object — its relation and its query — and its
-parts belong to it. `definition` is the query as the reader holds it: the
-DDL's `SELECT` rendered, or the registry's `query`.
+pg_tviews turns that statement into a table, a backing view in its own
+`tviews` schema and triggers on each base table, and lists it in
+`tviews.registry`, whose `view` column names the backing view. The model
+holds the TVIEW as one object — its relation and its query — and its parts
+belong to it; a `v_<entity>` view in the application's schema is the tree's
+own. `definition` is the query as the reader holds it: the DDL's `SELECT`
+rendered, or the registry's `query`.
 
-`logged` and `fillfactor` are pg_tviews' `options` keys of those names:
-what the tree pins (`UNLOGGED`, `WITH (fillfactor = n)`, `SET LOGGED`),
-`None` where it pins nothing, or what the registry holds, every key set.
+`logged` and `fillfactor` are pg_tviews' `options` keys of those names,
+and `uncascaded_policy` (`warn`, `error` or `full_refresh`) what a write
+to a table no cascade reaches does: what the tree pins (`UNLOGGED`, `WITH
+(fillfactor = n)`, `SET LOGGED`, a `pg_tviews_create_or_replace()` call's
+`options`), `None` where it pins nothing, or what the registry holds, every
+key set.
 
 | Field | Type | Default |
 |---|---|---|
@@ -628,6 +633,7 @@ what the tree pins (`UNLOGGED`, `WITH (fillfactor = n)`, `SET LOGGED`),
 | `definition` | `str \| None` | `None` |
 | `logged` | `bool \| None` | `None` |
 | `fillfactor` | `int \| None` | `None` |
+| `uncascaded_policy` | `str \| None` | `None` |
 
 ## Ordering
 

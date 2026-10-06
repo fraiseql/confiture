@@ -278,6 +278,7 @@ FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("definition", "str | None"),
         ("logged", "bool | None"),
         ("fillfactor", "int | None"),
+        ("uncascaded_policy", "str | None"),
     ),
     "SchemaModel": (
         ("tables", "Mapping[ObjectRef, Table]"),

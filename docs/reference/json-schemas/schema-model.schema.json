@@ -692,14 +692,15 @@
     },
     "TView": {
       "type": "object",
-      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view `v_<entity>` and triggers belong to it. `definition` is the query as the reader holds it. `logged` and `fillfactor` are pg_tviews' `options` keys of those names: what a tree pins, `null` where it pins nothing, or what `tviews.registry` holds, every key set. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none. A TVIEW written before its options were modelled has neither key and pins nothing.",
+      "description": "A pg_tviews TVIEW: `CREATE TABLE tv_<entity> AS SELECT …`, held as one object whose table, backing view (in pg_tviews' `tviews` schema, named by `tviews.registry.view`) and triggers belong to it. `definition` is the query as the reader holds it. `logged` and `fillfactor` are pg_tviews' `options` keys of those names, and `uncascaded_policy` (`warn`, `error` or `full_refresh`) what a write to a table no cascade reaches does: what a tree pins, `null` where it pins nothing, or what `tviews.registry` holds, every key set. `SchemaModel.from_json()` reads a model written before TVIEWs were modelled, which has no `tviews` key, as holding none. A TVIEW written before its options were modelled has none of their keys and pins nothing.",
       "additionalProperties": false,
       "required": [
         "name",
         "schema",
         "definition",
         "logged",
-        "fillfactor"
+        "fillfactor",
+        "uncascaded_policy"
       ],
       "properties": {
         "name": {
@@ -726,6 +727,12 @@
         "fillfactor": {
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "uncascaded_policy": {
+          "type": [
+            "string",
             "null"
           ]
         }

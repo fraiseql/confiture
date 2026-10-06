@@ -301,3 +301,42 @@ def test_a_generated_tview_passes_the_fillfactor_its_tree_set() -> None:
     )
     ((same,),) = called.values()
     assert obj.definition == same.definition
+
+
+POLICY = CALL.replace("$q$);", """$q$, options => '{"uncascaded_policy": "full_refresh"}');""")
+
+
+def test_a_call_pins_the_uncascaded_policy_it_passes() -> None:
+    """pg_tviews 0.1.0-beta.25 takes the key in ``options`` and stores it beside them."""
+    (tview,) = read_text(POLICY).model.tviews.values()
+
+    assert (tview.uncascaded_policy, tview.logged, tview.fillfactor) == ("full_refresh", None, None)
+
+
+@pytest.mark.parametrize("tree", [CTAS, CALL], ids=["ctas", "call"])
+def test_a_tview_that_names_no_policy_pins_none(tree: str) -> None:
+    """``CREATE TABLE … AS`` reads ``pg_tviews.uncascaded_policy``, a session setting: no pin."""
+    (tview,) = read_text(tree).model.tviews.values()
+
+    assert tview.uncascaded_policy is None
+
+
+def test_a_generated_tview_passes_the_uncascaded_policy_its_tree_declares() -> None:
+    """``migrate diff --generate`` writes the call with the policy, beside the storage pins."""
+    from confiture.core.ddl_walk import tview_calls
+
+    tree = POLICY + "ALTER TABLE tv_post SET LOGGED;\n"
+    ((obj,),) = _tracked(tree).values()
+    (call,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
+    assert call.options == {"logged": True, "uncascaded_policy": "full_refresh"}
+    assert obj.create_sql.endswith(
+        """options => '{"logged": true, "uncascaded_policy": "full_refresh"}')"""
+    )
+
+
+def test_a_changed_uncascaded_policy_is_a_change() -> None:
+    from confiture import platform
+
+    warned = POLICY.replace("full_refresh", "warn")
+    assert platform.diff(POLICY, warned).changes != []
+    assert platform.diff(CALL, POLICY).changes != []

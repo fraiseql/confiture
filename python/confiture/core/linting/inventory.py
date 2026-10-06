@@ -704,6 +704,7 @@ def _from_create_table_as(sql: str, stmt: Any, offset: int) -> SchemaObject | No
             definition=RawStream()(stmt.query),
             logged=options.get("logged"),
             fillfactor=options.get("fillfactor"),
+            uncascaded_policy=options.get("uncascaded_policy"),
         )
         return tview
     matview = _relation_object(sql, "matview", stmt.into.rel, offset)
@@ -788,6 +789,7 @@ def tviews_from_calls(sql: str, raw: Any) -> list[SchemaObject]:
             definition=call.query,
             logged=call.options.get("logged"),
             fillfactor=call.options.get("fillfactor"),
+            uncascaded_policy=call.options.get("uncascaded_policy"),
         )
         found.append(tview)
     return found

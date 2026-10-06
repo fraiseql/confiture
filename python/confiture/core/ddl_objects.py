@@ -55,7 +55,7 @@ from confiture.core.linting.inventory import (
 )
 
 # Defined with the rest of the model; re-exported for the callers that name it here.
-from confiture.core.schema_model import TVIEWS_SCHEMA, ObjectRef, Trigger, TView
+from confiture.core.schema_model import TVIEW_OPTIONS, TVIEWS_SCHEMA, ObjectRef, Trigger, TView
 from confiture.core.sql_lexer import ParsedFile
 
 #: Which parse nodes this module turns into objects, and why each one that
@@ -482,6 +482,7 @@ def _repinned(obj: DDLObject, pinned: TViewOptions) -> DDLObject:
         definition=call.query,
         logged=options.get("logged"),
         fillfactor=options.get("fillfactor"),
+        uncascaded_policy=options.get("uncascaded_policy"),
     )
     return tview_object(obj.ref, tview)
 
@@ -546,14 +547,11 @@ def _tview_create(ref: ObjectRef, tview: TView) -> str:
     pg_tviews' read contract 1: the call creates, replaces in place or rebuilds,
     and answers ``unchanged`` when applied again, so the migration re-applies.
     The name is the author's spelling; ``options`` holds what the tree pins
-    (``logged``, ``fillfactor``) and is left out when it pins nothing.
+    (``logged``, ``fillfactor``, ``uncascaded_policy``) and is left out when it
+    pins nothing.
     """
     arguments = [_literal(ref.qualified), _dollar_quoted(tview.definition or "")]
-    options = {
-        key: value
-        for key, value in (("fillfactor", tview.fillfactor), ("logged", tview.logged))
-        if value is not None
-    }
+    options = {key: value for key in TVIEW_OPTIONS if (value := getattr(tview, key)) is not None}
     if options:
         arguments.append(f"options => {_literal(json.dumps(options, sort_keys=True))}")
     return f"SELECT {TVIEWS_SCHEMA}.pg_tviews_create_or_replace({', '.join(arguments)})"

@@ -14,6 +14,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A TVIEW's backing view is the one `tviews.registry.view` names** (fraiseql/pg_tviews#181,
+  fraiseql/pg_tviews#185). From pg_tviews 0.1.0-beta.25 it lives in pg_tviews' own schema as
+  `tviews.<schema>__tv_<entity>`, and an application `v_<entity>` view is an ordinary view of the
+  tree: a tree may declare one beside its `tv_<entity>`, and it is built, compared and diffed
+  like any other view. The name is guessed only against a pg_tviews whose registry has no
+  `view` column, where pg_tviews itself holds `v_<entity>`. ⚠️ `TView.backing_view`, which
+  returned `v_<entity>`, is removed: the registry's `view` is the backing view.
+
+### Added
+
+- **`uncascaded_policy` is a TVIEW option** (fraiseql/pg_tviews#185). A
+  `pg_tviews_create_or_replace()` call's `options => '{"uncascaded_policy": "…"}'` is read into
+  `TView.uncascaded_policy` (the model's wire gains the key), `migrate diff --generate` passes it
+  in the call it writes, and drift compares it with `tviews.registry.uncascaded_policy` as
+  `tview_option_mismatch`. pg_tviews 0.1.0-beta.25 defaults `pg_tviews.uncascaded_policy` to
+  `error`, which refuses at create a TVIEW reading a table no cascade reaches unless it declares a
+  policy; a policy set with `SET pg_tviews.uncascaded_policy` before a `CREATE TABLE … AS` is a
+  session setting confiture does not model, and pins nothing.
+
 ### Fixed
 
 - **A constraint a later `ALTER TABLE … DROP CONSTRAINT` drops is no longer in the model** (#624).

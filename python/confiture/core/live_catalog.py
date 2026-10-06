@@ -411,9 +411,11 @@ def read(
     extension's own routines and views are left out, as its tables are.
 
     A pg_tviews TVIEW (#504) is always read as one object, whoever reads: its
-    parts — the ``tv_*`` table and the backing ``v_*`` view — are left out of the
-    tables and views, because they are the TVIEW's, and the triggers pg_tviews
-    puts on a base table run its own functions and are never read as a user's.
+    parts — the ``tv_*`` table and the backing view ``tviews.registry`` names —
+    are left out of the tables and views, because they are the TVIEW's, and the
+    triggers pg_tviews puts on a base table run its own functions and are never
+    read as a user's. A ``v_<entity>`` view of the application's schema is the
+    tree's own unless the registry names it.
     A database whose pg_tviews offers no read contract confiture knows is
     refused (``CONFIG_014``) rather than read as parts.
     """
@@ -797,12 +799,27 @@ CONTRACT_VERSION = 1
 
 _HAS_CONTRACT = "SELECT to_regprocedure(%s) IS NOT NULL"
 
-#: The registry's ``view`` column, which pg_tviews appended under contract 1: an
-#: earlier contract-1 build has none, and its backing view is the one it creates
-#: beside the table, ``v_<entity>``, found by name. Either is the view's oid, so the
-#: reader's ``search_path`` does not change it.
+#: The registry's ``view`` column, which pg_tviews appended under contract 1, names
+#: the backing view: in pg_tviews' own schema from 0.1.0-beta.25, so a ``v_<entity>``
+#: view beside the table is the tree's (fraiseql/pg_tviews#181). An earlier contract-1
+#: build has no column; its backing view is the one it creates beside the table,
+#: ``v_<entity>``, which no view of the tree can hold there, so the name finds it.
+#: Either is the view's oid, so the reader's ``search_path`` does not change it.
 _BACKING_VIEW = t"r.view"
 _BACKING_VIEW_BY_NAME = t"to_regclass(format('%I.%I', r.schema, 'v_' || r.entity))"
+
+#: The registry's ``uncascaded_policy`` column, from 0.1.0-beta.25: stored beside
+#: ``options``, not in them. An earlier build has no column, and no policy.
+_UNCASCADED_POLICY = t"r.uncascaded_policy"
+_NO_UNCASCADED_POLICY = t"NULL::text"
+
+_REGISTRY_HAS = """
+SELECT EXISTS (
+    SELECT 1 FROM pg_attribute
+    WHERE attrelid = to_regclass(format('%%I.%%I', %s::text, 'registry'))
+      AND attname = %s AND NOT attisdropped
+)
+"""
 
 # The argument types are spelled inside the one query, in order: a round trip
 # per parameter was what the introspector used to pay. `input_types` come from
@@ -1011,24 +1028,23 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
     if installed is None:
         return []
     require_supported_pg_tviews(installed[0], _contract(conn))
-    has_view_column = conn.execute(
-        t"""
-        SELECT EXISTS (
-            SELECT 1 FROM pg_attribute
-            WHERE attrelid = to_regclass(format('%I.%I', {TVIEWS_SCHEMA}::text, 'registry'))
-              AND attname = 'view' AND NOT attisdropped
-        )
-        """
-    ).fetchone()
     backing_view = (
-        _BACKING_VIEW if has_view_column and has_view_column[0] else _BACKING_VIEW_BY_NAME
+        _BACKING_VIEW
+        if _scalar(conn, _REGISTRY_HAS, (TVIEWS_SCHEMA, "view"))
+        else _BACKING_VIEW_BY_NAME
+    )
+    uncascaded_policy = (
+        _UNCASCADED_POLICY
+        if _scalar(conn, _REGISTRY_HAS, (TVIEWS_SCHEMA, "uncascaded_policy"))
+        else _NO_UNCASCADED_POLICY
     )
     # Each registered TVIEW: its relation, the query pg_tviews holds, the storage
-    # options it reads from the catalog, and its backing view's oid, whose relation
-    # is the TVIEW's and not a view of the tree's (``NULL`` once that view is gone).
+    # options it reads from the catalog, its uncascaded policy, and its backing
+    # view's oid, whose relation is the TVIEW's and not a view of the tree's
+    # (``NULL`` once that view is gone).
     query = t"""
         SELECT r.schema, r.name, r.query, r.logged, (r.options ->> 'fillfactor')::int,
-               {backing_view:q}::oid::bigint
+               {uncascaded_policy:q}, {backing_view:q}::oid::bigint
         FROM {TVIEWS_SCHEMA:i}.registry r
         WHERE r.schema = ANY({list(schemas)})
         ORDER BY r.schema, r.name
@@ -1041,10 +1057,13 @@ def _tviews(conn: psycopg.Connection, schemas: Sequence[str]) -> list[tuple[TVie
                 definition=rendered_query(definition),
                 logged=logged,
                 fillfactor=fillfactor,
+                uncascaded_policy=policy,
             ),
             view_oid,
         )
-        for schema, name, definition, logged, fillfactor, view_oid in conn.execute(query).fetchall()
+        for schema, name, definition, logged, fillfactor, policy, view_oid in conn.execute(
+            query
+        ).fetchall()
     ]
 
 
