@@ -459,7 +459,7 @@ a fourth resolver.
 
 #### pglast: one major
 
-Confiture depends on **`pglast>=8.1`, uncapped**: one major, verified on 8.4, which
+Confiture depends on **`pglast>=8.1`, uncapped**: one major, verified on 8.5, which
 `uv.lock` pins. 8.1 is the first pglast with a cp314 wheel on every platform confiture
 ships, and 8 embeds PostgreSQL 18's grammar, so 18's constraint attributes are readable.
 
