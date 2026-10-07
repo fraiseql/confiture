@@ -6,7 +6,7 @@ own grammar) rejects the data lines. Before this fix, one seed file using
 inline COPY anywhere in a concatenated schema killed the entire pglast pass;
 the sqlparse fallback then silently missed DDL (token limits), so
 ``migrate validate --require-migration`` reported "No DDL changes detected"
-while blind. Observed in the wild: printoptim_backend's ``local`` env build
+while blind. Observed in the wild: an application's ``local`` env build
 (18 MB, one ``COPY prep_seed.tb_generic_item FROM stdin`` block) made the
 ship gate a permanent no-op.
 

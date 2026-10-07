@@ -37,13 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`soft_delete: {tables: written}`: judge the tables the tree tombstones** (#640). The `softdel`
   rules judged every table that *has* the tombstone column; a tree that puts the audit columns on
-  every table buried its real findings under reference tables nothing deletes (112 of 119 on one
-  tree). `tables: written` judges a table when some statement or routine body writes a value
+  every table buried its real findings under reference tables nothing deletes. `tables: written` judges a table when some statement or routine body writes a value
   other than `NULL` to its column (`UPDATE`, `ON CONFLICT DO UPDATE`, `MERGE`, a rule's action;
   partitions with their parent). A body that cannot be read (`EXECUTE`, a refused body) is named
   in `degraded`, never taken as writing nothing. `tables: present` stays the default.
-  `soft_delete.exclude` drops tables either way. On a 1,115-file tree: 127 tables judged → 22,
-  `softdel_001` 148 → 26, `softdel_002` 24 → 11.
+  `soft_delete.exclude` drops tables either way.
 - **`-- confiture:softdel-nulls-distinct`** waives `softdel_002` for a key whose `NULL` is meant
   to be distinct (#640), placed as `softdel-keep-reserved` is.
 
@@ -85,8 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (#639). PostgreSQL's deparsers qualify a name only when the reading session's path would not
   find it, and the live reader read under whatever path the database (or a role in it) set:
   `migrate diff --from db --scratch-url …` read `s.f(inp)` on one side and `s.f(s.inp)` on the
-  other, and proposed a `REPLACE` of each (116 functions, 126 views and 7 materialized views on
-  one real tree). Every read that deparses now runs under `search_path = public` — what a
+  other, and proposed a `REPLACE` of each. Every read that deparses now runs under `search_path = public` — what a
   session that sets nothing sees, so a database that sets no path reads as before — and gives
   a caller's connection back with the path it came with.
 - **A constraint a later `ALTER TABLE … DROP CONSTRAINT` drops is no longer in the model** (#624).
@@ -2289,7 +2286,7 @@ dead since 0.49 — each fixed below, with 15 smaller defects filed as #358–#3
   estimator inside `with open_connection(…)` and read after the block closed the
   connection — so no caller can have depended on it (owner decision 13). It also looked
   a table up by its bare name, listed only `public` by default, and printed a table
-  never analysed as "0 rows, Standard migration OK": on printoptim's database the only
+  never analysed as "0 rows, Standard migration OK": on one production database the only
   two tables past its 100,000-row threshold are in `tenant` and `stat_transformed`.
   `TableSizeEstimator.all_tables`, which only it called, goes with it. No alias.
 - ⚠️ **"Do not act" has one spelling; a command that previews by default takes
@@ -2448,7 +2445,7 @@ dead since 0.49 — each fixed below, with 15 smaller defects filed as #358–#3
   fails on a host import and holds each host to its protocol — every member present,
   with the protocol's parameters — because ty does not check that conformance there.
 - **`MigratorSession.up` hands the apply loop one `UpOptions`.** `up()` keeps its
-  seventeen keyword parameters — fraisier and printoptim call them, and
+  seventeen keyword parameters — fraisier and a downstream application call them, and
   `tests/contract/` pins the shapes — but the chain below it forwarded each by name
   through three functions, where one dropped in any of them was silently ignored.
   `test_one_session_signature.py` reads through the options object: every keyword
@@ -2656,7 +2653,7 @@ consumer surface this release pins in `tests/contract/`.
 ### Added
 
 - **The consumer surface is pinned** in `tests/contract/`. `test_consumer_symbols.py`
-  imports every symbol fraisier and printoptim_backend import, by name — fraisier's
+  imports every symbol fraisier and a downstream application import, by name — fraisier's
   floor probe row for row, plus `exceptions.ValidationError`, which fraisier imports
   and its probe does not list — and asserts the call shapes they rely on have not
   narrowed. `test_consumer_cli_surface.py` resolves every command line they run
@@ -6913,7 +6910,7 @@ still scan everything, and three of them block on any violation.
   gates table/column DDL and function *signature* changes, but not function
   *bodies* — so a body edit that ships to rebuilt-from-DDL environments (dev/test)
   without a migration silently never reaches migrate-only environments
-  (staging/production). In the PrintOptim audit ~120 functions ran different bodies
+  (staging/production). In one production audit ~120 functions ran different bodies
   in prod purely because body edits never got a migration. The new opt-in flag
   extends the accompaniment check: it diffs function bodies between `--base-ref` and
   HEAD (static, git-based, **no DB**) and requires each changed body to be carried
@@ -6950,7 +6947,7 @@ still scan everything, and three of them block on any violation.
   definition drift (#174).** The missing half of `--check-body`: it catches when a
   live view's predicate or projection was changed directly in the database (an
   out-of-band `CREATE OR REPLACE VIEW` on prod) without updating the DDL — the
-  class of bug behind the `printoptim_backend` ETL incident where a committed
+  class of bug behind an ETL incident where a committed
   `meter_at > max_volume_date` had silently become `meter_at > (max_volume_date +
   1)` on production, dropping every other day's volume for months. Views aren't
   stored verbatim (`pg_get_viewdef` returns pg's *deparsed* tree — schema-qualified,
@@ -6968,7 +6965,7 @@ still scan everything, and three of them block on any violation.
 - **`migrate validate --check-body --show-diff` emits the expected body, the live
   body, and a unified diff per drifted function (#177).** Previously a body drift
   reported only two 12-char hashes (`source_hash`, `db_hash`), so every consumer
-  hand-wrote a `prosrc` differ to classify drift (the PrintOptim audit did this
+  hand-wrote a `prosrc` differ to classify drift (one production audit did this
   for 120 functions). `FunctionBodyDrift` now also carries `expected_body`,
   `live_body`, and a `unified_diff` computed with `difflib` over a new
   line-oriented normalisation (`FunctionBodyNormalizer.normalize_for_diff`) — it

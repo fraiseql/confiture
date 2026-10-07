@@ -480,7 +480,7 @@ confiture migrate up --config db/environments/production.yaml
 **Risk 5: Insufficient Adoption**
 - **Likelihood**: Low
 - **Impact**: Critical
-- **Mitigation**: FraiseQL users as base, proven printoptim_backend approach, clear differentiation
+- **Mitigation**: FraiseQL users as base, a build-from-scratch approach proven in production, clear differentiation
 
 ### Execution Risks
 
@@ -604,7 +604,7 @@ confiture migrate up --config db/environments/production.yaml
 - [MIGRATION_COMPETITIVE_ANALYSIS.md](/home/lionel/code/fraiseql/MIGRATION_COMPETITIVE_ANALYSIS.md) - Market analysis
 
 ### References
-- printoptim_backend: Proven build-from-scratch approach
+- Production applications: Proven build-from-scratch approach
 - FraiseQL: GraphQL integration patterns
 - pgroll: Zero-downtime inspiration
 - Alembic: Migration file format reference

@@ -1,6 +1,6 @@
 """Contract test pinning the command lines confiture's consumers spell.
 
-fraisier and printoptim_backend drive confiture over a subprocess, from Python,
+fraisier and a downstream application drive confiture over a subprocess, from Python,
 Makefiles, CI job definitions and shell scripts. None of it runs in confiture's CI,
 so a renamed command or a dropped flag surfaces as a failed deploy or a red ship
 gate in someone else's repository. Each row below is one invocation as the
@@ -12,7 +12,7 @@ Resolution goes through the live Typer tree, the same walk the docs guards use
 
 The ``--format`` vocabularies are **not** one vocabulary, and a consumer depends on
 that: ``lint`` accepts ``table`` and ``seed validate`` rejects it with
-``VALID_001``, which is why printoptim runs ``seed validate --format text``.
+``VALID_001``, which is why the application runs ``seed validate --format text``.
 """
 
 from __future__ import annotations
@@ -39,9 +39,9 @@ class Invocation(NamedTuple):
 
 _FRAISIER_DBOPS = "fraisier:fraisier/dbops/confiture.py"
 _FRAISIER_DRIFT = "fraisier:fraisier/dbops/drift.py"
-_FRAISES = "printoptim:fraises.yaml"
-_MAKEFILE = "printoptim:Makefile"
-_DEFINITION_DRIFT = "printoptim:scripts/ops/check_definition_drift.py"
+_FRAISES = "app:fraises.yaml"
+_MAKEFILE = "app:Makefile"
+_DEFINITION_DRIFT = "app:scripts/ops/check_definition_drift.py"
 
 INVOCATIONS: tuple[Invocation, ...] = (
     # fraisier
@@ -89,109 +89,109 @@ INVOCATIONS: tuple[Invocation, ...] = (
         ("--against", "--migrations-dir", "--format", "--config", "--since"),
         "fraisier:fraisier/dbops/preflight.py:771",
     ),
-    # printoptim_backend
+    # A downstream application
     Invocation(
-        "printoptim",
+        "app",
         ("build",),
         ("--env", "--show-hash", "--project-dir"),
         f"{_MAKEFILE}:367",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("build",),
         ("--env", "--schema-only", "--output"),
         f"{_DEFINITION_DRIFT}:223",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("lint",),
         ("--env", "--select", "--format", "--fail-on", "--baseline"),
         f"{_FRAISES}:214",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("migrate", "validate"),
         ("--require-migration", "--base-ref", "--env"),
         f"{_FRAISES}:365",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("migrate", "validate"),
         ("--idempotent", "--base-ref"),
         f"{_FRAISES}:312",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("migrate", "validate"),
         ("--require-grant-migration", "--base-ref"),
         f"{_FRAISES}:376",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("migrate", "validate"),
         ("--check-ownership-coverage",),
         f"{_FRAISES}:346",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("migrate", "validate"),
         ("--check-signatures", "--check-body", "--env", "--schemas", "--format"),
         f"{_DEFINITION_DRIFT}:158",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("migrate", "validate"),
         ("--check-live-drift", "--env", "--schema", "--format"),
         f"{_DEFINITION_DRIFT}:253",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("seed", "validate"),
         ("--prep-seed", "--static-only", "--level", "--format", "--output"),
         f"{_MAKEFILE}:369",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("seed", "validate"),
         ("--prep-seed", "--full-execution", "--level", "--database-url", "--format"),
         f"{_FRAISES}:223",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("test-db", "ram-setup"),
         ("--tablespace", "--location"),
         f"{_MAKEFILE}:151",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("verify-checksums",),
         ("--migrations-dir", "--allow-uninitialized"),
         f"{_FRAISES}:305",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("migrate", "status"),
         ("--config", "-c"),
         f"{_MAKEFILE}:413",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("migrate", "up"),
         ("-c", "--config", "--dry-run"),
         f"{_MAKEFILE}:588",
     ),
-    Invocation("printoptim", ("migrate", "down"), ("-c",), f"{_MAKEFILE}:596"),
+    Invocation("app", ("migrate", "down"), ("-c",), f"{_MAKEFILE}:596"),
     Invocation(
-        "printoptim",
+        "app",
         ("migrate", "baseline"),
         ("--through", "--config"),
-        "printoptim:scripts/etl/setup_prod_local_db.sh:119",
+        "app:scripts/etl/setup_prod_local_db.sh:119",
     ),
     Invocation(
-        "printoptim",
+        "app",
         ("install-helpers",),
         ("--config",),
-        "printoptim:scripts/etl/setup_prod_local_db.sh:116",
+        "app:scripts/etl/setup_prod_local_db.sh:116",
     ),
 )
 
@@ -229,7 +229,7 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
 def test_lint_still_accepts_format_table() -> None:
-    """printoptim's lint gate prints a table (``fraises.yaml:214``)."""
+    """The application's lint gate prints a table (``fraises.yaml:214``)."""
     result = runner.invoke(app, ["lint", "--format", "table", "--list-rules"])
     output = _ANSI.sub("", result.output)
     assert "VALID_001" not in output, output
@@ -239,7 +239,7 @@ def test_lint_still_accepts_format_table() -> None:
 def test_seed_validate_still_rejects_format_table() -> None:
     """``seed validate`` speaks text/json/csv and says so (``fraises.yaml:218``).
 
-    printoptim chose ``--format text`` *because* ``table`` is refused with
+    the application chose ``--format text`` *because* ``table`` is refused with
     ``VALID_001``. An option factory that unified the two vocabularies would make
     that comment false in a way no consumer test notices.
     """

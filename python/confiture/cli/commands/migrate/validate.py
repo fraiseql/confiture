@@ -412,7 +412,7 @@ SshViaOpt = Annotated[
     typer.Option(
         "--ssh",
         help="Open an SSH tunnel before connecting: user@host or host "
-        "(e.g. lionel@printoptim.io).  Used with --check-signatures and "
+        "(e.g. deploy@db.example.com).  Used with --check-signatures and "
         "--check-live-drift.  Overrides the ssh_tunnel block in the config file.",
     ),
 ]
@@ -503,7 +503,7 @@ def migrate_validate(
       confiture migrate validate --check-signatures --env production --schemas public,auth
         ↳ Live: check production DB across multiple schemas
 
-      confiture migrate validate --check-signatures --env production --ssh lionel@printoptim.io
+      confiture migrate validate --check-signatures --env production --ssh deploy@db.example.com
         ↳ Live: reach production DB through an SSH tunnel (no manual ssh -L needed)
 
       confiture migrate validate --check-imports
