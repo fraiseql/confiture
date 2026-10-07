@@ -477,7 +477,7 @@ jobs:
         # formatter style), so an unpinned install can turn CI red on an
         # unrelated PR. Keep in lockstep with [dependency-groups] ruff and
         # .pre-commit-config.yaml's rev, deliberately.
-        uv pip install 'ruff==0.16.9'
+        uv pip install 'ruff==0.16.10'
     - name: Run ruff check
       run: uv run ruff check .
     - name: Run ruff format check
