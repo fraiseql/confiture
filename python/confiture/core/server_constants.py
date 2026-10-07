@@ -25,6 +25,7 @@ import psycopg
 from psycopg import sql
 
 from confiture.core.ddl_walk import AS_WRITTEN, ConstantSpellings, typed_constants
+from confiture.core.live_catalog import read_path
 from confiture.core.model_facts import resolve
 
 if TYPE_CHECKING:
@@ -54,18 +55,19 @@ def server_constants(conn: psycopg.Connection, model: SchemaModel) -> ConstantSp
     )
     if not asked:
         return AS_WRITTEN
-    types = _server_types(conn, model, {type_ for _, type_ in asked})
-    wanted = [(literal, type_) for literal, type_ in asked if type_ in types]
-    try:
-        spelled = _cast(conn, wanted, types)
-    except _REFUSED:
-        # One refused literal refuses the statement: ask for each on its own.
-        spelled = {}
-        for constant in wanted:
-            try:
-                spelled |= _cast(conn, [constant], types)
-            except _REFUSED:
-                continue  # left as written: the refused value is its own difference
+    with read_path(conn):
+        types = _server_types(conn, model, {type_ for _, type_ in asked})
+        wanted = [(literal, type_) for literal, type_ in asked if type_ in types]
+        try:
+            spelled = _cast(conn, wanted, types)
+        except _REFUSED:
+            # One refused literal refuses the statement: ask for each on its own.
+            spelled = {}
+            for constant in wanted:
+                try:
+                    spelled |= _cast(conn, [constant], types)
+                except _REFUSED:
+                    continue  # left as written: the refused value is its own difference
     return ConstantSpellings(spelled)
 
 
