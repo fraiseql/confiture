@@ -94,6 +94,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
     "SetOperation": ("SETOP_NONE",),
     "BoolExprType": ("AND_EXPR",),
     "NullTestType": ("IS_NULL",),
+    "CmdType": ("CMD_UPDATE",),
     "TableLikeOption": (
         "CREATE_TABLE_LIKE_DEFAULTS",
         "CREATE_TABLE_LIKE_IDENTITY",

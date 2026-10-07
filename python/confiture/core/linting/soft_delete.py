@@ -31,7 +31,16 @@ A value that must stay reserved after its row is deleted is waived with
 the key: the ``CREATE UNIQUE INDEX`` or the ``ALTER TABLE … ADD CONSTRAINT``. A
 ``CREATE TABLE`` writes several keys, so above one the directive names the key it
 waives: ``-- confiture:softdel-keep-reserved tb_order_line_code_key`` (an unnamed
-key by the name PostgreSQL gives it).
+key by the name PostgreSQL gives it). ``-- confiture:softdel-nulls-distinct``, placed
+and argued the same way, waives ``softdel_002`` for a key whose ``NULL`` is meant to
+be distinct (two devices with no MAC address recorded, #640).
+
+Which tables soft-delete is ``soft_delete.tables``: every table carrying the column
+(``present``, the default), or those the tree tombstones (``written``, #640: some
+statement writes a value other than ``NULL`` to the column —
+:mod:`~confiture.core.linting.tombstones`). ``soft_delete.exclude`` drops tables
+either way. What the run could not decide, and an ``exclude`` entry that matches no
+table, are said in the rules' ``degraded`` status (:func:`soft_deleting`).
 
 A key is judged on the table the tree ends with — the model's: an index a later
 ``DROP INDEX`` drops, or a constraint a later ``DROP CONSTRAINT`` drops, is not
@@ -54,12 +63,17 @@ from confiture.core.ddl_walk import (
     read_index,
 )
 from confiture.core.linting.inventory import Inventory, SchemaObject, inherit_columns
-from confiture.core.schema_identity import identifier_identity, quote_identifier
+from confiture.core.linting.tombstones import TableKey, key_of, tombstoned
+from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity, quote_identifier
 from confiture.core.schema_model import Column, Constraint, RelationName
 from confiture.core.sql_lexer import ParsedFile
 
 #: The directive that keeps a key reserving deleted rows on purpose.
 KEEP_RESERVED = "softdel-keep-reserved"
+#: The directive that keeps a nullable key's ``NULL`` distinct on purpose (``softdel_002``).
+NULLS_DISTINCT = "softdel-nulls-distinct"
+#: The waivers, each placed and argued the same way.
+_WAIVERS = (KEEP_RESERVED, NULLS_DISTINCT)
 
 _AND_EXPR = _pg_member("BoolExprType", "AND_EXPR")
 _IS_NULL = _pg_member("NullTestType", "IS_NULL")
@@ -81,7 +95,8 @@ class WrittenKey:
         nulls_not_distinct: Whether the key says ``NULLS NOT DISTINCT``.
         file: The file that writes the key.
         line: Where a finding points: the key in a ``CREATE TABLE``, else its statement.
-        waived: A ``softdel-keep-reserved`` directive waives it.
+        waived: The directives that waive it, of :data:`KEEP_RESERVED` and
+            :data:`NULLS_DISTINCT`.
     """
 
     table: SchemaObject
@@ -94,7 +109,7 @@ class WrittenKey:
     nulls_not_distinct: bool
     file: str | None
     line: int
-    waived: bool
+    waived: frozenset[str]
 
     def column(self, folded: str) -> Column | None:
         """The table's column named *folded*, or ``None``."""
@@ -104,6 +119,78 @@ class WrittenKey:
     def columns(self) -> tuple[str, ...]:
         """The keys that are columns, not expressions."""
         return tuple(k for k, e in zip(self.keys, self.expressions, strict=True) if not e)
+
+
+@dataclass(frozen=True)
+class SoftDeleting:
+    """Which tables the ``softdel`` rules judge, and what the run could not decide.
+
+    Attributes:
+        column: The tombstone column, folded.
+        written: The tables the tree tombstones, under ``tables: written``;
+            ``None`` under ``present``, where every table carrying the column is judged.
+        excluded: The ``exclude`` entries, each a folded ``(schema, name)``, the
+            schema ``None`` for a bare name.
+        notes: What a rule's ``degraded`` status says: routines whose writes could
+            not be read, ``exclude`` entries no table matches.
+    """
+
+    column: str
+    written: frozenset[TableKey] | None
+    excluded: frozenset[TableKey]
+    notes: tuple[str, ...]
+
+    def judges(self, table: SchemaObject) -> bool:
+        """Whether *table* soft-deletes, as far as the rules are concerned."""
+        if any(_matches(entry, table) for entry in self.excluded):
+            return False
+        return self.written is None or key_of(table) in self.written
+
+
+def _matches(entry: TableKey, table: SchemaObject) -> bool:
+    """Whether an ``exclude`` entry names *table*; an unwritten schema is the default one."""
+    schema, name = entry
+    if name != table.folded_name:
+        return False
+    return schema is None or schema == (table.folded_schema or DEFAULT_SCHEMA)
+
+
+def _excluded(entries: Sequence[str]) -> frozenset[TableKey]:
+    """The ``exclude`` entries, read as SQL reads a name and folded."""
+    found: set[TableKey] = set()
+    for entry in entries:
+        match [identifier_identity(part) for part in sql_lexer.name_parts(entry) or ()]:
+            case [schema, name]:
+                found.add((schema, name))
+            case [name]:
+                found.add((None, name))
+            case _:
+                pass  # refused when the config was read
+    return frozenset(found)
+
+
+def soft_deleting(
+    inventory: Inventory, files: Sequence[ParsedFile], config: SoftDeleteConfig
+) -> SoftDeleting:
+    """What ``soft_delete:`` says soft-deletes in this tree, decided once for every rule."""
+    column = identifier_identity(config.column)
+    excluded = _excluded(config.exclude)
+    notes: list[str] = [
+        f"soft_delete.exclude names {name if schema is None else f'{schema}.{name}'}, "
+        "which no table matches"
+        for schema, name in sorted(excluded, key=lambda e: (e[0] or "", e[1]))
+        if not any(_matches((schema, name), table) for table in inventory.tables)
+    ]
+    written: frozenset[TableKey] | None = None
+    if config.tables == "written":
+        found = tombstoned(inventory, files, column)
+        written = found.tables
+        if found.undecided:
+            notes.append(
+                f"whether {len(found.undecided)} routine(s) tombstone a table is not known, "
+                "so a table only they write is not judged: " + "; ".join(found.undecided)
+            )
+    return SoftDeleting(column, written, excluded, tuple(notes))
 
 
 @dataclass(frozen=True)
@@ -124,15 +211,18 @@ class _Statement:
     table: SchemaObject
     parsed: ParsedFile
     line: int
-    #: The arguments of each ``softdel-keep-reserved`` above it, ``None`` for a bare one.
-    waivers: frozenset[str | None]
+    #: Per waiver directive, the arguments of each above it, ``None`` for a bare one.
+    waivers: dict[str, frozenset[str | None]]
     #: A ``CREATE TABLE``, whose bare directive waives nothing: it writes several keys.
     creates_table: bool
 
-    def waives(self, name: str | None) -> bool:
-        """Whether a directive above the statement keeps the key *name* reserved."""
-        return (None in self.waivers and not self.creates_table) or (
-            name is not None and name in self.waivers
+    def waives(self, name: str | None) -> frozenset[str]:
+        """The directives above the statement that waive the key *name*."""
+        return frozenset(
+            directive
+            for directive, arguments in self.waivers.items()
+            if (None in arguments and not self.creates_table)
+            or (name is not None and name in arguments)
         )
 
 
@@ -142,14 +232,18 @@ def _line_finder(text: str) -> Callable[[int], int]:
     return lambda offset: bisect.bisect_left(newlines, min(max(offset, 0), len(text))) + 1
 
 
-def _waivers(parsed: ParsedFile) -> dict[int, frozenset[str | None]]:
-    """Statement line → the arguments of each ``softdel-keep-reserved`` above it."""
-    found: dict[int, set[str | None]] = {}
+def _waivers(parsed: ParsedFile) -> dict[int, dict[str, frozenset[str | None]]]:
+    """Statement line → per waiver directive, the arguments of each above it."""
+    found: dict[int, dict[str, set[str | None]]] = {}
     for directive in sql_lexer.directives(parsed.text):
-        if directive.name == KEEP_RESERVED and directive.statement_line is not None:
+        if directive.name in _WAIVERS and directive.statement_line is not None:
             argument = identifier_identity(directive.argument) if directive.argument else None
-            found.setdefault(directive.statement_line, set()).add(argument)
-    return {line: frozenset(arguments) for line, arguments in found.items()}
+            at = found.setdefault(directive.statement_line, {})
+            at.setdefault(directive.name, set()).add(argument)
+    return {
+        line: {name: frozenset(arguments) for name, arguments in directives.items()}
+        for line, directives in found.items()
+    }
 
 
 def _table(held: Inventory, relation: Any) -> SchemaObject | None:
@@ -229,7 +323,7 @@ def _statement_keys(
     held: Inventory,
     parsed: ParsedFile,
     raw: Any,
-    waivers: dict[int, frozenset[str | None]],
+    waivers: dict[int, dict[str, frozenset[str | None]]],
     line_of: Callable[[int], int],
 ) -> Iterator[WrittenKey]:
     """The unique keys one statement writes on a table the tree declares."""
@@ -241,7 +335,7 @@ def _statement_keys(
     if table is None:
         return
     line = line_of(sql_lexer.skip_leading_comments(parsed.text, raw.stmt_location or 0))
-    at = _Statement(table, parsed, line, waivers.get(line, frozenset()), kind == "CreateStmt")
+    at = _Statement(table, parsed, line, waivers.get(line, {}), kind == "CreateStmt")
     if kind == "CreateStmt":
         yield from _create_table_keys(at, stmt, line_of)
     elif kind == "AlterTableStmt":
@@ -308,11 +402,15 @@ def _no_author_chooses(key: WrittenKey) -> bool:
 
 
 def _keys_to_judge(
-    inventory: Inventory, files: Sequence[ParsedFile], column: str
+    inventory: Inventory, files: Sequence[ParsedFile], deleting: SoftDeleting
 ) -> Iterator[WrittenKey]:
     """The keys of every soft-deleting table that an author's value fills."""
     for key in written_keys(inventory, files):
-        if key.column(column) is not None and not _no_author_chooses(key):
+        if (
+            key.column(deleting.column) is not None
+            and deleting.judges(key.table)
+            and not _no_author_chooses(key)
+        ):
             yield key
 
 
@@ -377,12 +475,12 @@ def _reserving(key: WrittenKey, column: str) -> SoftDeleteFinding:
 
 
 def reserved_key_findings(
-    inventory: Inventory, files: Sequence[ParsedFile], config: SoftDeleteConfig
+    inventory: Inventory, files: Sequence[ParsedFile], deleting: SoftDeleting
 ) -> Iterator[SoftDeleteFinding]:
     """``softdel_001``: every key of a soft-deleting table that reserves deleted rows."""
-    column = identifier_identity(config.column)
-    for key in _keys_to_judge(inventory, files, column):
-        if not key.waived and not excludes_tombstones(key, column):
+    column = deleting.column
+    for key in _keys_to_judge(inventory, files, deleting):
+        if KEEP_RESERVED not in key.waived and not excludes_tombstones(key, column):
             yield _reserving(key, column)
 
 
@@ -396,13 +494,13 @@ def _nullable(key: WrittenKey, column: str) -> list[str]:
 
 
 def null_key_findings(
-    inventory: Inventory, files: Sequence[ParsedFile], config: SoftDeleteConfig
+    inventory: Inventory, files: Sequence[ParsedFile], deleting: SoftDeleting
 ) -> Iterator[SoftDeleteFinding]:
     """``softdel_002``: every such key over a nullable column, without ``NULLS NOT DISTINCT``."""
-    column = identifier_identity(config.column)
-    for key in _keys_to_judge(inventory, files, column):
+    column = deleting.column
+    for key in _keys_to_judge(inventory, files, deleting):
         nullable = _nullable(key, column)
-        if key.nulls_not_distinct or not nullable:
+        if key.nulls_not_distinct or NULLS_DISTINCT in key.waived or not nullable:
             continue
         if key.constraint:
             rewrite = f"UNIQUE NULLS NOT DISTINCT ({_key_text(key)})"
@@ -415,5 +513,8 @@ def null_key_findings(
             f"{_called(key)} on {key.table.qualified} covers {', '.join(nullable)}, which "
             "may be NULL, without NULLS NOT DISTINCT: two rows holding NULL there never "
             "collide",
-            f"when NULL is a value of the key (a root has no parent): {rewrite}",
+            f"when NULL is a value of the key (a root has no parent): {rewrite}. When two "
+            f"rows holding NULL there must not collide, on purpose: `-- confiture:"
+            f"{NULLS_DISTINCT}{'' if not key.constraint else ' ' + (key.name or '')}` above "
+            "the statement that writes it",
         )

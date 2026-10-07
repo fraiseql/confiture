@@ -35,6 +35,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy; a policy set with `SET pg_tviews.uncascaded_policy` before a `CREATE TABLE … AS` is a
   session setting confiture does not model, and pins nothing.
 
+- **`soft_delete: {tables: written}`: judge the tables the tree tombstones** (#640). The `softdel`
+  rules judged every table that *has* the tombstone column; a tree that puts the audit columns on
+  every table buried its real findings under reference tables nothing deletes (112 of 119 on one
+  tree). `tables: written` judges a table when some statement or routine body writes a value
+  other than `NULL` to its column (`UPDATE`, `ON CONFLICT DO UPDATE`, `MERGE`, a rule's action;
+  partitions with their parent). A body that cannot be read (`EXECUTE`, a refused body) is named
+  in `degraded`, never taken as writing nothing. `tables: present` stays the default.
+  `soft_delete.exclude` drops tables either way. On a 1,115-file tree: 127 tables judged → 22,
+  `softdel_001` 148 → 26, `softdel_002` 24 → 11.
+- **`-- confiture:softdel-nulls-distinct`** waives `softdel_002` for a key whose `NULL` is meant
+  to be distinct (#640), placed as `softdel-keep-reserved` is.
+
 ### Fixed
 
 - **A comment in a `DECLARE` section no longer hides a routine body** (#637). The #558 type

@@ -11,6 +11,7 @@ is, ``CONFIG_001`` (#468).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -70,13 +71,33 @@ class SoftDeleteConfig(BaseModel):
     Declaring it turns the ``softdel`` lint family on for every run.
 
     Attributes:
-        column: The tombstone column: a table that has it soft-deletes, and a row
-            whose value in it is not ``NULL`` is deleted.
+        column: The tombstone column: a row whose value in it is not ``NULL`` is
+            deleted.
+        tables: Which tables soft-delete. ``present``: every table that has the
+            column. ``written``: those the tree tombstones — a statement or a routine
+            body writes a value other than ``NULL`` to the column (#640). A tree that
+            puts the column on every table, reference tables included, wants
+            ``written``.
+        exclude: Tables that never soft-delete whatever *tables* says, each
+            ``schema.table`` or a bare name (any schema).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     column: str = "deleted_at"
+    tables: Literal["present", "written"] = "present"
+    exclude: list[str] = []
+
+    @field_validator("exclude")
+    @classmethod
+    def _exclude_names_tables(cls, value: list[str]) -> list[str]:
+        """Each entry read as SQL reads a name: one part, or a schema and a table."""
+        for entry in value:
+            if len(sql_lexer.name_parts(entry) or ()) not in (1, 2):
+                raise ValueError(
+                    f"soft_delete.exclude names a table as schema.table or table, got {entry!r}"
+                )
+        return value
 
     @field_validator("column")
     @classmethod
