@@ -382,14 +382,14 @@ def _declared_types(statement: str, body_at: int | None) -> list[Span]:
     declaration is ``name [CONSTANT] type [COLLATE …] [NOT NULL] [:= | = |
     DEFAULT …];``, so its type runs from after the name (and ``CONSTANT``) to the
     first of those. A ``%TYPE``/``%ROWTYPE`` copy, a cursor, an alias and
-    ``record`` are never candidates.
+    ``record`` are never candidates. A comment is no part of a declaration (#637).
     """
     body = _body_span(statement, body_at)
     if body is None:
         return []
     start, end = body
     text = statement[start:end]
-    tokens = sql_lexer.tokens(text)
+    tokens = sql_lexer.code_tokens(text)
     spans: list[Span] = []
     for low, high in _declaration_regions(text, 0):
         declaration: list[Any] = []
@@ -586,7 +586,7 @@ def _body_span(statement: str, body_at: int | None) -> Span | None:
     declarations are where most qualified type names are written (#270), and a
     missing argument must not quietly put them out of reach.
     """
-    tokens = sql_lexer.tokens(statement)
+    tokens = sql_lexer.code_tokens(statement)
     at = _as_offset(tokens, body_at)
     if at is None:
         return None

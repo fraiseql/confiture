@@ -327,7 +327,7 @@ def _declaration(
         return None
     body = compiled.text[compiled.body[0] : compiled.body[1]]
     low, high = _line_start(body, line), _line_start(body, line + 1)
-    toks = sql_lexer.tokens(body)
+    toks = sql_lexer.code_tokens(body)
     loop_variable = False
     for index, token in enumerate(toks):
         if (

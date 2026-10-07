@@ -247,6 +247,14 @@ class TestARecordVariablesInitialiser:
 
         assert [f.text for f in found if f.kind == "PLpgSQL_rec"] == []
 
+    def test_a_comment_before_the_declaration_on_its_line_is_not_a_token_of_it(self) -> None:
+        """#637: the declaration's previous token was the comment, so it was not found."""
+        (found,) = self._initialisers(
+            "DECLARE\n  /* c */ r record := app.fn_x();\nBEGIN RETURN 1; END"
+        )
+
+        assert found.text == "app.fn_x()"
+
     def test_a_cursor_loops_own_variable_has_none(self) -> None:
         """``FOR r IN c`` declares ``r`` itself: a record on its line, never a finding."""
         found = self._initialisers(

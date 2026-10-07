@@ -98,3 +98,30 @@ def test_lint_reads_the_body_it_used_to_report_unread(tmp_path, monkeypatch) -> 
     report = SchemaLinter(env="local", config=LintConfig(check_references=True)).lint()
 
     assert not [d for d in report.degraded if "could not read" in (d.reason or "")]
+
+
+@pytest.mark.parametrize(
+    "declare",
+    [
+        "a bigint;  -- trailing\n    b ltree;",
+        "a bigint;\n    -- on its own line\n    b citext;",
+        "a bigint;\n    /* before */ b hstore;",
+        "a bigint;\n    b /* between */ s.my_domain;",
+        "-- before the first\n    a bigint; b ltree;  -- after the last",
+    ],
+)
+def test_a_comment_in_the_declarations_is_not_a_declaration(declare: str) -> None:
+    """#637: a comment token was taken as a declaration's name, and the name as its type."""
+    statement = _function(declare, "SELECT id, label INTO a, b FROM s.t;")
+    compiled = parse_body(statement)
+    assert compiled.tree
+    assert statement.count("\n") == compiled.text.count("\n")
+
+
+def test_a_comment_between_as_and_the_body_does_not_hide_it() -> None:
+    """#637's sibling: with no ``body_at``, the body was the string right after ``AS``."""
+    statement = (
+        "CREATE FUNCTION s.f() RETURNS void LANGUAGE plpgsql AS -- the body\n$$\n"
+        "DECLARE\n    a bigint; b ltree;\nBEGIN\n    SELECT id, label INTO a, b FROM s.t;\nEND;\n$$;"
+    )
+    assert parse_body(statement).substituted

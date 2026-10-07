@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A comment in a `DECLARE` section no longer hides a routine body** (#637). The #558 type
+  substitution took a comment before a declaration for the variable's name, and the name for
+  the start of its type, so `b ltree;` after `a bigint; -- note` lost `b` and the body stayed
+  unread (`build_003 … could not read 1 routine body`). Comments are no longer tokens of a
+  declaration.
 - **A constraint a later `ALTER TABLE … DROP CONSTRAINT` drops is no longer in the model** (#624).
   The expected schema kept it, so `softdel_001` and `tenant_005` reported a key the tree had
   dropped and a database built from the tree read back without a constraint the tree still
