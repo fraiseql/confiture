@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-10-07
+
+**Soft deletion, judged where it happens.** `softdel_003` (new) reports every read of
+a soft-deleting table that a view never tests the tombstone of, through joins, CTEs and
+sub-selects, and carries a test across a key equality; `soft_delete: {tables: written}`
+judges only the tables the tree tombstones. The model keeps the first index of a taken
+name, as PostgreSQL does (`build_005`/`build_006`); live reads deparse under one
+`search_path`; a comment in a `DECLARE` no longer hides a routine body; `build_003`
+resolves TVIEWs. pg_tviews 0.1.0-beta.25: the backing view is the registry's (⚠️
+`TView.backing_view` is removed) and `uncascaded_policy` is a TVIEW option.
+
 ### Changed
 
 - **A TVIEW's backing view is the one `tviews.registry.view` names** (fraiseql/pg_tviews#181,
