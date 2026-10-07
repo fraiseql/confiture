@@ -389,5 +389,5 @@ invalid-argument-type = "error"
 [dependency-groups]
 dev = [
     "maturin>=1.9.6",
-    "ruff==0.16.9",
+    "ruff==0.16.10",
 ]
