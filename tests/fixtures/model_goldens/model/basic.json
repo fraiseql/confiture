@@ -148,6 +148,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -165,6 +166,7 @@
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -182,6 +184,7 @@
           "kind": "foreign_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -204,6 +207,7 @@
           "kind": "foreign_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -229,6 +233,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_pk_comment",
+          "nulls_not_distinct": false,
           "table": {
             "name": "comments",
             "schema": null
@@ -247,6 +252,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_post_id",
+          "nulls_not_distinct": false,
           "table": {
             "name": "comments",
             "schema": null
@@ -265,6 +271,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_comments_user_id",
+          "nulls_not_distinct": false,
           "table": {
             "name": "comments",
             "schema": null
@@ -285,6 +292,7 @@
           ],
           "method": "btree",
           "name": "idx_comments_created_at",
+          "nulls_not_distinct": false,
           "table": {
             "name": "comments",
             "schema": null
@@ -454,6 +462,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -471,6 +480,7 @@
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -488,6 +498,7 @@
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -505,6 +516,7 @@
           "kind": "foreign_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -530,6 +542,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_pk_post",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -548,6 +561,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_slug",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -566,6 +580,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_posts_user_id",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -586,6 +601,7 @@
           ],
           "method": "btree",
           "name": "idx_posts_published_at",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -606,6 +622,7 @@
           ],
           "method": "btree",
           "name": "idx_posts_created_at",
+          "nulls_not_distinct": false,
           "table": {
             "name": "posts",
             "schema": null
@@ -759,6 +776,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -776,6 +794,7 @@
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -793,6 +812,7 @@
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -810,6 +830,7 @@
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -827,6 +848,7 @@
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -847,6 +869,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_pk_user",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -865,6 +888,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_slug",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -883,6 +907,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_username",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -901,6 +926,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -921,6 +947,7 @@
           ],
           "method": "btree",
           "name": "idx_users_created_at",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null

@@ -228,6 +228,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "pk_tb_comment",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -245,6 +246,7 @@
           "kind": "unique",
           "method": null,
           "name": "uq_tb_comment_pk",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -262,6 +264,7 @@
           "kind": "foreign_key",
           "method": null,
           "name": "fk_tb_comment_post",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -284,6 +287,7 @@
           "kind": "foreign_key",
           "method": null,
           "name": "fk_tb_comment_user",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -306,6 +310,7 @@
           "kind": "foreign_key",
           "method": null,
           "name": "fk_tb_comment_parent",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -326,6 +331,7 @@
           "kind": "check",
           "method": null,
           "name": "ck_tb_comment_content_length",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -341,6 +347,7 @@
           "kind": "check",
           "method": null,
           "name": "ck_tb_comment_not_self_parent",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -361,6 +368,7 @@
           "key_options": [],
           "method": "btree",
           "name": "uq_tb_comment_identifier",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_comment",
             "schema": null
@@ -379,6 +387,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_comment_post",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_comment",
             "schema": null
@@ -397,6 +406,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_comment_user",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_comment",
             "schema": null
@@ -415,6 +425,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_comment_parent",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_comment",
             "schema": null
@@ -435,6 +446,7 @@
           ],
           "method": "btree",
           "name": "idx_tb_comment_created",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_comment",
             "schema": null
@@ -458,6 +470,7 @@
           ],
           "method": "btree",
           "name": "idx_tb_comment_post_created",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_comment",
             "schema": null
@@ -481,6 +494,7 @@
           ],
           "method": "btree",
           "name": "idx_tb_comment_user_created",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_comment",
             "schema": null
@@ -504,6 +518,7 @@
           ],
           "method": "btree",
           "name": "idx_tb_comment_top_level",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_comment",
             "schema": null
@@ -753,6 +768,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "pk_tb_post",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -770,6 +786,7 @@
           "kind": "unique",
           "method": null,
           "name": "uq_tb_post_pk",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -787,6 +804,7 @@
           "kind": "unique",
           "method": null,
           "name": "uq_tb_post_slug",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -804,6 +822,7 @@
           "kind": "foreign_key",
           "method": null,
           "name": "fk_tb_post_user",
+          "nulls_not_distinct": false,
           "on_delete": "CASCADE",
           "on_update": null,
           "operators": [],
@@ -824,6 +843,7 @@
           "kind": "check",
           "method": null,
           "name": "ck_tb_post_title_length",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -839,6 +859,7 @@
           "kind": "check",
           "method": null,
           "name": "ck_tb_post_slug_format",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -854,6 +875,7 @@
           "kind": "check",
           "method": null,
           "name": "ck_tb_post_view_count",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -869,6 +891,7 @@
           "kind": "check",
           "method": null,
           "name": "ck_tb_post_published_at",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -889,6 +912,7 @@
           "key_options": [],
           "method": "btree",
           "name": "uq_tb_post_identifier",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_post",
             "schema": null
@@ -907,6 +931,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_user",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_post",
             "schema": null
@@ -925,6 +950,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_slug",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_post",
             "schema": null
@@ -943,6 +969,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_published",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_post",
             "schema": null
@@ -963,6 +990,7 @@
           ],
           "method": "btree",
           "name": "idx_tb_post_created",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_post",
             "schema": null
@@ -981,6 +1009,7 @@
           "key_options": [],
           "method": "gin",
           "name": "idx_tb_post_tags",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_post",
             "schema": null
@@ -1001,6 +1030,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_post_user_published",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_post",
             "schema": null
@@ -1024,6 +1054,7 @@
           ],
           "method": "btree",
           "name": "idx_tb_post_published_created",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_post",
             "schema": null
@@ -1047,6 +1078,7 @@
           ],
           "method": "btree",
           "name": "idx_tb_post_unpublished",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_post",
             "schema": null
@@ -1248,6 +1280,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "pk_tb_user",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -1265,6 +1298,7 @@
           "kind": "unique",
           "method": null,
           "name": "uq_tb_user_pk",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -1282,6 +1316,7 @@
           "kind": "unique",
           "method": null,
           "name": "uq_tb_user_email",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -1299,6 +1334,7 @@
           "kind": "unique",
           "method": null,
           "name": "uq_tb_user_username",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -1314,6 +1350,7 @@
           "kind": "check",
           "method": null,
           "name": "ck_tb_user_email_format",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -1329,6 +1366,7 @@
           "kind": "check",
           "method": null,
           "name": "ck_tb_user_username_length",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -1349,6 +1387,7 @@
           "key_options": [],
           "method": "btree",
           "name": "uq_tb_user_identifier",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_user",
             "schema": null
@@ -1367,6 +1406,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_email",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_user",
             "schema": null
@@ -1385,6 +1425,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_username",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_user",
             "schema": null
@@ -1403,6 +1444,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_active",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_user",
             "schema": null
@@ -1423,6 +1465,7 @@
           ],
           "method": "btree",
           "name": "idx_tb_user_created",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_user",
             "schema": null
@@ -1441,6 +1484,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tb_user_active_username",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_user",
             "schema": null
@@ -1546,6 +1590,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -1566,6 +1611,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_comment_post",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_comment",
             "schema": null
@@ -1584,6 +1630,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_comment_author",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_comment",
             "schema": null
@@ -1705,6 +1752,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -1725,6 +1773,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_post_slug",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_post",
             "schema": null
@@ -1743,6 +1792,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_post_published",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_post",
             "schema": null
@@ -1763,6 +1813,7 @@
           ],
           "method": "btree",
           "name": "idx_tv_post_created",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_post",
             "schema": null
@@ -1781,6 +1832,7 @@
           "key_options": [],
           "method": "gin",
           "name": "idx_tv_post_content_search",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_post",
             "schema": null
@@ -1799,6 +1851,7 @@
           "key_options": [],
           "method": "gin",
           "name": "idx_tv_post_title_search",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_post",
             "schema": null
@@ -1819,6 +1872,7 @@
           ],
           "method": "gin",
           "name": "idx_tv_post_title_trgm",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_post",
             "schema": null
@@ -1839,6 +1893,7 @@
           ],
           "method": "btree",
           "name": "idx_tv_post_list",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_post",
             "schema": null
@@ -1960,6 +2015,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -1980,6 +2036,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_user_email",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_user",
             "schema": null
@@ -1998,6 +2055,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_user_username",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_user",
             "schema": null
@@ -2016,6 +2074,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_tv_user_active",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_user",
             "schema": null
@@ -2036,6 +2095,7 @@
           ],
           "method": "gin",
           "name": "idx_tv_user_username_trgm",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_user",
             "schema": null
@@ -2056,6 +2116,7 @@
           ],
           "method": "btree",
           "name": "idx_tv_user_list",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tv_user",
             "schema": null

@@ -120,6 +120,7 @@
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -137,6 +138,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -157,6 +159,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_catalog_tb_manufacturer_name",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_manufacturer",
             "schema": "catalog"
@@ -175,6 +178,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_catalog_tb_manufacturer_id",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_manufacturer",
             "schema": "catalog"
@@ -248,6 +252,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -268,6 +273,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_prep_tb_manufacturer_name",
+          "nulls_not_distinct": false,
           "table": {
             "name": "tb_manufacturer",
             "schema": "prep_seed"

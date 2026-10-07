@@ -267,7 +267,8 @@
         "operators",
         "method",
         "where",
-        "key_options"
+        "key_options",
+        "nulls_not_distinct"
       ],
       "properties": {
         "kind": {
@@ -352,6 +353,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "nulls_not_distinct": {
+          "type": "boolean",
+          "description": "A UNIQUE's `NULLS NOT DISTINCT`: two rows holding NULL in a key column collide. False for every other kind."
         }
       }
     },
@@ -368,7 +373,8 @@
         "method",
         "backs_constraint",
         "key_options",
-        "expressions"
+        "expressions",
+        "nulls_not_distinct"
       ],
       "properties": {
         "name": {
@@ -420,6 +426,10 @@
             "type": "boolean"
           },
           "description": "Alongside `columns`: whether each key is an expression rather than a column; null where the reader recorded nothing."
+        },
+        "nulls_not_distinct": {
+          "type": "boolean",
+          "description": "The index's `NULLS NOT DISTINCT` (`pg_index.indnullsnotdistinct`), recorded on any index, constraining only a unique one."
         }
       }
     },

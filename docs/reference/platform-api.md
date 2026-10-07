@@ -455,6 +455,9 @@ on `Index`; `operators` runs alongside too, the operator each element
 is compared with (`&&`, `OPERATOR(pg_catalog.=)`). `method` is its index
 access method and `where` its partial predicate, rendered.
 
+`nulls_not_distinct` is a `UNIQUE … NULLS NOT DISTINCT`: two rows holding
+`NULL` in a key column collide. No other kind can say it.
+
 | Field | Type | Default |
 |---|---|---|
 | `kind` | `ConstraintKind` | required |
@@ -470,6 +473,7 @@ access method and `where` its partial predicate, rendered.
 | `method` | `str \| None` | `None` |
 | `where` | `str \| None` | `None` |
 | `key_options` | `tuple[str, ...]` | `()` |
+| `nulls_not_distinct` | `bool` | `False` |
 
 ### `Index`
 
@@ -488,6 +492,8 @@ never *extra* to it; only the catalog knows it. `key_options` runs alongside
 `columns`: what each key's element writes after the key — its collation,
 operator class and ordering (`gin_trgm_ops`, `DESC NULLS LAST`), `""`
 for a key that writes none, and `()` when no key writes any.
+`nulls_not_distinct` is its `NULLS NOT DISTINCT`, which PostgreSQL records on
+any index and which constrains only a unique one.
 
 | Field | Type | Default |
 |---|---|---|
@@ -500,6 +506,7 @@ for a key that writes none, and `()` when no key writes any.
 | `backs_constraint` | `bool` | `False` |
 | `key_options` | `tuple[str, ...]` | `()` |
 | `expressions` | `tuple[bool, ...] \| None` | `None` |
+| `nulls_not_distinct` | `bool` | `False` |
 
 ### `EnumType`
 

@@ -138,6 +138,7 @@
           "kind": "primary_key",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -155,6 +156,7 @@
           "kind": "unique",
           "method": null,
           "name": "",
+          "nulls_not_distinct": false,
           "on_delete": null,
           "on_update": null,
           "operators": [],
@@ -175,6 +177,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_email",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -195,6 +198,7 @@
           ],
           "method": "btree",
           "name": "idx_users_created_at",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
@@ -213,6 +217,7 @@
           "key_options": [],
           "method": "btree",
           "name": "idx_users_display_name",
+          "nulls_not_distinct": false,
           "table": {
             "name": "users",
             "schema": null
