@@ -51,6 +51,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Two lint rules report the statement: **`build_005`** (warning) for an `IF NOT EXISTS` that
   creates nothing, **`build_006`** (error) for a plain `CREATE INDEX` the build would fail at.
   Both are on by default.
+||||||| parent of 2e64a062 (fix(live): read the catalog under one search_path, whatever the database sets)
+- **A database's own `search_path` no longer makes unchanged views and functions `REPLACE`**
+  (#639). PostgreSQL's deparsers qualify a name only when the reading session's path would not
+  find it, and the live reader read under whatever path the database (or a role in it) set:
+  `migrate diff --from db --scratch-url …` read `s.f(inp)` on one side and `s.f(s.inp)` on the
+  other, and proposed a `REPLACE` of each (116 functions, 126 views and 7 materialized views on
+  one real tree). Every read that deparses now runs under `search_path = public` — what a
+  session that sets nothing sees, so a database that sets no path reads as before — and gives
+  a caller's connection back with the path it came with.
 - **A constraint a later `ALTER TABLE … DROP CONSTRAINT` drops is no longer in the model** (#624).
   The expected schema kept it, so `softdel_001` and `tenant_005` reported a key the tree had
   dropped and a database built from the tree read back without a constraint the tree still
