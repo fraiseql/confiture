@@ -114,6 +114,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -268,6 +269,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -358,6 +360,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -380,6 +383,7 @@
             "name": "orders",
             "schema": null
           },
+          "temporal": false,
           "where": null
         },
         {
@@ -402,6 +406,7 @@
             "name": "products",
             "schema": null
           },
+          "temporal": false,
           "where": null
         },
         {
@@ -417,6 +422,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -574,6 +580,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -596,6 +603,7 @@
             "name": "users",
             "schema": null
           },
+          "temporal": false,
           "where": null
         },
         {
@@ -611,6 +619,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -768,6 +777,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -790,6 +800,7 @@
             "name": "orders",
             "schema": null
           },
+          "temporal": false,
           "where": null
         },
         {
@@ -805,6 +816,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -914,6 +926,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -931,6 +944,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -946,6 +960,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -1068,6 +1083,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -1090,6 +1106,7 @@
             "name": "users",
             "schema": null
           },
+          "temporal": false,
           "where": null
         }
       ],
@@ -1215,6 +1232,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -1237,6 +1255,7 @@
             "name": "users",
             "schema": null
           },
+          "temporal": false,
           "where": null
         }
       ],
@@ -1410,6 +1429,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],

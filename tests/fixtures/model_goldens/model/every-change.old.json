@@ -83,6 +83,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -165,6 +166,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -223,6 +225,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -281,6 +284,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -451,6 +455,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -473,6 +478,7 @@
             "name": "parent",
             "schema": null
           },
+          "temporal": false,
           "where": null
         },
         {
@@ -488,6 +494,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -505,6 +512,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -524,6 +532,7 @@
           ],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -585,6 +594,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],

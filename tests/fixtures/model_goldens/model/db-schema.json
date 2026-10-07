@@ -169,6 +169,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -186,6 +187,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -203,6 +205,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -220,6 +223,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],

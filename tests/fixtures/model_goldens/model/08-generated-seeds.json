@@ -180,6 +180,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -197,6 +198,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -219,6 +221,7 @@
             "name": "tb_vendor",
             "schema": "catalog"
           },
+          "temporal": false,
           "where": null
         },
         {
@@ -234,6 +237,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -324,6 +328,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -341,6 +346,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -447,6 +453,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         },
         {
@@ -469,6 +476,7 @@
             "name": "tb_vendor",
             "schema": "prep_seed"
           },
+          "temporal": false,
           "where": null
         },
         {
@@ -484,6 +492,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
@@ -558,6 +567,7 @@
           "operators": [],
           "ref_columns": [],
           "ref_table": null,
+          "temporal": false,
           "where": null
         }
       ],
