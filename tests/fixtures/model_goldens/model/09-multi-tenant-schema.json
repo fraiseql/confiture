@@ -140,6 +140,7 @@
             "tenant_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -163,6 +164,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -181,6 +183,7 @@
             "code"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -287,6 +290,7 @@
             "tenant_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -310,6 +314,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -328,6 +333,7 @@
             "reference"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -346,6 +352,7 @@
             "fk_provider"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -477,6 +484,7 @@
             "tenant_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -499,6 +507,7 @@
             "fk_product"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -519,6 +528,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "quantity > 0",
           "key_options": [],
           "kind": "check",
@@ -537,6 +547,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -555,6 +566,7 @@
             "fk_order"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -651,6 +663,7 @@
             "tenant_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -673,6 +686,7 @@
             "fk_company"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -696,6 +710,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -714,6 +729,7 @@
             "fk_company"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -788,6 +804,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -805,6 +822,7 @@
             "vat_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -879,6 +897,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -896,6 +915,7 @@
             "sku"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -970,6 +990,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -987,6 +1008,7 @@
             "code"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -1045,6 +1067,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",

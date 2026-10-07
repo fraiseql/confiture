@@ -90,6 +90,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -172,6 +173,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -230,6 +232,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -289,6 +292,7 @@
             "b"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -459,6 +463,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -476,6 +481,7 @@
             "pid"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -496,6 +502,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "qty >= 0",
           "key_options": [],
           "kind": "check",
@@ -514,6 +521,7 @@
             "qty"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -531,6 +539,7 @@
             "span"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "exclusion",
@@ -596,6 +605,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",

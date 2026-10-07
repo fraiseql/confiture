@@ -223,6 +223,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -240,6 +241,7 @@
             "pk_comment"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -257,6 +259,7 @@
             "fk_post"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -279,6 +282,7 @@
             "fk_user"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -301,6 +305,7 @@
             "fk_parent_comment"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -321,6 +326,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "length(content) >= 1",
           "key_options": [],
           "kind": "check",
@@ -336,6 +342,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "pk_comment <> fk_parent_comment",
           "key_options": [],
           "kind": "check",
@@ -748,6 +755,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -765,6 +773,7 @@
             "pk_post"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -782,6 +791,7 @@
             "slug"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -799,6 +809,7 @@
             "fk_user"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -819,6 +830,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "length(title) >= 1",
           "key_options": [],
           "kind": "check",
@@ -834,6 +846,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "slug ~ '^[a-z0-9-]+$'",
           "key_options": [],
           "kind": "check",
@@ -849,6 +862,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "view_count >= 0",
           "key_options": [],
           "kind": "check",
@@ -864,6 +878,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "(is_published = FALSE AND published_at IS NULL) OR (is_published = TRUE AND published_at IS NOT NULL)",
           "key_options": [],
           "kind": "check",
@@ -1243,6 +1258,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -1260,6 +1276,7 @@
             "pk_user"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -1277,6 +1294,7 @@
             "email"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -1294,6 +1312,7 @@
             "username"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -1309,6 +1328,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "email LIKE '%@%'",
           "key_options": [],
           "kind": "check",
@@ -1324,6 +1344,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "length(username) >= 3 AND length(username) <= 30",
           "key_options": [],
           "kind": "check",
@@ -1541,6 +1562,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -1700,6 +1722,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -1955,6 +1978,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",

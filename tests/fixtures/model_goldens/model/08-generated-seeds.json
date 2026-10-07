@@ -170,6 +170,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -187,6 +188,7 @@
             "pk_product"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -204,6 +206,7 @@
             "fk_vendor"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -224,6 +227,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "price > 0",
           "key_options": [],
           "kind": "check",
@@ -314,6 +318,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -331,6 +336,7 @@
             "pk_vendor"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -437,6 +443,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -454,6 +461,7 @@
             "fk_vendor_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -474,6 +482,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "price > 0",
           "key_options": [],
           "kind": "check",
@@ -548,6 +557,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",

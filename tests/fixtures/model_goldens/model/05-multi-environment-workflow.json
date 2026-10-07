@@ -201,6 +201,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -218,6 +219,7 @@
             "owner_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -238,6 +240,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "char_length(name) >= 3 AND char_length(name) <= 100",
           "key_options": [],
           "kind": "check",
@@ -253,6 +256,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "status IN ('active', 'archived', 'deleted')",
           "key_options": [],
           "kind": "check",
@@ -271,6 +275,7 @@
             "name"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -550,6 +555,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -567,6 +573,7 @@
             "project_id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -589,6 +596,7 @@
             "assigned_to"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "foreign_key",
@@ -609,6 +617,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "char_length(title) >= 3 AND char_length(title) <= 200",
           "key_options": [],
           "kind": "check",
@@ -624,6 +633,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "priority IN ('low', 'medium', 'high', 'urgent')",
           "key_options": [],
           "kind": "check",
@@ -639,6 +649,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "status IN ('todo', 'in_progress', 'done', 'cancelled')",
           "key_options": [],
           "kind": "check",
@@ -654,6 +665,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "(status = 'done' AND completed_at IS NOT NULL) OR (status <> 'done' AND completed_at IS NULL)",
           "key_options": [],
           "kind": "check",
@@ -923,6 +935,7 @@
             "id"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "primary_key",
@@ -940,6 +953,7 @@
             "email"
           ],
           "deferrable": null,
+          "enforced": true,
           "expression": null,
           "key_options": [],
           "kind": "unique",
@@ -955,6 +969,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'",
           "key_options": [],
           "kind": "check",
@@ -970,6 +985,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "char_length(display_name) >= 2",
           "key_options": [],
           "kind": "check",
@@ -985,6 +1001,7 @@
         {
           "columns": [],
           "deferrable": null,
+          "enforced": true,
           "expression": "char_length(bio) <= 1000",
           "key_options": [],
           "kind": "check",

@@ -252,7 +252,7 @@
     },
     "Constraint": {
       "type": "object",
-      "description": "A primary key, a UNIQUE, a CHECK, a foreign key or an EXCLUDE. `name` is empty where the schema wrote none; an empty `ref_columns` means the referenced primary key. An EXCLUDE's `columns` are its elements, with `operators` and `key_options` alongside.",
+      "description": "A primary key, a UNIQUE, a CHECK, a foreign key or an EXCLUDE. `name` is empty where the schema wrote none; an empty `ref_columns` means the referenced primary key. An EXCLUDE's `columns` are its elements, with `operators` and `key_options` alongside. `enforced` is false for a CHECK or foreign key declared NOT ENFORCED (PostgreSQL 18).",
       "additionalProperties": false,
       "required": [
         "kind",
@@ -267,7 +267,8 @@
         "operators",
         "method",
         "where",
-        "key_options"
+        "key_options",
+        "enforced"
       ],
       "properties": {
         "kind": {
@@ -352,6 +353,9 @@
           "items": {
             "type": "string"
           }
+        },
+        "enforced": {
+          "type": "boolean"
         }
       }
     },

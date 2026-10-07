@@ -98,6 +98,16 @@ itself (⚠️ default suffix `.sql.zst`). New: `softdel_001`/`softdel_002` (#59
 
 ### Added
 
+- **A NOT ENFORCED CHECK or foreign key is no longer the enforced one** (#603). PostgreSQL 18
+  lets either be declared `NOT ENFORCED`; the model now holds it as `Constraint.enforced`
+  (`true` by default), read from the tree wherever the grammar puts the clause and from the
+  catalog through `pg_get_constraintdef`, by the one constraint reader. A constraint that stops
+  or starts being enforced is replaced by `migrate diff` (drop, then add with the clause) and
+  reported by `confiture drift` as the existing `constraint_mismatch` (critical). `build.two_pass`
+  now moves a `NOT ENFORCED` key like any other. **Model wire:** every constraint in
+  `SchemaModel.to_json()` carries `"enforced"`, and `schema-model.schema.json` requires it; a
+  model written before reads as enforced. The model goldens are refreshed for that key alone.
+
 - **`build --list-files --compare-to <ref>` proves a renumbering kept the build order** (#580).
   A renumbering that arrives by merge, vendoring or a hand `git mv` was checked by diffing two
   listings, in which every renamed file reads as a removal plus an addition. The comparison reads
