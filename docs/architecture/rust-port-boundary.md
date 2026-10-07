@@ -36,7 +36,7 @@ holds.
 ## The grammar the crate inherits
 
 The Python package supports pglast 8, which embeds the PostgreSQL 18 grammar. The crate
-targets **PostgreSQL 18** too, the grammar the lockfile pins today (pglast 8.5;
+targets **PostgreSQL 18** too, the grammar the lockfile pins today (pglast 8.4;
 `confiture --version` names it on its second line).
 
 The majors do not agree on the parse-node enums. PostgreSQL 18 inserted an
