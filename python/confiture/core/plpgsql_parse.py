@@ -586,7 +586,7 @@ def _body_span(statement: str, body_at: int | None) -> Span | None:
     declarations are where most qualified type names are written (#270), and a
     missing argument must not quietly put them out of reach.
     """
-    tokens = sql_lexer.tokens(statement)
+    tokens = sql_lexer.code_tokens(statement)
     at = _as_offset(tokens, body_at)
     if at is None:
         return None

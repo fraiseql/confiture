@@ -116,3 +116,12 @@ def test_a_comment_in_the_declarations_is_not_a_declaration(declare: str) -> Non
     compiled = parse_body(statement)
     assert compiled.tree
     assert statement.count("\n") == compiled.text.count("\n")
+
+
+def test_a_comment_between_as_and_the_body_does_not_hide_it() -> None:
+    """#637's sibling: with no ``body_at``, the body was the string right after ``AS``."""
+    statement = (
+        "CREATE FUNCTION s.f() RETURNS void LANGUAGE plpgsql AS -- the body\n$$\n"
+        "DECLARE\n    a bigint; b ltree;\nBEGIN\n    SELECT id, label INTO a, b FROM s.t;\nEND;\n$$;"
+    )
+    assert parse_body(statement).substituted
