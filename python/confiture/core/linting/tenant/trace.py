@@ -23,7 +23,11 @@ relation a ``FROM`` reads, at any depth, and where each column a *qualification*
 names — ``WHERE``, ``JOIN … ON``, ``HAVING``, a sub-select's own — comes from. A
 sub-select anywhere in a query (an ``EXISTS``, a scalar sub-select in the target
 list) is walked with that query as its outer scope, so a correlated reference
-resolves as PostgreSQL resolves it.
+resolves as PostgreSQL resolves it. It is told, too, each key-shaped equality a
+qualification asserts — a top-level ``AND`` conjunct ``a = b`` between two columns —
+with the column on the side the qualification *restricts*: a range of the query's own
+``FROM`` (not an outer one), and never a ``LEFT JOIN``'s preserved side, whose rows its
+``ON`` keeps whatever it says.
 """
 
 from __future__ import annotations
@@ -39,6 +43,9 @@ from confiture.core.ddl_walk import walk_nodes
 ColumnId = tuple[str, str, str]
 
 _SETOP_NONE = _pg_member("SetOperation", "SETOP_NONE")
+_AND_EXPR = _pg_member("BoolExprType", "AND_EXPR")
+_AEXPR_OP = _pg_member("A_Expr_Kind", "AEXPR_OP")
+_JOIN_LEFT = _pg_member("JoinType", "JOIN_LEFT")
 _JOIN_FULL = _pg_member("JoinType", "JOIN_FULL")
 _JOIN_RIGHT = _pg_member("JoinType", "JOIN_RIGHT")
 
@@ -95,6 +102,14 @@ class Observer(Protocol):
 
     def qualifies(self, source: Source) -> None:
         """A column a qualification names, resolved where the query resolves it."""
+        ...
+
+    def equal(self, target: Source, through: Source) -> None:
+        """A qualification keeps only the rows whose *target* column equals *through*.
+
+        *target* is resolved in a range the qualification restricts; *through* where
+        the query resolves it. Told once per side that is restricted.
+        """
         ...
 
 
@@ -189,6 +204,7 @@ class _Tracer:
         if self.observer is not None:
             for qualification in (stmt.whereClause, stmt.havingClause):
                 self.observe(qualification, scope, ctes, tests=True)
+                self.equalities(qualification, scope, _Scope(entries, None))
             self.observe(stmt.targetList, scope, ctes, tests=False)
         return [out for target in stmt.targetList or () for out in _target(target, scope)]
 
@@ -211,6 +227,19 @@ class _Tracer:
                 self.select(node.subselect, ctes, scope)
             elif kind == "ColumnRef" and tests:
                 self.observer.qualifies(_reference(node, scope))
+
+    def equalities(self, expression: Any, scope: _Scope, restricted: _Scope) -> None:
+        """Tell the observer each ``a = b`` conjunct, from each side *restricted* reads."""
+        if expression is None or self.observer is None:
+            return
+        for conjunct in conjuncts(expression):
+            sides = _column_equality(conjunct)
+            if sides is None:
+                continue
+            for target, through in (sides, sides[::-1]):
+                held = _reference(target, restricted)
+                if isinstance(held, Origin):
+                    self.observer.equal(held, _reference(through, scope))
 
     def with_clause(self, clause: Any, ctes: _Ctes, parent: _Scope | None) -> _Ctes:
         if clause is None:
@@ -254,7 +283,17 @@ class _Tracer:
         left = self.from_item(node.larg, ctes, scope)
         right = self.from_item(node.rarg, ctes, _Scope([*scope.entries, left], scope.parent))
         star = _joined(left.star, right.star, node)
-        self.observe(node.quals, _Scope([left, right], scope), ctes, tests=True)
+        quals = _Scope([left, right], scope)
+        self.observe(node.quals, quals, ctes, tests=True)
+        kind = int(node.jointype)
+        restricted = [
+            _preserved(entry) if kind in preserving else entry
+            for entry, preserving in (
+                (left, (_JOIN_LEFT, _JOIN_FULL)),
+                (right, (_JOIN_RIGHT, _JOIN_FULL)),
+            )
+        ]
+        self.equalities(node.quals, quals, _Scope(restricted, None))
         if node.alias is None:
             return _Entry({**left.ranges, **right.ranges}, star)
         if not isinstance(star, Unread):
@@ -268,6 +307,33 @@ _UNREAD_FROM = {
     "RangeTableFunc": "an XMLTABLE in FROM",
     "RangeTableSample": "a TABLESAMPLE in FROM",
 }
+
+
+def _preserved(entry: _Entry) -> _Entry:
+    """A join side whose every row its ``ON`` keeps: nothing in it is restricted."""
+    kept = Unread("the preserved side of an outer join")
+    return _Entry(dict.fromkeys(entry.ranges, kept), kept)
+
+
+def conjuncts(expression: Any) -> list[Any]:
+    """The top-level ``AND`` terms of *expression*: each one alone must hold."""
+    if type(expression).__name__ == "BoolExpr" and int(expression.boolop) == _AND_EXPR:
+        return [term for arg in expression.args for term in conjuncts(arg)]
+    return [expression]
+
+
+def _column_equality(node: Any) -> tuple[Any, Any] | None:
+    """The two ``ColumnRef`` s of ``a = b``, or ``None`` for anything else."""
+    if (
+        type(node).__name__ != "A_Expr"
+        or int(node.kind) != _AEXPR_OP
+        or [n.sval for n in node.name] not in (["="], ["pg_catalog", "="])
+    ):
+        return None
+    sides = (node.lexpr, node.rexpr)
+    if any(type(side).__name__ != "ColumnRef" for side in sides):
+        return None
+    return sides
 
 
 def _joined(left: Columns, right: Columns, node: Any) -> Columns:

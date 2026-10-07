@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `HAVING`); a view that filters its driving table and embeds a joined one unfiltered is
   reported. Waiver: `-- confiture:softdel-keeps-deleted <table>[, …]: <why>`, covering only the
   tables it names. The column tracer (`tenant/trace.py`) gains an observer for it.
+  A key equality carries a test (#650): a read joined on a one-column primary key or UNIQUE to
+  tested reads of the same table — a filtered or recursive CTE, an aggregate CTE grouped by the
+  key and joined back to a filtered read — reaches only live rows and is not reported; a
+  `LEFT JOIN`'s preserved side is not restricted by its `ON`. An anti-join (`LEFT JOIN t …
+  WHERE t.pk IS NULL`) is reported as what it does: a deleted row still matches and hides a
+  live one.
 
 ### Fixed
 

@@ -92,6 +92,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "OBJECT_FOREIGN_TABLE",
     ),
     "SetOperation": ("SETOP_NONE",),
+    "A_Expr_Kind": ("AEXPR_OP",),
     "BoolExprType": ("AND_EXPR",),
     "NullTestType": ("IS_NULL",),
     "CmdType": ("CMD_UPDATE",),
