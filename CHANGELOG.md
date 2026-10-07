@@ -57,6 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`build_003`/`build_004` resolve a pg_tviews TVIEW** (#651). A view or routine reading a
+  TVIEW's table, declared with `pg_tviews_create_or_replace(…)` or `CREATE TABLE … AS`, was
+  reported as reading a relation no file in the build creates.
 - **A comment in a `DECLARE` section no longer hides a routine body** (#637). The #558 type
   substitution took a comment before a declaration for the variable's name, and the name for
   the start of its type, so `b ltree;` after `a bigint; -- note` lost `b` and the body stayed
