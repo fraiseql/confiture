@@ -965,8 +965,29 @@ On when `db/project.yaml` declares the tombstone column:
 
 ```yaml
 soft_delete:
-  column: deleted_at   # the default; a table that has this column soft-deletes
+  column: deleted_at   # the default
+  tables: present      # the default: every table that has the column soft-deletes
+  exclude: []          # tables that never do: schema.table, or a bare name (any schema)
 ```
+
+**Which tables soft-delete.** `present` judges every table carrying the column.
+A tree that puts the audit columns on every table — reference tables nothing ever
+deletes included — wants `tables: written` (#640): a table soft-deletes when some
+statement of the tree writes a value other than `NULL` to its column — `now()`,
+`CURRENT_TIMESTAMP`, a variable, a parameter. It is read wherever PostgreSQL
+updates a row: `UPDATE` (in a CTE, with `FROM`, `SET (a, b) = (…)`), `INSERT … ON
+CONFLICT DO UPDATE`, `MERGE … UPDATE`, a `CREATE RULE`'s action, at the top level
+of a file and in every function and procedure body (PL/pgSQL, `LANGUAGE sql`,
+`BEGIN ATOMIC`). An `UPDATE` without `ONLY` writes a partitioned table's partitions
+too; `SET deleted_at = NULL` (an undelete) and `= DEFAULT` write nothing. A body
+that cannot be read — the compiler refuses it, or it builds its statement with
+`EXECUTE` — is named in the rules' `degraded` status: whether it tombstones a table
+is not known, and a table only it writes is not judged. A trigger that assigns
+`NEW.deleted_at` is not read; name such a table's keys with the waivers below, or
+keep `present`. An `exclude` entry that matches no table is said in `degraded` too.
+
+On one 1,115-file tree whose every table carries `deleted_at`, `written` judges 22
+tables where `present` judges 127: `softdel_001` 148 → 26, `softdel_002` 24 → 11.
 
 A table that soft-deletes keeps its deleted rows, and their keys. A `UNIQUE`
 constraint or unique index that does not exclude them keeps reserving a deleted
@@ -1024,9 +1045,8 @@ waives — an unnamed key by the name PostgreSQL gives it, `<table>_<columns>_ke
 CREATE TABLE app.tb_account (id BIGINT PRIMARY KEY, handle TEXT UNIQUE, deleted_at TIMESTAMPTZ);
 ```
 
-A key a later `DROP INDEX` removes is not judged; one a later `ALTER TABLE … DROP
-CONSTRAINT` removes still is, because the model does not fold that statement yet
-(tracked in #624). A child table (`INHERITS`,
+A key a later `DROP INDEX` or `ALTER TABLE … DROP CONSTRAINT` removes is not
+judged. A child table (`INHERITS`,
 `PARTITION OF`) soft-deletes when it inherits the column.
 
 ### `softdel_002` — a nullable key column says `NULLS NOT DISTINCT`
@@ -1040,6 +1060,12 @@ no parent — two roots may then share a name:
 CREATE UNIQUE INDEX ux_node_parent_name ON app.tb_node (fk_parent, name)
     NULLS NOT DISTINCT WHERE deleted_at IS NULL;
 ```
+
+A key whose `NULL` is meant to be distinct — two devices with no MAC address
+recorded must not collide on `(fk_org, mac_address)` — is waived with
+`-- confiture:softdel-nulls-distinct`, placed and argued as
+`softdel-keep-reserved` is (above a `CREATE TABLE`, it names the key). Each
+directive waives its own rule only.
 
 The flag is read from the statement that writes the key. The schema model does
 not hold it, so `confiture drift` and `migrate diff` do not see it change (tracked

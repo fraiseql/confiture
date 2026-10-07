@@ -37,7 +37,12 @@ from confiture.core.linting.inventory import (
 from confiture.core.linting.quoted_names import needs_quotes, quoted_names
 from confiture.core.linting.rule_registry import LINT_RULES, UNPARSEABLE_RULE_ID
 from confiture.core.linting.seed_secrets import secret_kinds
-from confiture.core.linting.soft_delete import null_key_findings, reserved_key_findings
+from confiture.core.linting.soft_delete import (
+    SoftDeleting,
+    null_key_findings,
+    reserved_key_findings,
+    soft_deleting,
+)
 from confiture.core.linting.tenant import rules as tenant_rules
 from confiture.core.linting.tview_rules import tview_findings
 from confiture.core.schema_identity import DEFAULT_SCHEMA
@@ -407,6 +412,7 @@ class SchemaLinter:
         self._files, rejected = self._parsed_files()
         self._report_rejected_files(report, rejected)
         self._inventory = build_inventory(self._files)
+        self._soft_deleting: SoftDeleting | None = None
         self._file_objects, self._file_schemas = (
             files_alone(self._files) if self._schema_files else ([], [])
         )
@@ -1148,9 +1154,16 @@ class SchemaLinter:
                 )
             )
             return
+        if self._soft_deleting is None:
+            self._soft_deleting = soft_deleting(self._inventory, self._files, config)
+        deleting = self._soft_deleting
+        if deleting.notes:
+            report.degraded.append(
+                RuleStatus(code=code, state="degraded", reason="; ".join(deleting.notes))
+            )
         rule, judge = _SOFT_DELETE_RULES[code]
         severity = RuleSeverity(next(r.severity for r in LINT_RULES if r.code == code))
-        for finding in judge(self._inventory, self._files, config):
+        for finding in judge(self._inventory, self._files, deleting):
             report.add_violation(
                 LintViolation(
                     rule_id=code,

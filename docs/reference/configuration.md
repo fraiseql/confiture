@@ -808,7 +808,9 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `column` | str | `deleted_at` | The tombstone column: a table that has it soft-deletes, and a row whose value in it is not ``NULL`` is deleted. |
+| `column` | str | `deleted_at` | The tombstone column: a row whose value in it is not ``NULL`` is deleted. |
+| `tables` | `present` \| `written` | `present` | Which tables soft-delete. ``present``: every table that has the column. ``written``: those the tree tombstones — a statement or a routine body writes a value other than ``NULL`` to the column (#640). A tree that puts the column on every table, reference tables included, wants ``written``. |
+| `exclude` | list[str] | `[]` | Tables that never soft-delete whatever *tables* says, each ``schema.table`` or a bare name (any schema). |
 
 #### `SquashConfig`
 
@@ -966,6 +968,8 @@ tenancy:
   global_schemas: []
 soft_delete:
   column: deleted_at
+  tables: present
+  exclude: []
 squash:
   min_age_days: 90
   skip_environments: []

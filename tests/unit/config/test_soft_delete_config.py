@@ -81,3 +81,29 @@ def test_an_environment_file_carrying_soft_delete_is_refused_like_tenancy(
         Environment.load("local", project_dir=tmp_path)
 
     assert refused.value.error_code == "CONFIG_010"
+
+
+def test_tables_defaults_to_present_and_reads_written(tmp_path: Path) -> None:
+    """#640: ``present`` keeps 1.30's meaning; ``written`` is asked for."""
+    assert SoftDeleteConfig().tables == "present"
+    _write(tmp_path, "soft_delete:\n  tables: written\n  exclude: [app.tb_x, tb_y]\n")
+    config = load_project_config(tmp_path).soft_delete
+    assert config is not None
+    assert config.tables == "written"
+    assert config.exclude == ["app.tb_x", "tb_y"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "soft_delete:\n  tables: all\n",
+        "soft_delete:\n  exclude: ['a.b.c']\n",
+        "soft_delete:\n  exclude: ['']\n",
+    ],
+)
+def test_a_tables_mode_or_exclude_entry_it_cannot_read_is_refused(
+    tmp_path: Path, text: str
+) -> None:
+    _write(tmp_path, text)
+    with pytest.raises(ConfigurationError):
+        load_project_config(tmp_path)

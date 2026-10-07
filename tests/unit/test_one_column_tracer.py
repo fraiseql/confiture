@@ -39,6 +39,10 @@ ALLOWED: dict[str, str] = {
     "core.live_catalog:_expression": (
         "a catalog expression parsed as `SELECT <expr>` so it renders the way DDL does"
     ),
+    "core.linting.tombstones:_written_relations": (
+        "the columns an UPDATE, ON CONFLICT or MERGE *assigns* (a SET list), and the "
+        "value each is given — what a statement writes, never where an output comes from"
+    ),
     "core.seed.validation.prep_seed.seed_rows:_branches": (
         "the values a seed `INSERT … SELECT` writes, row by row — data, not provenance"
     ),
