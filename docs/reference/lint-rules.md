@@ -39,6 +39,7 @@ Adopt a rule on a schema that already trips it with a
 | `tenant_005` | tenant | warning | with `tenancy:` | A tenant table's primary key and unique keys keep tenants apart |
 | `softdel_001` | softdel | warning | with `soft_delete:` | A unique key on a soft-deleting table excludes deleted rows |
 | `softdel_002` | softdel | info | with `soft_delete:` | A nullable column in such a key is NULLS NOT DISTINCT |
+| `softdel_003` | softdel | warning | with `soft_delete:` | A view tests the tombstone of every soft-deleting table it reads |
 | `tview_001` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT |
 | `tview_002` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
@@ -1071,7 +1072,53 @@ The flag is read from the statement that writes the key. The schema model does
 not hold it, so `confiture drift` and `migrate diff` do not see it change (tracked
 in #623).
 
-Both rules report themselves *skipped*, with the reason, when selected in a
+### `softdel_003` — a view tests the tombstone of every soft-deleting table it reads
+
+Warning. A deleted row stays in its table, so a view or materialized view that
+reads a soft-deleting table and never tests its tombstone column lists deleted
+rows, embeds them in live ones, or counts them. The check is per *read*: every
+relation the view's query reads — `FROM`, a join, a `LATERAL` or `FROM` subquery,
+a CTE, a sub-select in any clause, every branch of a `UNION` — that is a
+soft-deleting table must have its tombstone named through that read by a
+*qualification*: `WHERE`, `JOIN … ON`, `HAVING`, or a sub-select's own. Naming the
+column in the target list is no test.
+
+```sql
+CREATE VIEW app.v_order AS
+SELECT o.id,
+       jsonb_build_object(
+           'id', o.id,
+           'lines', (SELECT jsonb_agg(jsonb_build_object('id', l.id, 'qty', l.qty))
+                     FROM app.tb_order_line l                -- softdel_003: l is never tested
+                     WHERE l.fk_order = o.pk_order)
+       ) AS data
+FROM app.tb_order o
+WHERE o.deleted_at IS NULL;                                   -- o is
+```
+
+Which reference reaches which read is the column tracer's answer, the one
+`tenant_003` uses: `FROM (SELECT * FROM t) x WHERE x.deleted_at IS NULL` tests
+`t`; a correlated reference resolves outward; a self-join's two reads are judged
+apart. The finding says where the test belongs: the view's `WHERE` for its
+driving table, the `ON` clause for the nullable side of a `LEFT JOIN` (in `WHERE`
+it would turn the join into an inner join), inside the sub-select for an embed.
+A view's reads of other views are not judged — the inner view is, on its own
+reads. A view defined twice is judged as the build leaves it. TVIEW definitions
+are not read yet.
+
+A view that keeps deleted rows on purpose — an audit trail, an id resolver — is
+waived above its statement, naming the tables it covers, so a later join to
+another soft-deleting table is still judged:
+
+```sql
+-- confiture:softdel-keeps-deleted tb_order_line, app.tb_order: resolves ids of deleted lines too
+CREATE VIEW app.v_order_line_resolver AS …
+```
+
+Under `tables: written` only the tables the tree tombstones are judged. On a
+1,115-file tree: 229 reads in 75 views (`written`), 516 in 105 (`present`).
+
+All three rules report themselves *skipped*, with the reason, when selected in a
 project with no `soft_delete:` block.
 
 ## The `tview` family — how a pg_tviews TVIEW's storage is left

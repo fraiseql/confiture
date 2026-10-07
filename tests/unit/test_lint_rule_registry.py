@@ -58,6 +58,7 @@ class TestRegistryContents:
             "tenant_005",
             "softdel_001",
             "softdel_002",
+            "softdel_003",
             "tview_001",
             "tview_002",
             "replica_001",

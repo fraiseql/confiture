@@ -47,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`-- confiture:softdel-nulls-distinct`** waives `softdel_002` for a key whose `NULL` is meant
   to be distinct (#640), placed as `softdel-keep-reserved` is.
 
+- **`softdel_003`: a view tests the tombstone of every soft-deleting table it reads** (#632).
+  Warning, on with `soft_delete:`. Each relation a view's query reads, at any depth (joins,
+  `LATERAL`, CTEs, sub-selects in any clause, set operations), that is a soft-deleting table
+  must have its tombstone column named through that read by a qualification (`WHERE`, `ON`,
+  `HAVING`); a view that filters its driving table and embeds a joined one unfiltered is
+  reported. Waiver: `-- confiture:softdel-keeps-deleted <table>[, …]: <why>`, covering only the
+  tables it names. The column tracer (`tenant/trace.py`) gains an observer for it.
+
 ### Fixed
 
 - **A comment in a `DECLARE` section no longer hides a routine body** (#637). The #558 type

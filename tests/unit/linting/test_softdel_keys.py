@@ -278,9 +278,10 @@ def test_no_rule_runs_when_the_family_is_not_declared(tmp_path: Path) -> None:
 def test_the_family_is_on_when_the_project_declares_soft_delete() -> None:
     rules = {r.code: r for r in LINT_RULES if r.family == "softdel"}
 
-    assert sorted(rules) == ["softdel_001", "softdel_002"]
+    assert sorted(rules) == ["softdel_001", "softdel_002", "softdel_003"]
     assert rules["softdel_001"].severity == "warning"
     assert rules["softdel_002"].severity == "info"
+    assert rules["softdel_003"].severity == "warning"
     assert all(r.enabled_by == "soft_delete" and not r.default_on for r in rules.values())
     declared = resolve_selection(None, (), declared=frozenset({"soft_delete"}))
     assert {"softdel_001", "softdel_002"} <= declared

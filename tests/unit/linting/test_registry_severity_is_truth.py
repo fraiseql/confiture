@@ -197,6 +197,13 @@ FIXTURES: dict[str, Fixture] = {
         },
         extra_files={"db/project.yaml": "soft_delete: {}\n"},
     ),
+    "softdel_003": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_user (id INT PRIMARY KEY, deleted_at TIMESTAMPTZ);\n"
+            "CREATE VIEW v_user AS SELECT id FROM tb_user;\n"
+        },
+        extra_files={"db/project.yaml": "soft_delete: {}\n"},
+    ),
     "tview_001": Fixture(
         {
             "010.sql": "CREATE TABLE tb_p (pk_p bigint PRIMARY KEY, fk_u bigint, t text);\n"

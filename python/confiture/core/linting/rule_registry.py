@@ -353,6 +353,14 @@ LINT_RULES: tuple[LintRule, ...] = (
         enabled_by="soft_delete",
     ),
     LintRule(
+        code="softdel_003",
+        family="softdel",
+        title="A view tests the tombstone of every soft-deleting table it reads",
+        severity="warning",
+        default_on=False,
+        enabled_by="soft_delete",
+    ),
+    LintRule(
         code="tview_001",
         family="tview",
         title="No index over data or updated_at on a TVIEW: it blocks HOT",
