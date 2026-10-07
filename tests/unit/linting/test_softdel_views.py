@@ -135,7 +135,7 @@ def test_each_read_of_a_soft_deleting_table_tests_its_tombstone(
 def test_a_self_join_tests_each_read(tmp_path: Path) -> None:
     view = (
         "CREATE VIEW app.v AS SELECT a.id FROM app.tb_order a JOIN app.tb_order b "
-        "ON b.pk_order = a.pk_order WHERE a.deleted_at IS NULL;\n"
+        "ON b.id = a.id WHERE a.deleted_at IS NULL;\n"
     )
     report = _lint(tmp_path, TABLES + view, check_softdel_views=True)
     (finding,) = _found(report, SELECT)
@@ -179,3 +179,124 @@ def test_a_view_replaced_later_is_judged_as_it_ends(tmp_path: Path) -> None:
         "CREATE OR REPLACE VIEW app.v AS SELECT id FROM app.tb_order WHERE deleted_at IS NULL;\n"
     )
     assert _reported(tmp_path, views) == []
+
+
+# A key equality carries a test across reads of one table (#650), measured on
+# PostgreSQL 18.4: a row joined on its primary key to a live row of the same table is
+# that live row; a LEFT JOIN's ON restricts only its nullable side.
+LIVE = "(SELECT pk_order FROM app.tb_order WHERE deleted_at IS NULL)"
+
+
+@pytest.mark.parametrize(
+    ("view", "reported"),
+    [
+        (
+            f"CREATE VIEW app.v AS SELECT o.id FROM {LIVE} live "
+            "JOIN app.tb_order o ON o.pk_order = live.pk_order;",
+            [],
+        ),
+        (
+            "CREATE VIEW app.v AS WITH RECURSIVE tree AS ("
+            "SELECT pk_order FROM app.tb_order WHERE deleted_at IS NULL "
+            "UNION ALL SELECT c.pk_order FROM app.tb_order c JOIN tree t "
+            "ON c.pk_order = t.pk_order + 1 WHERE c.deleted_at IS NULL) "
+            "SELECT o.id FROM tree JOIN app.tb_order o ON tree.pk_order = o.pk_order;",
+            [],
+        ),
+        (
+            "CREATE VIEW app.v AS WITH agg AS (SELECT o.pk_order AS fk_order, count(*) AS n "
+            "FROM app.tb_order o GROUP BY o.pk_order) "
+            "SELECT o.id, agg.n FROM app.tb_order o LEFT JOIN agg ON o.pk_order = agg.fk_order "
+            "WHERE o.deleted_at IS NULL;",
+            [],
+        ),
+        (
+            f"CREATE VIEW app.v AS SELECT o.id FROM app.tb_order o, {LIVE} live "
+            "WHERE live.pk_order = o.pk_order;",
+            [],
+        ),
+        (
+            "CREATE VIEW app.v AS SELECT o.id FROM app.tb_order o WHERE o.deleted_at IS NULL "
+            "AND EXISTS (SELECT 1 FROM app.tb_order o2 WHERE o2.pk_order = o.pk_order);",
+            [],
+        ),
+        (
+            f"CREATE VIEW app.v AS SELECT o.id FROM app.tb_order o "
+            f"LEFT JOIN {LIVE} live ON live.pk_order = o.pk_order;",
+            ["app.v"],
+        ),
+        (
+            f"CREATE VIEW app.v AS SELECT o.id FROM {LIVE} live "
+            "JOIN app.tb_order o ON o.id = live.pk_order::text::uuid;",
+            ["app.v"],
+        ),
+        (
+            "CREATE VIEW app.v AS SELECT o.id FROM (SELECT id FROM app.tb_order "
+            "WHERE deleted_at IS NULL) live JOIN app.tb_order o ON o.id = live.id;",
+            ["app.v"],
+        ),
+        (
+            f"CREATE VIEW app.v AS SELECT o.id FROM {LIVE} live "
+            "JOIN app.tb_order o ON o.pk_order = live.pk_order OR o.id IS NULL;",
+            ["app.v"],
+        ),
+        (
+            "CREATE VIEW app.v AS SELECT o.id FROM app.tb_order live "
+            "JOIN app.tb_order o ON o.pk_order = live.pk_order;",
+            ["app.v", "app.v"],
+        ),
+        (
+            "CREATE VIEW app.v AS SELECT l.id FROM app.tb_order_line l "
+            "JOIN app.tb_order_line live ON live.fk_order = l.fk_order "
+            "WHERE live.deleted_at IS NULL;",
+            ["app.v"],
+        ),
+        (
+            "CREATE VIEW app.v AS WITH agg AS (SELECT l.fk_order, count(*) AS n "
+            "FROM app.tb_order o LEFT JOIN app.tb_order_line l "
+            "ON o.pk_order = l.fk_order AND l.deleted_at IS NULL GROUP BY l.fk_order) "
+            "SELECT o.id, agg.n FROM app.tb_order o LEFT JOIN agg ON o.pk_order = agg.fk_order "
+            "WHERE o.deleted_at IS NULL;",
+            [],
+        ),
+        (
+            "CREATE VIEW app.v AS WITH agg AS (SELECT l.fk_order, count(*) AS n "
+            "FROM app.tb_order o LEFT JOIN app.tb_order_line l "
+            "ON o.pk_order = l.qty AND l.deleted_at IS NULL GROUP BY l.fk_order) "
+            "SELECT o.id, agg.n FROM app.tb_order o LEFT JOIN agg ON o.pk_order = agg.fk_order "
+            "WHERE o.deleted_at IS NULL;",
+            ["app.v"],
+        ),
+    ],
+    ids=[
+        "key-join-to-live-subquery",
+        "key-join-to-recursive-cte",
+        "aggregate-cte-grouped-by-key",
+        "key-equality-in-where",
+        "correlated-exists-on-key",
+        "left-join-preserved-side",
+        "not-a-plain-column",
+        "not-a-key",
+        "under-or",
+        "neither-tested",
+        "equal-but-not-unique",
+        "aggregate-cte-grouped-by-the-joined-key",
+        "aggregate-cte-grouped-by-an-unjoined-column",
+    ],
+)
+def test_a_key_equality_with_a_live_read_of_the_table_carries_its_test(
+    tmp_path: Path, view: str, reported: list[str]
+) -> None:
+    assert _reported(tmp_path, view + "\n") == reported
+
+
+def test_an_anti_join_hides_live_rows_and_says_so(tmp_path: Path) -> None:
+    view = (
+        "CREATE VIEW app.v AS SELECT c.pk FROM app.tb_country c "
+        "LEFT JOIN app.tb_order o ON o.pk_order = c.pk WHERE o.pk_order IS NULL;\n"
+    )
+    report = _lint(tmp_path, TABLES + view, check_softdel_views=True)
+    (finding,) = _found(report, SELECT)
+    assert "hides" in finding.message
+    assert "shows the rows deleted" not in finding.message
+    assert "ON clause" in (finding.suggested_fix or "")

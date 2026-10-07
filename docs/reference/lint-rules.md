@@ -1102,6 +1102,28 @@ Which reference reaches which read is the column tracer's answer, the one
 apart. The finding says where the test belongs: the view's `WHERE` for its
 driving table, the `ON` clause for the nullable side of a `LEFT JOIN` (in `WHERE`
 it would turn the join into an inner join), inside the sub-select for an embed.
+An anti-join leaks the other way, and the finding says so: in `LEFT JOIN t … WHERE
+t.pk IS NULL` a deleted row of `t` still matches and hides the live row it should
+keep, so the test belongs in the `ON` clause.
+
+A key equality carries a test from one read of a table to another. A read that a
+qualification restricts — `WHERE`, an inner join's `ON`, the nullable side of an
+outer join's `ON`, never its preserved side — to rows whose one-column primary key
+or UNIQUE equals the same key of tested reads of the same table reaches only live
+rows, and is not reported:
+
+```sql
+WITH RECURSIVE path AS (
+    SELECT pk_item_category FROM tb_item_category WHERE deleted_at IS NULL
+    UNION ALL
+    SELECT c.pk_item_category FROM tb_item_category c
+    JOIN path p ON c.fk_parent = p.pk_item_category WHERE c.deleted_at IS NULL)
+SELECT cat.name FROM path
+JOIN tb_item_category cat ON cat.pk_item_category = path.pk_item_category;  -- cat is live
+```
+
+So does a CTE grouped by the key and joined back on it to a filtered read
+(`LEFT JOIN agg ON agg.fk_dataflow = df.pk_dataflow … WHERE df.deleted_at IS NULL`).
 A view's reads of other views are not judged — the inner view is, on its own
 reads. A view defined twice is judged as the build leaves it. TVIEW definitions
 are not read yet.
