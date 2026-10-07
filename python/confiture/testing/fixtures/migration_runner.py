@@ -1,7 +1,7 @@
 """Migration execution utility for testing.
 
 Wraps confiture migrations to provide structured test results and execution
-tracking for PrintOptim's migration test suite.
+tracking for an application's migration test suite.
 """
 
 import contextlib

@@ -720,7 +720,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `host` | str | **required** | SSH server hostname (e.g. "printoptim.io") |
+| `host` | str | **required** | SSH server hostname (e.g. "db.example.com") |
 | `user` | str \| NoneType | - | SSH username. Defaults to the current OS user if omitted. |
 | `remote_host` | str | `localhost` | PostgreSQL host on the remote side (default: localhost). Ignored when ``remote_socket`` is set. |
 | `remote_port` | int | `5432` | PostgreSQL port on the remote side (default: 5432). Ignored when ``remote_socket`` is set. |

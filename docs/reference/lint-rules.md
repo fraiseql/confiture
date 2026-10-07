@@ -987,9 +987,6 @@ is not known, and a table only it writes is not judged. A trigger that assigns
 `NEW.deleted_at` is not read; name such a table's keys with the waivers below, or
 keep `present`. An `exclude` entry that matches no table is said in `degraded` too.
 
-On one 1,115-file tree whose every table carries `deleted_at`, `written` judges 22
-tables where `present` judges 127: `softdel_001` 148 → 26, `softdel_002` 24 → 11.
-
 A table that soft-deletes keeps its deleted rows, and their keys. A `UNIQUE`
 constraint or unique index that does not exclude them keeps reserving a deleted
 row's value: adding the same product to the same order again fails with `23505`,
@@ -1114,16 +1111,16 @@ rows, and is not reported:
 
 ```sql
 WITH RECURSIVE path AS (
-    SELECT pk_item_category FROM tb_item_category WHERE deleted_at IS NULL
+    SELECT pk_category FROM tb_category WHERE deleted_at IS NULL
     UNION ALL
-    SELECT c.pk_item_category FROM tb_item_category c
-    JOIN path p ON c.fk_parent = p.pk_item_category WHERE c.deleted_at IS NULL)
+    SELECT c.pk_category FROM tb_category c
+    JOIN path p ON c.fk_parent = p.pk_category WHERE c.deleted_at IS NULL)
 SELECT cat.name FROM path
-JOIN tb_item_category cat ON cat.pk_item_category = path.pk_item_category;  -- cat is live
+JOIN tb_category cat ON cat.pk_category = path.pk_category;  -- cat is live
 ```
 
 So does a CTE grouped by the key and joined back on it to a filtered read
-(`LEFT JOIN agg ON agg.fk_dataflow = df.pk_dataflow … WHERE df.deleted_at IS NULL`).
+(`LEFT JOIN agg ON agg.fk_order = o.pk_order … WHERE o.deleted_at IS NULL`).
 A view's reads of other views are not judged — the inner view is, on its own
 reads. A view defined twice is judged as the build leaves it. TVIEW definitions
 are not read yet.
@@ -1137,8 +1134,7 @@ another soft-deleting table is still judged:
 CREATE VIEW app.v_order_line_resolver AS …
 ```
 
-Under `tables: written` only the tables the tree tombstones are judged. On a
-1,115-file tree: 229 reads in 75 views (`written`), 516 in 105 (`present`).
+Under `tables: written` only the tables the tree tombstones are judged.
 
 All three rules report themselves *skipped*, with the reason, when selected in a
 project with no `soft_delete:` block.

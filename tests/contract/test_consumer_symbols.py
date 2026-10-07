@@ -7,7 +7,7 @@ repository's CI:
   ``tests/test_confiture_dependency_floor.py`` with ``importlib.import_module`` +
   ``hasattr`` — nothing stronger, so a symbol rebound to a different kind of object,
   or a method whose parameters narrowed, passes its probe and fails a deploy.
-- **printoptim_backend** names what it imports in a ``pyproject.toml`` comment, and
+- **A downstream application** names what it imports in a ``pyproject.toml`` comment, and
   runs every one of its migrations through ``models.migration.Migration``.
 
 Confiture is the side that knows what the shape was, so the shape is pinned here.
@@ -97,56 +97,56 @@ FRAISIER_SYMBOLS: tuple[Symbol, ...] = (
     ),
 )
 
-# printoptim_backend's `pyproject.toml:31` comment names these as the symbols it
+# A downstream application's `pyproject.toml:31` comment names these as the symbols it
 # consumes; the `source` column is where each one is actually imported.
-PRINTOPTIM_SYMBOLS: tuple[Symbol, ...] = (
+APP_SYMBOLS: tuple[Symbol, ...] = (
     Symbol(
-        "printoptim",
+        "app",
         "confiture.models.migration",
         "Migration",
-        "printoptim:db/migrations/*.py (every Python migration)",
+        "app:db/migrations/*.py (every Python migration)",
         "1.14.0",
     ),
     Symbol(
-        "printoptim",
+        "app",
         "confiture.core.builder",
         "SchemaBuilder",
-        "printoptim:tests/fixtures/database/setup.py:85",
+        "app:tests/fixtures/database/setup.py:85",
         "1.14.0",
     ),
     Symbol(
-        "printoptim",
+        "app",
         "confiture.core.test_db",
         "TestDbProvisioner",
-        "printoptim:tests/fixtures/database/setup.py:86",
+        "app:tests/fixtures/database/setup.py:86",
         "1.14.0",
     ),
     Symbol(
-        "printoptim",
+        "app",
         "confiture.testing.worker_db",
         "resolve_worker_db_name",
-        "printoptim:tests/conftest.py:27",
+        "app:tests/conftest.py:27",
         "1.14.0",
     ),
     Symbol(
-        "printoptim",
+        "app",
         "confiture.testing.worker_db",
         "is_ci",
-        "printoptim:tests/fixtures/database/setup.py:87",
+        "app:tests/fixtures/database/setup.py:87",
         "1.14.0",
     ),
     Symbol(
-        "printoptim",
+        "app",
         "confiture",
         "Migrator",
-        "printoptim:src/printoptim_backend/core/migration_runner.py:79",
+        "app:src/app/core/migration_runner.py:79",
         "1.14.0",
     ),
 )
 
 _FRAISIER_DBOPS = "fraisier:fraisier/dbops/confiture.py"
-_PRINTOPTIM_SETUP = "printoptim:tests/fixtures/database/setup.py"
-_PRINTOPTIM_RUNNER = "printoptim:src/printoptim_backend/core/migration_runner.py"
+_APP_SETUP = "app:tests/fixtures/database/setup.py"
+_APP_RUNNER = "app:src/app/core/migration_runner.py"
 
 CALL_SHAPES: tuple[CallShape, ...] = (
     CallShape(
@@ -252,101 +252,101 @@ CALL_SHAPES: tuple[CallShape, ...] = (
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture:Migrator.from_config",
         ("config", "migrations_dir"),
-        f"{_PRINTOPTIM_RUNNER}:81",
+        f"{_APP_RUNNER}:81",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core._migrator.session:MigratorSession.up",
         ("dry_run",),
-        f"{_PRINTOPTIM_RUNNER}:142",
+        f"{_APP_RUNNER}:142",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core._migrator.session:MigratorSession.down",
         ("steps",),
-        f"{_PRINTOPTIM_RUNNER}:178",
+        f"{_APP_RUNNER}:178",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core._migrator.session:MigratorSession.reinit",
         ("through",),
-        f"{_PRINTOPTIM_RUNNER}:219",
+        f"{_APP_RUNNER}:219",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.models.migration:Migration.execute",
         ("sql", "params"),
-        "printoptim:db/migrations/*.py (self.execute)",
+        "app:db/migrations/*.py (self.execute)",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core.builder:SchemaBuilder",
         ("env", "project_dir"),
-        f"{_PRINTOPTIM_SETUP}:106",
+        f"{_APP_SETUP}:106",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core.builder:SchemaBuilder.build",
         (),
-        f"{_PRINTOPTIM_SETUP}:110",
+        f"{_APP_SETUP}:110",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core.test_db:TestDbProvisioner",
         ("server_url",),
-        f"{_PRINTOPTIM_SETUP}:94",
+        f"{_APP_SETUP}:94",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core.test_db:TestDbProvisioner.ensure_template",
         ("template", "schema_hash", "schema_sql"),
-        f"{_PRINTOPTIM_SETUP}:107",
+        f"{_APP_SETUP}:107",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core.test_db:TestDbProvisioner.tablespace_usable",
         ("name",),
-        f"{_PRINTOPTIM_SETUP}:113",
+        f"{_APP_SETUP}:113",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core.test_db:TestDbProvisioner.drop",
         ("target", "force"),
-        f"{_PRINTOPTIM_SETUP}:118",
+        f"{_APP_SETUP}:118",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.core.test_db:TestDbProvisioner.clone",
         ("template", "target", "tablespace"),
-        f"{_PRINTOPTIM_SETUP}:119",
+        f"{_APP_SETUP}:119",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.testing.worker_db:resolve_worker_db_name",
         ("base",),
-        "printoptim:tests/conftest.py:31",
+        "app:tests/conftest.py:31",
         "1.14.0",
     ),
     CallShape(
-        "printoptim",
+        "app",
         "confiture.testing.worker_db:is_ci",
         (),
-        f"{_PRINTOPTIM_SETUP}:97",
+        f"{_APP_SETUP}:97",
         "1.14.0",
     ),
 )
@@ -394,47 +394,47 @@ MEMBERS: tuple[Members, ...] = (
     # confiture release has declared (the field is `errors`); that is a defect
     # in the consumer, reported there, and deliberately not pinned here.
     Members(
-        "printoptim",
+        "app",
         "confiture:MigrateUpResult",
         ("success", "errors", "migrations_applied"),
-        f"{_PRINTOPTIM_RUNNER}:153",
+        f"{_APP_RUNNER}:153",
         "1.14.0",
     ),
     Members(
-        "printoptim",
+        "app",
         "confiture:MigrateDownResult",
         ("success", "error", "migrations_rolled_back"),
-        f"{_PRINTOPTIM_RUNNER}:189",
+        f"{_APP_RUNNER}:189",
         "1.14.0",
     ),
     Members(
-        "printoptim",
+        "app",
         "confiture.models.results:MigrateReinitResult",
         ("success", "error", "migrations_marked"),
-        f"{_PRINTOPTIM_RUNNER}:231",
+        f"{_APP_RUNNER}:231",
         "1.14.0",
     ),
     Members(
-        "printoptim",
+        "app",
         "confiture.models.results:StatusResult",
         ("migrations",),
-        f"{_PRINTOPTIM_RUNNER}:103",
+        f"{_APP_RUNNER}:103",
         "1.14.0",
     ),
     Members(
-        "printoptim",
+        "app",
         "confiture.models.results:MigrationInfo",
         ("version", "name", "status"),
-        f"{_PRINTOPTIM_RUNNER}:103",
+        f"{_APP_RUNNER}:103",
         "1.14.0",
     ),
-    # A printoptim migration is a subclass declaring `version` and `name` and
+    # An application migration is a subclass declaring `version` and `name` and
     # overriding `up`/`down`, calling `self.execute`.
     Members(
-        "printoptim",
+        "app",
         "confiture.models.migration:Migration",
         ("version", "name", "up", "down", "execute"),
-        "printoptim:pyproject.toml:31",
+        "app:pyproject.toml:31",
         "1.14.0",
     ),
 )
@@ -453,7 +453,7 @@ def _row_id(row: NamedTuple) -> str:
     return f"{row[0]}:{row[1]}{'.' + row[2] if isinstance(row, Symbol) else ''}"
 
 
-@pytest.mark.parametrize("row", FRAISIER_SYMBOLS + PRINTOPTIM_SYMBOLS, ids=_row_id)
+@pytest.mark.parametrize("row", FRAISIER_SYMBOLS + APP_SYMBOLS, ids=_row_id)
 def test_consumer_symbol_is_importable_by_name(row: Symbol) -> None:
     """Every symbol a consumer imports still exists where the consumer looks."""
     module = importlib.import_module(row.module)

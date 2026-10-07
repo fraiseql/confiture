@@ -274,6 +274,6 @@ expected, a `str` is the path it spells: `apply_seeds(url, "db/seeds")`, or a
 `confiture seed generate` writes a commented-out `INSERT` template for one table.
 It is a starting point for a hand-written seed, not a generator.
 
-In printoptim_backend, `scripts/generate_frontend_seed_data.py` and
+In one application, `scripts/generate_frontend_seed_data.py` and
 `scripts/generate_meter_seed_data.py` already draw from `Random(42)` and write
 batched `INSERT` files. They are the first consumers to move onto this seam.

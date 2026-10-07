@@ -347,7 +347,7 @@ class SshTunnelConfig(BaseModel):
     accessed via ``ssh user@host psql -d dbname``.
 
     Attributes:
-        host: SSH server hostname (e.g. "printoptim.io")
+        host: SSH server hostname (e.g. "db.example.com")
         user: SSH username. Defaults to the current OS user if omitted.
         remote_host: PostgreSQL host on the remote side (default: localhost).
             Ignored when ``remote_socket`` is set.
@@ -364,7 +364,7 @@ class SshTunnelConfig(BaseModel):
     Example config (TCP remote port)::
 
         ssh_tunnel:
-          host: printoptim.io
+          host: db.example.com
           user: lionel
           remote_port: 5432
           local_port: 0          # auto-assign
@@ -372,7 +372,7 @@ class SshTunnelConfig(BaseModel):
     Example config (Unix socket on remote)::
 
         ssh_tunnel:
-          host: printoptim.io
+          host: db.example.com
           user: lionel
           remote_socket: /var/run/postgresql/.s.PGSQL.5432
           local_port: 0          # auto-assign

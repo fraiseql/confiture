@@ -1822,7 +1822,7 @@ confiture migrate validate [OPTIONS]
 | `--schemas` | - | str | - | Comma-separated list of schemas to inspect. Defaults to the schemas the source declares, which is what --check-live-drift derives from the same DDL. |
 | `--config` | `-c` | path | `confiture.yaml` | Configuration file (default: confiture.yaml); --env reads db/environments/<name>.yaml |
 | `--env` | `-e` | str | - | Environment name: reads db/environments/<name>.yaml, instead of --config |
-| `--ssh` | - | str | - | Open an SSH tunnel before connecting: user@host or host (e.g. lionel@printoptim.io). Used with --check-signatures and --check-live-drift. Overrides the ssh_tunnel block in the config file. |
+| `--ssh` | - | str | - | Open an SSH tunnel before connecting: user@host or host (e.g. deploy@db.example.com). Used with --check-signatures and --check-live-drift. Overrides the ssh_tunnel block in the config file. |
 | `--schema` | - | path | - | Schema SQL file to compare against. If omitted with --check-signatures, schema is auto-built from DDL files. |
 | `--format` | `-f` | str | `text` | Output format: text or json or csv (default: text) |
 | `--output` | `-o` | path | - | Write the output to this file instead of stdout |
@@ -2583,7 +2583,7 @@ confiture migrate validate [OPTIONS]
 | `--schemas` | - | str | - | Comma-separated list of schemas to inspect. Defaults to the schemas the source declares, which is what --check-live-drift derives from the same DDL. |
 | `--config` | `-c` | path | `confiture.yaml` | Configuration file (default: confiture.yaml); --env reads db/environments/<name>.yaml |
 | `--env` | `-e` | str | - | Environment name: reads db/environments/<name>.yaml, instead of --config |
-| `--ssh` | - | str | - | Open an SSH tunnel before connecting: user@host or host (e.g. lionel@printoptim.io). Used with --check-signatures and --check-live-drift. Overrides the ssh_tunnel block in the config file. |
+| `--ssh` | - | str | - | Open an SSH tunnel before connecting: user@host or host (e.g. deploy@db.example.com). Used with --check-signatures and --check-live-drift. Overrides the ssh_tunnel block in the config file. |
 | `--schema` | - | path | - | Schema SQL file to compare against. If omitted with --check-signatures, schema is auto-built from DDL files. |
 | `--format` | `-f` | str | `text` | Output format: text or json or csv (default: text) |
 | `--output` | `-o` | path | - | Write the output to this file instead of stdout |

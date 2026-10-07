@@ -32,7 +32,7 @@ INCIDENT = """
 DO $$
 DECLARE v_ok int;
 BEGIN
-  SELECT count(*) INTO v_ok FROM catalog.tb_printoptim_field
+  SELECT count(*) INTO v_ok FROM catalog.tb_product_field
    WHERE identifier IN ('meter_a4_color', 'volume_a4_color');
   IF v_ok <> 2 THEN
     RAISE EXCEPTION 'expected 2 fields, got %', v_ok;
@@ -51,7 +51,7 @@ class TestTheIncident:
         (f,) = find_data_assertions(INCIDENT, HERE)
 
         assert f.variable == "v_ok"
-        assert f.relation == "catalog.tb_printoptim_field"
+        assert f.relation == "catalog.tb_product_field"
         # Line 8 of INCIDENT, counted in the FILE: the `RAISE`, not the
         # `DECLARE` and not the `IF`, because the RAISE is what has to move.
         assert INCIDENT.splitlines()[f.line - 1].strip().startswith("RAISE EXCEPTION")

@@ -3,7 +3,7 @@
 This is what ``migrate estimate`` was for, folded where the operator already looks
 ``estimate`` read ``pg_class`` by ``relname`` alone, listed only
 ``public`` and printed an unanalysed table as "0 rows, Standard migration OK"; on
-printoptim's own database the only two tables past its threshold were outside
+one production database the only two tables past its threshold were outside
 ``public``. The estimate is read from the ``--against`` target before the replay,
 as the other schema facts are, and it is qualified.
 """

@@ -75,7 +75,7 @@ def test_environment_ssh_tunnel_parsed_from_dict() -> None:
     env = Environment.model_validate(
         _make_env_data(
             ssh_tunnel={
-                "host": "printoptim.io",
+                "host": "db.example.com",
                 "user": "lionel",
                 "remote_port": 5432,
                 "local_port": 0,
@@ -83,7 +83,7 @@ def test_environment_ssh_tunnel_parsed_from_dict() -> None:
         )
     )
     assert env.ssh_tunnel is not None
-    assert env.ssh_tunnel.host == "printoptim.io"
+    assert env.ssh_tunnel.host == "db.example.com"
     assert env.ssh_tunnel.user == "lionel"
 
 
@@ -91,7 +91,7 @@ def test_environment_ssh_tunnel_with_remote_socket() -> None:
     env = Environment.model_validate(
         _make_env_data(
             ssh_tunnel={
-                "host": "printoptim.io",
+                "host": "db.example.com",
                 "remote_socket": "/var/run/postgresql/.s.PGSQL.5432",
             }
         )

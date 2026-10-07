@@ -1,6 +1,6 @@
 """What ``MigratorSession.up`` was asked for, as the one value the apply loop reads.
 
-``up()`` keeps its keyword parameters — fraisier and printoptim call them, and
+``up()`` keeps its keyword parameters — fraisier and downstream applications call them, and
 ``tests/contract/test_consumer_symbols.py`` pins the shapes — but nothing below it
 forwards them by name: a keyword forwarded through a chain of functions is silently
 ignored wherever one link drops it. :class:`UpOptions` is built once, at the

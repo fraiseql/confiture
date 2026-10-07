@@ -264,7 +264,7 @@ def test_corpus_has_duplicates_and_every_finding_is_located() -> None:
     corpus = os.environ.get("CONFITURE_SCHEMA_CORPUS_DIR")
     if not corpus:
         pytest.skip(
-            "set CONFITURE_SCHEMA_CORPUS_DIR to a real schema tree (e.g. printoptim_backend/db/0_schema)"
+            "set CONFITURE_SCHEMA_CORPUS_DIR to a real schema tree (e.g. <project>/db/schema)"
         )
     root = Path(corpus)
     objects, _schemas, unparseable = inventory_files(sorted(root.rglob("*.sql")), root=root)

@@ -15,7 +15,7 @@ directory under it — a schema tree, not its seeds, which the model ignores and
 parser still reads — is read twice and must write one text that reads back to the
 same model and validates against the published schema. It is not
 ``CONFITURE_CORPUS_DIR``, which names a directory of ``.py`` migrations for the
-static evaluator's floor test. printoptim's 8.4 MB ``db/0_schema`` passes in 36 s.
+static evaluator's floor test. A real 8.4 MB schema tree passes in 36 s.
 """
 
 from __future__ import annotations
