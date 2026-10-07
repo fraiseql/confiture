@@ -100,7 +100,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
         "CREATE_TABLE_LIKE_IDENTITY",
         "CREATE_TABLE_LIKE_GENERATED",
     ),
-    "JoinType": ("JOIN_FULL", "JOIN_RIGHT"),
+    "JoinType": ("JOIN_FULL", "JOIN_LEFT", "JOIN_RIGHT"),
     "SortByDir": ("SORTBY_DEFAULT",),
     "SortByNulls": ("SORTBY_NULLS_DEFAULT",),
     "VariableSetKind": (

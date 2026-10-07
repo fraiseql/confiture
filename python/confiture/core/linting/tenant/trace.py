@@ -17,6 +17,13 @@ reads until it names a column of a relation. It answers one of three things:
 
 It is the only module that walks a ``SELECT``'s target list to say where an output
 column comes from (``tests/unit/test_one_column_tracer.py``).
+
+An :class:`Observer` (``softdel_003``) is told the same walk's two other facts: each
+relation a ``FROM`` reads, at any depth, and where each column a *qualification*
+names — ``WHERE``, ``JOIN … ON``, ``HAVING``, a sub-select's own — comes from. A
+sub-select anywhere in a query (an ``EXISTS``, a scalar sub-select in the target
+list) is walked with that query as its outer scope, so a correlated reference
+resolves as PostgreSQL resolves it.
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.ddl_walk import walk_nodes
 
 #: ``(schema, relation, column)``, each as the parser folds it.
 ColumnId = tuple[str, str, str]
@@ -74,6 +82,20 @@ class Relations(Protocol):
 
 #: A range's columns, or why they are unknown.
 Columns = Sequence[Output] | Unread
+
+
+class Observer(Protocol):
+    """What a walk tells a rule besides the outputs: the relations read, the columns tested."""
+
+    def relation(self, node: Any, columns: Columns) -> Columns:
+        """A ``RangeVar`` the query reads (not a CTE), and its columns; returns the columns
+        the walk goes on with — the observer may tag their origins to tell two reads of
+        one table apart."""
+        ...
+
+    def qualifies(self, source: Source) -> None:
+        """A column a qualification names, resolved where the query resolves it."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -147,8 +169,9 @@ _Ctes = Mapping[str, Columns]
 class _Tracer:
     """One query's walk: its CTEs, its ``FROM``, its target list, its set operations."""
 
-    def __init__(self, relations: Relations) -> None:
+    def __init__(self, relations: Relations, observer: Observer | None = None) -> None:
         self.relations = relations
+        self.observer = observer
 
     def select(self, stmt: Any, ctes: _Ctes, parent: _Scope | None = None) -> list[Output]:
         ctes = self.with_clause(stmt.withClause, ctes, parent)
@@ -163,7 +186,31 @@ class _Tracer:
             # Each item sees the ones before it: what a LATERAL reference reads.
             entries.append(self.from_item(item, ctes, _Scope(entries, parent)))
         scope = _Scope(entries, parent)
+        if self.observer is not None:
+            for qualification in (stmt.whereClause, stmt.havingClause):
+                self.observe(qualification, scope, ctes, tests=True)
+            self.observe(stmt.targetList, scope, ctes, tests=False)
         return [out for target in stmt.targetList or () for out in _target(target, scope)]
+
+    def observe(self, expression: Any, scope: _Scope, ctes: _Ctes, *, tests: bool) -> None:
+        """Tell the observer the columns *expression* tests, and walk its sub-selects.
+
+        A sub-select is walked with *scope* as its outer query, so it reports what it
+        reads and tests itself; the columns of its ``IN``'s left side are this
+        query's.
+        """
+        if expression is None or self.observer is None:
+            return
+        sublinks = [n for n in walk_nodes(expression) if type(n).__name__ == "SubLink"]
+        inner = {id(n) for link in sublinks for n in walk_nodes(link.subselect)}
+        for node in walk_nodes(expression):
+            if id(node) in inner:
+                continue
+            kind = type(node).__name__
+            if kind == "SubLink":
+                self.select(node.subselect, ctes, scope)
+            elif kind == "ColumnRef" and tests:
+                self.observer.qualifies(_reference(node, scope))
 
     def with_clause(self, clause: Any, ctes: _Ctes, parent: _Scope | None) -> _Ctes:
         if clause is None:
@@ -197,6 +244,8 @@ class _Tracer:
             columns = ctes[node.relname]
         else:
             columns = self.relations.columns(node.schemaname, node.relname)
+            if self.observer is not None:
+                columns = self.observer.relation(node, columns)
         if not isinstance(columns, Unread):
             columns = _renamed(columns, _colnames(node))
         return _Entry({_alias(node) or node.relname: columns}, columns)
@@ -205,6 +254,7 @@ class _Tracer:
         left = self.from_item(node.larg, ctes, scope)
         right = self.from_item(node.rarg, ctes, _Scope([*scope.entries, left], scope.parent))
         star = _joined(left.star, right.star, node)
+        self.observe(node.quals, _Scope([left, right], scope), ctes, tests=True)
         if node.alias is None:
             return _Entry({**left.ranges, **right.ranges}, star)
         if not isinstance(star, Unread):
@@ -300,6 +350,17 @@ def _target(target: Any, scope: _Scope) -> list[Output]:
     return [Output(target.name or name, source)]
 
 
+def _reference(node: Any, scope: _Scope) -> Source:
+    """Where a ``ColumnRef`` in a qualification comes from; ``t.*`` and a whole row are unread."""
+    fields = node.fields
+    last = fields[-1]
+    if type(last).__name__ != "String":
+        return Unread("a whole row")
+    if len(fields) == 1:
+        return scope.column(last.sval)
+    return scope.qualified(fields[-2].sval, last.sval)
+
+
 def _figure_name(node: Any) -> str | None:
     """The name PostgreSQL gives an unaliased expression (``FigureColname``), where it gives one."""
     kind = type(node).__name__
@@ -312,7 +373,12 @@ def _figure_name(node: Any) -> str | None:
     return None
 
 
-def outputs(query: Any, relations: Relations, aliases: Sequence[str] = ()) -> list[Output]:
+def outputs(
+    query: Any,
+    relations: Relations,
+    aliases: Sequence[str] = (),
+    observer: Observer | None = None,
+) -> list[Output]:
     """Every output column of *query*, in order, each with where it comes from.
 
     Args:
@@ -320,8 +386,9 @@ def outputs(query: Any, relations: Relations, aliases: Sequence[str] = ()) -> li
         relations: The columns of each relation the query may read.
         aliases: The view's column list (``CREATE VIEW v (a, b) AS …``), which
             renames the first outputs.
+        observer: Told each relation read and each column a qualification names.
     """
-    return _renamed(_Tracer(relations).select(query, {}), aliases)
+    return _renamed(_Tracer(relations, observer).select(query, {}), aliases)
 
 
 def _renamed(columns: Sequence[Output], names: Sequence[str]) -> list[Output]:

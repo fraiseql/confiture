@@ -43,6 +43,7 @@ from confiture.core.linting.soft_delete import (
     reserved_key_findings,
     soft_deleting,
 )
+from confiture.core.linting.soft_delete_views import view_findings
 from confiture.core.linting.tenant import rules as tenant_rules
 from confiture.core.linting.tview_rules import tview_findings
 from confiture.core.schema_identity import DEFAULT_SCHEMA
@@ -61,6 +62,7 @@ logger = logging.getLogger(__name__)
 _SOFT_DELETE_RULES = {
     "softdel_001": ("Soft-Delete Reserved Key", reserved_key_findings),
     "softdel_002": ("Soft-Delete Nullable Key", null_key_findings),
+    "softdel_003": ("Soft-Delete View Shows Deleted Rows", view_findings),
 }
 
 #: How long ``build_003``'s live tier waits for a connection. A lint runs in a
@@ -203,6 +205,7 @@ class LintConfig:
         check_tenant_unique_keys: bool = False,
         check_softdel_reserved_keys: bool = False,
         check_softdel_null_keys: bool = False,
+        check_softdel_views: bool = False,
         check_tview_hot: bool = False,
         check_tview_replicas: bool = False,
         has_replicas: bool = False,
@@ -253,6 +256,8 @@ class LintConfig:
                 in ``db/project.yaml``.
             check_softdel_null_keys: Such a key over a nullable column says
                 ``NULLS NOT DISTINCT`` (``softdel_002``).
+            check_softdel_views: Every read of a soft-deleting table in a view tests
+                its tombstone column (``softdel_003``).
             check_tview_hot: No index over ``data`` or ``updated_at`` on a pg_tviews
                 TVIEW (``tview_001``).
             check_tview_replicas: A TVIEW is made LOGGED where replicas are
@@ -306,6 +311,7 @@ class LintConfig:
         self.check_tenant_unique_keys = check_tenant_unique_keys
         self.check_softdel_reserved_keys = check_softdel_reserved_keys
         self.check_softdel_null_keys = check_softdel_null_keys
+        self.check_softdel_views = check_softdel_views
         self.check_tview_hot = check_tview_hot
         self.check_tview_replicas = check_tview_replicas
         self.has_replicas = has_replicas
@@ -493,6 +499,11 @@ class SchemaLinter:
             (
                 self.config.check_softdel_null_keys,
                 partial(self._check_soft_delete, "softdel_002"),
+                "softdel",
+            ),
+            (
+                self.config.check_softdel_views,
+                partial(self._check_soft_delete, "softdel_003"),
                 "softdel",
             ),
             (self.config.check_tview_hot, partial(self._check_tview, "tview_001"), "tview"),
