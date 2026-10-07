@@ -1399,6 +1399,7 @@ def _read_unique(node: Any, column: str | None) -> Constraint:
         name=node.conname or "",
         columns=_covered(node.keys, column),
         deferrable=_deferral(node),
+        nulls_not_distinct=bool(node.nulls_not_distinct),
     )
 
 
@@ -1600,6 +1601,7 @@ def read_index(stmt: Any, *, table: RelationName) -> Index:
         method=stmt.accessMethod,
         key_options=options if any(options) else (),
         expressions=tuple(not elem.name for elem in elements),
+        nulls_not_distinct=bool(stmt.nulls_not_distinct),
     )
 
 

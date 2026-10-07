@@ -181,6 +181,18 @@ MORE = [
         id="unique-gains-a-column",
     ),
     pytest.param(
+        "ALTER TABLE core.tb_other DROP CONSTRAINT uq_other_label, "
+        "ADD CONSTRAINT uq_other_label UNIQUE NULLS NOT DISTINCT (label)",
+        "constraint_mismatch",
+        id="unique-gains-nulls-not-distinct",
+    ),
+    pytest.param(
+        "DROP INDEX core.ix_widget_serial; "
+        "CREATE INDEX ix_widget_serial ON core.tb_widget (serial) NULLS NOT DISTINCT",
+        "missing_index",
+        id="index-gains-nulls-not-distinct",
+    ),
+    pytest.param(
         "ALTER TABLE core.tb_widget DROP COLUMN maybe_null, ADD COLUMN maybe_null TEXT NOT NULL",
         "column_order_mismatch",
         id="column-order",

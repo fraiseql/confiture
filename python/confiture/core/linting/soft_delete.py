@@ -24,8 +24,7 @@ Exempt:
 and does not say ``NULLS NOT DISTINCT``: two rows holding ``NULL`` there never
 collide, so when ``NULL`` is a real value of the scope (a tree's root has no
 parent) two roots may share a name. A column a top-level ``AND`` conjunct of the
-predicate tests ``IS NOT NULL`` is not nullable inside the key. The flag is read from
-the key's statement, not from the schema model, which does not hold it.
+predicate tests ``IS NOT NULL`` is not nullable inside the key.
 
 A value that must stay reserved after its row is deleted is waived with
 ``-- confiture:softdel-keep-reserved`` on the line above the statement that writes
@@ -277,7 +276,7 @@ def _constraint_key(at: _Statement, node: Any, column: str | None, line: int) ->
         constraint=True,
         predicate=None,
         where=None,
-        nulls_not_distinct=bool(getattr(node, "nulls_not_distinct", False)),
+        nulls_not_distinct=read.nulls_not_distinct,
         file=at.parsed.label,
         line=line,
         waived=at.waives(name),
@@ -297,7 +296,7 @@ def _index_key(at: _Statement, stmt: Any) -> WrittenKey | None:
         constraint=False,
         predicate=stmt.whereClause,
         where=index.where,
-        nulls_not_distinct=bool(getattr(stmt, "nulls_not_distinct", False)),
+        nulls_not_distinct=index.nulls_not_distinct,
         file=at.parsed.label,
         line=at.line,
         waived=at.waives(index.name),

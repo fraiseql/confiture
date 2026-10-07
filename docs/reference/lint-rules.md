@@ -1113,9 +1113,9 @@ nullable inside the key: a row holding `NULL` there is never in the index, so
 `(fk_org, mac_address) WHERE mac_address IS NOT NULL AND deleted_at IS NULL` is
 not reported.
 
-The flag is read from the statement that writes the key. The schema model does
-not hold it, so `confiture drift` and `migrate diff` do not see it change (tracked
-in #623).
+The flag is part of the schema model, so `migrate diff` and `confiture drift`
+see a key gain or lose it: PostgreSQL cannot change it in place, so the change is
+the key's drop and re-creation.
 
 ### `softdel_003` — a view tests the tombstone of every soft-deleting table it reads
 
