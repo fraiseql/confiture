@@ -126,6 +126,20 @@ FIXTURES: dict[str, Fixture] = {
             "020.sql": "CREATE TABLE app.tb_t (id INT PRIMARY KEY);\n",
         }
     ),
+    "build_005": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, a INT, b INT);\n"
+            "CREATE INDEX IF NOT EXISTS idx_t ON tb_t (a);\n",
+            "020.sql": "CREATE INDEX IF NOT EXISTS idx_t ON tb_t (b);\n",
+        }
+    ),
+    "build_006": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, a INT, b INT);\n"
+            "CREATE INDEX idx_t ON tb_t (a);\n",
+            "020.sql": "CREATE INDEX idx_t ON tb_t (b);\n",
+        }
+    ),
     "sec_001": Fixture({"010.sql": "CREATE TABLE tb_t (id INT PRIMARY KEY, password TEXT);\n"}),
     "sec_003": Fixture(
         {

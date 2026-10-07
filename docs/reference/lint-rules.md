@@ -25,6 +25,8 @@ Adopt a rule on a schema that already trips it with a
 | `build_002` | build | info | on | A routine's overloads are split across files |
 | `build_003` | build | warning | on | A body references an object the build does not create |
 | `build_004` | build | error | on | A statement needs, when it runs, an object the build creates later |
+| `build_005` | build | warning | on | A CREATE INDEX IF NOT EXISTS reuses a taken name, so it creates nothing |
+| `build_006` | build | error | on | A CREATE INDEX reuses a taken name, so the build fails at it |
 | `sec_001` | security | warning | on | Columns that look like secrets should not be plain text |
 | `sec_003` | security | warning | on | No credential is written as a literal in the tree (a seed row, a role password) |
 | `qual_001` | qual | warning | on | Routines are created schema-qualified |
@@ -316,6 +318,14 @@ unqualified), name and — for routines — input parameter types.
 | `build_002` | info | a routine whose overloads are split across files — legal, but how the first mistake starts |
 | `build_003` | warning | a routine or view body that names an object **no file in the build creates** |
 | `build_004` | error | a statement that needs, when it runs, an object the build **creates later** |
+| `build_005` | warning | a `CREATE INDEX IF NOT EXISTS` whose name its schema already holds — an index, a table, a view, a sequence, a composite type, or a key's index: PostgreSQL skips it, so the index it describes is never built |
+| `build_006` | error | the same without `IF NOT EXISTS`: PostgreSQL refuses it (`42P07`) and the build stops there |
+
+An index's name is a relation name of its table's schema, so the clash is
+schema-wide: `CREATE INDEX IF NOT EXISTS i ON s.t2 (a)` creates nothing when
+`s.i` already indexes `s.t`. The expected schema keeps what PostgreSQL keeps — the
+first — so `drift` does not report the live index missing (#638). An unnamed index
+never clashes.
 
 `build_001` and `build_002` run as lint rules (`confiture lint`,
 `--select build`) and from the build

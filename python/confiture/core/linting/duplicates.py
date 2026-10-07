@@ -27,6 +27,7 @@ from typing import Any, Protocol
 import pglast
 
 from confiture.core.linting.inventory import (
+    IndexCollision,
     SchemaObject,
     files_alone,
     group_definitions,
@@ -254,3 +255,41 @@ def duplicate_violations(duplicates: Iterable[Duplicate]) -> list[LintViolation]
             )
         )
     return violations
+
+
+def index_collision_violations(collisions: Iterable[IndexCollision]) -> list[LintViolation]:
+    """``build_005`` (an ``IF NOT EXISTS`` index that creates nothing), ``build_006`` (one that fails)."""
+    violations: list[LintViolation] = []
+    for clash in collisions:
+        line = f"line {clash.taken_line}"
+        taken = f"{clash.taken_file} ({line})" if clash.taken_file else line
+        if clash.if_not_exists:
+            rule_id, severity, name = "build_005", RuleSeverity.WARNING, "Index Not Created"
+            outcome = "PostgreSQL skips this statement, so the index it describes is never built"
+            fix = "Give the index its own name, or delete the statement if the first is the one meant."
+        else:
+            rule_id, severity, name = "build_006", RuleSeverity.ERROR, "Index Name Taken"
+            outcome = "PostgreSQL refuses this statement (42P07), and the build stops at it"
+            fix = "Give the index its own name."
+        violations.append(
+            LintViolation(
+                rule_id=rule_id,
+                rule_name=name,
+                severity=severity,
+                object_type="index",
+                object_name=clash.name,
+                message=(
+                    f"Index '{clash.name}': its schema already holds {_a(clash.taken_by)} "
+                    f"of that name ({taken}) — {outcome}"
+                ),
+                file_path=clash.file,
+                line_number=clash.line,
+                suggested_fix=fix,
+            )
+        )
+    return violations
+
+
+def _a(noun: str) -> str:
+    """*noun* with its indefinite article: ``an index``, ``a table``."""
+    return f"{'an' if noun[0] in 'aeiou' else 'a'} {noun}"

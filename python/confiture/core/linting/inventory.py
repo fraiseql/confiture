@@ -55,7 +55,7 @@ from confiture.core.ddl_walk import type_name as ddl_type_name
 
 # The fold lives in its own module so a reader that needs it but not a parser
 # can have it; imported here because this is where object identity is decided.
-from confiture.core.schema_identity import DEFAULT_SCHEMA
+from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity
 from confiture.core.schema_model import (
     TVIEW_PREFIX,
     Column,
@@ -230,6 +230,33 @@ class SchemaObject:
         )
 
 
+@dataclass(frozen=True)
+class IndexCollision:
+    """A ``CREATE INDEX`` naming a relation its schema already holds.
+
+    PostgreSQL skips it under ``IF NOT EXISTS`` (a notice) and refuses it
+    otherwise (``42P07``); either way the relation that took the name is the one
+    the schema keeps, and the model keeps it too.
+
+    Attributes:
+        name: The index name, as written.
+        if_not_exists: Whether the statement says ``IF NOT EXISTS``.
+        file: The file of the statement that did not create its index.
+        line: Its line.
+        taken_by: What holds the name: ``index``, or the inventory kind.
+        taken_file: The file of the statement that took the name.
+        taken_line: Its line.
+    """
+
+    name: str
+    if_not_exists: bool
+    file: str | None
+    line: int
+    taken_by: str
+    taken_file: str | None
+    taken_line: int
+
+
 @dataclass
 class Inventory:
     """The objects a text creates, and the schemas it declares.
@@ -243,6 +270,8 @@ class Inventory:
 
     objects: list[SchemaObject] = field(default_factory=list)
     schemas: list[SchemaObject] = field(default_factory=list)
+    #: Each ``CREATE INDEX`` whose name its schema already held when it ran (#638).
+    index_collisions: list[IndexCollision] = field(default_factory=list)
 
     @property
     def tables(self) -> list[SchemaObject]:
@@ -1017,19 +1046,75 @@ def _targets(inventory: Inventory, edit: ObjectEdit, offset: int) -> list[Schema
 _INDEXED_KINDS = ("table", "matview", "tview")
 
 
+#: The kinds whose name is a relation's (``pg_class``), which an index name may not repeat.
+#: A ``type`` is one only when composite; :func:`_holds_name` asks.
+_RELATION_KINDS = ("table", "view", "matview", "sequence", "tview", "type")
+#: The constraints PostgreSQL backs with an index of the constraint's name.
+_INDEXED_CONSTRAINTS = frozenset({"primary_key", "unique", "exclusion"})
+
+
 def _apply_index(parsed: ParsedFile, raw: Any, inventory: Inventory) -> None:
-    """Fold a ``CREATE INDEX`` onto the table — or materialized view — the tree declared."""
+    """Fold a ``CREATE INDEX`` onto the table — or materialized view — the tree declared.
+
+    An index takes its name in its table's schema, among every relation there;
+    a statement naming one already taken creates nothing (#638).
+    """
     relation = raw.stmt.relation
     found = inventory.find_all(_INDEXED_KINDS, relation.schemaname, relation.relname)
     if not found:
         return
     target = found[0]
     index = read_index(raw.stmt, table=RelationName(target.schema, target.name))
+    offset = _statement_offset(parsed.text, raw)
+    line = _line_of(parsed.text, offset)
+    if index.name is not None and (
+        taken := _holds_name(inventory, target.folded_schema, index.name, parsed.base + offset)
+    ):
+        kind, (taken_file, taken_line) = taken
+        inventory.index_collisions.append(
+            IndexCollision(
+                name=index.name,
+                if_not_exists=bool(raw.stmt.if_not_exists),
+                file=parsed.label,
+                line=line,
+                taken_by=kind,
+                taken_file=taken_file,
+                taken_line=taken_line,
+            )
+        )
+        return
     target.indexes.append(index)
-    target.index_sites[index] = (
-        parsed.label,
-        _line_of(parsed.text, _statement_offset(parsed.text, raw)),
-    )
+    target.index_sites[index] = (parsed.label, line)
+
+
+def _holds_name(
+    inventory: Inventory, folded_schema: str | None, name: str, before: int
+) -> tuple[str, tuple[str | None, int]] | None:
+    """What already holds the relation name *name* in a schema, and where it was written."""
+    folded = identifier_identity(name)
+    for obj in inventory.find_all(_RELATION_KINDS, folded_schema, folded):
+        if obj.offset < before and not (obj.kind == "type" and obj.enum_values is not None):
+            return obj.kind, (obj.file, obj.line)
+    for obj in inventory.objects:
+        if obj.kind not in _INDEXED_KINDS or not _same_schema(obj.folded_schema, folded_schema):
+            continue
+        held = [
+            (index.name, "index", obj.index_sites.get(index, (obj.file, obj.line)))
+            for index in obj.indexes
+        ] + [
+            (key.name, "constraint", (obj.file, obj.line))
+            for key in obj.constraints
+            if key.kind in _INDEXED_CONSTRAINTS
+        ]
+        for written, kind, site in held:
+            if written is not None and identifier_identity(written) == folded:
+                return kind, site
+    return None
+
+
+def _same_schema(left: str | None, right: str | None) -> bool:
+    """Two folded schemas name one schema; a missing one matches any, as ``find_all`` reads it."""
+    return left is None or right is None or left == right
 
 
 def _drop_index(inventory: Inventory, edit: ObjectEdit) -> None:
