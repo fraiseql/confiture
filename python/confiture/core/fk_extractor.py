@@ -37,7 +37,6 @@ from confiture.core.parser_info import ascii_shadow, is_ascii
 from confiture.core.schema_model import Constraint, RelationName
 
 _OPEN, _CLOSE, _COMMA = "ASCII_40", "ASCII_41", "ASCII_44"
-_COMMENTS = frozenset({"SQL_COMMENT", "C_COMMENT"})
 #: A column constraint node that qualifies the one written before it.
 _ATTRIBUTE_PREFIX = "CONSTR_ATTR_"
 
@@ -119,7 +118,7 @@ class _Statement:
 
     def __init__(self, text: str) -> None:
         self.text = text
-        self.tokens = [t for t in sql_lexer.tokens(text) if t.name not in _COMMENTS]
+        self.tokens = sql_lexer.code_tokens(text)
 
     def _index_at(self, offset: int) -> int:
         return next(i for i, t in enumerate(self.tokens) if t.start >= offset)

@@ -317,6 +317,11 @@ def tokens(sql: str) -> list[Any]:
     return _lex(sql)[0]
 
 
+def code_tokens(sql: str) -> list[Any]:
+    """:func:`tokens` less the comments: the tokens PostgreSQL's grammar reads."""
+    return [token for token in tokens(sql) if token.name not in _COMMENT_TOKENS]
+
+
 def name_parts(written: str) -> list[str] | None:
     """The parts of one dotted name as written, or ``None`` when *written* is not one.
 
