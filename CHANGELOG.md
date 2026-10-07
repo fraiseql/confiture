@@ -34,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `error`, which refuses at create a TVIEW reading a table no cascade reaches unless it declares a
   policy; a policy set with `SET pg_tviews.uncascaded_policy` before a `CREATE TABLE … AS` is a
   session setting confiture does not model, and pins nothing.
+- **`NULLS NOT DISTINCT` is in the schema model** (#623; ⚠️ owner-gated: moves fraisier
+  contracts). `Constraint.nulls_not_distinct` and `Index.nulls_not_distinct` are read from DDL and
+  from a live database (`pg_get_constraintdef` / `pg_get_indexdef`, i.e. `pg_index.indnullsnotdistinct`),
+  so a unique key that gains or loses the clause is a change to `migrate diff` and to `confiture
+  drift`. No PostgreSQL statement changes it in place, so the change is the key's drop and
+  re-creation (`DROP_INDEX` + `ADD_INDEX`, or `DROP_UNIQUE_CONSTRAINT` + `ADD_UNIQUE_CONSTRAINT`),
+  and drift reports it with the kinds it already has (`constraint_mismatch`, `missing_index` +
+  `extra_index`). Generated DDL writes the clause. The model's wire gains `nulls_not_distinct` on
+  every constraint and index (`schema-model.schema.json`, the model goldens); a wire written
+  before it reads as `false`. `softdel_002` reads the flag from the model.
 
 - **`soft_delete: {tables: written}`: judge the tables the tree tombstones** (#640). The `softdel`
   rules judged every table that *has* the tombstone column; a tree that puts the audit columns on

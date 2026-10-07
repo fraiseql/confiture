@@ -130,6 +130,8 @@ def _body(constraint: Constraint) -> str | None:
             return f"CHECK ({constraint.expression})" if constraint.expression else None
         case "unique" | "primary_key":
             keyword = "UNIQUE" if constraint.kind == "unique" else "PRIMARY KEY"
+            if constraint.nulls_not_distinct:
+                keyword += " NULLS NOT DISTINCT"
             return f"{keyword} ({_columns(constraint.columns)})" if constraint.columns else None
         case "exclusion":
             return _exclusion(constraint)

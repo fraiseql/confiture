@@ -349,10 +349,11 @@ def _index_statement(index: Index, table: str, *, concurrently: bool) -> str:
     unique = "UNIQUE " if index.unique else ""
     how = "CONCURRENTLY " if concurrently else ""
     method = f" USING {index.method}" if index.method not in (None, "btree") else ""
+    nulls = " NULLS NOT DISTINCT" if index.nulls_not_distinct else ""
     where = f" WHERE {index.where}" if index.where else ""
     return (
         f"CREATE {unique}INDEX {how}IF NOT EXISTS {quote_identifier(index.name or '')}"
-        f" ON {table}{method} ({_index_keys(index)}){where};\n"
+        f" ON {table}{method} ({_index_keys(index)}){nulls}{where};\n"
     )
 
 
