@@ -163,6 +163,7 @@
         "type_key",
         "raw_sql_type",
         "not_null",
+        "not_null_validated",
         "default",
         "identity",
         "generated",
@@ -201,6 +202,10 @@
         },
         "not_null": {
           "type": "boolean"
+        },
+        "not_null_validated": {
+          "type": "boolean",
+          "description": "False for a NOT NULL PostgreSQL 18 holds NOT VALID: rows from before it may be NULL. True for every other column."
         },
         "default": {
           "type": [

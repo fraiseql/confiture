@@ -50,6 +50,11 @@
         "irreversible_reason": null
       },
       {
+        "type": "CHANGE_COLUMN_NOT_NULL_VALIDITY",
+        "details": "CHANGE COLUMN NOT NULL VALIDITY things.qty FROM NOT VALID TO VALID",
+        "irreversible_reason": null
+      },
+      {
         "type": "CHANGE_COLUMN_TYPE",
         "details": "CHANGE COLUMN TYPE things.size FROM VARCHAR(50) TO VARCHAR(100)",
         "irreversible_reason": null
@@ -150,7 +155,7 @@
         "irreversible_reason": null
       }
     ],
-    "change_count": 29,
+    "change_count": 30,
     "migration_generated": true,
     "migration_file": "<version>_golden.up.sql",
     "error": null,

@@ -149,6 +149,14 @@
         "details": null
       },
       {
+        "type": "CHANGE_COLUMN_NOT_NULL_VALIDITY",
+        "table": "things",
+        "column": "qty",
+        "old_value": "NOT VALID",
+        "new_value": "VALID",
+        "details": null
+      },
+      {
         "type": "CHANGE_COLUMN_TYPE",
         "table": "things",
         "column": "size",

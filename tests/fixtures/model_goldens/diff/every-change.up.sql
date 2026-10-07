@@ -70,6 +70,9 @@ ALTER TABLE things ADD COLUMN created_at TIMESTAMPTZ;
 -- confiture:tier reversible
 ALTER TABLE things ALTER COLUMN note DROP NOT NULL;
 
+-- confiture:tier lock_risky
+ALTER TABLE things ALTER COLUMN qty SET NOT NULL;
+
 ALTER TABLE things ALTER COLUMN size TYPE VARCHAR(100);
 
 -- confiture:tier reversible

@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS things (
     status TEXT DEFAULT 'new',
     pid INTEGER,
     code TEXT,
-    qty INTEGER,
+    qty INTEGER NOT NULL,
     span TSRANGE,
     PRIMARY KEY (id),
     CONSTRAINT things_old_fk FOREIGN KEY (pid) REFERENCES parent (id),

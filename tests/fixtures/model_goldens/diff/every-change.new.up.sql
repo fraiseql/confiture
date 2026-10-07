@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS things (
     status TEXT DEFAULT 'open',
     pid INTEGER,
     code TEXT,
-    qty INTEGER,
+    qty INTEGER NOT NULL,
     span TSRANGE,
     PRIMARY KEY (id),
     CONSTRAINT things_new_fk FOREIGN KEY (pid) REFERENCES parent (id) ON DELETE CASCADE,
