@@ -126,3 +126,22 @@ def test_the_live_model_flags_the_constraint_backed_indexes(
         "t_label_uq",
         "idx_t_code",
     }
+
+
+def test_a_later_if_not_exists_on_a_taken_name_is_not_missing(
+    clean_test_db: psycopg.Connection, tmp_path: Path
+) -> None:
+    """#638: PostgreSQL keeps the first ``idx_t_a``; the expected schema keeps it too."""
+    ddl = (
+        "CREATE SCHEMA s;\n"
+        "CREATE TABLE s.t (id bigint PRIMARY KEY, a bigint, b bigint);\n"
+        "CREATE INDEX IF NOT EXISTS idx_t_a ON s.t (a);\n"
+        "CREATE INDEX IF NOT EXISTS idx_t_a ON s.t (b);\n"
+    )
+    _apply(clean_test_db, ddl)
+    schema_file = tmp_path / "schema.sql"
+    schema_file.write_text(ddl)
+
+    report = SchemaDriftDetector(clean_test_db).compare_with_schema_file(str(schema_file))
+
+    assert not report.has_drift, report.to_dict()

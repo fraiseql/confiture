@@ -242,6 +242,20 @@ LINT_RULES: tuple[LintRule, ...] = (
         default_on=True,
     ),
     LintRule(
+        code="build_005",
+        family="build",
+        title="A CREATE INDEX IF NOT EXISTS reuses a taken name, so it creates nothing",
+        severity="warning",
+        default_on=True,
+    ),
+    LintRule(
+        code="build_006",
+        family="build",
+        title="A CREATE INDEX reuses a taken name, so the build fails at it",
+        severity="error",
+        default_on=True,
+    ),
+    LintRule(
         code="sec_001",
         family="security",
         title="Columns that look like secrets should not be plain text",

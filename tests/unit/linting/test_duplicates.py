@@ -167,9 +167,11 @@ class TestLintRule:
             ("build_002", "info", True),
             ("build_003", "warning", True),
             ("build_004", "error", True),
+            ("build_005", "warning", True),
+            ("build_006", "error", True),
         ]
         assert resolve_selection(["build"], []) == frozenset(
-            {"build_001", "build_002", "build_003", "build_004"}
+            {"build_001", "build_002", "build_003", "build_004", "build_005", "build_006"}
         )
 
     def test_lint_reports_build_001_as_an_error_with_the_locations(self) -> None:

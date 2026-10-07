@@ -83,7 +83,9 @@ def linter_config(
         check_primary_keys="pk_001" in selected,
         check_documentation=any(code.startswith("doc_") for code in selected),
         check_restatements="doc_005" in selected,
-        check_duplicates=any(code in selected for code in ("build_001", "build_002")),
+        check_duplicates=any(
+            code in selected for code in ("build_001", "build_002", "build_005", "build_006")
+        ),
         check_references="build_003" in selected,
         check_forward_references="build_004" in selected,
         check_security="sec_001" in selected,

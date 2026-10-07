@@ -42,6 +42,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the start of its type, so `b ltree;` after `a bigint; -- note` lost `b` and the body stayed
   unread (`build_003 … could not read 1 routine body`). Comments are no longer tokens of a
   declaration.
+||||||| parent of 9562415f (fix(model): a CREATE INDEX IF NOT EXISTS on a taken name creates nothing)
+- **A `CREATE INDEX IF NOT EXISTS` on a taken name is the no-op PostgreSQL makes it** (#638). The
+  expected schema kept every `CREATE INDEX` of a name, so a database built from a tree that wrote
+  `idx_t_a` twice was reported by `drift`'s static tier as missing the index it had. An index name
+  is a relation name of its schema: the model now keeps the first holder, and `parse_schema`,
+  `schema dump-model` and `migrate diff` read such a tree with one index where they read two.
+  Two lint rules report the statement: **`build_005`** (warning) for an `IF NOT EXISTS` that
+  creates nothing, **`build_006`** (error) for a plain `CREATE INDEX` the build would fail at.
+  Both are on by default.
 - **A constraint a later `ALTER TABLE … DROP CONSTRAINT` drops is no longer in the model** (#624).
   The expected schema kept it, so `softdel_001` and `tenant_005` reported a key the tree had
   dropped and a database built from the tree read back without a constraint the tree still

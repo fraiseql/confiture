@@ -689,14 +689,23 @@ class SchemaLinter:
     def _check_duplicates(self, report: LintReport) -> None:
         """``build_001`` / ``build_002``: an object defined more than once in one build (#218).
 
+        ``build_005`` / ``build_006``: a ``CREATE INDEX`` on a relation name its schema
+        already holds — a silent no-op under ``IF NOT EXISTS``, a failed build without (#638).
+
         File-backed runs inventory each schema file on its own so a finding can
         name the files; a run on one string reports offsets into that string.
         """
         # Reason: import cycle (the module is partially initialised when this import runs at module level)
-        from confiture.core.linting.duplicates import duplicate_violations, find_duplicates
+        from confiture.core.linting.duplicates import (
+            duplicate_violations,
+            find_duplicates,
+            index_collision_violations,
+        )
 
         objects = self._file_objects or self._inventory.objects
         for violation in duplicate_violations(find_duplicates(objects)):
+            report.add_violation(violation)
+        for violation in index_collision_violations(self._inventory.index_collisions):
             report.add_violation(violation)
 
     def _check_qualification(self, report: LintReport) -> None:
