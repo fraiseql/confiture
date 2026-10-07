@@ -56,8 +56,9 @@ from confiture.core.linting.schema_linter import LintViolation, RuleSeverity
 RULE_ID = "build_003"
 FORWARD_RULE_ID = "build_004"
 
-#: What a ``RangeVar`` can name: everything that occupies a relation's namespace.
-RELATION_KINDS: frozenset[str] = frozenset({"table", "view", "matview", "sequence"})
+#: What a ``RangeVar`` can name: everything that occupies a relation's namespace, a pg_tviews
+#: TVIEW among them, in either spelling (#651).
+RELATION_KINDS: frozenset[str] = frozenset({"table", "view", "matview", "sequence", "tview"})
 
 #: What a call can name.
 ROUTINE_KINDS: frozenset[str] = frozenset({"function", "procedure", "aggregate"})
