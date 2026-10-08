@@ -529,6 +529,7 @@ class PrepSeedOrchestrator:
                         seed_files=seed_file_paths,
                         resolution_functions=resolvers,
                         tables=target_tables,
+                        prep_seed_schema=self.config.prep_seed_schema,
                     )
                 )
         except Exception as e:  # Reason: level-5 executes arbitrary seed SQL; any failure is a CRITICAL violation, not a crash
