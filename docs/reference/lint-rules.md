@@ -1168,9 +1168,43 @@ JOIN tb_category cat ON cat.pk_category = path.pk_category;  -- cat is live
 ```
 
 So does a CTE grouped by the key and joined back on it to a filtered read
-(`LEFT JOIN agg ON agg.fk_order = o.pk_order … WHERE o.deleted_at IS NULL`).
+(`LEFT JOIN agg ON agg.fk_order = o.pk_order … WHERE o.deleted_at IS NULL`), and
+so does a view whose output column is that key of a read it tests:
+
+```sql
+CREATE VIEW app.v_item AS
+  SELECT i.id, i.data FROM app.tb_item i WHERE i.deleted_at IS NULL;
+
+SELECT … FROM app.v_item vi
+JOIN app.tb_item i ON vi.id = i.id;                          -- i.id is UNIQUE: i is live
+```
+
 A view's reads of other views are not judged — the inner view is, on its own
-reads. A view defined twice is judged as the build leaves it. TVIEW definitions
+reads.
+
+A read whose rows reach nothing the view outputs is not reported either. That is
+a relation on the nullable side of a `LEFT JOIN` whose columns no output column,
+aggregate, `WHERE`, `HAVING` or `GROUP BY` names — only the `ON` of another such
+join — when the `SELECT` holding it cannot be changed by the rows it multiplies:
+it says `GROUP BY` or `DISTINCT` and calls no window function and no aggregate a
+duplicated row changes (`min`, `max`, `bool_and`, `bool_or`, `every`, `bit_and`,
+`bit_or`, `any_value` and a `DISTINCT` aggregate are fine; `count`, `sum`,
+`jsonb_agg` are not), or it and every such join reading it is on its own
+one-column key, so none matches more than one row:
+
+```sql
+SELECT v.pk_vendor, v.id, v.name
+FROM app.tb_vendor v
+LEFT JOIN app.tb_product p ON p.fk_vendor = v.pk_vendor        -- reaches nothing
+LEFT JOIN app.tb_order_line l ON l.fk_product = p.pk_product   -- reaches nothing
+WHERE v.deleted_at IS NULL
+GROUP BY v.pk_vendor, v.id, v.name;
+```
+
+A call is an aggregate when PostgreSQL 18 has one by that name, the tree creates
+one (`CREATE AGGREGATE`), or it is written as one (`count(*)`, `ORDER BY` or
+`FILTER` inside the call, `WITHIN GROUP`); an aggregate an extension adds under
+another name is read as a scalar function. A view defined twice is judged as the build leaves it. TVIEW definitions
 are not read yet.
 
 A view that keeps deleted rows on purpose — an audit trail, an id resolver — is

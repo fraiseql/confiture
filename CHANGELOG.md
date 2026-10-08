@@ -76,6 +76,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`app.tb_mailbox.smtp_password[pk_mailbox=1]`) or, when there is none, by the
   statement's line (`[line 12]`). A `WHERE` key that names a secret never labels the row.
 
+- **`softdel_003` no longer reports a key join to a filtering view, nor a join that
+  reaches nothing** (#662). A read restricted to rows whose one-column key equals that
+  key in a view that tests the table's tombstone (`JOIN tb_item i ON vi.id = i.id`,
+  `v_item` filtering `tb_item`) reaches only live rows, as #650 had it for a filtered
+  CTE. And the nullable side of a `LEFT JOIN` whose columns no output, aggregate or
+  qualification names — but the `ON` of another such join — is read without effect
+  when the `SELECT` cannot be changed by the rows it multiplies: `GROUP BY` or
+  `DISTINCT` with no window function and no aggregate a duplicated row changes, or every
+  such join on its own one-column key. Each shape was measured on PostgreSQL 18.4 by
+  comparing the view over tombstoned rows with the view over the same rows deleted;
+  `count(*)`, an inner join, an ungrouped `SELECT` and a key join read by one that
+  multiplies are still reported.
+
 - **A create on a name another kind already holds is the no-op, or the failure, PostgreSQL
   makes it** (#648). A schema's relation names are one namespace across tables, views,
   materialized views, sequences, indexes and composite types, and a row-typed relation also

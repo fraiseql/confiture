@@ -37,6 +37,10 @@ ALLOWED: dict[str, str] = {
     "core.live_catalog:_expression": (
         "a catalog expression parsed as `SELECT <expr>` so it renders the way DDL does"
     ),
+    "core.linting.soft_delete_views:_collapses": (
+        "the calls a grouped SELECT's target list makes, to know whether a duplicated "
+        "joined row changes an aggregate — never where an output comes from"
+    ),
     "core.linting.tombstones:_written_relations": (
         "the columns an UPDATE, ON CONFLICT or MERGE *assigns* (a SET list), and the "
         "value each is given — what a statement writes, never where an output comes from"

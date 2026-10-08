@@ -300,3 +300,182 @@ def test_an_anti_join_hides_live_rows_and_says_so(tmp_path: Path) -> None:
     assert "hides" in finding.message
     assert "shows the rows deleted" not in finding.message
     assert "ON clause" in (finding.suggested_fix or "")
+
+
+# A key equality to a *view* that filters the table carries the test too (#662),
+# measured on PostgreSQL 18.4: tombstoning rows of tb_item gives the same output as
+# deleting them.
+ITEMS = """CREATE TABLE app.tb_item (pk_item BIGINT PRIMARY KEY, id UUID UNIQUE, data JSONB,
+    fk_order BIGINT, deleted_at TIMESTAMPTZ);
+CREATE VIEW app.v_item AS
+  SELECT i.id, i.data FROM app.tb_item i WHERE i.deleted_at IS NULL;
+"""
+
+
+@pytest.mark.parametrize(
+    ("view", "reported"),
+    [
+        (
+            "CREATE VIEW app.v_items_by_order AS SELECT o.pk_order, jsonb_agg(vi.data) AS items "
+            "FROM app.v_item vi JOIN app.tb_item i ON vi.id = i.id "
+            "JOIN app.tb_order o ON i.fk_order = o.pk_order AND o.deleted_at IS NULL "
+            "GROUP BY o.pk_order;",
+            [],
+        ),
+        (
+            "CREATE VIEW app.v_two AS SELECT vi.id FROM app.v_item vi;\n"
+            "CREATE VIEW app.v AS SELECT i.data FROM app.v_two w "
+            "JOIN app.tb_item i ON i.id = w.id;",
+            [],
+        ),
+        (
+            "CREATE VIEW app.v_all AS SELECT i.id FROM app.tb_item i;\n"
+            "CREATE VIEW app.v AS SELECT i.data FROM app.v_all a JOIN app.tb_item i ON i.id = a.id;",
+            ["app.v", "app.v_all"],
+        ),
+        (
+            "CREATE VIEW app.v_data AS SELECT i.data AS id FROM app.tb_item i "
+            "WHERE i.deleted_at IS NULL;\n"
+            "CREATE VIEW app.v AS SELECT i.data FROM app.v_data d JOIN app.tb_item i ON i.id = d.id;",
+            ["app.v"],
+        ),
+        (
+            "CREATE VIEW app.v AS SELECT i.data FROM app.tb_item i "
+            "LEFT JOIN app.v_item vi ON vi.id = i.id;",
+            ["app.v"],
+        ),
+    ],
+    ids=["issue", "view-over-view", "view-not-filtered", "not-the-key", "left-join-preserved-side"],
+)
+def test_a_key_equality_with_a_filtering_view_carries_its_test(
+    tmp_path: Path, view: str, reported: list[str]
+) -> None:
+    assert _reported(tmp_path, ITEMS + view + "\n") == reported
+
+
+# A joined relation whose rows reach nothing is read without effect (#662), measured on
+# PostgreSQL 18.4: with GROUP BY or DISTINCT collapsing the rows it multiplies, and no
+# column of it selected, aggregated or tested, tombstoning its rows changes nothing.
+CATALOG = """CREATE AGGREGATE app.my_count (uuid) (SFUNC = int8inc_any, STYPE = int8);
+CREATE TABLE app.tb_vendor (pk_vendor BIGINT PRIMARY KEY, id UUID, name TEXT,
+    deleted_at TIMESTAMPTZ);
+CREATE TABLE app.tb_product (pk_product BIGINT PRIMARY KEY, fk_vendor BIGINT, deleted_at TIMESTAMPTZ);
+"""
+VENDOR_JOINS = (
+    "FROM app.tb_vendor v "
+    "LEFT JOIN app.tb_product p ON p.fk_vendor = v.pk_vendor "
+    "LEFT JOIN app.tb_order_line l ON l.fk_order = p.pk_product "
+)
+
+
+@pytest.mark.parametrize(
+    ("view", "reported"),
+    [
+        (
+            f"SELECT v.pk_vendor, v.id, v.name {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor, v.id, v.name",
+            [],
+        ),
+        (f"SELECT DISTINCT v.pk_vendor {VENDOR_JOINS}WHERE v.deleted_at IS NULL", []),
+        (
+            f"SELECT v.pk_vendor, max(v.name), count(DISTINCT v.id) {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor",
+            [],
+        ),
+        (
+            f"SELECT v.pk_vendor, count(*) {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor",
+            ["(l)", "(p)"],
+        ),
+        (
+            f"SELECT v.pk_vendor, jsonb_build_object('name', lower(v.name)) {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor, v.name",
+            [],
+        ),
+        (
+            "SELECT v.pk_vendor, jsonb_build_object('n', jsonb_agg(v.name)) "
+            f"{VENDOR_JOINS}WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor",
+            ["(l)", "(p)"],
+        ),
+        (
+            f"SELECT v.pk_vendor, app.my_count(v.id) {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor",
+            ["(l)", "(p)"],
+        ),
+        (
+            f"SELECT v.pk_vendor, row_number() OVER () {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor",
+            ["(l)", "(p)"],
+        ),
+        (f"SELECT v.pk_vendor {VENDOR_JOINS}WHERE v.deleted_at IS NULL", ["(l)", "(p)"]),
+        (
+            "SELECT p.pk_product FROM app.tb_product p "
+            "LEFT JOIN app.tb_vendor v ON v.pk_vendor = p.fk_vendor "
+            "LEFT JOIN app.tb_order o ON o.pk_order = v.pk_vendor "
+            "WHERE p.deleted_at IS NULL",
+            [],
+        ),
+        (
+            "SELECT p.pk_product FROM app.tb_product p "
+            "LEFT JOIN app.tb_vendor v ON v.pk_vendor = p.fk_vendor "
+            "LEFT JOIN app.tb_order_line l ON l.fk_order = v.pk_vendor "
+            "WHERE p.deleted_at IS NULL",
+            ["(l)", "(v)"],
+        ),
+        (
+            f"SELECT v.pk_vendor, max(p.pk_product) {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor",
+            ["(p)"],
+        ),
+        (
+            f"SELECT v.pk_vendor {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL AND l.qty > 0 GROUP BY v.pk_vendor",
+            ["(l)", "(p)"],
+        ),
+        (
+            "SELECT v.pk_vendor FROM app.tb_vendor v "
+            "JOIN app.tb_product p ON p.fk_vendor = v.pk_vendor "
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor",
+            ["(p)"],
+        ),
+        (
+            f"SELECT v.pk_vendor {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor HAVING count(l.pk) > 0",
+            ["(l)", "(p)"],
+        ),
+        (
+            f"SELECT v.pk_vendor, p {VENDOR_JOINS}"
+            "WHERE v.deleted_at IS NULL GROUP BY v.pk_vendor, p",
+            ["(p)"],
+        ),
+    ],
+    ids=[
+        "issue",
+        "distinct",
+        "duplicate-insensitive-aggregates",
+        "count-star",
+        "scalar-calls",
+        "aggregate-inside-a-call",
+        "the-tree-s-own-aggregate",
+        "window-function",
+        "no-grouping",
+        "joined-on-its-key",
+        "a-key-join-read-by-one-that-multiplies",
+        "aggregates-its-column",
+        "tested-in-where",
+        "inner-join",
+        "having",
+        "whole-row",
+    ],
+)
+def test_a_join_whose_rows_reach_nothing_is_read_without_effect(
+    tmp_path: Path, view: str, reported: list[str]
+) -> None:
+    report = _lint(
+        tmp_path, TABLES + CATALOG + f"CREATE VIEW app.v AS {view};\n", check_softdel_views=True
+    )
+    found = sorted(
+        "(" + v.message.split(") and never")[0].rsplit("(", 1)[1] + ")"
+        for v in _found(report, SELECT)
+    )
+    assert found == reported
