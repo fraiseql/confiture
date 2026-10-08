@@ -252,7 +252,8 @@
             "SEED_UNPARSEABLE",
             "SEED_NOT_CHECKED",
             "SEED_ROW_WIDTH",
-            "AMBIGUOUS_FINAL_TABLE"
+            "AMBIGUOUS_FINAL_TABLE",
+            "STAGED_ROW_NOT_PROMOTED"
           ]
         },
         "severity": {

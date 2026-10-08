@@ -1,6 +1,6 @@
 """Level 5: Full seed execution validation.
 
-Cycles 5-8: Seed loading, resolution execution, NULL FK detection, data integrity.
+Seed loading, resolution execution, NULL FK and lost-row detection, data integrity.
 
 Validates by actually executing seeds and transformations.
 Catches runtime issues that static analysis can't detect.
@@ -31,6 +31,13 @@ if TYPE_CHECKING:
 #: A final table: ``(schema, name)``, or a bare name in the validator's ``catalog_schema``.
 FinalName = str | tuple[str, str]
 
+#: How many of the staged ids a resolution lost a finding names.
+_LOST_IDS_SHOWN = 3
+
+
+def _is_uuid(column: Column | None) -> bool:
+    return column is not None and column.type_key == "uuid"
+
 
 @contextmanager
 def _probe(connection: Any) -> Generator[None]:
@@ -60,6 +67,7 @@ class Level5ExecutionValidator:
 
     Catches runtime issues:
     - NULL FKs from broken transformations
+    - Staged rows a resolver's inner join drops
     - Missing seed data (FK references non-existent UUID)
     - Duplicate identifiers
     - Constraint violations
@@ -275,6 +283,118 @@ class Level5ExecutionValidator:
                 continue
 
         return violations
+
+    def detect_unpromoted_rows(
+        self,
+        connection: Any,
+        tables: Sequence[FinalName],
+        prep_seed_schema: str,
+    ) -> list[PrepSeedViolation]:
+        """Detect staged rows that no final row carries after resolution (#666).
+
+        A resolver whose ``INNER JOIN`` finds no parent writes no row for that
+        child: nothing is NULL, so :meth:`detect_null_fks` sees nothing. A staged
+        row is matched to its final row by the UUID natural key ``id``; a table
+        pair without one is not judged. The finding names how many rows were lost,
+        the first few ids, and each staged ``fk_<x>_id`` whose parent a lost row
+        does not find.
+
+        Args:
+            connection: Database connection
+            tables: The final tables: ``(schema, name)``, or a name in
+                :attr:`catalog_schema`; each one's staging table has its name in
+                *prep_seed_schema*
+            prep_seed_schema: The schema the seeds are staged in
+
+        Returns:
+            List of violations found
+        """
+        violations: list[PrepSeedViolation] = []
+        for table in tables:
+            staging = (prep_seed_schema, self._qualified(table)[1])
+            if staging == self._qualified(table):
+                continue
+            try:
+                found = self._unpromoted(connection, staging, table)
+            except psycopg.Error:
+                # A table that is not there is level 4's finding.
+                continue
+            if found is not None:
+                violations.append(found)
+        return violations
+
+    def _unpromoted(
+        self, connection: Any, staging: tuple[str, str], table: FinalName
+    ) -> PrepSeedViolation | None:
+        """The finding for the staged rows of *staging* that *table* does not hold."""
+        staged = {c.name: c for c in self._columns(connection, staging)}
+        final = {c.name: c for c in self._columns(connection, table)}
+        if not _is_uuid(staged.get("id")) or not _is_uuid(final.get("id")):
+            return None
+        source = t"{staging[0]:i}.{staging[1]:i}"
+        lost_rows = t"NOT EXISTS (SELECT 1 FROM {self._relation(table):q} AS f WHERE f.id = s.id)"
+        with _probe(connection):
+            row = connection.execute(t"SELECT COUNT(*) FROM {source:q}").fetchone()
+            lost = connection.execute(
+                t"SELECT COUNT(*) OVER (), s.id::text FROM {source:q} AS s "
+                t"WHERE {lost_rows:q} ORDER BY s.id"
+            ).fetchmany(_LOST_IDS_SHOWN)
+        if not lost:
+            return None
+        total = int(row[0]) if row else 0
+        unresolved = self._unresolved_parents(connection, staging, staged, table, lost_rows)
+        message = (
+            f"{self._name(table)}: {lost[0][0]} of {total} staged rows were not promoted "
+            f"(e.g. {', '.join(identifier for _, identifier in lost)})"
+        )
+        if unresolved:
+            message += "; " + "; ".join(unresolved)
+        return PrepSeedViolation(
+            pattern=PrepSeedPattern.STAGED_ROW_NOT_PROMOTED,
+            severity=ViolationSeverity.CRITICAL,
+            message=message,
+            file_path=self._at(table)[0],
+            line_number=self._at(table)[1],
+            impact="Seed rows lost - the final table holds fewer rows than were staged",
+        )
+
+    def _unresolved_parents(
+        self,
+        connection: Any,
+        staging: tuple[str, str],
+        staged: dict[str, Column],
+        table: FinalName,
+        lost_rows: Template,
+    ) -> list[str]:
+        """``<staging>.<fk_x_id> finds no <parent> row``, for each key a lost row misses.
+
+        A one-column foreign key ``fk_<x>`` of the final table is staged as
+        ``fk_<x>_id``, the parent's UUID ``id``; a parent without one is not asked.
+        """
+        source = t"{staging[0]:i}.{staging[1]:i}"
+        found: list[str] = []
+        for fk in self._constraints(connection, table, "foreign_key"):
+            if len(fk.columns) != 1 or fk.ref_table is None:
+                continue
+            column = f"{fk.columns[0]}_id"
+            if not _is_uuid(staged.get(column)):
+                continue
+            parent, _name = self._referenced(fk)
+            query = (
+                t"SELECT EXISTS (SELECT 1 FROM {source:q} AS s WHERE {lost_rows:q} "
+                t"AND s.{column:i} IS NOT NULL AND NOT EXISTS "
+                t"(SELECT 1 FROM {parent:q} AS p WHERE p.id = s.{column:i}))"
+            )
+            try:
+                with _probe(connection):
+                    row = connection.execute(query).fetchone()
+            except psycopg.Error:
+                continue
+            if row and row[0]:
+                target = fk.ref_table
+                named = f"{target.schema}.{target.name}" if target.schema else target.name
+                found.append(f"{'.'.join(staging)}.{column} finds no {named} row")
+        return found
 
     def detect_duplicate_identifiers(
         self,
@@ -495,6 +615,7 @@ class Level5ExecutionValidator:
         seed_files: list[str],
         resolution_functions: list[Resolver],
         tables: Sequence[FinalName],
+        prep_seed_schema: str | None = None,
     ) -> list[PrepSeedViolation]:
         """Execute full seed loading and validation cycle.
 
@@ -504,6 +625,8 @@ class Level5ExecutionValidator:
             resolution_functions: The resolvers, in the order they run
             tables: The final tables: ``(schema, name)``, or a name in
                 :attr:`catalog_schema`
+            prep_seed_schema: The schema the seeds are staged in; given, a staged
+                row the resolution does not promote is reported
 
         Returns:
             List of violations found
@@ -522,6 +645,8 @@ class Level5ExecutionValidator:
 
         # Step 3: Validate results
         violations.extend(self.detect_null_fks(connection, tables))
+        if prep_seed_schema is not None:
+            violations.extend(self.detect_unpromoted_rows(connection, tables, prep_seed_schema))
         violations.extend(self.detect_duplicate_identifiers(connection, tables))
 
         return violations
@@ -532,6 +657,7 @@ class Level5ExecutionValidator:
         seed_files: list[str],
         resolution_functions: list[Resolver],
         tables: Sequence[FinalName],
+        prep_seed_schema: str | None = None,
     ) -> list[PrepSeedViolation]:
         """Execute full seed loading and comprehensive validation cycle.
 
@@ -543,6 +669,8 @@ class Level5ExecutionValidator:
             resolution_functions: The resolvers, in the order they run
             tables: The final tables: ``(schema, name)``, or a name in
                 :attr:`catalog_schema`
+            prep_seed_schema: The schema the seeds are staged in; given, a staged
+                row the resolution does not promote is reported
 
         Returns:
             List of violations found
@@ -559,8 +687,10 @@ class Level5ExecutionValidator:
         if violations:
             return violations
 
-        # Step 3: Detect NULL FKs
+        # Step 3: Detect NULL FKs, and staged rows the resolution lost
         violations.extend(self.detect_null_fks(connection, tables))
+        if prep_seed_schema is not None:
+            violations.extend(self.detect_unpromoted_rows(connection, tables, prep_seed_schema))
 
         # Step 4: Detect duplicate identifiers
         violations.extend(self.detect_duplicate_identifiers(connection, tables))

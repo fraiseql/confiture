@@ -295,6 +295,11 @@ report = orchestrator.run()
 - **Actual seed data loads** into prep_seed tables
 - **Resolution functions execute successfully**
 - Final data is valid (no NULLs where not allowed)
+- **Every staged row is promoted**: a staged UUID `id` that no final row carries is
+  `STAGED_ROW_NOT_PROMOTED` (CRITICAL), naming the table, how many rows were lost,
+  the first few ids, and each staged `fk_<x>_id` whose parent a lost row does not
+  find. A resolver whose `INNER JOIN` finds no parent drops the child silently,
+  where a `LEFT JOIN` would leave a NULL foreign key
 - Constraints satisfied (UNIQUE, FOREIGN KEY)
 - Referential integrity maintained
 
@@ -309,6 +314,8 @@ report = orchestrator.run()
 **Example violations:**
 ```
 ❌ NULL foreign key in catalog.tb_x.fk_org_id (row id=123)
+❌ catalog.tb_customer: 2 of 4 staged rows were not promoted (e.g. 0c0d0e0f-…-0001, …);
+   prep_seed.tb_customer.fk_category_id finds no catalog.tb_category row
 ❌ UNIQUE constraint violated after resolution (duplicate identifier)
 ❌ Self-referencing FK not handled with two-pass resolution
 ```
@@ -412,7 +419,7 @@ Nothing read is not a clean report.
 
 ### Level 5 Modes
 
-- **standard** (faster): Checks NULL FKs and duplicate identifiers
+- **standard** (faster): Checks NULL FKs, staged rows not promoted, and duplicate identifiers
 - **comprehensive** (slower): Also checks NOT NULL, CHECK, and FK constraints
 
 ---

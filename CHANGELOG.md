@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Level 5 reports a staged row the resolution does not promote** (#666). A resolver
+  whose `INNER JOIN` finds no parent writes no row for that child, and nothing is NULL,
+  so `validate_seeds(…, max_level=5)` passed while the final table held fewer rows than
+  were staged; the same stale UUID through a `LEFT JOIN` resolver was caught. After
+  resolution, a staged UUID `id` that no final row carries is now
+  `STAGED_ROW_NOT_PROMOTED` (CRITICAL, in both level-5 modes): the table, how many rows
+  were lost, the first three ids, and each staged `fk_<x>_id` whose parent a lost row
+  does not find. `seed-validate.schema.json` gains the pattern.
+
 - **Translation tables: their shape, and what they miss** (#657). `db/project.yaml` takes a
   `translations:` block (`tables` globs, `locale_table`, `locale_column`, `locale_fk`, and
   `required` locales or a `required_query`). **`i18n_001`** (warning, on when the block is

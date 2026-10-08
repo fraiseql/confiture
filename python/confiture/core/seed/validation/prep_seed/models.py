@@ -68,6 +68,9 @@ class PrepSeedPattern(Enum):
     AMBIGUOUS_FINAL_TABLE = "AMBIGUOUS_FINAL_TABLE"
     """A staging table's name is declared in several schemas and no resolver says which."""
 
+    STAGED_ROW_NOT_PROMOTED = "STAGED_ROW_NOT_PROMOTED"
+    """A staged row no final row carries after resolution: a resolver's join dropped it."""
+
     @property
     def description(self) -> str:
         """Get human-readable description of this pattern."""
@@ -122,6 +125,10 @@ class PrepSeedPattern(Enum):
             PrepSeedPattern.AMBIGUOUS_FINAL_TABLE: (
                 "A prep_seed table's final table could be any of several: its name is "
                 "declared in more than one schema and no resolver's INSERT names one"
+            ),
+            PrepSeedPattern.STAGED_ROW_NOT_PROMOTED: (
+                "A staged row is missing from its final table after resolution: a "
+                "resolver's inner join found no parent for it"
             ),
         }
         return descriptions.get(self, "Prep-seed pattern violation")
