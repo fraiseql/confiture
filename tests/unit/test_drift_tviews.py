@@ -6,8 +6,6 @@ side read ``tv_post`` as a table, so every TVIEW project reported
 ``--fail-on-warning`` on a database built from its own DDL.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 from confiture.core.drift import DriftType, SchemaDriftDetector, parse_expected_schema

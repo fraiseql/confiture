@@ -12,8 +12,6 @@ against the published ``schema-model.schema.json``, and ``from_json`` gives back
 the model it was written from, for every tree the model goldens record.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import inspect
 import json
@@ -22,6 +20,7 @@ from pathlib import Path
 
 import pytest
 from jsonschema import Draft202012Validator
+from tests._helpers import field_annotations, string_signature
 
 from confiture import platform
 from confiture.core.schema_exporter import load_schema
@@ -132,8 +131,8 @@ ERRORS = ("ConfiturError", "ConfigurationError")
 
 EXPORTS = frozenset(MODEL + CHANGES + READING + ORDERING + WRITER + SEEDS + ERRORS)
 
-#: ``str(inspect.signature(...))`` of every callable the seam defines. Under
-#: ``from __future__ import annotations`` an annotation is its source text.
+#: ``str(string_signature(...))`` of every callable the seam defines: each
+#: annotation as its source text (``annotationlib.Format.STRING``).
 SIGNATURES: dict[str, str] = {
     "parse_schema": (
         "(source: 'SchemaSource | None' = None, *, env: 'str | None' = None, "
@@ -177,10 +176,6 @@ SIGNATURES: dict[str, str] = {
     "SchemaModel.to_json": "(self) -> 'str'",
     "SchemaModel.from_json": "(text: 'str') -> 'SchemaModel'",
 }
-
-
-def _fields(cls: type) -> tuple[tuple[str, str], ...]:
-    return tuple((f.name, str(f.type)) for f in dataclasses.fields(cls))
 
 
 #: The fields of every dataclass the seam hands out, name and annotation.
@@ -439,12 +434,12 @@ def test_every_name_is_importable(name: str) -> None:
 
 @pytest.mark.parametrize("dotted", sorted(SIGNATURES))
 def test_every_signature_is_pinned(dotted: str) -> None:
-    assert str(inspect.signature(_resolve(dotted))) == SIGNATURES[dotted]
+    assert str(string_signature(_resolve(dotted))) == SIGNATURES[dotted]
 
 
 @pytest.mark.parametrize("name", sorted(FIELDS))
 def test_every_dataclass_is_pinned(name: str) -> None:
-    assert _fields(getattr(platform, name)) == FIELDS[name]
+    assert field_annotations(getattr(platform, name)) == FIELDS[name]
 
 
 @pytest.mark.parametrize("name", sorted(MODEL_FIELDS))

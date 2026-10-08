@@ -11,8 +11,6 @@ The assertions here are that the *same* constraint, however it is spelled,
 produces the *same* model.
 """
 
-from __future__ import annotations
-
 from confiture.core.differ import SchemaDiffer
 from confiture.core.schema_model import RelationName, Table
 

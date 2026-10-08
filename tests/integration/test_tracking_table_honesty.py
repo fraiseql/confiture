@@ -23,8 +23,6 @@ false green:
   ``--yes`` never executes the destructive command's prompt at all.
 """
 
-from __future__ import annotations
-
 import os
 from collections.abc import Iterator
 from pathlib import Path

@@ -11,8 +11,6 @@ created three files later resolves: only a name absent from the entire build is
 a finding.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

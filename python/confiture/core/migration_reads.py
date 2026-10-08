@@ -15,8 +15,6 @@ fix is reported unresolved, with the evaluator's reason. A ``.sql`` migration re
 no file: its text is its SQL.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path

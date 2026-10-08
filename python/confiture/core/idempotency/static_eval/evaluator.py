@@ -1,7 +1,5 @@
 """The evaluator: :class:`ModuleModel` walks one migration file and evaluates expressions."""
 
-from __future__ import annotations
-
 import ast
 import symtable
 import textwrap

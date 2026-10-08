@@ -1,7 +1,5 @@
 """Tests for the Python-migration SQL extractor."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.idempotency.python_migration_extractor import (

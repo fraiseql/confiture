@@ -10,8 +10,6 @@ text is confiture's markup, and :func:`render` writes every interpolation as
 computed ``str`` — and holds the Rich console it prints through.
 """
 
-from __future__ import annotations
-
 import unicodedata
 from collections.abc import Callable
 from string.templatelib import Interpolation, Template

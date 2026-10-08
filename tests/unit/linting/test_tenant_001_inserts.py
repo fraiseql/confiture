@@ -9,8 +9,6 @@ legitimate design). Bodies are read by the one fragment reader; what it cannot
 read is reported, never passed.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

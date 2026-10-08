@@ -6,8 +6,6 @@ Roles are server-scoped, not database-scoped, so each test uses a small set
 of well-known role names and the fixture cleans them up explicitly.
 """
 
-from __future__ import annotations
-
 from collections.abc import Generator
 
 import psycopg

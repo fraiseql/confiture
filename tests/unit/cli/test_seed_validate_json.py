@@ -1,7 +1,5 @@
 """``seed validate --fix --format json`` writes one JSON document to stdout, and says what it fixed."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

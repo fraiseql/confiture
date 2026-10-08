@@ -4,8 +4,6 @@ Catches drift if a schema is added but not cross-linked from
 ``docs/reference/json-schemas.md``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

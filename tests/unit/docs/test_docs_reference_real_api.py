@@ -31,8 +31,6 @@ command guard: they record what was announced at a version, and
 erratum rather than a rewrite, because a release note is a record.
 """
 
-from __future__ import annotations
-
 import importlib
 import importlib.util
 import re

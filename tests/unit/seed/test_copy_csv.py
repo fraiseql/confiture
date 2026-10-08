@@ -8,8 +8,6 @@ default) is NULL, a quoted one never is — unless its column is ``FORCE_NULL`` 
 row is not a line.
 """
 
-from __future__ import annotations
-
 import random
 
 import pytest

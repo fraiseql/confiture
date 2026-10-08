@@ -1,7 +1,5 @@
 """Unit tests for CTE debug models."""
 
-from __future__ import annotations
-
 from confiture.models.debug_models import CTEDebugSession, CTEStepResult
 
 

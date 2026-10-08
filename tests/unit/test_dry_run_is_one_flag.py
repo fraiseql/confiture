@@ -11,8 +11,6 @@ never both, and never one of the retired spellings.
 every pending migration inside a SAVEPOINT and rolls back. It keeps its name.
 """
 
-from __future__ import annotations
-
 import ast
 from collections.abc import Iterator
 from pathlib import Path

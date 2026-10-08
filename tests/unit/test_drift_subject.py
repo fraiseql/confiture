@@ -12,8 +12,6 @@ read whatever it holds, which is why the parts matter: an extra constraint in
 the database is reported under the name the database gives it.
 """
 
-from __future__ import annotations
-
 import ast
 from dataclasses import replace
 from pathlib import Path

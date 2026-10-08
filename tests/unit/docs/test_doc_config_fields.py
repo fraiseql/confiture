@@ -7,8 +7,6 @@ docs and a
 new field cannot ship undocumented.
 """
 
-from __future__ import annotations
-
 import re
 import typing
 

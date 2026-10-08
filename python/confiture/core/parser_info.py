@@ -6,8 +6,6 @@ envelope carries :func:`parser_stamp`, so which parser produced a verdict is
 stated rather than inferred from confiture's own version (#210).
 """
 
-from __future__ import annotations
-
 import codecs
 import re
 from importlib import metadata

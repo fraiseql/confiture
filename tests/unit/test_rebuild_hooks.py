@@ -1,7 +1,5 @@
 """Tests for the hooks integration (BEFORE/AFTER_REBUILD)."""
 
-from __future__ import annotations
-
 
 class TestRebuildHookPhases:
     """Hook phases and context."""

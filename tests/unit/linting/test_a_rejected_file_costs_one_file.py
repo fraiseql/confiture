@@ -11,8 +11,6 @@ can fire on.
 baseline can record a finding and a baseline never sees `degraded`.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

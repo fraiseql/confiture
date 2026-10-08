@@ -22,8 +22,6 @@ survives is the shape of the repair, in this module's git history and in the
 mutation pins at the bottom.
 """
 
-from __future__ import annotations
-
 import itertools
 
 import pytest

@@ -12,8 +12,6 @@ file.
 Every test runs in a database of its own.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

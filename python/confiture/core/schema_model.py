@@ -31,8 +31,6 @@ other still matches (#302), which no dict key can express — so a routine's
 overload that falls in it.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping

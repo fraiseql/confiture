@@ -6,8 +6,6 @@ and a key it reads is only a promise once the published schema requires it. Each
 row names the key by its path in the payload and the consumer's own ``file:line``.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from typing import Any, NamedTuple

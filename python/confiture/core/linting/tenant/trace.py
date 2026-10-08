@@ -30,8 +30,6 @@ with the column on the side the qualification *restricts*: a range of the query'
 ``ON`` keeps whatever it says.
 """
 
-from __future__ import annotations
-
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol

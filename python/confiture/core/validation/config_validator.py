@@ -10,8 +10,6 @@ Each issue is the unified inner issue object preflight's ``issues[]`` also carri
 ``{severity, code, message, actionable, details, migration, file, line}``.
 """
 
-from __future__ import annotations
-
 import os
 from dataclasses import dataclass, field
 from pathlib import Path

@@ -15,8 +15,6 @@ a field is explained.
 ``tests/unit/docs/test_doc_config_fields.py`` runs the check.
 """
 
-from __future__ import annotations
-
 import argparse
 import inspect
 import re

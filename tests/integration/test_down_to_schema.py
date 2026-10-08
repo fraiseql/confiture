@@ -1,7 +1,5 @@
 """Validate `migrate down-to --format json` output against its schema (#142)."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

@@ -13,8 +13,6 @@ as written, a database's as PostgreSQL writes them (``live_catalog.catalogued_ob
 Which rules the comparison applies follows from where each side came from.
 """
 
-from __future__ import annotations
-
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path

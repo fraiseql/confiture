@@ -5,8 +5,6 @@ that every code carries an `actionable` resolution hint (the envelope field), an
 that the published codebook doc stays generated from the registry.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.error_codes import ERROR_CODE_REGISTRY, render_error_codebook

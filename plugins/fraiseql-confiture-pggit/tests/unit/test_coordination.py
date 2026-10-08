@@ -4,8 +4,6 @@ Tests for Intent registry, conflict detection, and coordination models.
 These tests do NOT require a database - models and detection logic are tested in isolation.
 """
 
-from __future__ import annotations
-
 from confiture_pggit.coordination import (
     ConflictDetector,
     ConflictReport,

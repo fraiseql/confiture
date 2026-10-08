@@ -4,8 +4,6 @@ The floors file is the committed contract; this test checks the script's reading
 a report (below / at / missing file) and that the committed floors name real modules.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import json
 from pathlib import Path

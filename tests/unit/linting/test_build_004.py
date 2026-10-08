@@ -10,8 +10,6 @@ verdict on it (``tests/integration/test_forward_reference_oracle.py`` applies
 every bundle); the rule reports a row exactly when PostgreSQL refuses it.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

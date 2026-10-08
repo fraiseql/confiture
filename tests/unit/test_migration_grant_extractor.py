@@ -11,8 +11,6 @@ the contract: if you add a fixture there, both backends MUST produce
 the same result.  That's the point of this file.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.migration_grant_extractor import (

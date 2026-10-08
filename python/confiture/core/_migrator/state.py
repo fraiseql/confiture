@@ -4,8 +4,6 @@ Free functions taking the ``MigrationEngine`` instance as their first argument; 
 class keeps thin delegating methods, which are its public surface and its patch targets.
 """
 
-from __future__ import annotations
-
 import logging
 from string.templatelib import Template
 from typing import TYPE_CHECKING, Any

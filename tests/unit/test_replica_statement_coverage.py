@@ -12,8 +12,6 @@ fallback for a statement it cannot map is :class:`Other` — which routes to
 ``PFLIGHT_REPLICA_UNCLASSIFIED``, a warning, so opacity never hard-blocks.
 """
 
-from __future__ import annotations
-
 import json
 
 import pytest

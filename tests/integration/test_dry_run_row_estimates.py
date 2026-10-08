@@ -4,8 +4,6 @@ It looked each table up by its bare name, so ``tenant.tb_stat``'s estimate was
 whichever ``tb_stat`` the catalogue index gave first — ``public``'s, here.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

@@ -10,8 +10,6 @@ imported, and called against the database they were generated from.
 Every test runs in a database of its own.
 """
 
-from __future__ import annotations
-
 import ast as pyast
 import importlib.util
 import sys

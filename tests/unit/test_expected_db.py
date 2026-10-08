@@ -5,8 +5,6 @@ build still drops the scratch database, so no orphan ``confiture_tmp_*`` DB is
 left behind.
 """
 
-from __future__ import annotations
-
 from typing import ClassVar
 
 import pytest

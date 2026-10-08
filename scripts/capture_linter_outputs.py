@@ -10,8 +10,6 @@ The tools are not confiture dependencies. Run it where both are installed::
     uv run --with sqlfluff --with squawk-cli python scripts/capture_linter_outputs.py
 """
 
-from __future__ import annotations
-
 import json
 import shutil
 import subprocess

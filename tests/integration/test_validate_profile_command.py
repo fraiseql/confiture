@@ -9,8 +9,6 @@ the error registry gives its code: ``ANON_1400`` for a profile that is invalid,
 connection.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

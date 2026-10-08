@@ -10,8 +10,6 @@ The three things a deploy gate needs from this, on a real database:
   it the exit code is unchanged.
 """
 
-from __future__ import annotations
-
 import json
 import textwrap
 from pathlib import Path

@@ -13,8 +13,6 @@ Naming the COMMENT prefix it looked for — and reporting what it found instead 
 separates them without reading ``_managed_kind``.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 import pytest

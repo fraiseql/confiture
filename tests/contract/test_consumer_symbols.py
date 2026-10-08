@@ -21,14 +21,13 @@ new required parameter appeared that the consumer does not pass. Widening — a 
 optional parameter — is always allowed.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import importlib
 import inspect
 from typing import Any, NamedTuple
 
 import pytest
+from tests._helpers import string_annotations, string_signature
 
 
 class Symbol(NamedTuple):
@@ -485,7 +484,7 @@ def test_consumer_call_shape_has_not_narrowed(row: CallShape) -> None:
     """The parameters a consumer passes are still accepted, and nothing new is required."""
     target = _resolve(row.target)
     assert callable(target), f"{row.target} is no longer callable ({row.source})"
-    problems = _narrowing(inspect.signature(target), row.passes)
+    problems = _narrowing(string_signature(target), row.passes)
     assert not problems, (
         f"{row.target} narrowed for {row.consumer} ({row.source}): {'; '.join(problems)}"
     )
@@ -494,7 +493,7 @@ def test_consumer_call_shape_has_not_narrowed(row: CallShape) -> None:
 def _has_member(cls: type, name: str) -> bool:
     if dataclasses.is_dataclass(cls) and name in {f.name for f in dataclasses.fields(cls)}:
         return True
-    annotations = inspect.get_annotations(cls)
+    annotations = string_annotations(cls)
     return name in annotations or hasattr(cls, name)
 
 

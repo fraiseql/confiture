@@ -4,8 +4,6 @@ Drives the Typer CLI end-to-end against a real Postgres instance.
 Mirrors :mod:`tests.integration.test_drift_check_acls_cli`.
 """
 
-from __future__ import annotations
-
 import json
 import textwrap
 from collections.abc import Generator

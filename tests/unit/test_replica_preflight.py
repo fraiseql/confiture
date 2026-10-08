@@ -7,8 +7,6 @@ and *never-inspected*. The surface now emits ``PFLIGHT_REPLICA_UNCLASSIFIED`` fo
 migrations it cannot read, so the presence rule covers them.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.linting.libraries.replica import replica_preflight_issues

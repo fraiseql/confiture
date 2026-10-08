@@ -12,8 +12,6 @@ Usage:
     confiture generate alloc db/schema/functions/catalog/ --verb create
 """
 
-from __future__ import annotations
-
 import importlib
 import subprocess
 from collections.abc import Callable

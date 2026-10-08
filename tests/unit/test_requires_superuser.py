@@ -9,8 +9,6 @@ Mirrors the existing ``transactional: bool = True`` instance-attribute
 pattern at python/confiture/models/migration.py:142.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 import psycopg

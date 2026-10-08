@@ -12,8 +12,6 @@ mode is a contributor adding a fresh-resolving install step next to a locked
 one — which no runtime assertion can see.
 """
 
-from __future__ import annotations
-
 import re
 import subprocess
 from pathlib import Path

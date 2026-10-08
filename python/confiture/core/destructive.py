@@ -15,8 +15,6 @@ The tiers that gate are named here, not derived from the tier ordering: the
 ordering picks the worst of a set, policy maps each tier to an action.
 """
 
-from __future__ import annotations
-
 from typing import Literal, assert_never
 
 from confiture.core.risk_tier import RiskTier

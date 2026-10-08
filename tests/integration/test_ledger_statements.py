@@ -6,8 +6,6 @@ command does, so a statement that quoted, bound or qualified wrongly fails here
 rather than in a deployment.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

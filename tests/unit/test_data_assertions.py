@@ -18,8 +18,6 @@ database — the schema is there, so the query answers truthfully. Flagging it
 would be telling the author to break a working guard.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

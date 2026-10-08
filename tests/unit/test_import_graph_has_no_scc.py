@@ -15,8 +15,6 @@ are the linter's and not the migrator's. They may remain SCCs among themselves; 
 may not reach into the scope.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

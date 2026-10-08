@@ -12,8 +12,6 @@ else as confiture's own bookkeeping. Here it *is* the schema under test, so the
 ignore list is emptied: a comparison of zero tables would pass whatever it does.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

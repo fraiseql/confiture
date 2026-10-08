@@ -1,9 +1,12 @@
 """Small helpers shared across test layers."""
 
-from __future__ import annotations
-
+import annotationlib
+import dataclasses
+import inspect
 import os
 import re
+from collections.abc import Callable
+from typing import Any
 
 import psycopg
 
@@ -78,3 +81,31 @@ def routines(bodies: dict[str, str | None]) -> list[Routine]:
         types = [t for t in arguments.rstrip(")").split(",") if t]
         found.append(routine(name, *types, schema=schema or "public", body=body))
     return found
+
+
+def string_signature(obj: Callable[..., Any]) -> inspect.Signature:
+    """*obj*'s signature with each annotation as its source text, never evaluated.
+
+    Python 3.14 evaluates an annotation when it is read (PEP 649); a reader that
+    pins the *text* a signature declares asks for it (``Format.STRING``), and gets
+    the text ``from __future__ import annotations`` used to produce.
+    """
+    return inspect.signature(obj, annotation_format=annotationlib.Format.STRING)
+
+
+def string_annotations(obj: Any) -> dict[str, str]:
+    """*obj*'s own annotations as source text (a class's own fields, not its bases')."""
+    return annotationlib.get_annotations(obj, format=annotationlib.Format.STRING)
+
+
+def field_annotations(cls: type) -> tuple[tuple[str, str], ...]:
+    """Each dataclass field of *cls*, in order, with its annotation's source text.
+
+    ``dataclasses.fields`` says which fields and in what order; each text is read
+    from the class that declares the field, since a field's ``type`` is a value now.
+    """
+    texts: dict[str, str] = {}
+    for klass in reversed(cls.__mro__):
+        if dataclasses.is_dataclass(klass):
+            texts.update(string_annotations(klass))
+    return tuple((f.name, texts[f.name]) for f in dataclasses.fields(cls))

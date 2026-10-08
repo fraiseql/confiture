@@ -7,8 +7,6 @@ migration-relative read went missing. The primitive takes the text and the
 path the text belongs to.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

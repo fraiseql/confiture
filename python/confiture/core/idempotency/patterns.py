@@ -7,8 +7,6 @@ something less exact. :data:`PATTERN_CATALOG` is what ``--list-patterns``
 publishes.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import NamedTuple, TypedDict
 

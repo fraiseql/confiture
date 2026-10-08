@@ -20,8 +20,6 @@ happens where it belongs, on the findings, in `_keep_selected_rules`. The two
 tables are keyed differently on purpose; this test is what keeps them agreeing.
 """
 
-from __future__ import annotations
-
 import inspect
 
 from confiture.core.linting.gate import Threshold

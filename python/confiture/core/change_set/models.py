@@ -1,7 +1,5 @@
 """The change-set wire shape: entries, the set, tier tables and the tier rules."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
 

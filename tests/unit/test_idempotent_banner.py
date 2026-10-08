@@ -5,8 +5,6 @@ backend via ``payload["meta"]["backend"]`` so pipe-able output stays
 clean.
 """
 
-from __future__ import annotations
-
 import json
 
 from typer.testing import CliRunner

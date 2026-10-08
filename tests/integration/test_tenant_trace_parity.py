@@ -23,8 +23,6 @@ A column the tracer reports :class:`~confiture.core.linting.tenant.trace.Unread`
 outside the plain-column subset (``unread``), and is counted too.
 """
 
-from __future__ import annotations
-
 from collections import Counter
 from collections.abc import Callable
 from typing import Any

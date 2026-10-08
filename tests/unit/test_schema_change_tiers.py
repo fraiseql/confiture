@@ -14,8 +14,6 @@ fails and goes. A change the renderer writes no statement for has nothing to
 agree with and is not compared.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

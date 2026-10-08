@@ -6,8 +6,6 @@ Filesystem-only checks that require no database connection:
 - Non-transactional statements: does any migration contain DDL that cannot run in a transaction?
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any

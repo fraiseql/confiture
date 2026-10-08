@@ -13,8 +13,6 @@ Usage:
     python scripts/bump-version.py 0.3.13
 """
 
-from __future__ import annotations
-
 import re
 import sys
 from datetime import datetime

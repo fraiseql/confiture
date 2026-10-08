@@ -6,8 +6,6 @@ generated migration was one ``RENAME`` — and when the renamed table was first
 compared, its follow-up changes named the old table, which no longer existed.
 """
 
-from __future__ import annotations
-
 import pglast
 import psycopg
 

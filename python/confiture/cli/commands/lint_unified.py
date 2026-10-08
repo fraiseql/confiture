@@ -1,7 +1,5 @@
 """``confiture lint-unified``: Squawk, SQLFluff, the schema linter and the tree rules in one report."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import typer

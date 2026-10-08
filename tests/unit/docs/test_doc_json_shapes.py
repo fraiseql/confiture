@@ -8,8 +8,6 @@
   surface (no ``locked_tables`` / ``confidence_percent`` / ``estimated_*``).
 """
 
-from __future__ import annotations
-
 import dataclasses
 import json
 from pathlib import Path

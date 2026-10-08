@@ -7,8 +7,6 @@ constraint it names, the index backing a primary key, an analysed CHECK or
 default, a ``serial`` — and generated ``DROP``s for objects the tree declares.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable
 from pathlib import Path

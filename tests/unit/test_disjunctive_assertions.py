@@ -10,8 +10,6 @@ Every disjunction was reviewed and resolved over an exit code (the
 class that hides a wrong verdict); the rest are frozen at this baseline.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

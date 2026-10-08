@@ -12,8 +12,6 @@ fragment reader and the tables through the one model, and every finding names
 the file and line the resolver is written on.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock

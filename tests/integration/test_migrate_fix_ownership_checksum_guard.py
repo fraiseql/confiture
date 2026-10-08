@@ -5,8 +5,6 @@ recorded in the local tracking table, unless ``--force`` is also set.
 This protects users from silently breaking ``migrate verify``.
 """
 
-from __future__ import annotations
-
 import textwrap
 from collections.abc import Generator
 from pathlib import Path

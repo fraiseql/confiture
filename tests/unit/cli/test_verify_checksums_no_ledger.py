@@ -9,8 +9,6 @@ CliRunner merges stdout/stderr, so these assert on exit codes and combined
 output substrings only — never on stream identity.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

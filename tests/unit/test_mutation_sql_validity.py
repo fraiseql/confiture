@@ -6,8 +6,6 @@ before any test runs and tells you nothing about the tests. ``schema_001``
 did exactly that — its regex swallowed the comma after ``PRIMARY KEY``.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.testing.frameworks.mutation import MutationCategory, MutationRegistry

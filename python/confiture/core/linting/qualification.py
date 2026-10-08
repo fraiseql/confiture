@@ -21,8 +21,6 @@ a file that is deliberately schema-agnostic — an extension bootstrap, a
 template — the way ``-- confiture:secdef-allow-unpinned`` does for ``sec_002``.
 """
 
-from __future__ import annotations
-
 from collections.abc import Container, Iterable, Sequence
 
 from confiture.core.linting.inventory import KIND_KEYWORD, SchemaObject

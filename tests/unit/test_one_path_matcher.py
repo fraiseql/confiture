@@ -13,8 +13,6 @@ and a listed module that no longer matches anything fails the test, as in the
 one-lexer guard.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

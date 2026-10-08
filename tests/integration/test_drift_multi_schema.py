@@ -7,8 +7,6 @@ the qualified tables at all. This runs the real comparison against a database
 with a ``tenant`` schema next to ``public``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

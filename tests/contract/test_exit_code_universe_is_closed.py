@@ -13,8 +13,6 @@ for both sides, which turns fraisier-core's red CI into an obligation stated in
 this one.
 """
 
-from __future__ import annotations
-
 import difflib
 from pathlib import Path
 

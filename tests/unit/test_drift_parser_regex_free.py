@@ -6,8 +6,6 @@ became a table called ``tenant``. This pins the replacement: no DDL regex in
 the module, and the expected side built from the one schema read (``schema_read``).
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

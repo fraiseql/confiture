@@ -6,8 +6,6 @@ Decoupled from the live ``ExecutionContext`` so renderers stay pure (input
 ``ExecutionContext`` at fire time.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 

@@ -16,31 +16,14 @@ of each signature — the ``Args:`` block, the forwarding call, and the fence in
 ``docs/api/migrator.md`` — against the signature itself.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
-if TYPE_CHECKING:
-    from psycopg import Connection
+from psycopg import Connection
 
-    from confiture.config.environment import Environment
-    from confiture.models.results import (
-        CurrentRevision,
-        DownToResult,
-        MigrateDownResult,
-        MigrateRebuildResult,
-        MigrateReinitResult,
-        MigrateUpResult,
-        MigrationApplied,
-        PreflightAgainstResult,
-        PreflightResult,
-        StatusResult,
-    )
-
-
+from confiture.config.environment import Environment
 from confiture.core import connection
 from confiture.core._migrator import apply_loop as _apply_loop
 from confiture.core._migrator import replay as _replay
@@ -52,6 +35,18 @@ from confiture.core._migrator.loader import load_migration_class
 from confiture.core._migrator.options import UpOptions
 from confiture.core.locking import LockConfig, MigrationLock, resolve_lock_settings
 from confiture.exceptions import ConfigurationError
+from confiture.models.results import (
+    CurrentRevision,
+    DownToResult,
+    MigrateDownResult,
+    MigrateRebuildResult,
+    MigrateReinitResult,
+    MigrateUpResult,
+    MigrationApplied,
+    PreflightAgainstResult,
+    PreflightResult,
+    StatusResult,
+)
 
 
 def _not_entered() -> ConfigurationError:

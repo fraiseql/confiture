@@ -4,8 +4,6 @@ Every ``tenant`` rule reads ``db/project.yaml``'s ``tenancy:`` block, so each te
 needs a project directory holding one; this writes it and runs one switch.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.linting.schema_linter import (

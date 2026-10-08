@@ -9,8 +9,6 @@ Verifies that:
 5. RecreateResult dataclass works correctly
 """
 
-from __future__ import annotations
-
 from importlib import resources
 from textwrap import dedent
 

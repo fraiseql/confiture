@@ -13,8 +13,6 @@ in the result is not re-scanned, so nested references are rejected
 explicitly rather than producing surprising one-pass-only behavior.
 """
 
-from __future__ import annotations
-
 import os
 import re
 from typing import Any

@@ -4,8 +4,6 @@ A free function that builds a managed :class:`MigratorSession` from an
 ``Environment`` / config path.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any

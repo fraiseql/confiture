@@ -1,7 +1,5 @@
 """`confiture migrate down` and `down-to`."""
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 

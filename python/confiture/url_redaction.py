@@ -16,8 +16,6 @@ Lives in ``core`` so that ``core`` modules — the ``psql`` applier and the
 :func:`redact_url` from here for backwards compatibility.
 """
 
-from __future__ import annotations
-
 import os
 import re
 from urllib.parse import ParseResult, unquote, urlparse, urlunparse

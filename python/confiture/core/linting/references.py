@@ -49,8 +49,6 @@ statement in it was not, and :attr:`ReferenceScan.unread_fragments` names it
 with its line rather than letting the rest of the body pass for the whole.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field

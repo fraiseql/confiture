@@ -10,8 +10,6 @@ Requires a superuser on the server accessible via CONFITURE_TEST_DB_URL (an even
 trigger, a wrapper and an access method need one).
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 import psycopg

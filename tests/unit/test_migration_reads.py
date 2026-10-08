@@ -1,7 +1,5 @@
 """Which files a migration reads, resolved as the runtime would (#540, #538)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.migration_reads import reads, reads_under

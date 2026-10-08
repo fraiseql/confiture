@@ -6,8 +6,6 @@ cannot commit, is a ``SeedError`` naming it, never the driver's or the codec's
 exception.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

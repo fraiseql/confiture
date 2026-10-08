@@ -11,8 +11,6 @@ baseline, and what it does depends on the ledger:
 - anything else: it refuses (``VALID_008``) before changing anything.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

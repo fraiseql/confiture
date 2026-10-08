@@ -8,8 +8,6 @@ Integration tests covering the executor against a real DB live in
 ``tests/integration/test_bootstrap_executor.py``.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 import pglast

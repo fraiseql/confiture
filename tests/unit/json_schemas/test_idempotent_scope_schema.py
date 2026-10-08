@@ -10,8 +10,6 @@ Two shapes must stay valid against
   forbids the scan counters while requiring ``message``.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

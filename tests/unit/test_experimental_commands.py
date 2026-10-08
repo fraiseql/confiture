@@ -8,8 +8,6 @@ its ``--help`` — which ``docs/reference/cli.md`` reprints — and nowhere else
 the word marks a list and not a mood.
 """
 
-from __future__ import annotations
-
 from typer.main import get_command
 
 from confiture.cli.main import app

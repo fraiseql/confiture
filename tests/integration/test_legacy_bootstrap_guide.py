@@ -10,8 +10,6 @@ the docs go stale.
 Requires DATABASE_URL to point at a writable Postgres. Skipped otherwise.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import shutil

@@ -6,8 +6,6 @@ does not name is silently dropped. Adding ``tviews`` (#504) found two that
 dropped it. Each rebuild is fed a model with one object in every section.
 """
 
-from __future__ import annotations
-
 import dataclasses
 
 import pytest

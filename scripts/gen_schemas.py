@@ -5,8 +5,6 @@ uv run python scripts/gen_schemas.py          # write the docs copy
 uv run python scripts/gen_schemas.py --check  # exit 1 if the copy is stale (CI)
 """
 
-from __future__ import annotations
-
 import sys
 from pathlib import Path
 

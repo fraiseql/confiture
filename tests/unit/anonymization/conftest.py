@@ -5,8 +5,6 @@ it. Every test here gets a fixed test secret so the strategies can be
 exercised; a test about the *absence* of the secret deletes it explicitly.
 """
 
-from __future__ import annotations
-
 import pytest
 
 

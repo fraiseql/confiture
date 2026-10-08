@@ -9,8 +9,6 @@ lock-profile table gives its statements, and the longest ACCESS EXCLUSIVE hold
 a stage takes — the number the online e2e measures.
 """
 
-from __future__ import annotations
-
 from confiture.core.expand_contract import plan, plannable
 
 ADD_NOT_NULL = "ALTER TABLE orders ADD COLUMN status text NOT NULL DEFAULT 'new';"

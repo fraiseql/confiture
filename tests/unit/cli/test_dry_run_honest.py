@@ -5,8 +5,6 @@ every migration and ``classification: "warning"`` regardless of content, and
 always closed with "All migrations appear safe to execute".
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import patch

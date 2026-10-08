@@ -1,7 +1,5 @@
 """Unit tests for per-worker DB name/URL resolution."""
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.testing.worker_db import (

@@ -11,8 +11,6 @@ knows the body is wrong because PostgreSQL said so, and has nothing to add to
 what it said.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

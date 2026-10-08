@@ -8,8 +8,6 @@ from ``parse_sql``. The differ's index / enum / sequence / constraint passes wal
 the AST, so a commented-out ``CREATE INDEX`` is nothing, not a change.
 """
 
-from __future__ import annotations
-
 import time
 
 import pglast

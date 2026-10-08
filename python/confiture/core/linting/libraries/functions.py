@@ -38,8 +38,6 @@ A ``-- confiture:func-allow-duplicate`` line immediately above a
 the duplicate-detection map (mirrors ``-- confiture:owner-skip``).
 """
 
-from __future__ import annotations
-
 import fnmatch
 from dataclasses import dataclass
 from pathlib import Path

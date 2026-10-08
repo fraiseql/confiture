@@ -7,8 +7,6 @@ subcommands, and that the documented names exactly match the names the CLI app
 actually registers (so the doc can't drift from the implementation).
 """
 
-from __future__ import annotations
-
 from doc_snippets import read_doc
 
 from confiture.cli.schema_to_schema import schema_to_schema_app

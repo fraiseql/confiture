@@ -25,8 +25,6 @@ PostgreSQL adds; ``_pglast_enums.enums_are_usable`` covers the other direction,
 a member that goes away.
 """
 
-from __future__ import annotations
-
 import pglast.enums
 import pytest
 

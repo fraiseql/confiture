@@ -6,8 +6,6 @@ lives in ``DEFAULT_SCHEMA``, #313; a view is not a routine), and the statement i
 fails on a routine that exists — which is what a body fix replaces.
 """
 
-from __future__ import annotations
-
 import pglast
 
 from confiture.core.function_signature_drift import (

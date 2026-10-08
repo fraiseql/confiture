@@ -9,8 +9,6 @@ is what dropped every ``v := f(…)``: neither ``v := f()`` nor
 ``SELECT v := f()`` is SQL, so the assignment contributed nothing.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.plpgsql_fragments import SLOTS, Fragment, Mode, fragments, nodes

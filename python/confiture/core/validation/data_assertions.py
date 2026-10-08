@@ -12,8 +12,6 @@ exits 0. Confiture owns ``preflight``, so it owns telling the author about the
 contract; it does not own deciding their migration is wrong.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from pathlib import Path
 

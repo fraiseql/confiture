@@ -7,8 +7,6 @@ each must stay what it is, whatever the name holds. Checked by parsing what
 was written: the Python with :mod:`ast`, the SQL with pglast.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

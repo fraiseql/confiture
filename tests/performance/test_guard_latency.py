@@ -10,8 +10,6 @@ The bounds are loose enough for a slow CI runner; the measured
 numbers are printed so a regression shows in the log before it trips the bound.
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 import time

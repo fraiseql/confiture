@@ -12,8 +12,6 @@ The secret is mandatory.  Every keyed pseudonym goes through one
 empty secret is a ``ConfigurationError`` before any row is read.
 """
 
-from __future__ import annotations
-
 import hashlib
 import hmac
 import random

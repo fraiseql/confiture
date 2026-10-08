@@ -7,8 +7,6 @@ imports no parser and no driver, so a tool that only wants to *hold* a schema
 (a seed generator, a port's parity fixture) does not pay for either.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 import sys

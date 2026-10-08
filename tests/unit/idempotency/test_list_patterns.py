@@ -5,8 +5,6 @@ and surfaces the same information through the
 ``confiture migrate validate --list-patterns`` CLI flag.
 """
 
-from __future__ import annotations
-
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import PATTERN_CATALOG, list_patterns
 

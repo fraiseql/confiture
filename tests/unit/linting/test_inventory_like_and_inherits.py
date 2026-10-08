@@ -11,8 +11,6 @@ holds its parent's columns for as long as it is one, so
 tree's final state, for the readers that compare against PostgreSQL.
 """
 
-from __future__ import annotations
-
 from confiture.core.drift import parse_expected_schema
 from confiture.core.linting.inventory import (
     SchemaObject,

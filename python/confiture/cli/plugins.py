@@ -21,8 +21,6 @@ registered before failing is taken back: a broken extension costs its own comman
 never the ones ``confiture`` ships.
 """
 
-from __future__ import annotations
-
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass

@@ -7,8 +7,6 @@ NULL. Level 4 reported ``catalog.tb_widget`` missing, and level 5's NULL-FK
 check never looked at ``tenant.tb_widget``: the real CRITICAL was missed.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

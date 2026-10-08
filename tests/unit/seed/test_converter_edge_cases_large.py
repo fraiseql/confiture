@@ -3,8 +3,6 @@
 Tests for patterns that could cause regex backtracking or other issues.
 """
 
-from __future__ import annotations
-
 import time
 
 import pytest

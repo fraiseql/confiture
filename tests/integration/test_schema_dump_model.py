@@ -7,8 +7,6 @@ same bytes, and the model inside is ``SchemaModel.to_json()``'s, from DDL or fro
 a database.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

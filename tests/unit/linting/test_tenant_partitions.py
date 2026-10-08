@@ -6,8 +6,6 @@ written against ``app.tb_event`` does. It is still never judged on its own for w
 its parent declares — ``tenant_002`` and ``tenant_005`` report the parent once.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from tests.unit.linting.tenant_projects import SCOPED, findings

@@ -4,8 +4,6 @@ Offline — no database. Run as integration only because they exercise the full
 CLI; none of them connect.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

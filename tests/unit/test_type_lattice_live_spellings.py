@@ -21,8 +21,6 @@ the implicit length belongs to the spelling the author used, not to the
 canonical name.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.type_lattice import TypeChange, canonical_type, compare_types

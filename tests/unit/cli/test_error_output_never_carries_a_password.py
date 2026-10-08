@@ -7,8 +7,6 @@ errors pass through also scrubs, so the next message that interpolates a URL or
 a ``password=`` conninfo cannot leak it either.
 """
 
-from __future__ import annotations
-
 import pytest
 import typer
 from typer.testing import CliRunner

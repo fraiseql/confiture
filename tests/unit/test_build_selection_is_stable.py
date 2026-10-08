@@ -5,8 +5,6 @@ carried its text twice, ``build_001`` reported the file as its own duplicate,
 and ``--fail-on-duplicates`` refused to build.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

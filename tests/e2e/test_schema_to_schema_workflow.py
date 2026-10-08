@@ -8,8 +8,6 @@ database; everything *around* the core (arg parsing, the mapping-YAML loader,
 output formatting, exit codes, the JSON envelope) is exercised for real.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner

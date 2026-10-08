@@ -6,8 +6,6 @@ migration could not be applied through it. It now runs ``MigratorSession.up()``
 attached to the engine's own connection.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

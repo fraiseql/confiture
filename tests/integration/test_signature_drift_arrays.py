@@ -9,8 +9,6 @@ destructive ``DROP FUNCTION`` remediation.  This exercises the real
 Requires a running PostgreSQL server accessible via CONFITURE_TEST_DB_URL.
 """
 
-from __future__ import annotations
-
 import psycopg
 import pytest
 

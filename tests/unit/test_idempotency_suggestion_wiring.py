@@ -1,7 +1,5 @@
 """The detector fills every suggestion from the statement it flagged."""
 
-from __future__ import annotations
-
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.validator import IdempotencyValidator
 

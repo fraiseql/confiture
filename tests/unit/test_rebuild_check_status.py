@@ -1,7 +1,5 @@
 """Tests for the status integration (--check-rebuild)."""
 
-from __future__ import annotations
-
 from confiture.models.results import MigrationInfo, StatusResult
 
 

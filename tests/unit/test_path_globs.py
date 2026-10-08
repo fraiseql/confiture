@@ -8,8 +8,6 @@ measurement with the expected column rewritten to the semantics that ship, plus
 the rows that pin each of the four rules.
 """
 
-from __future__ import annotations
-
 from pathlib import PurePath, PurePosixPath, PureWindowsPath
 
 import pytest

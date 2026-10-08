@@ -1,7 +1,5 @@
 """General best practices rule library."""
 
-from __future__ import annotations
-
 from ..composer import RuleLibrary
 from ..versioning import ComplianceSeverity, Rule, RuleVersion
 

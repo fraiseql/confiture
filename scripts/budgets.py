@@ -27,8 +27,6 @@ Usage:
     uv run python scripts/budgets.py --init     # write the first baseline (file must not exist)
 """
 
-from __future__ import annotations
-
 import ast
 import json
 import shutil

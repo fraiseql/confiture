@@ -11,8 +11,6 @@ The reporter's two environments are the test: the same tree, the second adding
 `./db/seed` to `include_dirs`. They must agree on everything.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

@@ -3,8 +3,6 @@
 The no-``--against`` static path needs no database; these run as unit tests.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

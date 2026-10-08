@@ -6,8 +6,6 @@ stay raw SQL by documented contract — they are code the migration author
 writes — but a name is a name and is a template's ``{name:i}``.
 """
 
-from __future__ import annotations
-
 from string.templatelib import Template
 from typing import Any
 from unittest.mock import MagicMock

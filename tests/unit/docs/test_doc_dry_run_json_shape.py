@@ -5,8 +5,6 @@ built by the real builder for a one-migration project, so a renamed or invented 
 either place fails here.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from pathlib import Path

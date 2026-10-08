@@ -9,8 +9,6 @@ materialized views) and ``doc_004`` (composite and enum types, domains) join
 and on its schema-qualified twin.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

@@ -9,8 +9,6 @@ interpreter never checks. What a concern needs of its host is ``_migrator/ports.
 ``EngineHost`` / ``SessionHost`` protocols, which name exactly the members it reads.
 """
 
-from __future__ import annotations
-
 import ast
 import inspect
 from pathlib import Path
@@ -22,6 +20,7 @@ import confiture
 from confiture.core._migrator.engine import MigrationEngine
 from confiture.core._migrator.ports import EngineHost, SessionHost
 from confiture.core._migrator.session import MigratorSession
+from tests._helpers import string_annotations, string_signature
 
 MIGRATOR = Path(confiture.__file__).resolve().parent / "core" / "_migrator"
 HOSTS = ("confiture.core._migrator.engine", "confiture.core._migrator.session")
@@ -50,7 +49,7 @@ def test_no_concern_module_imports_its_host() -> None:
 
 def _members(protocol: type) -> list[str]:
     """What a protocol declares: its annotated attributes, properties and methods."""
-    declared = set(inspect.get_annotations(protocol))
+    declared = set(string_annotations(protocol))
     declared |= {
         name
         for name, value in protocol.__dict__.items()
@@ -61,7 +60,7 @@ def _members(protocol: type) -> list[str]:
 
 def _parameters(member: object) -> list[str]:
     target = member.fget if isinstance(member, property) else member
-    return list(inspect.signature(target).parameters)
+    return list(string_signature(target).parameters)
 
 
 def _missing(protocol: type, host: object) -> list[str]:

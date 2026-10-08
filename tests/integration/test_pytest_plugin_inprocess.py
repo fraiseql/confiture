@@ -7,8 +7,6 @@ this process against the local test server: template build, per-worker clone, th
 sandbox, validator and snapshotter, and the session-scoped facts.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from pathlib import Path
 

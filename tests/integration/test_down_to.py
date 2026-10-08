@@ -4,8 +4,6 @@ Uses an isolated tracking table and uniquely-named target tables so the tests
 neither depend on nor pollute the shared confiture_test state.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

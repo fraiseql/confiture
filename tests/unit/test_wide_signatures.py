@@ -6,8 +6,6 @@ follows that chain through the whole statement. The copy existed only to blank
 the typmods; a routine with ~30 parameters exceeded the recursion limit.
 """
 
-from __future__ import annotations
-
 import pglast.parser
 
 from confiture.core.linting.inventory import type_key, type_text

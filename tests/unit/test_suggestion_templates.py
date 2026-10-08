@@ -9,8 +9,6 @@ Every :class:`IdempotencyPattern` member must belong to exactly one of
 these sets — neither both nor neither.
 """
 
-from __future__ import annotations
-
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import (
     TEMPLATE_FILLABLE,

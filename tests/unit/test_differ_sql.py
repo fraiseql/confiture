@@ -1,7 +1,5 @@
 """Unit tests for DifferSQLGenerator."""
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.differ import SchemaDiffer

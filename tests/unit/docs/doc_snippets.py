@@ -16,8 +16,6 @@ The anchor is an HTML comment, so it never renders. ``fenced_after_anchor``
 keys on it; ``all_fenced`` scans every fence of a given language.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

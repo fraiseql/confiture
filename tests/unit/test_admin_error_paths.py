@@ -7,8 +7,6 @@ headline fix: an invalid format value is a config error (5), never "tracking
 table absent" (2).
 """
 
-from __future__ import annotations
-
 import json
 
 from typer.testing import CliRunner

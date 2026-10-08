@@ -8,8 +8,6 @@ built schema — ``replica_001``, ``sec_002``, ``func_001``, ``own_001``/``own_0
 reads, and a rule whose configuration is absent has nothing to report.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 from pathlib import Path
 from typing import Any

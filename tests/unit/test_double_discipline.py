@@ -9,8 +9,6 @@ whatever is there. Every patch of ``Migrator``, ``MigratorSession`` or
 or a double built by ``tests/unit/_doubles.py`` (which is itself autospecced).
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

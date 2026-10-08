@@ -5,8 +5,6 @@ misspelled discriminator values, Jinja opt-in gate, factory builds the
 right transport/renderer pair for each config combination.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.hooks.notifications.config import (

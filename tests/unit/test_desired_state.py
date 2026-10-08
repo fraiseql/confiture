@@ -6,8 +6,6 @@ source yields the DDL text the differ already parses — the differ never learns
 what an artifact is.
 """
 
-from __future__ import annotations
-
 import io
 from pathlib import Path
 

@@ -7,8 +7,6 @@ structure, and the reference manual's own exclusion examples excluded a
 different set of files from the one they name.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.builder import SchemaBuilder

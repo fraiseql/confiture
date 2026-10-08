@@ -21,8 +21,6 @@ whose six fields and one line are pinned byte for byte by
 ``type`` strings live in this module and in no other.
 """
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import Any, ClassVar, get_args

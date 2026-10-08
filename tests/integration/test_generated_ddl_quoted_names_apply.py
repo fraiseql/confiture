@@ -5,8 +5,6 @@ back against the new DDL; then migrated down and read back against the old.
 Every name in both trees needs quotes: a space, a capital, a reserved word.
 """
 
-from __future__ import annotations
-
 import pglast
 import psycopg
 import pytest

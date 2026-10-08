@@ -7,8 +7,6 @@ file at each ref by the lint inventory — and verifying that a migration file
 drops the old signature.
 """
 
-from __future__ import annotations
-
 import dataclasses
 from pathlib import Path
 from typing import TYPE_CHECKING

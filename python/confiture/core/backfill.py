@@ -9,8 +9,6 @@ seam, resumption from a checkpoint's cursor, and a guard that pauses between
 batches while other sessions wait for a lock on the table.
 """
 
-from __future__ import annotations
-
 import time
 from collections.abc import Callable
 from dataclasses import dataclass

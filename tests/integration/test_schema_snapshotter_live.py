@@ -7,8 +7,6 @@ the cross product of its two column lists — while one pointing into another
 schema was not there at all.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterator
 
 import psycopg

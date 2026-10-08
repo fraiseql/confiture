@@ -4,8 +4,6 @@ This module provides schema-aware validation of seed data by checking
 table/column existence, types, and constraint violations.
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.validation.models import (
     SeedValidationReport,
 )

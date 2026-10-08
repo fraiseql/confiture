@@ -15,8 +15,6 @@ where it is declared, or — when the tree only ever uses it as a qualifier —
 where it is first used, and its objects are not reported again for it.
 """
 
-from __future__ import annotations
-
 import string
 import unicodedata
 from collections.abc import Iterable, Iterator

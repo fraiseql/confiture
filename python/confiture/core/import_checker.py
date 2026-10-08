@@ -5,8 +5,6 @@ well-formed Migration subclasses, and (at Level 3) don't call nonexistent
 methods on ``self``.
 """
 
-from __future__ import annotations
-
 import ast
 import inspect
 from dataclasses import dataclass, field

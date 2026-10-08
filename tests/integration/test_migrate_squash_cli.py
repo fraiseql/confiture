@@ -1,7 +1,5 @@
 """`confiture migrate squash` and `migrate squash-ledger` from the command line (#539)."""
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable
 from pathlib import Path

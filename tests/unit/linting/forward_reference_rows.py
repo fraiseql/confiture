@@ -9,8 +9,6 @@ row exactly when PostgreSQL refuses it. The rule and PostgreSQL agree on every
 row, or the row is wrong.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 
 SCHEMA = "CREATE SCHEMA app;\n"

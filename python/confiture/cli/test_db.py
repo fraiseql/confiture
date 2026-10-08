@@ -5,8 +5,6 @@ GitHub Actions / local script calls directly to build a template once and hand
 out lock-free per-worker clones.
 """
 
-from __future__ import annotations
-
 import os
 import pwd
 from pathlib import Path

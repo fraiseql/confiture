@@ -5,8 +5,6 @@ wrote an empty file where the COPY writer wrote a header; a column list that
 could name one column twice; a profile's name the applier never recorded.
 """
 
-from __future__ import annotations
-
 import copy
 import dataclasses
 import pickle

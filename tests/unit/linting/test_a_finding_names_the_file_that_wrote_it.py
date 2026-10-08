@@ -5,8 +5,6 @@ later file adds is found where it was written — not at its table's file, and n
 a line of the files joined together, which is a line of nothing the author edits.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

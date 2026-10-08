@@ -9,8 +9,6 @@ followed a literal on the same line. Positions now come from pglast's own
 statement locations on the untouched text.
 """
 
-from __future__ import annotations
-
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.validator import IdempotencyValidator
 

@@ -11,8 +11,6 @@ Every test runs in a database of its own: ``--drop-schemas`` drops every user
 schema it can see.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

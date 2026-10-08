@@ -4,8 +4,6 @@ TestDbProvisioner is mocked, so no database is needed. Builder-backed commands
 (provision-template, status) run against a tiny tmp project.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

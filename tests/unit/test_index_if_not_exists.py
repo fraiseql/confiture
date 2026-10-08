@@ -5,8 +5,6 @@ An index's name lives in its schema's relation namespace: PostgreSQL 18 skips
 ``s.t``, or a table, and keeps the first. The model keeps what PostgreSQL keeps.
 """
 
-from __future__ import annotations
-
 from confiture.platform import parse_schema
 
 _TABLES = "CREATE SCHEMA s;\nCREATE TABLE s.t (id bigint PRIMARY KEY, a bigint, b bigint);\n"

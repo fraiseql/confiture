@@ -11,8 +11,6 @@ Usage::
     actual = model(table("tenant.users", column("id", nullable=False)))
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from typing import Any
 

@@ -7,8 +7,6 @@ hand-written registry the table replaced, so the refactor is byte-for-byte check
 a deliberate change to a code updates the snapshot in the same commit.
 """
 
-from __future__ import annotations
-
 import ast
 import dataclasses
 import json

@@ -14,8 +14,6 @@ warnings, whose one selected rule is a warning rule that never executed, has not
 established that there are no warnings.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

@@ -18,8 +18,6 @@ same model and validates against the published schema. It is not
 static evaluator's floor test. A real 8.4 MB schema tree passes in 36 s.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import json
 import os

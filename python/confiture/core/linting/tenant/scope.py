@@ -23,8 +23,6 @@ declares (#466). A table defined twice is judged once, by its first definition
 duplicate.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum

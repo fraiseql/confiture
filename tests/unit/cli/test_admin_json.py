@@ -5,8 +5,6 @@ seed is the key to an anonymization's pseudonyms, and a JSON payload is the
 kind of output that ends up in a CI log.
 """
 
-from __future__ import annotations
-
 import json
 from contextlib import nullcontext
 from pathlib import Path

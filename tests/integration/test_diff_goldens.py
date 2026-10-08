@@ -10,8 +10,6 @@ A golden that changes on purpose is refreshed with ``--write`` in the same PR,
 and the reason is named in ``CHANGELOG.md`` under ``## [Unreleased]``.
 """
 
-from __future__ import annotations
-
 import difflib
 import importlib.util
 import subprocess

@@ -7,8 +7,6 @@ its own to keep. A file and a directory sharing a value are one value here (the
 collision is ``tree_005``'s), and a directory the build excludes takes none.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

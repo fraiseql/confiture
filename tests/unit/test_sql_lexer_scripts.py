@@ -6,8 +6,6 @@ read pglast's scanner, whose token names this file pins on every supported major
 (it runs in the ``pglast-matrix`` leg).
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.sql_lexer import copy_blocks, transaction_statements

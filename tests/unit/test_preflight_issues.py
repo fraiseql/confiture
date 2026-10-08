@@ -1,7 +1,5 @@
 """Unit tests for the structured preflight report model (issue #148)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.preflight import preflight_exit_code, run_preflight

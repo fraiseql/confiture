@@ -13,8 +13,6 @@ comparison and not the other used to see: a primary key, a foreign key's action,
 default's value, an index's keys.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

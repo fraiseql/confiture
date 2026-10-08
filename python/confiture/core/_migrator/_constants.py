@@ -5,8 +5,6 @@ baseline) can share one copy without a runtime import cycle.  The tracking-table
 :mod:`confiture.core.ledger`, next to the probe that resolves the name.
 """
 
-from __future__ import annotations
-
 import re
 
 # Matches the psycopg error raised when an ALTER would rename a view column,

@@ -25,8 +25,6 @@ altogether — SQL states only the target — so it has to come from the differ 
 live database, and when it does not, the answer stays UNKNOWN.
 """
 
-from __future__ import annotations
-
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass

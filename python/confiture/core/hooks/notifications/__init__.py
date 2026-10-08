@@ -7,8 +7,6 @@ Discord, Teams, Email, PagerDuty, OpsGenie, raw JSON, Jinja), and the
 factory builds a :class:`NotificationHook` that ties them together.
 """
 
-from __future__ import annotations
-
 from confiture.core.hooks.notifications.context import NotificationContext
 from confiture.core.hooks.notifications.renderer import (
     DiscordRenderer,

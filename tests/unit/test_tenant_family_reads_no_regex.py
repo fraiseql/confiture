@@ -6,8 +6,6 @@ text matched five regexes; a pattern here would be a second reader of SQL beside
 the one parser, so any use of :mod:`re` under ``core/linting/tenant/`` fails.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

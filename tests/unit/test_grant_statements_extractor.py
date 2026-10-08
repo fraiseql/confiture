@@ -13,8 +13,6 @@ ground truth; the regex fallback is intentionally weaker for non-table
 objects and leans on the unrepresentable channel rather than guessing.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.migration_grant_extractor import (

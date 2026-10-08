@@ -11,8 +11,6 @@ Every case runs on a bare name and on its schema-qualified twin: the qualified
 one must be silent.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

@@ -10,8 +10,6 @@ something", by reading the generated statement back through ``SchemaDiffer``:
 a name confiture made up comes back as a name.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 

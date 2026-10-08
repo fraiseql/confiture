@@ -4,8 +4,6 @@ A per-migration savepoint was ``f"SAVEPOINT sp_{migration.version}"``; a
 version is whatever the migration class declares.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from string.templatelib import Template
 from typing import Any

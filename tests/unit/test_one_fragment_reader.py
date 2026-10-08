@@ -13,8 +13,6 @@ Each entry below is ``module`` → why it reads the tree. An entry that matches
 nothing fails, so the table is an edit, never an escape. It is empty.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

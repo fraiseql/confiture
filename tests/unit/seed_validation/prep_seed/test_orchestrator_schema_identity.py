@@ -10,8 +10,6 @@ It is latent rather than active only because the shipped
 declarations in directories the heuristic separates correctly.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.seed.validation.prep_seed.orchestrator import (

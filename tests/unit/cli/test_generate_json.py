@@ -4,8 +4,6 @@
 external tool; in JSON mode neither may write text where a consumer parses.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

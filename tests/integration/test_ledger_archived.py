@@ -7,8 +7,6 @@ never pending, never checked against a file, never rolled back. A ledger created
 before the column existed reads the same, whatever command reads it first.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

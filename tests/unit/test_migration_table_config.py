@@ -4,8 +4,6 @@ tracking_table is nested under migration: in the environment YAML, consistent
 with all other migration settings. Migrator previously hardcoded 'tb_confiture'.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

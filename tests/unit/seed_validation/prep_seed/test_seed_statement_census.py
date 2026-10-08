@@ -7,8 +7,6 @@ names in ``UNREAD_SEED_STATEMENTS`` fails here, and so does a reason in that tab
 no statement in the corpus needs.
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 

@@ -6,8 +6,6 @@ clock, not the wall clock), the body carries no timestamp, and the differ's
 change order does not depend on the interpreter's hash seed.
 """
 
-from __future__ import annotations
-
 import subprocess
 import sys
 from pathlib import Path

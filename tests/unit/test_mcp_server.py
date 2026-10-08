@@ -1,7 +1,5 @@
 """Unit tests for MCPServer."""
 
-from __future__ import annotations
-
 from datetime import UTC
 from unittest.mock import MagicMock, patch
 

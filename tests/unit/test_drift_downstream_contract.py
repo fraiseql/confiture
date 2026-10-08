@@ -27,8 +27,6 @@ Each row is checked on what the detector *emits* and on the JSON it writes, not
 on the enum's declaration: severity is chosen where the item is built.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 import pytest

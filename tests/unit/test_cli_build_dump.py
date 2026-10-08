@@ -3,8 +3,6 @@
 The artifact orchestrator is mocked, so no real database or pg_dump is needed.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import patch
 

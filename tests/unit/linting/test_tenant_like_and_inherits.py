@@ -6,8 +6,6 @@ table is the missing reference, never a missing column — and the table is tena
 data every other rule of the family judges.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from tests.unit.linting.tenant_projects import ROOT, SCOPED, findings, project

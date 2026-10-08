@@ -8,8 +8,6 @@ the up file again — statement by statement, as ``CREATE INDEX CONCURRENTLY``
 requires, with the destructive gate open so every derived statement is written.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

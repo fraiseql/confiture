@@ -5,8 +5,6 @@ generated-section markers, exactly as the error codebook does; a rule added
 to ``LINT_RULES`` without regenerating the page fails here.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.linting.rule_registry import LINT_RULES, render_rule_table

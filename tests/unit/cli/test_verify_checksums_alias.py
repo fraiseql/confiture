@@ -13,8 +13,6 @@ exit-code table (`docs/reference/fraisier-adapter-contract.md`), so this is an
 alias, not a move and not a deprecation.
 """
 
-from __future__ import annotations
-
 from tests._helpers import strip_ansi
 from typer.testing import CliRunner
 

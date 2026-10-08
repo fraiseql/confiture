@@ -10,8 +10,6 @@ command names: a list is the same rot one level up, and would have to be updated
 by exactly the person who forgot to update the docs.
 """
 
-from __future__ import annotations
-
 import functools
 import itertools
 import re

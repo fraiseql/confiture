@@ -6,8 +6,6 @@ TABLE … ADD COLUMN`` in a later file adds is that file's, not its table's: a
 finding about it points where it was written.
 """
 
-from __future__ import annotations
-
 from confiture.core.schema_read import Segment, read_segments
 
 SCHEMA_FILE = "CREATE SCHEMA IF NOT EXISTS core;\n"

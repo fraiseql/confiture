@@ -17,8 +17,6 @@ than the reverse. An opt-in flag would reproduce the defect being fixed: a
 correct mechanism behind a name the user has to already know.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

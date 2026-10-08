@@ -11,8 +11,6 @@ This file also covers the line back-mapping helper directly so any
 future refactor that touches the offset math has a focused test.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from textwrap import dedent
 

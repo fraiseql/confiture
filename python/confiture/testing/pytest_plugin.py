@@ -23,8 +23,6 @@ Example test file:
     ...     assert confiture_sandbox.validator.constraints_valid()
 """
 
-from __future__ import annotations
-
 import contextlib
 import os
 from collections.abc import Generator

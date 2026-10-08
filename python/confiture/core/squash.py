@@ -22,8 +22,6 @@ migration; when it cannot, the caller gives one (``--version``) and
 :func:`usable_version` checks it (``VALID_007`` otherwise).
 """
 
-from __future__ import annotations
-
 import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass

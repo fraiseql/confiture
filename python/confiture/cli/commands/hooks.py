@@ -14,8 +14,6 @@ if anything is malformed.  This makes the command useful for verifying
 hook setup before a real migration ever fires.
 """
 
-from __future__ import annotations
-
 import asyncio
 from pathlib import Path
 from typing import Any

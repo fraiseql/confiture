@@ -8,8 +8,6 @@ wrong — no referenced column list, ``MATCH FULL``, ``SET NULL (col)``, a strin
 literal spelling ``REFERENCES``, deferral on a column.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

@@ -3,8 +3,6 @@
 Validates schema mapping, FK types, trinity pattern, self-references.
 """
 
-from __future__ import annotations
-
 from confiture.core.schema_model import Column, Table
 from confiture.core.seed.validation.prep_seed.level_2_schema import (
     Level2SchemaValidator,

@@ -8,8 +8,6 @@ advertised in ``__all__`` — so a future orphan can't be half-exposed (in one b
 not the other) and slip back into "tested-but-unreachable" limbo.
 """
 
-from __future__ import annotations
-
 import confiture
 from confiture import _LAZY_IMPORTS
 

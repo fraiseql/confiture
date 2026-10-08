@@ -6,8 +6,6 @@ becomes in the catalog), drift (whose default is its own) and ``tenant_005``
 them by matching ``nextval(`` in text.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.schema_model import ValueSource

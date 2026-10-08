@@ -11,8 +11,6 @@ refused with the same reason.
 Nothing is read from disk: a site's values are the paths, not the files' text.
 """
 
-from __future__ import annotations
-
 import ast
 import dataclasses
 from collections.abc import Iterator

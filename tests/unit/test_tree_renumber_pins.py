@@ -5,8 +5,6 @@ rewriting the migration would change its checksum, and not rewriting it breaks
 every replay. Which files a migration reads is ``core/migration_reads``'s answer.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

@@ -12,8 +12,6 @@ escalations a project has made — so a project that *has* escalated is told the
 truth rather than a generic warning.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum

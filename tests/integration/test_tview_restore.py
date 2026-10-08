@@ -8,8 +8,6 @@ restore loads ``pg_tview_meta``. Runs on a server that preloads pg_tviews, as th
 ``pg-tviews`` CI leg does; elsewhere it skips with the reason.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlparse

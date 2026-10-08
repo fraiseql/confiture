@@ -5,8 +5,6 @@ resolve on success.  No cross-migration incident pairing — documented v1
 tradeoff.
 """
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime
 

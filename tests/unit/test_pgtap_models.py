@@ -1,7 +1,5 @@
 """Unit tests for pgTAP model generation."""
 
-from __future__ import annotations
-
 from datetime import UTC
 
 from confiture.models.function_info import FunctionInfo, Volatility

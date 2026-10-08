@@ -13,8 +13,6 @@ an interpolation directly inside the quotes after ``FROM``, ``TABLE``, ``INTO``,
 exception is a new injection site, not a false positive.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

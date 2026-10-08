@@ -17,8 +17,6 @@ not carry — an index or constraint with no name, a CHECK with no expression. A
 statement ends with its semicolon and a newline.
 """
 
-from __future__ import annotations
-
 from typing import assert_never
 
 from confiture.core.ddl_clauses import (

@@ -1,7 +1,5 @@
 """Integration tests for ``migrate apply-as`` (issue #137 part 2)."""
 
-from __future__ import annotations
-
 import textwrap
 from pathlib import Path
 

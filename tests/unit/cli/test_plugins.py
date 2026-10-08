@@ -8,8 +8,6 @@ warning, never the rest of ``confiture``; a name ``confiture`` already has stays
 ``confiture``'s, and the plugin is told so.
 """
 
-from __future__ import annotations
-
 import copy
 from importlib.metadata import EntryPoint
 

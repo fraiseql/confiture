@@ -6,13 +6,12 @@ holds them — ``format_type``'s spelling of a type, a composite foreign key pai
 column by column, a reference into another schema.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+
+import psycopg
 
 from confiture.core import live_catalog
-from confiture.core.schema_model import ref_for
+from confiture.core.schema_model import Table, ref_for
 from confiture.models.introspection import (
     FKReference,
     IntrospectedColumn,
@@ -20,11 +19,6 @@ from confiture.models.introspection import (
     IntrospectionResult,
     TableHints,
 )
-
-if TYPE_CHECKING:
-    import psycopg
-
-    from confiture.core.schema_model import Table
 
 #: What ``introspect`` has always meant by a table: an ordinary one, a partition
 #: included, a partitioned parent — which holds no rows of its own — not.

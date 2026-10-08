@@ -13,8 +13,6 @@ documented symbols are real, the profile-YAML example validates against the
 Pydantic model, and the old fictional API can never reappear in this doc.
 """
 
-from __future__ import annotations
-
 import yaml
 from doc_snippets import assert_doc_imports_resolve, fenced_after_anchor, read_doc
 

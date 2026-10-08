@@ -5,8 +5,6 @@ the relevant ``.schema.json`` and validates real CLI output against it
 using Draft 2020-12.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

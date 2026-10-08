@@ -19,8 +19,6 @@ be pinned too; ``has_errors`` and ``halted`` are, because they are the shapes
 #508 is about.
 """
 
-from __future__ import annotations
-
 import importlib
 import inspect
 from collections.abc import Callable

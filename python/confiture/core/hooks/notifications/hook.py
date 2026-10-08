@@ -8,8 +8,6 @@ Transport errors are logged and swallowed — a migration never blocks
 on a notification failure.
 """
 
-from __future__ import annotations
-
 import logging
 from datetime import UTC, datetime
 

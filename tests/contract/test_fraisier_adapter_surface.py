@@ -19,8 +19,6 @@ The surface assertions need no database. The end-to-end JSON/exit-code assertion
 are DB-gated and skip when no PostgreSQL is reachable.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from pathlib import Path

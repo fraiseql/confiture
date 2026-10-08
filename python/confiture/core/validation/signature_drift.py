@@ -11,8 +11,6 @@ side, a migration replay (:mod:`confiture.core.validation.replay_drift`).
 patch them on this module.
 """
 
-from __future__ import annotations
-
 from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path

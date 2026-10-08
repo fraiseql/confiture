@@ -12,8 +12,6 @@ Usage::
     added("view", "public.v", "CREATE OR REPLACE VIEW public.v AS SELECT 1")
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from confiture.core.ddl_objects import DDLObject

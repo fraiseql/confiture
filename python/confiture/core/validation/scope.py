@@ -1,7 +1,5 @@
 """Which migrations a git-scoped check reads: the ones changed on this branch, or staged (#181)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

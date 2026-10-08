@@ -17,8 +17,6 @@ the routine half of `object_key`, so `build_001` â€” an `error`, on by default â
 reported no duplicate for two `CREATE`s PostgreSQL rejects as the same function.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

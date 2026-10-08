@@ -14,8 +14,6 @@ is also exactly the absent-vs-error conflation ``core/ledger.py`` was introduced
 in 0.37.0 to eliminate.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import psycopg

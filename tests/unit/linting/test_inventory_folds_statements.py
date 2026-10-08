@@ -7,8 +7,6 @@ expected in both. Every one of those is a drift item on a database that matches
 the tree exactly.
 """
 
-from __future__ import annotations
-
 from confiture.core.schema_read import read_text
 
 

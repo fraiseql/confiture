@@ -17,8 +17,6 @@ SQL file runs in autocommit (``migrate up``) and is skipped (``preflight``),
 exactly like a Python migration with ``transactional = False``.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 import pytest

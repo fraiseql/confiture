@@ -8,8 +8,6 @@ replica classifier no ``ALTER``, the idempotency check flagged nothing. Each is
 asked the same question with and without the block, and answers alike.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from typing import Any
 

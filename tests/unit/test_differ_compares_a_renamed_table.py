@@ -6,8 +6,6 @@ compared. The generated migration was one ``ALTER TABLE … RENAME TO`` and the
 applied schema lacked everything else the new table declares.
 """
 
-from __future__ import annotations
-
 import pglast
 
 from confiture.core.differ_sql import DifferSQLGenerator

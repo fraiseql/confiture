@@ -8,8 +8,6 @@ notes an overload family split across files. Both are lint rules and both are
 reachable from `confiture build --warn-duplicates` / `--fail-on-duplicates`.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

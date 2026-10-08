@@ -5,8 +5,6 @@ about the same situation — a missing config file exits 5 (CONFIG_004)
 everywhere else — or with themselves across output formats.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

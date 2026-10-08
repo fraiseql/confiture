@@ -11,8 +11,6 @@ and ``pg_proc`` for routines, one round trip for every outstanding name — and 
 stub would only prove that the code calls itself.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

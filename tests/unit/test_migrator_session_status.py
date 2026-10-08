@@ -1,7 +1,5 @@
 """Tests for MigratorSession.status()."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock

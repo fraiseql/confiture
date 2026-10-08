@@ -8,8 +8,6 @@ ACCESS EXCLUSIVE hold on the table: under 100 ms online, and below the classic
 rewrite's on the same machine. A wall-clock bound, so a benchmark.
 """
 
-from __future__ import annotations
-
 import threading
 import time
 from pathlib import Path

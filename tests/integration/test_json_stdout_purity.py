@@ -4,8 +4,6 @@ Progress and warning lines belong on stderr when the payload is machine-read;
 ``json.loads(result.stdout)`` must parse without scraping for the first ``{``.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

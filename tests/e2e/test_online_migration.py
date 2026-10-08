@@ -8,8 +8,6 @@ row accounted for. The lock measurement lives with the benchmarks
 database, 200 000 rows.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

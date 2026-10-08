@@ -5,8 +5,6 @@ exist; only the quoted identity calls the routine the DDL created. Level 4
 calls it inside a savepoint, so the row it writes is gone afterwards.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

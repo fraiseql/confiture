@@ -13,8 +13,6 @@ read from its own source: an annotation-only import is still a type the caller
 sees.
 """
 
-from __future__ import annotations
-
 import ast
 import dataclasses
 import inspect

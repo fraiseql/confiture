@@ -11,8 +11,6 @@ Scenarios tested:
 - Complex multi-agent scenarios with dependencies
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture_pggit.coordination import (

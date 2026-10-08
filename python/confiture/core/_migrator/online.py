@@ -6,8 +6,6 @@ the apply loop runs it through :class:`~confiture.core._migrator.apply.Online`
 — the same pipeline, hooks and preconditions as every other migration.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

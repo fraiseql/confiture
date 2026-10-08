@@ -36,8 +36,6 @@ Example::
         print(result.action, result.path)
 """
 
-from __future__ import annotations
-
 import dataclasses
 from datetime import UTC, datetime
 from pathlib import Path

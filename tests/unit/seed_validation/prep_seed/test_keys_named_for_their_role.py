@@ -9,8 +9,6 @@ second-pass ``UPDATE`` is resolved, and a routine named ``fn_resolve_…`` that
 takes arguments is not a resolver: levels 4 and 5 call one with none.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

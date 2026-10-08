@@ -7,8 +7,6 @@ with fewer findings, because the missing half contributed nothing. With
 ``--require-complete`` the run exits 2 (``NOT_RUN``) and names each rule and why.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

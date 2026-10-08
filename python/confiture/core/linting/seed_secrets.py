@@ -20,8 +20,6 @@ names the row by another of its columns, so a baseline can hold it without the
 value ever reaching a CI log.
 """
 
-from __future__ import annotations
-
 import math
 import re
 from collections import Counter

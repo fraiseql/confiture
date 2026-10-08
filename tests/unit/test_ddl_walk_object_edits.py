@@ -19,8 +19,6 @@ defect class, one node type over.
 ``column_edit`` answers for the ``ALTER TABLE`` subtypes.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 

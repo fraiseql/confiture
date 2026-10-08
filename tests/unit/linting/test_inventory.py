@@ -8,8 +8,6 @@ with its byte offset, not just the last one. Every case runs on a bare name and
 on its schema-qualified twin and must inventory the same objects.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.inventory import Inventory, SchemaObject

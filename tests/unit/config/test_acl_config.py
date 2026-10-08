@@ -9,8 +9,6 @@ The plan's ``_write_confiture_yaml`` helper is renamed to ``_write_env_yaml``
 to reflect what ``Environment.load`` actually reads: ``db/environments/<env>.yaml``.
 """
 
-from __future__ import annotations
-
 import textwrap
 from pathlib import Path
 

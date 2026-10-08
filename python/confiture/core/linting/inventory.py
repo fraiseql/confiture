@@ -14,8 +14,6 @@ Offsets and lines are character positions into the text that was parsed,
 which is what pglast reports.
 """
 
-from __future__ import annotations
-
 import bisect
 import copy
 import functools

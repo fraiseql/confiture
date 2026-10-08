@@ -5,8 +5,6 @@ migrations directory for tables missing matching grants — either inline or in
 the configured global grant-sweep directory.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from confiture.core import connection as _core_connection

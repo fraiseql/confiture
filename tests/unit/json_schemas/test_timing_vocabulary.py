@@ -9,8 +9,6 @@ same table from the code so the two cannot drift: a new timing key without a row
 fails, and so does a row for a key that no longer exists.
 """
 
-from __future__ import annotations
-
 import ast
 import json
 import re

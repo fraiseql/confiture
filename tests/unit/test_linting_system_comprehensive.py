@@ -10,8 +10,6 @@ Tests cover:
 - Edge cases and error handling
 """
 
-from __future__ import annotations
-
 from confiture.core.linting.schema_linter import (
     LintConfig,
     LintReport,

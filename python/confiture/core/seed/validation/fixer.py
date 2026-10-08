@@ -3,8 +3,6 @@
 This module provides automated corrections for common seed data issues.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from pathlib import Path

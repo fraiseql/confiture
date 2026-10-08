@@ -4,8 +4,6 @@ These models represent the structured output of the `confiture introspect`
 command: tables, columns, types, constraints, and the FK relationship graph.
 """
 
-from __future__ import annotations
-
 import dataclasses
 from collections.abc import Collection, Iterable
 from typing import Any

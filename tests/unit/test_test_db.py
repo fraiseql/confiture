@@ -4,8 +4,6 @@ Identifier validation, SQL composition, and template-status classification are
 testable without a database. DB-touching behaviour is integration-tested.
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 

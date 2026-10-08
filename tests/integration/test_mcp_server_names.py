@@ -5,8 +5,6 @@ call composes both as identifiers, so a name that reads as a statement is only
 ever a name, and a mixed-case one is not folded onto another routine.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 
 import psycopg

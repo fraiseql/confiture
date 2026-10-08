@@ -7,8 +7,6 @@ Provides:
 - Transparent audit trails
 """
 
-from __future__ import annotations
-
 from .composer import (
     ComposedRuleSet,
     ConflictResolution,

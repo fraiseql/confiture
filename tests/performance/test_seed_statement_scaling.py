@@ -9,8 +9,6 @@ counted from the top for every statement too, and now counts on from the last.
 The bound is absolute and roughly twentyfold, as in ``test_lexer_scaling``.
 """
 
-from __future__ import annotations
-
 import time
 
 import pytest

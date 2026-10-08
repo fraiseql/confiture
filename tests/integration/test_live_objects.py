@@ -12,8 +12,6 @@ around, each measured rather than assumed:
   parameters, which the expected side counts as neither.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

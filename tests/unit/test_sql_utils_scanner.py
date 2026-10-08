@@ -6,8 +6,6 @@ exactly the wrapper. The ``BEGIN`` of a ``DO $$ … $$`` block, a ``'BEGIN'``
 literal and a ``-- BEGIN`` comment are never wrappers.
 """
 
-from __future__ import annotations
-
 from confiture.core.sql_utils import strip_transaction_wrappers
 
 

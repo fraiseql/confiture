@@ -19,8 +19,6 @@ Two properties are deliberate and load-bearing:
 This module is pure: no I/O, no database, no parser.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from enum import Enum
 

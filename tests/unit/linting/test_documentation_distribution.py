@@ -11,8 +11,6 @@ It is reported *before* the findings, because the failure mode the issue
 describes has no findings at all.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

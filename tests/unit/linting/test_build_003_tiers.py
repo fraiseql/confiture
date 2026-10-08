@@ -14,8 +14,6 @@ is how a rule loses its reader. The degradation is stated in the table and in
 the JSON, in the shape a check that could not run at all uses too.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

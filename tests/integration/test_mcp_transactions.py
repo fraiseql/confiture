@@ -11,8 +11,6 @@ The connections MCP opens are in autocommit. A connection a library caller hands
 connection it did not open — so one in a transaction is refused.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 
 import psycopg

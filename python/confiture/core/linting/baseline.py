@@ -9,8 +9,6 @@ rewritten without them, so the ratchet only ever tightens;
 ``--write-baseline`` creates or resets it.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass, field

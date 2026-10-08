@@ -28,8 +28,6 @@ Deferred to v0.11 (sandboxed objects, ``{% if %}`` / ``{% for %}``, custom
 filters, process-isolated render workers).
 """
 
-from __future__ import annotations
-
 import threading
 from dataclasses import dataclass
 from typing import Any

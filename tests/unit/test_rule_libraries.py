@@ -9,8 +9,6 @@ Tests cover:
 - Audit trail tracking
 """
 
-from __future__ import annotations
-
 from confiture.core.linting import (
     RuleLibraryComposer,
 )

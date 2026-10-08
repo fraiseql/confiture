@@ -1,7 +1,5 @@
 """The backfill yields between batches while other sessions wait for a lock on the table."""
 
-from __future__ import annotations
-
 from confiture.core.backfill import MAX_WAITER_PAUSES, yield_to_waiters
 
 

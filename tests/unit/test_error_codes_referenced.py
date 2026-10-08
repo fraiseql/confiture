@@ -9,8 +9,6 @@ argument, a translation table, or a finding constructor. Docstrings and
 comments do not count: a code that only appears in prose is still dead.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from functools import lru_cache

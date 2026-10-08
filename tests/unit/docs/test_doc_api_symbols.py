@@ -13,8 +13,6 @@ the real public API three ways:
 Only *import* statements are resolved — fence bodies are never executed.
 """
 
-from __future__ import annotations
-
 import ast
 import inspect
 import re

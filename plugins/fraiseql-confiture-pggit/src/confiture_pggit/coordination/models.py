@@ -4,8 +4,6 @@ This module defines the core data structures for tracking agent intents,
 conflicts, and coordination state.
 """
 
-from __future__ import annotations
-
 import json
 from dataclasses import dataclass, field
 from datetime import datetime

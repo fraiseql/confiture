@@ -7,5 +7,3 @@ raise :class:`~confiture.exceptions.ConfiturError` on failure (never
 single ``fail()`` error boundary (#145/#146). Rendering lives separately in
 ``confiture.cli.formatters.validate_formatter``.
 """
-
-from __future__ import annotations

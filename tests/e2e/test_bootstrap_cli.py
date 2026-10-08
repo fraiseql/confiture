@@ -1,7 +1,5 @@
 """End-to-end tests for ``confiture bootstrap`` (issue #137 part 1)."""
 
-from __future__ import annotations
-
 import json
 import textwrap
 from collections.abc import Generator

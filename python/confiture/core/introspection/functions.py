@@ -1,11 +1,11 @@
 """Introspect PostgreSQL functions and procedures, through ``core/live_catalog``."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+
+import psycopg
 
 from confiture.core import live_catalog
+from confiture.core.live_catalog import RoutineRow
 from confiture.models.function_info import (
     FunctionCatalog,
     FunctionInfo,
@@ -13,11 +13,6 @@ from confiture.models.function_info import (
     ParamMode,
     Volatility,
 )
-
-if TYPE_CHECKING:
-    import psycopg
-
-    from confiture.core.live_catalog import RoutineRow
 
 _CHAR_TO_MODE: dict[str, ParamMode] = {
     "i": ParamMode.IN,

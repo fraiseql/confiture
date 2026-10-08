@@ -19,8 +19,6 @@ Two fixtures supply a live tablespace to the tablespace integration tests:
   :func:`ram_tablespace` and the unit-level fallback tests.
 """
 
-from __future__ import annotations
-
 import os
 import pwd
 import shutil

@@ -21,8 +21,6 @@ whole of ``confiture.core`` — that cost every user's test start-up, and it imp
 the package before coverage could start recording.
 """
 
-from __future__ import annotations
-
 import importlib
 from typing import Any
 

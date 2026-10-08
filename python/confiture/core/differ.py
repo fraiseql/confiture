@@ -6,8 +6,6 @@ This module provides functionality to:
 - Generate migrations from schema diffs
 """
 
-from __future__ import annotations
-
 import logging
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping

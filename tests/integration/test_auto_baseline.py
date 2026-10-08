@@ -4,8 +4,6 @@ Requires a live PostgreSQL connection.  Tests are skipped automatically
 when no DATABASE_URL is available.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

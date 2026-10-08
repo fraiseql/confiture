@@ -9,8 +9,6 @@ object, the fixer never recognised the line it wrote, and drift reported every
 relation as owned by the wrong role.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock
 

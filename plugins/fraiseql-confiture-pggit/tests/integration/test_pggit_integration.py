@@ -7,8 +7,6 @@ These tests require:
 Tests will be skipped if pgGit is not available.
 """
 
-from __future__ import annotations
-
 import tempfile
 from pathlib import Path
 

@@ -1,7 +1,5 @@
 """Shared helpers for the prep-seed level tests."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 import pytest

@@ -5,8 +5,6 @@ schema — the converter hard-coded them because the linter "did not track"
 them. It reads an inventory now, so the counts are what it inventoried.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

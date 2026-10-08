@@ -17,8 +17,6 @@ command where the scanner is not looking:
   must not swallow the ``\\.`` terminator and everything after it.
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock

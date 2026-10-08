@@ -7,8 +7,6 @@ oversight: it now runs in a default ``confiture lint`` and fails it under the
 default ``--fail-on error``. ``--ignore tree_001`` is the way back.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

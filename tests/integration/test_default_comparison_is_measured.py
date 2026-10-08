@@ -18,8 +18,6 @@ through ``confiture drift`` and ``migrate diff --from db``: the server spells th
 tree's constants (``server_constants``), so the two sides compare as values.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

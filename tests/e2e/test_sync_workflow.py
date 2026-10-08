@@ -8,8 +8,6 @@ anonymization-YAML loader, the warn-when-plaintext posture, output formatting,
 exit codes, and the JSON envelope — is exercised for real.
 """
 
-from __future__ import annotations
-
 import json
 from unittest.mock import MagicMock, patch
 

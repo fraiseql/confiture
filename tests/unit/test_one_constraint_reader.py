@@ -12,8 +12,6 @@ Each entry below is ``module`` → the different question it asks. An entry that
 matches nothing fails, so the table is an edit, never an escape.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

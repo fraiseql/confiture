@@ -7,8 +7,6 @@ to the differ and nullable to the inventory, which is why ``confiture drift``
 reported a database applied verbatim from its own DDL as drifted.
 """
 
-from __future__ import annotations
-
 from confiture.core.schema_model import Column, Constraint, RelationName
 from confiture.core.schema_read import read_text
 from confiture.core.type_lattice import canonical_type

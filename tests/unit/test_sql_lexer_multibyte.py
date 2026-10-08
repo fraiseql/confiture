@@ -11,8 +11,6 @@ never recognised, and its data rows reach the parser as statements. A schema tre
 holding one French seed file and one COPY block then fails to parse whole.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 

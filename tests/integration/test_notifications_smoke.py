@@ -12,8 +12,6 @@ to a working configuration end-to-end — if a YAML snippet in the guide
 stops parsing, this file fails first.
 """
 
-from __future__ import annotations
-
 import asyncio
 import io
 import json

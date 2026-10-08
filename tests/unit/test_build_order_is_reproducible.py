@@ -15,8 +15,6 @@ allocator accepted either. A ``0a_*.sql`` tree was therefore ordered by one
 definition and linted by another.
 """
 
-from __future__ import annotations
-
 import random
 from pathlib import Path
 

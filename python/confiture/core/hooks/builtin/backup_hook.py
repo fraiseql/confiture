@@ -6,8 +6,6 @@ renamed onto its final name only once ``pg_dump`` has exited 0, so a failed dump
 never counts as a backup.
 """
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import logging

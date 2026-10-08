@@ -8,8 +8,6 @@ longer reach, or a variant nothing emits, is a failure here rather than a
 serialiser branch nobody runs.
 """
 
-from __future__ import annotations
-
 import ast
 from collections import Counter
 from pathlib import Path

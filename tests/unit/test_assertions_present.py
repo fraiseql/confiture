@@ -9,8 +9,6 @@ helper whose name says it asserts (``assert_…``, ``check_…``, ``verify_…``
 ``expect_…``).
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

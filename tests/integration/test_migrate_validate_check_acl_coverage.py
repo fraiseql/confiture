@@ -6,8 +6,6 @@ is the canonical flag from 0.12.0 onward; ``--check-acl-coverage`` is
 kept as a deprecated alias and covered by one dedicated test.
 """
 
-from __future__ import annotations
-
 import textwrap
 from pathlib import Path
 

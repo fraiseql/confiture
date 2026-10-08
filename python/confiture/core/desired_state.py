@@ -8,8 +8,6 @@ and never learns what an artifact is. ``describe()`` is what ``--format json``
 reports as ``source``.
 """
 
-from __future__ import annotations
-
 import sys
 from dataclasses import dataclass
 from pathlib import Path

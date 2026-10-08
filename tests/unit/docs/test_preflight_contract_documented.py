@@ -16,8 +16,6 @@ A guide, not only a reference page: reference is where you look something up
 once you know its name, and not knowing the name was the whole problem.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest
