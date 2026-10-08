@@ -209,11 +209,12 @@ def read_segments(segments: Iterable[Segment]) -> SchemaRead:
     for segment in pieces:
         files.append(_parsed(segment, base))
         base += len(segment.text) + 1
+    inventory = build_inventory(files)
     return SchemaRead(
         segments=pieces,
         files=tuple(files),
-        inventory=build_inventory(files),
-        declared=declared_objects(files),
+        inventory=inventory,
+        declared=declared_objects(files, inventory.uncreated),
     )
 
 

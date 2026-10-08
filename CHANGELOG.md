@@ -27,6 +27,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `confiture.testing` sandbox import their annotation names at run time, so a consumer
   evaluating them resolves every name; `docs/reference/platform-api.md` writes the
   `Connection` protocol's `Any` as written, no longer `typing.Any`.
+||||||| parent of 29824dda (fix(model): a create on a name another kind holds creates nothing)
+
+### Fixed
+
+- **A create on a name another kind already holds is the no-op, or the failure, PostgreSQL
+  makes it** (#648). A schema's relation names are one namespace across tables, views,
+  materialized views, sequences, indexes and composite types, and a row-typed relation also
+  takes its name among the schema's types. The expected schema grouped definitions per kind,
+  so a tree with `CREATE VIEW s.x …` and then `CREATE TABLE IF NOT EXISTS s.x (…)` held a
+  view *and* a table, where PostgreSQL skips the table. The model now keeps the first holder,
+  as #638 did for an index: `parse_schema`, `schema dump-model`, `migrate diff` and `drift`
+  read such a tree with one object where they read two. `build_005` (warning) now reports
+  any create PostgreSQL skips this way, and `build_006` (error) any it refuses: `42P07`,
+  `42809` for `CREATE OR REPLACE VIEW` over a non-view, `42710` for a relation over an enum or
+  a domain (refused even under `IF NOT EXISTS`) or a type over a row-typed relation.
 
 ## [1.31.0] - 2026-10-07
 

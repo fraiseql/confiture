@@ -44,11 +44,14 @@ from confiture.core.linting.inventory import (
     KIND_KEYWORD,
     SchemaObject,
     Signature,
+    build_inventory,
+    identifier_identity,
     object_from_statement,
     signature_bucket,
     signature_from_type_names,
     signatures_match,
     split_names,
+    statement_offset,
     tviews_from_calls,
 )
 
@@ -703,19 +706,33 @@ def _flags(stmt: Any) -> CreateFlags:
     )
 
 
-def declared_objects(files: Sequence[ParsedFile]) -> Declared:
-    """:func:`objects_in`, with the objects it had to fold into one reported beside it."""
+def declared_objects(
+    files: Sequence[ParsedFile], uncreated: frozenset[tuple[int, str]] | None = None
+) -> Declared:
+    """:func:`objects_in`, with the objects it had to fold into one reported beside it.
+
+    *uncreated* is the inventory's :attr:`~confiture.core.linting.inventory.Inventory.uncreated`:
+    the creates PostgreSQL skips or refuses because another kind holds their name
+    (#648). The inventory decides it, because it holds every relation a name can
+    be taken by; a caller that has not built one gets it built here.
+    """
+    if uncreated is None:
+        uncreated = build_inventory(files).uncreated
     objects: dict[ObjectRef, list[DDLObject]] = {}
     # Keyed by identity: two definitions written alike are equal, and are still two.
     flags: dict[int, CreateFlags] = {}
-    for sql, raw in ((parsed.text, raw) for parsed in files for raw in parsed.statements):
+    for parsed, raw in ((file, raw) for file in files for raw in file.statements):
+        sql = parsed.text
         # A drop first: `SELECT pg_tviews_drop('tv_x'), pg_tviews_create_or_replace('tv_x', …)`
         # drops and creates, as `DROP …; CREATE …` does, and no other statement does both.
         for edit in object_edits(raw.stmt):
             if edit.kind == "drop":
                 _apply_drop(objects, edit)
         found = object_of(sql, raw)
+        at = parsed.base + statement_offset(sql, raw)
         for obj in [found] if found is not None else tview_objects_of(sql, raw):
+            if (at, identifier_identity(obj.ref.name)) in uncreated:
+                continue
             objects.setdefault(obj.ref, []).append(obj)
             flags[id(obj)] = _flags(raw.stmt)
         _apply_storage(objects, flags, raw.stmt)
