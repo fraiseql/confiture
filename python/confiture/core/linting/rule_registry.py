@@ -242,14 +242,14 @@ LINT_RULES: tuple[LintRule, ...] = (
     LintRule(
         code="build_005",
         family="build",
-        title="A CREATE INDEX IF NOT EXISTS reuses a taken name, so it creates nothing",
+        title="A CREATE … IF NOT EXISTS reuses a name another kind holds, so it creates nothing",
         severity="warning",
         default_on=True,
     ),
     LintRule(
         code="build_006",
         family="build",
-        title="A CREATE INDEX reuses a taken name, so the build fails at it",
+        title="A CREATE reuses a name another kind holds, so the build fails at it",
         severity="error",
         default_on=True,
     ),

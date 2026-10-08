@@ -25,8 +25,8 @@ Adopt a rule on a schema that already trips it with a
 | `build_002` | build | info | on | A routine's overloads are split across files |
 | `build_003` | build | warning | on | A body references an object the build does not create |
 | `build_004` | build | error | on | A statement needs, when it runs, an object the build creates later |
-| `build_005` | build | warning | on | A CREATE INDEX IF NOT EXISTS reuses a taken name, so it creates nothing |
-| `build_006` | build | error | on | A CREATE INDEX reuses a taken name, so the build fails at it |
+| `build_005` | build | warning | on | A CREATE … IF NOT EXISTS reuses a name another kind holds, so it creates nothing |
+| `build_006` | build | error | on | A CREATE reuses a name another kind holds, so the build fails at it |
 | `sec_001` | security | warning | on | Columns that look like secrets should not be plain text |
 | `sec_003` | security | warning | on | No credential is written as a literal in the tree (a seed row, a role password) |
 | `qual_001` | qual | warning | on | Routines are created schema-qualified |
@@ -319,14 +319,22 @@ unqualified), name and — for routines — input parameter types.
 | `build_002` | info | a routine whose overloads are split across files — legal, but how the first mistake starts |
 | `build_003` | warning | a routine or view body that names an object **no file in the build creates** |
 | `build_004` | error | a statement that needs, when it runs, an object the build **creates later** |
-| `build_005` | warning | a `CREATE INDEX IF NOT EXISTS` whose name its schema already holds — an index, a table, a view, a sequence, a composite type, or a key's index: PostgreSQL skips it, so the index it describes is never built |
-| `build_006` | error | the same without `IF NOT EXISTS`: PostgreSQL refuses it (`42P07`) and the build stops there |
+| `build_005` | warning | a `CREATE … IF NOT EXISTS` (table, materialized view, sequence, index) whose name its schema already holds as **another kind** — a table, a view, a materialized view, a sequence, an index or a key's index, a composite type, a TVIEW: PostgreSQL skips it, so the object it describes is never built |
+| `build_006` | error | a create PostgreSQL **refuses** because its name is taken by another kind: the same without `IF NOT EXISTS` (`42P07`), `CREATE OR REPLACE VIEW` over a non-view (`42809`), a composite type, enum or domain over a row-typed relation, or any relation over an enum or a domain, `IF NOT EXISTS` or not (`42710`); the build stops there |
 
-An index's name is a relation name of its table's schema, so the clash is
-schema-wide: `CREATE INDEX IF NOT EXISTS i ON s.t2 (a)` creates nothing when
-`s.i` already indexes `s.t`. The expected schema keeps what PostgreSQL keeps — the
-first — so `drift` does not report the live index missing (#638). An unnamed index
-never clashes.
+A schema's relation names — tables, views, materialized views, sequences,
+indexes, composite types — are one namespace, and a row-typed relation also takes
+its name among the schema's types. So the clash is schema-wide and across kinds:
+`CREATE INDEX IF NOT EXISTS i ON s.t2 (a)` creates nothing when `s.i` already
+indexes `s.t` (#638), and `CREATE TABLE IF NOT EXISTS s.x (…)` creates nothing when
+`s.x` is a view (#648). An enum or a domain beside a sequence or an index of its
+name is no clash: neither has a row type. The expected schema keeps what
+PostgreSQL keeps — the first holder — so `parse_schema`, `schema dump-model`,
+`migrate diff` and `drift` read one object, not two. An unnamed index never
+clashes; a `DROP` or a rename frees a name for the statements after it. Two
+definitions of one kind stay `build_001`'s. A plain `CREATE TABLE … AS` is data to
+confiture, not a table it models, and foreign tables and range types are not read
+as holders.
 
 `build_001` and `build_002` run as lint rules (`confiture lint`,
 `--select build`) and from the build

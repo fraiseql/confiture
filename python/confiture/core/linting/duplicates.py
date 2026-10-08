@@ -25,7 +25,8 @@ from typing import Any, Protocol
 import pglast
 
 from confiture.core.linting.inventory import (
-    IndexCollision,
+    KIND_KEYWORD,
+    NameCollision,
     SchemaObject,
     files_alone,
     group_definitions,
@@ -255,30 +256,33 @@ def duplicate_violations(duplicates: Iterable[Duplicate]) -> list[LintViolation]
     return violations
 
 
-def index_collision_violations(collisions: Iterable[IndexCollision]) -> list[LintViolation]:
-    """``build_005`` (an ``IF NOT EXISTS`` index that creates nothing), ``build_006`` (one that fails)."""
+def name_collision_violations(collisions: Iterable[NameCollision]) -> list[LintViolation]:
+    """``build_005`` (a create PostgreSQL skips), ``build_006`` (one it refuses): a taken name."""
     violations: list[LintViolation] = []
     for clash in collisions:
         line = f"line {clash.taken_line}"
         taken = f"{clash.taken_file} ({line})" if clash.taken_file else line
-        if clash.if_not_exists:
-            rule_id, severity, name = "build_005", RuleSeverity.WARNING, "Index Not Created"
-            outcome = "PostgreSQL skips this statement, so the index it describes is never built"
-            fix = "Give the index its own name, or delete the statement if the first is the one meant."
+        noun = _noun(clash.kind)
+        if clash.sqlstate is None:
+            rule_id, severity, name = "build_005", RuleSeverity.WARNING, "Object Not Created"
+            outcome = f"PostgreSQL skips this statement, so the {noun} it describes is never built"
+            fix = f"Give the {noun} its own name, or delete the statement if the first is the one meant."
         else:
-            rule_id, severity, name = "build_006", RuleSeverity.ERROR, "Index Name Taken"
-            outcome = "PostgreSQL refuses this statement (42P07), and the build stops at it"
-            fix = "Give the index its own name."
+            rule_id, severity, name = "build_006", RuleSeverity.ERROR, "Name Taken"
+            outcome = (
+                f"PostgreSQL refuses this statement ({clash.sqlstate}), and the build stops at it"
+            )
+            fix = f"Give the {noun} its own name."
         violations.append(
             LintViolation(
                 rule_id=rule_id,
                 rule_name=name,
                 severity=severity,
-                object_type="index",
+                object_type=clash.kind,
                 object_name=clash.name,
                 message=(
-                    f"Index '{clash.name}': its schema already holds {_a(clash.taken_by)} "
-                    f"of that name ({taken}) — {outcome}"
+                    f"{noun.capitalize()} '{clash.name}': its schema already holds "
+                    f"{_a(_noun(clash.taken_by))} of that name ({taken}) — {outcome}"
                 ),
                 file_path=clash.file,
                 line_number=clash.line,
@@ -286,6 +290,13 @@ def index_collision_violations(collisions: Iterable[IndexCollision]) -> list[Lin
             )
         )
     return violations
+
+
+def _noun(kind: str) -> str:
+    """What a finding calls a kind: ``materialized view``, ``tview`` as ``table``."""
+    if kind in ("index", "constraint"):
+        return kind
+    return KIND_KEYWORD.get(kind, kind.upper()).lower()
 
 
 def _a(noun: str) -> str:
