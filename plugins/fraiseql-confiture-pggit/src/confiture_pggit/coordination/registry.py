@@ -4,8 +4,6 @@ Tracks agent intentions and manages conflict detection, branch allocation,
 and coordination workflow.
 """
 
-from __future__ import annotations
-
 import json
 from datetime import datetime
 from typing import TYPE_CHECKING, Any

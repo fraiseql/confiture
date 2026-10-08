@@ -19,8 +19,6 @@ mutation changed an item the baseline already carried would measure the
 baseline, not the mutation.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 

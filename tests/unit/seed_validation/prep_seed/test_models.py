@@ -3,8 +3,6 @@
 Core models: PrepSeedViolation, Report, and the Pattern enum.
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.validation.prep_seed.models import (
     PrepSeedPattern,
     PrepSeedReport,

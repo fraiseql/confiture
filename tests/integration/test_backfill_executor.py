@@ -6,8 +6,6 @@ backwards), report each batch on the ``UpObserver`` seam, and pick up from a
 checkpoint's cursor instead of starting over. Against the local database.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 
 import psycopg

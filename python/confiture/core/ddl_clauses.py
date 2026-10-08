@@ -12,8 +12,6 @@ A leaf: the change union serialises a column with :func:`column_body` and the
 renderer writes one, so neither may be where the other has to import from.
 """
 
-from __future__ import annotations
-
 from confiture.core.schema_identity import quote_identifier
 from confiture.core.schema_model import Column, Constraint, RelationName
 

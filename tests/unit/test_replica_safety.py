@@ -1,7 +1,5 @@
 """Tests for the replica-safety verdict matrix + policy (issue #139)."""
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.replica.classifier import (

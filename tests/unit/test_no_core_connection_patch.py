@@ -8,8 +8,6 @@ code, and the CLI's one seam ``confiture.cli.helpers.create_connection`` (what
 ``cli.helpers.open_connection`` calls) for command tests.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

@@ -14,8 +14,6 @@ written by hand and left alone.
 ``tests/unit/docs/test_doc_sync_cli.py`` runs the check.
 """
 
-from __future__ import annotations
-
 import argparse
 import re
 import sys

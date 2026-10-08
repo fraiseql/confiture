@@ -4,8 +4,6 @@ The envelope schema $refs issue-object.schema.json, so the registry resolves
 both relative URIs.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import patch

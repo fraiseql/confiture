@@ -26,8 +26,6 @@ A function, a procedure and an aggregate share one pair of drift types
 and three more members of a published enum would say nothing new.
 """
 
-from __future__ import annotations
-
 import importlib
 from collections import defaultdict
 from unittest.mock import MagicMock

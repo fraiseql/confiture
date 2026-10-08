@@ -15,8 +15,6 @@ cannot be resolved statically, an ``EXECUTE`` of a built string above all, is
 *declared* unresolvable rather than guessed at.
 """
 
-from __future__ import annotations
-
 import pglast.parser
 import pytest
 

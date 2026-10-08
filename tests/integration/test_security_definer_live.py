@@ -8,8 +8,6 @@ Tests create SECURITY DEFINER fixtures in a dedicated schema, assert
 which ones are flagged, then tear everything down.
 """
 
-from __future__ import annotations
-
 import textwrap
 from pathlib import Path
 

@@ -16,8 +16,6 @@ Each ``*_EXEMPT`` table names a module the walk cannot see used, with the reason
 entry that stops matching fails.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

@@ -18,8 +18,6 @@ an entry that no longer matches anything is itself a failure, so the exemptions
 cannot outlive the reason for them.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 from pathlib import Path

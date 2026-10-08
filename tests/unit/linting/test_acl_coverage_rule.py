@@ -6,8 +6,6 @@ expectations.  Coverage can come from the same migration file or from
 the configured global grant sweep directory (typically ``db/7_grant``).
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

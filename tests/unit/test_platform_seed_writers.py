@@ -8,8 +8,6 @@ value it was handed: COPY's escapes, SQL's quoting, and one conversion of a Pyth
 value to PostgreSQL's input text behind both.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

@@ -9,8 +9,6 @@ module that compares one of those fields with ``==`` or ``!=``, and on a field
 the engine compares by name that :data:`NAMED` does not answer for.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

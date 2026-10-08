@@ -3,8 +3,6 @@
 Integration of Levels 1-5 seed validators.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

@@ -7,8 +7,6 @@ strict mode inside ``except Exception: pass``: an invalid file meant a silently
 non-strict run.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import patch

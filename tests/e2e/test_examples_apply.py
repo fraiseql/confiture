@@ -24,8 +24,6 @@ include_dirs specified`` was duly filed against it as a bug. If you add one back
 say why in a comment beside it, or the next reader will file it again.
 """
 
-from __future__ import annotations
-
 import subprocess
 from collections.abc import Callable
 from pathlib import Path

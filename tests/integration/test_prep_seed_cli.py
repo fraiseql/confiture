@@ -4,8 +4,6 @@ Tests the end-to-end CLI experience including flag combinations,
 output formats, and error handling.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

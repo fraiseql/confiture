@@ -17,8 +17,6 @@ is a *server-side* read, so it needs superuser and the migration file present
 on the database host — not the case for any managed or remote database.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

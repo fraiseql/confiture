@@ -6,8 +6,6 @@ pg_tviews requires and the ``pg-tviews`` CI leg does. Elsewhere the tests skip
 with the reason.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

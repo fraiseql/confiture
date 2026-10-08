@@ -9,8 +9,6 @@ Requires a PostgreSQL server at ``CONFITURE_TEST_DB_URL``
 (routing rule in ``tests/conftest.py``).
 """
 
-from __future__ import annotations
-
 import psycopg
 import pytest
 from tests.conftest import database_url_for

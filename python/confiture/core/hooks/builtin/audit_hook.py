@@ -1,7 +1,5 @@
 """Post-migration audit logging with HMAC integrity."""
 
-from __future__ import annotations
-
 import hashlib
 import hmac
 import logging

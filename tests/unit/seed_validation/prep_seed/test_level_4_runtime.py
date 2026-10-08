@@ -6,8 +6,6 @@ Note: These are unit tests that mock the database.
 Integration tests with real database go in tests/integration/.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 from confiture.core.seed.validation.prep_seed.level_4_runtime import (

@@ -11,8 +11,6 @@ generates for a constraint confiture wrote unnamed is the name it would have
 generated for the author's own DDL. Confiture never has to invent one.
 """
 
-from __future__ import annotations
-
 import psycopg
 import pytest
 

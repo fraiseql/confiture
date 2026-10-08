@@ -9,8 +9,6 @@ check constraints and unique constraints all emit ``{"name": obj.name, …}`` an
 all read ``details.get("name")``.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 

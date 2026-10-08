@@ -7,8 +7,6 @@ gate under ``--fail-on-unanalyzable`` shows it to the person who has to fix
 the migration.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

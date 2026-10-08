@@ -4,8 +4,6 @@ Each test uses an isolated tracking table (dropped up front) so it does not
 depend on or pollute the shared tb_confiture state in confiture_test.
 """
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path

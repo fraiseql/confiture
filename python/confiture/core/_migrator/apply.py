@@ -18,8 +18,6 @@ precondition checks live here too, and take the engine rather than their
 collaborators.
 """
 
-from __future__ import annotations
-
 import logging
 import time
 from collections.abc import Callable

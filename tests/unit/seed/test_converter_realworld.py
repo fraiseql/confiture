@@ -4,8 +4,6 @@ Tests converter with realistic seed files that reflect actual production usage.
 Real-world examples
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 from confiture.models.results import ConversionResult
 

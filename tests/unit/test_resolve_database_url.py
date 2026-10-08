@@ -4,8 +4,6 @@ Precedence: --database-url flag > CONFITURE_DATABASE_URL > DATABASE_URL > None
 (None means: let MigratorSession/load_config resolve from --config).
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

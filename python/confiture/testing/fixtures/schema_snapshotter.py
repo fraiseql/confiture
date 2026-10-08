@@ -4,20 +4,15 @@ Captures and compares database schema states to validate migrations work correct
 Can be extracted to confiture-testing package in the future.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
+
+import psycopg
 
 from confiture.core import live_catalog
-
-if TYPE_CHECKING:
-    import psycopg
-
-    from confiture.core.schema_model import Index, Table
-
+from confiture.core.schema_model import Index, Table
 
 #: What ``information_schema.table_constraints`` called each kind a table
 #: constraint can be; a NOT NULL column is not one of them.

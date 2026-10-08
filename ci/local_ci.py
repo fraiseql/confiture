@@ -14,8 +14,6 @@ Usage (driven through a Dagger session so the SDK reuses the local engine)::
 Jobs: ``lint``, ``type-check``, ``rust-checks``, ``security``, ``test``, ``all``.
 """
 
-from __future__ import annotations
-
 import sys
 import time
 

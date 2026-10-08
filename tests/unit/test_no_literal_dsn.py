@@ -11,8 +11,6 @@ sentinel URLs below, which are written into config files for CLI tests that
 never dial them, or dial them to prove a failure path.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

@@ -8,8 +8,6 @@ than at collection time (``test_collection_integrity``), with a floor on the cou
 empty listing cannot pass vacuously.
 """
 
-from __future__ import annotations
-
 import re
 import subprocess
 from pathlib import Path

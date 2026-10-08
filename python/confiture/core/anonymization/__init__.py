@@ -17,8 +17,6 @@ may name.
 See ``docs/api/anonymization.md``.
 """
 
-from __future__ import annotations
-
 # Importing the strategies subpackage registers every built-in strategy with the
 # StrategyRegistry (side-effect import — keep it first so the registry is
 # populated before anyone calls StrategyRegistry.get).

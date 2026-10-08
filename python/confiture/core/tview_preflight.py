@@ -6,8 +6,6 @@ TVIEW first. :func:`live_issues` names each such change; it needs the TVIEWs a
 database registers, which only a live database knows.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any

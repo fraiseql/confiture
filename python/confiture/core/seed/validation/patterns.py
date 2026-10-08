@@ -4,8 +4,6 @@ This module provides regex-based detection of SQL patterns in seed files that
 should be addressed for consistency and reliability.
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from typing import NamedTuple

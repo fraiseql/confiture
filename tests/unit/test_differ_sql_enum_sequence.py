@@ -1,7 +1,5 @@
 """DifferSQLGenerator: enum and sequence change types."""
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.differ import SchemaDiffer

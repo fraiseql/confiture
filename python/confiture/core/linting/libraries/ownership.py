@@ -22,8 +22,6 @@ production-time gate.  The two are designed to be complementary —
 neither alone is sufficient.
 """
 
-from __future__ import annotations
-
 import fnmatch
 import re
 from dataclasses import dataclass

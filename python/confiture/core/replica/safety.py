@@ -6,8 +6,6 @@ verdict table is the single source the rule, the preflight surface, and the docs
 all read from — no copy-paste between code and the "why replicas need this" guide.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any

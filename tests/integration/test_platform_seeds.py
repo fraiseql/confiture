@@ -8,8 +8,6 @@ its first data row. And it refused any file whose text held ``BEGIN`` or
 values here are the ones each escape exists for.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

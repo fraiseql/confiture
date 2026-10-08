@@ -8,8 +8,6 @@ stated kind and severity, or names why drift has none — and every schema drift
 kind is reached from it, so none is reported by a comparison of drift's own.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

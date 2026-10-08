@@ -5,8 +5,6 @@ adding one reported nothing in either spelling, and a new table's generated
 ``CREATE TABLE`` dropped it.
 """
 
-from __future__ import annotations
-
 import pglast
 
 from confiture.core.differ import SchemaDiffer

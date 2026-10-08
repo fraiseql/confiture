@@ -11,8 +11,6 @@ injection vector:
    the driver quotes it; no call site hand-quotes with an f-string.
 """
 
-from __future__ import annotations
-
 from string.templatelib import Template
 from typing import Any
 from unittest.mock import patch

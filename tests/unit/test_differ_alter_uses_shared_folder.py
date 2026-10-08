@@ -10,8 +10,6 @@ did: add, drop and retype all still land, and an ``ALTER`` against a table this
 tree never creates is still ignored.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.differ import SchemaDiffer

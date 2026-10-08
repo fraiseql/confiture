@@ -5,8 +5,6 @@ this holds what it must not do — read a type through the session's ``search_pa
 fail a whole read over one refused value, or leave the caller's transaction broken.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 import psycopg

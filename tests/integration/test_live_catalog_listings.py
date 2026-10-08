@@ -7,8 +7,6 @@ decided — a partition and its parent, an index a constraint owns, an object an
 extension owns, the internal triggers of a foreign key.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable, Iterator
 
 import psycopg

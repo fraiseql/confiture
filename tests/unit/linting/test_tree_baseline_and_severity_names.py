@@ -11,8 +11,6 @@ between them, two sharing a name — so which one an import meant
 depended on where the import was written.
 """
 
-from __future__ import annotations
-
 import ast
 import collections
 import json

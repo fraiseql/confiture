@@ -12,8 +12,6 @@ it" are observed at the far end of a socket rather than inferred from a patched
 - a ``send`` the endpoint cannot receive exits 1 and says the hook failed.
 """
 
-from __future__ import annotations
-
 import json
 import socket
 import threading

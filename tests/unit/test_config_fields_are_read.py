@@ -8,8 +8,6 @@ documentation described behaviour that did not exist. For each model in
 consumer is wired or deleted, together with its documentation section.
 """
 
-from __future__ import annotations
-
 import ast
 import inspect
 from pathlib import Path

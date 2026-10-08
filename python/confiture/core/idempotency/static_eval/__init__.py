@@ -74,8 +74,6 @@ Under-resolving is a warning the CLI shows with the reason; over-resolving
 would be a wrong verdict, which is why every rule here errs toward refusal.
 """
 
-from __future__ import annotations
-
 from confiture.core.idempotency.static_eval import (
     file_io,  # noqa: F401 — the resolver seam tests patch
 )

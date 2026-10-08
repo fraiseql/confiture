@@ -1,7 +1,5 @@
 """The one read of a tree: each file parsed once, every position a line of a file."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

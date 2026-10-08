@@ -15,8 +15,6 @@ that: ``lint`` accepts ``table`` and ``seed validate`` rejects it with
 ``VALID_001``, which is why the application runs ``seed validate --format text``.
 """
 
-from __future__ import annotations
-
 import re
 from typing import NamedTuple
 

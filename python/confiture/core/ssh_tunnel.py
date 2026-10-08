@@ -15,8 +15,6 @@ literal ``${TUNNEL_LOCAL_PORT}`` placeholder, which is substituted with
 the real port before yielding.
 """
 
-from __future__ import annotations
-
 import socket
 import subprocess
 import time

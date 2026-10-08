@@ -9,8 +9,6 @@ module no row covers fails, a row naming nothing fails, and a row that says what
 the row above it already says is not a decision and fails too.
 """
 
-from __future__ import annotations
-
 import importlib
 import importlib.util
 import re

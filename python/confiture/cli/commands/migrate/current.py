@@ -3,8 +3,6 @@
 Split out of the monolithic migrate command modules.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import typer

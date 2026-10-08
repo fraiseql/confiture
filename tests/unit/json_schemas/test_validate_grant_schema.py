@@ -4,8 +4,6 @@ This schema is NOT part of the fraisier adapter contract — it is a
 standalone, completeness schema for the grant gate's JSON failure envelope.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

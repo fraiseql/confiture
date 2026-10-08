@@ -11,8 +11,6 @@ The diagnoses here are texts ``plpgsql_check`` returns; the ``plpgsql-check`` CI
 asks the extension itself.
 """
 
-from __future__ import annotations
-
 from confiture.core.linting import bodies, references
 from confiture.core.linting.baseline import Baseline
 from confiture.core.linting.gate import Threshold

@@ -4,8 +4,6 @@ Covers the case where a seed file contains multiple individual INSERT statements
 that should all be converted, not just the first one.
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.insert_to_copy_converter import InsertToCopyConverter
 
 

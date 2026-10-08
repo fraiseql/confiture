@@ -8,8 +8,6 @@ never numbered. This test pins the module's answers and fails on a tree tool
 that parses or formats a prefix itself.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

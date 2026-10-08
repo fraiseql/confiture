@@ -4,8 +4,6 @@ Tests for pgGit detection, configuration, exceptions, and client classes.
 These tests do NOT require an actual PostgreSQL database with pgGit installed.
 """
 
-from __future__ import annotations
-
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 

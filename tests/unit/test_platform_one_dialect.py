@@ -6,8 +6,6 @@ them; an error is named ``…Error``. And every change names its object the way 
 model keys it, whatever its other fields are called: ``change.ref``.
 """
 
-from __future__ import annotations
-
 import typing
 from collections.abc import Callable
 from pathlib import Path

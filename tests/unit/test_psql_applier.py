@@ -5,8 +5,6 @@ non-zero-exit ``SchemaError`` paths (with credential redaction), and the inline
 ``COPY … FROM stdin`` detection predicate used as a safety-net hint.
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock

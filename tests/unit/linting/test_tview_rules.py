@@ -3,8 +3,6 @@
 ``tview_002`` waits on fraiseql/pg_tviews#75 and is deleted with it.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.gate import Threshold

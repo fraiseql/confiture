@@ -14,8 +14,6 @@ the wildcard ``inventory.types_match`` applies to a routine's argument types
 ambiguity resolves to nothing rather than to a guess.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 
 from confiture.core import sql_lexer

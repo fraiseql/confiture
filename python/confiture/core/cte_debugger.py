@@ -1,7 +1,5 @@
 """CTE step-through debugger: execute each CTE in isolation to find failures."""
 
-from __future__ import annotations
-
 import contextlib
 import re
 import time

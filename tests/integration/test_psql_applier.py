@@ -5,8 +5,6 @@ and ``psql`` on PATH. Uses :class:`TempDatabase` for a throwaway database that i
 dropped on exit.
 """
 
-from __future__ import annotations
-
 import shutil
 
 import psycopg

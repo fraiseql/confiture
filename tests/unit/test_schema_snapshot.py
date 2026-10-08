@@ -5,8 +5,6 @@ a database with each (``tests/integration/test_baseline_detection.py``). Live mo
 reads the build back from a scratch server, is the integration suite's.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.schema_model import SchemaModel

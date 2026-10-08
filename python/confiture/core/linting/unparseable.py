@@ -9,8 +9,6 @@ why it is a registered rule at ``error`` (#274) and why the report
 keeps one per file however many rules discovered it.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.linting.rule_registry import UNPARSEABLE_RULE_ID

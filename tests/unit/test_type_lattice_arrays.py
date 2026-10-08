@@ -22,8 +22,6 @@ rewrite — because confiture models no array conversions and an unmodelled chan
 must never read as safe.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 

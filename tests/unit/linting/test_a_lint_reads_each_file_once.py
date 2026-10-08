@@ -18,8 +18,6 @@ it stays *one* however many rules run — which is why the selections below are
 compared against each other and not only against a number.
 """
 
-from __future__ import annotations
-
 import collections
 import os
 from collections.abc import Iterator

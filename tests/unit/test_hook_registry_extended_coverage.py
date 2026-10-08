@@ -9,8 +9,6 @@ Focuses on:
 - Error strategy variations
 """
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 from uuid import uuid4

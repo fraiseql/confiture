@@ -5,8 +5,6 @@ mechanics: the canonical command, the deprecated alias's stderr warning, and the
 cross-referential help.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import yaml

@@ -4,8 +4,6 @@ Uses Typer's CliRunner and unittest.mock to avoid real emitter loading.
 No database required.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import patch

@@ -9,8 +9,6 @@ them, and an inventory-backed finding names its own source file rather than an
 offset into the concatenated build.
 """
 
-from __future__ import annotations
-
 import csv
 import io
 import json

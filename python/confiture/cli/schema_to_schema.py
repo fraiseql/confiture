@@ -10,8 +10,6 @@ migrator, runs the operation, and routes failures through the ``fail()``
 boundary. Errors emit the #145 envelope in ``--format json``.
 """
 
-from __future__ import annotations
-
 import contextlib
 from pathlib import Path
 from typing import Any

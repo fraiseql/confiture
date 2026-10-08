@@ -16,8 +16,6 @@ the one narrow band where a comment is judged — it says only what the name say
 — and is ``info`` and opt-in for exactly that reason.
 """
 
-from __future__ import annotations
-
 import math
 from collections.abc import Sequence
 from typing import Any

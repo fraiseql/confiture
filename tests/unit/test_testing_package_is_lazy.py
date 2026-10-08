@@ -8,8 +8,6 @@ pytest start-up and, under ``pytest --cov``, importing the package before covera
 began recording. The names are lazy now; this pins it, in a fresh interpreter.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 import sys

@@ -6,8 +6,6 @@ the file-content diffing, the merge-base anchoring, and the
 can prove.
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory

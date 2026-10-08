@@ -5,8 +5,6 @@ running, swallow every hook failure into a log line, and leave a closed loop
 installed as the current one.
 """
 
-from __future__ import annotations
-
 import asyncio
 
 import pytest

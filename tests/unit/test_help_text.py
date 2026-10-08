@@ -13,8 +13,6 @@ requires a warning about a condition that cannot arise is a test asking for
 a false statement.
 """
 
-from __future__ import annotations
-
 from typer.testing import CliRunner
 
 from confiture.cli.main import app

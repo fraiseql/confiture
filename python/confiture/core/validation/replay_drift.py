@@ -14,8 +14,6 @@ checks differ only in where the expected routines come from, here a scratch
 database read by ``core/live_catalog`` exactly as the live one is.
 """
 
-from __future__ import annotations
-
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING

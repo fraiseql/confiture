@@ -7,8 +7,6 @@ here is the mapping from a catalog row to a :class:`FunctionInfo`. What the read
 answers on a real server is ``tests/integration/test_introspection_live.py``.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 from unittest.mock import MagicMock
 

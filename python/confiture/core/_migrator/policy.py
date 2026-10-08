@@ -4,8 +4,6 @@ These are the decisions an apply loop takes. They live here, not in the CLI, so
 the library path and the CLI path make them the same way.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 

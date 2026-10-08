@@ -17,8 +17,6 @@ catalogue and the dispatch agreeing in that direction, as
 ``test_every_rule_is_registered.py`` does in the other.
 """
 
-from __future__ import annotations
-
 import textwrap
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass

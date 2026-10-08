@@ -26,8 +26,6 @@ they pin the message formatting and never execute the SQL. Only a real database
 can fail on this, which is why these tests are here.
 """
 
-from __future__ import annotations
-
 from collections.abc import Generator
 
 import psycopg

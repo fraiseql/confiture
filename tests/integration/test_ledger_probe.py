@@ -10,8 +10,6 @@ residue. The two role-based scenarios skip cleanly where the connection cannot
 create a role — that is a permission of the environment, not a gap in cover.
 """
 
-from __future__ import annotations
-
 import uuid
 from collections.abc import Iterator
 

@@ -5,8 +5,6 @@ Provides a Python interface to pgGit PostgreSQL functions.
 This client is designed for development and staging databases only.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal

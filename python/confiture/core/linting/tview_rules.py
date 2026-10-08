@@ -10,8 +10,6 @@ drift and generation agree on it. It waits on fraiseql/pg_tviews#75 and is delet
 with it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from typing import TYPE_CHECKING
 

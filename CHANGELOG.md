@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **No module defers its annotations** (#598). Python 3.14 evaluates an annotation when it
+  is read (PEP 649), so `from __future__ import annotations` is gone from every file, and
+  `tests/unit/test_no_deferred_annotations.py` keeps it gone. What the platform seam pins
+  is unchanged: its signatures and dataclass fields are read as source text
+  (`annotationlib.Format.STRING`), the text the import used to produce. A consumer that
+  calls `inspect.signature` or reads a dataclass field's `type` **without** asking for
+  `Format.STRING` now sees the types themselves (`confiture.platform.DiffSide | None`)
+  where it saw strings (`'DiffSide | None'`). `MigratorSession`, the introspectors and the
+  `confiture.testing` sandbox import their annotation names at run time, so a consumer
+  evaluating them resolves every name; `docs/reference/platform-api.md` writes the
+  `Connection` protocol's `Any` as written, no longer `typing.Any`.
+
 ## [1.31.0] - 2026-10-07
 
 **Soft deletion, judged where it happens.** `softdel_003` (new) reports every read of

@@ -5,8 +5,6 @@ so what a new project gets is reviewable as files rather than as string literals
 inside a command.
 """
 
-from __future__ import annotations
-
 from importlib.resources import files
 from importlib.resources.abc import Traversable
 from pathlib import Path

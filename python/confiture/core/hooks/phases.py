@@ -6,8 +6,6 @@ Three categories with distinct semantics:
 3. ALERT EVENTS - Fired when metrics cross thresholds
 """
 
-from __future__ import annotations
-
 from enum import Enum
 
 

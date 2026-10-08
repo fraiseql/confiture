@@ -10,8 +10,6 @@ One engine (`_iter_findings`) feeds two surfaces: the `confiture lint` rule
 (`replica_preflight_issues`, the #148 PreflightIssue / PFLIGHT_REPLICA_* shape).
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path

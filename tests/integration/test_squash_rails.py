@@ -9,8 +9,6 @@ the cut unfinished. An environment listed in ``squash.skip_environments`` is not
 asked; one that cannot be reached, and is not listed, refuses.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

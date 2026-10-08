@@ -5,8 +5,6 @@ are created with pytest's ``tmp_path`` fixture so nothing is written to
 the real schema tree.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

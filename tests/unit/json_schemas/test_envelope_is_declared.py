@@ -10,8 +10,6 @@ payload matches; a schema that is a ``$ref`` to another declares what that one
 declares.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.schema_exporter import load_schema, schema_files

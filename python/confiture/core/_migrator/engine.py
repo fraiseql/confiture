@@ -6,8 +6,6 @@ open or attach a session (``from_config``, ``migrate_up``); they live there, abo
 the session, so that the engine never needs to know one exists.
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from string.templatelib import Template

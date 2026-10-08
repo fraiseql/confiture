@@ -8,8 +8,6 @@ one production database the only two tables past its threshold were outside
 as the other schema facts are, and it is qualified.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

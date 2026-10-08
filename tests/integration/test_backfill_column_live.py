@@ -1,7 +1,5 @@
 """``backfill_column`` on a real table larger than one batch."""
 
-from __future__ import annotations
-
 import psycopg
 import pytest
 

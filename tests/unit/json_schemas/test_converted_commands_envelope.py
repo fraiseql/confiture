@@ -11,8 +11,6 @@ Mirrors ``test_error_envelope_schema.py`` (which covers ``migrate up``); these
 cases cover the build/seed/diff/drift/apply-as surface.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

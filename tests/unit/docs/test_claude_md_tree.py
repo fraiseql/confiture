@@ -6,8 +6,6 @@ CLAUDE.md must equal that rendering byte for byte. Line counts in prose go stale
 day after they are written, so none are allowed anywhere in the file.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import re
 from pathlib import Path

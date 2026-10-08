@@ -6,8 +6,6 @@ statement as a ``-- confiture:tier <tier>`` directive — the tier
 ``migrate preflight``'s change-set classifier assigns, so the two never disagree.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import ClassVar
 

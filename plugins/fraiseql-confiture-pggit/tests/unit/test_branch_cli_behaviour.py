@@ -7,8 +7,6 @@ have the *same signatures and return types* as ``PgGitClient`` (``get_branch(nam
 A command that calls the client in a way the real client does not support fails here.
 """
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from pathlib import Path
 

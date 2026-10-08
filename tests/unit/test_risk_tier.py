@@ -6,8 +6,6 @@ a ratified cross-repo contract (fraisier-core#44,
 confiture's side so a rename fails here rather than silently in the consumer.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.risk_tier import RiskTier, worst_tier

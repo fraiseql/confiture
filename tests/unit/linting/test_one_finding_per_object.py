@@ -13,8 +13,6 @@ deduplicated: ``qual_001`` asks which schema this ``CREATE`` lands in, and a
 second unqualified definition is a second answer.
 """
 
-from __future__ import annotations
-
 from collections import Counter
 from pathlib import Path
 

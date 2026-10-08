@@ -7,8 +7,6 @@ asserts the restored object set matches what the schema declares.
 Requires a reachable local PostgreSQL (CONFITURE_TEST_DB_URL or localhost).
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from pathlib import Path
 

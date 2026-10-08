@@ -37,8 +37,6 @@ number — the same "ask the parser" rule the module itself follows, and the one
 that will quietly retire these skips if libpg_query ever fixes either.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Iterator
 from pathlib import Path

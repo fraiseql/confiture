@@ -21,8 +21,6 @@ The enumeration is mechanical: every ``Alter…Stmt``, ``Drop…Stmt`` and
 ``test_ddl_objects_are_exhaustive.py``'s subject and are not repeated here.
 """
 
-from __future__ import annotations
-
 import pglast.ast
 import pytest
 

@@ -6,10 +6,8 @@ Validates by actually executing seeds and transformations.
 Catches runtime issues that static analysis can't detect.
 """
 
-from __future__ import annotations
-
 import contextlib
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from string.templatelib import Template
@@ -35,7 +33,7 @@ FinalName = str | tuple[str, str]
 
 
 @contextmanager
-def _probe(connection: Any) -> Iterator[None]:
+def _probe(connection: Any) -> Generator[None]:
     """Run a read-only probe without leaving the caller's transaction aborted.
 
     Level 5 runs inside one ``BEGIN``. A failed statement poisons it, so each

@@ -11,8 +11,6 @@ reads ``prep_seed.<table>``; otherwise the one schema the tree declares
 ``<table>`` in (outside the prep-seed schema); otherwise ``catalog_schema``.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture import platform

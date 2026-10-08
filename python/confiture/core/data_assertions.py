@@ -38,8 +38,6 @@ source, it is documented in ``docs/guides/migrate-validate.md``, and it is why
 findings are warnings rather than gate failures.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from collections.abc import Mapping

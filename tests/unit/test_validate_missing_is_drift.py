@@ -15,8 +15,6 @@ database, `missing_from_db` listed a trigger function and every routine outside
 `public`. That is the same commit's work, not this one's.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.function_signature_drift import FunctionSignatureDriftDetector

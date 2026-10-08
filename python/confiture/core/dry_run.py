@@ -1,7 +1,5 @@
 """SAVEPOINT-based dry-run execution with guaranteed rollback."""
 
-from __future__ import annotations
-
 import logging
 import time
 from dataclasses import dataclass, field

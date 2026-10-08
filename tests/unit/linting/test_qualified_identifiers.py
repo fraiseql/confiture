@@ -7,8 +7,6 @@ a clean schema. Every case below runs on the bare name and on its qualified
 twin and must report the same rule codes.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.schema_linter import LintConfig, SchemaLinter

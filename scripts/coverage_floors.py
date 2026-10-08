@@ -12,8 +12,6 @@ Usage:
     uv run python scripts/coverage_floors.py --report coverage.json  # print the named files
 """
 
-from __future__ import annotations
-
 import json
 import sys
 from pathlib import Path

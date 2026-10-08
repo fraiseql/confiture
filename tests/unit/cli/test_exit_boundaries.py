@@ -8,8 +8,6 @@ or, in JSON mode, emits a result payload whose ``error`` is the string ``"1"``.
 Exit codes follow ``docs/reference/exit-codes.md``: 5 for invalid input.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

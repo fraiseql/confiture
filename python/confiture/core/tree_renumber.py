@@ -60,8 +60,6 @@ Example::
         print("Manual fixes needed:", result.dangling_refs)
 """
 
-from __future__ import annotations
-
 import dataclasses
 import re
 import subprocess

@@ -3,8 +3,6 @@
 Add ConversionResult and ConversionReport models.
 """
 
-from __future__ import annotations
-
 from confiture.models.results import ConversionReport, ConversionResult
 
 

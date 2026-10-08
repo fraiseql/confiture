@@ -5,8 +5,6 @@ DDL files — or the same text on stdin; the current state is a schema file or t
 configured database. No hand-authored target SQL anywhere.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

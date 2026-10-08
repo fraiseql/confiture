@@ -16,8 +16,6 @@ per-tenant tables in ``tenant`` resolves into both. The final table is, in order
 3. **``catalog_schema``**, which keeps a single-schema tree's behaviour.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any

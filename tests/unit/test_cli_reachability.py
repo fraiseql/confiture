@@ -11,8 +11,6 @@ module raises on import, fails here. This is the no-"shipped-but-unreachable"
 backstop — a new orphan command can't slip in without a test noticing.
 """
 
-from __future__ import annotations
-
 import pytest
 import typer
 from typer.testing import CliRunner

@@ -1,6 +1,6 @@
 """Database connection management for CLI commands."""
 
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Protocol, cast, runtime_checkable
@@ -70,7 +70,7 @@ class Connection(Protocol):
 
 
 @contextmanager
-def connection_for(database: str | Connection) -> Iterator[psycopg.Connection]:
+def connection_for(database: str | Connection) -> Generator[psycopg.Connection]:
     """The connection a library call runs on: its own for a URL, the caller's otherwise.
 
     For a URL the connection is opened here and is this call's: committed when

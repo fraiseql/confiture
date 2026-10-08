@@ -3,8 +3,6 @@
 Split out of the monolithic migrate command modules.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 from pathlib import Path
 

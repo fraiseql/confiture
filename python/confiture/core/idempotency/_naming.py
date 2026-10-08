@@ -6,8 +6,6 @@ present, each half quoted by the one identifier quoter
 (:func:`confiture.core.schema_identity.quote_identifier`).
 """
 
-from __future__ import annotations
-
 from confiture.core.schema_identity import quote_identifier
 
 

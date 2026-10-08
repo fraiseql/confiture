@@ -6,8 +6,6 @@ nobody meant (a sibling directory that sorts in between) is seen. ``--compact``,
 whose promise is to keep the order, refuses one instead (``VALID_005``).
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

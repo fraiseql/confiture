@@ -135,7 +135,7 @@ own statements do after the call returns.
 #### `Connection.cursor`
 
 ```python
-def cursor(self) -> typing.Any
+def cursor(self) -> Any
 ```
 
 A cursor on this connection.
@@ -143,7 +143,7 @@ A cursor on this connection.
 #### `Connection.execute`
 
 ```python
-def execute(self, query: typing.Any, params: typing.Any = None) -> typing.Any
+def execute(self, query: Any, params: Any = None) -> Any
 ```
 
 Run *query* and return its cursor.

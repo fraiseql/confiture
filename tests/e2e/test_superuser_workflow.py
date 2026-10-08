@@ -1,7 +1,5 @@
 """End-to-end test for the halt → apply-as → resume workflow (issue #137)."""
 
-from __future__ import annotations
-
 import textwrap
 from pathlib import Path
 

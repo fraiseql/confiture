@@ -4,8 +4,6 @@ The planner computes the rollback set and validates reversibility up front,
 without touching the database. The four edge cases are typed outcomes.
 """
 
-from __future__ import annotations
-
 from confiture.core._migrator.rollback_planner import RollbackPlan, plan_down_to
 
 APPLIED = ["20260101_a", "20260102_b", "20260103_c", "20260104_d"]  # ASC

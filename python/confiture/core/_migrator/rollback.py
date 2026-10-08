@@ -5,8 +5,6 @@ take the ``MigrationEngine`` instance as their first argument; the class keeps t
 delegating methods so its public surface and patch targets are unchanged.
 """
 
-from __future__ import annotations
-
 import logging
 from typing import TYPE_CHECKING
 

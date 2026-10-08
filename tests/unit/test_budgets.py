@@ -5,8 +5,6 @@ measures the package. A file over its budget fails; an entry above the real coun
 stale and fails (the file must state the truth); ``--update`` only ever lowers numbers.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import json
 from pathlib import Path

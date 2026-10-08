@@ -1,7 +1,5 @@
 """Unit tests for stub model generation."""
 
-from __future__ import annotations
-
 from datetime import UTC
 
 from confiture.core.introspection.type_mapping import TypeMapper

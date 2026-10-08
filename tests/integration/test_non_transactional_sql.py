@@ -7,8 +7,6 @@ failed. And ``dry_run_execute`` handed such a migration to the autocommit apply
 path, which committed the SAVEPOINT's transaction on its way through.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

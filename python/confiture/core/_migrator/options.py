@@ -8,8 +8,6 @@ facade; ``tests/unit/test_one_session_signature.py`` holds that every keyword ``
 accepts is a field of it and that every field is given one.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any

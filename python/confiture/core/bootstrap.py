@@ -37,8 +37,6 @@ passed, so a run never silently hands over less, or more, than the operator
 meant.  See :class:`BootstrapScopeError`.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 

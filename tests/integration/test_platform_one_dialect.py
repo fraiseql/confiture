@@ -7,8 +7,6 @@ found it. A call never changes a caller's connection's mode: one that needs a
 transaction refuses a connection in autocommit.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

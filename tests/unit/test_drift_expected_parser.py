@@ -9,8 +9,6 @@ the parser reports which schemas the DDL declares so the live side can read
 exactly those.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 import pytest

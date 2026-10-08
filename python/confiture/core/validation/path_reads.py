@@ -13,8 +13,6 @@ checksum; ``migrate squash`` retires it, and with it the pin. A read whose path 
 counted as clean.
 """
 
-from __future__ import annotations
-
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path

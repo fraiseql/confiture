@@ -1,7 +1,5 @@
 """Seed generation bridge: generate seed SQL files from schema introspection."""
 
-from __future__ import annotations
-
 import dataclasses
 from pathlib import Path
 from typing import Any

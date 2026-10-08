@@ -3,8 +3,6 @@
 Subprocess and TempDatabase are mocked; no real database or pg_dump is needed.
 """
 
-from __future__ import annotations
-
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch

@@ -14,8 +14,6 @@ under ``if TYPE_CHECKING:`` do not count):
 allow-list) and is not repeated here.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

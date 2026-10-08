@@ -4,8 +4,6 @@ Read with PostgreSQL's own parser (``sql_lexer.parse_file``). Non-transactional 
 special handling during deployment (e.g. no atomic rollback).
 """
 
-from __future__ import annotations
-
 from typing import ClassVar
 
 from confiture.core.sql_lexer import parse_file

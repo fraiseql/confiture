@@ -4,8 +4,6 @@ This module defines the core data structures used for tracking and reporting
 seed data validation violations.
 """
 
-from __future__ import annotations
-
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum

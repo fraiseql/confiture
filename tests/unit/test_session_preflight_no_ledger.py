@@ -9,8 +9,6 @@ existence probe, so it raised psycopg's `UndefinedTable`.
 checksum verification is skipped and the reason reported, no exception.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

@@ -15,8 +15,6 @@ generated nothing for a change it did not know. And the wire's ``type`` strings 
 them is reading a spelling, not the change.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

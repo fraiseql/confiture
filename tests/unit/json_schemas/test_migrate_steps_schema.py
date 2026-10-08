@@ -1,7 +1,5 @@
 """Validate ``migrate steps --format json`` output against its schema (issue #200)."""
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime
 from pathlib import Path

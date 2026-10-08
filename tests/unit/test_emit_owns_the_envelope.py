@@ -7,8 +7,6 @@ written by the boundary, another. A payload dict passed to ``emit`` must not car
 ``command`` (nor ``ok``, which ``emit`` also owns).
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

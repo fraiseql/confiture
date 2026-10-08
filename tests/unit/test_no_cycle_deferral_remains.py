@@ -9,8 +9,6 @@ failing. This test names each by ``file:line``; a start-up deferral (``reporting
 ``core.preflight``) or a user-code guard says something else and is not counted.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

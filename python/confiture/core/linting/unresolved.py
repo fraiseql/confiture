@@ -33,8 +33,6 @@ Which of these PostgreSQL refuses was settled by applying each case to an empty
 database (``tests/integration/test_forward_reference_oracle.py``), not assumed.
 """
 
-from __future__ import annotations
-
 from bisect import bisect_left
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass

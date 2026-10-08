@@ -4,8 +4,6 @@ Templates never read a pglast node: they take one normalized :class:`Captures`
 instance, which defaults to all-None and is frozen.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.idempotency._captures import (

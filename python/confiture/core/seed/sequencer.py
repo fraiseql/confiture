@@ -5,8 +5,6 @@ through :class:`~confiture.core.seed.applier.SeedApplier`, commit, close — and
 the result; the CLI renders it.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 

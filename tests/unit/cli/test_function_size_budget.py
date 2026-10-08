@@ -5,8 +5,6 @@ its first statement after the docstring. The CLI declares and renders; the
 session and core do the work.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

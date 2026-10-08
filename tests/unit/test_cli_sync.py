@@ -7,8 +7,6 @@ safety posture, output formatting, exit codes, and the #145 JSON envelope — is
 exercised for real.
 """
 
-from __future__ import annotations
-
 import json
 import re
 from unittest.mock import MagicMock, patch

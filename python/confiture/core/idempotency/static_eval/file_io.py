@@ -1,7 +1,5 @@
 """Reading a SQL file the shared resolver confines to the project root."""
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 from typing import TYPE_CHECKING

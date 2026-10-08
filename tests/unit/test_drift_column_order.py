@@ -8,8 +8,6 @@ nothing when the sets differ (the missing/extra items already say so);
 ``drift.column_order_severity: critical`` promotes it to a failing item.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 from jsonschema import Draft202012Validator

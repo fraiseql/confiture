@@ -4,8 +4,6 @@ Parses ``-- Strategy: <name>`` headers from SQL migration files.
 The header must appear within the first 10 lines of the file.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.sql_lexer import comments

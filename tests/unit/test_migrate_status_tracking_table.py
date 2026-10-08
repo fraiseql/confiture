@@ -5,8 +5,6 @@ tb_confiture tracking table is absent from the target database, and should exit
 with code 1 with an actionable advisory message.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

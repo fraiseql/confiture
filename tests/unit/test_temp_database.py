@@ -1,7 +1,5 @@
 """Unit tests for TempDatabase and pg_dump_schema."""
 
-from __future__ import annotations
-
 import subprocess
 from unittest.mock import MagicMock, patch
 

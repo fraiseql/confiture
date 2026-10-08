@@ -13,8 +13,6 @@ The parity cases skip when the extension is not importable, except under
 prove the native path, not skip it.
 """
 
-from __future__ import annotations
-
 import hashlib
 import logging
 import os

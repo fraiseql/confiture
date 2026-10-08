@@ -6,8 +6,6 @@ TVIEW as one object — the relation's name and the query — so drift and prefl
 compare a TVIEW, never its parts.
 """
 
-from __future__ import annotations
-
 import json
 
 from confiture.core.schema_model import SchemaModel, TView, ref_for, tview_ref

@@ -17,8 +17,6 @@ database — an integration-only guard over a data-destroying path would gate
 nothing on a pull request.
 """
 
-from __future__ import annotations
-
 import textwrap
 from collections.abc import Iterator
 from pathlib import Path

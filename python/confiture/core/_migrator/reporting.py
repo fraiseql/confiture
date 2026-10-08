@@ -4,8 +4,6 @@ Every function takes the ``MigratorSession`` as its first argument; the session'
 methods delegate here.
 """
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
 from confiture.core._migrator.discovery import parse_migration_filename

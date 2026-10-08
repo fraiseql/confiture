@@ -9,8 +9,6 @@ Each test runs the three strategies — transactional, autocommit (``CREATE INDE
 CONCURRENTLY``) and online — and asserts the same thing of each.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

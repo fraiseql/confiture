@@ -6,8 +6,6 @@ not the connection's: ``core.connection`` opens a database and knows nothing abo
 migrations.
 """
 
-from __future__ import annotations
-
 import importlib.util
 import sys
 from pathlib import Path

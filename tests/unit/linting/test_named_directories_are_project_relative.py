@@ -8,8 +8,6 @@ rules read that flag now and `--overrides-dir` is a fourth directory of the same
 shape, so there is one resolver.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

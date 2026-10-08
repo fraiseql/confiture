@@ -1,7 +1,5 @@
 """Values the static evaluator produces, its refusal codes and their remedies."""
 
-from __future__ import annotations
-
 import ast
 from dataclasses import dataclass
 from enum import Enum

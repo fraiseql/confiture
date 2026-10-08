@@ -19,8 +19,6 @@ the one the change set gives the SQL confiture writes for the change —
 tier (``CREATE AGGREGATE``), or an enum losing labels, which no statement can do.
 """
 
-from __future__ import annotations
-
 from typing import assert_never
 
 from confiture.core.change_set.models import (

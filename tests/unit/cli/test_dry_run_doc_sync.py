@@ -4,8 +4,6 @@ The example block is rendered from a fixed two-migration fixture; when the
 renderer changes, the doc changes with it or this test says so.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.dry_run_summary import build_dry_run_summary, render_dry_run_text

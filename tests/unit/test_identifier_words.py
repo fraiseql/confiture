@@ -1,7 +1,5 @@
 """The words of a name: one tokeniser, for every rule that matches a name by meaning."""
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.schema_identity import contains_words, identifier_words

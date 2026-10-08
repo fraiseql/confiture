@@ -9,8 +9,6 @@ make it. Identity is ``(schema, name)`` (#313): the prep-seed pattern keeps the
 same table names in two schemas, and nothing here may confuse them.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture import platform

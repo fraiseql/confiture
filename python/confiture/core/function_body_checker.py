@@ -14,8 +14,6 @@ be carried by a migration that re-defines the function. The complementary
 provided by ``migrate validate --check-body-replay`` (#179).
 """
 
-from __future__ import annotations
-
 import dataclasses
 import difflib
 from typing import TYPE_CHECKING

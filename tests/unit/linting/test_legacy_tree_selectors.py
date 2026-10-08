@@ -9,8 +9,6 @@ while the emitted `rule_id` is the new code from day one, because a baseline
 keyed on the old id would have to be rewritten either way.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

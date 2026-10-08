@@ -5,8 +5,6 @@ discarded: every entry's matches were flattened into one list and sorted
 globally, so a directory's ``order`` decided nothing a reader could observe.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.builder import SchemaBuilder

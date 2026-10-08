@@ -13,8 +13,6 @@ its array, and asserts the round trip is exact: keyed by
 ``type_lattice.catalog_spelling``, each reads back as ``format_type`` wrote it.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 import psycopg

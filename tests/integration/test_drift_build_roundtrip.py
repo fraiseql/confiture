@@ -9,8 +9,6 @@ every live table as spurious ``extra_table`` drift with exit 0.
 Requires a running PostgreSQL server accessible via CONFITURE_TEST_DB_URL.
 """
 
-from __future__ import annotations
-
 import psycopg
 
 from confiture.core.drift import DriftType, SchemaDriftDetector

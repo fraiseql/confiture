@@ -16,8 +16,6 @@ run from the repo root exits with "No migrations directory found" long before
 reaching the dispatch under test.
 """
 
-from __future__ import annotations
-
 import itertools
 import json
 import textwrap

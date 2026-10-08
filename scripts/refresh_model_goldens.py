@@ -35,8 +35,6 @@ Usage::
     uv run python scripts/refresh_model_goldens.py --write --server-url postgresql://…/postgres
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os

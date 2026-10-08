@@ -7,8 +7,6 @@ envelope only grows, and that a withdrawn release is withdrawn as a tag — neve
 reverting ``main``, whose changes are not independently revertible.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

@@ -10,8 +10,6 @@ position in the blanked text is the same position in the original — the techni
 #270 established for a schema-qualified type name a compiler would not accept.
 """
 
-from __future__ import annotations
-
 from typing import ClassVar
 
 import pglast.parser

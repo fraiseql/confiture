@@ -8,8 +8,6 @@ dependency: nothing guards its import, and a pglast whose enum surface confiture
 cannot resolve is a configuration error naming the version, not a silent degrade.
 """
 
-from __future__ import annotations
-
 import ast
 import tomllib
 from importlib import metadata

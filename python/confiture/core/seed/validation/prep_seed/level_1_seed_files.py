@@ -14,8 +14,6 @@ Every ``INSERT … VALUES`` and every ``COPY … FROM stdin`` block is read
 A statement level 1 cannot read is a finding saying so, never a pass.
 """
 
-from __future__ import annotations
-
 from typing import Literal
 
 from pglast import ast

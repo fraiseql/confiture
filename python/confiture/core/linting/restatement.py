@@ -16,8 +16,6 @@ emits ``info``, is opt-in, and is documented as something to baseline rather
 than to reword. Nothing in this module reads meaning; it compares strings.
 """
 
-from __future__ import annotations
-
 import re
 
 from confiture.core.schema_identity import identifier_words

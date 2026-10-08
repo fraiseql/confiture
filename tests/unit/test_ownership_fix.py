@@ -5,8 +5,6 @@ The fixer reuses :class:`Own001OwnershipCoverage` to find violations,
 then emits ``ALTER … OWNER TO`` immediately after each offending CREATE.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

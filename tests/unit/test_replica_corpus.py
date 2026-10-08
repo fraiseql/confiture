@@ -11,8 +11,6 @@ two-version forward-compatibility, the tier is what the change does to the data.
 Pinning both here means a change that moves one without the other is visible.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.change_set import classify_statements

@@ -5,8 +5,6 @@ a usage error (exit 2) naming both, and nothing is served. None is generated: a
 token nobody chose is one nobody holds, and printing it would put it in a log.
 """
 
-from __future__ import annotations
-
 import pytest
 from tests._helpers import strip_ansi
 from typer.testing import CliRunner

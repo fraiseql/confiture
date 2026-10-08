@@ -16,8 +16,6 @@ check (a migration must be present) and the reason is surfaced as a note. It
 never silently passes an unaccompanied grant.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 from typing import Any

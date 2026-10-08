@@ -10,8 +10,6 @@ The static path must be untouched: without a reachable target, the same
 migrations must produce the same tier-less entry they always did.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

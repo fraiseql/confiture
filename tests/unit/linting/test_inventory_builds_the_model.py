@@ -5,8 +5,6 @@ onto the table the tree declared — including its access method, which the diff
 model never read: two indexes that differ only in ``USING`` were one index to it.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.schema_model import EnumType, Index, RelationName, Sequence, ref_for

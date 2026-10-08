@@ -1,7 +1,5 @@
 """Validate ``confiture build --list-files --format json`` against its schema."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

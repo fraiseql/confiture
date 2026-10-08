@@ -8,8 +8,6 @@ These tests exercise the IntentRegistry database operations including:
 - Multi-agent conflict scenarios
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture_pggit.coordination import (

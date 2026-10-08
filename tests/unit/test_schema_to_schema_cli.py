@@ -5,8 +5,6 @@ that the subcommand group is reachable and threads to SchemaToSchemaMigrator,
 without needing a database (the migrator is mocked via the `_migrator` factory).
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner

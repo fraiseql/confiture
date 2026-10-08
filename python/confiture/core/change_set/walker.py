@@ -1,7 +1,5 @@
 """The pglast walk: one handler per statement kind, producing change entries."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING, Any, Final
 
 from confiture.core._pglast_enums import member as _pg_member

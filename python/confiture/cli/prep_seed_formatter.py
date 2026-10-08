@@ -4,8 +4,6 @@ Handles output formatting in text/JSON/CSV formats with rich tables and
 severity-based grouping.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.cli.formatters.common import print_csv, save_csv

@@ -5,8 +5,6 @@ that are irrelevant to function logic, so only genuine body changes trigger
 a drift report.
 """
 
-from __future__ import annotations
-
 import hashlib
 import re
 

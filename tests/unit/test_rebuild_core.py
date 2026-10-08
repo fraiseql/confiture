@@ -1,7 +1,5 @@
 """Tests for the core rebuild logic on Migrator."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

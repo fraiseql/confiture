@@ -6,8 +6,6 @@ is given, and ``migrate preflight`` says the gate is there before anyone runs
 ``up``. Against the local test database.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

@@ -15,8 +15,6 @@ refresh names what moved, before and after, in ``CHANGELOG.md`` under
 ``## [Unreleased]``.
 """
 
-from __future__ import annotations
-
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager

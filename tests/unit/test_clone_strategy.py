@@ -8,8 +8,6 @@ disposable test clone and wrong as a silent default — validated, and refused o
 server that has no ``STRATEGY`` clause.
 """
 
-from __future__ import annotations
-
 import pglast
 import pytest
 from typer.testing import CliRunner

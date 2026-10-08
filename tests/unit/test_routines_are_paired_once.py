@@ -11,8 +11,6 @@ This fails on a pairing helper coming back, or on a module matching two routines
 signatures to each other.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

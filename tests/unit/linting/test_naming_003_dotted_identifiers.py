@@ -6,8 +6,6 @@ all — so a dot inside a name is read as the separator. A dotted name is an
 error, reported once per object, spelled as SQL writes it.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.linting.gate import Threshold

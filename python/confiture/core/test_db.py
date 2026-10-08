@@ -12,8 +12,6 @@ via ``shobj_description`` — so a status check never connects to the template a
 never races a concurrent clone — and are not copied into clones.
 """
 
-from __future__ import annotations
-
 import contextlib
 import hashlib
 import logging

@@ -4,8 +4,6 @@ This module provides the IdempotencyValidator class which scans SQL files
 and strings for non-idempotent patterns.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING

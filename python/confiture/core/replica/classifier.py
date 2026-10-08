@@ -6,8 +6,6 @@ The output carries exactly the attributes the replica-safety matrix needs
 change).
 """
 
-from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from typing import Any

@@ -5,8 +5,6 @@ single check still emits its own payload — the wrapper must *not* appear then,
 or every documented single-check schema breaks at once.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from textwrap import dedent

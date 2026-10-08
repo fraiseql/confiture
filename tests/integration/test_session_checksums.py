@@ -6,8 +6,6 @@ reported as verified. The CLI carried its own copy of the check; the library
 path had none.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

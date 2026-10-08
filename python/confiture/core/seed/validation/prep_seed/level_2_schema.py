@@ -5,8 +5,6 @@ tables of the one schema model (``core/schema_model.py``) the whole tree reads
 into.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 from confiture.core.schema_identity import DEFAULT_SCHEMA

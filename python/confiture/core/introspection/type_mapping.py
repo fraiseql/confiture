@@ -1,7 +1,5 @@
 """Map PostgreSQL types to Python type annotations."""
 
-from __future__ import annotations
-
 from typing import ClassVar
 
 

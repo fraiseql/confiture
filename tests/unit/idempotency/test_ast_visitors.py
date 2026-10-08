@@ -4,8 +4,6 @@ The bugs and limitations issue #122 closed: shapes a text match misread, each
 pinned here against the one parser.
 """
 
-from __future__ import annotations
-
 from confiture.core.idempotency.models import IdempotencyPattern
 from confiture.core.idempotency.patterns import detect_non_idempotent_patterns
 

@@ -10,8 +10,6 @@ The benchmarks help ensure the coordination system performs well
 even with many concurrent agents and large numbers of active intents.
 """
 
-from __future__ import annotations
-
 import time
 
 import pytest

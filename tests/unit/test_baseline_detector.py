@@ -4,8 +4,6 @@ How a database is matched against them is the integration suite's
 (``tests/integration/test_baseline_detection.py``); this pins what is read.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.baseline_detector import BaselineDetector

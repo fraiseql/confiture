@@ -12,8 +12,6 @@ already gives. An explicit `--schemas` still wins, because naming a schema is a
 narrowing a caller may legitimately want.
 """
 
-from __future__ import annotations
-
 from confiture.core.function_signature_drift import schemas_to_scan
 from confiture.core.schema_model import Routine
 from tests._helpers import routine

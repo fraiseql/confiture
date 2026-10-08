@@ -6,8 +6,6 @@ focus is the RAM-tablespace threading and the "never ``pytest.exit()`` in a
 worker" guarantee.
 """
 
-from __future__ import annotations
-
 import ast
 import inspect
 from types import SimpleNamespace

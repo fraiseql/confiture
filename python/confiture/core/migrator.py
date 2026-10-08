@@ -11,8 +11,6 @@ This module holds no patch seams. Tests and embedders inject through
 ``MigratorSession.default_*`` attributes.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any

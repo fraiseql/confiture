@@ -9,8 +9,6 @@ now reads under ``public`` — what a default session sees — and gives a calle
 connection back as it found it.
 """
 
-from __future__ import annotations
-
 import json
 from collections.abc import Callable
 from pathlib import Path

@@ -21,8 +21,6 @@ anything fails too, as in the one-lexer, one-path-matcher and one-canonicaliser
 guards: a reason cannot outlive the thing it explains.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

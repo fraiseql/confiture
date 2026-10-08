@@ -1,7 +1,5 @@
 """Validate ``migrate validate --list-patterns --format json`` output against its schema."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

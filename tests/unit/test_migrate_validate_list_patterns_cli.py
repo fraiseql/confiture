@@ -4,8 +4,6 @@ Read-only catalog flag: no DB connection, no config file, no migrations
 directory. Mutually exclusive with check-mode flags (``--idempotent``).
 """
 
-from __future__ import annotations
-
 import json
 
 from typer.testing import CliRunner

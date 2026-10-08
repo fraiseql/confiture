@@ -1,7 +1,5 @@
 """AST-based import checker for untrusted strategy modules."""
 
-from __future__ import annotations
-
 import ast
 from dataclasses import dataclass
 from pathlib import Path

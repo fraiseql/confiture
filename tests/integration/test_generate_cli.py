@@ -8,8 +8,6 @@ Issue #111 success criterion: this test guards the CLI wiring between
 ``alloc``, ``scaffold``, ``renumber``, and the cross-repo refusal feature.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import sys

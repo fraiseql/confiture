@@ -13,8 +13,6 @@ This pins the two counts together, in text and in JSON, so a refactor that
 reintroduces the wide update fails here rather than in someone's ledger.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

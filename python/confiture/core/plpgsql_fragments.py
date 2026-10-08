@@ -35,8 +35,6 @@ This module is the one walker of a compiled PL/pgSQL tree:
 reads a ``PLpgSQL_expr`` or its ``query``.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from enum import StrEnum

@@ -1,7 +1,5 @@
 """``-- Strategy: <name>`` is read from a comment token, not from a line that starts with ``--``."""
 
-from __future__ import annotations
-
 from confiture.core.strategy import parse_migration_strategy
 
 

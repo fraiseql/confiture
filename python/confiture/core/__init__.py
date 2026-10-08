@@ -6,8 +6,6 @@ dry-run executor, the hook system and the preconditions pulled psycopg into a
 process that only wanted to hold a schema model (``core/schema_model.py``).
 """
 
-from __future__ import annotations
-
 import importlib
 from typing import Any
 

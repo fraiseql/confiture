@@ -12,8 +12,6 @@ artifact's content always matches the ``db/`` source whose hash names it — nev
 a drifted live database.
 """
 
-from __future__ import annotations
-
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path

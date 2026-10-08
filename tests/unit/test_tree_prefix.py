@@ -6,8 +6,6 @@ to two of them and a word to the third, and the base a prefix was
 read in was a property of the filename rather than of the directory.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

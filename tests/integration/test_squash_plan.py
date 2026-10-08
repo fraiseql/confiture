@@ -7,8 +7,6 @@ versions and checksums, the one fact the ledger step compares an environment's
 ledger with.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from pathlib import Path
 

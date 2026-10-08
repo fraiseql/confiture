@@ -3,8 +3,6 @@
 Tests for data models, pattern detection, and validation logic.
 """
 
-from __future__ import annotations
-
 from confiture.core.seed.validation.models import (
     SeedValidationPattern,
     SeedValidationReport,

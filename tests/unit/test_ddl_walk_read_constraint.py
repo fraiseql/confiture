@@ -8,8 +8,6 @@ compare and no second model could use it; now it returns a
 :class:`~confiture.core.schema_model.Constraint` or a :class:`ColumnFact`.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 import pglast

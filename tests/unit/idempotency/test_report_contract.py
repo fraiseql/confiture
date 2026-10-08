@@ -4,8 +4,6 @@ Locks the additive-only serialization contract documented in CHANGELOG so a
 future "let's rename ``scanned_files`` to ``files``" gets caught immediately.
 """
 
-from __future__ import annotations
-
 from confiture.core.idempotency.models import (
     IdempotencyPattern,
     IdempotencyReport,

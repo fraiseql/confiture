@@ -10,8 +10,6 @@ version 1). Two properties matter more than any individual mapping:
   line once promised parity with was removed in 0.50.0.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.change_set import (

@@ -13,8 +13,6 @@ with its own ``pyproject.toml`` anchor). Every statement in them is
 idempotent: the table measures *reach*, not findings.
 """
 
-from __future__ import annotations
-
 import os
 from collections import Counter
 from pathlib import Path

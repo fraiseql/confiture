@@ -9,8 +9,6 @@ All string fields hold post-unquoted, lowercased identifiers — quoting
 is the template's job, not the capturer's.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

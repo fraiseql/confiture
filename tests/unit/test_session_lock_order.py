@@ -8,8 +8,6 @@ ledger's ``initialize()`` — belong inside the lock: whoever holds it plans
 against the ledger as it is at that moment.
 """
 
-from __future__ import annotations
-
 from contextlib import contextmanager
 from pathlib import Path
 from typing import ClassVar

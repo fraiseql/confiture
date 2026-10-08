@@ -14,8 +14,6 @@ day it was introduced. Whether each member is *emitted* is
 lists agreeing.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

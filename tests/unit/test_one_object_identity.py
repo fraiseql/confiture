@@ -45,8 +45,6 @@ constraint keyed by bare name *within one table* is correct and must not be
 flagged, and an AST cannot tell those apart by shape alone.
 """
 
-from __future__ import annotations
-
 import ast
 from functools import cache
 from pathlib import Path

@@ -13,8 +13,6 @@ The detector entry point lives in :mod:`ast_detector`; visitors land in
 later phases.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Any
 

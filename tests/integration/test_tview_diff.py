@@ -10,8 +10,6 @@ pg_tviews is in no stock PostgreSQL: these tests run on the ``pg-tviews`` CI leg
 and skip with the reason elsewhere.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 
 import psycopg

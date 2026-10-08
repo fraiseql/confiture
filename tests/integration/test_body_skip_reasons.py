@@ -12,8 +12,6 @@ Each skips where its precondition is the other one's, so between the two legs
 both are exercised.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

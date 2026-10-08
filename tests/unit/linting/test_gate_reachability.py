@@ -13,8 +13,6 @@ selection; the notice still has work to do for a narrower one, which is what
 these fixtures select.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

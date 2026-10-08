@@ -9,10 +9,8 @@ migration reaches the ledger only when its last ``contract`` stage has
 finished — until then it is pending, and ``migrate steps`` says so.
 """
 
-from __future__ import annotations
-
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -135,7 +133,7 @@ class CheckpointStore:
 
 
 @contextmanager
-def _autocommit(connection: Any) -> Iterator[None]:
+def _autocommit(connection: Any) -> Generator[None]:
     """Each statement in its own transaction: a lock is held no longer than its statement."""
     connection.commit()
     previous = connection.autocommit

@@ -9,8 +9,6 @@ wave through.
 is exactly the state under test: reachable, no migration ledger.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

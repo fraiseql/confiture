@@ -4,8 +4,6 @@ Tests for MigrationGenerator and GeneratedMigration classes.
 These tests do NOT require an actual PostgreSQL database with pgGit installed.
 """
 
-from __future__ import annotations
-
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch

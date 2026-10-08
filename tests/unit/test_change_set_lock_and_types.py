@@ -13,8 +13,6 @@ The static path must be unchanged by all of this: preflight is a filesystem-only
 check by design, and the DB layer is strictly additive.
 """
 
-from __future__ import annotations
-
 import pytest
 
 from confiture.core.change_set import build_change_set, classify_statements

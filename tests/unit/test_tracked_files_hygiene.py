@@ -6,8 +6,6 @@ untracked. ``testpaths`` must name directories that exist, or pytest silently
 collects from fewer places than the configuration promises.
 """
 
-from __future__ import annotations
-
 import subprocess
 import tomllib
 from pathlib import Path

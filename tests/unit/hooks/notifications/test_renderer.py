@@ -4,8 +4,6 @@ Renderer ABC + SlackRenderer + DiscordRenderer +
 TeamsRenderer.  All tests are pure-Python; no network, no DB.
 """
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime
 

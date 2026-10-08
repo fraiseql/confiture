@@ -7,8 +7,6 @@ parallelism (not just a hand-set PYTEST_XDIST_WORKER).
 Requires a reachable local PostgreSQL.
 """
 
-from __future__ import annotations
-
 import os
 import subprocess
 import sys

@@ -1,16 +1,16 @@
 """Data models for Python stub generation from PostgreSQL functions."""
 
-from __future__ import annotations
-
 import dataclasses
 from collections.abc import Sequence
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
+from confiture.models.function_info import FunctionInfo
+from confiture.models.introspection import JSONBKey
+
 if TYPE_CHECKING:
+    # Reason: models are leaves; nothing under confiture.models imports core at run time
     from confiture.core.introspection.type_mapping import TypeMapper
-    from confiture.models.function_info import FunctionInfo
-    from confiture.models.introspection import JSONBKey
 
 
 def _to_pascal_case(name: str) -> str:

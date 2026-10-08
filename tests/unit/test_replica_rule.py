@@ -1,7 +1,5 @@
 """Tests for the Replica001ForwardCompat lint rule (issue #139)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.linting.libraries.replica import Replica001ForwardCompat

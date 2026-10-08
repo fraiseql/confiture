@@ -8,8 +8,6 @@ shape-risk heuristic in
 :mod:`confiture.core.idempotency.patterns` cannot reach.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 from confiture.models.preflight import (

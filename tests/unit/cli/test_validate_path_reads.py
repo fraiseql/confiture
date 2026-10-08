@@ -6,8 +6,6 @@ reads one fails the gate. Migrations outside the git scope (`--since`,
 `--base-ref`, `--staged`) are reported as warnings: they are history.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import subprocess

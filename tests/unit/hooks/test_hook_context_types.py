@@ -6,8 +6,6 @@ correlation id and an aware timestamp, and that ``add_metadata`` writes into the
 payload's ``metadata`` mapping when it has one and is a no-op otherwise.
 """
 
-from __future__ import annotations
-
 from datetime import UTC
 from uuid import UUID, uuid4
 

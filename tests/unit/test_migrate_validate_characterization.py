@@ -11,8 +11,6 @@ and the git "all checks passed" JSON envelope (previously unpinned). They are
 DB-free — every mode exercised here is static.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 import textwrap

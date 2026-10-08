@@ -7,8 +7,6 @@ table cannot point at a tenant's row at all; a tenant table may point at a globa
 one. A table whose tenancy nobody decided is ``tenant_002``'s finding, not judged here.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pglast

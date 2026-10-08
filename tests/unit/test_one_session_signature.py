@@ -35,10 +35,7 @@ entry fails, and an entry naming a verb that no longer delegates fails too, as i
 the one-lexer and one-path-matcher guards.
 """
 
-from __future__ import annotations
-
 import ast
-import inspect
 import re
 from dataclasses import fields
 from pathlib import Path
@@ -49,6 +46,7 @@ from confiture.core._migrator import apply_loop, replay, reporting, rollback_loo
 from confiture.core._migrator.options import UpOptions
 from confiture.core._migrator.session import MigratorSession
 from confiture.core.migrator import Migrator
+from tests._helpers import string_signature
 
 SESSION_PY = Path(confiture.__file__).resolve().parent / "core" / "_migrator" / "session.py"
 
@@ -125,7 +123,7 @@ def _delegate_params(delegate: Any) -> list[str]:
     function the facade calls as ``_apply_loop.up(self, ...)``, ``self`` for an
     engine method the facade calls on a bound instance.
     """
-    return list(inspect.signature(delegate).parameters)[1:]
+    return list(string_signature(delegate).parameters)[1:]
 
 
 def _forwarding(call: ast.Call, delegate_params: list[str]) -> tuple[dict[str, str], set[str]]:
@@ -307,7 +305,7 @@ def test_not_surfaced_entries_still_match() -> None:
 def test_runtime_signature_matches_the_parsed_one() -> None:
     """The AST the guard reads is the class Python imported, not a stale file."""
     for name, fn in _delegating_methods().items():
-        live = list(inspect.signature(getattr(MigratorSession, name)).parameters)
+        live = list(string_signature(getattr(MigratorSession, name)).parameters)
         assert live[1:] == _declared(fn), (
             f"MigratorSession.{name} on disk and in memory disagree — the guard is "
             f"reading a different file from the one under test"

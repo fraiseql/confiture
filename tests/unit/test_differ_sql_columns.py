@@ -11,8 +11,6 @@ Same shape as #316 one kind along: the change carries what the statement needs
 and the generator looked in the wrong field.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 
 import pglast

@@ -8,8 +8,6 @@ reader. This pins the text shapes PostgreSQL produces, with no database, so the
 ``pglast-matrix`` leg can run it on every supported pglast.
 """
 
-from __future__ import annotations
-
 import pglast
 
 from confiture.core.ddl_walk import read_index, written_type

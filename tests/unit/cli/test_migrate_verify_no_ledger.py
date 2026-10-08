@@ -9,8 +9,6 @@ contract's `InvalidConfig` row.  The contract row was widened in the same
 commit as this change.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

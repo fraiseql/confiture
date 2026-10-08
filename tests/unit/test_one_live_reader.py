@@ -13,8 +13,6 @@ that ask a *different* question of the catalog are listed with that question; an
 entry that matches nothing fails, so the list shrinks as readers move.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from pathlib import Path

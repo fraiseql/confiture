@@ -25,8 +25,6 @@ A flag that fails a deploy on `missing_from_db` is unshippable on top of that.
 The de-noising is the work; the flag is the last commit.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

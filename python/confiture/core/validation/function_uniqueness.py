@@ -6,8 +6,6 @@ signature — two files defining the same ``schema.name(args)`` are silently
 shadowed by ``confiture build``, so func_001 catches the duplicate first.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 

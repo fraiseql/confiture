@@ -9,8 +9,6 @@ that model's ``to_dict()``; a test populates every such model and validates it.
 :data:`LIBRARY_SCHEMAS` what the library seam writes, which no command emits alone.
 """
 
-from __future__ import annotations
-
 import filecmp
 import importlib
 import json

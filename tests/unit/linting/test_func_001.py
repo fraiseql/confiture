@@ -14,8 +14,6 @@ is no skip notice, and a file pglast rejects is reported rather than passed
 over.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

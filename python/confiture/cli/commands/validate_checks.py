@@ -11,8 +11,6 @@ The registry order is fixed and deliberate: it decides which error a user sees
 first, and reordering for elegance would change that for no benefit.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING

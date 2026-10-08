@@ -1,7 +1,5 @@
 """Unit tests for the sec_002 security-definer/search_path lint rule (issue #161)."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

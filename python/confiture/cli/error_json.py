@@ -10,8 +10,6 @@ unified inner issue object shared across #144 / #145 / #148:
 The process still exits with the #146 exit code (``ConfiturError.exit_code``).
 """
 
-from __future__ import annotations
-
 import copy
 import functools
 from collections.abc import Callable

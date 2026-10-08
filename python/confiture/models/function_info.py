@@ -1,7 +1,5 @@
 """Data models for PostgreSQL function/procedure introspection."""
 
-from __future__ import annotations
-
 import dataclasses
 from enum import Enum
 

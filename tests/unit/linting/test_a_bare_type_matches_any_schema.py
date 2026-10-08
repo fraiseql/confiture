@@ -13,8 +13,6 @@ both present and disagree: `app.custom_t` and `other.custom_t` are two types,
 and two routines that differ only there are two routines.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

@@ -6,8 +6,6 @@ Every failing result is built here through ``MigratorSession.up``, for the real
 run and for the ``dry_run_execute`` rehearsal both.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

@@ -6,8 +6,6 @@ loads seeds in this order writes the same files on every run, whatever order the
 schema declared its tables in.
 """
 
-from __future__ import annotations
-
 import dataclasses
 import heapq
 from collections.abc import Iterable

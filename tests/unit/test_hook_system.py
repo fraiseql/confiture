@@ -11,8 +11,6 @@ Tests cover:
 - Retry logic with exponential backoff
 """
 
-from __future__ import annotations
-
 import asyncio
 from datetime import datetime
 from uuid import UUID, uuid4

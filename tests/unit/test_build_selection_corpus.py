@@ -14,8 +14,6 @@ differing between the two is a fixture that has rotted into a no-op, and fails
 here.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

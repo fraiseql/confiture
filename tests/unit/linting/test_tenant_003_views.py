@@ -7,8 +7,6 @@ relation it reads, or the key of the table of tenants. What the tracer cannot
 resolve is a finding that says so, never a clean pass.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 from confiture.core.linting.schema_linter import LintConfig, SchemaLinter

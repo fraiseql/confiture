@@ -5,8 +5,6 @@ never the status (#213): ``unverified`` is its own answer, distinct from
 ``checked and clean``.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 
 import pytest

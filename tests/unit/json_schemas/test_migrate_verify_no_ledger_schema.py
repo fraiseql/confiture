@@ -8,8 +8,6 @@ Two payloads must stay contract-valid:
 - the error envelope on the default path, carrying `PRECON_1001`.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch

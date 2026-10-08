@@ -5,8 +5,6 @@ its *own* apply loop — the one that commits. The SAVEPOINT existed only in the
 library session, which the CLI did not call.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import psycopg

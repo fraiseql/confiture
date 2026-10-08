@@ -11,8 +11,6 @@ Reuses ``_resolve_source_sql`` / ``_ssh_override`` from :mod:`signature_drift`
 so the source-resolution and SSH-tunnel behaviour matches ``--check-signatures``.
 """
 
-from __future__ import annotations
-
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any

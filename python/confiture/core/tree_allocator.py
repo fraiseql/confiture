@@ -23,8 +23,6 @@ Example::
     # → Path("db/schema/functions/catalog/manufacturer/03323_create.sql")
 """
 
-from __future__ import annotations
-
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass

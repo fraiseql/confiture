@@ -7,8 +7,6 @@ consumed by both ``drift --check-ownership`` and
 its callers funnel the failure through their ``fail()`` boundary.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import Any
 

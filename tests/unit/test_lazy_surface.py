@@ -7,8 +7,6 @@ confiture``. Two names in the public API meant the same thing (``export_all`` /
 was promised for (0.19.0). This test pins the surface as narrow as the code.
 """
 
-from __future__ import annotations
-
 import json
 import subprocess
 import sys

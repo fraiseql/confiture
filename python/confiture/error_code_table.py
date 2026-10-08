@@ -6,8 +6,6 @@ snapshot and keeps this module free of imports and code. Exit codes follow the
 canonical convention in ``confiture.error_codes.CANONICAL_EXIT_CODES``.
 """
 
-from __future__ import annotations
-
 ERROR_CODE_DEFINITIONS: tuple[dict[str, str | int | None], ...] = (
     # ========== CONFIG (001-099): Configuration errors → exit code 5 ==========
     {

@@ -23,8 +23,6 @@ to become optional again, these sentences would become true and this test would
 stop asking for them.
 """
 
-from __future__ import annotations
-
 import re
 import tomllib
 from pathlib import Path

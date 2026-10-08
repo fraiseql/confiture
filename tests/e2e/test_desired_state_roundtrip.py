@@ -7,8 +7,6 @@ with preflight, apply it, and find nothing left to migrate. Every step here is
 the CLI call the deployer would make, against the local test database.
 """
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

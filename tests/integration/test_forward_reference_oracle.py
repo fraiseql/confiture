@@ -6,8 +6,6 @@ with ``psql``, as a build is applied. A row whose verdict differs from
 PostgreSQL's is a wrong row, and fixing it comes before any rule code.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

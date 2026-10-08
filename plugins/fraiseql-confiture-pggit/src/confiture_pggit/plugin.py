@@ -6,8 +6,6 @@ commands ``confiture`` ships there — every spelling a user typed before the
 extraction still works once this is installed.
 """
 
-from __future__ import annotations
-
 import typer
 
 from confiture.cli.generate import generate_app

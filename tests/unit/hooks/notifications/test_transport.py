@@ -5,8 +5,6 @@ All tests run without a network or process subprocess; HttpTransport is
 exercised against ``pytest-httpserver`` for happy-path / retry tests.
 """
 
-from __future__ import annotations
-
 import io
 import logging
 import socket

@@ -5,8 +5,6 @@ Static check (no database). Verifies every created relation is paired with an
 TO`` on objects the migration didn't create (own_002).
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 

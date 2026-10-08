@@ -9,8 +9,6 @@ This module imports nothing DB-related on purpose; correctness lives here and is
 trivially unit-testable.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 

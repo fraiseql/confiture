@@ -6,8 +6,6 @@ has its own shape, stream and exit code. The one envelope is
 And ``raise SystemExit`` bypasses Typer's exit handling entirely.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

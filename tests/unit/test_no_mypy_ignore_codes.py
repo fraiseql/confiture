@@ -6,8 +6,6 @@ cannot type gets ``# ty: ignore[<ty code>]`` with the code ty prints; the rest g
 a real fix.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path
 

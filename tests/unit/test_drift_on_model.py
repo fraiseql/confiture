@@ -9,8 +9,6 @@ differ in that one fact, beside the pairs that must *not* differ: an unnamed
 foreign key and the name PostgreSQL gave it, ``'x'`` and ``'x'::text``.
 """
 
-from __future__ import annotations
-
 from dataclasses import replace
 from typing import Any
 from unittest.mock import MagicMock

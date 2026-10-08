@@ -6,8 +6,6 @@ transaction and runs in autocommit. Silently doing so under a dry run persisted
 everything tested before it.
 """
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock
 
 import pytest

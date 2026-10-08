@@ -6,8 +6,6 @@ matches ``tb_sample.id = s.fk_origin_id``. The convention ``tb_<role>`` decides 
 when the resolver never reads ``<fk>_id`` at all.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

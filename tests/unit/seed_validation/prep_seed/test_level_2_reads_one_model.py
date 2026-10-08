@@ -7,8 +7,6 @@ of the whole tree once: a file the parser rejects is a finding naming its file
 and line, and a file it cannot read is the seam's error naming it.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

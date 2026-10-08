@@ -12,8 +12,6 @@ checked it: the reporter's audit of one large tree found 36 colliding prefixes,
 carry a prefix; `tree_003` needs two prefixed files in one directory.
 """
 
-from __future__ import annotations
-
 import json
 import os
 from collections.abc import Iterator

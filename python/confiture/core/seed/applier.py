@@ -4,8 +4,6 @@ Provides high-level orchestration for applying seed files either
 sequentially (each in own savepoint) or concatenated (default behavior).
 """
 
-from __future__ import annotations
-
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field

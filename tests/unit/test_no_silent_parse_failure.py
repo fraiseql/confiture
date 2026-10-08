@@ -12,8 +12,6 @@ empty answer *is* the answer (an oracle asked "does this compile?"). An entry
 whose function no longer has such a handler fails too.
 """
 
-from __future__ import annotations
-
 import ast
 from pathlib import Path
 

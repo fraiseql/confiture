@@ -5,8 +5,6 @@ Covers `seed apply --profile`, `build --seed-profile`, and
 unknown-profile exit-5 gate, and that the profile is threaded to the applier.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import patch
 

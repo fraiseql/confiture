@@ -8,8 +8,6 @@ or a ``_`` / ``-`` separator. This recognises ordering-prefixed layouts
 ``build --schema-only`` and the sequential file count all ask here.
 """
 
-from __future__ import annotations
-
 import re
 from pathlib import Path, PurePath
 

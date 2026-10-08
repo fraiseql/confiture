@@ -9,8 +9,6 @@ transaction and savepoints (#64). Only a *top-level* wrapper is a wrapper: the
 scanner of this module's own.
 """
 
-from __future__ import annotations
-
 from confiture.core.sql_lexer import code_text
 
 _WRAPPERS = frozenset({"BEGIN", "COMMIT"})

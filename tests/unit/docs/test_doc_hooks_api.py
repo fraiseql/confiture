@@ -12,8 +12,6 @@ imports resolve and teach real symbols; and the old fictional decorator API can
 never reappear in *any* doc that carries hook snippets.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

@@ -10,8 +10,6 @@ keep each other alive. Public names are out of
 scope here: a consumer may read those, and the orphan census answers for modules.
 """
 
-from __future__ import annotations
-
 import ast
 import re
 from collections import Counter

@@ -21,22 +21,17 @@ Pre-state simulation (Issue #10):
     ...     # Assertions...
 """
 
-from __future__ import annotations
-
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import psycopg
 
 from confiture.core import live_catalog
 from confiture.exceptions import PreStateSimulationError
-
-if TYPE_CHECKING:
-    from confiture.models.migration import Migration
-    from confiture.testing.fixtures.data_validator import DataBaseline, DataValidator
-    from confiture.testing.fixtures.schema_snapshotter import SchemaSnapshotter
+from confiture.models.migration import Migration
+from confiture.testing.fixtures.data_validator import DataBaseline, DataValidator
+from confiture.testing.fixtures.schema_snapshotter import SchemaSnapshotter
 
 
 class MigrationSandbox:
