@@ -8,8 +8,9 @@ check reads the source tree, not a bundle.
 
 The rows come from the one seed reader
 (:func:`~confiture.core.seed.validation.prep_seed.seed_rows.read_seed_statements`:
-``INSERT … VALUES`` from the parse tree, ``COPY`` rows decoded), a role's password
-from ``CREATE``/``ALTER ROLE`` parsed by PostgreSQL's own parser. A comment is not
+``INSERT … VALUES`` from the parse tree, ``COPY`` rows decoded); an assignment from
+``UPDATE … SET`` or ``INSERT … ON CONFLICT DO UPDATE SET``, and a role's password
+from ``CREATE``/``ALTER ROLE``, are read from PostgreSQL's own parse tree (#658). A comment is not
 a statement, so a documented example is never read. A value is reported when it
 sits in a column named for a secret (``sec_001``'s own table), or in a column
 named for a key and it looks like one (long, high-entropy, not a UUID) — and it is
@@ -31,12 +32,14 @@ import pglast
 import pglast.parser
 from pglast import ast
 
+from confiture.core._pglast_enums import member as _pg_member
+from confiture.core.ddl_walk import enum_int
 from confiture.core.parser_info import ascii_shadow
 from confiture.core.schema_identity import contains_words
 from confiture.core.sql_lexer import parse_file, skip_leading_comments
 
 if TYPE_CHECKING:
-    from confiture.core.seed.validation.prep_seed.seed_rows import SeedWrite
+    from confiture.core.seed.validation.prep_seed.seed_rows import SeedWrite, Value
 
 #: The words of a column name that say it holds a credential, and what the
 #: finding calls it — ``sec_001`` flags the column, ``sec_003`` a literal written
@@ -118,6 +121,9 @@ _PLACEHOLDER_WORDS: tuple[tuple[str, ...], ...] = (
     ("xxx",),
     ("not", "a", "secret"),
 )
+_AND_EXPR = _pg_member("BoolExprType", "AND_EXPR")
+_AEXPR_OP = _pg_member("A_Expr_Kind", "AEXPR_OP")
+_ONCONFLICT_UPDATE = _pg_member("OnConflictAction", "ONCONFLICT_UPDATE")
 _UUID = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 
 
@@ -191,6 +197,31 @@ def _plaintext(value: object) -> str | None:
     return value
 
 
+def _names_a_secret(column: str, value: str) -> bool:
+    """Whether naming a row by *column* = *value* could repeat a secret (#463)."""
+    return bool(secret_kind(column) or contains_words(column, _KEY_WORD) or looks_like_a_key(value))
+
+
+def _value_finding(
+    column: str, value: Value, line: int, table: str, label: str
+) -> SecretFinding | None:
+    """The finding for *value* written into *column*, when it is a credential literal."""
+    kind = secret_kind(column)
+    keyed = kind is None and contains_words(column, _KEY_WORD)
+    if kind is None and not keyed:
+        return None
+    text = _plaintext(value)
+    if text is None or (keyed and not looks_like_a_key(text)):
+        return None
+    return SecretFinding(
+        line=line,
+        subject=f"{table}.{column}[{label}]",
+        kind=kind or "key",
+        length=len(text),
+        personal=kind is not None and is_personal(kind),
+    )
+
+
 def _row_label(columns: tuple[str, ...], values: tuple[Any, ...], secret: int, number: int) -> str:
     """The row, named by its first other literal column — a key, typically.
 
@@ -200,7 +231,7 @@ def _row_label(columns: tuple[str, ...], values: tuple[Any, ...], secret: int, n
     for index, (column, value) in enumerate(zip(columns, values, strict=False)):
         if index == secret or not isinstance(value, str) or not value:
             continue
-        if secret_kind(column) or contains_words(column, _KEY_WORD) or looks_like_a_key(value):
+        if _names_a_secret(column, value):
             continue
         return f"{column}={value}"
     return f"row {number}"
@@ -213,55 +244,114 @@ def _write_findings(
     if not columns:
         return
     for index, column in enumerate(columns):
-        kind = secret_kind(column)
-        keyed = kind is None and contains_words(column, _KEY_WORD)
-        if kind is None and not keyed:
-            continue
         for row in write.rows:
             if index >= len(row.values):
                 continue
-            value = _plaintext(row.values[index])
-            if value is None or (keyed and not looks_like_a_key(value)):
-                continue
             label = _row_label(columns, row.values, index, row.number)
-            yield SecretFinding(
-                line=row.line,
-                subject=f"{write.qualified}.{column}[{label}]",
-                kind=kind or "key",
-                length=len(value),
-                personal=kind is not None and is_personal(kind),
-            )
+            found = _value_finding(column, row.values[index], row.line, write.qualified, label)
+            if found is not None:
+                yield found
 
 
-def _role_findings(sql: str) -> Iterator[SecretFinding]:
-    """``CREATE``/``ALTER ROLE … PASSWORD '<literal>'`` — the shadow keeps offsets honest."""
+def _conjuncts(node: Any) -> Iterator[Any]:
+    """The terms of a ``WHERE``'s top-level ``AND``, nested ``AND`` flattened."""
+    if isinstance(node, ast.BoolExpr) and enum_int(node.boolop) == _AND_EXPR:
+        for arg in node.args or ():
+            yield from _conjuncts(arg)
+    elif node is not None:
+        yield node
+
+
+def _where_key(where: Any, constant: Callable[[Any], Value]) -> str | None:
+    """``column=value`` from the first ``column = constant`` conjunct that names no secret."""
+    for term in _conjuncts(where):
+        if (
+            not isinstance(term, ast.A_Expr)
+            or enum_int(term.kind) != _AEXPR_OP
+            or [n.sval for n in term.name or ()] != ["="]
+        ):
+            continue
+        for ref, other in ((term.lexpr, term.rexpr), (term.rexpr, term.lexpr)):
+            if not isinstance(ref, ast.ColumnRef) or not isinstance(ref.fields[-1], ast.String):
+                continue
+            value = constant(other)
+            column = ref.fields[-1].sval
+            if isinstance(value, str) and value and not _names_a_secret(column, value):
+                return f"{column}={value}"
+    return None
+
+
+def _assigned(target: Any) -> Any:
+    """The expression a ``SET`` target receives, ``SET (a, b) = (…)`` read per column."""
+    val = target.val
+    if isinstance(val, ast.MultiAssignRef):
+        source = val.source
+        if isinstance(source, ast.RowExpr) and val.colno <= len(source.args or ()):
+            return source.args[val.colno - 1]
+        return source
+    return val
+
+
+def _assignments(stmt: Any) -> tuple[Any, tuple[Any, ...], Any] | None:
+    """The table, ``SET`` targets and ``WHERE`` of an ``UPDATE`` or ``ON CONFLICT DO UPDATE``."""
+    if isinstance(stmt, ast.UpdateStmt):
+        return stmt.relation, tuple(stmt.targetList or ()), stmt.whereClause
+    conflict = stmt.onConflictClause if isinstance(stmt, ast.InsertStmt) else None
+    if conflict is not None and enum_int(conflict.action) == _ONCONFLICT_UPDATE:
+        return stmt.relation, tuple(conflict.targetList or ()), conflict.whereClause
+    return None
+
+
+def _assignment_findings(
+    stmt: Any, line: int, constant: Callable[[Any], Value]
+) -> Iterator[SecretFinding]:
+    """A credential literal a ``SET`` writes, the row named by its ``WHERE`` key or its line."""
+    read = _assignments(stmt)
+    if read is None:
+        return
+    relation, targets, where = read
+    table = f"{relation.schemaname}.{relation.relname}" if relation.schemaname else relation.relname
+    label = _where_key(where, constant) or f"line {line}"
+    for target in targets:
+        found = _value_finding(target.name, constant(_assigned(target)), line, table, label)
+        if found is not None:
+            yield found
+
+
+def _role_finding(stmt: Any, line: int) -> SecretFinding | None:
+    """``CREATE``/``ALTER ROLE … PASSWORD '<literal>'``."""
+    if not isinstance(stmt, ast.CreateRoleStmt | ast.AlterRoleStmt):
+        return None
+    for option in stmt.options or ():
+        if option.defname != "password" or option.arg is None:
+            continue
+        value = _plaintext(getattr(option.arg, "sval", None))
+        if value is None:
+            continue
+        if isinstance(stmt, ast.CreateRoleStmt):
+            role = stmt.role
+        else:
+            role = stmt.role.rolename if stmt.role is not None else "?"
+        return SecretFinding(line=line, subject=f"role {role}", kind="password", length=len(value))
+    return None
+
+
+def _statement_findings(sql: str, constant: Callable[[Any], Value]) -> Iterator[SecretFinding]:
+    """What a statement's parse tree writes: ``SET`` assignments and role passwords.
+
+    The shadow keeps offsets honest.
+    """
     shadow = ascii_shadow(sql)
     try:
         raws = parse_file(shadow).statements
     except pglast.parser.ParseError:
         return
     for raw in raws or ():
-        stmt = raw.stmt
-        if not isinstance(stmt, ast.CreateRoleStmt | ast.AlterRoleStmt):
-            continue
-        for option in stmt.options or ():
-            if option.defname != "password" or option.arg is None:
-                continue
-            literal = getattr(option.arg, "sval", None)
-            value = _plaintext(literal)
-            if value is None:
-                continue
-            if isinstance(stmt, ast.CreateRoleStmt):
-                role = stmt.role
-            else:
-                role = stmt.role.rolename if stmt.role is not None else "?"
-            start = skip_leading_comments(shadow, raw.stmt_location)
-            yield SecretFinding(
-                line=shadow.count("\n", 0, start) + 1,
-                subject=f"role {role}",
-                kind="password",
-                length=len(value),
-            )
+        line = shadow.count("\n", 0, skip_leading_comments(shadow, raw.stmt_location)) + 1
+        yield from _assignment_findings(raw.stmt, line, constant)
+        role = _role_finding(raw.stmt, line)
+        if role is not None:
+            yield role
 
 
 def findings_in(
@@ -281,6 +371,7 @@ def findings_in(
     # Reason: import cycle (the prep_seed package imports schema_sources → ddl_objects → linting.duplicates → the linter that imports this module)
     from confiture.core.seed.validation.prep_seed.seed_rows import (
         SeedParseError,
+        constant,
         read_seed_statements,
     )
 
@@ -289,5 +380,5 @@ def findings_in(
     except SeedParseError:
         return []
     found = [f for write in statements.writes for f in _write_findings(write, table_columns)]
-    found.extend(_role_findings(sql))
+    found.extend(_statement_findings(sql, constant))
     return sorted(found, key=lambda f: (f.line, f.subject))

@@ -68,6 +68,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   key; a key left with no nullable column is not reported, and one excluded in part names
   only the columns that can still be `NULL` there.
 
+- **`sec_003` reads a credential assigned by `UPDATE … SET` and `ON CONFLICT DO UPDATE
+  SET`** (#658). The rule read `INSERT … VALUES` and `COPY` rows only, so a seed that
+  inserted a row and set its password in a second statement passed. An assignment's
+  literal is now read from the parse tree, with the same placeholder and hash exemptions
+  and the same `key`-column entropy test; the row is named by its `WHERE` key
+  (`app.tb_mailbox.smtp_password[pk_mailbox=1]`) or, when there is none, by the
+  statement's line (`[line 12]`). A `WHERE` key that names a secret never labels the row.
+
 - **A create on a name another kind already holds is the no-op, or the failure, PostgreSQL
   makes it** (#648). A schema's relation names are one namespace across tables, views,
   materialized views, sequences, indexes and composite types, and a row-typed relation also
