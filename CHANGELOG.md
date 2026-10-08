@@ -61,6 +61,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`) at the start of a line in any tracked text
   file; an `=` underline longer than seven characters is a heading, not a marker.
 
+- **`softdel_002` no longer reports a key column the index predicate tests `IS NOT
+  NULL`** (#665). A row holding `NULL` there is never in the index, so `NULLS NOT
+  DISTINCT` changes nothing and the suggested rewrite was a no-op. A column that a
+  top-level `AND` conjunct of the predicate tests `IS NOT NULL` is not nullable inside the
+  key; a key left with no nullable column is not reported, and one excluded in part names
+  only the columns that can still be `NULL` there.
+
 - **A create on a name another kind already holds is the no-op, or the failure, PostgreSQL
   makes it** (#648). A schema's relation names are one namespace across tables, views,
   materialized views, sequences, indexes and composite types, and a row-typed relation also

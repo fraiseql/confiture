@@ -1104,6 +1104,11 @@ recorded must not collide on `(fk_org, mac_address)` — is waived with
 `softdel-keep-reserved` is (above a `CREATE TABLE`, it names the key). Each
 directive waives its own rule only.
 
+A column the predicate tests `IS NOT NULL` in a top-level `AND` conjunct is not
+nullable inside the key: a row holding `NULL` there is never in the index, so
+`(fk_org, mac_address) WHERE mac_address IS NOT NULL AND deleted_at IS NULL` is
+not reported.
+
 The flag is read from the statement that writes the key. The schema model does
 not hold it, so `confiture drift` and `migrate diff` do not see it change (tracked
 in #623).

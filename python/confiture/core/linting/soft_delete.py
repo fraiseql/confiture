@@ -23,8 +23,9 @@ Exempt:
 ``softdel_002`` reports such a key — partial or not — that covers a nullable column
 and does not say ``NULLS NOT DISTINCT``: two rows holding ``NULL`` there never
 collide, so when ``NULL`` is a real value of the scope (a tree's root has no
-parent) two roots may share a name. The flag is read from the key's statement, not
-from the schema model, which does not hold it.
+parent) two roots may share a name. A column a top-level ``AND`` conjunct of the
+predicate tests ``IS NOT NULL`` is not nullable inside the key. The flag is read from
+the key's statement, not from the schema model, which does not hold it.
 
 A value that must stay reserved after its row is deleted is waived with
 ``-- confiture:softdel-keep-reserved`` on the line above the statement that writes
@@ -77,6 +78,7 @@ _WAIVERS = (KEEP_RESERVED, NULLS_DISTINCT)
 
 _AND_EXPR = _pg_member("BoolExprType", "AND_EXPR")
 _IS_NULL = _pg_member("NullTestType", "IS_NULL")
+_IS_NOT_NULL = _pg_member("NullTestType", "IS_NOT_NULL")
 
 
 @dataclass(frozen=True)
@@ -373,9 +375,9 @@ def _conjuncts(node: Any) -> Iterator[Any]:
         yield node
 
 
-def _is_null_test_on(node: Any, column: str) -> bool:
-    """Whether *node* is ``<column> IS NULL``, the column qualified or not."""
-    if type(node).__name__ != "NullTest" or enum_int(node.nulltesttype) != _IS_NULL:
+def _is_null_test_on(node: Any, column: str, test: int = _IS_NULL) -> bool:
+    """Whether *node* is ``<column> IS NULL`` (or *test*), the column qualified or not."""
+    if type(node).__name__ != "NullTest" or enum_int(node.nulltesttype) != test:
         return False
     arg = node.arg
     if type(arg).__name__ != "ColumnRef" or not arg.fields:
@@ -384,11 +386,16 @@ def _is_null_test_on(node: Any, column: str) -> bool:
     return type(last).__name__ == "String" and last.sval == column
 
 
+def _implies(key: WrittenKey, column: str, test: int) -> bool:
+    """Whether a top-level conjunct of the key's predicate is ``<column>`` *test*."""
+    return key.predicate is not None and any(
+        _is_null_test_on(term, column, test) for term in _conjuncts(key.predicate)
+    )
+
+
 def excludes_tombstones(key: WrittenKey, column: str) -> bool:
     """Whether the key's predicate implies ``<column> IS NULL``."""
-    return key.predicate is not None and any(
-        _is_null_test_on(term, column) for term in _conjuncts(key.predicate)
-    )
+    return _implies(key, column, _IS_NULL)
 
 
 def _no_author_chooses(key: WrittenKey) -> bool:
@@ -485,11 +492,18 @@ def reserved_key_findings(
 
 
 def _nullable(key: WrittenKey, column: str) -> list[str]:
-    """The key's columns, the tombstone aside, that may hold ``NULL``."""
+    """The key's columns, the tombstone aside, that may hold ``NULL`` inside the key.
+
+    A column the predicate implies ``IS NOT NULL`` may be ``NULL`` in the table, but a
+    row holding ``NULL`` there is never in the index (#665).
+    """
     return [
         name
         for name in key.columns
-        if name != column and (held := key.column(name)) is not None and not held.not_null
+        if name != column
+        and (held := key.column(name)) is not None
+        and not held.not_null
+        and not _implies(key, name, _IS_NOT_NULL)
     ]
 
 
