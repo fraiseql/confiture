@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Translation tables: their shape, and what they miss** (#657). `db/project.yaml` takes a
+  `translations:` block (`tables` globs, `locale_table`, `locale_column`, `locale_fk`, and
+  `required` locales or a `required_query`). **`i18n_001`** (warning, on when the block is
+  declared) checks each translation table: it references the locale table, translates one
+  entity (the foreign key whose columns, with the locale's, form a unique key), holds one
+  row per entity and locale — among live rows when it soft-deletes — and references an
+  entity table the tree creates. **`confiture check translations`** (a new `check` group)
+  counts on a live database, per table and required locale, the live entity rows with no
+  live translation and names the first keys
+  (`tl_category: fr-FR 3 missing (e.g. 3, 4, 5)`); `--fail-on missing` exits 1 on a gap and
+  2 when a table could not be counted, `--format json` writes
+  `check-translations.schema.json`. No new exit code.
 - **Lint: what a stored projection reads of the session** (#656). A pg_tviews TVIEW's rows
   are computed in the session that writes a base row, so whatever its definition reads of
   the session is the writer's, stored for every reader. For each TVIEW (both spellings)

@@ -25,7 +25,7 @@ def _live_drift_help() -> str:
 def _codes(text: str) -> set[str]:
     """Every rule code a paragraph names, ranges (``doc_001–doc_004``) expanded."""
     found: set[str] = set()
-    for first, last in re.findall(r"\b([a-z]+_\d{3})(?:–([a-z]+_\d{3}))?", text):
+    for first, last in re.findall(r"\b([a-z][a-z0-9]*_\d{3})(?:–([a-z][a-z0-9]*_\d{3}))?", text):
         if not last:
             found.add(first)
             continue

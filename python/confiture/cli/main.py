@@ -20,6 +20,7 @@ from confiture.cli.commands.admin import (
 from confiture.cli.commands.apply_as import migrate_apply_as
 from confiture.cli.commands.bootstrap import bootstrap
 from confiture.cli.commands.build import build
+from confiture.cli.commands.check import check_app
 from confiture.cli.commands.debug import debug_app
 from confiture.cli.commands.diff import schema_diff
 from confiture.cli.commands.drift import drift
@@ -120,6 +121,9 @@ app.add_typer(hooks_app, name="hooks")
 
 # Add schema subcommand group (the schema model itself)
 app.add_typer(schema_app, name="schema")
+
+# Add check subcommand group (questions a live database answers about its data)
+app.add_typer(check_app, name="check")
 
 
 def version_callback(value: bool) -> None:

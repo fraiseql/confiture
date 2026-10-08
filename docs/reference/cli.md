@@ -3939,3 +3939,33 @@ confiture validate-profile [OPTIONS] {path}
 
 <!-- END GENERATED: cli confiture validate-profile -->
 
+## `confiture check`
+
+Check what a live database holds: its data, not its schema
+
+### `confiture check translations`
+
+Count the entity rows each required locale has no translation for.
+
+<!-- BEGIN GENERATED: cli confiture check translations -->
+
+**Usage**
+
+```bash
+confiture check translations [OPTIONS]
+```
+
+**Options**
+
+| Option | Short | Type | Default | Description |
+|---|---|---|---|---|
+| `--env` | `-e` | str | `local` | Environment name: reads db/environments/<name>.yaml (default: local) |
+| `--database-url` | `-d` | str | - | The database whose rows are counted |
+| `--project-dir` | - | path | `.` | Project directory (default: current directory) |
+| `--fail-on` | - | str | `never` | missing: exit 1 when a required locale misses a row, 2 when a translation table could not be counted; never: report only (default) |
+| `--sample` | - | int range | `3` | How many missing entity keys to name per locale |
+| `--format` | `-f` | str | `text` | Output format: text or json (default: text) |
+| `--output` | `-o` | path | - | Write the output to this file instead of stdout |
+
+<!-- END GENERATED: cli confiture check translations -->
+

@@ -40,6 +40,7 @@ Adopt a rule on a schema that already trips it with a
 | `softdel_001` | softdel | warning | with `soft_delete:` | A unique key on a soft-deleting table excludes deleted rows |
 | `softdel_002` | softdel | info | with `soft_delete:` | A nullable column in such a key is NULLS NOT DISTINCT |
 | `softdel_003` | softdel | warning | with `soft_delete:` | A view tests the tombstone of every soft-deleting table it reads |
+| `i18n_001` | i18n | warning | with `translations:` | A translation table references its locale and one entity, one row per locale |
 | `tview_001` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT |
 | `tview_002` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
 | `tview_003` | tview | error | on | A TVIEW's definition reads session state: a setting or the session's identity |
@@ -973,6 +974,30 @@ them can adopt the family with a `--baseline`, or with
 `--ignore tenant_003,tenant_004,tenant_005` until its views and keys are rebuilt;
 the [guide](../guides/multi-tenant-schemas.md#moving-an-existing-schema) walks the
 migration step by step.
+
+## `i18n_001` — a translation table has the shape a coverage check can count
+
+On when `db/project.yaml` declares `translations:`. A project that translates
+reference data keeps one translation table per translated entity —
+`tl_category (fk_category, fk_locale, label)` beside `tb_category` and a locale table —
+and names them:
+
+```yaml
+translations:
+  tables: 'tl_*'               # globs: 'tl_*' in any schema, 'catalog.tl_*' in one
+  locale_table: public.tb_locale
+  locale_column: code          # the column holding a locale's code (default: code)
+  locale_fk: fk_locale         # default: fk_locale
+  required: [en-US, fr-FR]     # the locales every entity must be translated in
+```
+
+Each table a glob names must carry `locale_fk` and reference the locale table with
+it; translate **one** entity — the foreign key whose columns, with `locale_fk`, form a
+unique key (an audit key such as `fk_created_by` is not an entity); hold one row per
+entity and locale, among live rows when the table soft-deletes (`soft_delete:`), which
+takes a unique index whose `WHERE` excludes the tombstone; and reference an entity
+table the tree creates. A glob that matches no table, and a locale table the tree does
+not create, are findings too.
 
 ## The `softdel` family — unique keys on a table that soft-deletes
 

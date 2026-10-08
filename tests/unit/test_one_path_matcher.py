@@ -42,6 +42,9 @@ ALLOWED: dict[str, str] = {
     "core/linting/libraries/ownership.py": (
         "the `own_001` ownership expectation is scoped by relation name"
     ),
+    "core/linting/translations.py": (
+        "`translations.tables` names translation tables by `schema.name` or bare name"
+    ),
     "core/linting/libraries/security_definer.py": (
         "`security_lint.apply_to`/`ignore` scope `sec_002` by schema and routine name"
     ),

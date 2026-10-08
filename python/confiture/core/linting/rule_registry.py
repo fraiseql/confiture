@@ -365,6 +365,14 @@ LINT_RULES: tuple[LintRule, ...] = (
         enabled_by="soft_delete",
     ),
     LintRule(
+        code="i18n_001",
+        family="i18n",
+        title="A translation table references its locale and one entity, one row per locale",
+        severity="warning",
+        default_on=False,
+        enabled_by="translations",
+    ),
+    LintRule(
         code="tview_001",
         family="tview",
         title="No index over data or updated_at on a TVIEW: it blocks HOT",

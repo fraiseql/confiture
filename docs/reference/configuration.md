@@ -795,6 +795,7 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 | `tenancy` | [TenancyConfig](#tenancyconfig) \| NoneType | - | Declares the project tenant-scoped; absent, no tenant rule runs. |
 | `soft_delete` | [SoftDeleteConfig](#softdeleteconfig) \| NoneType | - | Declares the tombstone column of the tables that soft-delete; absent, no ``softdel`` rule runs. |
 | `squash` | [SquashConfig](#squashconfig) \| NoneType | - | What ``migrate squash`` checks before it cuts; absent, its defaults. |
+| `translations` | [TranslationsConfig](#translationsconfig) \| NoneType | - | Declares the translation tables; absent, no ``i18n`` rule runs. |
 
 #### `TenancyConfig`
 
@@ -818,6 +819,17 @@ Generated from `confiture.config.environment` and `confiture.config.project`; th
 |---|---|---|---|
 | `min_age_days` | int | `90` | The cut must have been applied at least this many days ago in every environment the squash asks: a restore from a backup taken before that replays the history the baseline replaced. With no environment asked, the age of a timestamp version is its own date. |
 | `skip_environments` | list[str] | `[]` | ``db/environments/<name>.yaml`` files the squash does not connect to, because they cannot be reached from where it runs. Each is named in its output; ``migrate up`` still refuses a baseline there when the ledger holds part of its history. |
+
+#### `TranslationsConfig`
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `tables` | list[str] | **required** | The translation tables, as globs over table names: ``tl_*`` matches a name in any schema, ``catalog.tl_*`` one in ``catalog``. One glob, or a list. |
+| `locale_fk` | str | `fk_locale` | The column of each translation table that references the locale. |
+| `locale_table` | str | **required** | The table of locales, ``schema.table`` or a bare name. |
+| `locale_column` | str | `code` | The column of *locale_table* that holds a locale's code (``en-US``), which *required* names. |
+| `required` | list[str] | `[]` | The locale codes every entity row must have a translation in. |
+| `required_query` | str \| NoneType | - | A query returning those codes, one text column, run by the live check instead of *required* (the two are exclusive). It is the project's own SQL, run as written. |
 
 ### Complete skeleton (every field at its default)
 
@@ -973,6 +985,13 @@ soft_delete:
 squash:
   min_age_days: 90
   skip_environments: []
+translations:
+  tables: null
+  locale_fk: fk_locale
+  locale_table: null
+  locale_column: code
+  required: []
+  required_query: null
 ```
 
 <!-- END GENERATED: config-fields -->

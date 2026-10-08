@@ -1,0 +1,48 @@
+{
+  "locales": [
+    "en-US",
+    "fr-FR",
+    "de-DE"
+  ],
+  "missing": 8,
+  "tables": [
+    {
+      "table": "tl_category",
+      "locales": [
+        {
+          "locale": "en-US",
+          "missing": 0,
+          "sample": []
+        },
+        {
+          "locale": "fr-FR",
+          "missing": 3,
+          "sample": [
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "locale": "de-DE",
+          "missing": 5,
+          "sample": [
+            "1",
+            "2",
+            "3"
+          ]
+        }
+      ]
+    }
+  ],
+  "unknown_locales": [
+    "de-DE"
+  ],
+  "not_counted": [],
+  "ok": true,
+  "command": "check translations",
+  "parser": {
+    "pglast": "8.4",
+    "pg_major": 18
+  }
+}

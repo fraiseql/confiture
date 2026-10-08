@@ -548,7 +548,7 @@ confiture/
 │   │   ├── seed_copy.py          # ``confiture seed convert``: the COPY-format tool
 │   │   ├── sync.py               # ``confiture sync`` — Medium 3 (Production Data Sync) CLI
 │   │   ├── test_db.py            # ``confiture test-db``: provision isolated template/clone test databases
-│   │   ├── commands/             # CLI command modules for Confiture (36 modules)
+│   │   ├── commands/             # CLI command modules for Confiture (37 modules)
 │   │   └── formatters/           # (8 modules)
 │   ├── config/                   # Configuration module for Confiture
 │   │   ├── __init__.py           # Configuration module for Confiture
@@ -644,6 +644,7 @@ confiture/
 │   │   ├── syncer.py             # Production data synchronization
 │   │   ├── temp_database.py      # Temporary database lifecycle and pg_dump wrapper
 │   │   ├── test_db.py            # Test-database provisioning primitive (CI-path)
+│   │   ├── translations.py       # Which entity rows have no translation in a required locale, counted liv…
 │   │   ├── tree_allocator.py     # SQL function tree file allocation
 │   │   ├── tree_prefix.py        # What a numbered filename's prefix is, and where the file it names sorts
 │   │   ├── tree_renumber.py      # SQL function tree renumber — safe file-move with cross-reference rewrit…
@@ -658,7 +659,7 @@ confiture/
 │   │   ├── hooks/                # Enhanced Hook System (18 modules)
 │   │   ├── idempotency/          # Idempotency validation for SQL migrations (20 modules)
 │   │   ├── introspection/        # Introspection layer for PostgreSQL schemas, functions, and dependencies (5 modules)
-│   │   ├── linting/              # Rule Library System (43 modules)
+│   │   ├── linting/              # Rule Library System (44 modules)
 │   │   ├── replica/              # Replica-aware forward-compatibility analysis (issue #139) (3 modules)
 │   │   ├── scaffold/             # Scaffold package — pluggable SQL function file generation (4 modules)
 │   │   ├── seed/                 # Seed data management and optimization (28 modules)

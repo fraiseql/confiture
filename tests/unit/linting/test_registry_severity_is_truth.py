@@ -180,6 +180,15 @@ FIXTURES: dict[str, Fixture] = {
         {"010.sql": "CREATE TABLE tb_user (id INT PRIMARY KEY, tenant_id INT NOT NULL);\n"},
         extra_files={"db/project.yaml": "tenancy: {}\n"},
     ),
+    "i18n_001": Fixture(
+        {
+            "010.sql": "CREATE TABLE tb_locale (pk_locale INT PRIMARY KEY, code TEXT UNIQUE);\n"
+            "CREATE TABLE tl_thing (pk_tl_thing INT PRIMARY KEY, label TEXT);\n"
+        },
+        extra_files={
+            "db/project.yaml": "translations:\n  tables: 'tl_*'\n  locale_table: tb_locale\n"
+        },
+    ),
     "softdel_001": Fixture(
         {
             "010.sql": "CREATE TABLE tb_user (id INT PRIMARY KEY, email TEXT NOT NULL UNIQUE,\n"

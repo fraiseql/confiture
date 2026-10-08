@@ -69,6 +69,7 @@ MODEL_SCHEMAS: dict[str, str] = {
 # Payloads a command assembles from several sources; validated by the CLI tests.
 CLI_BUILT_SCHEMAS: tuple[str, ...] = (
     "bootstrap.schema.json",
+    "check-translations.schema.json",
     "build-list-files.schema.json",
     "build-list-files-compare.schema.json",
     "drift-check-acls.schema.json",

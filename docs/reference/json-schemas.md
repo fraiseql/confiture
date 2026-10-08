@@ -126,6 +126,10 @@ attribute names are scheduled to follow them at 1.0.0.
 
 [validate-config.schema.json](./json-schemas/validate-config.schema.json) — `{valid, config_source, migrations_path, migration_count, issues[]}` for offline config + migrations-tree validation (#144). **Never connects to a database.** Each `issues[]` element is the shared [issue object](./json-schemas/issue-object.schema.json). Invalid config exits 5.
 
+### `confiture check translations --format json`
+
+[check-translations.schema.json](./json-schemas/check-translations.schema.json) — `{locales[], missing, tables[], unknown_locales[], not_counted[]}`: per translation table `db/project.yaml` declares, each required locale's `{locale, missing, sample[]}` — the live entity rows with no live translation, and the first few keys. A table `i18n_001` refuses is named in `not_counted`, never counted; a required locale the locale table lacks is in `unknown_locales`. An unreachable database emits the [error envelope](./json-schemas/error-envelope.schema.json) (exit 3).
+
 ### `confiture validate-profile <path> --format json`
 
 [validate-profile.schema.json](./json-schemas/validate-profile.schema.json) — `{valid, path, name, version, has_global_seed, strategies{}, tables{}}` for an anonymization profile that validated: each strategy's `{type, seed_env_var}` and each table's rules `{column, strategy, has_seed}`. A seed is never written, only whether one is set. An invalid profile emits the [error envelope](./json-schemas/error-envelope.schema.json) (`ANON_1400`).
