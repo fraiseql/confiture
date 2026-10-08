@@ -9,9 +9,16 @@ is, ``CONFIG_001`` (#468).
 """
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from confiture.config.environment import _read_config_yaml
 from confiture.core import sql_lexer
@@ -105,6 +112,76 @@ class SoftDeleteConfig(BaseModel):
         return value
 
 
+class TranslationsConfig(BaseModel):
+    """The project translates reference data: one table per translated entity (#657).
+
+    Declaring it turns ``i18n_001`` on for every run, and gives the live coverage
+    check (:mod:`confiture.core.translations`) its tables and locales.
+
+    Attributes:
+        tables: The translation tables, as globs over table names: ``tl_*`` matches
+            a name in any schema, ``catalog.tl_*`` one in ``catalog``. One glob, or
+            a list.
+        locale_fk: The column of each translation table that references the locale.
+        locale_table: The table of locales, ``schema.table`` or a bare name.
+        locale_column: The column of *locale_table* that holds a locale's code
+            (``en-US``), which *required* names.
+        required: The locale codes every entity row must have a translation in.
+        required_query: A query returning those codes, one text column, run by the
+            live check instead of *required* (the two are exclusive). It is the
+            project's own SQL, run as written.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tables: list[str] = Field(min_length=1)
+    locale_fk: str = "fk_locale"
+    locale_table: str
+    locale_column: str = "code"
+    required: list[str] = []
+    required_query: str | None = None
+
+    @field_validator("tables", mode="before")
+    @classmethod
+    def _one_glob_is_a_list(cls, value: object) -> object:
+        return [value] if isinstance(value, str) else value
+
+    @field_validator("tables")
+    @classmethod
+    def _globs_are_names(cls, value: list[str]) -> list[str]:
+        for glob in value:
+            if not glob.strip() or glob.count(".") > 1:
+                raise ValueError(
+                    f"translations.tables holds globs over schema.table or table, got {glob!r}"
+                )
+        return value
+
+    @field_validator("locale_table")
+    @classmethod
+    def _locale_table_is_a_name(cls, value: str) -> str:
+        if len(sql_lexer.name_parts(value) or ()) not in (1, 2):
+            raise ValueError(
+                f"translations.locale_table names a table as schema.table or table, got {value!r}"
+            )
+        return value
+
+    @field_validator("locale_fk", "locale_column")
+    @classmethod
+    def _column_is_a_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("a translations column must be named, got an empty name")
+        return value
+
+    @model_validator(mode="after")
+    def _one_source_of_locales(self) -> Self:
+        if self.required and self.required_query is not None:
+            raise ValueError(
+                "translations.required_query and translations.required are exclusive: "
+                "name the locales, or the query that returns them"
+            )
+        return self
+
+
 class SquashConfig(BaseModel):
     """How far back ``migrate squash`` may cut, and which environments it asks first.
 
@@ -133,6 +210,7 @@ class ProjectConfig(BaseModel):
         soft_delete: Declares the tombstone column of the tables that soft-delete;
             absent, no ``softdel`` rule runs.
         squash: What ``migrate squash`` checks before it cuts; absent, its defaults.
+        translations: Declares the translation tables; absent, no ``i18n`` rule runs.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -140,6 +218,7 @@ class ProjectConfig(BaseModel):
     tenancy: TenancyConfig | None = None
     soft_delete: SoftDeleteConfig | None = None
     squash: SquashConfig | None = None
+    translations: TranslationsConfig | None = None
 
     def declared_blocks(self) -> frozenset[str]:
         """The blocks this file declares — what ``LintRule.enabled_by`` names."""

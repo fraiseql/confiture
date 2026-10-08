@@ -204,6 +204,7 @@ class LintConfig:
         check_softdel_reserved_keys: bool = False,
         check_softdel_null_keys: bool = False,
         check_softdel_views: bool = False,
+        check_translations: bool = False,
         check_tview_hot: bool = False,
         check_tview_replicas: bool = False,
         has_replicas: bool = False,
@@ -257,6 +258,8 @@ class LintConfig:
                 ``NULLS NOT DISTINCT`` (``softdel_002``).
             check_softdel_views: Every read of a soft-deleting table in a view tests
                 its tombstone column (``softdel_003``).
+            check_translations: ``i18n_001``: each translation table ``translations:``
+                names references its locale and one entity, one row per locale (#657).
             check_tview_hot: No index over ``data`` or ``updated_at`` on a pg_tviews
                 TVIEW (``tview_001``).
             check_tview_replicas: A TVIEW is made LOGGED where replicas are
@@ -314,6 +317,7 @@ class LintConfig:
         self.check_softdel_reserved_keys = check_softdel_reserved_keys
         self.check_softdel_null_keys = check_softdel_null_keys
         self.check_softdel_views = check_softdel_views
+        self.check_translations = check_translations
         self.check_tview_hot = check_tview_hot
         self.check_tview_replicas = check_tview_replicas
         self.has_replicas = has_replicas
@@ -509,6 +513,7 @@ class SchemaLinter:
                 partial(self._check_soft_delete, "softdel_003"),
                 "softdel",
             ),
+            (self.config.check_translations, self._check_translations, "i18n"),
             (self.config.check_tview_hot, partial(self._check_tview, "tview_001"), "tview"),
             (self.config.check_tview_replicas, partial(self._check_tview, "tview_002"), "tview"),
             (bool(self.config.check_session_reads), self._check_session_reads, None),
@@ -664,6 +669,47 @@ class SchemaLinter:
                     message=f"Table '{table.qualified}' should have a PRIMARY KEY",
                     file_path=table.file,
                     line_number=table.line,
+                )
+            )
+
+    def _check_translations(self, report: LintReport) -> None:
+        """``i18n_001``: the translation tables ``db/project.yaml`` declares (#657)."""
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
+        from confiture.core.linting.translations import RULE_ID, translation_findings
+
+        project = load_project_config(self.project_dir)
+        if project.translations is None:
+            report.skipped.append(
+                RuleStatus(
+                    code=RULE_ID,
+                    state="skipped",
+                    reason="no translations: block in db/project.yaml, so no table is known "
+                    "to translate another",
+                )
+            )
+            return
+        deleting = None
+        if project.soft_delete is not None:
+            if self._soft_deleting is None:
+                self._soft_deleting = soft_deleting(
+                    self._inventory, self._files, project.soft_delete
+                )
+            deleting = self._soft_deleting
+        severity = RuleSeverity(next(r.severity for r in LINT_RULES if r.code == RULE_ID))
+        for finding in translation_findings(
+            self._inventory, self._files, project.translations, deleting
+        ):
+            report.add_violation(
+                LintViolation(
+                    rule_id=RULE_ID,
+                    rule_name="Translation Table Shape",
+                    severity=severity,
+                    object_type="table",
+                    object_name=finding.object_name,
+                    message=finding.message,
+                    suggested_fix=finding.fix,
+                    file_path=finding.file,
+                    line_number=finding.line,
                 )
             )
 

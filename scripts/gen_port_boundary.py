@@ -132,6 +132,7 @@ ROWS: dict[str, tuple[str, str]] = {
     "syncer.py": (GLUE, ORCHESTRATION),
     "temp_database.py": (GLUE, ORCHESTRATION),
     "test_db.py": (GLUE, ORCHESTRATION),
+    "translations.py": (GLUE, ORCHESTRATION),
     "tree_allocator.py": (GLUE, ORCHESTRATION),
     "tree_renumber.py": (GLUE, ORCHESTRATION),
     "unified_linter.py": (GLUE, ORCHESTRATION),

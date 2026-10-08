@@ -192,6 +192,7 @@ module moves, not when one grows.
 | `syncer.py` | database orchestration |
 | `temp_database.py` | database orchestration |
 | `test_db.py` | database orchestration |
+| `translations.py` | database orchestration |
 | `tree_allocator.py` | database orchestration |
 | `tree_renumber.py` | database orchestration |
 | `unified_linter.py` | database orchestration |

@@ -897,7 +897,7 @@ def _normalize_acls(data: dict[str, Any]) -> None:
 
 
 #: The ``db/project.yaml`` blocks an environment file refuses: facts about the schema.
-_PROJECT_FACTS = ("tenancy", "soft_delete")
+_PROJECT_FACTS = ("tenancy", "soft_delete", "translations")
 
 
 class Environment(BaseModel):

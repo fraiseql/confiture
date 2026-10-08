@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://confiture.fraiseql.dev/schemas/check-translations.schema.json",
+  "title": "confiture check translations --format json",
+  "description": "Per translation table db/project.yaml declares (translations:) and per required locale, how many live entity rows have no live translation, and the first few of their keys. A table i18n_001 refuses is named in not_counted, never counted. A database that cannot be reached writes the error envelope (error-envelope.schema.json).",
+  "type": "object",
+  "required": [
+    "locales",
+    "missing",
+    "tables",
+    "unknown_locales",
+    "not_counted"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "locales": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The required locales, from translations.required or translations.required_query, in that order."
+    },
+    "missing": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Every entity row missing a translation, over every table and locale."
+    },
+    "tables": {
+      "type": "array",
+      "description": "Each translation table counted.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "table",
+          "locales"
+        ],
+        "properties": {
+          "table": {
+            "type": "string",
+            "description": "The translation table, as the tree names it."
+          },
+          "locales": {
+            "type": "array",
+            "description": "One entry per required locale, in the order of locales.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "locale",
+                "missing",
+                "sample"
+              ],
+              "properties": {
+                "locale": {
+                  "type": "string"
+                },
+                "missing": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Live entity rows with no live translation in this locale."
+                },
+                "sample": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "The first missing entity keys, in key order, as text (a composite key's parts joined by ', '); at most --sample."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "unknown_locales": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Required locales the locale table does not hold: every entity misses them."
+    },
+    "not_counted": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "i18n_001's findings: a translation table, or the declaration, the count could not read."
+    },
+    "ok": {
+      "type": "boolean",
+      "const": true,
+      "description": "The envelope (1.16.0): the command produced this report. A command that could not produce one writes the error envelope, where ok is false."
+    },
+    "command": {
+      "type": "string",
+      "const": "check translations",
+      "description": "The envelope (1.16.0): the command that wrote this payload, as typed after `confiture`."
+    },
+    "parser": {
+      "$ref": "_common.schema.json#/$defs/Parser"
+    }
+  }
+}
