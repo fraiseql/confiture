@@ -53,9 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `confiture.testing` sandbox import their annotation names at run time, so a consumer
   evaluating them resolves every name; `docs/reference/platform-api.md` writes the
   `Connection` protocol's `Any` as written, no longer `typing.Any`.
-||||||| parent of 29824dda (fix(model): a create on a name another kind holds creates nothing)
 
 ### Fixed
+
+- **No merge-conflict lines in the changelog** (#663). Three `|||||||` lines a merge left in
+  the 1.31.0 and Unreleased sections are gone, and a guard now fails on a conflict marker
+  (`<<<<<<<`, `|||||||`, `=======`, `>>>>>>>`) at the start of a line in any tracked text
+  file; an `=` underline longer than seven characters is a heading, not a marker.
 
 - **A create on a name another kind already holds is the no-op, or the failure, PostgreSQL
   makes it** (#648). A schema's relation names are one namespace across tables, views,
@@ -135,7 +139,6 @@ resolves TVIEWs. pg_tviews 0.1.0-beta.25: the backing view is the registry's (âš
   the start of its type, so `b ltree;` after `a bigint; -- note` lost `b` and the body stayed
   unread (`build_003 â€¦ could not read 1 routine body`). Comments are no longer tokens of a
   declaration.
-||||||| parent of 9562415f (fix(model): a CREATE INDEX IF NOT EXISTS on a taken name creates nothing)
 - **A `CREATE INDEX IF NOT EXISTS` on a taken name is the no-op PostgreSQL makes it** (#638). The
   expected schema kept every `CREATE INDEX` of a name, so a database built from a tree that wrote
   `idx_t_a` twice was reported by `drift`'s static tier as missing the index it had. An index name
@@ -144,7 +147,6 @@ resolves TVIEWs. pg_tviews 0.1.0-beta.25: the backing view is the registry's (âš
   Two lint rules report the statement: **`build_005`** (warning) for an `IF NOT EXISTS` that
   creates nothing, **`build_006`** (error) for a plain `CREATE INDEX` the build would fail at.
   Both are on by default.
-||||||| parent of 2e64a062 (fix(live): read the catalog under one search_path, whatever the database sets)
 - **A database's own `search_path` no longer makes unchanged views and functions `REPLACE`**
   (#639). PostgreSQL's deparsers qualify a name only when the reading session's path would not
   find it, and the live reader read under whatever path the database (or a role in it) set:
