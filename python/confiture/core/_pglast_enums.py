@@ -94,6 +94,7 @@ REQUIRED_MEMBERS: Final[dict[str, tuple[str, ...]]] = {
     "BoolExprType": ("AND_EXPR",),
     "NullTestType": ("IS_NULL", "IS_NOT_NULL"),
     "CmdType": ("CMD_UPDATE",),
+    "OnConflictAction": ("ONCONFLICT_UPDATE",),
     "TableLikeOption": (
         "CREATE_TABLE_LIKE_DEFAULTS",
         "CREATE_TABLE_LIKE_IDENTITY",

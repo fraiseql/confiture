@@ -158,6 +158,96 @@ def test_a_documented_example_in_a_comment_is_not_a_statement() -> None:
     )
 
 
+_MAILBOX = "CREATE TABLE app.tb_mailbox (pk_mailbox bigint PRIMARY KEY, smtp_password text);\n"
+
+
+def test_an_update_set_literal_is_a_finding_named_by_its_where_key() -> None:
+    """#658: a seed that sets the credential in a second statement."""
+    (finding,) = _findings(
+        _MAILBOX
+        + "UPDATE app.tb_mailbox SET smtp_password = 'Qe5Vb9Nw3Lz7Hk1Xs4Pd' WHERE pk_mailbox = 1;\n"
+    )
+
+    assert finding.object_name == "app.tb_mailbox.smtp_password[pk_mailbox=1]"
+    assert finding.line_number == 6
+    assert "Qe5Vb9Nw3Lz7Hk1Xs4Pd" not in f"{finding.message} {finding.suggested_fix}"
+
+
+def test_an_update_without_a_where_key_is_named_by_its_line() -> None:
+    (finding,) = _findings(
+        _MAILBOX + "\nUPDATE app.tb_mailbox\n  SET smtp_password = 'Ua2Mf6Rk8Tc3Jn9Gy5Wq';\n"
+    )
+
+    assert finding.object_name == "app.tb_mailbox.smtp_password[line 7]"
+    assert finding.line_number == 7
+
+
+def test_an_on_conflict_do_update_set_literal_is_a_finding() -> None:
+    found = _findings(
+        _MAILBOX + "INSERT INTO app.tb_mailbox (pk_mailbox, smtp_password) VALUES (2, NULL)\n"
+        "ON CONFLICT (pk_mailbox) DO UPDATE SET smtp_password = 'Fn3Wr7Jp1Ys5Dm9Ga2Xe';\n"
+    )
+
+    assert [(f.object_name, f.line_number) for f in found] == [
+        ("app.tb_mailbox.smtp_password[line 6]", 6)
+    ]
+
+
+def test_the_issues_seed_reports_every_assignment() -> None:
+    found = _findings(
+        _MAILBOX
+        + "INSERT INTO app.tb_mailbox (pk_mailbox, smtp_password) VALUES (1, 'Zc4Hx8Ld2Nv6Bq1Kt7Sm');\n"
+        "UPDATE app.tb_mailbox SET smtp_password = 'Qe5Vb9Nw3Lz7Hk1Xs4Pd' WHERE pk_mailbox = 1;\n"
+        "UPDATE app.tb_mailbox SET smtp_password = 'Ua2Mf6Rk8Tc3Jn9Gy5Wq';\n"
+        "INSERT INTO app.tb_mailbox (pk_mailbox, smtp_password) VALUES (2, NULL)\n"
+        "ON CONFLICT (pk_mailbox) DO UPDATE SET smtp_password = 'Fn3Wr7Jp1Ys5Dm9Ga2Xe';\n"
+    )
+
+    assert [f.line_number for f in found] == [6, 7, 8, 9]
+
+
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        "smtp_password = 'changeme'",
+        "smtp_password = '$2b$12$C6UzMDM.H6dfI/f/IKcEeO5kmbGJW.p3Ya0d4CUNFr8S2A6bCkUe6'",
+        "smtp_password = NULL",
+        "smtp_password = md5('x')",
+        "smtp_password = excluded.smtp_password",
+    ],
+    ids=["placeholder", "hash", "null", "computed", "reference"],
+)
+def test_an_assignment_the_exemptions_cover_is_not_a_finding(assignment: str) -> None:
+    assert _findings(_MAILBOX + f"UPDATE app.tb_mailbox SET {assignment};\n") == []
+
+
+def test_a_multi_column_assignment_reads_each_value() -> None:
+    (finding,) = _findings(
+        _MAILBOX + "UPDATE app.tb_mailbox SET (pk_mailbox, smtp_password) "
+        "= (3, 'Qe5Vb9Nw3Lz7Hk1Xs4Pd'::text) WHERE pk_mailbox = 3;\n"
+    )
+
+    assert finding.object_name == "app.tb_mailbox.smtp_password[pk_mailbox=3]"
+
+
+def test_a_key_column_assignment_needs_a_high_entropy_value() -> None:
+    found = _findings(
+        "UPDATE app.tb_api SET sort_key = 'alpha' WHERE id = 1;\n"
+        "UPDATE app.tb_api SET signing_key = 'Zk8qP2vN7xR4tW9mB3cJ6hL1' WHERE id = 2;\n"
+    )
+
+    assert [f.object_name for f in found] == ["app.tb_api.signing_key[id=2]"]
+
+
+def test_a_where_key_that_is_a_secret_never_names_the_row() -> None:
+    (finding,) = _findings(
+        _LOGIN + "UPDATE app.tb_login SET password = 'hunter2secret' "
+        "WHERE api_token = 'tok_live_9f8a7s6d5f4g3h2j';\n"
+    )
+
+    assert finding.object_name == "app.tb_login.password[line 6]"
+
+
 def test_sec_003_is_registered_default_on_at_warning() -> None:
     (rule,) = [r for r in LINT_RULES if r.code == "sec_003"]
 

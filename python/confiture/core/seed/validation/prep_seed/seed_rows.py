@@ -131,7 +131,7 @@ class _Lines:
         return bisect_left(self._newlines, offset) + 1
 
 
-def _constant(node: Any) -> Value:
+def constant(node: Any) -> Value:
     """The input text of a constant, through any casts on it; :class:`Computed` otherwise."""
     while isinstance(node, ast.TypeCast):
         node = node.arg
@@ -188,7 +188,7 @@ def _insert(
     if len(openings) != len(select.valuesLists):
         openings = [parsed.location] * len(select.valuesLists)
     rows = tuple(
-        SeedRow(number, lines.of(at), tuple(_constant(v) for v in values))
+        SeedRow(number, lines.of(at), tuple(constant(v) for v in values))
         for number, (at, values) in enumerate(
             zip(openings, select.valuesLists, strict=True), start=1
         )

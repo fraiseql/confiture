@@ -713,7 +713,9 @@ It reports, at `warning` and on by default:
   holding the word `password`, `passwd`, `pwd`, `passphrase`, `credential(s)`,
   `api key`/`apikey`, `secret` or `token` — or for personal data — `credit card`,
   `card number`, `ssn`, `iban`, said as such in the finding — by `INSERT … VALUES`,
-  every row of it, or by `COPY … FROM stdin`, every row decoded. A name is matched
+  every row of it, by `COPY … FROM stdin`, every row decoded, or by an assignment in
+  `UPDATE … SET` or `INSERT … ON CONFLICT DO UPDATE SET` (`SET (a, b) = (…)` read
+  per column). A name is matched
   by its **words** (`schema_identity.identifier_words`: `_`, `-`, digits and
   camelCase split it), so `smtp_passwd` and `stripeApiKey` are read and `tokenizer`
   and `lessons` are not;
@@ -732,7 +734,9 @@ and `test_password` are not reported and `contest-winner` is. A
 comment is not a statement, so a documented example is never read.
 
 **A finding never repeats the secret.** It gives the kind and the length, and names
-the row by its first other column — `app.tb_user.password[id=3]` — so a `--baseline`
+the row by its first other column — `app.tb_user.password[id=3]` — or, for a `SET`
+assignment, by the `WHERE` key (`[pk_mailbox=1]`, the first `column = constant`
+conjunct) or else the statement's line (`[line 12]`), so a `--baseline`
 can hold an accepted finding without the value reaching a CI log. A tree that has
 never been checked adopts the rule the usual way: `--baseline` records today's
 findings, and only a new one fails.

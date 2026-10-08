@@ -41,6 +41,10 @@ ALLOWED: dict[str, str] = {
         "the columns an UPDATE, ON CONFLICT or MERGE *assigns* (a SET list), and the "
         "value each is given — what a statement writes, never where an output comes from"
     ),
+    "core.linting.seed_secrets:_assignments": (
+        "the literal an UPDATE or ON CONFLICT DO UPDATE *assigns* to a credential column "
+        "(a SET list) — what a seed writes, never where an output comes from"
+    ),
     "core.seed.validation.prep_seed.seed_rows:_branches": (
         "the values a seed `INSERT … SELECT` writes, row by row — data, not provenance"
     ),

@@ -48,7 +48,7 @@ ALLOWED: dict[str, str] = {
     "python/confiture/core/linting/references.py:temp_relations": (
         "a body the compiler will not return is named unread by read_references (build_003)"
     ),
-    "python/confiture/core/linting/seed_secrets.py:_role_findings": (
+    "python/confiture/core/linting/seed_secrets.py:_statement_findings": (
         "a seed file the parser rejects is the lint's UNPARSEABLE notice for that file"
     ),
     "python/confiture/core/linting/seed_secrets.py:findings_in": (
