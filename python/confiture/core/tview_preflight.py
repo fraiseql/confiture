@@ -15,7 +15,13 @@ import pglast.parser
 from pglast.stream import RawStream
 
 from confiture.core._migrator.discovery import _version_from_migration_filename
-from confiture.core.ddl_walk import column_edit, object_edits, tview_calls, walk_nodes
+from confiture.core.ddl_walk import (
+    column_edit,
+    object_edits,
+    tview_calls,
+    tview_query_tree,
+    walk_nodes,
+)
 from confiture.core.schema_identity import DEFAULT_SCHEMA
 from confiture.core.schema_model import TVIEW_PREFIX
 from confiture.core.schema_read import read_text
@@ -133,7 +139,7 @@ class _Reads:
         self._bare: set[str] = set()
         self._star = False
         try:
-            root = pglast.parse_sql(query)[0].stmt
+            root = tview_query_tree(query)
         except pglast.parser.ParseError, IndexError:
             self._star = True
             return

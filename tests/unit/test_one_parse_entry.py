@@ -49,7 +49,6 @@ ALLOWED: dict[str, str] = {
     "python/confiture/core/stub_generator.py": (
         "a routine's body as the catalog returns it (`pg_get_functiondef`)"
     ),
-    "python/confiture/core/tview_preflight.py": "one TVIEW query, as the registry or the tree holds it",
 }
 
 

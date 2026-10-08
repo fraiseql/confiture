@@ -216,6 +216,7 @@ class LintConfig:
         check_bodies: bool = False,
         check_body_warnings: bool = False,
         check_body_classes: frozenset[str] = frozenset(),
+        check_session_reads: frozenset[str] = frozenset({"tview_003"}),
         server_url: str | None = None,
     ):
         """Initialize linting configuration.
@@ -287,6 +288,9 @@ class LintConfig:
             check_body_classes: The artefact codes to report (``body_003`` a TEMP
                 table, ``body_004`` a RECORD, ``body_005`` dblink, #354): what the
                 analysis cannot see rather than what the body does. Off by default.
+            check_session_reads: The session-read codes to report (#656): the
+                ``tview`` family's ``tview_003``–``005`` and ``session_reads``'
+                ``session_001``–``003``. ``tview_003`` by default.
             server_url: The writable maintenance server the ``body`` family
                 builds its scratch database on (``--server-url``). ``None``
                 falls back to the environment's own URL, whose *database* is
@@ -322,6 +326,7 @@ class LintConfig:
         self.check_bodies = check_bodies
         self.check_body_warnings = check_body_warnings
         self.check_body_classes = check_body_classes
+        self.check_session_reads = check_session_reads
         self.server_url = server_url
 
 
@@ -506,6 +511,7 @@ class SchemaLinter:
             ),
             (self.config.check_tview_hot, partial(self._check_tview, "tview_001"), "tview"),
             (self.config.check_tview_replicas, partial(self._check_tview, "tview_002"), "tview"),
+            (bool(self.config.check_session_reads), self._check_session_reads, None),
         ):
             if enabled:
                 check(report)
@@ -680,6 +686,30 @@ class SchemaLinter:
                         suggested_fix=fix,
                     )
                 )
+
+    def _check_session_reads(self, report: LintReport) -> None:
+        """``tview_003``–``005`` and ``session_001``–``003``: session state a projection reads (#656)."""
+        # Reason: import cycle (the module is partially initialised when this import runs at module level)
+        from confiture.core.linting.session_reads import RULE_NAMES, session_read_findings
+
+        severities = {rule.code: rule.severity for rule in LINT_RULES}
+
+        for found in session_read_findings(
+            self._files, self._inventory, self.config.check_session_reads
+        ):
+            report.add_violation(
+                LintViolation(
+                    rule_id=found.code,
+                    rule_name=RULE_NAMES[found.code],
+                    severity=RuleSeverity(severities[found.code]),
+                    object_type=found.object_type,
+                    object_name=found.object_name,
+                    message=found.message,
+                    file_path=found.file,
+                    line_number=found.line,
+                    suggested_fix=found.fix,
+                )
+            )
 
     def _check_documentation(self, report: LintReport) -> None:
         """The ``doc`` family: every commentable object carries a COMMENT (#217)."""

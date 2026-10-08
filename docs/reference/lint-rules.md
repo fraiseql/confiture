@@ -42,6 +42,12 @@ Adopt a rule on a schema that already trips it with a
 | `softdel_003` | softdel | warning | with `soft_delete:` | A view tests the tombstone of every soft-deleting table it reads |
 | `tview_001` | tview | warning | off | No index over data or updated_at on a TVIEW: it blocks HOT |
 | `tview_002` | tview | warning | off | A TVIEW is made LOGGED where replicas are declared (pg_tviews#75) |
+| `tview_003` | tview | error | on | A TVIEW's definition reads session state: a setting or the session's identity |
+| `tview_004` | tview | warning | off | A TVIEW calls a non-immutable function its function_reads does not declare |
+| `tview_005` | tview | warning | off | A TVIEW's definition reads the time and declares no time_refresh |
+| `session_001` | session_reads | error | off | A view reads session state: a setting or the session's identity |
+| `session_002` | session_reads | warning | off | A view calls a non-immutable function outside pg_catalog |
+| `session_003` | session_reads | warning | off | A view reads the time |
 | `replica_001` | replica | warning | off | Migrations stay forward-compatible with streaming replicas |
 | `func_001` | func | error | off | Every function and procedure signature is defined exactly once |
 | `own_001` | own | error | off | Every created relation is paired with an ALTER … OWNER TO |
@@ -1149,7 +1155,9 @@ project with no `soft_delete:` block.
 
 ## The `tview` family — how a pg_tviews TVIEW's storage is left
 
-`--select tview` (off by default). pg_tviews turns `CREATE TABLE tv_x AS SELECT …`
+`tview_001` and `tview_002` are off by default (`--select tview`); `tview_003` is on, see
+[session reads](#session-reads--what-a-stored-projection-reads-of-the-session) below.
+pg_tviews turns `CREATE TABLE tv_x AS SELECT …`
 into a table it keeps in step with its base tables. From 0.1.0-beta.18 it indexes
 each `fk_*` column and sets fillfactor 85 itself; what it leaves to the author is
 said on the `CREATE` (`UNLOGGED`, `WITH (fillfactor = n)`, which pg_tviews
@@ -1165,6 +1173,56 @@ one drift compares and a generated migration passes.
 
 `tview_002` works around fraiseql/pg_tviews#75, names it in its message, and is
 removed when it is fixed. `tview_001` sees only the indexes the tree declares.
+
+## Session reads — what a stored projection reads of the session
+
+A TVIEW's rows are computed in the session that **writes** a base row, not in the
+reader's. Whatever its definition reads of the session is the writer's, stored for
+every reader: a locale from `current_setting('app.locale', true)`, the role, the date.
+For every TVIEW the tree declares (`CREATE TABLE tv_x AS …` and
+`SELECT tviews.pg_tviews_create_or_replace('tv_x', $$…$$, …)` alike), confiture reads
+its query, then each **plain view** it reads, transitively, and each function those call
+whose body it can read (`LANGUAGE sql`, `BEGIN ATOMIC`, PL/pgSQL). A materialized view,
+a table and another TVIEW store their own rows, so a chain stops there.
+
+| Rule | Severity | Default | Reports |
+|---|---|---|---|
+| `tview_003` | error | on | a setting (`current_setting(…)`) or the session's identity (`CURRENT_USER`, `SESSION_USER`, `CURRENT_ROLE`, `USER`, `current_schema`) |
+| `tview_004` | warning | off | a non-immutable function outside `pg_catalog` that the TVIEW's `function_reads` option does not declare |
+| `tview_005` | warning | off | the time (`CURRENT_DATE`, `now()`, `clock_timestamp()`, `'today'::date`, `age(x)` …) with no `time_refresh` option |
+| `session_001` | error | off | `tview_003`'s reads, in any view |
+| `session_002` | warning | off | `tview_004`'s, in any view |
+| `session_003` | warning | off | `tview_005`'s, in any view |
+
+```
+db/schema/20_views/v_product.sql:4  tview_003  tv_product reads current_setting('app.locale')
+    through v_product: the stored row takes the writer's value, not the reader's
+```
+
+- **One finding per read, where it is written.** A helper that reads a setting is
+  reported once, in the helper, naming every TVIEW that reaches it; the baseline
+  identity is the object holding the read and the read
+  (`public.caller_locale:current_setting(app.locale)`), so a new TVIEW does not move it.
+- **What pg_tviews refuses.** pg_tviews#193 refuses a time read without
+  `"time_refresh": "external"` and a non-immutable function not declared in
+  `"function_reads"` — under its `error` and `full_refresh` policies, so neither rule
+  reports a TVIEW declaring `uncascaded_policy: warn`. `tview_004` and `tview_005` are
+  off by default until confiture's pinned pg_tviews carries those options; select them
+  (`--select tview_004,tview_005`) to catch them at lint time. A `CREATE TABLE … AS`
+  cannot pass options: write the TVIEW as a `pg_tviews_create_or_replace()` call, or
+  waive the read. `tview_003` is on because pg_tviews does not refuse `current_setting`
+  (a `pg_catalog` function), yet the stored row is wrong for every other reader.
+- **Every view** (`--select session_reads`): `session_001`–`003` ask the same of each
+  view's own definition and the functions it calls — for a view a cache or a replica
+  serves. The two families report independently.
+- **Waiver**: `-- confiture:projection-reads-session <name>[, <name>]: <why>` above the
+  TVIEW, a view in its chain, or the function holding the read. `<name>` is a setting
+  (`app.locale`), a function (`public.caller_locale` or `caller_locale`) or a time read
+  (`current_date`, `now`). A waiver with no reason waives nothing, and the finding says so.
+- A read in a PL/pgSQL body is placed on the line its statement starts on, as
+  `build_003` places what a body names.
+- A TVIEW query the parser rejects, or a routine body confiture cannot read, that a
+  chain reaches is reported as a `degraded` rule rather than passed as clean.
 
 ## The `body` family — a routine's body resolves, checked by PostgreSQL
 
