@@ -340,6 +340,61 @@ def test_a_nullable_key_column_needs_nulls_not_distinct(
         assert "NULLS NOT DISTINCT" in (finding.suggested_fix or "")
 
 
+DEVICE = """CREATE SCHEMA app;
+CREATE TABLE app.tb_device (
+    pk_device bigint PRIMARY KEY,
+    fk_owner bigint NOT NULL,
+    fk_parent bigint,
+    fk_part bigint,
+    mac_address text,
+    deleted_at timestamptz
+);
+"""
+
+
+def test_a_column_the_predicate_tests_is_not_null_is_not_nullable_in_the_key(
+    tmp_path: Path,
+) -> None:
+    """#665: a row holding NULL there is never in the index, so NULLS NOT DISTINCT is moot."""
+    key = (
+        "CREATE UNIQUE INDEX uq_device_mac_per_owner ON app.tb_device (fk_owner, mac_address) "
+        "WHERE mac_address IS NOT NULL AND deleted_at IS NULL;\n"
+    )
+
+    assert _nulls(tmp_path, DEVICE + key) == []
+
+
+def test_a_key_the_predicate_excludes_in_part_names_only_what_stays_nullable(
+    tmp_path: Path,
+) -> None:
+    key = (
+        "CREATE UNIQUE INDEX uq_part ON app.tb_device (fk_parent, fk_part) "
+        "WHERE (fk_part IS NOT NULL AND tb_device.mac_address IS NOT NULL) "
+        "AND deleted_at IS NULL;\n"
+    )
+
+    (finding,) = _nulls(tmp_path, DEVICE + key)
+
+    assert "covers fk_parent, which may be NULL" in finding.message
+
+
+@pytest.mark.parametrize(
+    "predicate",
+    [
+        "mac_address IS NOT NULL OR deleted_at IS NULL",
+        "NOT (mac_address IS NULL) AND deleted_at IS NULL",
+        "fk_owner IS NOT NULL AND deleted_at IS NULL",
+    ],
+    ids=["or", "not-is-null", "another-column"],
+)
+def test_only_a_top_level_conjunct_excludes_null(tmp_path: Path, predicate: str) -> None:
+    key = f"CREATE UNIQUE INDEX ux ON app.tb_device (fk_owner, mac_address) WHERE {predicate};\n"
+
+    (finding,) = _nulls(tmp_path, DEVICE + key)
+
+    assert "covers mac_address" in finding.message
+
+
 def test_softdel_002_reads_only_soft_deleting_tables(tmp_path: Path) -> None:
     sql = "CREATE TABLE tb_node (id INT PRIMARY KEY, fk_parent INT, name TEXT, UNIQUE (fk_parent, name));\n"
 
