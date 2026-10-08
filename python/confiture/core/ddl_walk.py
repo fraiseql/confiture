@@ -296,6 +296,20 @@ TVIEW_FUNCTIONS: dict[str, Literal["create", "create_or_replace", "drop"]] = {
 
 
 @dataclass(frozen=True)
+class TViewDeclarations:
+    """What a TVIEW declares about the reads pg_tviews refuses undeclared (pg_tviews#193).
+
+    ``time_refresh`` (``"external"``) accepts a definition that reads the time;
+    ``function_reads`` names each non-immutable function the definition may call,
+    as pg_tviews keys it (``public.label_suffix()``). Read for lint; not part of
+    the model, which holds what pg_tviews' registry reports.
+    """
+
+    time_refresh: str | None = None
+    function_reads: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class TViewCall:
     """One call to a :data:`TVIEW_FUNCTIONS` function, and the TVIEW it names.
 
@@ -303,7 +317,9 @@ class TViewCall:
     alike; ``None`` when the argument is not a constant this reader can name.
     ``query`` is the definition a create passes, rendered as :func:`rendered_query`
     renders it, and ``options`` the keys it pins; ``None`` and ``{}`` when it passes
-    no constant, and for a drop.
+    no constant, and for a drop. ``written`` is the query as the constant writes it
+    and ``written_at`` where that constant starts in the statement's text, so a
+    reader of :func:`tview_query_tree` can place a node on its line.
     """
 
     action: Literal["create", "create_or_replace", "drop"]
@@ -311,6 +327,9 @@ class TViewCall:
     name: str | None
     query: str | None = None
     options: TViewOptions = field(default_factory=TViewOptions)
+    written: str | None = None
+    written_at: int | None = None
+    declared: TViewDeclarations = field(default_factory=TViewDeclarations)
 
 
 #: Each argument a call's reader reads: its parameter names, and its position.
@@ -352,6 +371,9 @@ def tview_calls(stmt: Any) -> list[TViewCall]:
                 name,
                 None if query is None else rendered_query(query),
                 _options_passed(arguments.get("options")),
+                query,
+                getattr(arguments.get("query"), "location", None),
+                _declarations_passed(arguments.get("options")),
             )
         )
     return calls
@@ -377,6 +399,11 @@ def _tview_arguments(node: Any, action: str) -> dict[str, Any]:
     return found
 
 
+def constant_text(arg: Any) -> str | None:
+    """The text of a string constant, cast or not; ``None`` for anything else."""
+    return _constant_text(arg)
+
+
 def _constant_text(arg: Any) -> str | None:
     """The text of a string constant, cast or not; ``None`` for anything else."""
     while type(arg).__name__ == "TypeCast":
@@ -385,15 +412,32 @@ def _constant_text(arg: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def _options_passed(arg: Any) -> TViewOptions:
-    """The keys a constant ``options`` object pins, as :func:`tview_options` reads a CTAS."""
+def _passed(arg: Any) -> dict[str, Any]:
+    """A constant ``options`` argument as the object it writes; ``{}`` for anything else."""
     text = _constant_text(arg)
     try:
         passed = json.loads(text) if text is not None else None
     except json.JSONDecodeError:
         passed = None
+    return passed if isinstance(passed, dict) else {}
+
+
+def _declarations_passed(arg: Any) -> TViewDeclarations:
+    """``time_refresh`` and ``function_reads`` from a constant ``options`` object."""
+    passed = _passed(arg)
+    time_refresh = passed.get("time_refresh")
+    function_reads = passed.get("function_reads")
+    return TViewDeclarations(
+        time_refresh=time_refresh if isinstance(time_refresh, str) else None,
+        function_reads=tuple(function_reads) if isinstance(function_reads, dict) else (),
+    )
+
+
+def _options_passed(arg: Any) -> TViewOptions:
+    """The keys a constant ``options`` object pins, as :func:`tview_options` reads a CTAS."""
+    passed = _passed(arg)
     options = TViewOptions()
-    if not isinstance(passed, dict):
+    if not passed:
         return options
     if isinstance(logged := passed.get("logged"), bool):
         options["logged"] = logged
@@ -407,6 +451,16 @@ def _options_passed(arg: Any) -> TViewOptions:
     return options
 
 
+def tview_query_tree(text: str) -> Any:
+    """A TVIEW's query as written, parsed: the one parse of it, for every reader of its tree.
+
+    Locations index into *text*. Raises ``pglast.parser.ParseError`` for text the
+    parser refuses (or ``IndexError`` for text holding no statement): the caller
+    says what an unread query means to it.
+    """
+    return pglast.parse_sql(text)[0].stmt
+
+
 def rendered_query(text: str) -> str:
     """A TVIEW's query as confiture holds it: *text* parsed and rendered.
 
@@ -415,7 +469,7 @@ def rendered_query(text: str) -> str:
     definition. Text the parser refuses is kept as written.
     """
     try:
-        return RawStream()(pglast.parse_sql(text)[0].stmt)
+        return RawStream()(tview_query_tree(text))
     except pglast.parser.ParseError, IndexError:
         return text
 

@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Lint: what a stored projection reads of the session** (#656). A pg_tviews TVIEW's rows
+  are computed in the session that writes a base row, so whatever its definition reads of
+  the session is the writer's, stored for every reader. For each TVIEW (both spellings)
+  confiture reads its query, the plain views it reads, transitively, and the functions they
+  call whose bodies it can read, and reports, where each read is written:
+  **`tview_003`** (error, on) a setting (`current_setting(…)`) or the session's identity;
+  **`tview_004`** (warning, off) a non-immutable function outside `pg_catalog` the TVIEW's
+  `function_reads` option does not declare; **`tview_005`** (warning, off) a time read with
+  no `time_refresh` option (pg_tviews#193's options, read from the create call; the model is
+  unchanged). `--select session_reads` asks the same of every view (`session_001`–`003`).
+  Waive a read with `-- confiture:projection-reads-session <name>: <why>`.
+
 ### Changed
 
 - **No module defers its annotations** (#598). Python 3.14 evaluates an annotation when it
