@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.34.0] - 2026-10-09
+
+**A TVIEW's `time_refresh` and `function_reads` are in the model.** ⚠️ pg_tviews
+0.1.0-beta.26 is the minimum: an older pg_tviews is refused with `CONFIG_014`, naming the
+registry columns it lacks. The model's wire gains `TView.time_refresh` and
+`TView.function_reads`; a mismatch is the existing `tview_option_mismatch`, so no drift kind or
+severity changes. `tview_004` and `tview_005` are on by default. ⚠️ pglast 8.5 is the floor.
+
 ### Added
 
 - **⚠️ A TVIEW's `time_refresh` and `function_reads` are in the model** (pg_tviews#193). pg_tviews
