@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-10-09
+
+**The schema model holds what PostgreSQL 18 says of a constraint.** ⚠️ The model's wire
+gains five required booleans (`Constraint.nulls_not_distinct`, `.temporal`, `.enforced`,
+`Index.nulls_not_distinct`, `Column.not_null_validated`), so a key that gains or loses
+`NULLS NOT DISTINCT`, `WITHOUT OVERLAPS`/`PERIOD` or `NOT ENFORCED`, and a NOT NULL held
+`NOT VALID`, are changes to `migrate diff` and drift. No drift kind or severity changes;
+`migrate diff` gains `CHANGE_COLUMN_NOT_NULL_VALIDITY`. pglast 8.5.
+
 ### Added
 
 - **⚠️ The schema model holds what PostgreSQL 18 says of a constraint** (#623, #603, #604,
