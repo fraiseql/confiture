@@ -186,6 +186,7 @@ def test_the_against_payload_carries_the_change_set_too(runner, tmp_path):
     session.__enter__ = lambda s: session
     session.__exit__ = MagicMock(return_value=False)
     session.run_against.return_value = against_result
+    session._conn = None  # no schema facts: the replay is what is under test
 
     with patch(
         "confiture.cli.commands.migrate.preflight.MigratorSession",

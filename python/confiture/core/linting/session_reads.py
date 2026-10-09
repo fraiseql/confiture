@@ -41,7 +41,6 @@ from confiture.core import sql_lexer
 from confiture.core._pglast_enums import member as _pg_member
 from confiture.core.ddl_walk import (
     TViewCall,
-    TViewDeclarations,
     constant_text,
     enum_int,
     tview_calls,
@@ -60,6 +59,7 @@ from confiture.core.linting.inventory import (
 from confiture.core.linting.references import routine_bodies
 from confiture.core.linting.rule_registry import SESSION_CODES
 from confiture.core.schema_identity import identifier_identity
+from confiture.core.schema_model import FunctionRead, TView
 from confiture.core.sql_lexer import ParsedFile
 
 TVIEW_CODES = frozenset({"tview_003", "tview_004", "tview_005"})
@@ -184,8 +184,7 @@ class _Target:
 
     obj: SchemaObject
     family: str
-    declared: TViewDeclarations = field(default_factory=TViewDeclarations)
-    policy: str | None = None
+    declared: TView | None = None
     spelled_as_call: bool = False
 
 
@@ -298,7 +297,7 @@ class _Graph:
         except pglast.parser.ParseError, IndexError:
             # Not read, so not judged: session_reads() names it as unread.
             self._holder(parsed, obj).unread = "its query does not parse"
-            self.targets.append(_Target(obj, "tview", call.declared, spelled_as_call=True))
+            self.targets.append(_Target(obj, "tview", obj.tview, spelled_as_call=True))
         else:
             first = _line(parsed.text, call.written_at)
             self._add_query(
@@ -320,15 +319,8 @@ class _Graph:
         holder = self._holder(parsed, obj)
         self._walk(holder, root, line_at)
         if obj.kind == "tview":
-            tview = obj.tview
             self.targets.append(
-                _Target(
-                    holder.obj,
-                    "tview",
-                    call.declared if call is not None else TViewDeclarations(),
-                    None if tview is None else tview.uncascaded_policy,
-                    spelled_as_call=call is not None,
-                )
+                _Target(holder.obj, "tview", obj.tview, spelled_as_call=call is not None)
             )
         else:
             self.targets.append(_Target(holder.obj, "view"))
@@ -428,12 +420,13 @@ class _Graph:
         ]
 
     def _reported(self, target: _Target, holder: _Holder, path: _Path, read: _Read) -> bool:
-        if target.family == "tview" and read.kind in ("function", "time"):
-            if target.policy == "warn":
+        declared = target.declared
+        if declared is not None and read.kind in ("function", "time"):
+            if declared.uncascaded_policy == "warn":
                 return False
-            if read.kind == "time" and target.declared.time_refresh:
+            if read.kind == "time" and declared.time_refresh:
                 return False
-            if read.kind == "function" and _declared(read, target.declared):
+            if read.kind == "function" and _declared(read, declared.function_reads or ()):
                 return False
         return not self._waived(target, holder, path, read)
 
@@ -553,12 +546,12 @@ def _builtin_read(node: Any, line_at: Callable[[int | None], int]) -> _Read | No
     return None
 
 
-def _declared(read: _Read, declared: TViewDeclarations) -> bool:
+def _declared(read: _Read, declared: tuple[FunctionRead, ...]) -> bool:
     """Whether a ``function_reads`` key names the routine *read* calls (by schema and name)."""
     routine = read.routine
     if routine is None:
         return False
-    for key in declared.function_reads:
+    for key in (entry.function for entry in declared):
         parts = sql_lexer.name_parts(key.partition("(")[0].strip())
         if not parts:
             continue

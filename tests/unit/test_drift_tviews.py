@@ -9,7 +9,15 @@ side read ``tv_post`` as a table, so every TVIEW project reported
 from unittest.mock import MagicMock
 
 from confiture.core.drift import DriftType, SchemaDriftDetector, parse_expected_schema
-from confiture.core.schema_model import Coverage, SchemaModel, Table, TView, ref_for, tview_ref
+from confiture.core.schema_model import (
+    Coverage,
+    FunctionRead,
+    SchemaModel,
+    Table,
+    TView,
+    ref_for,
+    tview_ref,
+)
 
 DECLARED = """
 CREATE TABLE tb_post (pk_post bigint PRIMARY KEY);
@@ -179,6 +187,68 @@ def test_a_policy_the_tree_does_not_pin_is_never_drift() -> None:
     found = compare_pinned(
         DECLARED,
         live(TView(name="tv_post", schema="public", uncascaded_policy="warn")),
+    )
+
+    assert found == []
+
+
+READS = """
+CREATE TABLE tb_post (pk_post bigint PRIMARY KEY);
+SELECT tviews.pg_tviews_create_or_replace('tv_post', 'SELECT pk_post FROM tb_post',
+    options => '{"time_refresh": "external",
+                 "function_reads": {"label_suffix()": ["tb_setting"],
+                                    "app.price(int8, date)": ["app.tb_price"]}}');
+"""
+
+
+def _registry(**declared: object) -> SchemaModel:
+    """The TVIEW as ``tviews.registry`` spells it under confiture's read path (``public``)."""
+    return live(TView(name="tv_post", schema="public", logged=False, fillfactor=85, **declared))
+
+
+def test_declared_reads_the_registry_holds_are_no_drift() -> None:
+    """The registry qualifies a function and formats its types; a table on the path is bare."""
+    found = compare_pinned(
+        READS,
+        _registry(
+            time_refresh="external",
+            function_reads=(
+                FunctionRead("app.price(bigint, date)", ("app.tb_price",)),
+                FunctionRead("public.label_suffix()", ("tb_setting",)),
+            ),
+        ),
+    )
+
+    assert found == []
+
+
+def test_a_declared_read_the_registry_does_not_hold_is_a_warning() -> None:
+    found = compare_pinned(
+        READS,
+        _registry(
+            function_reads=(FunctionRead("public.label_suffix()", ("tb_setting",)),),
+        ),
+    )
+
+    assert sorted((i.drift_type.value, i.severity.value, i.subject.name) for i in found) == [
+        ("tview_option_mismatch", "warning", "function_reads"),
+        ("tview_option_mismatch", "warning", "time_refresh"),
+    ]
+    by_key = {i.subject.name: i for i in found}
+    assert by_key["time_refresh"].actual == "time_refresh = null"
+    assert by_key["function_reads"].actual == (
+        'function_reads = {"public.label_suffix()": ["tb_setting"]}'
+    )
+
+
+def test_reads_the_tree_does_not_declare_are_never_drift() -> None:
+    """An absent key leaves the registry's value as it is, as a replace keeps it."""
+    found = compare_pinned(
+        DECLARED,
+        _registry(
+            time_refresh="external",
+            function_reads=(FunctionRead("public.label_suffix()", ("tb_setting",)),),
+        ),
     )
 
     assert found == []

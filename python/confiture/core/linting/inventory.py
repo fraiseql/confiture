@@ -47,6 +47,7 @@ from confiture.core.ddl_walk import (
     routine_options,
     storage_pinned,
     tview_calls,
+    tview_of,
     tview_options,
     validated_constraint,
     written_type,
@@ -787,13 +788,7 @@ def _from_create_table_as(sql: str, stmt: Any, offset: int) -> SchemaObject | No
             return None
         tview = _relation_object(sql, "tview", rel, offset)
         options = tview_options(stmt)
-        tview.tview = TView(
-            name=tview.name,
-            definition=RawStream()(stmt.query),
-            logged=options.get("logged"),
-            fillfactor=options.get("fillfactor"),
-            uncascaded_policy=options.get("uncascaded_policy"),
-        )
+        tview.tview = tview_of(tview.name, RawStream()(stmt.query), options)
         return tview
     matview = _relation_object(sql, "matview", stmt.into.rel, offset)
     matview.if_not_exists = bool(getattr(stmt, "if_not_exists", False))
@@ -872,13 +867,7 @@ def tviews_from_calls(sql: str, raw: Any) -> list[SchemaObject]:
     for call in calls:
         tview = _object("tview", call.schema, str(call.name), line, offset)
         tview.statement_line = line
-        tview.tview = TView(
-            name=tview.name,
-            definition=call.query,
-            logged=call.options.get("logged"),
-            fillfactor=call.options.get("fillfactor"),
-            uncascaded_policy=call.options.get("uncascaded_policy"),
-        )
+        tview.tview = tview_of(tview.name, call.query, call.options)
         found.append(tview)
     return found
 

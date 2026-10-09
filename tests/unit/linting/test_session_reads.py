@@ -283,5 +283,4 @@ def test_select_session_reads_selects_the_view_family() -> None:
     assert resolve_selection(["session_reads"], ()) == frozenset(
         {"session_001", "session_002", "session_003"}
     )
-    assert "tview_003" in resolve_selection(None, ())
-    assert {"tview_004", "tview_005"}.isdisjoint(resolve_selection(None, ()))
+    assert {"tview_003", "tview_004", "tview_005"} <= resolve_selection(None, ())

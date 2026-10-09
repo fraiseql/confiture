@@ -30,7 +30,7 @@ from pglast.stream import RawStream
 from pglast.visitors import Visitor
 
 from confiture.core._pglast_enums import member as _pg_member
-from confiture.core.schema_identity import identifier_identity
+from confiture.core.schema_identity import DEFAULT_SCHEMA, identifier_identity
 from confiture.core.schema_model import (
     TVIEW_PREFIX,
     TVIEWS_SCHEMA,
@@ -38,14 +38,16 @@ from confiture.core.schema_model import (
     Constraint,
     DefaultKind,
     Deferral,
+    FunctionRead,
     GeneratedKind,
     IdentityKind,
     Index,
     RelationName,
+    TView,
     Volatility,
 )
 from confiture.core.sql_lexer import name_parts as written_name_parts
-from confiture.core.type_lattice import canonical_type, parse_type
+from confiture.core.type_lattice import canonical_type, parse_type, signature_from_type_names
 
 _CONSTR_NOTNULL = _pg_member("ConstrType", "CONSTR_NOTNULL")
 _CONSTR_DEFAULT = _pg_member("ConstrType", "CONSTR_DEFAULT")
@@ -218,13 +220,29 @@ def column_edit(cmd: Any) -> ColumnEdit | None:
 class TViewOptions(TypedDict, total=False):
     """pg_tviews' ``options`` keys a tree can pin; a key it does not pin is absent.
 
-    ``uncascaded_policy`` is passed in ``options`` too, though pg_tviews stores it
-    beside them (``tviews.registry.uncascaded_policy``).
+    ``uncascaded_policy``, ``time_refresh`` and ``function_reads`` are passed in
+    ``options`` too, though pg_tviews stores them beside them (columns of
+    ``tviews.registry``).
     """
 
     logged: bool
     fillfactor: int
     uncascaded_policy: str
+    time_refresh: str
+    function_reads: tuple[FunctionRead, ...]
+
+
+def tview_of(name: str, definition: str | None, options: TViewOptions) -> TView:
+    """The TVIEW *name* whose query is *definition*, pinning what *options* pins."""
+    return TView(
+        name=name,
+        definition=definition,
+        logged=options.get("logged"),
+        fillfactor=options.get("fillfactor"),
+        uncascaded_policy=options.get("uncascaded_policy"),
+        time_refresh=options.get("time_refresh"),
+        function_reads=options.get("function_reads"),
+    )
 
 
 def tview_options(stmt: Any) -> TViewOptions:
@@ -297,20 +315,6 @@ TVIEW_FUNCTIONS: dict[str, Literal["create", "create_or_replace", "drop"]] = {
 
 
 @dataclass(frozen=True)
-class TViewDeclarations:
-    """What a TVIEW declares about the reads pg_tviews refuses undeclared (pg_tviews#193).
-
-    ``time_refresh`` (``"external"``) accepts a definition that reads the time;
-    ``function_reads`` names each non-immutable function the definition may call,
-    as pg_tviews keys it (``public.label_suffix()``). Read for lint; not part of
-    the model, which holds what pg_tviews' registry reports.
-    """
-
-    time_refresh: str | None = None
-    function_reads: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
 class TViewCall:
     """One call to a :data:`TVIEW_FUNCTIONS` function, and the TVIEW it names.
 
@@ -330,7 +334,6 @@ class TViewCall:
     options: TViewOptions = field(default_factory=TViewOptions)
     written: str | None = None
     written_at: int | None = None
-    declared: TViewDeclarations = field(default_factory=TViewDeclarations)
 
 
 #: Each argument a call's reader reads: its parameter names, and its position.
@@ -374,7 +377,6 @@ def tview_calls(stmt: Any) -> list[TViewCall]:
                 _options_passed(arguments.get("options")),
                 query,
                 getattr(arguments.get("query"), "location", None),
-                _declarations_passed(arguments.get("options")),
             )
         )
     return calls
@@ -423,17 +425,6 @@ def _passed(arg: Any) -> dict[str, Any]:
     return passed if isinstance(passed, dict) else {}
 
 
-def _declarations_passed(arg: Any) -> TViewDeclarations:
-    """``time_refresh`` and ``function_reads`` from a constant ``options`` object."""
-    passed = _passed(arg)
-    time_refresh = passed.get("time_refresh")
-    function_reads = passed.get("function_reads")
-    return TViewDeclarations(
-        time_refresh=time_refresh if isinstance(time_refresh, str) else None,
-        function_reads=tuple(function_reads) if isinstance(function_reads, dict) else (),
-    )
-
-
 def _options_passed(arg: Any) -> TViewOptions:
     """The keys a constant ``options`` object pins, as :func:`tview_options` reads a CTAS."""
     passed = _passed(arg)
@@ -449,7 +440,72 @@ def _options_passed(arg: Any) -> TViewOptions:
     # fails where pg_tviews names the values it accepts.
     if isinstance(policy := passed.get("uncascaded_policy"), str):
         options["uncascaded_policy"] = policy
+    if isinstance(time_refresh := passed.get("time_refresh"), str):
+        options["time_refresh"] = time_refresh
+    reads = passed.get("function_reads")
+    if isinstance(reads, dict) and all(
+        isinstance(tables, list) and all(isinstance(t, str) for t in tables)
+        for tables in reads.values()
+    ):
+        options["function_reads"] = function_reads(reads)
     return options
+
+
+def function_reads(declared: dict[str, list[str]]) -> tuple[FunctionRead, ...]:
+    """A ``function_reads`` object as :class:`TView` holds it: functions and tables sorted.
+
+    pg_tviews keeps each function once and each of its tables once, in an order
+    of its own; the model's is the spelling's.
+    """
+    return tuple(
+        FunctionRead(function, tuple(sorted(set(tables))))
+        for function, tables in sorted(declared.items())
+    )
+
+
+def tview_read_identities(tview: TView) -> TView:
+    """*tview* with each ``function_reads`` entry spelled as its identity.
+
+    The tree spells a function and a table as its author wrote them; the registry
+    qualifies the function, writes its argument types as ``format_type`` does, and
+    leaves a table on the read path bare. A function is folded as PostgreSQL's
+    parser reads ``DROP FUNCTION <key>`` (its argument types canonical, its schema
+    :data:`DEFAULT_SCHEMA` where none is written) and a table as a qualified name,
+    so the two compare as the same declaration. A key or table that is no name is
+    kept as written: pg_tviews refuses it, and its spelling is all there is.
+    """
+    if not tview.function_reads:
+        return tview
+    folded: dict[str, list[str]] = {}
+    for read in tview.function_reads:
+        tables = folded.setdefault(_function_identity(read.function), [])
+        tables.extend(_table_identity(table) for table in read.tables)
+    return replace(tview, function_reads=function_reads(folded))
+
+
+def _function_identity(key: str) -> str:
+    try:
+        parsed = pglast.parse_sql(f"DROP FUNCTION {key}")
+    except pglast.parser.ParseError:
+        return key  # not a signature: compared as written, as pg_tviews refuses it
+    objects = getattr(parsed[0].stmt, "objects", None) if len(parsed) == 1 else None
+    if objects is None or len(objects) != 1:
+        return key
+    (routine,) = objects
+    if routine.args_unspecified:
+        return key
+    *schema, name = (str(part.sval) for part in routine.objname)  # folded by the parser
+    arguments = signature_from_type_names(type_name(arg) or "" for arg in routine.objargs or ())
+    spelled = ", ".join(f"{s}.{t}" if s else t for s, t in arguments)
+    return f"{(schema or [DEFAULT_SCHEMA])[-1]}.{name}({spelled})"
+
+
+def _table_identity(written: str) -> str:
+    parts = written_name_parts(written)
+    if not parts:
+        return written
+    *schema, name = (identifier_identity(part) for part in parts[-2:])
+    return f"{(schema or [DEFAULT_SCHEMA])[0]}.{name}"
 
 
 def tview_query_tree(text: str) -> Any:

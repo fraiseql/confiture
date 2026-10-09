@@ -37,6 +37,7 @@ from confiture.core.ddl_walk import (
     object_kinds,
     storage_pinned,
     tview_calls,
+    tview_of,
 )
 from confiture.core.linting.duplicates import CreateFlags, wins
 from confiture.core.linting.inventory import (
@@ -56,7 +57,14 @@ from confiture.core.linting.inventory import (
 )
 
 # Defined with the rest of the model; re-exported for the callers that name it here.
-from confiture.core.schema_model import TVIEW_OPTIONS, TVIEWS_SCHEMA, ObjectRef, Trigger, TView
+from confiture.core.schema_model import (
+    TVIEW_OPTIONS,
+    TVIEWS_SCHEMA,
+    ObjectRef,
+    Trigger,
+    TView,
+    tview_option,
+)
 from confiture.core.sql_lexer import ParsedFile
 
 #: Which parse nodes this module turns into objects, and why each one that
@@ -477,15 +485,7 @@ def _apply_storage(
 
 def _repinned(obj: DDLObject, pinned: TViewOptions) -> DDLObject:
     (call,) = tview_calls(pglast.parse_sql(obj.create_sql)[0].stmt)
-    options = {**call.options, **pinned}
-    tview = TView(
-        obj.ref.name,
-        definition=call.query,
-        logged=options.get("logged"),
-        fillfactor=options.get("fillfactor"),
-        uncascaded_policy=options.get("uncascaded_policy"),
-    )
-    return tview_object(obj.ref, tview)
+    return tview_object(obj.ref, tview_of(obj.ref.name, call.query, {**call.options, **pinned}))
 
 
 def output_columns(obj: DDLObject) -> tuple[str, ...] | None:
@@ -548,11 +548,13 @@ def _tview_create(ref: ObjectRef, tview: TView) -> str:
     pg_tviews' read contract 1: the call creates, replaces in place or rebuilds,
     and answers ``unchanged`` when applied again, so the migration re-applies.
     The name is the author's spelling; ``options`` holds what the tree pins
-    (``logged``, ``fillfactor``, ``uncascaded_policy``) and is left out when it
+    (:data:`~confiture.core.schema_model.TVIEW_OPTIONS`) and is left out when it
     pins nothing.
     """
     arguments = [_literal(ref.qualified), _dollar_quoted(tview.definition or "")]
-    options = {key: value for key in TVIEW_OPTIONS if (value := getattr(tview, key)) is not None}
+    options = {
+        key: value for key in TVIEW_OPTIONS if (value := tview_option(tview, key)) is not None
+    }
     if options:
         arguments.append(f"options => {_literal(json.dumps(options, sort_keys=True))}")
     return f"SELECT {TVIEWS_SCHEMA}.pg_tviews_create_or_replace({', '.join(arguments)})"

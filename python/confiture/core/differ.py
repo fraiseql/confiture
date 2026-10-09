@@ -13,7 +13,12 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 from confiture.core.ddl_objects import DDLObject, pair_definitions
-from confiture.core.ddl_walk import AS_WRITTEN, ConstantSpellings, same_value
+from confiture.core.ddl_walk import (
+    AS_WRITTEN,
+    ConstantSpellings,
+    same_value,
+    tview_read_identities,
+)
 from confiture.core.linting.inventory import signatures_match
 from confiture.core.linting.quoted_names import QuotedName
 from confiture.core.schema_change import (
@@ -529,15 +534,16 @@ def _tview_redefined(old: TView, new: TView, policy: ComparisonPolicy) -> bool:
 
     Against an author's side, an option that side does not pin is pg_tviews' to
     choose, whatever the database holds (``tview_defaults``), and one it pins is
-    compared as pinned. With no author side, the rule's own reading decides.
+    compared as pinned, ``function_reads`` by identity, since the registry spells
+    them its own way. With no author side, the rule's own reading decides.
     """
     if policy.author is None:
         return parity_tview(old, policy.rules) != parity_tview(new, policy.rules)
     pins = old if policy.author == "old" else new
     unpinned = {key: None for key in TVIEW_OPTIONS if getattr(pins, key) is None}
     rules = policy.rules - {"tview_defaults"}
-    return parity_tview(replace(old, **unpinned), rules) != parity_tview(
-        replace(new, **unpinned), rules
+    return parity_tview(tview_read_identities(replace(old, **unpinned)), rules) != parity_tview(
+        tview_read_identities(replace(new, **unpinned)), rules
     )
 
 

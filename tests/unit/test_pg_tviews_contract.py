@@ -14,7 +14,7 @@ from confiture.exceptions import ConfigurationError
 
 def test_the_contract_confiture_reads_is_accepted() -> None:
     assert (
-        live_catalog.require_supported_pg_tviews("0.1.0-beta.20", live_catalog.CONTRACT_VERSION)
+        live_catalog.require_supported_pg_tviews("0.1.0-beta.26", live_catalog.CONTRACT_VERSION)
         is None
     )
 
@@ -42,3 +42,23 @@ def test_a_pg_tviews_without_a_contract_is_refused_with_its_migration(
     assert "has no read contract" in str(refused.value)
     assert "migrate-from-0.1.0.sql" in (refused.value.resolution_hint or "")
     assert (installed or "unknown") in str(refused.value)
+
+
+@pytest.mark.parametrize(
+    "missing",
+    [("function_reads", "time_refresh"), ("view", "uncascaded_policy", "function_reads")],
+)
+def test_a_registry_without_the_columns_confiture_reads_is_refused(
+    missing: tuple[str, ...],
+) -> None:
+    """Contract 1 grows by appended columns: 0.1.0-beta.26 is the first with every one read."""
+    with pytest.raises(ConfigurationError) as refused:
+        live_catalog.require_supported_pg_tviews(
+            "0.1.0-beta.25", live_catalog.CONTRACT_VERSION, missing
+        )
+
+    assert refused.value.error_code == "CONFIG_014"
+    assert "0.1.0-beta.25" in str(refused.value)
+    assert ", ".join(missing) in str(refused.value)
+    assert live_catalog.MINIMUM_PG_TVIEWS == "0.1.0-beta.26"
+    assert live_catalog.MINIMUM_PG_TVIEWS in str(refused.value)
