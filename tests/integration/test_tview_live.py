@@ -263,7 +263,7 @@ def test_a_declared_read_changed_on_the_database_is_drift(reads_database: str) -
 
 
 def test_a_generated_migration_carries_the_reads_the_tree_declares(
-    fresh_database_factory: Callable[[str], str],
+    reads_database: str, fresh_database_factory: Callable[[str], str]
 ) -> None:
     """The call ``migrate diff --generate`` writes passes pg_tviews' default ``error`` policy."""
     from confiture.core.ddl_objects import objects_in
