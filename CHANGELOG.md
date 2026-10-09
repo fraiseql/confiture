@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-10-09
+
+**Seeds that lose rows, translations that miss, projections that store a session.** Level 5
+reports a staged row the resolution never promotes (`STAGED_ROW_NOT_PROMOTED`, critical);
+a `translations:` block, `i18n_001` and `confiture check translations` judge translation
+tables and count what they miss; `tview_003` reports a TVIEW that stores the writer's
+session settings or identity. The model keeps the first holder of a relation name, as
+PostgreSQL does (`build_005`/`build_006`). `softdel_002`, `softdel_003` and `sec_003` lose
+false positives and gain reach. ⚠️ No module defers its annotations: an unpinned
+`inspect.signature` now sees types where it saw strings.
+
 ### Added
 
 - **Level 5 reports a staged row the resolution does not promote** (#666). A resolver
